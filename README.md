@@ -2,6 +2,8 @@
 
 Golang implementation of Birdnet Analyzer.
 
+![image](go-birdnet-logo.webp)
+
 Go-BirdNet is an application inspired by BirdNet Analyzer, developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology. While the original BirdNet is based on Python, Go-BirdNet is built using Golang, aiming for simplified deployment across multiple platforms, from Windows PCs to single board computers like Raspberry Pi.
 
 Currently, Go-BirdNet supports the analysis of WAV files only, support for other audio file formats is planned. Use of metadata model for location-based filtering is not yet implemented. This is very much of work in progress, and contributions and feedback are welcome.
@@ -11,6 +13,10 @@ Currently, Go-BirdNet supports the analysis of WAV files only, support for other
 Go-BirdNet primarily relies on go-tflite by Yasuhiro Matsumoto (a.k.a. mattn). Go-tflite provides a Go binding for the TensorFlow Lite C API. Although go-tflite is documented to support only TensorFlow Lite version 2.2.0-rc3, I have successfully compiled it against version 2.14.0. As go-tflite is a C API binding compiled binary is not statically linked one, it is depending on libtensorflowlite_c.so to be present on deployment target system.
 
 A crucial component is the BirdNet tflite model. After all, Go-BirdNet essentially serves as an interface to this model, with the core detection functionality residing within the BirdNet tflite model itself.
+
+## Executable Distributions
+
+to be done
 
 ## Compiling
 
