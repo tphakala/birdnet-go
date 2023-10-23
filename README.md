@@ -1,8 +1,10 @@
 # Go-BirdNet
 
-Golang implementation of Birdnet Analyzer.
+Golang implementation of BirdNet Analyzer.
 
 ![image](doc/go-birdnet-logo.webp)
+
+[![License: CC BY-NC-SA 4.0](https://badgen.net/badge/License/CC-BY-NC-SA%204.0/green)](https://creativecommons.org/licenses/by-nc-sa/4.0/) [![OS Support](https://badgen.net/badge/OS/Linux%2C%20Windows%2C%20macOS/blue)]()
 
 Go-BirdNet is an application inspired by BirdNet Analyzer, developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology. While the original BirdNet is based on Python, Go-BirdNet is built using Golang, aiming for simplified deployment across multiple platforms, from Windows PCs to single board computers like Raspberry Pi.
 
@@ -23,28 +25,33 @@ to be done
 ### Building TensorFlow Lite C API
 
 Build tflite with cmake
-```
+
+```bash
 sudo apt-get install cmake
 ```
 
 Clone tensorflow repository
-```
+
+```bash
 git clone https://github.com/tensorflow/tensorflow.git tensorflow_src
 ```
 
 Create cmake build directory
-```
+
+```bash
 mkdir tflite_build
 cd tflite_build
 ```
 
 Run cmake
-```
+
+```bash
 cmake ../tensorflow_src/tensorflow/lite/c
 ```
 
 Build tflite, In the tflite_build directory do
-```
+
+```bash
 cmake --build . -j
 ```
 
@@ -53,24 +60,27 @@ Copy compiled  libtensorflowlite_c.so to /usr/local/lib
 ### Building Go-BirdNet
 
 Clone go-birdnet repository
-```
+
+```bash
 git clone https://github.com/tphakala/go-birdnet.git
 ```
 
 Add CGO_CFLAGS and point it to directory you cloned tensorflow source in
-```
-export CGO_CFLAGS=-I$HOME/src/tensorflow/tensorflow_src
+
+```bash
+export CGO_CFLAGS=-I$HOME/src/tensorflow
 ```
 
 Build Go-BirdNet
-```
+
+```bash
 cd go-birdnet
 go build birdnet.go
 ```
 
 ## Usage
 
-```
+```bash
 $ ./birdnet -h
 Usage of ./birdnet:
   -input string
@@ -86,3 +96,9 @@ Usage of ./birdnet:
 ## License
 
 Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+
+## Author
+
+Tomi P. Hakala
+
+BirdNet model by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology.
