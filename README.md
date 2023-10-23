@@ -2,7 +2,7 @@
 
 Golang implementation of Birdnet Analyzer.
 
-![image](go-birdnet-logo.webp)
+![image](doc/go-birdnet-logo.webp)
 
 Go-BirdNet is an application inspired by BirdNet Analyzer, developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology. While the original BirdNet is based on Python, Go-BirdNet is built using Golang, aiming for simplified deployment across multiple platforms, from Windows PCs to single board computers like Raspberry Pi.
 
@@ -20,7 +20,7 @@ to be done
 
 ## Compiling
 
-### Building TensorFlow Lite
+### Building TensorFlow Lite C API
 
 Build tflite with cmake
 ```
@@ -40,7 +40,7 @@ cd tflite_build
 
 Run cmake
 ```
-cmake ../tensorflow_src/tensorflow/lite
+cmake ../tensorflow_src/tensorflow/lite/c
 ```
 
 Build tflite, In the tflite_build directory do
@@ -54,7 +54,7 @@ Copy compiled  libtensorflowlite_c.so to /usr/local/lib
 
 Clone go-birdnet repository
 ```
-https://github.com/tphakala/go-birdnet.git
+git clone https://github.com/tphakala/go-birdnet.git
 ```
 
 Add CGO_CFLAGS and point it to directory you cloned tensorflow source in

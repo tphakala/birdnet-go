@@ -19,8 +19,6 @@ import (
 	"github.com/tphakala/go-tflite"
 )
 
-//var Labels []string
-
 // Required sample rate for input audio data
 const SampleRate = 48000
 
@@ -382,7 +380,7 @@ func validateFlags(inputAudioFile *string, modelPath *string, sensitivity, overl
 func main() {
 	// Define the flag for the input WAV file
 	inputAudioFile := flag.String("input", "", "Path to the input audio file (WAV)")
-	modelPath := flag.String("model", "BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite", "Path to the model file")
+	modelPath := flag.String("model", "model/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite", "Path to the model file")
 	sensitivity := flag.Float64("sensitivity", 1, "Sigmoid sensitivity value between 0.0 and 1.5")
 	overlap := flag.Float64("overlap", 0, "Overlap value between 0.0 and 2.9")
 	flag.Parse()
@@ -399,7 +397,7 @@ func main() {
 	// Ensure the interpreter is deleted at the end
 	defer interpreter.Delete()
 
-	labels, err := loadLabels("BirdNET_GLOBAL_6K_V2.4_Labels.txt")
+	labels, err := loadLabels("model/BirdNET_GLOBAL_6K_V2.4_Labels.txt")
 	if err != nil {
 		log.Fatalf("Failed to load labels: %v", err)
 	}
