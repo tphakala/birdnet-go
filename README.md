@@ -55,7 +55,12 @@ Build tflite, In the tflite_build directory do
 cmake --build . -j
 ```
 
-Copy compiled  libtensorflowlite_c.so to /usr/local/lib
+Copy compiled libtensorflowlite_c.so to /usr/local/lib and update dynamic linker run‐time bindings with ldconfig
+
+```bash
+sudo cp libtensorflowlite_c.so /usr/local/lib
+sudo ldconfig
+```
 
 ### Building Go-BirdNet
 
@@ -71,17 +76,17 @@ Add CGO_CFLAGS and point it to directory you cloned tensorflow source in
 export CGO_CFLAGS=-I$HOME/src/tensorflow
 ```
 
-Build Go-BirdNet
+Build Go-BirdNet by make, compiled binary will be placed in go-birdnet/bin directory
 
 ```bash
 cd go-birdnet
-go build birdnet.go
+make
 ```
 
 ## Usage
 
 ```bash
-$ ./birdnet -h
+$ ./bin/birdnet -h
 Usage of ./birdnet:
   -input string
     	Path to the input audio file (WAV)
@@ -92,6 +97,19 @@ Usage of ./birdnet:
   -sensitivity float
     	Sigmoid sensitivity value between 0.0 and 1.5 (default 1)
 ```
+
+## Roadmap
+
+Next I will work on
+
+- Realtime audio capture and processing from Pulseaudio or ALSA sound device.
+  - I have a youtube stream of my winter time birdfeeder and I wish to add bird species detection as overlay to my feed.
+  - Clips with interesting detections should be saved to disk
+  - Database support for keeping track of realtime detections
+
+## Derived works
+
+Feel free to fork this codebase for your own projects, but please follow license which restricts commercial usage
 
 ## License
 
