@@ -1,4 +1,4 @@
-module github.com/tphakala/tensorflow-test2
+module github.com/tphakala/go-birdnet
 
 go 1.21.3
 
