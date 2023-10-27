@@ -12,7 +12,7 @@ import (
 
 const (
 	chunkSize      = 144000
-	pollingTimeout = time.Millisecond * 100
+	pollingTimeout = time.Millisecond * 1000
 )
 
 var (
