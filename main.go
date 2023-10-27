@@ -92,6 +92,7 @@ func main() {
 		fmt.Println() // Empty line for better readability.
 		birdnet.PrintDetectionsWithThreshold(detections, 0.1)
 	}
+
 	if *realtimeMode {
 		fmt.Println("Starting BirdNet Analyzer in realtime mode")
 		myaudio.StartGoRoutines(debug)

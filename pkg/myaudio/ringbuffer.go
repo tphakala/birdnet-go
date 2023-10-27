@@ -45,16 +45,16 @@ func readFromBuffer() []byte {
 	return data
 }
 
-func BufferMonitor() {
+func BufferMonitor(debug *bool) {
 	for {
 		select {
 		case <-quitChannel:
 			return
 		default:
 			data := readFromBuffer()
-			fmt.Println("data length: ", len(data))
+			//fmt.Println("data length: ", len(data))
 			if data != nil {
-				processData(data)
+				processData(data, debug)
 			} else {
 				time.Sleep(pollingTimeout)
 			}
@@ -62,9 +62,9 @@ func BufferMonitor() {
 	}
 }
 
-func processData(data []byte) {
-	//log.Printf("Processing data: %b\n", data)
+func processData(data []byte, debug *bool) {
 	// get time stamp to calculate processing time
+
 	ts := time.Now()
 
 	// temporary assignments
@@ -79,9 +79,15 @@ func processData(data []byte) {
 	if err != nil {
 		log.Fatalf("Error predicting: %v", err)
 	}
-	te := time.Now()
-	fmt.Printf("processing time %v", te.Sub(ts))
 
-	fmt.Println(results)
+	te := time.Now()
+	if *debug {
+		fmt.Printf("processing time %v\n", te.Sub(ts))
+	}
+
+	if results[0].Confidence > 0.5 {
+		fmt.Println("Species:", birdnet.ExtractCommonName(results[0].Species), "Confidence:", results[0].Confidence)
+	}
+
 	//fmt.Println("Processed audio data of length:", len(data))
 }
