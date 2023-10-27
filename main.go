@@ -5,6 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/tphakala/go-birdnet/pkg/birdnet"
 	"github.com/tphakala/go-birdnet/pkg/myaudio"
@@ -91,9 +94,10 @@ func main() {
 	}
 	if *realtimeMode {
 		fmt.Println("Starting BirdNet Analyzer in realtime mode")
-
-		go myaudio.CaptureAudio(debug)
-		go myaudio.BufferMonitor()
+		myaudio.StartGoRoutines(debug)
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+		<-c
 	}
 
 	// Clean up resources used by BirdNet.

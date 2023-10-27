@@ -16,6 +16,12 @@ const (
 	bufferSize    = sampleRate * channelCount * 2 * captureLength
 )
 
+func StartGoRoutines(debug *bool) {
+	ringBuffer = ringbuffer.New(3 * sampleRate * channelCount)
+	go CaptureAudio(debug)
+	go BufferMonitor()
+}
+
 func CaptureAudio(debug *bool) {
 	fmt.Println("Initializing context")
 	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
@@ -38,7 +44,6 @@ func CaptureAudio(debug *bool) {
 	//fmt.Println("Sample size: ", sampleSize)
 
 	//fmt.Println("Creating ring buffer")
-	ringBuffer = ringbuffer.New(3 * sampleRate * channelCount)
 
 	onReceiveFrames := func(pSample2, pSamples []byte, framecount uint32) {
 		writeToBuffer(pSamples)
