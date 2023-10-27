@@ -19,11 +19,13 @@ const (
 func StartGoRoutines(debug *bool) {
 	ringBuffer = ringbuffer.New(3 * sampleRate * channelCount)
 	go CaptureAudio(debug)
-	go BufferMonitor()
+	go BufferMonitor(debug)
 }
 
 func CaptureAudio(debug *bool) {
-	fmt.Println("Initializing context")
+	if *debug {
+		fmt.Println("Initializing context")
+	}
 	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
 		if *debug {
 			println(message)
@@ -43,12 +45,13 @@ func CaptureAudio(debug *bool) {
 	//sampleSize := malgo.SampleSizeInBytes(deviceConfig.Capture.Format)
 	//fmt.Println("Sample size: ", sampleSize)
 
-	//fmt.Println("Creating ring buffer")
-
+	// Write to ringbuffer when audio data is received
+	// BufferMonitor() will poll this buffer and read data from it
 	onReceiveFrames := func(pSample2, pSamples []byte, framecount uint32) {
 		writeToBuffer(pSamples)
 	}
 
+	// Device callback to assign function to call when audio data is received
 	deviceCallbacks := malgo.DeviceCallbacks{
 		Data: onReceiveFrames,
 	}
@@ -58,12 +61,16 @@ func CaptureAudio(debug *bool) {
 		log.Fatalf("Device init failed %v", err)
 	}
 
-	fmt.Println("Starting device")
+	if *debug {
+		fmt.Println("Starting device")
+	}
 	err = device.Start()
 	if err != nil {
 		log.Fatalf("Device start failed %v", err)
 	}
-	fmt.Println("Device started")
+	if *debug {
+		fmt.Println("Device started")
+	}
 
 	// Let the Go routine run indefinitely to keep capturing audio
 	select {}

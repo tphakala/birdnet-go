@@ -15,7 +15,7 @@ type DetectionsMap map[string][]Result
 
 // If the input is "Cyanocitta_cristata_Blue Jay", the function will return "Blue Jay".
 // If there's no underscore in the string or if the format is unexpected, it returns the input string itself.
-func extractCommonName(species string) string {
+func ExtractCommonName(species string) string {
 	parts := strings.Split(species, "_")
 	if len(parts) > 1 {
 		return parts[1]
@@ -39,7 +39,7 @@ func PrintDetectionsWithThreshold(detections DetectionsMap, threshold float32) {
 		var validDetections []string
 		for _, pair := range detectedPairs {
 			if pair.Confidence >= threshold {
-				commonName := extractCommonName(pair.Species)
+				commonName := ExtractCommonName(pair.Species)
 				validDetections = append(validDetections, fmt.Sprintf("%-30s %.1f%%", commonName, pair.Confidence*100))
 			}
 		}
