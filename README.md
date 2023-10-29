@@ -1,20 +1,20 @@
-# Go-BirdNet
+# Go-BirdNET
 
-Golang implementation of BirdNet Analyzer.
+Golang implementation of BirdNET Analyzer.
 
 ![image](doc/go-birdnet-logo.webp)
 
 [![License: CC BY-NC-SA 4.0](https://badgen.net/badge/License/CC-BY-NC-SA%204.0/green)](https://creativecommons.org/licenses/by-nc-sa/4.0/) [![OS Support](https://badgen.net/badge/OS/Linux%2C%20Windows%2C%20macOS/blue)]()
 
-Go-BirdNet is an application inspired by BirdNet Analyzer, developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology. While the original BirdNet is based on Python, Go-BirdNet is built using Golang, aiming for simplified deployment across multiple platforms, from Windows PCs to single board computers like Raspberry Pi.
+Go-BirdNET is an application inspired by BirdNET Analyzer, developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology. While the original BirdNET is based on Python, Go-BirdNET is built using Golang, aiming for simplified deployment across multiple platforms, from Windows PCs to single board computers like Raspberry Pi.
 
-Currently, Go-BirdNet supports the analysis of WAV files only, support for other audio file formats is planned. Use of metadata model for location-based filtering is not yet implemented. This is very much of work in progress, and contributions and feedback are welcome.
+Currently, Go-BirdNET supports the analysis of WAV files only, support for other audio file formats is planned. Use of metadata model for location-based filtering is not yet implemented. This is very much of work in progress, and contributions and feedback are welcome.
 
 ## Dependencies
 
-Go-BirdNet primarily relies on go-tflite by Yasuhiro Matsumoto (a.k.a. mattn). Go-tflite provides a Go binding for the TensorFlow Lite C API. Although go-tflite is documented to support only TensorFlow Lite version 2.2.0-rc3, I have successfully compiled it against version 2.14.0. As go-tflite is a C API binding compiled binary is not statically linked one, it is depending on libtensorflowlite_c.so to be present on deployment target system.
+Go-BirdNET primarily relies on go-tflite by Yasuhiro Matsumoto (a.k.a. mattn). Go-tflite provides a Go binding for the TensorFlow Lite C API. Although go-tflite is documented to support only TensorFlow Lite version 2.2.0-rc3, I have successfully compiled it against version 2.14.0. As go-tflite is a C API binding compiled binary is not statically linked one, it is depending on libtensorflowlite_c.so to be present on deployment target system.
 
-A crucial component is the BirdNet tflite model. After all, Go-BirdNet essentially serves as an interface to this model, with the core detection functionality residing within the BirdNet tflite model itself.
+A crucial component is the BirdNET tflite model. After all, Go-BirdNET essentially serves as an interface to this model, with the core detection functionality residing within the BirdNET tflite model itself.
 
 ## Executable Distributions
 
@@ -62,7 +62,7 @@ sudo cp libtensorflowlite_c.so /usr/local/lib
 sudo ldconfig
 ```
 
-### Building Go-BirdNet
+### Building Go-BirdNET
 
 Clone go-birdnet repository
 
@@ -76,7 +76,7 @@ Add CGO_CFLAGS and point it to directory you cloned tensorflow source in
 export CGO_CFLAGS=-I$HOME/src/tensorflow
 ```
 
-Build Go-BirdNet by make, compiled binary will be placed in go-birdnet/bin directory
+Build Go-BirdNET by make, compiled binary will be placed in go-BirdNET/bin directory
 
 ```bash
 cd go-birdnet
@@ -119,4 +119,4 @@ Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
 
 Tomi P. Hakala
 
-BirdNet model by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology.
+BirdNET model by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology.
