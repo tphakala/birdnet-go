@@ -6,6 +6,7 @@ import (
 
 	"github.com/gen2brain/malgo"
 	"github.com/smallnest/ringbuffer"
+	"github.com/tphakala/go-birdnet/pkg/config"
 )
 
 const (
@@ -17,20 +18,18 @@ const (
 	bufferSize     = (sampleRate * channelCount * captureLength) * bytesPerSample
 )
 
-func StartGoRoutines(debug *bool, capturePath *string, logPath *string, threshold *float64) {
+func StartGoRoutines(cfg *config.Settings) {
 	ringBuffer = ringbuffer.New(bufferSize)
-	go CaptureAudio(debug)
-	go BufferMonitor(debug, capturePath, logPath, threshold)
+	go CaptureAudio(cfg)
+	go BufferMonitor(cfg)
 }
 
-func CaptureAudio(debug *bool) {
-	isDebug := *debug
-
-	if isDebug {
+func CaptureAudio(cfg *config.Settings) {
+	if cfg.Debug {
 		fmt.Println("Initializing context")
 	}
 	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
-		if isDebug {
+		if cfg.Debug {
 			println(message)
 		}
 	})
@@ -62,7 +61,7 @@ func CaptureAudio(debug *bool) {
 		log.Fatalf("Device init failed %v", err)
 	}
 
-	if isDebug {
+	if cfg.Debug {
 		fmt.Println("Starting device")
 	}
 	err = device.Start()
@@ -71,14 +70,14 @@ func CaptureAudio(debug *bool) {
 	}
 	defer device.Stop()
 
-	if isDebug {
+	if cfg.Debug {
 		fmt.Println("Device started")
 	}
 
 	// Monitor the quitChannel and cleanup before exiting
 	<-QuitChannel
 
-	if isDebug {
+	if cfg.Debug {
 		fmt.Println("Stopping capture due to quit signal.")
 	}
 }

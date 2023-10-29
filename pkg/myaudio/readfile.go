@@ -7,16 +7,17 @@ import (
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
+	"github.com/tphakala/go-birdnet/pkg/config"
 )
 
 // Required sample rate for input audio data
 const SampleRate = 48000
 
 // Read 48000 sample rate WAV file into 3 second chunks
-func ReadAudioFile(path string, overlap float64) ([][]float32, error) {
+func ReadAudioFile(cfg *config.Settings) ([][]float32, error) {
 	fmt.Print("- Reading audio data")
 
-	file, err := os.Open(path)
+	file, err := os.Open(cfg.InputAudioFile)
 	if err != nil {
 		return nil, err
 	}
@@ -28,12 +29,12 @@ func ReadAudioFile(path string, overlap float64) ([][]float32, error) {
 		return nil, errors.New("input is not a valid WAV audio file")
 	}
 
-	/*
+	if cfg.Debug {
 		fmt.Println("File is valid wav: ", decoder.IsValidFile())
 		fmt.Println("Sample rate:", decoder.SampleRate)
 		fmt.Println("Bits per sample:", decoder.BitDepth)
 		fmt.Println("Channels:", decoder.NumChans)
-	*/
+	}
 
 	if decoder.SampleRate != SampleRate {
 		return nil, errors.New("input file sample rate is not valid for BirdNet model")
@@ -53,7 +54,7 @@ func ReadAudioFile(path string, overlap float64) ([][]float32, error) {
 		return nil, errors.New("unsupported audio file bit depth")
 	}
 
-	step := int((3 - overlap) * SampleRate)
+	step := int((3 - cfg.Overlap) * SampleRate)
 	minLenSamples := int(1.5 * SampleRate)
 	secondsSamples := int(3 * SampleRate)
 
