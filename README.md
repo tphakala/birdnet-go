@@ -86,16 +86,26 @@ make
 ## Usage
 
 ```bash
-$ ./bin/birdnet -h
-Usage of ./birdnet:
-  -input string
-    	Path to the input audio file (WAV)
-  -model string
-    	Path to the model file (default "BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite")
-  -overlap float
-    	Overlap value between 0.0 and 2.9
-  -sensitivity float
-    	Sigmoid sensitivity value between 0.0 and 1.5 (default 1)
+$ ./bin/birdnet
+Go-BirdNET CLI
+
+Usage:
+  birdnet [command]
+
+Available Commands:
+  completion  Generate the autocompletion script for the specified shell
+  file        Analyze an audio file
+  help        Help about any command
+  realtime    Analyze audio in realtime mode
+
+Flags:
+      --debug               Enable debug output
+  -h, --help                help for birdnet
+      --locale string       Language to use for labels
+      --model string        Path to the model file (default "model/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite")
+      --sensitivity float   Sigmoid sensitivity value between 0.0 and 1.5 (default 1)
+
+Use "birdnet [command] --help" for more information about a command.
 ```
 
 ## ChangeLog
