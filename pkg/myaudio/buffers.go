@@ -8,12 +8,13 @@ import (
 
 	"github.com/smallnest/ringbuffer"
 	"github.com/tphakala/go-birdnet/pkg/birdnet"
+	"github.com/tphakala/go-birdnet/pkg/config"
 	"github.com/tphakala/go-birdnet/pkg/output"
 )
 
 const (
 	chunkSize    = 288000 // 3 seconds of 16-bit PCM data at 48 kHz
-	pollInterval = time.Millisecond * 100
+	pollInterval = time.Millisecond * 1000
 )
 
 var (
@@ -40,17 +41,17 @@ func readFromBuffer() []byte {
 	return data
 }
 
-func BufferMonitor(debug *bool, capturePath *string, logPath *string, threshold *float64) {
+func BufferMonitor(cfg *config.Settings) {
 	for {
 		select {
 		case <-QuitChannel:
 			return
 		default:
 			data := readFromBuffer()
-			fmt.Println("data length: ", len(data))
+			//fmt.Println("data length: ", len(data))
 			// if buffer has 3 seconds of data, process it
 			if len(data) == chunkSize {
-				processData(data, debug, capturePath, logPath, threshold)
+				processData(data, cfg)
 			} else {
 				time.Sleep(pollInterval)
 			}
@@ -58,37 +59,36 @@ func BufferMonitor(debug *bool, capturePath *string, logPath *string, threshold 
 	}
 }
 
-func processData(data []byte, debug *bool, capturePath *string, logPath *string, threshold *float64) {
-	// get time stamp to calculate processing time
+func processData(data []byte, cfg *config.Settings) {
 
+	// get time stamp to calculate processing time
 	ts := time.Now()
 
 	// temporary assignments
 	var bitDepth int = 16
-	var sensitivity float64 = 1.25
 
 	sampleData, err := ConvertToFloat32(data, bitDepth)
 	if err != nil {
 		log.Fatalf("Error converting to float32: %v", err)
 	}
-	results, err := birdnet.Predict(sampleData, sensitivity)
+	results, err := birdnet.Predict(sampleData, cfg.Sensitivity)
 	if err != nil {
 		log.Fatalf("Error predicting: %v", err)
 	}
 
 	te := time.Now()
-	if *debug {
+	if cfg.ProcessingTime || cfg.Debug {
 		fmt.Printf("processing time %v\n", te.Sub(ts))
 	}
 
-	var threshold32 float32 = float32(*threshold)
+	var threshold32 float32 = float32(cfg.Threshold)
 
 	if results[0].Confidence > threshold32 {
 		commonName := birdnet.ExtractCommonName(results[0].Species)
 		logMessage := fmt.Sprintf("%s", commonName) // TODO: make log message user configurable
-		output.WriteToLogfile(*logPath, logMessage)
+		output.WriteToLogfile(cfg.LogPath, logMessage)
 
-		fileName := fmt.Sprintf("%s/%s_%s.wav", *capturePath, strconv.FormatInt(time.Now().Unix(), 10), commonName)
+		fileName := fmt.Sprintf("%s/%s_%s.wav", cfg.CapturePath, strconv.FormatInt(time.Now().Unix(), 10), commonName)
 
 		// Save PCM data to WAV
 		if err := savePCMDataToWAV(fileName, data); err != nil {

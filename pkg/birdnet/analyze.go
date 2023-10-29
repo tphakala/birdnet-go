@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/tphakala/go-birdnet/pkg/config"
 	"github.com/tphakala/go-tflite"
 )
 
@@ -100,7 +101,7 @@ func Predict(sample [][]float32, sensitivity float64) ([]Result, error) {
 // predictions. Each chunk is processed individually, and the results are aggregated
 // into a map with timestamps as keys. The sensitivity and overlap values affect the
 // prediction process and the timestamp calculation, respectively.
-func AnalyzeAudio(chunks [][]float32, sensitivity, overlap float64) (map[string][]Result, error) {
+func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) (map[string][]Result, error) {
 	// Initialize an empty map to hold the detection results
 	detections := make(map[string][]Result)
 
@@ -122,7 +123,7 @@ func AnalyzeAudio(chunks [][]float32, sensitivity, overlap float64) (map[string]
 		sig := [][]float32{c}
 
 		// Predict labels for the current audio data
-		p, err := Predict(sig, sensitivity)
+		p, err := Predict(sig, cfg.Sensitivity)
 		if err != nil {
 			return nil, fmt.Errorf("prediction failed: %v", err)
 		}
@@ -134,7 +135,7 @@ func AnalyzeAudio(chunks [][]float32, sensitivity, overlap float64) (map[string]
 		detections[fmt.Sprintf("%5.1f;%5.1f", predStart, predEnd)] = p
 
 		// Adjust the start timestamp for the next prediction by considering the overlap
-		predStart = predEnd - overlap
+		predStart = predEnd - cfg.Overlap
 	}
 
 	// Move to a new line after the loop ends to avoid printing on the same line.

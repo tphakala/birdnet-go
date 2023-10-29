@@ -1,44 +1,77 @@
 package main
 
 import (
-	"errors"
-	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/spf13/cobra"
 	"github.com/tphakala/go-birdnet/pkg/birdnet"
+	"github.com/tphakala/go-birdnet/pkg/config"
 	"github.com/tphakala/go-birdnet/pkg/myaudio"
 )
 
-// Constants for file paths and other configurations.
 const (
 	DefaultModelPath = "model/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite"
 	LabelFilePath    = "model/labels_fi.txt"
 )
 
-// Validate input flags for proper values
-func validateFlags(inputAudioFile *string, realtimeMode *bool, modelPath *string, sensitivity, overlap *float64) error {
+func main() {
+	var cfg config.Settings
 
-	if !*realtimeMode && *inputAudioFile == "" {
-		return errors.New("please provide a path to input WAV file using the -input flag")
+	rootCmd := &cobra.Command{
+		Use:   "birdnet",
+		Short: "Go-BirdNET CLI",
 	}
 
-	if *modelPath == "" {
-		return errors.New("please provide a path to the model file using the -model flag")
+	// Set up the persistent debug flag for the root command.
+	rootCmd.PersistentFlags().BoolVar(&cfg.Debug, "debug", false, "Enable debug output")
+	rootCmd.PersistentFlags().StringVar(&cfg.ModelPath, "model", DefaultModelPath, "Path to the model file")
+	rootCmd.PersistentFlags().Float64Var(&cfg.Sensitivity, "sensitivity", 1, "Sigmoid sensitivity value between 0.0 and 1.5")
+	rootCmd.PersistentFlags().StringVar(&cfg.Locale, "locale", "", "Language to use for labels")
+
+	fileCmd := setupFileCommand(&cfg)
+	realtimeCmd := setupRealtimeCommand(&cfg)
+
+	setupBirdNET(cfg.ModelPath)
+
+	rootCmd.AddCommand(fileCmd, realtimeCmd)
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func setupFileCommand(cfg *config.Settings) *cobra.Command {
+	var cmd = &cobra.Command{
+		Use:   "file [input.wav]",
+		Short: "Analyze an audio file",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			cfg.InputAudioFile = args[0]
+			executeFileAnalysis(cfg)
+		},
 	}
 
-	if *sensitivity < 0.0 || *sensitivity > 1.5 {
-		return errors.New("invalid sensitivity value. It must be between 0.0 and 1.5")
+	cmd.PersistentFlags().Float64Var(&cfg.Overlap, "overlap", 0, "Overlap value between 0.0 and 2.9")
+
+	return cmd
+}
+
+func setupRealtimeCommand(cfg *config.Settings) *cobra.Command {
+	var cmd = &cobra.Command{
+		Use:   "realtime",
+		Short: "Analyze audio in realtime mode",
+		Run:   func(cmd *cobra.Command, args []string) { executeRealtimeAnalysis(cfg) },
 	}
 
-	if *overlap < 0.0 || *overlap > 2.9 {
-		return errors.New("invalid overlap value. It must be between 0.0 and 2.9")
-	}
+	cmd.PersistentFlags().StringVar(&cfg.CapturePath, "savepath", "./", "Path to save audio data to")
+	cmd.PersistentFlags().StringVar(&cfg.LogPath, "logpath", "./", "Path to save log file to")
+	cmd.PersistentFlags().Float64Var(&cfg.Threshold, "threshold", 0.8, "Threshold for detections")
+	cmd.PersistentFlags().BoolVar(&cfg.ProcessingTime, "processingtime", false, "Report processing time for each detection")
 
-	return nil
+	return cmd
 }
 
 // setupBirdNET initializes and loads the BirdNET model.
@@ -57,54 +90,27 @@ func setupBirdNET(modelPath string) error {
 	return nil
 }
 
-// main is the entry point of the BirdNet Analyzer.
-func main() {
-	inputAudioFile := flag.String("input", "", "Path to the input audio file (WAV)")
-	realtimeMode := flag.Bool("realtime", false, "Realtime mode")
-	modelPath := flag.String("model", DefaultModelPath, "Path to the model file")
-	sensitivity := flag.Float64("sensitivity", 1, "Sigmoid sensitivity value between 0.0 and 1.5")
-	overlap := flag.Float64("overlap", 0, "Overlap value between 0.0 and 2.9")
-	debug := flag.Bool("debug", false, "Enable debug output")
-	capturePath := flag.String("savepath", "", "Path to save audio data to")
-	logPath := flag.String("logpath", "", "Path to save log file to")
-	threshold := flag.Float64("threshold", 0.8, "Threshold for detections")
-	flag.Parse()
-
-	// Validate command-line flags.
-	if err := validateFlags(inputAudioFile, realtimeMode, modelPath, sensitivity, overlap); err != nil {
-		log.Fatal(err)
+func executeFileAnalysis(cfg *config.Settings) {
+	// Load and analyze the input audio file.
+	audioData, err := myaudio.ReadAudioFile(cfg)
+	if err != nil {
+		log.Fatalf("Error while reading input audio: %v", err)
 	}
 
-	// Initialize and load the BirdNet model.
-	if err := setupBirdNET(*modelPath); err != nil {
-		log.Fatalf("Failed to set up BirdNET: %v", err)
+	detections, err := birdnet.AnalyzeAudio(audioData, cfg)
+	if err != nil {
+		log.Fatalf("Failed to analyze audio data: %v", err)
 	}
 
-	if *inputAudioFile != "" {
-		// Load and analyze the input audio file.
-		audioData, err := myaudio.ReadAudioFile(*inputAudioFile, *overlap)
-		if err != nil {
-			log.Fatalf("Error while reading input audio: %v", err)
-		}
+	fmt.Println() // Empty line for better readability.
+	birdnet.PrintDetectionsWithThreshold(detections, 0.1)
+}
 
-		detections, err := birdnet.AnalyzeAudio(audioData, *sensitivity, *overlap)
-		if err != nil {
-			log.Fatalf("Failed to analyze audio data: %v", err)
-		}
-
-		fmt.Println() // Empty line for better readability.
-		birdnet.PrintDetectionsWithThreshold(detections, 0.1)
-	}
-
-	if *realtimeMode {
-		fmt.Println("Starting BirdNET Analyzer in realtime mode")
-		myaudio.StartGoRoutines(debug, capturePath, logPath, threshold)
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-		<-c
-		close(myaudio.QuitChannel)
-	}
-
-	// Clean up resources used by BirdNET
-	birdnet.DeleteInterpreter()
+func executeRealtimeAnalysis(cfg *config.Settings) {
+	fmt.Println("Starting BirdNET Analyzer in realtime mode")
+	myaudio.StartGoRoutines(cfg)
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	<-c
+	close(myaudio.QuitChannel)
 }
