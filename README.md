@@ -18,7 +18,8 @@ A crucial component is the BirdNET tflite model. After all, Go-BirdNET essential
 
 ## Executable Distributions
 
-to be done
+Ready to run binaries can be found from releases section https://github.com/tphakala/go-birdnet/releases/
+Arhives also contains libtensorflow_c library.
 
 ## Compiling
 
