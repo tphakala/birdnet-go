@@ -9,25 +9,28 @@ import (
 )
 
 const (
-	sampleRate    = 48000
-	channelCount  = 1
-	frameCount    = 1024
-	captureLength = 3 // in seconds
-	bufferSize    = sampleRate * channelCount * 2 * captureLength
+	bitDepth       = 16    // for now only 16bit is supported
+	sampleRate     = 48000 // BirdNET requires 48 kHz samples
+	channelCount   = 1     // downmix to mono
+	captureLength  = 3     // in seconds
+	bytesPerSample = bitDepth / 8
+	bufferSize     = (sampleRate * channelCount * captureLength) * bytesPerSample
 )
 
-func StartGoRoutines(debug *bool) {
-	ringBuffer = ringbuffer.New(3 * sampleRate * channelCount)
+func StartGoRoutines(debug *bool, capturePath *string, logPath *string, threshold *float64) {
+	ringBuffer = ringbuffer.New(bufferSize)
 	go CaptureAudio(debug)
-	go BufferMonitor(debug)
+	go BufferMonitor(debug, capturePath, logPath, threshold)
 }
 
 func CaptureAudio(debug *bool) {
-	if *debug {
+	isDebug := *debug
+
+	if isDebug {
 		fmt.Println("Initializing context")
 	}
 	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
-		if *debug {
+		if isDebug {
 			println(message)
 		}
 	})
@@ -42,9 +45,6 @@ func CaptureAudio(debug *bool) {
 	deviceConfig.SampleRate = sampleRate
 	deviceConfig.Alsa.NoMMap = 1
 
-	//sampleSize := malgo.SampleSizeInBytes(deviceConfig.Capture.Format)
-	//fmt.Println("Sample size: ", sampleSize)
-
 	// Write to ringbuffer when audio data is received
 	// BufferMonitor() will poll this buffer and read data from it
 	onReceiveFrames := func(pSample2, pSamples []byte, framecount uint32) {
@@ -56,22 +56,29 @@ func CaptureAudio(debug *bool) {
 		Data: onReceiveFrames,
 	}
 
+	// Initialize the capture device
 	device, err := malgo.InitDevice(ctx.Context, deviceConfig, deviceCallbacks)
 	if err != nil {
 		log.Fatalf("Device init failed %v", err)
 	}
 
-	if *debug {
+	if isDebug {
 		fmt.Println("Starting device")
 	}
 	err = device.Start()
 	if err != nil {
 		log.Fatalf("Device start failed %v", err)
 	}
-	if *debug {
+	defer device.Stop()
+
+	if isDebug {
 		fmt.Println("Device started")
 	}
 
-	// Let the Go routine run indefinitely to keep capturing audio
-	select {}
+	// Monitor the quitChannel and cleanup before exiting
+	<-QuitChannel
+
+	if isDebug {
+		fmt.Println("Stopping capture due to quit signal.")
+	}
 }
