@@ -126,4 +126,4 @@ Tomi P. Hakala
 
 BirdNET model by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology.
 
-BirdNET label translations by Patrick Levin for BirdNET-Pi project by Patrick McGuire
+BirdNET label translations by Patrick Levin for BirdNET-Pi project by Patrick McGuire.

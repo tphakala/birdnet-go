@@ -1,3 +1,5 @@
 bin/birdnet
+log
+clips
 tmp
 *.exe

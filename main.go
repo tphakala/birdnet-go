@@ -88,8 +88,8 @@ func setupRealtimeCommand(cfg *config.Settings) *cobra.Command {
 		Run:   func(cmd *cobra.Command, args []string) { executeRealtimeAnalysis(cfg) },
 	}
 
-	cmd.PersistentFlags().StringVar(&cfg.CapturePath, "savepath", "./", "Path to save audio data to")
-	cmd.PersistentFlags().StringVar(&cfg.LogPath, "logpath", "./", "Path to save log file to")
+	cmd.PersistentFlags().StringVar(&cfg.CapturePath, "savepath", "./clips", "Path to save audio data to")
+	cmd.PersistentFlags().StringVar(&cfg.LogPath, "logpath", "./log", "Path to save log file to")
 	cmd.PersistentFlags().Float64Var(&cfg.Threshold, "threshold", 0.8, "Threshold for detections")
 	cmd.PersistentFlags().BoolVar(&cfg.ProcessingTime, "processingtime", false, "Report processing time for each detection")
 
