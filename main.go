@@ -1,10 +1,14 @@
 package main
 
 import (
+	"archive/zip"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -15,7 +19,7 @@ import (
 
 const (
 	DefaultModelPath = "model/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite"
-	LabelFilePath    = "model/labels_fi.txt"
+	//LabelFilePath    = "model/labels_fi.txt"
 )
 
 func main() {
@@ -24,18 +28,36 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:   "birdnet",
 		Short: "Go-BirdNET CLI",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if _, exists := config.Locales[cfg.Locale]; !exists {
+				if fullLocale, exists := config.LocaleCodes[strings.ToLower(cfg.Locale)]; exists {
+					cfg.Locale = fullLocale
+				} else {
+					return fmt.Errorf("unsupported locale: %s", cfg.Locale)
+				}
+			}
+			LabelFilePath := fmt.Sprintf("model/%s", config.Locales[cfg.Locale])
+
+			// Check if label file exists on disk.
+			if _, err := os.Stat(LabelFilePath); os.IsNotExist(err) {
+				// Attempt to extract from ZIP.
+				if err := extractLabelFileFromZip("model/labels_nm.zip", LabelFilePath); err != nil {
+					return fmt.Errorf("error extracting label file: %v", err)
+				}
+			}
+			setupBirdNET(cfg.ModelPath, LabelFilePath)
+			return nil
+		},
 	}
 
 	// Set up the persistent debug flag for the root command.
 	rootCmd.PersistentFlags().BoolVar(&cfg.Debug, "debug", false, "Enable debug output")
 	rootCmd.PersistentFlags().StringVar(&cfg.ModelPath, "model", DefaultModelPath, "Path to the model file")
 	rootCmd.PersistentFlags().Float64Var(&cfg.Sensitivity, "sensitivity", 1, "Sigmoid sensitivity value between 0.0 and 1.5")
-	rootCmd.PersistentFlags().StringVar(&cfg.Locale, "locale", "", "Language to use for labels")
+	rootCmd.PersistentFlags().StringVar(&cfg.Locale, "locale", "English", "Set the locale for labels. Accepts full name or 2-letter code.")
 
 	fileCmd := setupFileCommand(&cfg)
 	realtimeCmd := setupRealtimeCommand(&cfg)
-
-	setupBirdNET(cfg.ModelPath)
 
 	rootCmd.AddCommand(fileCmd, realtimeCmd)
 	if err := rootCmd.Execute(); err != nil {
@@ -75,8 +97,8 @@ func setupRealtimeCommand(cfg *config.Settings) *cobra.Command {
 }
 
 // setupBirdNET initializes and loads the BirdNET model.
-func setupBirdNET(modelPath string) error {
-	//fmt.Println("Starting BirdNET Analyzer")
+func setupBirdNET(modelPath string, LabelFilePath string) error {
+	fmt.Println("Loading BirdNET model")
 	err := birdnet.InitializeModel(modelPath)
 	if err != nil {
 		return fmt.Errorf("failed to initialize model: %w", err)
@@ -113,4 +135,32 @@ func executeRealtimeAnalysis(cfg *config.Settings) {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	<-c
 	close(myaudio.QuitChannel)
+}
+
+func extractLabelFileFromZip(zipPath, labelFilePath string) error {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		if f.Name == filepath.Base(labelFilePath) {
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			defer rc.Close()
+
+			f, err := os.Create(labelFilePath)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+
+			_, err = io.Copy(f, rc)
+			return err
+		}
+	}
+	return fmt.Errorf("label file not found in the zip archive")
 }
