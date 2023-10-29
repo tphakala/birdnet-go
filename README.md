@@ -98,14 +98,9 @@ Usage of ./birdnet:
     	Sigmoid sensitivity value between 0.0 and 1.5 (default 1)
 ```
 
-## Roadmap
+## ChangeLog
 
-Next I will work on
-
-- Realtime audio capture and processing from Pulseaudio or ALSA sound device.
-  - I have a youtube stream of my winter time birdfeeder and I wish to add bird species detection as overlay to my feed.
-  - Clips with interesting detections should be saved to disk
-  - Database support for keeping track of realtime detections
+Realtime detection support is now added, launch with -realtime flag and application will start capturing audio from default audio device and log detections to detections.log.
 
 ## Derived works
 
@@ -120,3 +115,5 @@ Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
 Tomi P. Hakala
 
 BirdNET model by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology.
+
+BirdNET label translations by Patrick Levin for BirdNET-Pi project by Patrick McGuire
