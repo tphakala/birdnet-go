@@ -65,8 +65,8 @@ func main() {
 	sensitivity := flag.Float64("sensitivity", 1, "Sigmoid sensitivity value between 0.0 and 1.5")
 	overlap := flag.Float64("overlap", 0, "Overlap value between 0.0 and 2.9")
 	debug := flag.Bool("debug", false, "Enable debug output")
-	capturePath := flag.String("save", "", "Path to save audio data to")
-	logPath := flag.String("log", "", "Path to save log file to")
+	capturePath := flag.String("savepath", "", "Path to save audio data to")
+	logPath := flag.String("logpath", "", "Path to save log file to")
 	threshold := flag.Float64("threshold", 0.8, "Threshold for detections")
 	flag.Parse()
 
