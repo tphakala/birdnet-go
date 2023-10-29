@@ -16,7 +16,7 @@ import (
 // Constants for file paths and other configurations.
 const (
 	DefaultModelPath = "model/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite"
-	LabelFilePath    = "model/BirdNET_GLOBAL_6K_V2.4_Labels.txt"
+	LabelFilePath    = "model/labels_fi.txt"
 )
 
 // Validate input flags for proper values
@@ -41,9 +41,9 @@ func validateFlags(inputAudioFile *string, realtimeMode *bool, modelPath *string
 	return nil
 }
 
-// setupBirdNet initializes and loads the BirdNet model.
-func setupBirdNet(modelPath string) error {
-	fmt.Println("Starting BirdNet Analyzer")
+// setupBirdNET initializes and loads the BirdNET model.
+func setupBirdNET(modelPath string) error {
+	//fmt.Println("Starting BirdNET Analyzer")
 	err := birdnet.InitializeModel(modelPath)
 	if err != nil {
 		return fmt.Errorf("failed to initialize model: %w", err)
@@ -65,6 +65,9 @@ func main() {
 	sensitivity := flag.Float64("sensitivity", 1, "Sigmoid sensitivity value between 0.0 and 1.5")
 	overlap := flag.Float64("overlap", 0, "Overlap value between 0.0 and 2.9")
 	debug := flag.Bool("debug", false, "Enable debug output")
+	capturePath := flag.String("save", "", "Path to save audio data to")
+	logPath := flag.String("log", "", "Path to save log file to")
+	threshold := flag.Float64("threshold", 0.8, "Threshold for detections")
 	flag.Parse()
 
 	// Validate command-line flags.
@@ -73,8 +76,8 @@ func main() {
 	}
 
 	// Initialize and load the BirdNet model.
-	if err := setupBirdNet(*modelPath); err != nil {
-		log.Fatalf("Failed to set up BirdNet: %v", err)
+	if err := setupBirdNET(*modelPath); err != nil {
+		log.Fatalf("Failed to set up BirdNET: %v", err)
 	}
 
 	if *inputAudioFile != "" {
@@ -94,13 +97,14 @@ func main() {
 	}
 
 	if *realtimeMode {
-		fmt.Println("Starting BirdNet Analyzer in realtime mode")
-		myaudio.StartGoRoutines(debug)
+		fmt.Println("Starting BirdNET Analyzer in realtime mode")
+		myaudio.StartGoRoutines(debug, capturePath, logPath, threshold)
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 		<-c
+		close(myaudio.QuitChannel)
 	}
 
-	// Clean up resources used by BirdNet.
+	// Clean up resources used by BirdNET
 	birdnet.DeleteInterpreter()
 }
