@@ -9,8 +9,15 @@ import (
 
 const (
 	chunkSize    = 288000 // 3 seconds of 16-bit PCM data at 48 kHz
-	pollInterval = time.Millisecond * 1000
+	pollInterval = time.Millisecond * 500
 )
+
+// A variable to set the overlap. Can range from 0 to 2 seconds, represented in bytes.
+// For example, for 1.5-second overlap: overlapSize = 144000
+var overlapSize int = 144000 // Set as required
+var readSize int = chunkSize - overlapSize
+
+var prevData []byte
 
 // ringBuffer is used to store real time detection audio data
 var ringBuffer *ringbuffer.RingBuffer
@@ -28,20 +35,32 @@ func writeToBuffer(data []byte) {
 	}
 }
 
-// readFromBuffer reads a chunk of audio data from the ring buffer.
+// readFromBuffer reads a sliding chunk of audio data from the ring buffer.
 func readFromBuffer() []byte {
 	bytesWritten := ringBuffer.Length() - ringBuffer.Free()
-	if bytesWritten < chunkSize {
-		//fmt.Println("Not enough data in buffer")
+	if bytesWritten < readSize {
 		return nil
 	}
 
-	data := make([]byte, chunkSize)
+	data := make([]byte, readSize)
 	_, err := ringBuffer.Read(data)
 	if err != nil {
 		return nil
 	}
-	return data
+
+	// Join with previous data to ensure we're processing chunkSize bytes
+	fullData := append(prevData, data...)
+	if len(fullData) > chunkSize {
+		// Update prevData for the next iteration
+		prevData = fullData[readSize:]
+		fullData = fullData[:chunkSize]
+	} else {
+		// If there isn't enough data even after appending, update prevData and return nil
+		prevData = fullData
+		return nil
+	}
+
+	return fullData
 }
 
 // BufferMonitor monitors the buffer and processes audio data when enough data is present.
