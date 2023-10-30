@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/go-birdnet/pkg/birdnet"
 	"github.com/tphakala/go-birdnet/pkg/config"
 	"github.com/tphakala/go-birdnet/pkg/myaudio"
+	"github.com/tphakala/go-birdnet/pkg/output"
 )
 
 const (
@@ -89,7 +90,7 @@ func setupRealtimeCommand(cfg *config.Settings) *cobra.Command {
 	}
 
 	cmd.PersistentFlags().StringVar(&cfg.CapturePath, "savepath", "./clips", "Path to save audio data to")
-	cmd.PersistentFlags().StringVar(&cfg.LogPath, "logpath", "./log", "Path to save log file to")
+	cmd.PersistentFlags().StringVar(&cfg.LogPath, "logpath", "./log/detections.log", "Path to save log file to")
 	cmd.PersistentFlags().Float64Var(&cfg.Threshold, "threshold", 0.8, "Threshold for detections")
 	cmd.PersistentFlags().BoolVar(&cfg.ProcessingTime, "processingtime", false, "Report processing time for each detection")
 
@@ -119,17 +120,19 @@ func executeFileAnalysis(cfg *config.Settings) {
 		log.Fatalf("Error while reading input audio: %v", err)
 	}
 
-	detections, err := birdnet.AnalyzeAudio(audioData, cfg)
+	notes, err := birdnet.AnalyzeAudio(audioData, cfg)
 	if err != nil {
 		log.Fatalf("Failed to analyze audio data: %v", err)
 	}
 
 	fmt.Println() // Empty line for better readability.
-	birdnet.PrintDetectionsWithThreshold(detections, 0.1)
+	// Print the detections (notes) with a threshold of, for example, 10%
+	output.PrintNotesWithThreshold(notes, 0.1)
 }
 
 func executeRealtimeAnalysis(cfg *config.Settings) {
 	fmt.Println("Starting BirdNET Analyzer in realtime mode")
+
 	myaudio.StartGoRoutines(cfg)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
