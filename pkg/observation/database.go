@@ -22,8 +22,15 @@ type DatabaseConfig struct {
 	Name     string // database name
 }
 
+var defaultDatabaseType = "sqlite"
+
 func InitializeDatabase(config DatabaseConfig) error {
 	var err error
+
+	// Default to SQLite if Type is not set
+	if config.Type == "" {
+		config.Type = defaultDatabaseType
+	}
 
 	switch config.Type {
 	case "sqlite":
@@ -50,7 +57,9 @@ func InitializeDatabase(config DatabaseConfig) error {
 
 func SaveToDatabase(note Note) error {
 	if db == nil {
-		return errors.New("database not initialized")
+		if err := InitializeDatabase(DatabaseConfig{}); err != nil {
+			return err
+		}
 	}
 
 	return db.Create(&note).Error
