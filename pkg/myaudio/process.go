@@ -1,6 +1,68 @@
 package myaudio
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/tphakala/go-birdnet/pkg/birdnet"
+	"github.com/tphakala/go-birdnet/pkg/config"
+	"github.com/tphakala/go-birdnet/pkg/observation"
+)
+
+// processData processes the given audio data to detect bird species, logs the detected species
+// and optionally saves the audio clip if a bird species is detected above the configured threshold.
+func processData(data []byte, cfg *config.Settings) error {
+
+	const defaultBitDepth = 16
+
+	// Start timestamp for processing time measurement.
+	startTime := time.Now()
+
+	// Convert raw audio data to float32 format.
+	sampleData, err := ConvertToFloat32(data, defaultBitDepth)
+	if err != nil {
+		return fmt.Errorf("error converting to float32: %w", err)
+	}
+
+	// Use the birdnet model to predict the bird species from the audio sample.
+	results, err := birdnet.Predict(sampleData, cfg.Sensitivity)
+	if err != nil {
+		return fmt.Errorf("error predicting: %w", err)
+	}
+
+	// Print processing time if required.
+	if cfg.ProcessingTime || cfg.Debug {
+		elapsedTime := time.Since(startTime)
+		fmt.Printf("processing time %v\n", elapsedTime)
+	}
+
+	// Check if the prediction confidence is above the threshold.
+	if results[0].Confidence <= float32(cfg.Threshold) {
+		return nil
+	}
+
+	// Create an observation.Note from the prediction result.
+	note := observation.New(results[0].Species, float64(results[0].Confidence), 0, 0) // Adjust the start and end time arguments if required.
+
+	// Log the observation to the specified log file.
+	if err := observation.LogNote(cfg, note); err != nil {
+		return fmt.Errorf("error logging note: %w", err)
+	}
+
+	// Construct the filename for saving the audio sample.
+	fileName := fmt.Sprintf("%s/%s_%s.wav", cfg.CapturePath, strconv.FormatInt(time.Now().Unix(), 10), note.CommonName)
+
+	// Save the audio data as a WAV file.
+	if err := savePCMDataToWAV(fileName, data); err != nil {
+		return fmt.Errorf("error saving PCM data to WAV: %w", err)
+	}
+
+	fmt.Printf("Data length: %d bytes\n", len(data))
+
+	return nil
+}
 
 // ConvertToFloat32 converts a byte slice representing sample to a 2D slice of float32 samples.
 // The function supports 16, 24, and 32 bit depths.

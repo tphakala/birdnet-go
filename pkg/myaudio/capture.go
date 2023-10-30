@@ -5,7 +5,6 @@ import (
 	"log"
 
 	"github.com/gen2brain/malgo"
-	"github.com/smallnest/ringbuffer"
 	"github.com/tphakala/go-birdnet/pkg/config"
 )
 
@@ -18,8 +17,11 @@ const (
 	bufferSize     = (sampleRate * channelCount * captureLength) * bytesPerSample
 )
 
+// quitChannel is used to signal the capture goroutine to stop
+var QuitChannel = make(chan struct{})
+
 func StartGoRoutines(cfg *config.Settings) {
-	ringBuffer = ringbuffer.New(bufferSize)
+	InitRingBuffer(bufferSize)
 	go CaptureAudio(cfg)
 	go BufferMonitor(cfg)
 }
@@ -30,7 +32,7 @@ func CaptureAudio(cfg *config.Settings) {
 	}
 	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
 		if cfg.Debug {
-			println(message)
+			fmt.Print(message)
 		}
 	})
 	if err != nil {
