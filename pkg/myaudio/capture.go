@@ -75,6 +75,7 @@ func CaptureAudio(cfg *config.Settings) {
 	if cfg.Debug {
 		fmt.Println("Device started")
 	}
+	fmt.Println("Listening ...")
 
 	// Monitor the quitChannel and cleanup before exiting
 	<-QuitChannel

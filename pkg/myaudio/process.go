@@ -33,8 +33,9 @@ func processData(data []byte, cfg *config.Settings) error {
 	}
 
 	// Print processing time if required.
+	var elapsedTime time.Duration
 	if cfg.ProcessingTime || cfg.Debug {
-		elapsedTime := time.Since(startTime)
+		elapsedTime = time.Since(startTime)
 		fmt.Printf("processing time %v\n", elapsedTime)
 	}
 
@@ -43,23 +44,21 @@ func processData(data []byte, cfg *config.Settings) error {
 		return nil
 	}
 
-	// Create an observation.Note from the prediction result.
-	note := observation.New(results[0].Species, float64(results[0].Confidence), 0, 0) // Adjust the start and end time arguments if required.
-
-	// Log the observation to the specified log file.
-	if err := observation.LogNote(cfg, note); err != nil {
-		return fmt.Errorf("error logging note: %w", err)
-	}
-
 	// Construct the filename for saving the audio sample.
-	fileName := fmt.Sprintf("%s/%s_%s.wav", cfg.CapturePath, strconv.FormatInt(time.Now().Unix(), 10), note.CommonName)
+	fileName := fmt.Sprintf("%s/%s.wav", cfg.CapturePath, strconv.FormatInt(time.Now().Unix(), 10))
 
 	// Save the audio data as a WAV file.
 	if err := savePCMDataToWAV(fileName, data); err != nil {
 		return fmt.Errorf("error saving PCM data to WAV: %w", err)
 	}
 
-	fmt.Printf("Data length: %d bytes\n", len(data))
+	// Create an observation.Note from the prediction result.
+	note := observation.New(cfg, results[0].Species, float64(results[0].Confidence), 0, 0, fileName, elapsedTime) // Adjust the start and end time arguments if required.
+
+	// Log the observation to the specified log file.
+	if err := observation.LogNote(cfg, note); err != nil {
+		return fmt.Errorf("error logging note: %w", err)
+	}
 
 	return nil
 }

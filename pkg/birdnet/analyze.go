@@ -129,7 +129,7 @@ func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) ([]observation.Note,
 		predEnd := predStart + 3.0
 
 		for _, result := range predictedResults {
-			obs := observation.New(result.Species, float64(result.Confidence), predStart, predEnd)
+			obs := observation.New(cfg, result.Species, float64(result.Confidence), 0, 0, "", 0)
 			observations = append(observations, obs)
 		}
 
@@ -145,55 +145,3 @@ func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) ([]observation.Note,
 
 	return observations, nil
 }
-
-// analyzeAudioData processes chunks of audio data using a given interpreter to produce
-// predictions. Each chunk is processed individually, and the results are aggregated
-// into a map with timestamps as keys. The sensitivity and overlap values affect the
-// prediction process and the timestamp calculation, respectively.
-/*
-func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) (map[string][]Result, error) {
-	// Initialize an empty map to hold the detection results
-	detections := make(map[string][]Result)
-
-	fmt.Println("- Analyzing audio data")
-	start := time.Now()
-
-	// Start timestamp for the prediction. It will be adjusted for each chunk
-	predStart := 0.0
-
-	// Total number of chunks for progress indicator
-	totalChunks := len(chunks)
-
-	// Process each chunk of audio data
-	for idx, c := range chunks {
-		// Print progress indicator
-		fmt.Printf("\r- Processing chunk [%d/%d]", idx+1, totalChunks)
-
-		// Add the current chunk to the accumulated audio samples
-		sig := [][]float32{c}
-
-		// Predict labels for the current audio data
-		p, err := Predict(sig, cfg.Sensitivity)
-		if err != nil {
-			return nil, fmt.Errorf("prediction failed: %v", err)
-		}
-
-		// Calculate the end timestamp for this prediction
-		predEnd := predStart + 3.0
-
-		// Store the prediction results in the detections map with the timestamp range as the key
-		detections[fmt.Sprintf("%5.1f;%5.1f", predStart, predEnd)] = p
-
-		// Adjust the start timestamp for the next prediction by considering the overlap
-		predStart = predEnd - cfg.Overlap
-	}
-
-	// Move to a new line after the loop ends to avoid printing on the same line.
-	fmt.Println("")
-
-	elapsed := time.Since(start)
-	fmt.Printf("Time %f seconds\n", elapsed.Seconds())
-
-	return detections, nil
-}
-*/
