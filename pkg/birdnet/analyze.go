@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tphakala/go-birdnet/pkg/config"
+	"github.com/tphakala/go-birdnet/pkg/observation"
 	"github.com/tphakala/go-tflite"
 )
 
@@ -97,10 +98,59 @@ func Predict(sample [][]float32, sensitivity float64) ([]Result, error) {
 	return results, nil
 }
 
+// AnalyzeAudio processes chunks of audio data using a given interpreter to produce
+// predictions. Each chunk is processed individually, and the results are aggregated
+// into a slice of Observations. The sensitivity and overlap values affect the
+// prediction process and the timestamp calculation, respectively.
+func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) ([]observation.Note, error) {
+	observations := []observation.Note{}
+
+	fmt.Println("- Analyzing audio data")
+	start := time.Now()
+
+	// Start timestamp for the prediction. It will be adjusted for each chunk
+	predStart := 0.0
+
+	// Total number of chunks for progress indicator
+	totalChunks := len(chunks)
+
+	// Process each chunk of audio data
+	for idx, c := range chunks {
+		// Print progress indicator
+		fmt.Printf("\r- Processing chunk [%d/%d]", idx+1, totalChunks)
+
+		// Predict labels for the current audio data
+		predictedResults, err := Predict([][]float32{c}, cfg.Sensitivity)
+		if err != nil {
+			return nil, fmt.Errorf("prediction failed: %v", err)
+		}
+
+		// Calculate the end timestamp for this prediction
+		predEnd := predStart + 3.0
+
+		for _, result := range predictedResults {
+			obs := observation.New(result.Species, float64(result.Confidence), predStart, predEnd)
+			observations = append(observations, obs)
+		}
+
+		// Adjust the start timestamp for the next prediction by considering the overlap
+		predStart = predEnd - cfg.Overlap
+	}
+
+	// Move to a new line after the loop ends to avoid printing on the same line.
+	fmt.Println("")
+
+	elapsed := time.Since(start)
+	fmt.Printf("Time %f seconds\n", elapsed.Seconds())
+
+	return observations, nil
+}
+
 // analyzeAudioData processes chunks of audio data using a given interpreter to produce
 // predictions. Each chunk is processed individually, and the results are aggregated
 // into a map with timestamps as keys. The sensitivity and overlap values affect the
 // prediction process and the timestamp calculation, respectively.
+/*
 func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) (map[string][]Result, error) {
 	// Initialize an empty map to hold the detection results
 	detections := make(map[string][]Result)
@@ -146,3 +196,4 @@ func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) (map[string][]Result
 
 	return detections, nil
 }
+*/
