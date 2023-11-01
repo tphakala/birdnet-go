@@ -1,10 +1,14 @@
 # Go-BirdNET
 
-Golang implementation of BirdNET Analyzer.
-
-![image](doc/go-birdnet-logo.webp)
-
-[![License: CC BY-NC-SA 4.0](https://badgen.net/badge/License/CC-BY-NC-SA%204.0/green)](https://creativecommons.org/licenses/by-nc-sa/4.0/) [![OS Support](https://badgen.net/badge/OS/Linux%2C%20Windows%2C%20macOS/blue)]()
+<p align="center">
+  <img src="doc/go-birdnet-logo.webp" />
+</p>
+<p align="center">
+<a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">
+ <img src="https://badgen.net/badge/License/CC-BY-NC-SA%204.0/green">
+ </a>
+ <img src="https://badgen.net/badge/OS/Linux%2C%20Windows%2C%20macOS/blue">
+</p>
 
 Go-BirdNET is an application inspired by BirdNET Analyzer, developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology. While the original BirdNET is based on Python, Go-BirdNET is built using Golang, aiming for simplified deployment across multiple platforms, from Windows PCs to single board computers like Raspberry Pi.
 
@@ -121,10 +125,10 @@ Feel free to fork this codebase for your own projects, but please follow license
 
 Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
 
-## Author
+## Authors
 
 Tomi P. Hakala
 
-BirdNET model by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology.
+BirdNET model by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology. Stefan Kahl, Connor Wood, Maximilian Eibl, Holger Klinck.
 
 BirdNET label translations by Patrick Levin for BirdNET-Pi project by Patrick McGuire.
