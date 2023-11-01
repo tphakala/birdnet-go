@@ -103,6 +103,7 @@ func Predict(sample [][]float32, sensitivity float64) ([]Result, error) {
 // into a slice of Observations. The sensitivity and overlap values affect the
 // prediction process and the timestamp calculation, respectively.
 func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) ([]observation.Note, error) {
+	// Slice to keep our detections in
 	observations := []observation.Note{}
 
 	fmt.Println("- Analyzing audio data")
@@ -114,10 +115,16 @@ func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) ([]observation.Note,
 	// Total number of chunks for progress indicator
 	totalChunks := len(chunks)
 
+	// Variable to keep track of the total elapsed time for processed chunks
+	totalElapsed := time.Duration(0)
+
 	// Process each chunk of audio data
 	for idx, c := range chunks {
 		// Print progress indicator
 		fmt.Printf("\r- Processing chunk [%d/%d]", idx+1, totalChunks)
+
+		// Take current time
+		startTime := time.Now()
 
 		// Predict labels for the current audio data
 		predictedResults, err := Predict([][]float32{c}, cfg.Sensitivity)
@@ -125,16 +132,30 @@ func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) ([]observation.Note,
 			return nil, fmt.Errorf("prediction failed: %v", err)
 		}
 
+		// Store how long prediction took
+		elapsed := time.Since(startTime)
+		totalElapsed += elapsed
+
 		// Calculate the end timestamp for this prediction
 		predEnd := predStart + 3.0
 
+		var latitude float64 = 0.0
+		var longitude float64 = 0.0
+		var clipName string = ""
+
 		for _, result := range predictedResults {
-			obs := observation.New(cfg, result.Species, float64(result.Confidence), 0, 0, "", 0)
+			obs := observation.New(cfg, predStart, predEnd, result.Species, float64(result.Confidence), latitude, longitude, clipName, elapsed)
 			observations = append(observations, obs)
 		}
 
 		// Adjust the start timestamp for the next prediction by considering the overlap
 		predStart = predEnd - cfg.Overlap
+
+		// Estimate time to completion
+		avgProcessingTimePerChunk := totalElapsed / time.Duration(idx+1)
+		remainingChunks := totalChunks - (idx + 1)
+		estimatedTimeRemaining := avgProcessingTimePerChunk * time.Duration(remainingChunks)
+		fmt.Printf(" (Estimated time remaining: %s)", formatDuration(estimatedTimeRemaining))
 	}
 
 	// Move to a new line after the loop ends to avoid printing on the same line.
@@ -144,4 +165,19 @@ func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) ([]observation.Note,
 	fmt.Printf("Time %f seconds\n", elapsed.Seconds())
 
 	return observations, nil
+}
+
+// Function to format duration in a readable way
+func formatDuration(d time.Duration) string {
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60 // modulus to get remainder minutes after hours
+	seconds := int(d.Seconds()) % 60 // modulus to get remainder seconds after minutes
+
+	if hours >= 1 {
+		return fmt.Sprintf("%d hour(s) %d minute(s)", hours, minutes)
+	} else if minutes >= 1 {
+		return fmt.Sprintf("%d minute(s) %d second(s)", minutes, seconds)
+	} else {
+		return fmt.Sprintf("%d second(s)", seconds)
+	}
 }
