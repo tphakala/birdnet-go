@@ -55,15 +55,18 @@ func New(cfg *config.Settings, species string, confidence float64, latitude, lon
 
 // LogNote is the central function for logging observations.
 func LogNote(cfg *config.Settings, note Note) error {
-	use24HourFormat := true
-	// Save to Log File
-	if err := LogNoteToFile(cfg, note, use24HourFormat); err != nil {
-		return fmt.Errorf("failed to log note to file: %v", err)
+	if cfg.LogFile != "" {
+		// Save to Log File
+		if err := LogNoteToFile(cfg, note); err != nil {
+			return fmt.Errorf("failed to log note to file: %v", err)
+		}
 	}
 
-	// Save to Database
-	if err := SaveToDatabase(note); err != nil {
-		return fmt.Errorf("failed to save note to database: %v", err)
+	if cfg.Database != "none" {
+		// Save to Database
+		if err := SaveToDatabase(note); err != nil {
+			return fmt.Errorf("failed to save note to database: %v", err)
+		}
 	}
 
 	return nil
