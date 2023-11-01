@@ -77,7 +77,7 @@ func setupFileCommand(cfg *config.Settings) *cobra.Command {
 		Short: "Analyze an audio file",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			cfg.InputAudioFile = args[0]
+			cfg.InputFile = args[0]
 			executeFileAnalysis(cfg)
 		},
 	}
@@ -159,12 +159,12 @@ func executeDirectoryAnalysis(cfg *config.Settings) {
 	for _, file := range files {
 		// Check if the file has a .wav extension.
 		if filepath.Ext(file.Name()) == ".wav" {
-			audioFilePath := filepath.Join(cfg.InputDirectory, file.Name())
-			fmt.Println("Analyzing file:", audioFilePath)
+			inputFilePath := filepath.Join(cfg.InputDirectory, file.Name())
+			fmt.Println("Analyzing file:", inputFilePath)
 			// Create a copy of the config struct and set the input audio file path.
-			cfgCopy := *cfg
-			cfgCopy.InputAudioFile = audioFilePath
-			executeFileAnalysis(&cfgCopy)
+			//cfgCopy := *cfg
+			cfg.InputFile = inputFilePath
+			executeFileAnalysis(cfg)
 		}
 	}
 }
