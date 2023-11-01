@@ -13,6 +13,10 @@ type Note struct {
 	ID             uint `gorm:"primaryKey"`
 	Date           string
 	Time           string
+	InputFile      string
+	BeginTime      float64
+	EndTime        float64
+	SpeciesCode    string
 	ScientificName string
 	CommonName     string
 	Confidence     float64
@@ -36,11 +40,16 @@ func ParseSpeciesString(species string) (string, string) {
 }
 
 // New creates a new Observation.
-func New(cfg *config.Settings, species string, confidence float64, latitude, longitude float64, clipName string, elapsedTime time.Duration) Note {
+func New(cfg *config.Settings, beginTime, endTime float64, species string, confidence float64, latitude, longitude float64, clipName string, elapsedTime time.Duration) Note {
 	scientificName, commonName := ParseSpeciesString(species)
+	var speciesCode = ""
 	return Note{
 		Date:           time.Now().Format("2006-01-02"), // Using the current date
 		Time:           time.Now().Format("15:04:05"),   // Using the current time (24-hour format
+		InputFile:      cfg.InputFile,
+		BeginTime:      beginTime,
+		EndTime:        endTime,
+		SpeciesCode:    speciesCode,
 		ScientificName: scientificName,
 		CommonName:     commonName,
 		Confidence:     confidence,

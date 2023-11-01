@@ -17,7 +17,7 @@ const SampleRate = 48000
 func ReadAudioFile(cfg *config.Settings) ([][]float32, error) {
 	fmt.Print("- Reading audio data")
 
-	file, err := os.Open(cfg.InputAudioFile)
+	file, err := os.Open(cfg.InputFile)
 	if err != nil {
 		return nil, err
 	}

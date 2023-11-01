@@ -12,7 +12,7 @@ import (
 )
 
 type Settings struct {
-	InputAudioFile string
+	InputFile      string
 	InputDirectory string
 	RealtimeMode   bool
 	ModelPath      string
