@@ -3,6 +3,7 @@ package config
 
 type Settings struct {
 	InputAudioFile string
+	InputDirectory string
 	RealtimeMode   bool
 	ModelPath      string
 	Sensitivity    float64
