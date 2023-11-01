@@ -45,15 +45,21 @@ func processData(data []byte, cfg *config.Settings) error {
 	}
 
 	// Construct the filename for saving the audio sample.
-	fileName := fmt.Sprintf("%s/%s.wav", cfg.CapturePath, strconv.FormatInt(time.Now().Unix(), 10))
+	clipName := fmt.Sprintf("%s/%s.wav", cfg.CapturePath, strconv.FormatInt(time.Now().Unix(), 10))
 
 	// Save the audio data as a WAV file.
-	if err := savePCMDataToWAV(fileName, data); err != nil {
+	if err := savePCMDataToWAV(clipName, data); err != nil {
 		return fmt.Errorf("error saving PCM data to WAV: %w", err)
 	}
 
+	// temporary assignments
+	var beginTime float64 = 0.0
+	var endTime float64 = 0.0
+	var latitude float64 = 0.0
+	var longitude float64 = 0.0
+
 	// Create an observation.Note from the prediction result.
-	note := observation.New(cfg, results[0].Species, float64(results[0].Confidence), 0, 0, fileName, elapsedTime) // Adjust the start and end time arguments if required.
+	note := observation.New(cfg, beginTime, endTime, results[0].Species, float64(results[0].Confidence), latitude, longitude, clipName, elapsedTime) // Adjust the start and end time arguments if required.
 
 	// Log the observation to the specified log file.
 	if err := observation.LogNote(cfg, note); err != nil {
