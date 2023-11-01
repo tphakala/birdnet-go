@@ -3,3 +3,4 @@ log
 clips
 tmp
 *.exe
+model/labels_en.txt
