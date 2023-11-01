@@ -18,7 +18,7 @@ func PrintNotesWithThreshold(notes []observation.Note, threshold float64) {
 
 	for _, note := range notes {
 		if note.Confidence >= threshold {
-			fmt.Printf("Time Interval: %s\t%-30s %.1f%%\n", note.Time, note.CommonName, note.Confidence*100)
+			fmt.Printf("Time Interval: %.1f %.1f\t%-30s %.1f%%\n", note.BeginTime, note.EndTime, note.CommonName, note.Confidence*100)
 		}
 	}
 }
