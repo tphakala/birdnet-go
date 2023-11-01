@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
@@ -58,9 +59,10 @@ func main() {
 	rootCmd.PersistentFlags().StringVar(&cfg.Locale, "locale", "English", "Set the locale for labels. Accepts full name or 2-letter code.")
 
 	fileCmd := setupFileCommand(&cfg)
+	directoryCmd := setupDirectoryCommand(&cfg)
 	realtimeCmd := setupRealtimeCommand(&cfg)
 
-	rootCmd.AddCommand(fileCmd, realtimeCmd)
+	rootCmd.AddCommand(fileCmd, realtimeCmd, directoryCmd)
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
@@ -78,6 +80,20 @@ func setupFileCommand(cfg *config.Settings) *cobra.Command {
 	}
 
 	cmd.PersistentFlags().Float64Var(&cfg.Overlap, "overlap", 0, "Overlap value between 0.0 and 2.9")
+
+	return cmd
+}
+
+func setupDirectoryCommand(cfg *config.Settings) *cobra.Command {
+	var cmd = &cobra.Command{
+		Use:   "directory [path]",
+		Short: "Analyze all *.wav files in a directory",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			cfg.InputDirectory = args[0]
+			executeDirectoryAnalysis(cfg)
+		},
+	}
 
 	return cmd
 }
@@ -128,6 +144,21 @@ func executeFileAnalysis(cfg *config.Settings) {
 	fmt.Println() // Empty line for better readability.
 	// Print the detections (notes) with a threshold of, for example, 10%
 	output.PrintNotesWithThreshold(notes, 0.1)
+}
+
+func executeDirectoryAnalysis(cfg *config.Settings) {
+	files, err := ioutil.ReadDir(cfg.InputDirectory)
+	if err != nil {
+		log.Fatalf("Failed to read directory: %v", err)
+	}
+
+	for _, file := range files {
+		if strings.HasSuffix(file.Name(), ".wav") {
+			cfg.InputAudioFile = filepath.Join(cfg.InputDirectory, file.Name())
+			fmt.Println("Analyzing file:", cfg.InputAudioFile)
+			executeFileAnalysis(cfg)
+		}
+	}
 }
 
 func executeRealtimeAnalysis(cfg *config.Settings) {
