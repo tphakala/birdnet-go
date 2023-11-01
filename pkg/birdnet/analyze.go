@@ -121,7 +121,7 @@ func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) ([]observation.Note,
 	// Process each chunk of audio data
 	for idx, c := range chunks {
 		// Print progress indicator
-		fmt.Printf("\r- Processing chunk [%d/%d]", idx+1, totalChunks)
+		//fmt.Printf("\r- Processing chunk [%d/%d]", idx+1, totalChunks)
 
 		// Take current time
 		startTime := time.Now()
@@ -155,7 +155,9 @@ func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) ([]observation.Note,
 		avgProcessingTimePerChunk := totalElapsed / time.Duration(idx+1)
 		remainingChunks := totalChunks - (idx + 1)
 		estimatedTimeRemaining := avgProcessingTimePerChunk * time.Duration(remainingChunks)
-		fmt.Printf(" (Estimated time remaining: %s)", formatDuration(estimatedTimeRemaining))
+
+		// Clear the line and then print combined progress and estimated time
+		fmt.Printf("\r\033[K- Processing chunk [%d/%d] (Estimated time remaining: %s)", idx+1, totalChunks, formatDuration(estimatedTimeRemaining))
 	}
 
 	// Move to a new line after the loop ends to avoid printing on the same line.
