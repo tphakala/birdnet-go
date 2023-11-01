@@ -10,7 +10,7 @@ import (
 )
 
 // LogNoteToFile saves the Note to a log file.
-func LogNoteToFile(cfg *config.Settings, note Note, use24HourFormat bool) error {
+func LogNoteToFile(cfg *config.Settings, note Note) error {
 	// Check if the directory of the log file exists. If not, create it.
 	dir := filepath.Dir(cfg.LogPath)
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
@@ -35,7 +35,7 @@ func LogNoteToFile(cfg *config.Settings, note Note, use24HourFormat bool) error 
 
 	// Determine the time format string based on the user's preference
 	var timeFormat string
-	if use24HourFormat {
+	if cfg.TimeAs24h {
 		timeFormat = "15:04:05"
 	} else {
 		timeFormat = "03:04:05 PM"

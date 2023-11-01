@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
@@ -13,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/tphakala/go-birdnet/pkg/birdnet"
 	"github.com/tphakala/go-birdnet/pkg/config"
 	"github.com/tphakala/go-birdnet/pkg/myaudio"
@@ -25,6 +25,9 @@ const (
 )
 
 func main() {
+	// Load configuration
+	config.Load()
+
 	var cfg config.Settings
 
 	rootCmd := &cobra.Command{
@@ -53,10 +56,10 @@ func main() {
 	}
 
 	// Set up the persistent debug flag for the root command.
-	rootCmd.PersistentFlags().BoolVar(&cfg.Debug, "debug", false, "Enable debug output")
-	rootCmd.PersistentFlags().StringVar(&cfg.ModelPath, "model", DefaultModelPath, "Path to the model file")
-	rootCmd.PersistentFlags().Float64Var(&cfg.Sensitivity, "sensitivity", 1, "Sigmoid sensitivity value between 0.0 and 1.5")
-	rootCmd.PersistentFlags().StringVar(&cfg.Locale, "locale", "English", "Set the locale for labels. Accepts full name or 2-letter code.")
+	rootCmd.PersistentFlags().BoolVar(&cfg.Debug, "debug", viper.GetBool("debug"), "Enable debug output")
+	rootCmd.PersistentFlags().StringVar(&cfg.ModelPath, "model", viper.GetString("modelpath"), "Path to the model file")
+	rootCmd.PersistentFlags().Float64Var(&cfg.Sensitivity, "sensitivity", viper.GetFloat64("sensitivity"), "Sigmoid sensitivity value between 0.0 and 1.5")
+	rootCmd.PersistentFlags().StringVar(&cfg.Locale, "locale", viper.GetString("locale"), "Set the locale for labels. Accepts full name or 2-letter code.")
 
 	fileCmd := setupFileCommand(&cfg)
 	directoryCmd := setupDirectoryCommand(&cfg)
@@ -79,7 +82,7 @@ func setupFileCommand(cfg *config.Settings) *cobra.Command {
 		},
 	}
 
-	cmd.PersistentFlags().Float64Var(&cfg.Overlap, "overlap", 0, "Overlap value between 0.0 and 2.9")
+	cmd.PersistentFlags().Float64Var(&cfg.Overlap, "overlap", viper.GetFloat64("overlap"), "Overlap value between 0.0 and 2.9")
 
 	return cmd
 }
@@ -105,10 +108,11 @@ func setupRealtimeCommand(cfg *config.Settings) *cobra.Command {
 		Run:   func(cmd *cobra.Command, args []string) { executeRealtimeAnalysis(cfg) },
 	}
 
-	cmd.PersistentFlags().StringVar(&cfg.CapturePath, "savepath", "./clips", "Path to save audio data to")
-	cmd.PersistentFlags().StringVar(&cfg.LogPath, "logpath", "./log/detections.log", "Path to save log file to")
-	cmd.PersistentFlags().Float64Var(&cfg.Threshold, "threshold", 0.8, "Threshold for detections")
-	cmd.PersistentFlags().BoolVar(&cfg.ProcessingTime, "processingtime", false, "Report processing time for each detection")
+	cmd.PersistentFlags().StringVar(&cfg.CapturePath, "savepath", viper.GetString("savepath"), "Path to save audio data to")
+	cmd.PersistentFlags().StringVar(&cfg.LogPath, "logpath", viper.GetString("logpath"), "Path to save log file to")
+	cmd.PersistentFlags().StringVar(&cfg.LogFile, "logfile", viper.GetString("logfile"), "Filename of logfile")
+	cmd.PersistentFlags().Float64Var(&cfg.Threshold, "threshold", viper.GetFloat64("threshold"), "Threshold for detections")
+	cmd.PersistentFlags().BoolVar(&cfg.ProcessingTime, "processingtime", viper.GetBool("processingtime"), "Report processing time for each detection")
 
 	return cmd
 }
@@ -116,14 +120,12 @@ func setupRealtimeCommand(cfg *config.Settings) *cobra.Command {
 // setupBirdNET initializes and loads the BirdNET model.
 func setupBirdNET(modelPath string, LabelFilePath string) error {
 	fmt.Println("Loading BirdNET model")
-	err := birdnet.InitializeModel(modelPath)
-	if err != nil {
-		return fmt.Errorf("failed to initialize model: %w", err)
+	if err := birdnet.InitializeModel(modelPath); err != nil {
+		log.Fatalf("failed to initialize model: %v", err)
 	}
 
-	err = birdnet.LoadLabels(LabelFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to load labels: %w", err)
+	if err := birdnet.LoadLabels(LabelFilePath); err != nil {
+		log.Fatalf("failed to load labels: %v", err)
 	}
 
 	return nil
@@ -133,12 +135,12 @@ func executeFileAnalysis(cfg *config.Settings) {
 	// Load and analyze the input audio file.
 	audioData, err := myaudio.ReadAudioFile(cfg)
 	if err != nil {
-		log.Fatalf("Error while reading input audio: %v", err)
+		log.Fatalf("error while reading input audio: %v", err)
 	}
 
 	notes, err := birdnet.AnalyzeAudio(audioData, cfg)
 	if err != nil {
-		log.Fatalf("Failed to analyze audio data: %v", err)
+		log.Fatalf("eailed to analyze audio data: %v", err)
 	}
 
 	fmt.Println() // Empty line for better readability.
@@ -146,55 +148,82 @@ func executeFileAnalysis(cfg *config.Settings) {
 	output.PrintNotesWithThreshold(notes, 0.1)
 }
 
+// executeDirectoryAnalysis processes all .wav files in the given directory for analysis.
 func executeDirectoryAnalysis(cfg *config.Settings) {
-	files, err := ioutil.ReadDir(cfg.InputDirectory)
+	// Read the list of files from the input directory.
+	files, err := os.ReadDir(cfg.InputDirectory)
 	if err != nil {
-		log.Fatalf("Failed to read directory: %v", err)
+		log.Fatalf("Failed to open directory: %v", err)
 	}
 
 	for _, file := range files {
-		if strings.HasSuffix(file.Name(), ".wav") {
-			cfg.InputAudioFile = filepath.Join(cfg.InputDirectory, file.Name())
-			fmt.Println("Analyzing file:", cfg.InputAudioFile)
-			executeFileAnalysis(cfg)
+		// Check if the file has a .wav extension.
+		if filepath.Ext(file.Name()) == ".wav" {
+			audioFilePath := filepath.Join(cfg.InputDirectory, file.Name())
+			fmt.Println("Analyzing file:", audioFilePath)
+			// Create a copy of the config struct and set the input audio file path.
+			cfgCopy := *cfg
+			cfgCopy.InputAudioFile = audioFilePath
+			executeFileAnalysis(&cfgCopy)
 		}
 	}
 }
 
+// executeRealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 func executeRealtimeAnalysis(cfg *config.Settings) {
 	fmt.Println("Starting BirdNET Analyzer in realtime mode")
 
+	// Start necessary routines for real-time analysis.
 	myaudio.StartGoRoutines(cfg)
+
+	// Channel to receive OS signals.
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	// Block until a signal is received.
 	<-c
+
+	// Close the QuitChannel to signal termination.
 	close(myaudio.QuitChannel)
 }
 
+// extractLabelFileFromZip extracts a specified label file from a zip archive
 func extractLabelFileFromZip(zipPath, labelFilePath string) error {
+	// Open the zip archive for reading
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
 
-	for _, f := range r.File {
-		if f.Name == filepath.Base(labelFilePath) {
-			rc, err := f.Open()
+	// Iterate through the files in the zip archive
+	for _, zipFile := range r.File {
+		// Check if the current file matches the desired label file
+		if zipFile.Name == filepath.Base(labelFilePath) {
+			// Open the zip file entry for reading
+			rc, err := zipFile.Open()
 			if err != nil {
 				return err
 			}
-			defer rc.Close()
 
-			f, err := os.Create(labelFilePath)
+			// Create the output file
+			outFile, err := os.Create(labelFilePath)
 			if err != nil {
+				rc.Close() // Make sure to close the zip file entry before returning
 				return err
 			}
-			defer f.Close()
 
-			_, err = io.Copy(f, rc)
+			// Copy the content from the zip file entry to the output file
+			_, err = io.Copy(outFile, rc)
+
+			// Close the files after copying
+			rc.Close()
+			outFile.Close()
+
 			return err
 		}
 	}
+
+	// Return an error if the desired label file wasn't found in the zip archive
 	return fmt.Errorf("label file not found in the zip archive")
 }
