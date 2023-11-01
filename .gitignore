@@ -4,3 +4,4 @@ clips
 tmp
 *.exe
 model/labels_en.txt
+model/labels_fi.txt
