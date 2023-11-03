@@ -11,6 +11,13 @@ import (
 	"github.com/tphakala/go-tflite"
 )
 
+type Result struct {
+	Species    string
+	Confidence float32
+}
+
+type DetectionsMap map[string][]Result
+
 // customSigmoid calculates the sigmoid of x adjusted by a sensitivity factor.
 // Sensitivity modifies the steepness of the curve. A higher value for sensitivity
 // makes the curve steeper. It returns a value between 0 and 1.

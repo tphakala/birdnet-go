@@ -1,9 +1,11 @@
 package birdnet
 
 import (
+	"archive/zip"
 	"bufio"
+	"bytes"
+	_ "embed"
 	"fmt"
-	"os"
 	"runtime"
 	"strings"
 
@@ -13,12 +15,20 @@ import (
 var interpreter *tflite.Interpreter
 var labels []string
 
-// initializeModel loads the model from the given path and creates a new interpreter
-func InitializeModel(modelPath string) error {
-	// Load the TensorFlow Lite model from the provided path
-	model := tflite.NewModelFromFile(modelPath)
+//go:embed BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite
+var modelData []byte
+
+const modelVersion = "BirdNET GLOBAL 6K V2.4 FP32"
+
+//go:embed labels.zip
+var labelsZip []byte
+
+// initializeModel loads the model from embedded data and creates a new interpreter
+func InitializeModelFromEmbeddedData() error {
+	// Load the TensorFlow Lite model from embedded data
+	model := tflite.NewModel(modelData)
 	if model == nil {
-		return fmt.Errorf("cannot load model from path: %s", modelPath)
+		return fmt.Errorf("cannot load model from embedded data")
 	}
 
 	// Get cpu core count for interpreter options
@@ -46,32 +56,53 @@ func InitializeModel(modelPath string) error {
 		return fmt.Errorf("tensor allocation failed")
 	}
 
+	fmt.Printf("%s model initialized\n", modelVersion)
 	return nil
 }
 
-// loadLabels loads the labels from the provided file path into a slice and returns them.
-// An error is returned if there's an issue reading the file or its content.
-func LoadLabels(labelspath string) error {
+// LoadLabels extracts the specified label file from the embedded zip archive
+// and loads the labels into a slice based on the provided locale.
+func LoadLabels(locale string) error {
+	// Reset labels slice to ensure it's empty before loading new labels
+	labels = nil
 
-	// Open the labels file.
-	file, err := os.Open(labelspath)
+	// Create a new reader for the embedded labels.zip
+	reader := bytes.NewReader(labelsZip)
+	r, err := zip.NewReader(reader, int64(len(labelsZip)))
 	if err != nil {
 		return err
 	}
-	defer file.Close()
 
-	// Read each line in the file and append to the labels slice.
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		labels = append(labels, strings.TrimSpace(scanner.Text()))
+	labelFileName := fmt.Sprintf("labels_%s.txt", locale)
+
+	// Search for the matching labels file in the zip archive
+	for _, zipFile := range r.File {
+		if zipFile.Name == labelFileName {
+			// File found, open it
+			rc, err := zipFile.Open()
+			if err != nil {
+				return err
+			}
+			defer rc.Close()
+
+			// Read the file content line by line
+			scanner := bufio.NewScanner(rc)
+			for scanner.Scan() {
+				labels = append(labels, strings.TrimSpace(scanner.Text()))
+			}
+
+			// Check for errors from the scanner
+			if err := scanner.Err(); err != nil {
+				return err
+			}
+
+			// Successfully loaded labels
+			return nil
+		}
 	}
 
-	// Check for errors from the scanner.
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
-	return nil
+	// If the loop completes without returning, the label file was not found
+	return fmt.Errorf("label file '%s' not found in the zip archive", labelFileName)
 }
 
 func DeleteInterpreter() {

@@ -16,6 +16,7 @@ type Settings struct {
 	InputDirectory string
 	RealtimeMode   bool
 	ModelPath      string
+	LabelFilePath  string
 	Sensitivity    float64
 	Overlap        float64
 	Debug          bool
@@ -23,6 +24,8 @@ type Settings struct {
 	Threshold      float64
 	Locale         string
 	ProcessingTime bool
+	OutputDir      string
+	OutputType     string
 	LogPath        string
 	LogFile        string
 	Database       string // none, sqlite, mysql
@@ -153,7 +156,6 @@ func Load() {
 func createDefault(path string) {
 	defaultConfig := `
 debug: false
-modelpath: ./model/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite
 sensitivity: 1
 locale: en
 overlap: 0.0
@@ -162,6 +164,8 @@ threshold: 0.8
 processingtime: false
 logpath: ./log/
 logfile: notes.log
+outputdir: ./output/
+outputtype: table
 database: none
 timeas24h: true
 `
