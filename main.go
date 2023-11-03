@@ -89,7 +89,7 @@ func setupFileCommand(cfg *config.Settings) *cobra.Command {
 	}
 
 	cmd.PersistentFlags().StringVar(&cfg.OutputDir, "output", viper.GetString("outputdir"), "Path to output directory")
-	cmd.PersistentFlags().StringVar(&cfg.OutputType, "outputtype", viper.GetString("outputtype"), "Output type, defauls to table (Raven selection table)")
+	cmd.PersistentFlags().StringVar(&cfg.OutputType, "outputtype", viper.GetString("outputtype"), "Output type, defaults to table (Raven selection table)")
 	cmd.PersistentFlags().Float64Var(&cfg.Overlap, "overlap", viper.GetFloat64("overlap"), "Overlap value between 0.0 and 2.9")
 
 	return cmd
@@ -154,12 +154,21 @@ func executeFileAnalysis(cfg *config.Settings) {
 	fmt.Println() // Empty line for better readability.
 	// Print the detections (notes) with a threshold of, for example, 10%
 	//output.PrintNotesWithThreshold(notes, 0.1)
+	var outputFile string = ""
+	if cfg.OutputDir != "" {
+		outputFile = filepath.Join(cfg.OutputDir, filepath.Base(cfg.InputFile))
+	}
 	if cfg.OutputType == "" || cfg.OutputType == "table" {
-		var outputFile string = ""
-		if cfg.OutputDir != "" {
-			outputFile = filepath.Join(cfg.OutputDir, filepath.Base(cfg.InputFile)+".txt")
+		if outputFile != "" {
+			outputFile = filepath.Join(outputFile + ".txt")
 		}
-		observation.WriteNotes(notes, outputFile)
+		observation.WriteNotesTable(notes, outputFile)
+	}
+	if cfg.OutputType == "csv" {
+		if outputFile != "" {
+			outputFile = filepath.Join(outputFile + ".csv")
+		}
+		observation.WriteNotesCsv(notes, outputFile)
 	}
 }
 
