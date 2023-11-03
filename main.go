@@ -77,35 +77,61 @@ func main() {
 	}
 }
 
+// setupFileCommand creates and returns a Cobra command for the audio file analysis.
+// This command is intended for analyzing a single audio file as specified by the user.
 func setupFileCommand(cfg *config.Settings) *cobra.Command {
+	// Define a new command with usage, short description, and required arguments.
 	var cmd = &cobra.Command{
 		Use:   "file [input.wav]",
 		Short: "Analyze an audio file",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.ExactArgs(1), // Ensure exactly one argument is provided, the input file.
+
+		// Run is the command's execution logic when the "file" command is invoked.
 		Run: func(cmd *cobra.Command, args []string) {
+			// Update the configuration to use the provided input file.
 			cfg.InputFile = args[0]
+			// Call the function to execute the file analysis with the updated configuration.
 			executeFileAnalysis(cfg)
 		},
 	}
 
+	// Setup persistent flags for the command which will be available to this command and all child commands.
 	cmd.PersistentFlags().StringVar(&cfg.OutputDir, "output", viper.GetString("outputdir"), "Path to output directory")
 	cmd.PersistentFlags().StringVar(&cfg.OutputType, "outputtype", viper.GetString("outputtype"), "Output type, defaults to table (Raven selection table)")
 	cmd.PersistentFlags().Float64Var(&cfg.Overlap, "overlap", viper.GetFloat64("overlap"), "Overlap value between 0.0 and 2.9")
 
+	// Return the fully configured command to be added to the root command of the CLI.
 	return cmd
 }
 
+// setupDirectoryCommand initializes and returns a new cobra.Command for directory analysis.
+// It configures the command to accept a directory path as an argument and sets up
+// persistent flags that control the output and analysis behavior based on user input.
 func setupDirectoryCommand(cfg *config.Settings) *cobra.Command {
+	// Define the directory command with usage, description, and argument validation.
 	var cmd = &cobra.Command{
 		Use:   "directory [path]",
 		Short: "Analyze all *.wav files in a directory",
-		Args:  cobra.ExactArgs(1),
+		Long: `Provide a directory path to analyze all *.wav files within it. 
+		       The analysis will use the provided configuration settings.`,
+		Args: cobra.ExactArgs(1), // Ensure exactly one argument is provided.
+
+		// Command execution logic when the directory command is invoked.
 		Run: func(cmd *cobra.Command, args []string) {
+			// Set the input directory in the configuration to the provided argument.
 			cfg.InputDirectory = args[0]
+
+			// Call the function that executes the directory analysis with the given configuration.
 			executeDirectoryAnalysis(cfg)
 		},
 	}
 
+	// Setup persistent flags for the command which will be available to this command and all child commands.
+	cmd.PersistentFlags().StringVar(&cfg.OutputDir, "output", viper.GetString("outputdir"), "Path to output directory")
+	cmd.PersistentFlags().StringVar(&cfg.OutputType, "outputtype", viper.GetString("outputtype"), "Output type, defaults to table (Raven selection table)")
+	cmd.PersistentFlags().Float64Var(&cfg.Overlap, "overlap", viper.GetFloat64("overlap"), "Overlap value between 0.0 and 2.9")
+
+	// Return the fully configured command to the caller.
 	return cmd
 }
 
@@ -126,49 +152,67 @@ func setupRealtimeCommand(cfg *config.Settings) *cobra.Command {
 }
 
 // setupBirdNET initializes and loads the BirdNET model.
+// It prints a loading message, initializes the model with embedded data,
+// and loads the labels according to the provided locale in the config.
+// It returns an error if any step in the initialization process fails.
 func setupBirdNET(cfg config.Settings) error {
-	fmt.Println("Loading BirdNET model")
+	fmt.Println("Loading BirdNET model...")
+
+	// Initialize the BirdNET model from embedded data.
 	if err := birdnet.InitializeModelFromEmbeddedData(); err != nil {
-		log.Fatalf("failed to initialize model: %v", err)
+		// Return an error allowing the caller to handle it.
+		return fmt.Errorf("failed to initialize model: %w", err)
 	}
 
+	// Load the labels for the BirdNET model based on the locale specified in the configuration.
 	if err := birdnet.LoadLabels(cfg.Locale); err != nil {
-		log.Fatalf("failed to load labels: %v", err)
+		// Return an error allowing the caller to handle it.
+		return fmt.Errorf("failed to load labels: %w", err)
 	}
 
+	// If everything was successful, return nil indicating no error occurred.
 	return nil
 }
 
+// executeFileAnalysis conducts an analysis of an audio file and outputs the results.
+// It reads an audio file, analyzes it for bird sounds, and prints the results based on the provided configuration.
 func executeFileAnalysis(cfg *config.Settings) {
 	// Load and analyze the input audio file.
 	audioData, err := myaudio.ReadAudioFile(cfg)
 	if err != nil {
+		// Use log.Fatalf to log the error and exit the program.
 		log.Fatalf("error while reading input audio: %v", err)
 	}
 
+	// Analyze the loaded audio data for bird sounds.
 	notes, err := birdnet.AnalyzeAudio(audioData, cfg)
 	if err != nil {
-		log.Fatalf("eailed to analyze audio data: %v", err)
+		// Corrected typo "eailed" to "failed" and used log.Fatalf to log the error and exit.
+		log.Fatalf("failed to analyze audio data: %v", err)
 	}
 
-	fmt.Println() // Empty line for better readability.
-	// Print the detections (notes) with a threshold of, for example, 10%
-	//output.PrintNotesWithThreshold(notes, 0.1)
-	var outputFile string = ""
+	// Print a newline for better readability in the output.
+	fmt.Println()
+
+	// Prepare the output file path if OutputDir is specified in the configuration.
+	var outputFile string
 	if cfg.OutputDir != "" {
+		// Safely concatenate file paths using filepath.Join to avoid cross-platform issues.
 		outputFile = filepath.Join(cfg.OutputDir, filepath.Base(cfg.InputFile))
 	}
+
+	// Output the notes based on the desired output type in the configuration.
+	// If OutputType is not specified or if it's set to "table", output as a table format.
 	if cfg.OutputType == "" || cfg.OutputType == "table" {
-		if outputFile != "" {
-			outputFile = filepath.Join(outputFile + ".txt")
+		if err := observation.WriteNotesTable(notes, outputFile); err != nil {
+			log.Fatalf("failed to write notes table: %v", err)
 		}
-		observation.WriteNotesTable(notes, outputFile)
 	}
+	// If OutputType is set to "csv", output as CSV format.
 	if cfg.OutputType == "csv" {
-		if outputFile != "" {
-			outputFile = filepath.Join(outputFile + ".csv")
+		if err := observation.WriteNotesCsv(notes, outputFile); err != nil {
+			log.Fatalf("failed to write notes CSV: %v", err)
 		}
-		observation.WriteNotesCsv(notes, outputFile)
 	}
 }
 
@@ -207,6 +251,9 @@ func executeRealtimeAnalysis(cfg *config.Settings) {
 	// Block until a signal is received.
 	<-c
 
-	// Close the QuitChannel to signal termination.
+	// Delete tflite interpreter
+	birdnet.DeleteInterpreter()
+
+	// Close the QuitChannel to signal termination
 	close(myaudio.QuitChannel)
 }

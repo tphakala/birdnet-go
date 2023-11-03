@@ -105,6 +105,7 @@ func LoadLabels(locale string) error {
 	return fmt.Errorf("label file '%s' not found in the zip archive", labelFileName)
 }
 
+// DeleteInterpreter safely removes the current instance of the interpreter
 func DeleteInterpreter() {
 	interpreter.Delete()
 }
