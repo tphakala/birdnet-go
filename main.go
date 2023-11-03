@@ -1,9 +1,7 @@
 package main
 
 import (
-	"archive/zip"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -16,12 +14,7 @@ import (
 	"github.com/tphakala/go-birdnet/pkg/birdnet"
 	"github.com/tphakala/go-birdnet/pkg/config"
 	"github.com/tphakala/go-birdnet/pkg/myaudio"
-	"github.com/tphakala/go-birdnet/pkg/output"
-)
-
-const (
-	DefaultModelPath = "model/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite"
-	//LabelFilePath    = "model/labels_fi.txt"
+	"github.com/tphakala/go-birdnet/pkg/observation"
 )
 
 func main() {
@@ -34,30 +27,43 @@ func main() {
 		Use:   "birdnet",
 		Short: "Go-BirdNET CLI",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if _, exists := config.Locales[cfg.Locale]; !exists {
-				if fullLocale, exists := config.LocaleCodes[strings.ToLower(cfg.Locale)]; exists {
-					cfg.Locale = fullLocale
-				} else {
-					return fmt.Errorf("unsupported locale: %s", cfg.Locale)
-				}
-			}
-			LabelFilePath := fmt.Sprintf("model/%s", config.Locales[cfg.Locale])
+			// Normalize the input locale to lowercase
+			inputLocale := strings.ToLower(cfg.Locale)
 
-			// Check if label file exists on disk.
-			if _, err := os.Stat(LabelFilePath); os.IsNotExist(err) {
-				// Attempt to extract from ZIP.
-				if err := extractLabelFileFromZip("model/labels_nm.zip", LabelFilePath); err != nil {
-					return fmt.Errorf("error extracting label file: %v", err)
+			// Check if input is already a locale code
+			if _, exists := config.Locales[config.LocaleCodes[inputLocale]]; exists {
+				cfg.Locale = inputLocale // The input is a valid locale code, so use it directly.
+			} else {
+				// If inputLocale is not a locale code, look for a full locale name match
+				for code, fullName := range config.LocaleCodes {
+					if strings.ToLower(fullName) == inputLocale {
+						// Found full locale name, now get the corresponding locale code
+						cfg.Locale = code
+						break
+					}
 				}
 			}
-			setupBirdNET(cfg.ModelPath, LabelFilePath)
+
+			// Now, cfg.Locale should be the locale code, check if it's in LocaleCodes map
+			if fullLocale, exists := config.LocaleCodes[cfg.Locale]; !exists {
+				return fmt.Errorf("unsupported locale: %s", cfg.Locale)
+			} else {
+				// Check if the corresponding label file exists
+				if _, exists := config.Locales[fullLocale]; !exists {
+					return fmt.Errorf("locale code supported but no label file found: %s", fullLocale)
+				}
+			}
+
+			// At this point, cfg.Locale is set to a valid locale code
+			// Proceed with the setup using the standardized locale code
+			setupBirdNET(cfg)
 			return nil
 		},
 	}
 
 	// Set up the persistent debug flag for the root command.
 	rootCmd.PersistentFlags().BoolVar(&cfg.Debug, "debug", viper.GetBool("debug"), "Enable debug output")
-	rootCmd.PersistentFlags().StringVar(&cfg.ModelPath, "model", viper.GetString("modelpath"), "Path to the model file")
+	//rootCmd.PersistentFlags().StringVar(&cfg.ModelPath, "model", viper.GetString("modelpath"), "Path to the model file")
 	rootCmd.PersistentFlags().Float64Var(&cfg.Sensitivity, "sensitivity", viper.GetFloat64("sensitivity"), "Sigmoid sensitivity value between 0.0 and 1.5")
 	rootCmd.PersistentFlags().StringVar(&cfg.Locale, "locale", viper.GetString("locale"), "Set the locale for labels. Accepts full name or 2-letter code.")
 
@@ -82,6 +88,8 @@ func setupFileCommand(cfg *config.Settings) *cobra.Command {
 		},
 	}
 
+	cmd.PersistentFlags().StringVar(&cfg.OutputDir, "output", viper.GetString("outputdir"), "Path to output directory")
+	cmd.PersistentFlags().StringVar(&cfg.OutputType, "outputtype", viper.GetString("outputtype"), "Output type, defauls to table (Raven selection table)")
 	cmd.PersistentFlags().Float64Var(&cfg.Overlap, "overlap", viper.GetFloat64("overlap"), "Overlap value between 0.0 and 2.9")
 
 	return cmd
@@ -118,13 +126,13 @@ func setupRealtimeCommand(cfg *config.Settings) *cobra.Command {
 }
 
 // setupBirdNET initializes and loads the BirdNET model.
-func setupBirdNET(modelPath string, LabelFilePath string) error {
+func setupBirdNET(cfg config.Settings) error {
 	fmt.Println("Loading BirdNET model")
-	if err := birdnet.InitializeModel(modelPath); err != nil {
+	if err := birdnet.InitializeModelFromEmbeddedData(); err != nil {
 		log.Fatalf("failed to initialize model: %v", err)
 	}
 
-	if err := birdnet.LoadLabels(LabelFilePath); err != nil {
+	if err := birdnet.LoadLabels(cfg.Locale); err != nil {
 		log.Fatalf("failed to load labels: %v", err)
 	}
 
@@ -145,7 +153,14 @@ func executeFileAnalysis(cfg *config.Settings) {
 
 	fmt.Println() // Empty line for better readability.
 	// Print the detections (notes) with a threshold of, for example, 10%
-	output.PrintNotesWithThreshold(notes, 0.1)
+	//output.PrintNotesWithThreshold(notes, 0.1)
+	if cfg.OutputType == "" || cfg.OutputType == "table" {
+		var outputFile string = ""
+		if cfg.OutputDir != "" {
+			outputFile = filepath.Join(cfg.OutputDir, filepath.Base(cfg.InputFile)+".txt")
+		}
+		observation.WriteNotes(notes, outputFile)
+	}
 }
 
 // executeDirectoryAnalysis processes all .wav files in the given directory for analysis.
@@ -185,45 +200,4 @@ func executeRealtimeAnalysis(cfg *config.Settings) {
 
 	// Close the QuitChannel to signal termination.
 	close(myaudio.QuitChannel)
-}
-
-// extractLabelFileFromZip extracts a specified label file from a zip archive
-func extractLabelFileFromZip(zipPath, labelFilePath string) error {
-	// Open the zip archive for reading
-	r, err := zip.OpenReader(zipPath)
-	if err != nil {
-		return err
-	}
-	defer r.Close()
-
-	// Iterate through the files in the zip archive
-	for _, zipFile := range r.File {
-		// Check if the current file matches the desired label file
-		if zipFile.Name == filepath.Base(labelFilePath) {
-			// Open the zip file entry for reading
-			rc, err := zipFile.Open()
-			if err != nil {
-				return err
-			}
-
-			// Create the output file
-			outFile, err := os.Create(labelFilePath)
-			if err != nil {
-				rc.Close() // Make sure to close the zip file entry before returning
-				return err
-			}
-
-			// Copy the content from the zip file entry to the output file
-			_, err = io.Copy(outFile, rc)
-
-			// Close the files after copying
-			rc.Close()
-			outFile.Close()
-
-			return err
-		}
-	}
-
-	// Return an error if the desired label file wasn't found in the zip archive
-	return fmt.Errorf("label file not found in the zip archive")
 }
