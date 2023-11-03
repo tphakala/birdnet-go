@@ -88,7 +88,7 @@ func LogNote(cfg *config.Settings, note Note) error {
 // WriteNotes writes the slice of notes to the specified destination.
 // The output can be directed to either stdout or a file specified by the filename.
 // If filename is an empty string, it will write to stdout.
-func WriteNotes(notes []Note, filename string) error {
+func WriteNotesTable(notes []Note, filename string) error {
 	var w io.Writer
 	if filename == "" {
 		w = os.Stdout
@@ -109,6 +109,37 @@ func WriteNotes(notes []Note, filename string) error {
 	for i, note := range notes {
 		line := fmt.Sprintf("%d\tSpectrogram 1\t1\t%s\t%.1f\t%.1f\t0\t15000\t%s\t%s\t%.4f\n",
 			i+1, note.InputFile, note.BeginTime, note.EndTime, note.SpeciesCode, note.CommonName, note.Confidence)
+		if _, err := w.Write([]byte(line)); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// WriteNotesCsv writes the slice of notes to the specified destination in CSV format.
+// If filename is an empty string, it will write to stdout.
+func WriteNotesCsv(notes []Note, filename string) error {
+	var w io.Writer
+	if filename == "" {
+		w = os.Stdout
+	} else {
+		file, err := os.Create(filename)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		w = file
+	}
+
+	header := "Start (s),End (s),Scientific name,Common name,Confidence\n"
+	if _, err := w.Write([]byte(header)); err != nil {
+		return err
+	}
+
+	for _, note := range notes {
+		line := fmt.Sprintf("%f,%f,%s,%s,%.4f\n",
+			note.BeginTime, note.EndTime, note.ScientificName, note.CommonName, note.Confidence)
 		if _, err := w.Write([]byte(line)); err != nil {
 			return err
 		}
