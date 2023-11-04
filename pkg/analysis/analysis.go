@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/tphakala/go-birdnet/pkg/birdnet"
@@ -54,25 +55,41 @@ func FileAnalysis(cfg *config.Settings) error {
 	return nil
 }
 
-// executeDirectoryAnalysis processes all .wav files in the given directory for analysis.
+// DirectoryAnalysis processes all .wav files in the given directory for analysis.
 func DirectoryAnalysis(cfg *config.Settings) error {
-	// Read the list of files from the input directory.
-	files, err := os.ReadDir(cfg.InputDirectory)
-	if err != nil {
-		log.Fatalf("Failed to open directory: %v", err)
+	analyzeFunc := func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			// Return the error to stop the walking process.
+			return err
+		}
+
+		if d.IsDir() {
+			// If recursion is not enabled and this is a subdirectory, skip it.
+			if !cfg.Recursive && path != cfg.InputDirectory {
+				return filepath.SkipDir
+			}
+			// If it's the root directory or recursion is enabled, continue walking.
+			return nil
+		}
+
+		if strings.HasSuffix(d.Name(), ".wav") {
+			fmt.Println("Analyzing file:", path)
+			cfg.InputFile = path
+			if err := FileAnalysis(cfg); err != nil {
+				// If FileAnalysis returns an error log it and continue
+				log.Printf("Error analyzing file '%s': %v", path, err)
+				return nil
+			}
+		}
+		return nil
 	}
 
-	for _, file := range files {
-		// Check if the file has a .wav extension.
-		if filepath.Ext(file.Name()) == ".wav" {
-			inputFilePath := filepath.Join(cfg.InputDirectory, file.Name())
-			fmt.Println("Analyzing file:", inputFilePath)
-			// Create a copy of the config struct and set the input audio file path.
-			//cfgCopy := *cfg
-			cfg.InputFile = inputFilePath
-			FileAnalysis(cfg)
-		}
+	// Start walking through the directory
+	err := filepath.WalkDir(cfg.InputDirectory, analyzeFunc)
+	if err != nil {
+		log.Fatalf("Failed to walk directory: %v", err)
 	}
+
 	return nil
 }
 

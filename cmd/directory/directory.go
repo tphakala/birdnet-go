@@ -27,7 +27,7 @@ func Command(cfg *config.Settings) *cobra.Command {
 
 // setupDirectoryFlags defines flags specific to the directory command.
 func setupFlags(cmd *cobra.Command, cfg *config.Settings) {
-	cmd.Flags().BoolVar(&cfg.Recursive, "recursive", false, "Recursively analyze subdirectories")
+	cmd.Flags().BoolVarP(&cfg.Recursive, "recursive", "r", false, "Recursively analyze subdirectories")
 	cmd.Flags().StringVarP(&cfg.OutputDir, "output", "o", "", "Path to output directory")
 	cmd.Flags().StringVarP(&cfg.OutputFormat, "format", "f", "", "Output format: table, csv")
 
