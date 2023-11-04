@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/tphakala/go-birdnet/pkg/config"
 	"github.com/tphakala/go-tflite"
 )
 
@@ -23,8 +24,29 @@ const modelVersion = "BirdNET GLOBAL 6K V2.4 FP32"
 //go:embed labels.zip
 var labelsZip []byte
 
+// Setup initializes and loads the BirdNET model.
+// It prints a loading message, initializes the model with embedded data,
+// and loads the labels according to the provided locale in the config.
+// It returns an error if any step in the initialization process fails.
+func Setup(cfg *config.Settings) error {
+	// Initialize the BirdNET model from embedded data.
+	if err := initializeModelFromEmbeddedData(); err != nil {
+		// Return an error allowing the caller to handle it.
+		return fmt.Errorf("failed to initialize model: %w", err)
+	}
+
+	// Load the labels for the BirdNET model based on the locale specified in the configuration.
+	if err := loadLabels(cfg.Locale); err != nil {
+		// Return an error allowing the caller to handle it.
+		return fmt.Errorf("failed to load labels: %w", err)
+	}
+
+	// If everything was successful, return nil indicating no error occurred.
+	return nil
+}
+
 // initializeModel loads the model from embedded data and creates a new interpreter
-func InitializeModelFromEmbeddedData() error {
+func initializeModelFromEmbeddedData() error {
 	fmt.Print("Loading BirdNET model")
 	// Load the TensorFlow Lite model from embedded data
 	model := tflite.NewModel(modelData)
@@ -63,7 +85,7 @@ func InitializeModelFromEmbeddedData() error {
 
 // LoadLabels extracts the specified label file from the embedded zip archive
 // and loads the labels into a slice based on the provided locale.
-func LoadLabels(locale string) error {
+func loadLabels(locale string) error {
 	// Reset labels slice to ensure it's empty before loading new labels
 	labels = nil
 
