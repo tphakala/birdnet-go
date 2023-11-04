@@ -6,7 +6,7 @@ import (
 	"github.com/tphakala/go-birdnet/pkg/config"
 )
 
-// NewRealtimeCommand creates a new command for real-time audio analysis.
+// RealtimeCommand creates a new command for real-time audio analysis.
 func Command(cfg *config.Settings) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "realtime",

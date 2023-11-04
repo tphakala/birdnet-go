@@ -6,42 +6,61 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/tphakala/go-birdnet/cmd/authors"
 	"github.com/tphakala/go-birdnet/cmd/directory"
 	"github.com/tphakala/go-birdnet/cmd/file"
+	"github.com/tphakala/go-birdnet/cmd/license"
 	"github.com/tphakala/go-birdnet/cmd/realtime"
 	"github.com/tphakala/go-birdnet/pkg/birdnet"
 	"github.com/tphakala/go-birdnet/pkg/config"
 )
 
-// NewRootCommand creates and returns the root command
+// RootCommand creates and returns the root command
 func RootCommand() *cobra.Command {
 	cfg := config.GetSettings()
 
 	rootCmd := &cobra.Command{
 		Use:   "birdnet",
 		Short: "Go-BirdNET CLI",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// Parse the command line flags
-			if err := cmd.Flags().Parse(args); err != nil {
-				return err
-			}
-
-			// Now sync the cfg struct with viper's values to ensure command-line arguments take precedence
-			config.SyncViper(cfg)
-
-			return initialize(cfg)
-		},
 	}
 
 	// Set up the global flags for the root command.
 	defineGlobalFlags(rootCmd, cfg)
 
 	// Add sub-commands to the root command.
-	rootCmd.AddCommand(
-		file.Command(cfg),
-		directory.Command(cfg),
-		realtime.Command(cfg),
-	)
+	fileCmd := file.Command(cfg)
+	directoryCmd := directory.Command(cfg)
+	realtimeCmd := realtime.Command(cfg)
+	authorsCmd := authors.Command(cfg)
+	licenseCmd := license.Command(cfg)
+
+	subcommands := []*cobra.Command{
+		fileCmd,
+		directoryCmd,
+		realtimeCmd,
+		authorsCmd,
+		licenseCmd,
+	}
+
+	rootCmd.AddCommand(subcommands...)
+
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		// Parse the command line flags
+		if err := cmd.Flags().Parse(args); err != nil {
+			return err
+		}
+
+		// Now sync the cfg struct with viper's values to ensure command-line arguments take precedence
+		config.SyncViper(cfg)
+
+		// Skip setup for authors and license commands
+		if cmd.Name() != authorsCmd.Name() && cmd.Name() != licenseCmd.Name() {
+			return initialize(cfg)
+		}
+
+		// Return nil to proceed without initializing for the excluded commands
+		return nil
+	}
 
 	return rootCmd
 }
