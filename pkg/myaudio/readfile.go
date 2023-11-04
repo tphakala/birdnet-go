@@ -94,8 +94,5 @@ func ReadAudioFile(cfg *config.Settings) ([][]float32, error) {
 		chunks = append(chunks, currentChunk)
 	}
 
-	// Done reading audio data
-	fmt.Printf(", done, read %d chunks\n", len(chunks))
-
 	return chunks, nil
 }

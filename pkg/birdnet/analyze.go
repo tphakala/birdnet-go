@@ -110,68 +110,61 @@ func Predict(sample [][]float32, sensitivity float64) ([]Result, error) {
 // into a slice of Observations. The sensitivity and overlap values affect the
 // prediction process and the timestamp calculation, respectively.
 func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) ([]observation.Note, error) {
-	// Slice to keep our detections in
 	observations := []observation.Note{}
 
-	fmt.Println("- Analyzing audio data")
 	start := time.Now()
-
-	// Start timestamp for the prediction. It will be adjusted for each chunk
 	predStart := 0.0
-
-	// Total number of chunks for progress indicator
 	totalChunks := len(chunks)
-
-	// Variable to keep track of the total elapsed time for processed chunks
 	totalElapsed := time.Duration(0)
 
-	// Process each chunk of audio data
-	for idx, c := range chunks {
-		// Print progress indicator
-		//fmt.Printf("\r- Processing chunk [%d/%d]", idx+1, totalChunks)
+	// Initialize with an empty string, it will be calculated after the first prediction
+	timeRemainingMessage := ""
+	fmt.Printf("\r\033[K")
 
-		// Take current time
+	for idx, chunk := range chunks {
+		// Calculate and print the estimated time before processing each chunk
+		if idx > 0 { // Skip the first iteration
+			avgProcessingTimePerChunk := totalElapsed / time.Duration(idx)
+			remainingChunks := totalChunks - idx
+			estimatedTimeRemaining := avgProcessingTimePerChunk * time.Duration(remainingChunks)
+			timeRemainingMessage = formatDuration(estimatedTimeRemaining)
+		} else {
+			// For the first chunk, we just indicate that we're calculating
+			timeRemainingMessage = "Calculating..."
+		}
+
+		// Print the status message with the current chunk and estimated time remaining
+		fmt.Printf("\r\033[K- Analyzing chunk [%d/%d] (Estimated time remaining: %s)", idx+1, totalChunks, timeRemainingMessage)
+
+		// Take current time before prediction
 		startTime := time.Now()
 
 		// Predict labels for the current audio data
-		predictedResults, err := Predict([][]float32{c}, cfg.Sensitivity)
+		predictedResults, err := Predict([][]float32{chunk}, cfg.Sensitivity)
 		if err != nil {
 			return nil, fmt.Errorf("prediction failed: %v", err)
 		}
 
-		// Store how long prediction took
 		elapsed := time.Since(startTime)
 		totalElapsed += elapsed
 
-		// Calculate the end timestamp for this prediction
+		// Calculate the end timestamp for this prediction, chunk length is fixed 3.0 seconds
 		predEnd := predStart + 3.0
 
-		var latitude float64 = 0.0
-		var longitude float64 = 0.0
-		var clipName string = ""
-
+		// Generate observations from predicted results
 		for _, result := range predictedResults {
-			obs := observation.New(cfg, predStart, predEnd, result.Species, float64(result.Confidence), latitude, longitude, clipName, elapsed)
+			obs := observation.New(cfg, predStart, predEnd, result.Species, float64(result.Confidence), 0.0, 0.0, "", elapsed)
 			observations = append(observations, obs)
 		}
 
-		// Adjust the start timestamp for the next prediction by considering the overlap
+		// Adjust for overlap for the next prediction
 		predStart = predEnd - cfg.Overlap
-
-		// Estimate time to completion
-		avgProcessingTimePerChunk := totalElapsed / time.Duration(idx+1)
-		remainingChunks := totalChunks - (idx + 1)
-		estimatedTimeRemaining := avgProcessingTimePerChunk * time.Duration(remainingChunks)
-
-		// Clear the line and then print combined progress and estimated time
-		fmt.Printf("\r\033[K- Processing chunk [%d/%d] (Estimated time remaining: %s)", idx+1, totalChunks, formatDuration(estimatedTimeRemaining))
 	}
 
-	// Move to a new line after the loop ends to avoid printing on the same line.
-	fmt.Println("")
-
+	// Clear the line and print a new line for completion message
+	fmt.Printf("\r\033[K")
 	elapsed := time.Since(start)
-	fmt.Printf("Time %f seconds\n", elapsed.Seconds())
+	fmt.Printf("Analysis completed. Total time elapsed: %s\n", formatDuration(elapsed))
 
 	return observations, nil
 }
