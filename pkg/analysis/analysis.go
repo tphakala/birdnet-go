@@ -31,9 +31,6 @@ func FileAnalysis(cfg *config.Settings) error {
 		log.Fatalf("failed to analyze audio data: %v", err)
 	}
 
-	// Print a newline for better readability in the output.
-	fmt.Println()
-
 	// Prepare the output file path if OutputDir is specified in the configuration.
 	var outputFile string
 	if cfg.OutputDir != "" {
