@@ -25,6 +25,7 @@ var labelsZip []byte
 
 // initializeModel loads the model from embedded data and creates a new interpreter
 func InitializeModelFromEmbeddedData() error {
+	fmt.Print("Loading BirdNET model")
 	// Load the TensorFlow Lite model from embedded data
 	model := tflite.NewModel(modelData)
 	if model == nil {
@@ -56,7 +57,7 @@ func InitializeModelFromEmbeddedData() error {
 		return fmt.Errorf("tensor allocation failed")
 	}
 
-	fmt.Printf("%s model initialized\n", modelVersion)
+	fmt.Printf(" - %s model initialized\n", modelVersion)
 	return nil
 }
 

@@ -25,7 +25,7 @@ type Settings struct {
 	Locale         string
 	ProcessingTime bool
 	OutputDir      string
-	OutputType     string
+	OutputFormat   string
 	LogPath        string
 	LogFile        string
 	Database       string // none, sqlite, mysql
@@ -165,7 +165,7 @@ processingtime: false
 logpath: ./log/
 logfile: notes.log
 outputdir: ./output/
-outputtype: table
+outputformat: table
 database: none
 timeas24h: true
 `
