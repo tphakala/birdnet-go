@@ -3,11 +3,12 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
@@ -23,9 +24,10 @@ type Settings struct {
 	CapturePath    string
 	Threshold      float64
 	Locale         string
-	ProcessingTime bool
-	OutputDir      string
-	OutputFormat   string
+	ProcessingTime bool   // true to report processing time for each prediction
+	Recursive      bool   // true for recursive directory analysis
+	OutputDir      string // directory to output results
+	OutputFormat   string // table, csv
 	LogPath        string
 	LogFile        string
 	Database       string // none, sqlite, mysql
@@ -96,65 +98,107 @@ var LocaleCodes = map[string]string{
 	"uk": "Ukrainian",
 }
 
-func Load() {
-	// Get the user's home directory
-	usr, err := user.Current()
-	if err != nil {
-		log.Fatalf("Error fetching user directory: %v", err)
+var (
+	GlobalConfig Settings
+)
+
+// Load initializes the configuration by reading in the config file and environment variables.
+func Load() error {
+	setDefaults()
+	initViper()
+
+	if err := viper.Unmarshal(&GlobalConfig); err != nil {
+		return fmt.Errorf("error unmarshaling config into struct: %w", err)
 	}
 
-	// Initialize Viper
-	viper.SetConfigType("yaml") // or "json", "toml"
+	processConfig()
 
-	// Define config paths and names
-	configPaths := []string{
-		usr.HomeDir + "/.config/go-birdnet/",
-		".",
-	}
-	configNames := []string{
-		"config",
-		"go-birdnet.conf",
-	}
+	return nil
+}
 
-	// Look for the config in defined paths and names in the specific order
-	found := false
-	for _, path := range configPaths {
-		for _, name := range configNames {
-			viper.AddConfigPath(path)
-			viper.SetConfigName(name)
+// GetSettings returns a reference to the global application settings.
+func GetSettings() *Settings {
+	return &GlobalConfig
+}
 
-			if err := viper.ReadInConfig(); err == nil {
-				found = true
-				break
-			}
-		}
-		if found {
-			break
-		}
-	}
-
-	if !found {
-		// Config file not found in any of the paths; create a default one
-		configPath := usr.HomeDir + "/.config/go-birdnet/config"
-		createDefault(configPath)
-		// Read the just created default config
-		viper.AddConfigPath(filepath.Dir(configPath))
-		viper.SetConfigName(filepath.Base(configPath))
-		if err := viper.ReadInConfig(); err != nil {
-			panic(fmt.Errorf("fatal error reading created default config file: %s", err))
-		}
-	}
-
-	var cfg Settings
-
-	// Unmarshal config file into struct
-	if err := viper.Unmarshal(&cfg); err != nil {
-		panic(fmt.Errorf("error unmarshaling config into struct: %s", err))
+// BindFlags binds command line flags to configuration settings using Viper.
+func BindFlags(cmd *cobra.Command, cfg *Settings) {
+	if err := viper.BindPFlags(cmd.Flags()); err != nil {
+		fmt.Printf("Error binding flags: %v\n", err)
 	}
 }
 
-func createDefault(path string) {
-	defaultConfig := `
+// SyncViper is used to update the configuration values with those from Viper.
+func SyncViper(cfg *Settings) {
+	viper.Unmarshal(cfg)
+}
+
+// NormalizeLocale normalizes the input locale string and matches it to a known locale code or full name.
+func NormalizeLocale(inputLocale string) (string, error) {
+	inputLocale = strings.ToLower(inputLocale)
+
+	if _, exists := Locales[LocaleCodes[inputLocale]]; exists {
+		return inputLocale, nil
+	}
+
+	for code, fullName := range LocaleCodes {
+		if strings.ToLower(fullName) == inputLocale {
+			return code, nil
+		}
+	}
+
+	fullLocale, exists := LocaleCodes[inputLocale]
+	if !exists {
+		return "", fmt.Errorf("unsupported locale: %s", inputLocale)
+	}
+
+	if _, exists := Locales[fullLocale]; !exists {
+		return "", fmt.Errorf("locale code supported but no label file found: %s", fullLocale)
+	}
+
+	return inputLocale, nil
+}
+
+// unexported functions below
+
+func initViper() {
+	viper.SetConfigType("yaml")
+
+	usr, err := user.Current()
+	if err != nil {
+		panic(fmt.Errorf("error fetching user directory: %v", err))
+	}
+
+	configPaths := []string{filepath.Join(usr.HomeDir, ".config", "go-birdnet"), "."}
+	configName := "config"
+
+	for _, path := range configPaths {
+		viper.AddConfigPath(path)
+	}
+
+	viper.SetConfigName(configName)
+
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			createDefault(filepath.Join(usr.HomeDir, ".config", "go-birdnet", "config.yaml"))
+		} else {
+			panic(fmt.Errorf("fatal error reading config file: %s", err))
+		}
+	}
+}
+
+func setDefaults() {
+	// Set default values for the configuration
+	// ...
+}
+
+func processConfig() {
+	// Any additional processing after loading configuration
+	// ...
+}
+
+func createDefault(configPath string) {
+	defaultConfig := `# Default configuration
 debug: false
 sensitivity: 1
 locale: en
@@ -164,22 +208,19 @@ threshold: 0.8
 processingtime: false
 logpath: ./log/
 logfile: notes.log
-outputdir: ./output/
-outputformat: table
+outputdir:
+outputformat:
 database: none
 timeas24h: true
 `
-	// Create the directory structure if it doesn't exist
-	dir := filepath.Dir(path)
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			log.Fatalf("error creating directories for config file: %v", err)
-		}
+	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+		panic(fmt.Errorf("error creating directories for config file: %v", err))
 	}
 
-	if err := os.WriteFile(path, []byte(defaultConfig), 0644); err != nil {
-		log.Fatalf("error creating default config file: %v", err)
+	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
+		panic(fmt.Errorf("error writing default config file: %v", err))
 	}
 
-	//fmt.Println("Created default config file at:", path)
+	fmt.Println("Created default config file at:", configPath)
+	viper.ReadInConfig()
 }

@@ -72,19 +72,25 @@ func New(cfg *config.Settings, beginTime, endTime float64, species string, confi
 // LogNote is the central function for logging observations. It writes a note to a log file and/or database
 // depending on the provided configuration settings.
 func LogNote(cfg *config.Settings, note Note) error {
-	// If a log file path is specified in the configuration, attempt to log the note to this file.
-	if cfg.LogFile != "" {
-		if err := LogNoteToFile(cfg, note); err != nil {
-			// If an error occurs when logging to a file, wrap and return the error.
-			return fmt.Errorf("failed to log note to file: %w", err)
-		}
-	}
+	// only log if the confidence is above the threshold
+	fmt.Println("Confidence: ", note.Confidence)
+	fmt.Println("Threshold: ", cfg.Threshold)
 
-	// If the configuration specifies a database (and it's not set to "none"), attempt to save the note to the database.
-	if cfg.Database != "none" {
-		if err := SaveToDatabase(note); err != nil {
-			// If an error occurs when saving to the database, wrap and return the error.
-			return fmt.Errorf("failed to save note to database: %w", err)
+	if note.Confidence > cfg.Threshold {
+		// If a log file path is specified in the configuration, attempt to log the note to this file.
+		if cfg.LogFile != "" {
+			if err := LogNoteToFile(cfg, note); err != nil {
+				// If an error occurs when logging to a file, wrap and return the error.
+				return fmt.Errorf("failed to log note to file: %w", err)
+			}
+		}
+
+		// If the configuration specifies a database (and it's not set to "none"), attempt to save the note to the database.
+		if cfg.Database != "none" {
+			if err := SaveToDatabase(note); err != nil {
+				// If an error occurs when saving to the database, wrap and return the error.
+				return fmt.Errorf("failed to save note to database: %w", err)
+			}
 		}
 	}
 
@@ -95,7 +101,7 @@ func LogNote(cfg *config.Settings, note Note) error {
 // WriteNotesTable writes a slice of Note structs to a table-formatted text output.
 // The output can be directed to either stdout or a file specified by the filename.
 // If the filename is an empty string, it writes to stdout.
-func WriteNotesTable(notes []Note, filename string) error {
+func WriteNotesTable(cfg *config.Settings, notes []Note, filename string) error {
 	var w io.Writer
 	// Determine the output destination based on the filename argument.
 	if filename == "" {
@@ -120,13 +126,27 @@ func WriteNotesTable(notes []Note, filename string) error {
 		return fmt.Errorf("failed to write header: %v", err)
 	}
 
-	// Iterate over the slice of notes, writing each to the output destination.
+	// Pre-declare err outside the loop to avoid re-declaration
+	var err error
+
 	for i, note := range notes {
+		if note.Confidence <= cfg.Threshold {
+			continue // Skip the current iteration as the note doesn't meet the threshold
+		}
+
+		// Prepare the line for notes above the threshold
 		line := fmt.Sprintf("%d\tSpectrogram 1\t1\t%s\t%.1f\t%.1f\t0\t15000\t%s\t%s\t%.4f\n",
 			i+1, note.InputFile, note.BeginTime, note.EndTime, note.SpeciesCode, note.CommonName, note.Confidence)
-		if _, err := w.Write([]byte(line)); err != nil {
-			return fmt.Errorf("failed to write note: %v", err)
+
+		// Attempt to write the note
+		if _, err = w.Write([]byte(line)); err != nil {
+			break // If an error occurs, exit the loop
 		}
+	}
+
+	// Check if an error occurred during the loop and return it
+	if err != nil {
+		return fmt.Errorf("failed to write note: %v", err)
 	}
 
 	// Return nil if the writing operation completes successfully.
@@ -136,7 +156,7 @@ func WriteNotesTable(notes []Note, filename string) error {
 // WriteNotesCsv writes the slice of notes to the specified destination in CSV format.
 // If filename is an empty string, the function writes to stdout.
 // The function returns an error if writing to the destination fails.
-func WriteNotesCsv(notes []Note, filename string) error {
+func WriteNotesCsv(cfg *config.Settings, notes []Note, filename string) error {
 	// Define an io.Writer to abstract the writing operation.
 	var w io.Writer
 
@@ -164,13 +184,26 @@ func WriteNotesCsv(notes []Note, filename string) error {
 		return fmt.Errorf("failed to write header to CSV: %w", err)
 	}
 
-	// Iterate through the notes and write each one as a line in the CSV format.
+	// Pre-declare err outside the loop to avoid re-declaration
+	var err error
+
 	for _, note := range notes {
+		if note.Confidence <= cfg.Threshold {
+			continue // Skip the current iteration as the note doesn't meet the threshold
+		}
+
 		line := fmt.Sprintf("%f,%f,%s,%s,%.4f\n",
 			note.BeginTime, note.EndTime, note.ScientificName, note.CommonName, note.Confidence)
-		if _, err := w.Write([]byte(line)); err != nil {
-			return fmt.Errorf("failed to write note to CSV: %w", err)
+
+		if _, err = w.Write([]byte(line)); err != nil {
+			// Break out of the loop at the first sign of an error
+			break
 		}
+	}
+
+	// Handle any errors that occurred during the write operation
+	if err != nil {
+		return fmt.Errorf("failed to write note to CSV: %w", err)
 	}
 
 	// Return nil if the writing operation completes successfully.
