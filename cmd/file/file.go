@@ -6,7 +6,7 @@ import (
 	"github.com/tphakala/go-birdnet/pkg/config"
 )
 
-// NewFileCommand creates a new file command for analyzing a single audio file.
+// FileCommand creates a new file command for analyzing a single audio file.
 func Command(cfg *config.Settings) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "file [input.wav]",

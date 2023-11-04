@@ -6,7 +6,7 @@ import (
 	"github.com/tphakala/go-birdnet/pkg/config"
 )
 
-// NewDirectoryCommand creates a new cobra.Command for directory analysis.
+// DirectoryCommand creates a new cobra.Command for directory analysis.
 func Command(cfg *config.Settings) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "directory [path]",
