@@ -134,7 +134,7 @@ func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) ([]observation.Note,
 		}
 
 		// Print the status message with the current chunk and estimated time remaining
-		fmt.Printf("\r\033[K- Analyzing chunk [%d/%d] (Estimated time remaining: %s)", idx+1, totalChunks, timeRemainingMessage)
+		fmt.Printf("\r\033[KAnalyzing chunk [%d/%d] (Estimated time remaining: %s)", idx+1, totalChunks, timeRemainingMessage)
 
 		// Take current time before prediction
 		startTime := time.Now()
@@ -164,7 +164,7 @@ func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) ([]observation.Note,
 	// Clear the line and print a new line for completion message
 	fmt.Printf("\r\033[K")
 	elapsed := time.Since(start)
-	fmt.Printf("Analysis completed. Total time elapsed: %s\n", formatDuration(elapsed))
+	fmt.Printf("Analysis completed, total time elapsed: %s\n", formatDuration(elapsed))
 
 	return observations, nil
 }

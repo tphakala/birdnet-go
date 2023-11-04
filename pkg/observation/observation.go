@@ -147,6 +147,8 @@ func WriteNotesTable(cfg *config.Settings, notes []Note, filename string) error 
 	// Check if an error occurred during the loop and return it
 	if err != nil {
 		return fmt.Errorf("failed to write note: %v", err)
+	} else {
+		fmt.Println("Output written to", filename)
 	}
 
 	// Return nil if the writing operation completes successfully.
@@ -204,6 +206,8 @@ func WriteNotesCsv(cfg *config.Settings, notes []Note, filename string) error {
 	// Handle any errors that occurred during the write operation
 	if err != nil {
 		return fmt.Errorf("failed to write note to CSV: %w", err)
+	} else {
+		fmt.Println("Output written to", filename)
 	}
 
 	// Return nil if the writing operation completes successfully.
