@@ -56,16 +56,20 @@ func main() {
 
 			// At this point, cfg.Locale is set to a valid locale code
 			// Proceed with the setup using the standardized locale code
-			setupBirdNET(cfg)
+			if err := setupBirdNET(cfg); err != nil {
+				return fmt.Errorf("failed to setup BirdNET: %w", err)
+			}
 			return nil
 		},
 	}
 
 	// Set up the persistent debug flag for the root command.
-	rootCmd.PersistentFlags().BoolVar(&cfg.Debug, "debug", viper.GetBool("debug"), "Enable debug output")
+	rootCmd.PersistentFlags().BoolVarP(&cfg.Debug, "debug", "d", viper.GetBool("debug"), "Enable debug output")
 	//rootCmd.PersistentFlags().StringVar(&cfg.ModelPath, "model", viper.GetString("modelpath"), "Path to the model file")
 	rootCmd.PersistentFlags().Float64Var(&cfg.Sensitivity, "sensitivity", viper.GetFloat64("sensitivity"), "Sigmoid sensitivity value between 0.0 and 1.5")
+	rootCmd.PersistentFlags().Float64Var(&cfg.Overlap, "overlap", viper.GetFloat64("overlap"), "Overlap value between 0.0 and 2.9")
 	rootCmd.PersistentFlags().StringVar(&cfg.Locale, "locale", viper.GetString("locale"), "Set the locale for labels. Accepts full name or 2-letter code.")
+	rootCmd.PersistentFlags().Float64Var(&cfg.Threshold, "threshold", viper.GetFloat64("threshold"), "Confidency threshold for detections, value between 0.1 to 1.0")
 
 	fileCmd := setupFileCommand(&cfg)
 	directoryCmd := setupDirectoryCommand(&cfg)
@@ -75,6 +79,12 @@ func main() {
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+// Output flags configures common persistent flags for file and directory commands
+func setupOutputFlags(cmd *cobra.Command, cfg *config.Settings) {
+	cmd.PersistentFlags().StringVarP(&cfg.OutputDir, "output", "o", viper.GetString("outputdir"), "Path to output directory")
+	cmd.PersistentFlags().StringVarP(&cfg.OutputFormat, "format", "f", viper.GetString("format"), "Output format, defaults to table (Raven selection table)")
 }
 
 // setupFileCommand creates and returns a Cobra command for the audio file analysis.
@@ -95,10 +105,7 @@ func setupFileCommand(cfg *config.Settings) *cobra.Command {
 		},
 	}
 
-	// Setup persistent flags for the command which will be available to this command and all child commands.
-	cmd.PersistentFlags().StringVar(&cfg.OutputDir, "output", viper.GetString("outputdir"), "Path to output directory")
-	cmd.PersistentFlags().StringVar(&cfg.OutputType, "outputtype", viper.GetString("outputtype"), "Output type, defaults to table (Raven selection table)")
-	cmd.PersistentFlags().Float64Var(&cfg.Overlap, "overlap", viper.GetFloat64("overlap"), "Overlap value between 0.0 and 2.9")
+	setupOutputFlags(cmd, cfg)
 
 	// Return the fully configured command to be added to the root command of the CLI.
 	return cmd
@@ -126,10 +133,7 @@ func setupDirectoryCommand(cfg *config.Settings) *cobra.Command {
 		},
 	}
 
-	// Setup persistent flags for the command which will be available to this command and all child commands.
-	cmd.PersistentFlags().StringVar(&cfg.OutputDir, "output", viper.GetString("outputdir"), "Path to output directory")
-	cmd.PersistentFlags().StringVar(&cfg.OutputType, "outputtype", viper.GetString("outputtype"), "Output type, defaults to table (Raven selection table)")
-	cmd.PersistentFlags().Float64Var(&cfg.Overlap, "overlap", viper.GetFloat64("overlap"), "Overlap value between 0.0 and 2.9")
+	setupOutputFlags(cmd, cfg)
 
 	// Return the fully configured command to the caller.
 	return cmd
@@ -156,8 +160,6 @@ func setupRealtimeCommand(cfg *config.Settings) *cobra.Command {
 // and loads the labels according to the provided locale in the config.
 // It returns an error if any step in the initialization process fails.
 func setupBirdNET(cfg config.Settings) error {
-	fmt.Println("Loading BirdNET model...")
-
 	// Initialize the BirdNET model from embedded data.
 	if err := birdnet.InitializeModelFromEmbeddedData(); err != nil {
 		// Return an error allowing the caller to handle it.
@@ -203,13 +205,13 @@ func executeFileAnalysis(cfg *config.Settings) {
 
 	// Output the notes based on the desired output type in the configuration.
 	// If OutputType is not specified or if it's set to "table", output as a table format.
-	if cfg.OutputType == "" || cfg.OutputType == "table" {
+	if cfg.OutputFormat == "" || cfg.OutputFormat == "table" {
 		if err := observation.WriteNotesTable(notes, outputFile); err != nil {
 			log.Fatalf("failed to write notes table: %v", err)
 		}
 	}
 	// If OutputType is set to "csv", output as CSV format.
-	if cfg.OutputType == "csv" {
+	if cfg.OutputFormat == "csv" {
 		if err := observation.WriteNotesCsv(notes, outputFile); err != nil {
 			log.Fatalf("failed to write notes CSV: %v", err)
 		}
