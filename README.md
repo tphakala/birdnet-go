@@ -12,13 +12,15 @@
 
 Go-BirdNET is an application inspired by BirdNET Analyzer, developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology. While the original BirdNET is based on Python, Go-BirdNET is built using Golang, aiming for simplified deployment across multiple platforms, from Windows PCs to single board computers like Raspberry Pi.
 
-Currently, Go-BirdNET supports the analysis of WAV files only, support for other audio file formats is planned. Use of metadata model for location-based filtering is not yet implemented. This is very much of work in progress, and contributions and feedback are welcome.
+Go-BirdNET features
 
-## Dependencies
-
-Go-BirdNET primarily relies on go-tflite by Yasuhiro Matsumoto (a.k.a. mattn). Go-tflite provides a Go binding for the TensorFlow Lite C API. Although go-tflite is documented to support only TensorFlow Lite version 2.2.0-rc3, I have successfully compiled it against version 2.14.0. As go-tflite is a C API binding compiled binary is not statically linked one, it is depending on libtensorflowlite_c.so to be present on deployment target system.
-
-A crucial component is the BirdNET tflite model. After all, Go-BirdNET essentially serves as an interface to this model, with the core detection functionality residing within the BirdNET tflite model itself.
+- Works on Windows, Linux and macOS
+- Can analyse 48kHz WAV files from single file or directory of WAV files
+- Outputs to Raven selection table and CSV format
+- Realtime analysis of soundcard capture, analysis output to log file, SQLite or MySQL
+- Log file output can be used as overlay in OBS for bird feeder streams etc.
+- Localized species labels thanks to translations by @patlevin
+- Minimal runtime dependencies, BirdNET Tensorflow Lite model is embedded in compiled binary
 
 ## Executable Distributions
 
@@ -91,24 +93,27 @@ make
 ## Usage
 
 ```bash
-$ ./bin/birdnet
 Go-BirdNET CLI
 
 Usage:
   birdnet [command]
 
 Available Commands:
+  authors     Print the list of authors
   completion  Generate the autocompletion script for the specified shell
+  directory   Analyze all *.wav files in a directory
   file        Analyze an audio file
   help        Help about any command
+  license     Print the license of Go-BirdNET
   realtime    Analyze audio in realtime mode
 
 Flags:
       --debug               Enable debug output
   -h, --help                help for birdnet
-      --locale string       Language to use for labels
-      --model string        Path to the model file (default "model/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite")
+      --locale string       Set the locale for labels. Accepts full name or 2-letter code. (default "finnish")
+      --overlap float       Overlap value between 0.0 and 2.9
       --sensitivity float   Sigmoid sensitivity value between 0.0 and 1.5 (default 1)
+      --threshold float     Confidency threshold for detections, value between 0.1 to 1.0 (default 0.8)
 
 Use "birdnet [command] --help" for more information about a command.
 ```
