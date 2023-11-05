@@ -27,46 +27,32 @@ Go-BirdNET features
 Ready to run binaries can be found from releases section https://github.com/tphakala/go-birdnet/releases/
 Arhives also contains libtensorflow_c library.
 
-## Compiling
+## Compiling for Linux
 
-### Building TensorFlow Lite C API
+### Install TensorFlow Lite C library and setup headers for compile process
 
-Build tflite with cmake
+Download precompiled TensorFlow Lite C library for Linux from https://github.com/tphakala/tflite_c/releases/tag/v2.14.0
 
-```bash
-sudo apt-get install cmake
-```
-
-Clone tensorflow repository
-
-```bash
-git clone https://github.com/tensorflow/tensorflow.git tensorflow_src
-```
-
-Create cmake build directory
-
-```bash
-mkdir tflite_build
-cd tflite_build
-```
-
-Run cmake
-
-```bash
-cmake ../tensorflow_src/tensorflow/lite/c
-```
-
-Build tflite, In the tflite_build directory do
-
-```bash
-cmake --build . -j
-```
-
-Copy compiled libtensorflowlite_c.so to /usr/local/lib and update dynamic linker run‐time bindings with ldconfig
+Copy libtensorflowlite_c.so to /usr/local/lib and run ```ldconfig```
 
 ```bash
 sudo cp libtensorflowlite_c.so /usr/local/lib
 sudo ldconfig
+```
+
+Clone tensorflow repository, this is required for header files to be present while compiling with CGO
+
+```bash
+mkdir ~/src
+cd ~/src
+git clone https://github.com/tensorflow/tensorflow.git
+```
+
+Checkout TensorFlow v2.14.0 release
+
+```bash
+cd tensorflow
+git checkout tags/v2.14.0
 ```
 
 ### Building Go-BirdNET
@@ -77,18 +63,45 @@ Clone go-birdnet repository
 git clone https://github.com/tphakala/go-birdnet.git
 ```
 
-Add CGO_CFLAGS and point it to directory you cloned tensorflow source in
-
-```bash
-export CGO_CFLAGS=-I$HOME/src/tensorflow
-```
-
 Build Go-BirdNET by make, compiled binary will be placed in go-BirdNET/bin directory
 
 ```bash
 cd go-birdnet
 make
 ```
+
+## Compiling for Windows
+
+Windows build is cross compiled on Linux, for this you need MinGW-w64 on your build system
+
+```bash
+  sudo apt install mingw-w64-tools gcc-mingw-w64-x86-64 gcc-mingw-w64-i686
+```
+
+Download precompiled TensorFlow Lite C library for Windows from https://github.com/tphakala/tflite_c/releases/tag/v2.14.0
+
+Copy **libtensorflowlite_c.dll** to /usr/x86_64-w64-mingw32/lib/
+
+```bash
+sudo cp libtensorflowlite_c.dll /usr/x86_64-w64-mingw32/lib/
+```
+
+Clone tensorflow repository, this is required for header files to be present while compiling with CGO
+
+```bash
+mkdir ~/src
+cd ~/src
+git clone https://github.com/tensorflow/tensorflow.git
+```
+
+```bash
+cd go-birdnet
+make windows
+```
+
+Windows executable is in bin/birdnet.exe, copy this and **libtensorflowlite_c.so** to your Windows system, library file must be in PATH for birdnet.exe to run properly.
+
+Yes it is correct that you need libtensorflowlite_c.dll in Linux for linking but on Windows you need libtensorflowlite_c.so for runtime, this sounds backwards but this is how it works.
 
 ## Usage
 
