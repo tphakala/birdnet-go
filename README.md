@@ -63,7 +63,7 @@ Clone go-birdnet repository
 git clone https://github.com/tphakala/go-birdnet.git
 ```
 
-Build Go-BirdNET by make, compiled binary will be placed in go-BirdNET/bin directory
+Build Go-BirdNET by make, compiled binary will be placed in go-birdnet/bin directory
 
 ```bash
 cd go-birdnet
@@ -94,14 +94,24 @@ cd ~/src
 git clone https://github.com/tensorflow/tensorflow.git
 ```
 
+### Cross compiling Go-BirdNET
+
+Clone go-birdnet repository
+
+```bash
+git clone https://github.com/tphakala/go-birdnet.git
+```
+
+Build Go-BirdNET by running make windows
+
 ```bash
 cd go-birdnet
 make windows
 ```
 
-Windows executable is in bin/birdnet.exe, copy this and **libtensorflowlite_c.so** to your Windows system, library file must be in PATH for birdnet.exe to run properly.
+Windows executable is in **bin/birdnet.exe**, copy this and **libtensorflowlite_c.so** to your Windows system, library file must be in PATH for birdnet.exe to run properly.
 
-Yes it is correct that you need libtensorflowlite_c.dll in Linux for linking but on Windows you need libtensorflowlite_c.so for runtime, this sounds backwards but this is how it works.
+Yes it is correct that you need **libtensorflowlite_c.dll** in /usr/x86_64-w64-mingw32/lib/ for compile process, and on Windows you need **libtensorflowlite_c.so** for runtime. This sounds backwards but this is how it works.
 
 ## Usage
 
@@ -130,14 +140,6 @@ Flags:
 
 Use "birdnet [command] --help" for more information about a command.
 ```
-
-## ChangeLog
-
-Realtime detection support is now added, launch with -realtime flag and application will start capturing audio from default audio device and log detections to detections.log.
-
-## Derived works
-
-Feel free to fork this codebase for your own projects, but please follow license which restricts commercial usage
 
 ## License
 
