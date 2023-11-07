@@ -7,3 +7,4 @@ model/labels_en.txt
 model/labels_fi.txt
 output/soundscape.wav.txt
 output/soundscape.wav.csv
+birdnet.db
