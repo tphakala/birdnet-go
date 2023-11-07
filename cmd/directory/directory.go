@@ -7,7 +7,7 @@ import (
 )
 
 // DirectoryCommand creates a new cobra.Command for directory analysis.
-func Command(cfg *config.Settings) *cobra.Command {
+func Command(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "directory [path]",
 		Short: "Analyze all *.wav files in a directory",
@@ -15,22 +15,22 @@ func Command(cfg *config.Settings) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// The directory to analyze is passed as the first argument
-			cfg.InputDirectory = args[0]
-			return analysis.DirectoryAnalysis(cfg)
+			ctx.Settings.InputDirectory = args[0]
+			return analysis.DirectoryAnalysis(ctx)
 		},
 	}
 
-	setupFlags(cmd, cfg)
+	setupFlags(cmd, ctx.Settings)
 
 	return cmd
 }
 
 // setupDirectoryFlags defines flags specific to the directory command.
-func setupFlags(cmd *cobra.Command, cfg *config.Settings) {
-	cmd.Flags().BoolVarP(&cfg.Recursive, "recursive", "r", false, "Recursively analyze subdirectories")
-	cmd.Flags().StringVarP(&cfg.OutputDir, "output", "o", "", "Path to output directory")
-	cmd.Flags().StringVarP(&cfg.OutputFormat, "format", "f", "", "Output format: table, csv")
+func setupFlags(cmd *cobra.Command, settings *config.Settings) {
+	cmd.Flags().BoolVarP(&settings.Recursive, "recursive", "r", false, "Recursively analyze subdirectories")
+	cmd.Flags().StringVarP(&settings.OutputDir, "output", "o", "", "Path to output directory")
+	cmd.Flags().StringVarP(&settings.OutputFormat, "format", "f", "", "Output format: table, csv")
 
 	// Bind flags to configuration
-	config.BindFlags(cmd, cfg)
+	config.BindFlags(cmd, settings)
 }

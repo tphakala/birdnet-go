@@ -109,7 +109,7 @@ func Predict(sample [][]float32, sensitivity float64) ([]Result, error) {
 // predictions. Each chunk is processed individually, and the results are aggregated
 // into a slice of Observations. The sensitivity and overlap values affect the
 // prediction process and the timestamp calculation, respectively.
-func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) ([]observation.Note, error) {
+func AnalyzeAudio(chunks [][]float32, ctx *config.Context) ([]observation.Note, error) {
 	observations := []observation.Note{}
 
 	start := time.Now()
@@ -140,7 +140,7 @@ func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) ([]observation.Note,
 		startTime := time.Now()
 
 		// Predict labels for the current audio data
-		predictedResults, err := Predict([][]float32{chunk}, cfg.Sensitivity)
+		predictedResults, err := Predict([][]float32{chunk}, ctx.Settings.Sensitivity)
 		if err != nil {
 			return nil, fmt.Errorf("prediction failed: %v", err)
 		}
@@ -153,12 +153,12 @@ func AnalyzeAudio(chunks [][]float32, cfg *config.Settings) ([]observation.Note,
 
 		// Generate observations from predicted results
 		for _, result := range predictedResults {
-			obs := observation.New(cfg, predStart, predEnd, result.Species, float64(result.Confidence), 0.0, 0.0, "", elapsed)
+			obs := observation.New(ctx.Settings, predStart, predEnd, result.Species, float64(result.Confidence), 0.0, 0.0, "", elapsed)
 			observations = append(observations, obs)
 		}
 
 		// Adjust for overlap for the next prediction
-		predStart = predEnd - cfg.Overlap
+		predStart = predEnd - ctx.Settings.Overlap
 	}
 
 	// Clear the line and print a new line for completion message

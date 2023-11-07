@@ -64,7 +64,7 @@ func readFromBuffer() []byte {
 }
 
 // BufferMonitor monitors the buffer and processes audio data when enough data is present.
-func BufferMonitor(cfg *config.Settings) {
+func BufferMonitor(ctx *config.Context) {
 	for {
 		select {
 		case <-QuitChannel:
@@ -74,7 +74,7 @@ func BufferMonitor(cfg *config.Settings) {
 			//fmt.Println("data length: ", len(data))
 			// if buffer has 3 seconds of data, process it
 			if len(data) == chunkSize {
-				processData(data, cfg)
+				processData(data, ctx)
 			} else {
 				time.Sleep(pollInterval)
 			}
