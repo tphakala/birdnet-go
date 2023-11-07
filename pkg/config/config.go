@@ -203,7 +203,7 @@ debug: false
 sensitivity: 1
 locale: en
 overlap: 0.0
-savepath: ./clips
+capturepath: ./clips
 threshold: 0.8
 processingtime: false
 logpath: ./log/
