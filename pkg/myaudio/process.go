@@ -36,7 +36,7 @@ func processData(data []byte, ctx *config.Context) error {
 	var elapsedTime time.Duration
 	if ctx.Settings.ProcessingTime || ctx.Settings.Debug {
 		elapsedTime = time.Since(startTime)
-		fmt.Printf("processing time %v msma\n", elapsedTime.Milliseconds())
+		fmt.Printf("processing time %v ms\n", elapsedTime.Milliseconds())
 	}
 
 	// Check if the prediction confidence is above the threshold.
