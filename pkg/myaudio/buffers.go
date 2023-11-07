@@ -9,7 +9,7 @@ import (
 
 const (
 	chunkSize    = 288000 // 3 seconds of 16-bit PCM data at 48 kHz
-	pollInterval = time.Millisecond * 500
+	pollInterval = time.Millisecond * 100
 )
 
 // A variable to set the overlap. Can range from 0 to 2 seconds, represented in bytes.
