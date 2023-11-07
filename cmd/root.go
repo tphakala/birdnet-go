@@ -86,7 +86,7 @@ func initialize(cfg *config.Settings) error {
 
 // defineGlobalFlags defines flags that are global to the command line interface
 func defineGlobalFlags(rootCmd *cobra.Command, cfg *config.Settings) {
-	rootCmd.PersistentFlags().Bool("debug", viper.GetBool("debug"), "Enable debug output")
+	rootCmd.PersistentFlags().BoolP("debug", "d", viper.GetBool("debug"), "Enable debug output")
 	rootCmd.PersistentFlags().Float64("sensitivity", viper.GetFloat64("sensitivity"), "Sigmoid sensitivity value between 0.0 and 1.5")
 	rootCmd.PersistentFlags().Float64("overlap", viper.GetFloat64("overlap"), "Overlap value between 0.0 and 2.9")
 	rootCmd.PersistentFlags().String("locale", viper.GetString("locale"), "Set the locale for labels. Accepts full name or 2-letter code.")
