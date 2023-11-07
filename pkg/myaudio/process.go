@@ -36,7 +36,7 @@ func processData(data []byte, cfg *config.Settings) error {
 	var elapsedTime time.Duration
 	if cfg.ProcessingTime || cfg.Debug {
 		elapsedTime = time.Since(startTime)
-		fmt.Printf("processing time %v\n", elapsedTime)
+		fmt.Printf("processing time %v msma\n", elapsedTime.Milliseconds())
 	}
 
 	// Check if the prediction confidence is above the threshold.
@@ -46,10 +46,12 @@ func processData(data []byte, cfg *config.Settings) error {
 
 	// Construct the filename for saving the audio sample.
 	clipName := fmt.Sprintf("%s/%s.wav", cfg.CapturePath, strconv.FormatInt(time.Now().Unix(), 10))
-
+	if cfg.Debug {
+		fmt.Printf("Saving audio clip to %s\n", clipName)
+	}
 	// Save the audio data as a WAV file.
 	if err := savePCMDataToWAV(clipName, data); err != nil {
-		return fmt.Errorf("error saving PCM data to WAV: %w", err)
+		fmt.Printf("error saving PCM data to WAV: %s\n", err)
 	}
 
 	// temporary assignments
@@ -63,8 +65,10 @@ func processData(data []byte, cfg *config.Settings) error {
 
 	// Log the observation to the specified log file.
 	if err := observation.LogNote(cfg, note); err != nil {
-		return fmt.Errorf("error logging note: %w", err)
+		fmt.Printf("error logging note: %s\n", err)
 	}
+
+	fmt.Printf("%s %s %.2f\n", note.Time, note.CommonName, note.Confidence)
 
 	return nil
 }
