@@ -20,25 +20,25 @@ const (
 // quitChannel is used to signal the capture goroutine to stop
 var QuitChannel = make(chan struct{})
 
-func StartGoRoutines(cfg *config.Settings) {
+func StartGoRoutines(ctx *config.Context) {
 	InitRingBuffer(bufferSize)
-	go CaptureAudio(cfg)
-	go BufferMonitor(cfg)
+	go CaptureAudio(ctx)
+	go BufferMonitor(ctx)
 }
 
-func CaptureAudio(cfg *config.Settings) {
-	if cfg.Debug {
+func CaptureAudio(ctx *config.Context) {
+	if ctx.Settings.Debug {
 		fmt.Println("Initializing context")
 	}
-	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
-		if cfg.Debug {
+	malgoCtx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
+		if ctx.Settings.Debug {
 			fmt.Print(message)
 		}
 	})
 	if err != nil {
 		log.Fatalf("context init failed %v", err)
 	}
-	defer ctx.Uninit()
+	defer malgoCtx.Uninit()
 
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	deviceConfig.Capture.Format = malgo.FormatS16
@@ -58,12 +58,12 @@ func CaptureAudio(cfg *config.Settings) {
 	}
 
 	// Initialize the capture device
-	device, err := malgo.InitDevice(ctx.Context, deviceConfig, deviceCallbacks)
+	device, err := malgo.InitDevice(malgoCtx.Context, deviceConfig, deviceCallbacks)
 	if err != nil {
 		log.Fatalf("Device init failed %v", err)
 	}
 
-	if cfg.Debug {
+	if ctx.Settings.Debug {
 		fmt.Println("Starting device")
 	}
 	err = device.Start()
@@ -72,7 +72,7 @@ func CaptureAudio(cfg *config.Settings) {
 	}
 	defer device.Stop()
 
-	if cfg.Debug {
+	if ctx.Settings.Debug {
 		fmt.Println("Device started")
 	}
 	fmt.Println("Listening ...")
@@ -80,7 +80,7 @@ func CaptureAudio(cfg *config.Settings) {
 	// Monitor the quitChannel and cleanup before exiting
 	<-QuitChannel
 
-	if cfg.Debug {
+	if ctx.Settings.Debug {
 		fmt.Println("Stopping capture due to quit signal.")
 	}
 }

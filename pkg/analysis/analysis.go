@@ -17,16 +17,16 @@ import (
 
 // executeFileAnalysis conducts an analysis of an audio file and outputs the results.
 // It reads an audio file, analyzes it for bird sounds, and prints the results based on the provided configuration.
-func FileAnalysis(cfg *config.Settings) error {
+func FileAnalysis(ctx *config.Context) error {
 	// Load and analyze the input audio file.
-	audioData, err := myaudio.ReadAudioFile(cfg)
+	audioData, err := myaudio.ReadAudioFile(ctx)
 	if err != nil {
 		// Use log.Fatalf to log the error and exit the program.
 		log.Fatalf("error while reading input audio: %v", err)
 	}
 
 	// Analyze the loaded audio data for bird sounds.
-	notes, err := birdnet.AnalyzeAudio(audioData, cfg)
+	notes, err := birdnet.AnalyzeAudio(audioData, ctx)
 	if err != nil {
 		// Corrected typo "eailed" to "failed" and used log.Fatalf to log the error and exit.
 		log.Fatalf("failed to analyze audio data: %v", err)
@@ -34,21 +34,21 @@ func FileAnalysis(cfg *config.Settings) error {
 
 	// Prepare the output file path if OutputDir is specified in the configuration.
 	var outputFile string
-	if cfg.OutputDir != "" {
+	if ctx.Settings.OutputDir != "" {
 		// Safely concatenate file paths using filepath.Join to avoid cross-platform issues.
-		outputFile = filepath.Join(cfg.OutputDir, filepath.Base(cfg.InputFile))
+		outputFile = filepath.Join(ctx.Settings.OutputDir, filepath.Base(ctx.Settings.InputFile))
 	}
 
 	// Output the notes based on the desired output type in the configuration.
 	// If OutputType is not specified or if it's set to "table", output as a table format.
-	if cfg.OutputFormat == "" || cfg.OutputFormat == "table" {
-		if err := observation.WriteNotesTable(cfg, notes, outputFile); err != nil {
+	if ctx.Settings.OutputFormat == "" || ctx.Settings.OutputFormat == "table" {
+		if err := observation.WriteNotesTable(ctx.Settings, notes, outputFile); err != nil {
 			log.Fatalf("failed to write notes table: %v", err)
 		}
 	}
 	// If OutputType is set to "csv", output as CSV format.
-	if cfg.OutputFormat == "csv" {
-		if err := observation.WriteNotesCsv(cfg, notes, outputFile); err != nil {
+	if ctx.Settings.OutputFormat == "csv" {
+		if err := observation.WriteNotesCsv(ctx.Settings, notes, outputFile); err != nil {
 			log.Fatalf("failed to write notes CSV: %v", err)
 		}
 	}
@@ -56,7 +56,7 @@ func FileAnalysis(cfg *config.Settings) error {
 }
 
 // DirectoryAnalysis processes all .wav files in the given directory for analysis.
-func DirectoryAnalysis(cfg *config.Settings) error {
+func DirectoryAnalysis(ctx *config.Context) error {
 	analyzeFunc := func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			// Return the error to stop the walking process.
@@ -65,7 +65,7 @@ func DirectoryAnalysis(cfg *config.Settings) error {
 
 		if d.IsDir() {
 			// If recursion is not enabled and this is a subdirectory, skip it.
-			if !cfg.Recursive && path != cfg.InputDirectory {
+			if !ctx.Settings.Recursive && path != ctx.Settings.InputDirectory {
 				return filepath.SkipDir
 			}
 			// If it's the root directory or recursion is enabled, continue walking.
@@ -74,8 +74,8 @@ func DirectoryAnalysis(cfg *config.Settings) error {
 
 		if strings.HasSuffix(d.Name(), ".wav") {
 			fmt.Println("Analyzing file:", path)
-			cfg.InputFile = path
-			if err := FileAnalysis(cfg); err != nil {
+			ctx.Settings.InputFile = path
+			if err := FileAnalysis(ctx); err != nil {
 				// If FileAnalysis returns an error log it and continue
 				log.Printf("Error analyzing file '%s': %v", path, err)
 				return nil
@@ -85,7 +85,7 @@ func DirectoryAnalysis(cfg *config.Settings) error {
 	}
 
 	// Start walking through the directory
-	err := filepath.WalkDir(cfg.InputDirectory, analyzeFunc)
+	err := filepath.WalkDir(ctx.Settings.InputDirectory, analyzeFunc)
 	if err != nil {
 		log.Fatalf("Failed to walk directory: %v", err)
 	}
@@ -94,11 +94,11 @@ func DirectoryAnalysis(cfg *config.Settings) error {
 }
 
 // executeRealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
-func RealtimeAnalysis(cfg *config.Settings) error {
+func RealtimeAnalysis(ctx *config.Context) error {
 	fmt.Println("Starting BirdNET Analyzer in realtime mode")
 
 	// Start necessary routines for real-time analysis.
-	myaudio.StartGoRoutines(cfg)
+	myaudio.StartGoRoutines(ctx)
 
 	// Channel to receive OS signals.
 	c := make(chan os.Signal, 1)

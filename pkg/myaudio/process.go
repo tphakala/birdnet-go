@@ -13,7 +13,7 @@ import (
 
 // processData processes the given audio data to detect bird species, logs the detected species
 // and optionally saves the audio clip if a bird species is detected above the configured threshold.
-func processData(data []byte, cfg *config.Settings) error {
+func processData(data []byte, ctx *config.Context) error {
 
 	const defaultBitDepth = 16
 
@@ -27,26 +27,34 @@ func processData(data []byte, cfg *config.Settings) error {
 	}
 
 	// Use the birdnet model to predict the bird species from the audio sample.
-	results, err := birdnet.Predict(sampleData, cfg.Sensitivity)
+	results, err := birdnet.Predict(sampleData, ctx.Settings.Sensitivity)
 	if err != nil {
 		return fmt.Errorf("error predicting: %w", err)
 	}
 
 	// Print processing time if required.
 	var elapsedTime time.Duration
-	if cfg.ProcessingTime || cfg.Debug {
+	if ctx.Settings.ProcessingTime || ctx.Settings.Debug {
 		elapsedTime = time.Since(startTime)
 		fmt.Printf("processing time %v msma\n", elapsedTime.Milliseconds())
 	}
 
 	// Check if the prediction confidence is above the threshold.
-	if results[0].Confidence <= float32(cfg.Threshold) {
+	if results[0].Confidence <= float32(ctx.Settings.Threshold) {
+		return nil
+	}
+
+	species := results[0].Species // Replace with your actual method of obtaining species string
+	filter := ctx.OccurrenceMonitor.TrackSpecies(species)
+	if filter {
+		// Skip further processing if TrackSpecies returned true
+		fmt.Printf("Duplicate occurrence detected: %s, skipping processing\n", results[0].Species)
 		return nil
 	}
 
 	// Construct the filename for saving the audio sample.
-	clipName := fmt.Sprintf("%s/%s.wav", cfg.CapturePath, strconv.FormatInt(time.Now().Unix(), 10))
-	if cfg.Debug {
+	clipName := fmt.Sprintf("%s/%s.wav", ctx.Settings.CapturePath, strconv.FormatInt(time.Now().Unix(), 10))
+	if ctx.Settings.Debug {
 		fmt.Printf("Saving audio clip to %s\n", clipName)
 	}
 	// Save the audio data as a WAV file.
@@ -61,10 +69,10 @@ func processData(data []byte, cfg *config.Settings) error {
 	var longitude float64 = 0.0
 
 	// Create an observation.Note from the prediction result.
-	note := observation.New(cfg, beginTime, endTime, results[0].Species, float64(results[0].Confidence), latitude, longitude, clipName, elapsedTime) // Adjust the start and end time arguments if required.
+	note := observation.New(ctx.Settings, beginTime, endTime, results[0].Species, float64(results[0].Confidence), latitude, longitude, clipName, elapsedTime) // Adjust the start and end time arguments if required.
 
 	// Log the observation to the specified log file.
-	if err := observation.LogNote(cfg, note); err != nil {
+	if err := observation.LogNote(ctx.Settings, note); err != nil {
 		fmt.Printf("error logging note: %s\n", err)
 	}
 

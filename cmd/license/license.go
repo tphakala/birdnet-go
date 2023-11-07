@@ -13,7 +13,7 @@ import (
 var authorsFile embed.FS
 
 // Command creates a new cobra.Command to print authors.
-func Command(cfg *config.Settings) *cobra.Command {
+func Command(settings *config.Settings) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "license",
 		Short: "Print the license of Go-BirdNET",
