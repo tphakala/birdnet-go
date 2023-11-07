@@ -25,7 +25,7 @@ Go-BirdNET features
 ## Executable Distributions
 
 Ready to run binaries can be found from releases section https://github.com/tphakala/go-birdnet/releases/
-Arhives also contains libtensorflow_c library.
+Arhives also contains libtensorflowlite_c library.
 
 ## Compiling for Linux
 
