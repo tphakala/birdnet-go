@@ -3,6 +3,10 @@ package myaudio
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gen2brain/malgo"
 	"github.com/tphakala/go-birdnet/pkg/config"
@@ -27,6 +31,23 @@ func StartGoRoutines(ctx *config.Context) {
 	InitRingBuffer(bufferSize)
 	go CaptureAudio(ctx)
 	go BufferMonitor(ctx)
+	go monitorCtrlC()
+}
+
+func monitorCtrlC() {
+	// Set up channel to receive os signals
+	sigChan := make(chan os.Signal, 1)
+	// Notify sigChan on SIGINT (Ctrl+C)
+	signal.Notify(sigChan, syscall.SIGINT)
+
+	// Block until a signal is received
+	<-sigChan
+
+	// When received, send a message to QuitChannel to clean up
+	close(QuitChannel)
+
+	fmt.Println("\nReceived Ctrl+C, shutting down")
+	Spinner.Cleanup()
 }
 
 func CaptureAudio(ctx *config.Context) {
@@ -82,10 +103,22 @@ func CaptureAudio(ctx *config.Context) {
 	Spinner = spinner.NewSpinner()
 	defer Spinner.Cleanup()
 
-	// Monitor the quitChannel and cleanup before exiting
-	<-QuitChannel
-
-	if ctx.Settings.Debug {
-		fmt.Println("Stopping capture due to quit signal.")
+	// Now, instead of directly waiting on QuitChannel,
+	// check if it's closed in a non-blocking select.
+	// This loop will keep running until QuitChannel is closed.
+	for {
+		select {
+		case <-QuitChannel:
+			// QuitChannel was closed, clean up and return.
+			if ctx.Settings.Debug {
+				fmt.Println("Stopping capture due to quit signal.")
+			}
+			return
+		default:
+			// Do nothing and continue with the loop.
+			// This default case prevents blocking if QuitChannel is not closed yet.
+			// You may put a short sleep here to prevent a busy loop that consumes CPU unnecessarily.
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
 }
