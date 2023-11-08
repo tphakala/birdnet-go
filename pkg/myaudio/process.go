@@ -36,7 +36,7 @@ func processData(data []byte, ctx *config.Context) error {
 	var elapsedTime time.Duration
 	if ctx.Settings.ProcessingTime || ctx.Settings.Debug {
 		elapsedTime = time.Since(startTime)
-		fmt.Printf("processing time %v ms\n", elapsedTime.Milliseconds())
+		fmt.Printf("\r\033[Kprocessing time %v ms", elapsedTime.Milliseconds())
 	}
 
 	// Check if the prediction confidence is above the threshold.
@@ -48,18 +48,25 @@ func processData(data []byte, ctx *config.Context) error {
 	filter := ctx.OccurrenceMonitor.TrackSpecies(species)
 	if filter {
 		// Skip further processing if TrackSpecies returned true
-		fmt.Printf("Duplicate occurrence detected: %s, skipping processing\n", results[0].Species)
+		if ctx.Settings.Debug {
+			fmt.Printf("\nDuplicate occurrence detected: %s, skipping processing\n", results[0].Species)
+		}
 		return nil
 	}
 
-	// Construct the filename for saving the audio sample.
-	clipName := fmt.Sprintf("%s/%s.wav", ctx.Settings.CapturePath, strconv.FormatInt(time.Now().Unix(), 10))
-	if ctx.Settings.Debug {
-		fmt.Printf("Saving audio clip to %s\n", clipName)
-	}
-	// Save the audio data as a WAV file.
-	if err := savePCMDataToWAV(clipName, data); err != nil {
-		fmt.Printf("error saving PCM data to WAV: %s\n", err)
+	var clipName string = ""
+
+	// If CapturePath is set save audio clip to disk
+	if ctx.Settings.CapturePath != "" {
+		// Construct the filename for saving the audio sample.
+		clipName = fmt.Sprintf("%s/%s.wav", ctx.Settings.CapturePath, strconv.FormatInt(time.Now().Unix(), 10))
+		if ctx.Settings.Debug {
+			fmt.Printf("Saving audio clip to %s\n", clipName)
+		}
+		// Save the audio data as a WAV file.
+		if err := savePCMDataToWAV(clipName, data); err != nil {
+			fmt.Printf("error saving PCM data to WAV: %s\n", err)
+		}
 	}
 
 	// temporary assignments

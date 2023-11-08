@@ -6,6 +6,7 @@ import (
 
 	"github.com/gen2brain/malgo"
 	"github.com/tphakala/go-birdnet/pkg/config"
+	"github.com/tphakala/go-birdnet/pkg/spinner"
 )
 
 const (
@@ -19,6 +20,8 @@ const (
 
 // quitChannel is used to signal the capture goroutine to stop
 var QuitChannel = make(chan struct{})
+
+var Spinner *spinner.Spinner
 
 func StartGoRoutines(ctx *config.Context) {
 	InitRingBuffer(bufferSize)
@@ -76,6 +79,8 @@ func CaptureAudio(ctx *config.Context) {
 		fmt.Println("Device started")
 	}
 	fmt.Println("Listening ...")
+	Spinner = spinner.NewSpinner()
+	defer Spinner.Cleanup()
 
 	// Monitor the quitChannel and cleanup before exiting
 	<-QuitChannel
