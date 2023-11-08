@@ -16,8 +16,8 @@ import (
 )
 
 // RootCommand creates and returns the root command
-func RootCommand() *cobra.Command {
-	ctx := config.GetGlobalContext()
+func RootCommand(ctx *config.Context) *cobra.Command {
+	//ctx := config.GetGlobalContext()
 
 	rootCmd := &cobra.Command{
 		Use:   "birdnet",
