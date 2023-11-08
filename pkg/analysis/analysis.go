@@ -4,16 +4,17 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
+	"sync"
 
 	"github.com/tphakala/go-birdnet/pkg/birdnet"
 	"github.com/tphakala/go-birdnet/pkg/config"
 	"github.com/tphakala/go-birdnet/pkg/myaudio"
 	"github.com/tphakala/go-birdnet/pkg/observation"
 )
+
+var once sync.Once
 
 // executeFileAnalysis conducts an analysis of an audio file and outputs the results.
 // It reads an audio file, analyzes it for bird sounds, and prints the results based on the provided configuration.
@@ -100,18 +101,14 @@ func RealtimeAnalysis(ctx *config.Context) error {
 	// Start necessary routines for real-time analysis.
 	myaudio.StartGoRoutines(ctx)
 
-	// Channel to receive OS signals.
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	// Block until QuitChannel is closed.
+	<-myaudio.QuitChannel
 
-	// Block until a signal is received.
-	<-c
-
-	// Delete tflite interpreter
-	birdnet.DeleteInterpreter()
-
-	// Close the QuitChannel to signal termination
-	close(myaudio.QuitChannel)
+	// Perform cleanup using sync.Once to ensure it happens only once.
+	once.Do(func() {
+		birdnet.DeleteInterpreter()
+		//close(myaudio.QuitChannel)
+	})
 
 	return nil
 }
