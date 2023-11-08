@@ -4,209 +4,94 @@ package config
 import (
 	"fmt"
 	"os"
-	"os/user"
 	"path/filepath"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-// OccurrenceMonitor to track species occurrences and manage state reset.
-type OccurrenceMonitor struct {
-	LastSpecies   string
-	OccurrenceMap map[string]int
-	ResetDuration time.Duration
-	Mutex         sync.Mutex
-	Timer         *time.Timer
-}
-
-// Context holds the overall application state, including the Settings and the OccurrenceMonitor.
-type Context struct {
-	Settings          *Settings
-	OccurrenceMonitor *OccurrenceMonitor
-}
-
 type Settings struct {
-	InputFile      string
-	InputDirectory string
-	RealtimeMode   bool
+	NodeName       string // name of go-birdnet node, can be used to identify source of notes
+	InputFile      string // audio file to analyze (overrides InputDirectory if set)
+	InputDirectory string // directory to analyze
+	RealtimeMode   bool   // true to analyze audio in realtime
 	ModelPath      string
 	LabelFilePath  string
-	Sensitivity    float64
-	Overlap        float64
-	Debug          bool
-	CapturePath    string
-	Threshold      float64
-	Locale         string
-	ProcessingTime bool   // true to report processing time for each prediction
-	Recursive      bool   // true for recursive directory analysis
-	OutputDir      string // directory to output results
-	OutputFormat   string // table, csv
-	LogPath        string
-	LogFile        string
-	Database       string // none, sqlite, mysql
-	TimeAs24h      bool   // true 24-hour time format, false 12-hour time format
+	Sensitivity    float64 // birdnet analysis sigmoid sensitivity
+	Overlap        float64 // birdnet analysis overlap between chunks
+	Debug          bool    // true to enable debug mode
+	CapturePath    string  // directory to store audio clips
+	Threshold      float64 // threshold for prediction confidence to report
+	Locale         string  // language to use for labels
+	ProcessingTime bool    // true to report processing time for each prediction
+	Recursive      bool    // true for recursive directory analysis
+	OutputDir      string  // directory to output results
+	OutputFormat   string  // table, csv
+	LogPath        string  // directory to store log files
+	LogFile        string  // name of log file
+	Database       string  // none, sqlite, mysql
+	TimeAs24h      bool    // true 24-hour time format, false 12-hour time format
 }
 
-var Locales = map[string]string{
-	"Afrikaans": "labels_af.txt",
-	"Catalan":   "labels_ca.txt",
-	"Czech":     "labels_cs.txt",
-	"Chinese":   "labels_zh.txt",
-	"Croatian":  "labels_hr.txt",
-	"Danish":    "labels_da.txt",
-	"Dutch":     "labels_nl.txt",
-	"English":   "labels_en.txt",
-	"Estonian":  "labels_et.txt",
-	"Finnish":   "labels_fi.txt",
-	"French":    "labels_fr.txt",
-	"German":    "labels_de.txt",
-	"Hungarian": "labels_hu.txt",
-	"Icelandic": "labels_is.txt",
-	"Indonesia": "labels_id.txt",
-	"Italian":   "labels_it.txt",
-	"Japanese":  "labels_ja.txt",
-	"Latvian":   "labels_lv.txt",
-	"Lithuania": "labels_lt.txt",
-	"Norwegian": "labels_no.txt",
-	"Polish":    "labels_pl.txt",
-	"Portugues": "labels_pt.txt",
-	"Russian":   "labels_ru.txt",
-	"Slovak":    "labels_sk.txt",
-	"Slovenian": "labels_sl.txt",
-	"Spanish":   "labels_es.txt",
-	"Swedish":   "labels_sv.txt",
-	"Thai":      "labels_th.txt",
-	"Ukrainian": "labels_uk.txt",
-}
-
-var LocaleCodes = map[string]string{
-	"af": "Afrikaans",
-	"ca": "Catalan",
-	"cs": "Czech",
-	"zh": "Chinese",
-	"hr": "Croatian",
-	"da": "Danish",
-	"nl": "Dutch",
-	"en": "English",
-	"et": "Estonian",
-	"fi": "Finnish",
-	"fr": "French",
-	"de": "German",
-	"hu": "Hungarian",
-	"is": "Icelandic",
-	"id": "Indonesia",
-	"it": "Italian",
-	"ja": "Japanese",
-	"lv": "Latvian",
-	"lt": "Lithuania",
-	"no": "Norwegian",
-	"pl": "Polish",
-	"pt": "Portugues",
-	"ru": "Russian",
-	"sk": "Slovak",
-	"sl": "Slovenian",
-	"es": "Spanish",
-	"sv": "Swedish",
-	"th": "Thai",
-	"uk": "Ukrainian",
-}
-
-var (
-	GlobalConfig  Settings
-	globalContext *Context
-)
-
-// Load initializes the configuration by reading in the config file and environment variables.
-func Load() error {
+// Load reads the configuration file and environment variables into GlobalConfig.
+func Load() (*Context, error) {
+	var settings Settings
 	setDefaults()
-	initViper()
 
-	if err := viper.Unmarshal(&GlobalConfig); err != nil {
-		return fmt.Errorf("error unmarshaling config into struct: %w", err)
+	// Initialize viper to read config
+	if err := initViper(); err != nil {
+		return nil, err // Handle viper initialization errors
 	}
 
-	// Process the configuration
-	processConfig()
+	// Unmarshal the configuration file into the GlobalConfig struct
+	if err := viper.Unmarshal(&settings); err != nil {
+		return nil, fmt.Errorf("error unmarshaling config into struct: %w", err)
+	}
 
-	// Initialize the global context
-	InitGlobalContext()
+	processConfig() // Post-processing after loading configuration
 
-	return nil
+	// Initialize the OccurrenceMonitor or any other components as needed.
+	occurrenceMonitor := NewOccurrenceMonitor(10 * time.Second)
+
+	return &Context{
+		Settings:          &settings,
+		OccurrenceMonitor: occurrenceMonitor,
+	}, nil
 }
 
-// GetSettings returns a reference to the global application settings.
-func GetSettings() *Settings {
-	return &GlobalConfig
+// GetSettings returns a pointer to the global settings object.
+func GetSettings(ctx *Context) *Settings {
+	return ctx.Settings
 }
 
 // BindFlags binds command line flags to configuration settings using Viper.
-func BindFlags(cmd *cobra.Command, cfg *Settings) {
+func BindFlags(cmd *cobra.Command, settings *Settings) {
 	if err := viper.BindPFlags(cmd.Flags()); err != nil {
 		fmt.Printf("Error binding flags: %v\n", err)
 	}
 }
 
-// SyncViper is used to update the configuration values with those from Viper.
-func SyncViper(cfg *Settings) {
-	viper.Unmarshal(cfg)
+// SyncViper updates the settings object with values from Viper.
+func SyncViper(settings *Settings) {
+	if err := viper.Unmarshal(settings); err != nil {
+		fmt.Printf("Error unmarshalling Viper values to settings: %v\n", err)
+	}
 }
 
-// NormalizeLocale normalizes the input locale string and matches it to a known locale code or full name.
-func NormalizeLocale(inputLocale string) (string, error) {
-	inputLocale = strings.ToLower(inputLocale)
-
-	if _, exists := Locales[LocaleCodes[inputLocale]]; exists {
-		return inputLocale, nil
-	}
-
-	for code, fullName := range LocaleCodes {
-		if strings.ToLower(fullName) == inputLocale {
-			return code, nil
-		}
-	}
-
-	fullLocale, exists := LocaleCodes[inputLocale]
-	if !exists {
-		return "", fmt.Errorf("unsupported locale: %s", inputLocale)
-	}
-
-	if _, exists := Locales[fullLocale]; !exists {
-		return "", fmt.Errorf("locale code supported but no label file found: %s", fullLocale)
-	}
-
-	return inputLocale, nil
-}
-
-// unexported functions below
-
-func initViper() {
+// initViper initializes viper with the configuration file.
+func initViper() error {
 	viper.SetConfigType("yaml")
 
-	usr, err := user.Current()
-	if err != nil {
-		panic(fmt.Errorf("error fetching user directory: %v", err))
-	}
-
-	configPaths := []string{filepath.Join(usr.HomeDir, ".config", "go-birdnet"), "."}
+	configPaths := getDefaultConfigPaths()
 	configName := "config"
 
 	for _, path := range configPaths {
 		viper.AddConfigPath(path)
 	}
-
 	viper.SetConfigName(configName)
 
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			createDefault(filepath.Join(usr.HomeDir, ".config", "go-birdnet", "config.yaml"))
-		} else {
-			panic(fmt.Errorf("fatal error reading config file: %s", err))
-		}
-	}
+	return readConfig()
 }
 
 func setDefaults() {
@@ -219,9 +104,51 @@ func processConfig() {
 	// ...
 }
 
+// getDefaultConfigPaths builds a list of paths to look for the configuration file.
+func getDefaultConfigPaths() []string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		panic(fmt.Errorf("error fetching user directory: %v", err))
+	}
+	return []string{filepath.Join(homeDir, ".config", "go-birdnet"), "."}
+}
+
+// readConfig reads the configuration from files or creates a default if not found.
+func readConfig() error {
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			configPath := filepath.Join(getDefaultConfigPaths()[0], "config.yaml")
+			createDefault(configPath)
+		} else {
+			return fmt.Errorf("fatal error reading config file: %w", err)
+		}
+	}
+	return nil
+}
+
+// createDefault creates a default configuration file at the specified path.
 func createDefault(configPath string) {
-	defaultConfig := `# Default configuration
+	defaultConfig := getDefaultConfig()
+
+	// Ensure the directory exists
+	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+		panic(fmt.Errorf("error creating directories for config file: %v", err))
+	}
+
+	// Write the default configuration
+	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
+		panic(fmt.Errorf("error writing default config file: %v", err))
+	}
+
+	fmt.Println("Created default config file at:", configPath)
+	viper.ReadInConfig() // Re-read the config after creating the default
+}
+
+// getDefaultConfig returns the default configuration as a string.
+func getDefaultConfig() string {
+	return `# Default configuration
 debug: false
+nodename: go-birdnet
 sensitivity: 1
 locale: en
 overlap: 0.0
@@ -235,77 +162,4 @@ outputformat:
 database: none
 timeas24h: true
 `
-	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
-		panic(fmt.Errorf("error creating directories for config file: %v", err))
-	}
-
-	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
-		panic(fmt.Errorf("error writing default config file: %v", err))
-	}
-
-	fmt.Println("Created default config file at:", configPath)
-	viper.ReadInConfig()
-}
-
-// NewOccurrenceMonitor creates a new instance of OccurrenceMonitor with the given reset duration.
-func NewOccurrenceMonitor(resetDuration time.Duration) *OccurrenceMonitor {
-	return &OccurrenceMonitor{
-		OccurrenceMap: make(map[string]int),
-		ResetDuration: resetDuration,
-	}
-}
-
-// NewContext creates a new instance of Context with the provided settings and occurrence monitor.
-func NewContext(settings *Settings, occurrenceMonitor *OccurrenceMonitor) *Context {
-	return &Context{
-		Settings:          settings,
-		OccurrenceMonitor: occurrenceMonitor,
-	}
-}
-
-// TrackSpecies checks and updates the species occurrences in the OccurrenceMonitor.
-func (om *OccurrenceMonitor) TrackSpecies(species string) bool {
-	om.Mutex.Lock()
-	defer om.Mutex.Unlock()
-
-	if om.Timer == nil || om.LastSpecies != species {
-		om.resetState(species)
-		return false
-	}
-
-	om.OccurrenceMap[species]++
-
-	if om.OccurrenceMap[species] > 1 {
-		return true
-	}
-
-	return false
-}
-
-// resetState resets the state of the OccurrenceMonitor.
-func (om *OccurrenceMonitor) resetState(species string) {
-	om.OccurrenceMap = map[string]int{species: 1}
-	om.LastSpecies = species
-	if om.Timer != nil {
-		om.Timer.Stop()
-	}
-	om.Timer = time.AfterFunc(om.ResetDuration, func() {
-		om.Mutex.Lock()
-		defer om.Mutex.Unlock()
-		om.OccurrenceMap = make(map[string]int)
-		om.Timer = nil
-		om.LastSpecies = ""
-	})
-}
-
-func InitGlobalContext() {
-	// This function is supposed to be called after Load to make sure GlobalConfig is populated.
-	globalContext = NewContext(&GlobalConfig, NewOccurrenceMonitor(10*time.Second)) // Set the duration as required
-}
-
-func GetGlobalContext() *Context {
-	if globalContext == nil {
-		InitGlobalContext() // Lazy initialization, if needed
-	}
-	return globalContext
 }
