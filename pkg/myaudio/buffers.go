@@ -75,8 +75,10 @@ func BufferMonitor(ctx *config.Context) {
 			// if buffer has 3 seconds of data, process it
 			if len(data) == chunkSize {
 				processData(data, ctx)
+				Spinner.Update()
 			} else {
 				time.Sleep(pollInterval)
+				Spinner.Update()
 			}
 		}
 	}
