@@ -36,8 +36,12 @@ func ReadAudioFile(ctx *config.Context) ([][]float32, error) {
 		fmt.Println("Channels:", decoder.NumChans)
 	}
 
+	var doResample bool = false
+	var sourceSampleRate int = int(decoder.SampleRate)
+
 	if decoder.SampleRate != SampleRate {
-		return nil, errors.New("input file sample rate is not valid for BirdNet model")
+		doResample = true
+		//return nil, errors.New("input file sample rate is not valid for BirdNet model")
 	}
 
 	// Divisor for converting audio sample chunk from int to float32
@@ -74,14 +78,26 @@ func ReadAudioFile(ctx *config.Context) ([][]float32, error) {
 			break
 		}
 
+		var floatChunk []float32
 		for _, sample := range buf.Data[:n] {
 			// Convert sample from int to float32 type
-			currentChunk = append(currentChunk, float32(sample)/divisor)
+			floatChunk = append(floatChunk, float32(sample)/divisor)
+		}
 
-			if len(currentChunk) == secondsSamples {
-				chunks = append(chunks, currentChunk)
-				currentChunk = currentChunk[step:]
+		// Perform resampling if needed
+		if doResample {
+			var err error
+			floatChunk, err = ResampleAudio(floatChunk, sourceSampleRate, SampleRate)
+			if err != nil {
+				return nil, fmt.Errorf("error resampling audio: %w", err)
 			}
+		}
+
+		currentChunk = append(currentChunk, floatChunk...)
+
+		if len(currentChunk) >= secondsSamples {
+			chunks = append(chunks, currentChunk[:secondsSamples])
+			currentChunk = currentChunk[step:]
 		}
 	}
 
