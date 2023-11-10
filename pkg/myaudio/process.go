@@ -44,12 +44,23 @@ func processData(data []byte, ctx *config.Context) error {
 		return nil
 	}
 
-	species := results[0].Species // Replace with your actual method of obtaining species string
+	species, _, _ := observation.ParseSpeciesString(results[0].Species)
+
+	// Check if the species is in the excluded list
+	if isSpeciesExcluded(species, ctx.ExcludedSpeciesList) {
+		if ctx.Settings.Debug {
+			fmt.Printf("\nExcluded species detected: %s, skipping processing\n", species)
+		}
+		return nil
+	}
+
+	// check if it is same species as previous and if so, check if it is too soon to report
 	filter := ctx.OccurrenceMonitor.TrackSpecies(species)
+
 	if filter {
 		// Skip further processing if TrackSpecies returned true
 		if ctx.Settings.Debug {
-			fmt.Printf("\nDuplicate occurrence detected: %s, skipping processing\n", results[0].Species)
+			fmt.Printf("\nDuplicate occurrence detected: %s, skipping processing\n", species)
 		}
 		return nil
 	}
@@ -61,11 +72,11 @@ func processData(data []byte, ctx *config.Context) error {
 		// Construct the filename for saving the audio sample.
 		clipName = fmt.Sprintf("%s/%s.wav", ctx.Settings.CapturePath, strconv.FormatInt(time.Now().Unix(), 10))
 		if ctx.Settings.Debug {
-			fmt.Printf("Saving audio clip to %s\n", clipName)
+			fmt.Printf("\nSaving audio clip to %s\n", clipName)
 		}
 		// Save the audio data as a WAV file.
 		if err := savePCMDataToWAV(clipName, data); err != nil {
-			fmt.Printf("error saving PCM data to WAV: %s\n", err)
+			fmt.Printf("\nerror saving PCM data to WAV: %s\n", err)
 		}
 	}
 
@@ -86,6 +97,16 @@ func processData(data []byte, ctx *config.Context) error {
 	fmt.Printf("%s %s %.2f\n", note.Time, note.CommonName, note.Confidence)
 
 	return nil
+}
+
+// isSpeciesExcluded checks if the given species is in the excluded list.
+func isSpeciesExcluded(species string, excludedList []string) bool {
+	for _, excludedSpecies := range excludedList {
+		if species == excludedSpecies {
+			return true
+		}
+	}
+	return false
 }
 
 // ConvertToFloat32 converts a byte slice representing sample to a 2D slice of float32 samples.

@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-var globalContext *Context
+//var globalContext *Context
 
 // OccurrenceMonitor to track species occurrences and manage state reset.
 type OccurrenceMonitor struct {
@@ -18,8 +18,9 @@ type OccurrenceMonitor struct {
 
 // Context holds the overall application state, including the Settings and the OccurrenceMonitor.
 type Context struct {
-	Settings          *Settings
-	OccurrenceMonitor *OccurrenceMonitor
+	Settings            *Settings
+	OccurrenceMonitor   *OccurrenceMonitor
+	ExcludedSpeciesList []string // Field to hold the list of excluded species
 }
 
 // NewOccurrenceMonitor creates a new instance of OccurrenceMonitor with the given reset duration.
@@ -50,11 +51,7 @@ func (om *OccurrenceMonitor) TrackSpecies(species string) bool {
 
 	om.OccurrenceMap[species]++
 
-	if om.OccurrenceMap[species] > 1 {
-		return true
-	}
-
-	return false
+	return om.OccurrenceMap[species] > 1
 }
 
 // resetState resets the state of the OccurrenceMonitor.
@@ -72,17 +69,3 @@ func (om *OccurrenceMonitor) resetState(species string) {
 		om.LastSpecies = ""
 	})
 }
-
-/*
-	func InitGlobalContext() {
-		// This function is supposed to be called after Load to make sure GlobalConfig is populated.
-		globalContext = NewContext(&GlobalConfig, NewOccurrenceMonitor(10*time.Second)) // Set the duration as required
-	}
-
-func GetGlobalContext() *Context {
-	if globalContext == nil {
-		InitGlobalContext() // Lazy initialization, if needed
-	}
-	return globalContext
-}
-*/

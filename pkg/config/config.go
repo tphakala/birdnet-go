@@ -37,27 +37,32 @@ type Settings struct {
 // Load reads the configuration file and environment variables into GlobalConfig.
 func Load() (*Context, error) {
 	var settings Settings
-	setDefaults()
+
+	// Initialize the Context with the settings
+	ctx := &Context{
+		Settings: &settings,
+		// Initialize other fields as required
+	}
+
+	// Set default values for the context, including ExcludedSpeciesList
+	setDefaults(ctx)
 
 	// Initialize viper to read config
 	if err := initViper(); err != nil {
 		return nil, err // Handle viper initialization errors
 	}
 
-	// Unmarshal the configuration file into the GlobalConfig struct
-	if err := viper.Unmarshal(&settings); err != nil {
+	// Unmarshal the configuration file directly into the Settings of the Context
+	if err := viper.Unmarshal(ctx.Settings); err != nil {
 		return nil, fmt.Errorf("error unmarshaling config into struct: %w", err)
 	}
 
 	processConfig() // Post-processing after loading configuration
 
 	// Initialize the OccurrenceMonitor or any other components as needed.
-	occurrenceMonitor := NewOccurrenceMonitor(10 * time.Second)
+	ctx.OccurrenceMonitor = NewOccurrenceMonitor(10 * time.Second)
 
-	return &Context{
-		Settings:          &settings,
-		OccurrenceMonitor: occurrenceMonitor,
-	}, nil
+	return ctx, nil
 }
 
 // GetSettings returns a pointer to the global settings object.
@@ -94,9 +99,8 @@ func initViper() error {
 	return readConfig()
 }
 
-func setDefaults() {
-	// Set default values for the configuration
-	// ...
+func setDefaults(config *Context) {
+	config.ExcludedSpeciesList = []string{"Engine", "Human vocal", "Human non-vocal", "Human whistle", "Gun", "Fireworks", "Siren", "Dog"}
 }
 
 func processConfig() {
