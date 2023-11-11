@@ -152,7 +152,7 @@ func WriteNotesTable(cfg *config.Settings, notes []Note, filename string) error 
 	// Check if an error occurred during the loop and return it
 	if err != nil {
 		return fmt.Errorf("failed to write note: %v", err)
-	} else {
+	} else if filename != "" {
 		fmt.Println("Output written to", filename)
 	}
 
