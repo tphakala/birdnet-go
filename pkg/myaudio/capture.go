@@ -100,8 +100,8 @@ func CaptureAudio(ctx *config.Context) {
 		fmt.Println("Device started")
 	}
 	fmt.Println("Listening ...")
-	Spinner = spinner.NewSpinner()
-	defer Spinner.Cleanup()
+	//Spinner = spinner.NewSpinner()
+	//defer Spinner.Cleanup()
 
 	// Now, instead of directly waiting on QuitChannel,
 	// check if it's closed in a non-blocking select.
