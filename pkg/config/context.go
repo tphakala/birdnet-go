@@ -3,6 +3,8 @@ package config
 import (
 	"sync"
 	"time"
+
+	"github.com/tphakala/go-tflite"
 )
 
 //var globalContext *Context
@@ -20,7 +22,12 @@ type OccurrenceMonitor struct {
 type Context struct {
 	Settings            *Settings
 	OccurrenceMonitor   *OccurrenceMonitor
-	ExcludedSpeciesList []string // Field to hold the list of excluded species
+	IncludedSpeciesList []string  // Field to hold the list of included species
+	ExcludedSpeciesList []string  // Field to hold the list of excluded species
+	SpeciesListUpdated  time.Time // when was included species list last updated
+	AnalysisInterpreter *tflite.Interpreter
+	FilterInterpreter   *tflite.Interpreter
+	Labels              []string
 }
 
 // NewOccurrenceMonitor creates a new instance of OccurrenceMonitor with the given reset duration.

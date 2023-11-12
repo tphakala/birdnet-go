@@ -27,7 +27,7 @@ func processData(data []byte, ctx *config.Context) error {
 	}
 
 	// Use the birdnet model to predict the bird species from the audio sample.
-	results, err := birdnet.Predict(sampleData, ctx.Settings.Sensitivity)
+	results, err := birdnet.Predict(sampleData, ctx)
 	if err != nil {
 		return fmt.Errorf("error predicting: %w", err)
 	}
@@ -45,6 +45,14 @@ func processData(data []byte, ctx *config.Context) error {
 	}
 
 	species, _, _ := observation.ParseSpeciesString(results[0].Species)
+
+	// Check if the species is in the included list
+	if !isSpeciesIncluded(results[0].Species, ctx.IncludedSpeciesList) {
+		if ctx.Settings.Debug {
+			fmt.Printf("\nSpecies not included: %s, skipping processing\n", species)
+		}
+		return nil
+	}
 
 	// Check if the species is in the excluded list
 	if isSpeciesExcluded(species, ctx.ExcludedSpeciesList) {
@@ -83,11 +91,11 @@ func processData(data []byte, ctx *config.Context) error {
 	// temporary assignments
 	var beginTime float64 = 0.0
 	var endTime float64 = 0.0
-	var latitude float64 = 0.0
-	var longitude float64 = 0.0
+	//var latitude float64 = 0.0
+	//var longitude float64 = 0.0
 
 	// Create an observation.Note from the prediction result.
-	note := observation.New(ctx.Settings, beginTime, endTime, results[0].Species, float64(results[0].Confidence), latitude, longitude, clipName, elapsedTime) // Adjust the start and end time arguments if required.
+	note := observation.New(ctx.Settings, beginTime, endTime, results[0].Species, float64(results[0].Confidence), clipName, elapsedTime)
 
 	// Log the observation to the specified log file.
 	if err := observation.LogNote(ctx.Settings, note); err != nil {
@@ -97,6 +105,16 @@ func processData(data []byte, ctx *config.Context) error {
 	fmt.Printf("%s %s %.2f\n", note.Time, note.CommonName, note.Confidence)
 
 	return nil
+}
+
+// isSpeciesIncluded checks if the given species is in the included species list.
+func isSpeciesIncluded(species string, includedList []string) bool {
+	for _, s := range includedList {
+		if species == s {
+			return true
+		}
+	}
+	return false
 }
 
 // isSpeciesExcluded checks if the given species is in the excluded list.
