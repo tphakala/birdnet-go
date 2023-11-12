@@ -16,6 +16,11 @@ type Result struct {
 	Confidence float32
 }
 
+type Filter struct {
+	Score float32
+	Label string
+}
+
 type DetectionsMap map[string][]Result
 
 // customSigmoid calculates the sigmoid of x adjusted by a sensitivity factor.
@@ -55,9 +60,9 @@ func pairLabelsAndConfidence(labels []string, preds []float32) ([]Result, error)
 // It then applies a custom sigmoid function to the raw predictions, pairs the results
 // with their respective labels, sorts them by confidence, and returns the top results.
 // The function returns an error if there's any issue during the prediction process.
-func Predict(sample [][]float32, sensitivity float64) ([]Result, error) {
+func Predict(sample [][]float32, ctx *config.Context) ([]Result, error) {
 	// Get the input tensor from the interpreter
-	input := interpreter.GetInputTensor(0)
+	input := ctx.AnalysisInterpreter.GetInputTensor(0)
 	if input == nil {
 		return nil, fmt.Errorf("cannot get input tensor")
 	}
@@ -66,13 +71,13 @@ func Predict(sample [][]float32, sensitivity float64) ([]Result, error) {
 	copy(input.Float32s(), sample[0])
 
 	// Execute the inference using the interpreter
-	status := interpreter.Invoke()
+	status := ctx.AnalysisInterpreter.Invoke()
 	if status != tflite.OK {
 		return nil, fmt.Errorf("tensor invoke failed")
 	}
 
 	// Retrieve the output tensor from the interpreter
-	output := interpreter.GetOutputTensor(0)
+	output := ctx.AnalysisInterpreter.GetOutputTensor(0)
 	outputSize := output.Dim(output.NumDims() - 1)
 
 	// Create a slice to store the prediction results
@@ -85,10 +90,10 @@ func Predict(sample [][]float32, sensitivity float64) ([]Result, error) {
 	// get the confidence values
 	confidence := make([]float32, len(prediction))
 	for i := range prediction {
-		confidence[i] = float32(customSigmoid(float64(prediction[i]), sensitivity))
+		confidence[i] = float32(customSigmoid(float64(prediction[i]), ctx.Settings.Sensitivity))
 	}
 
-	results, err := pairLabelsAndConfidence(labels, confidence)
+	results, err := pairLabelsAndConfidence(ctx.Labels, confidence)
 	if err != nil {
 		return nil, fmt.Errorf("error pairing labels and confidence: %v", err)
 	}
@@ -140,7 +145,7 @@ func AnalyzeAudio(chunks [][]float32, ctx *config.Context) ([]observation.Note, 
 		startTime := time.Now()
 
 		// Predict labels for the current audio data
-		predictedResults, err := Predict([][]float32{chunk}, ctx.Settings.Sensitivity)
+		predictedResults, err := Predict([][]float32{chunk}, ctx)
 		if err != nil {
 			return nil, fmt.Errorf("prediction failed: %v", err)
 		}
@@ -153,7 +158,7 @@ func AnalyzeAudio(chunks [][]float32, ctx *config.Context) ([]observation.Note, 
 
 		// Generate observations from predicted results
 		for _, result := range predictedResults {
-			obs := observation.New(ctx.Settings, predStart, predEnd, result.Species, float64(result.Confidence), 0.0, 0.0, "", elapsed)
+			obs := observation.New(ctx.Settings, predStart, predEnd, result.Species, float64(result.Confidence), "", elapsed)
 			observations = append(observations, obs)
 		}
 
