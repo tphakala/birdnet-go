@@ -32,6 +32,8 @@ type Settings struct {
 	LogFile        string  // name of log file
 	Database       string  // none, sqlite, mysql
 	TimeAs24h      bool    // true 24-hour time format, false 12-hour time format
+	Longitude      float64 // longitude of recording location for prediction filtering
+	Latitude       float64 // latitude of recording location for prediction filtering
 }
 
 // Load reads the configuration file and environment variables into GlobalConfig.
@@ -41,11 +43,10 @@ func Load() (*Context, error) {
 	// Initialize the Context with the settings
 	ctx := &Context{
 		Settings: &settings,
-		// Initialize other fields as required
+		// set SpeciesListUpdated to yesterday to force update on first run
+		SpeciesListUpdated:  time.Now().AddDate(0, 0, -1),
+		ExcludedSpeciesList: []string{"Engine", "Human vocal", "Human non-vocal", "Human whistle", "Gun", "Fireworks", "Siren", "Dog"},
 	}
-
-	// Set default values for the context, including ExcludedSpeciesList
-	setDefaults(ctx)
 
 	// Initialize viper to read config
 	if err := initViper(); err != nil {
@@ -56,8 +57,6 @@ func Load() (*Context, error) {
 	if err := viper.Unmarshal(ctx.Settings); err != nil {
 		return nil, fmt.Errorf("error unmarshaling config into struct: %w", err)
 	}
-
-	processConfig() // Post-processing after loading configuration
 
 	// Initialize the OccurrenceMonitor or any other components as needed.
 	ctx.OccurrenceMonitor = NewOccurrenceMonitor(10 * time.Second)
@@ -97,15 +96,6 @@ func initViper() error {
 	viper.SetConfigName(configName)
 
 	return readConfig()
-}
-
-func setDefaults(config *Context) {
-	config.ExcludedSpeciesList = []string{"Engine", "Human vocal", "Human non-vocal", "Human whistle", "Gun", "Fireworks", "Siren", "Dog"}
-}
-
-func processConfig() {
-	// Any additional processing after loading configuration
-	// ...
 }
 
 // getDefaultConfigPaths builds a list of paths to look for the configuration file.

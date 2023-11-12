@@ -106,7 +106,7 @@ func RealtimeAnalysis(ctx *config.Context) error {
 
 	// Perform cleanup using sync.Once to ensure it happens only once.
 	once.Do(func() {
-		birdnet.DeleteInterpreter()
+		birdnet.DeleteInterpreter(ctx)
 		//close(myaudio.QuitChannel)
 	})
 
