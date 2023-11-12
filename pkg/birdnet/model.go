@@ -122,7 +122,6 @@ func initializeMetaModel(ctx *config.Context) error {
 		return fmt.Errorf("tensor allocation failed")
 	}
 
-	fmt.Printf(" - %s model initialized\n", modelVersion)
 	return nil
 }
 
