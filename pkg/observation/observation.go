@@ -46,7 +46,7 @@ func ParseSpeciesString(species string) (string, string, string) {
 
 // New creates and returns a new Note with the provided parameters and current date and time.
 // It uses the configuration and parsing functions to set the appropriate fields.
-func New(cfg *config.Settings, beginTime, endTime float64, species string, confidence float64, latitude, longitude float64, clipName string, elapsedTime time.Duration) Note {
+func New(cfg *config.Settings, beginTime, endTime float64, species string, confidence float64, clipName string, elapsedTime time.Duration) Note {
 	// Parse the species string to get the scientific name, common name, and species code.
 	scientificName, commonName, speciesCode := ParseSpeciesString(species)
 
@@ -62,8 +62,8 @@ func New(cfg *config.Settings, beginTime, endTime float64, species string, confi
 		ScientificName: scientificName,                  // Parsed scientific name of the species.
 		CommonName:     commonName,                      // Parsed common name of the species.
 		Confidence:     confidence,                      // Confidence score of the observation.
-		Latitude:       latitude,                        // Geographic latitude where the observation was made.
-		Longitude:      longitude,                       // Geographic longitude where the observation was made.
+		Latitude:       cfg.Latitude,                    // Geographic latitude where the observation was made.
+		Longitude:      cfg.Longitude,                   // Geographic longitude where the observation was made.
 		Threshold:      cfg.Threshold,                   // Threshold setting from configuration.
 		Sensitivity:    cfg.Sensitivity,                 // Sensitivity setting from configuration.
 		ClipName:       clipName,                        // Name of the audio clip.
