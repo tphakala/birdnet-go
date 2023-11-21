@@ -6,13 +6,13 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/tphakala/go-birdnet/cmd/authors"
-	"github.com/tphakala/go-birdnet/cmd/directory"
-	"github.com/tphakala/go-birdnet/cmd/file"
-	"github.com/tphakala/go-birdnet/cmd/license"
-	"github.com/tphakala/go-birdnet/cmd/realtime"
-	"github.com/tphakala/go-birdnet/pkg/birdnet"
-	"github.com/tphakala/go-birdnet/pkg/config"
+	"github.com/tphakala/BirdNET-Go/cmd/authors"
+	"github.com/tphakala/BirdNET-Go/cmd/directory"
+	"github.com/tphakala/BirdNET-Go/cmd/file"
+	"github.com/tphakala/BirdNET-Go/cmd/license"
+	"github.com/tphakala/BirdNET-Go/cmd/realtime"
+	"github.com/tphakala/BirdNET-Go/internal/config"
+	"github.com/tphakala/BirdNET-Go/pkg/birdnet"
 )
 
 // RootCommand creates and returns the root command
@@ -21,7 +21,7 @@ func RootCommand(ctx *config.Context) *cobra.Command {
 
 	rootCmd := &cobra.Command{
 		Use:   "birdnet",
-		Short: "Go-BirdNET CLI",
+		Short: "BirdNET-Go CLI",
 	}
 
 	// Set up the global flags for the root command.
