@@ -1,5 +1,5 @@
 BINARY_DIR=bin
-BINARY_NAME=birdnet
+BINARY_NAME=birdnet-go
 
 build:
 	CGO_ENABLED=1 CGO_CFLAGS="-I$(HOME)/src/tensorflow" go build -ldflags "-s -w" -o ${BINARY_DIR}/${BINARY_NAME}

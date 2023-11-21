@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/tphakala/go-birdnet/pkg/config"
+	"github.com/tphakala/BirdNET-Go/internal/config"
 	"github.com/tphakala/go-tflite"
 )
 

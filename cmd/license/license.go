@@ -6,7 +6,7 @@ import (
 	"io/fs"
 
 	"github.com/spf13/cobra"
-	"github.com/tphakala/go-birdnet/pkg/config"
+	"github.com/tphakala/BirdNET-Go/internal/config"
 )
 
 //go:embed LICENSE

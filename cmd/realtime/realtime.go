@@ -2,8 +2,8 @@ package realtime
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/tphakala/go-birdnet/pkg/analysis"
-	"github.com/tphakala/go-birdnet/pkg/config"
+	"github.com/tphakala/BirdNET-Go/internal/analysis"
+	"github.com/tphakala/BirdNET-Go/internal/config"
 )
 
 // RealtimeCommand creates a new command for real-time audio analysis.

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/tphakala/go-birdnet/cmd"
-	"github.com/tphakala/go-birdnet/pkg/config"
+	"github.com/tphakala/BirdNET-Go/cmd"
+	"github.com/tphakala/BirdNET-Go/internal/config"
 )
 
 func main() {

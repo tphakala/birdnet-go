@@ -2,8 +2,8 @@ package file
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/tphakala/go-birdnet/pkg/analysis"
-	"github.com/tphakala/go-birdnet/pkg/config"
+	"github.com/tphakala/BirdNET-Go/internal/analysis"
+	"github.com/tphakala/BirdNET-Go/internal/config"
 )
 
 // FileCommand creates a new file command for analyzing a single audio file.
