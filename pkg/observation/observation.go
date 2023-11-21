@@ -12,7 +12,7 @@ import (
 
 // Observation represents a single observation data point
 type Note struct {
-	id             uint `gorm:"column:id;primaryKey;autoIncrement"`
+	Id             uint `gorm:"column:id;primaryKey;autoIncrement"`
 	SourceNode     string
 	Date           string
 	Time           string
