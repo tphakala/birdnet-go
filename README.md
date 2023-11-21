@@ -10,9 +10,9 @@
  <img src="https://badgen.net/badge/OS/Linux%2C%20Windows%2C%20macOS/blue">
 </p>
 
-Go-BirdNET is an application inspired by BirdNET Analyzer, developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology. While the original BirdNET is based on Python, Go-BirdNET is built using Golang, aiming for simplified deployment across multiple platforms, from Windows PCs to single board computers like Raspberry Pi.
+BirdNET-Go is an application inspired by BirdNET Analyzer, developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology. While the original BirdNET is based on Python, Go-BirdNET is built using Golang, aiming for simplified deployment across multiple platforms, from Windows PCs to single board computers like Raspberry Pi.
 
-Go-BirdNET features
+BirdNET-Go features
 
 - Works on Windows, Linux and macOS
 - Can analyse 48kHz WAV files from single file or directory of WAV files
@@ -24,7 +24,7 @@ Go-BirdNET features
 
 ## Executable Distributions
 
-Ready to run binaries can be found from releases section https://github.com/tphakala/go-birdnet/releases/
+Ready to run binaries can be found from releases section https://github.com/tphakala/BirdNET-Go/releases/
 Arhives also contains libtensorflowlite_c library.
 
 ## Compiling for Linux
@@ -55,7 +55,7 @@ cd tensorflow
 git checkout tags/v2.14.0
 ```
 
-### Building Go-BirdNET
+### Building BirdNET-Go
 
 Clone go-birdnet repository
 
@@ -63,7 +63,7 @@ Clone go-birdnet repository
 git clone https://github.com/tphakala/go-birdnet.git
 ```
 
-Build Go-BirdNET by make, compiled binary will be placed in go-birdnet/bin directory
+Build BirdNET-Go by make, compiled binary will be placed in go-birdnet/bin directory
 
 ```bash
 cd go-birdnet
@@ -94,7 +94,7 @@ cd ~/src
 git clone https://github.com/tensorflow/tensorflow.git
 ```
 
-### Cross compiling Go-BirdNET
+### Cross compiling BirdNET-Go
 
 Clone go-birdnet repository
 
@@ -102,7 +102,7 @@ Clone go-birdnet repository
 git clone https://github.com/tphakala/go-birdnet.git
 ```
 
-Build Go-BirdNET by running make windows
+Build BirdNET-Go by running make windows
 
 ```bash
 cd go-birdnet
@@ -116,7 +116,7 @@ Yes it is correct that you need **libtensorflowlite_c.dll** in /usr/x86_64-w64-m
 ## Usage
 
 ```bash
-Go-BirdNET CLI
+BirdNET-Go CLI
 
 Usage:
   birdnet [command]
