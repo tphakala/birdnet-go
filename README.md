@@ -10,7 +10,7 @@
  <img src="https://badgen.net/badge/OS/Linux%2C%20Windows%2C%20macOS/blue">
 </p>
 
-BirdNET-Go is an application inspired by BirdNET Analyzer, developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology. While the original BirdNET is based on Python, Go-BirdNET is built using Golang, aiming for simplified deployment across multiple platforms, from Windows PCs to single board computers like Raspberry Pi.
+BirdNET-Go is an application inspired by BirdNET Analyzer, developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology. While the original BirdNET is based on Python, BirdNET-Go is built using Golang, aiming for simplified deployment across multiple platforms, from Windows PCs to single board computers like Raspberry Pi.
 
 BirdNET-Go features
 
@@ -57,16 +57,16 @@ git checkout tags/v2.14.0
 
 ### Building BirdNET-Go
 
-Clone go-birdnet repository
+Clone BirdNET-Go repository
 
 ```bash
-git clone https://github.com/tphakala/go-birdnet.git
+git clone https://github.com/tphakala/BirdNET-Go.git
 ```
 
 Build BirdNET-Go by make, compiled binary will be placed in go-birdnet/bin directory
 
 ```bash
-cd go-birdnet
+cd BirdNET-Go
 make
 ```
 
@@ -96,16 +96,16 @@ git clone https://github.com/tensorflow/tensorflow.git
 
 ### Cross compiling BirdNET-Go
 
-Clone go-birdnet repository
+Clone BirdNET-Go repository
 
 ```bash
-git clone https://github.com/tphakala/go-birdnet.git
+git clone https://github.com/tphakala/BirdNET-Go.git
 ```
 
 Build BirdNET-Go by running make windows
 
 ```bash
-cd go-birdnet
+cd BirdNET-Go
 make windows
 ```
 
