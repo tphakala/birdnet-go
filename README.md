@@ -1,4 +1,4 @@
-# Go-BirdNET
+# BirdNET-Go
 
 <p align="center">
   <img src="doc/go-birdnet-logo.webp" />
