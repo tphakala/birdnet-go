@@ -6,8 +6,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/tphakala/BirdNET-Go/internal/config"
-	"github.com/tphakala/BirdNET-Go/internal/observation"
+	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/observation"
 	"github.com/tphakala/go-tflite"
 )
 

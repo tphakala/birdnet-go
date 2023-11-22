@@ -6,7 +6,7 @@ import (
 	"io/fs"
 
 	"github.com/spf13/cobra"
-	"github.com/tphakala/BirdNET-Go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/config"
 )
 
 //go:embed AUTHORS

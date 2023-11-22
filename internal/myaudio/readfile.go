@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
-	"github.com/tphakala/BirdNET-Go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/config"
 )
 
 // Required sample rate for input audio data

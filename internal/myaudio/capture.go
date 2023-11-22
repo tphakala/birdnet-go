@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gen2brain/malgo"
-	"github.com/tphakala/BirdNET-Go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/config"
 )
 
 const (

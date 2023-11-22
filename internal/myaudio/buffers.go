@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/smallnest/ringbuffer"
-	"github.com/tphakala/BirdNET-Go/internal/config"
-	"github.com/tphakala/BirdNET-Go/pkg/birdnet"
+	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/pkg/birdnet"
 )
 
 const (

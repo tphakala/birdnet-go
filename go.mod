@@ -1,4 +1,4 @@
-module github.com/tphakala/BirdNET-Go
+module github.com/tphakala/birdnet-go
 
 go 1.21.3
 

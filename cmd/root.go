@@ -6,13 +6,13 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/tphakala/BirdNET-Go/cmd/authors"
-	"github.com/tphakala/BirdNET-Go/cmd/directory"
-	"github.com/tphakala/BirdNET-Go/cmd/file"
-	"github.com/tphakala/BirdNET-Go/cmd/license"
-	"github.com/tphakala/BirdNET-Go/cmd/realtime"
-	"github.com/tphakala/BirdNET-Go/internal/config"
-	"github.com/tphakala/BirdNET-Go/pkg/birdnet"
+	"github.com/tphakala/birdnet-go/cmd/authors"
+	"github.com/tphakala/birdnet-go/cmd/directory"
+	"github.com/tphakala/birdnet-go/cmd/file"
+	"github.com/tphakala/birdnet-go/cmd/license"
+	"github.com/tphakala/birdnet-go/cmd/realtime"
+	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/pkg/birdnet"
 )
 
 // RootCommand creates and returns the root command
