@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tphakala/BirdNET-Go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/config"
 )
 
 // Observation represents a single observation data point

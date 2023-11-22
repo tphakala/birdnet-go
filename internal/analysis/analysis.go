@@ -8,10 +8,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/tphakala/BirdNET-Go/internal/config"
-	"github.com/tphakala/BirdNET-Go/internal/myaudio"
-	"github.com/tphakala/BirdNET-Go/internal/observation"
-	"github.com/tphakala/BirdNET-Go/pkg/birdnet"
+	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/observation"
+	"github.com/tphakala/birdnet-go/pkg/birdnet"
 )
 
 var once sync.Once

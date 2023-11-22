@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/tphakala/BirdNET-Go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/config"
 )
 
 // LogNoteToFile saves the Note to a log file.

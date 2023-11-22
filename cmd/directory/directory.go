@@ -2,8 +2,8 @@ package directory
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/tphakala/BirdNET-Go/internal/analysis"
-	"github.com/tphakala/BirdNET-Go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/analysis"
+	"github.com/tphakala/birdnet-go/internal/config"
 )
 
 // DirectoryCommand creates a new cobra.Command for directory analysis.

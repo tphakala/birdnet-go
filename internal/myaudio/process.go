@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/tphakala/BirdNET-Go/internal/config"
-	"github.com/tphakala/BirdNET-Go/internal/observation"
-	"github.com/tphakala/BirdNET-Go/pkg/birdnet"
+	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/observation"
+	"github.com/tphakala/birdnet-go/pkg/birdnet"
 )
 
 // processData processes the given audio data to detect bird species, logs the detected species
