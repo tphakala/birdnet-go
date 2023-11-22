@@ -24,7 +24,8 @@ func Command(ctx *config.Context) *cobra.Command {
 
 // setupRealtimeFlags configures flags specific to the realtime command.
 func setupFlags(cmd *cobra.Command, settings *config.Settings) {
-	cmd.Flags().StringVar(&settings.CapturePath, "capturepath", "", "Path to save audio data")
+	cmd.Flags().StringVar(&settings.ClipPath, "clippath", "", "Path to save audio clips")
+	cmd.Flags().StringVar(&settings.ClipType, "cliptype", "", "Audio clip type: wav, flac, mp3")
 	cmd.Flags().StringVar(&settings.LogPath, "logpath", "", "Path to save log files")
 	cmd.Flags().StringVar(&settings.LogFile, "logfile", "", "Filename for the log file")
 	cmd.Flags().BoolVar(&settings.ProcessingTime, "processingtime", false, "Report processing time for each detection")

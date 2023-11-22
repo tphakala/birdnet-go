@@ -6,16 +6,19 @@ require (
 	github.com/gen2brain/malgo v0.11.10
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0
+	github.com/go-musicfox/goflac v0.1.5
 	github.com/smallnest/ringbuffer v0.0.0-20230728150354-35801fa39d0e
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.17.0
 	github.com/tphakala/go-tflite v0.0.0-20231013114437-e78004b1b843
+	github.com/viert/go-lame v0.0.0-20201108052322-bb552596b11d
 	gorm.io/driver/mysql v1.5.2
 	gorm.io/driver/sqlite v1.5.4
 	gorm.io/gorm v1.25.5
 )
 
 require (
+	github.com/cocoonlife/testify v0.0.0-20160218172820-792cc1faeb64 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/go-audio/riff v1.0.0 // indirect
 	github.com/go-sql-driver/mysql v1.7.0 // indirect

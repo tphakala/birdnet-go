@@ -96,7 +96,7 @@ func DirectoryAnalysis(ctx *config.Context) error {
 
 // executeRealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 func RealtimeAnalysis(ctx *config.Context) error {
-	fmt.Printf("Starting Go-BirdNET Analyzer in realtime mode, threshold: %.2f, sensitivity: %.2f\n",
+	fmt.Printf("Starting BirdNET-Go Analyzer in realtime mode, threshold: %.2f, sensitivity: %.2f\n",
 		ctx.Settings.Threshold, ctx.Settings.Sensitivity)
 
 	// Start necessary routines for real-time analysis.
