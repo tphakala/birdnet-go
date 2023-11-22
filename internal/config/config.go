@@ -21,7 +21,8 @@ type Settings struct {
 	Sensitivity    float64 // birdnet analysis sigmoid sensitivity
 	Overlap        float64 // birdnet analysis overlap between chunks
 	Debug          bool    // true to enable debug mode
-	CapturePath    string  // directory to store audio clips
+	ClipPath       string  // directory to store audio clips
+	ClipType       string  // wav, flac, mp3
 	Threshold      float64 // threshold for prediction confidence to report
 	Locale         string  // language to use for labels
 	ProcessingTime bool    // true to report processing time for each prediction
@@ -146,7 +147,8 @@ nodename: go-birdnet
 sensitivity: 1
 locale: en
 overlap: 0.0
-capturepath: ./clips
+clippath: ./clips
+cliptype: mp3
 threshold: 0.8
 processingtime: false
 logpath: ./log/

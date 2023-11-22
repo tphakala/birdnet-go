@@ -76,23 +76,40 @@ func processData(data []byte, ctx *config.Context) error {
 	var clipName string = ""
 
 	// If CapturePath is set save audio clip to disk
-	if ctx.Settings.CapturePath != "" {
+	if ctx.Settings.ClipPath != "" {
 		// Construct the filename for saving the audio sample.
-		clipName = fmt.Sprintf("%s/%s.wav", ctx.Settings.CapturePath, strconv.FormatInt(time.Now().Unix(), 10))
+		baseFileName := strconv.FormatInt(time.Now().Unix(), 10)
+		var clipName string
+		var err error
+
 		if ctx.Settings.Debug {
-			fmt.Printf("\nSaving audio clip to %s\n", clipName)
+			fmt.Printf("\nPreparing to save audio clip\n")
 		}
-		// Save the audio data as a WAV file.
-		if err := savePCMDataToWAV(clipName, data); err != nil {
-			fmt.Printf("\nerror saving PCM data to WAV: %s\n", err)
+
+		switch ctx.Settings.ClipType {
+		case "wav":
+			clipName = fmt.Sprintf("%s/%s.wav", ctx.Settings.ClipPath, baseFileName)
+			err = savePCMDataToWAV(clipName, data)
+
+		case "flac":
+			clipName = fmt.Sprintf("%s/%s.flac", ctx.Settings.ClipPath, baseFileName)
+			err = savePCMDataToFlac(clipName, data)
+
+		case "mp3":
+			clipName = fmt.Sprintf("%s/%s.mp3", ctx.Settings.ClipPath, baseFileName)
+			err = savePCMDataToMP3(clipName, data)
+		}
+
+		if err != nil {
+			fmt.Printf("error saving audio clip to %s: %s\n", ctx.Settings.ClipType, err)
+		} else if ctx.Settings.Debug {
+			fmt.Printf("Saved audio clip to %s\n", clipName)
 		}
 	}
 
 	// temporary assignments
 	var beginTime float64 = 0.0
 	var endTime float64 = 0.0
-	//var latitude float64 = 0.0
-	//var longitude float64 = 0.0
 
 	// Create an observation.Note from the prediction result.
 	note := observation.New(ctx.Settings, beginTime, endTime, results[0].Species, float64(results[0].Confidence), clipName, elapsedTime)
