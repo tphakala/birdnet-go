@@ -24,11 +24,26 @@ const (
 // quitChannel is used to signal the capture goroutine to stop
 var QuitChannel = make(chan struct{})
 
+// restartChannel is used to signal the CaptureAudio goroutine to restart
+var restartChannel = make(chan struct{})
+
 func StartGoRoutines(ctx *config.Context) {
 	InitRingBuffer(bufferSize)
 	go CaptureAudio(ctx)
 	go BufferMonitor(ctx)
 	go monitorCtrlC()
+
+	for {
+		select {
+		case <-QuitChannel:
+			// QuitChannel was closed, clean up and return.
+			return
+		case <-restartChannel:
+			// RestartChannel received a signal, restart CaptureAudio goroutine.
+			go CaptureAudio(ctx)
+		}
+	}
+
 }
 
 func monitorCtrlC() {
@@ -72,9 +87,15 @@ func CaptureAudio(ctx *config.Context) {
 		writeToBuffer(pSamples)
 	}
 
+	onStopDevice := func() {
+		time.Sleep(1000 * time.Millisecond)
+		restartChannel <- struct{}{}
+	}
+
 	// Device callback to assign function to call when audio data is received
 	deviceCallbacks := malgo.DeviceCallbacks{
 		Data: onReceiveFrames,
+		Stop: onStopDevice,
 	}
 
 	// Initialize the capture device
@@ -106,6 +127,12 @@ func CaptureAudio(ctx *config.Context) {
 			// QuitChannel was closed, clean up and return.
 			if ctx.Settings.Debug {
 				fmt.Println("Stopping capture due to quit signal.")
+			}
+			return
+		case <-restartChannel:
+			// Handle restart signal
+			if ctx.Settings.Debug {
+				fmt.Println("Restarting capture.")
 			}
 			return
 		default:
