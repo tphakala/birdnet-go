@@ -112,7 +112,7 @@ func getDefaultConfigPaths() []string {
 func readConfig() error {
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			configPath := filepath.Join(getDefaultConfigPaths()[0], "birdnet-go.yaml")
+			configPath := filepath.Join(getDefaultConfigPaths()[0], "config.yaml")
 			createDefault(configPath)
 		} else {
 			return fmt.Errorf("fatal error reading config file: %w", err)
@@ -141,9 +141,9 @@ func createDefault(configPath string) {
 
 // getDefaultConfig returns the default configuration as a string.
 func getDefaultConfig() string {
-	return `# Default configuration
+	return `# BirdNET-Go configuration
 debug: false
-nodename: go-birdnet
+nodename: BirdNET-Go
 sensitivity: 1
 locale: en
 overlap: 0.0
