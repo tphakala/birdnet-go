@@ -1,4 +1,5 @@
-bin/
+bin/birdnet-go
+bin/birdnet-go.exe
 log/
 clips/
 tmp
