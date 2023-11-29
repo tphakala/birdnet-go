@@ -2,9 +2,12 @@
 package config
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -62,6 +65,13 @@ func Load() (*Context, error) {
 	// Initialize the OccurrenceMonitor or any other components as needed.
 	ctx.OccurrenceMonitor = NewOccurrenceMonitor(10 * time.Second)
 
+	// Load custom species confidence list
+	customConfidence, err := LoadCustomSpeciesConfidence("custom_confidence_list.txt")
+	if err != nil {
+		return nil, fmt.Errorf("error loading custom species confidence: %w", err)
+	}
+	ctx.CustomConfidence = customConfidence
+
 	return ctx, nil
 }
 
@@ -97,6 +107,40 @@ func initViper() error {
 	viper.SetConfigName(configName)
 
 	return readConfig()
+}
+
+func LoadCustomSpeciesConfidence(filePath string) (SpeciesConfidence, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return SpeciesConfidence{}, fmt.Errorf("error opening custom species confidence file: %w", err)
+	}
+	defer file.Close()
+
+	var speciesConfidence SpeciesConfidence
+	speciesConfidence.Thresholds = make(map[string]float32)
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Split(line, ",")
+		if len(parts) != 2 {
+			continue // skip malformed lines
+		}
+
+		species := strings.TrimSpace(parts[0])
+		confidence, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 32)
+		if err != nil {
+			continue // skip lines with invalid confidence values
+		}
+
+		speciesConfidence.Thresholds[species] = float32(confidence)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return SpeciesConfidence{}, fmt.Errorf("error reading custom species confidence file: %w", err)
+	}
+
+	return speciesConfidence, nil
 }
 
 // getDefaultConfigPaths builds a list of paths to look for the configuration file.

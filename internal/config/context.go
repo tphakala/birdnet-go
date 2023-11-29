@@ -18,6 +18,10 @@ type OccurrenceMonitor struct {
 	Timer         *time.Timer
 }
 
+type SpeciesConfidence struct {
+	Thresholds map[string]float32 // Maps species names to their custom confidence thresholds
+}
+
 // Context holds the overall application state, including the Settings and the OccurrenceMonitor.
 type Context struct {
 	Settings            *Settings
@@ -28,6 +32,7 @@ type Context struct {
 	AnalysisInterpreter *tflite.Interpreter
 	FilterInterpreter   *tflite.Interpreter
 	Labels              []string
+	CustomConfidence    SpeciesConfidence
 }
 
 // NewOccurrenceMonitor creates a new instance of OccurrenceMonitor with the given reset duration.
