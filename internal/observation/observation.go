@@ -78,9 +78,9 @@ func LogNote(cfg *config.Settings, note Note) error {
 	if note.Confidence > cfg.Threshold {
 		// If a log file path is specified in the configuration, attempt to log the note to this file.
 		if cfg.LogFile != "" {
-			if cfg.Debug {
-				fmt.Println("Logging note to file...")
-			}
+			//if cfg.Debug {
+			fmt.Println("Logging note to file...")
+			//}
 			if err := LogNoteToFile(cfg, note); err != nil {
 				// If an error occurs when logging to a file, wrap and return the error.
 				fmt.Printf("failed to log note to file: %s", err)

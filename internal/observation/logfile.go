@@ -51,5 +51,6 @@ func LogNoteToFile(cfg *config.Settings, note Note) error {
 		return err
 	}
 
+	fmt.Println("Logged note to file")
 	return nil
 }
