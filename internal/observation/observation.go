@@ -74,28 +74,25 @@ func New(cfg *config.Settings, beginTime, endTime float64, species string, confi
 // LogNote is the central function for logging observations. It writes a note to a log file and/or database
 // depending on the provided configuration settings.
 func LogNote(cfg *config.Settings, note Note) error {
-	// only log if the confidence is above the threshold
-	if note.Confidence > cfg.Threshold {
-		// If a log file path is specified in the configuration, attempt to log the note to this file.
-		if cfg.LogFile != "" {
-			//if cfg.Debug {
-			fmt.Println("Logging note to file...")
-			//}
-			if err := LogNoteToFile(cfg, note); err != nil {
-				// If an error occurs when logging to a file, wrap and return the error.
-				fmt.Printf("failed to log note to file: %s", err)
-			}
+	// If a log file path is specified in the configuration, attempt to log the note to this file.
+	if cfg.LogFile != "" {
+		//if cfg.Debug {
+		fmt.Println("Logging note to file...")
+		//}
+		if err := LogNoteToFile(cfg, note); err != nil {
+			// If an error occurs when logging to a file, wrap and return the error.
+			fmt.Printf("failed to log note to file: %s", err)
 		}
+	}
 
-		// If the configuration specifies a database (and it's not set to "none"), attempt to save the note to the database.
-		if cfg.Database != "none" {
-			if cfg.Debug {
-				fmt.Println("Saving note to database...")
-			}
-			if err := SaveToDatabase(note); err != nil {
-				// If an error occurs when saving to the database, wrap and return the error.
-				fmt.Printf("failed to save note to database: %s", err)
-			}
+	// If the configuration specifies a database (and it's not set to "none"), attempt to save the note to the database.
+	if cfg.Database != "none" {
+		if cfg.Debug {
+			fmt.Println("Saving note to database...")
+		}
+		if err := SaveToDatabase(note); err != nil {
+			// If an error occurs when saving to the database, wrap and return the error.
+			fmt.Printf("failed to save note to database: %s", err)
 		}
 	}
 
