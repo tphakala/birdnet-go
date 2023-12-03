@@ -79,6 +79,7 @@ func processPredictionResults(results []birdnet.Result, data []byte, ctx *config
 		return nil
 	}
 
+	// match against location based filter
 	if !isSpeciesIncluded(results[0].Species, ctx.IncludedSpeciesList) {
 		if ctx.Settings.Debug {
 			fmt.Printf("\nSpecies not on included list: %s\n", species)
@@ -86,6 +87,7 @@ func processPredictionResults(results []birdnet.Result, data []byte, ctx *config
 		return nil
 	}
 
+	// match against occurence monitor to filter too frequent observations for same species
 	if ctx.OccurrenceMonitor.TrackSpecies(species) {
 		if ctx.Settings.Debug {
 			fmt.Printf("\nDuplicate occurrence detected: %s, skipping processing\n", species)
@@ -277,26 +279,7 @@ func processData(data []byte, ctx *config.Context) error {
 
 	return nil
 }
-
-// isSpeciesIncluded checks if the given species is in the included species list.
-func isSpeciesIncluded(species string, includedList []string) bool {
-	for _, s := range includedList {
-		if species == s {
-			return true
-		}
-	}
-	return false
-}
-
-// isSpeciesExcluded checks if the given species is in the excluded list.
-func isSpeciesExcluded(species string, excludedList []string) bool {
-	for _, excludedSpecies := range excludedList {
-		if species == excludedSpecies {
-			return true
-		}
-	}
-	return false
-}*/
+*/
 
 // ConvertToFloat32 converts a byte slice representing sample to a 2D slice of float32 samples.
 // The function supports 16, 24, and 32 bit depths.
