@@ -50,11 +50,16 @@ func New(cfg *config.Settings, beginTime, endTime float64, species string, confi
 	// Parse the species string to get the scientific name, common name, and species code.
 	scientificName, commonName, speciesCode := ParseSpeciesString(species)
 
+	// detectionTime is time now minus 3 seconds to account for the delay in the detection
+	now := time.Now()
+	detectionTime := now.Add(-3 * time.Second)
+	formattedTime := detectionTime.Format("15:04:05")
+
 	// Return a new Note struct populated with the provided parameters as well as the current date and time.
 	return Note{
 		SourceNode:     cfg.NodeName,                    // From the provided configuration settings.
 		Date:           time.Now().Format("2006-01-02"), // Use ISO 8601 date format.
-		Time:           time.Now().Format("15:04:05"),   // Use 24-hour time format.
+		Time:           formattedTime,                   // Use 24-hour time format.
 		InputFile:      cfg.InputFile,                   // From the provided configuration settings.
 		BeginTime:      beginTime,                       // Start time of the observation.
 		EndTime:        endTime,                         // End time of the observation.
