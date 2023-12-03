@@ -43,13 +43,14 @@ type Settings struct {
 // Load reads the configuration file and environment variables into GlobalConfig.
 func Load() (*Context, error) {
 	var settings Settings
+	// Do not report repeated observations within this interval
+	const OccurrenceInterval = 15 // seconds
 
 	// Initialize the Context with the settings
 	ctx := &Context{
 		Settings: &settings,
 		// set SpeciesListUpdated to yesterday to force update on first run
-		SpeciesListUpdated:  time.Now().AddDate(0, 0, -1),
-		ExcludedSpeciesList: []string{"Engine", "Human vocal", "Human non-vocal", "Human whistle", "Gun", "Fireworks", "Siren", "Dog"},
+		SpeciesListUpdated: time.Now().AddDate(0, 0, -1),
 	}
 
 	// Initialize viper to read config
@@ -63,7 +64,7 @@ func Load() (*Context, error) {
 	}
 
 	// Initialize the OccurrenceMonitor or any other components as needed.
-	ctx.OccurrenceMonitor = NewOccurrenceMonitor(10 * time.Second)
+	ctx.OccurrenceMonitor = NewOccurrenceMonitor(OccurrenceInterval * time.Second)
 
 	// Load custom species confidence list
 	customConfidence, err := LoadCustomSpeciesConfidence("custom_confidence_list.txt")
