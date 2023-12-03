@@ -23,6 +23,7 @@ func LogNoteToFile(cfg *config.Settings, note Note) error {
 	// Open the file for appending. If it doesn't exist, create it.
 	file, err := os.OpenFile(cfg.LogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
+		fmt.Printf("failed to open file: %v\n", err)
 		return err
 	}
 	defer file.Close()
@@ -46,6 +47,7 @@ func LogNoteToFile(cfg *config.Settings, note Note) error {
 
 	// Write the formatted data to the file
 	if _, err := file.WriteString(logString); err != nil {
+		fmt.Printf("failed to write to file: %v\n", err)
 		return err
 	}
 
