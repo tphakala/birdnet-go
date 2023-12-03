@@ -68,7 +68,9 @@ func processPredictionResults(results []birdnet.Result, data []byte, ctx *config
 	if !exists {
 		confidenceThreshold = float32(ctx.Settings.Threshold)
 	} else {
-		fmt.Printf("\nUsing confidence threshold of %.2f for %s", confidenceThreshold, species)
+		if ctx.Settings.Debug {
+			fmt.Printf("\nUsing confidence threshold of %.2f for %s\n", confidenceThreshold, species)
+		}
 	}
 
 	if confidence <= confidenceThreshold {
