@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/config"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -96,6 +97,12 @@ func DirectoryAnalysis(ctx *config.Context) error {
 
 // executeRealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 func RealtimeAnalysis(ctx *config.Context) error {
+	// Do not report repeated observations within this interval
+	const OccurrenceInterval = 15 // seconds
+
+	// initialize occurrence monitor to filter out repeated observations
+	ctx.OccurrenceMonitor = config.NewOccurrenceMonitor(OccurrenceInterval * time.Second)
+
 	fmt.Printf("Starting BirdNET-Go Analyzer in realtime mode, threshold: %.2f, sensitivity: %.2f\n",
 		ctx.Settings.Threshold, ctx.Settings.Sensitivity)
 
