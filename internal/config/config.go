@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -43,8 +44,6 @@ type Settings struct {
 // Load reads the configuration file and environment variables into GlobalConfig.
 func Load() (*Context, error) {
 	var settings Settings
-	// Do not report repeated observations within this interval
-	const OccurrenceInterval = 15 // seconds
 
 	// Initialize the Context with the settings
 	ctx := &Context{
@@ -55,21 +54,19 @@ func Load() (*Context, error) {
 
 	// Initialize viper to read config
 	if err := initViper(); err != nil {
-		return nil, err // Handle viper initialization errors
+		return nil, fmt.Errorf("error initializing viper: %w", err)
 	}
 
-	// Unmarshal the configuration file directly into the Settings of the Context
+	// Unmarshal config into struct
 	if err := viper.Unmarshal(ctx.Settings); err != nil {
 		return nil, fmt.Errorf("error unmarshaling config into struct: %w", err)
 	}
 
-	// Initialize the OccurrenceMonitor or any other components as needed.
-	ctx.OccurrenceMonitor = NewOccurrenceMonitor(OccurrenceInterval * time.Second)
-
-	// Load custom species confidence list
+	// init custom confidence list
 	customConfidence, err := LoadCustomSpeciesConfidence("custom_confidence_list.txt")
 	if err != nil {
-		return nil, fmt.Errorf("error loading custom species confidence: %w", err)
+		// set customConfidence list as empty if file not found
+		customConfidence = SpeciesConfidence{}
 	}
 	ctx.CustomConfidence = customConfidence
 
@@ -95,21 +92,36 @@ func SyncViper(settings *Settings) {
 	}
 }
 
-// initViper initializes viper with the configuration file.
 func initViper() error {
+	// Set config file name and type
+	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 
-	configPaths := getDefaultConfigPaths()
-	configName := "config"
+	configPaths, err := getDefaultConfigPaths()
+	if err != nil {
+		return fmt.Errorf("error getting default config paths: %w", err)
+	}
 
 	for _, path := range configPaths {
 		viper.AddConfigPath(path)
 	}
-	viper.SetConfigName(configName)
 
-	return readConfig()
+	// Read configuration file
+	err = viper.ReadInConfig()
+	if err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			// config file not found, create config with defaults
+			return createDefaultConfig()
+		}
+		return fmt.Errorf("fatal error reading config file: %w", err)
+	} else {
+		fmt.Println("Read config file:", viper.ConfigFileUsed())
+	}
+
+	return nil
 }
 
+// Load list of custom thresholds for species
 func LoadCustomSpeciesConfidence(filePath string) (SpeciesConfidence, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -144,63 +156,95 @@ func LoadCustomSpeciesConfidence(filePath string) (SpeciesConfidence, error) {
 	return speciesConfidence, nil
 }
 
-// getDefaultConfigPaths builds a list of paths to look for the configuration file.
-func getDefaultConfigPaths() []string {
+// getDefaultConfigPaths returns a list of default config paths for the current OS
+func getDefaultConfigPaths() ([]string, error) {
+	var configPaths []string
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		panic(fmt.Errorf("error fetching user directory: %v", err))
+		return nil, fmt.Errorf("error fetching user directory: %v", err)
 	}
-	return []string{filepath.Join(homeDir, ".config", "birdnet-go"), "."}
-}
 
-// readConfig reads the configuration from files or creates a default if not found.
-func readConfig() error {
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			configPath := filepath.Join(getDefaultConfigPaths()[0], "config.yaml")
-			createDefault(configPath)
-		} else {
-			return fmt.Errorf("fatal error reading config file: %w", err)
+	switch runtime.GOOS {
+	case "windows":
+		// Windows path, usually in "C:\Users\Username\AppData\Roaming"
+		configPaths = []string{
+			".",
+			filepath.Join(homeDir, "AppData", "Local", "birdnet-go"),
+		}
+	default:
+		// Linux and macOS path
+		configPaths = []string{
+			filepath.Join(homeDir, ".config", "birdnet-go"),
+			"/etc/birdnet-go",
+			".",
 		}
 	}
-	return nil
+
+	return configPaths, nil
 }
 
-// createDefault creates a default configuration file at the specified path.
-func createDefault(configPath string) {
+// createDefaultConfig creates a default config file and writes it to the default config path
+func createDefaultConfig() error {
+	configPaths, err := getDefaultConfigPaths() // Again, adjusted for error handling
+	if err != nil {
+		return fmt.Errorf("error getting default config paths: %w", err)
+	}
+	configPath := filepath.Join(configPaths[0], "config.yaml")
 	defaultConfig := getDefaultConfig()
 
-	// Ensure the directory exists
 	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
-		panic(fmt.Errorf("error creating directories for config file: %v", err))
+		return fmt.Errorf("error creating directories for config file: %w", err)
 	}
 
-	// Write the default configuration
 	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
-		panic(fmt.Errorf("error writing default config file: %v", err))
+		return fmt.Errorf("error writing default config file: %w", err)
 	}
 
 	fmt.Println("Created default config file at:", configPath)
-	viper.ReadInConfig() // Re-read the config after creating the default
+	return viper.ReadInConfig()
 }
 
 // getDefaultConfig returns the default configuration as a string.
 func getDefaultConfig() string {
 	return `# BirdNET-Go configuration
+
 debug: false
-nodename: BirdNET-Go
-sensitivity: 1
-locale: en
-overlap: 0.0
-clippath: ./clips
-cliptype: mp3
-threshold: 0.8
-processingtime: false
-logpath: ./log/
-logfile: notes.log
-outputdir:
-outputformat:
-database: none
-timeas24h: true
+
+node:
+  name: BirdNET-Go
+  locale: en
+  timeas24h: true
+
+birdnet:
+  sensitivity: 1
+  threshold: 0.8
+  overlap: 0.0
+  latitude: 00.000
+  longitude: 00.000
+
+fileanalysis:
+  dir: output/
+  format: raven
+
+realtime:
+  processingtime: false
+  audioexport:
+    enabled: false
+    path: clips/
+    type: wav
+  log:
+    enabled: false
+    path: log/birdnet.txt	
+
+sqlite:
+  enabled: false
+  path: birdnet.db
+
+mysql:
+  enabled: false
+  username: birdnet
+  password: secret
+  host: localhost
 `
 }
