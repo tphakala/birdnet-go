@@ -18,6 +18,7 @@ func Command(ctx *config.Context) *cobra.Command {
 		Long:  `Analyze a single audio file for bird calls and songs.`,
 		Args:  cobra.ExactArgs(1), // the command expects exactly one argument
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Input file path is the first argument
 			ctx.Settings.Input.Path = args[0]
 			return analysis.FileAnalysis(ctx)
 		},
@@ -34,8 +35,9 @@ func Command(ctx *config.Context) *cobra.Command {
 
 // setupFileFlags configures flags specific to the file command.
 func setupFlags(cmd *cobra.Command, settings *config.Settings) error {
-	cmd.Flags().StringVarP(&settings.Output.File.Path, "output", "o", "", "Path to output directory")
-	cmd.Flags().StringVar(&settings.Output.File.Type, "type", "table", "Output type: table, csv")
+
+	cmd.Flags().StringVarP(&settings.Output.File.Path, "output", "o", viper.GetString("output.file.path"), "Path to output directory")
+	cmd.Flags().StringVar(&settings.Output.File.Type, "type", viper.GetString("output.file.type"), "Output type: table, csv")
 
 	if err := viper.BindPFlags(cmd.Flags()); err != nil {
 		return fmt.Errorf("error binding flags: %v", err)

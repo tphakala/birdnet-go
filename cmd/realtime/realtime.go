@@ -17,6 +17,18 @@ func Command(ctx *config.Context) *cobra.Command {
 		Short: "Analyze audio in realtime mode",
 		Long:  "Start analyzing incoming audio data in real-time looking for bird calls.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+
+			// Debug print before unmarshaling (to compare values)
+			fmt.Printf("Before unmarshaling - Audio Export Path: %s\n", ctx.Settings.Realtime.AudioExport.Path)
+
+			// Sync the cfg struct with viper's values to ensure command-line arguments take precedence
+			if err := viper.Unmarshal(ctx.Settings); err != nil {
+				return fmt.Errorf("error unmarshalling Viper values to settings: %v", err)
+			}
+
+			// Debug print after unmarshaling (to compare values)
+			fmt.Printf("After unmarshaling - Audio Export Path: %s\n", ctx.Settings.Realtime.AudioExport.Path)
+
 			return analysis.RealtimeAnalysis(ctx)
 		},
 	}
@@ -35,9 +47,9 @@ func setupFlags(cmd *cobra.Command, settings *config.Settings) error {
 	cmd.Flags().StringVar(&settings.Realtime.AudioExport.Path, "clippath", viper.GetString("realtime.audioexport.path"), "Path to save audio clips")
 	cmd.Flags().StringVar(&settings.Realtime.AudioExport.Type, "cliptype", viper.GetString("realtime.audioexport.type"), "Audio clip type: wav, flac, mp3")
 	cmd.Flags().StringVar(&settings.Realtime.Log.Path, "logpath", viper.GetString("realtime.log.path"), "Path to save log files")
-	//cmd.Flags().StringVar(&settings.LogFile, "logfile", "", "Filename for the log file")
 	cmd.Flags().BoolVar(&settings.Realtime.ProcessingTime, "processingtime", viper.GetBool("realtime.processingtime"), "Report processing time for each detection")
 
+	// Bind flags to the viper settings
 	if err := viper.BindPFlags(cmd.Flags()); err != nil {
 		return fmt.Errorf("error binding flags: %v", err)
 	}
