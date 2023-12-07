@@ -6,14 +6,13 @@ import (
 	"io/fs"
 
 	"github.com/spf13/cobra"
-	"github.com/tphakala/birdnet-go/internal/config"
 )
 
 //go:embed AUTHORS
 var authorsFile embed.FS
 
 // Command creates a new cobra.Command to print authors.
-func Command(cfg *config.Settings) *cobra.Command {
+func Command() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "authors",
 		Short: "Print the list of authors",
