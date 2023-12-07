@@ -32,27 +32,27 @@ type Settings struct {
 	}
 
 	Input struct {
-		Path      string
-		Recursive bool // true for recursive directory analysis
+		Path      string // path to input file or directory
+		Recursive bool   // true for recursive directory analysis
 	}
 
 	Output struct {
 		File struct {
-			Enabled bool
+			Enabled bool   // true to enable file output
 			Path    string // directory to output results
 			Type    string // table, csv
 		}
 
 		Sqlite struct {
-			Enabled bool
-			Path    string
+			Enabled bool   // true to enable sqlite output
+			Path    string // path to sqlite database
 		}
 
 		MySQL struct {
-			Enabled  bool
-			Username string
-			Password string
-			Host     string
+			Enabled  bool   // true to enable mysql output
+			Username string // username for mysql database
+			Password string // password for mysql database
+			Host     string // host for mysql database
 		}
 	}
 
@@ -229,15 +229,11 @@ node:
   timeas24h: true
 
 birdnet:
-  sensitivity: 1
+  sensitivity: 1.0
   threshold: 0.8
   overlap: 0.0
   latitude: 00.000
   longitude: 00.000
-
-fileanalysis:
-  dir: output/
-  format: raven
 
 realtime:
   processingtime: false
@@ -249,14 +245,20 @@ realtime:
     enabled: false
     path: log/birdnet.txt	
 
-sqlite:
-  enabled: false
-  path: birdnet.db
+output:
+  file:
+    enabled: true
+	path: output/
+	type: table
 
-mysql:
-  enabled: false
-  username: birdnet
-  password: secret
-  host: localhost
+  sqlite:
+    enabled: false
+    path: birdnet.db
+
+  mysql:
+    enabled: false
+    username: birdnet
+    password: secret
+    host: localhost
 `
 }
