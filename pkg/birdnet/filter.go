@@ -23,6 +23,15 @@ func (a ByScore) Less(i, j int) bool { return a[i].Score > a[j].Score } // For d
 const locationFilterThreshold = 0.01
 
 func GetProbableSpecies(ctx *config.Context) []string {
+
+	// If latitude and longitude are not set, skip filtering
+	if ctx.Settings.Latitude == 0 && ctx.Settings.Longitude == 0 {
+		if ctx.Settings.Debug {
+			fmt.Printf("Latitude and longitude not set, not using location based prediction filter\n")
+		}
+		return ctx.Labels
+	}
+
 	filters, _ := predictFilter(ctx)
 
 	var speciesScores []SpeciesScore
