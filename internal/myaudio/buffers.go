@@ -75,14 +75,14 @@ func BufferMonitor(ctx *config.Context) {
 			// if buffer has 3 seconds of data, process it
 			if len(data) == chunkSize {
 				processData(data, ctx)
-				//Spinner.Update()
 			} else {
 				time.Sleep(pollInterval)
-				//Spinner.Update()
+
 				today := time.Now().Truncate(24 * time.Hour)
 				if today.After(ctx.SpeciesListUpdated) {
 					// update location based species list once a day
 					ctx.IncludedSpeciesList = birdnet.GetProbableSpecies(ctx)
+					ctx.SpeciesListUpdated = today
 				}
 			}
 		}
