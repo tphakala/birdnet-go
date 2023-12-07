@@ -25,14 +25,14 @@ func RootCommand(ctx *config.Context) *cobra.Command {
 	}
 
 	// Set up the global flags for the root command.
-	defineGlobalFlags(rootCmd, ctx.Settings)
+	setupFlags(rootCmd, ctx.Settings)
 
 	// Add sub-commands to the root command.
 	fileCmd := file.Command(ctx)
 	directoryCmd := directory.Command(ctx)
 	realtimeCmd := realtime.Command(ctx)
-	authorsCmd := authors.Command(ctx.Settings)
-	licenseCmd := license.Command(ctx.Settings)
+	authorsCmd := authors.Command()
+	licenseCmd := license.Command()
 
 	subcommands := []*cobra.Command{
 		fileCmd,
@@ -85,21 +85,18 @@ func initialize(ctx *config.Context) error {
 }
 
 // defineGlobalFlags defines flags that are global to the command line interface
-func defineGlobalFlags(rootCmd *cobra.Command, settings *config.Settings) {
-	rootCmd.PersistentFlags().BoolP("debug", "d", viper.GetBool("debug"), "Enable debug output")
-	rootCmd.PersistentFlags().Float64P("sensitivity", "s", viper.GetFloat64("sensitivity"), "Sigmoid sensitivity value between 0.0 and 1.5")
-	rootCmd.PersistentFlags().Float64("overlap", viper.GetFloat64("overlap"), "Overlap value between 0.0 and 2.9")
-	rootCmd.PersistentFlags().String("locale", viper.GetString("locale"), "Set the locale for labels. Accepts full name or 2-letter code.")
-	rootCmd.PersistentFlags().Float64P("threshold", "t", viper.GetFloat64("threshold"), "Confidency threshold for detections, value between 0.1 to 1.0")
-	rootCmd.PersistentFlags().Float64("latitude", viper.GetFloat64("latitude"), "Latitude for species prediction")
-	rootCmd.PersistentFlags().Float64("longitude", viper.GetFloat64("longitude"), "Longitude for species prediction")
+func setupFlags(rootCmd *cobra.Command, settings *config.Settings) error {
+	rootCmd.PersistentFlags().BoolVarP(&settings.Debug, "debug", "d", viper.GetBool("debug"), "Enable debug output")
+	rootCmd.PersistentFlags().StringVar(&settings.Locale, "locale", viper.GetString("node.locale"), "Set the locale for labels. Accepts full name or 2-letter code.")
+	rootCmd.PersistentFlags().Float64VarP(&settings.Sensitivity, "sensitivity", "s", viper.GetFloat64("birdnet.sensitivity"), "Sigmoid sensitivity value between 0.0 and 1.5")
+	rootCmd.PersistentFlags().Float64VarP(&settings.Threshold, "threshold", "t", viper.GetFloat64("birdnet.threshold"), "Confidency threshold for detections, value between 0.1 to 1.0")
+	rootCmd.PersistentFlags().Float64Var(&settings.Overlap, "overlap", viper.GetFloat64("birdnet.overlap"), "Overlap value between 0.0 and 2.9")
+	rootCmd.PersistentFlags().Float64Var(&settings.Latitude, "latitude", viper.GetFloat64("birdnet.latitude"), "Latitude for species prediction")
+	rootCmd.PersistentFlags().Float64Var(&settings.Longitude, "longitude", viper.GetFloat64("birdnet.longitude"), "Longitude for species prediction")
 
-	// Binding the configuration flags to the settings
-	viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
-	viper.BindPFlag("sensitivity", rootCmd.PersistentFlags().Lookup("sensitivity"))
-	viper.BindPFlag("overlap", rootCmd.PersistentFlags().Lookup("overlap"))
-	viper.BindPFlag("locale", rootCmd.PersistentFlags().Lookup("locale"))
-	viper.BindPFlag("threshold", rootCmd.PersistentFlags().Lookup("threshold"))
-	viper.BindPFlag("latitude", rootCmd.PersistentFlags().Lookup("latitude"))
-	viper.BindPFlag("longitude", rootCmd.PersistentFlags().Lookup("longitude"))
+	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
+		return fmt.Errorf("error binding flags: %v", err)
+	}
+
+	return nil
 }
