@@ -1,7 +1,11 @@
 package realtime
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/analysis"
 	"github.com/tphakala/birdnet-go/internal/config"
 )
@@ -17,18 +21,26 @@ func Command(ctx *config.Context) *cobra.Command {
 		},
 	}
 
-	setupFlags(cmd, ctx.Settings)
+	// Set up flags specific to the 'file' command
+	if err := setupFlags(cmd, ctx.Settings); err != nil {
+		fmt.Printf("error setting up flags: %v\n", err)
+		os.Exit(1)
+	}
 
 	return cmd
 }
 
 // setupRealtimeFlags configures flags specific to the realtime command.
-func setupFlags(cmd *cobra.Command, settings *config.Settings) {
-	cmd.Flags().StringVar(&settings.ClipPath, "clippath", "", "Path to save audio clips")
-	cmd.Flags().StringVar(&settings.ClipType, "cliptype", "", "Audio clip type: wav, flac, mp3")
-	cmd.Flags().StringVar(&settings.LogPath, "logpath", "", "Path to save log files")
-	cmd.Flags().StringVar(&settings.LogFile, "logfile", "", "Filename for the log file")
-	cmd.Flags().BoolVar(&settings.ProcessingTime, "processingtime", false, "Report processing time for each detection")
+func setupFlags(cmd *cobra.Command, settings *config.Settings) error {
+	cmd.Flags().StringVar(&settings.ClipPath, "clippath", viper.GetString("realtime.audioexport.path"), "Path to save audio clips")
+	cmd.Flags().StringVar(&settings.ClipType, "cliptype", viper.GetString("realtime.audioexport.type"), "Audio clip type: wav, flac, mp3")
+	cmd.Flags().StringVar(&settings.LogPath, "logpath", viper.GetString("realtime.log.path"), "Path to save log files")
+	//cmd.Flags().StringVar(&settings.LogFile, "logfile", "", "Filename for the log file")
+	cmd.Flags().BoolVar(&settings.ProcessingTime, "processingtime", viper.GetBool("realtime.processingtime"), "Report processing time for each detection")
 
-	config.BindFlags(cmd, settings)
+	if err := viper.BindPFlags(cmd.Flags()); err != nil {
+		return fmt.Errorf("error binding flags: %v", err)
+	}
+
+	return nil
 }
