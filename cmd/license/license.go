@@ -6,14 +6,13 @@ import (
 	"io/fs"
 
 	"github.com/spf13/cobra"
-	"github.com/tphakala/birdnet-go/internal/config"
 )
 
 //go:embed LICENSE
 var authorsFile embed.FS
 
 // Command creates a new cobra.Command to print authors.
-func Command(settings *config.Settings) *cobra.Command {
+func Command() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "license",
 		Short: "Print the license of Go-BirdNET",
