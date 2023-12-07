@@ -87,6 +87,7 @@ func setupFlags(rootCmd *cobra.Command, settings *config.Settings) error {
 	rootCmd.PersistentFlags().Float64Var(&settings.BirdNET.Latitude, "latitude", viper.GetFloat64("birdnet.latitude"), "Latitude for species prediction")
 	rootCmd.PersistentFlags().Float64Var(&settings.BirdNET.Longitude, "longitude", viper.GetFloat64("birdnet.longitude"), "Longitude for species prediction")
 
+	// Bind flags to the viper settings
 	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
 		return fmt.Errorf("error binding flags: %v", err)
 	}
