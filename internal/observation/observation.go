@@ -46,7 +46,7 @@ func ParseSpeciesString(species string) (string, string, string) {
 
 // New creates and returns a new Note with the provided parameters and current date and time.
 // It uses the configuration and parsing functions to set the appropriate fields.
-func New(cfg *config.Settings, beginTime, endTime float64, species string, confidence float64, clipName string, elapsedTime time.Duration) Note {
+func New(settigs *config.Settings, beginTime, endTime float64, species string, confidence float64, clipName string, elapsedTime time.Duration) Note {
 	// Parse the species string to get the scientific name, common name, and species code.
 	scientificName, commonName, speciesCode := ParseSpeciesString(species)
 
@@ -57,20 +57,20 @@ func New(cfg *config.Settings, beginTime, endTime float64, species string, confi
 
 	// Return a new Note struct populated with the provided parameters as well as the current date and time.
 	return Note{
-		SourceNode:     cfg.NodeName,                    // From the provided configuration settings.
+		SourceNode:     settigs.Node.Name,               // From the provided configuration settings.
 		Date:           time.Now().Format("2006-01-02"), // Use ISO 8601 date format.
 		Time:           formattedTime,                   // Use 24-hour time format.
-		InputFile:      cfg.InputFile,                   // From the provided configuration settings.
+		InputFile:      settigs.Input.Path,              // From the provided configuration settings.
 		BeginTime:      beginTime,                       // Start time of the observation.
 		EndTime:        endTime,                         // End time of the observation.
 		SpeciesCode:    speciesCode,                     // Parsed species code.
 		ScientificName: scientificName,                  // Parsed scientific name of the species.
 		CommonName:     commonName,                      // Parsed common name of the species.
 		Confidence:     confidence,                      // Confidence score of the observation.
-		Latitude:       cfg.Latitude,                    // Geographic latitude where the observation was made.
-		Longitude:      cfg.Longitude,                   // Geographic longitude where the observation was made.
-		Threshold:      cfg.Threshold,                   // Threshold setting from configuration.
-		Sensitivity:    cfg.Sensitivity,                 // Sensitivity setting from configuration.
+		Latitude:       settigs.BirdNET.Latitude,        // Geographic latitude where the observation was made.
+		Longitude:      settigs.BirdNET.Longitude,       // Geographic longitude where the observation was made.
+		Threshold:      settigs.BirdNET.Threshold,       // Threshold setting from configuration.
+		Sensitivity:    settigs.BirdNET.Sensitivity,     // Sensitivity setting from configuration.
 		ClipName:       clipName,                        // Name of the audio clip.
 		ProcessingTime: elapsedTime,                     // Time taken to process the observation.
 	}
@@ -78,21 +78,21 @@ func New(cfg *config.Settings, beginTime, endTime float64, species string, confi
 
 // LogNote is the central function for logging observations. It writes a note to a log file and/or database
 // depending on the provided configuration settings.
-func LogNote(cfg *config.Settings, note Note) error {
+func LogNote(settings *config.Settings, note Note) error {
 	// If a log file path is specified in the configuration, attempt to log the note to this file.
-	if cfg.LogFile != "" {
-		if cfg.Debug {
+	if settings.Realtime.Log.Enabled {
+		if settings.Debug {
 			fmt.Println("Logging note to file...")
 		}
-		if err := LogNoteToFile(cfg, note); err != nil {
+		if err := LogNoteToFile(settings, note); err != nil {
 			// If an error occurs when logging to a file, wrap and return the error.
 			fmt.Printf("failed to log note to file: %s", err)
 		}
 	}
 
 	// If the configuration specifies a database (and it's not set to "none"), attempt to save the note to the database.
-	if cfg.Database != "none" {
-		if cfg.Debug {
+	if settings.Output.MySQL.Enabled || settings.Output.Sqlite.Enabled {
+		if settings.Debug {
 			fmt.Println("Saving note to database...")
 		}
 		if err := SaveToDatabase(note); err != nil {
@@ -108,7 +108,7 @@ func LogNote(cfg *config.Settings, note Note) error {
 // WriteNotesTable writes a slice of Note structs to a table-formatted text output.
 // The output can be directed to either stdout or a file specified by the filename.
 // If the filename is an empty string, it writes to stdout.
-func WriteNotesTable(cfg *config.Settings, notes []Note, filename string) error {
+func WriteNotesTable(settings *config.Settings, notes []Note, filename string) error {
 	var w io.Writer
 	// Determine the output destination based on the filename argument.
 	if filename == "" {
@@ -137,7 +137,7 @@ func WriteNotesTable(cfg *config.Settings, notes []Note, filename string) error 
 	var err error
 
 	for i, note := range notes {
-		if note.Confidence <= cfg.Threshold {
+		if note.Confidence <= settings.BirdNET.Threshold {
 			continue // Skip the current iteration as the note doesn't meet the threshold
 		}
 
@@ -165,7 +165,7 @@ func WriteNotesTable(cfg *config.Settings, notes []Note, filename string) error 
 // WriteNotesCsv writes the slice of notes to the specified destination in CSV format.
 // If filename is an empty string, the function writes to stdout.
 // The function returns an error if writing to the destination fails.
-func WriteNotesCsv(cfg *config.Settings, notes []Note, filename string) error {
+func WriteNotesCsv(settings *config.Settings, notes []Note, filename string) error {
 	// Define an io.Writer to abstract the writing operation.
 	var w io.Writer
 
@@ -197,7 +197,7 @@ func WriteNotesCsv(cfg *config.Settings, notes []Note, filename string) error {
 	var err error
 
 	for _, note := range notes {
-		if note.Confidence <= cfg.Threshold {
+		if note.Confidence <= settings.BirdNET.Threshold {
 			continue // Skip the current iteration as the note doesn't meet the threshold
 		}
 

@@ -32,11 +32,11 @@ func Command(ctx *config.Context) *cobra.Command {
 
 // setupRealtimeFlags configures flags specific to the realtime command.
 func setupFlags(cmd *cobra.Command, settings *config.Settings) error {
-	cmd.Flags().StringVar(&settings.ClipPath, "clippath", viper.GetString("realtime.audioexport.path"), "Path to save audio clips")
-	cmd.Flags().StringVar(&settings.ClipType, "cliptype", viper.GetString("realtime.audioexport.type"), "Audio clip type: wav, flac, mp3")
-	cmd.Flags().StringVar(&settings.LogPath, "logpath", viper.GetString("realtime.log.path"), "Path to save log files")
+	cmd.Flags().StringVar(&settings.Realtime.AudioExport.Path, "clippath", viper.GetString("realtime.audioexport.path"), "Path to save audio clips")
+	cmd.Flags().StringVar(&settings.Realtime.AudioExport.Type, "cliptype", viper.GetString("realtime.audioexport.type"), "Audio clip type: wav, flac, mp3")
+	cmd.Flags().StringVar(&settings.Realtime.Log.Path, "logpath", viper.GetString("realtime.log.path"), "Path to save log files")
 	//cmd.Flags().StringVar(&settings.LogFile, "logfile", "", "Filename for the log file")
-	cmd.Flags().BoolVar(&settings.ProcessingTime, "processingtime", viper.GetBool("realtime.processingtime"), "Report processing time for each detection")
+	cmd.Flags().BoolVar(&settings.Realtime.ProcessingTime, "processingtime", viper.GetBool("realtime.processingtime"), "Report processing time for each detection")
 
 	if err := viper.BindPFlags(cmd.Flags()); err != nil {
 		return fmt.Errorf("error binding flags: %v", err)

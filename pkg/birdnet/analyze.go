@@ -90,7 +90,7 @@ func Predict(sample [][]float32, ctx *config.Context) ([]Result, error) {
 	// get the confidence values
 	confidence := make([]float32, len(prediction))
 	for i := range prediction {
-		confidence[i] = float32(customSigmoid(float64(prediction[i]), ctx.Settings.Sensitivity))
+		confidence[i] = float32(customSigmoid(float64(prediction[i]), ctx.Settings.BirdNET.Sensitivity))
 	}
 
 	results, err := pairLabelsAndConfidence(ctx.Labels, confidence)
@@ -163,7 +163,7 @@ func AnalyzeAudio(chunks [][]float32, ctx *config.Context) ([]observation.Note, 
 		}
 
 		// Adjust for overlap for the next prediction
-		predStart = predEnd - ctx.Settings.Overlap
+		predStart = predEnd - ctx.Settings.BirdNET.Overlap
 	}
 
 	// Clear the line and print a new line for completion message

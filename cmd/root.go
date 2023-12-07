@@ -45,20 +45,13 @@ func RootCommand(ctx *config.Context) *cobra.Command {
 	rootCmd.AddCommand(subcommands...)
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		// Parse the command line flags
-		if err := cmd.Flags().Parse(args); err != nil {
-			return err
-		}
-
-		// Now sync the cfg struct with viper's values to ensure command-line arguments take precedence
-		config.SyncViper(ctx.Settings)
-
 		// Skip setup for authors and license commands
 		if cmd.Name() != authorsCmd.Name() && cmd.Name() != licenseCmd.Name() {
-			return initialize(ctx)
+			if err := initialize(ctx); err != nil {
+				return fmt.Errorf("error initializing: %v", err)
+			}
 		}
 
-		// Return nil to proceed without initializing for the excluded commands
 		return nil
 	}
 
@@ -69,12 +62,12 @@ func RootCommand(ctx *config.Context) *cobra.Command {
 // This function is responsible for setting up configurations, ensuring the environment is ready, etc.
 func initialize(ctx *config.Context) error {
 	// Example of locale normalization and checking
-	inputLocale := strings.ToLower(ctx.Settings.Locale)
+	inputLocale := strings.ToLower(ctx.Settings.Node.Locale)
 	normalizedLocale, err := config.NormalizeLocale(inputLocale)
 	if err != nil {
 		return err
 	}
-	ctx.Settings.Locale = normalizedLocale
+	ctx.Settings.Node.Locale = normalizedLocale
 
 	// Initialize the BirdNET system with the normalized locale
 	if err := birdnet.Setup(ctx); err != nil {
@@ -87,15 +80,20 @@ func initialize(ctx *config.Context) error {
 // defineGlobalFlags defines flags that are global to the command line interface
 func setupFlags(rootCmd *cobra.Command, settings *config.Settings) error {
 	rootCmd.PersistentFlags().BoolVarP(&settings.Debug, "debug", "d", viper.GetBool("debug"), "Enable debug output")
-	rootCmd.PersistentFlags().StringVar(&settings.Locale, "locale", viper.GetString("node.locale"), "Set the locale for labels. Accepts full name or 2-letter code.")
-	rootCmd.PersistentFlags().Float64VarP(&settings.Sensitivity, "sensitivity", "s", viper.GetFloat64("birdnet.sensitivity"), "Sigmoid sensitivity value between 0.0 and 1.5")
-	rootCmd.PersistentFlags().Float64VarP(&settings.Threshold, "threshold", "t", viper.GetFloat64("birdnet.threshold"), "Confidency threshold for detections, value between 0.1 to 1.0")
-	rootCmd.PersistentFlags().Float64Var(&settings.Overlap, "overlap", viper.GetFloat64("birdnet.overlap"), "Overlap value between 0.0 and 2.9")
-	rootCmd.PersistentFlags().Float64Var(&settings.Latitude, "latitude", viper.GetFloat64("birdnet.latitude"), "Latitude for species prediction")
-	rootCmd.PersistentFlags().Float64Var(&settings.Longitude, "longitude", viper.GetFloat64("birdnet.longitude"), "Longitude for species prediction")
+	rootCmd.PersistentFlags().StringVar(&settings.Node.Locale, "locale", viper.GetString("node.locale"), "Set the locale for labels. Accepts full name or 2-letter code.")
+	rootCmd.PersistentFlags().Float64VarP(&settings.BirdNET.Sensitivity, "sensitivity", "s", viper.GetFloat64("birdnet.sensitivity"), "Sigmoid sensitivity value between 0.0 and 1.5")
+	rootCmd.PersistentFlags().Float64VarP(&settings.BirdNET.Threshold, "threshold", "t", viper.GetFloat64("birdnet.threshold"), "Confidency threshold for detections, value between 0.1 to 1.0")
+	rootCmd.PersistentFlags().Float64Var(&settings.BirdNET.Overlap, "overlap", viper.GetFloat64("birdnet.overlap"), "Overlap value between 0.0 and 2.9")
+	rootCmd.PersistentFlags().Float64Var(&settings.BirdNET.Latitude, "latitude", viper.GetFloat64("birdnet.latitude"), "Latitude for species prediction")
+	rootCmd.PersistentFlags().Float64Var(&settings.BirdNET.Longitude, "longitude", viper.GetFloat64("birdnet.longitude"), "Longitude for species prediction")
 
 	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
 		return fmt.Errorf("error binding flags: %v", err)
+	}
+
+	// Now sync the cfg struct with viper's values to ensure command-line arguments take precedence
+	if err := viper.Unmarshal(settings); err != nil {
+		return fmt.Errorf("error unmarshalling Viper values to settings: %v", err)
 	}
 
 	return nil

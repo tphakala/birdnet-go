@@ -11,34 +11,65 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 type Settings struct {
-	NodeName       string // name of go-birdnet node, can be used to identify source of notes
-	InputFile      string // audio file to analyze (overrides InputDirectory if set)
-	InputDirectory string // directory to analyze
-	RealtimeMode   bool   // true to analyze audio in realtime
-	ModelPath      string
-	LabelFilePath  string
-	Sensitivity    float64 // birdnet analysis sigmoid sensitivity
-	Overlap        float64 // birdnet analysis overlap between chunks
-	Debug          bool    // true to enable debug mode
-	ClipPath       string  // directory to store audio clips
-	ClipType       string  // wav, flac, mp3
-	Threshold      float64 // threshold for prediction confidence to report
-	Locale         string  // language to use for labels
-	ProcessingTime bool    // true to report processing time for each prediction
-	Recursive      bool    // true for recursive directory analysis
-	OutputDir      string  // directory to output results
-	OutputFormat   string  // table, csv
-	LogPath        string  // directory to store log files
-	LogFile        string  // name of log file
-	Database       string  // none, sqlite, mysql
-	TimeAs24h      bool    // true 24-hour time format, false 12-hour time format
-	Longitude      float64 // longitude of recording location for prediction filtering
-	Latitude       float64 // latitude of recording location for prediction filtering
+	Debug bool // true to enable debug mode
+
+	Node struct {
+		Name      string // name of go-birdnet node, can be used to identify source of notes
+		Locale    string // language to use for labels
+		TimeAs24h bool   // true 24-hour time format, false 12-hour time format
+	}
+
+	BirdNET struct {
+		Sensitivity float64 // birdnet analysis sigmoid sensitivity
+		Threshold   float64 // threshold for prediction confidence to report
+		Overlap     float64 // birdnet analysis overlap between chunks
+		Longitude   float64 // longitude of recording location for prediction filtering
+		Latitude    float64 // latitude of recording location for prediction filtering
+	}
+
+	Input struct {
+		Path      string
+		Recursive bool // true for recursive directory analysis
+	}
+
+	Output struct {
+		File struct {
+			Enabled bool
+			Path    string // directory to output results
+			Type    string // table, csv
+		}
+
+		Sqlite struct {
+			Enabled bool
+			Path    string
+		}
+
+		MySQL struct {
+			Enabled  bool
+			Username string
+			Password string
+			Host     string
+		}
+	}
+
+	Realtime struct {
+		ProcessingTime bool // true to report processing time for each prediction
+
+		AudioExport struct {
+			Enabled bool
+			Path    string
+			Type    string
+		}
+
+		Log struct {
+			Enabled bool
+			Path    string
+		}
+	}
 }
 
 // Load reads the configuration file and environment variables into GlobalConfig.
@@ -71,25 +102,6 @@ func Load() (*Context, error) {
 	ctx.CustomConfidence = customConfidence
 
 	return ctx, nil
-}
-
-// GetSettings returns a pointer to the global settings object.
-func GetSettings(ctx *Context) *Settings {
-	return ctx.Settings
-}
-
-// BindFlags binds command line flags to configuration settings using Viper.
-func BindFlags(cmd *cobra.Command, settings *Settings) {
-	if err := viper.BindPFlags(cmd.Flags()); err != nil {
-		fmt.Printf("Error binding flags: %v\n", err)
-	}
-}
-
-// SyncViper updates the settings object with values from Viper.
-func SyncViper(settings *Settings) {
-	if err := viper.Unmarshal(settings); err != nil {
-		fmt.Printf("Error unmarshalling Viper values to settings: %v\n", err)
-	}
 }
 
 func initViper() error {
