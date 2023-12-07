@@ -20,6 +20,17 @@ var once sync.Once
 // executeFileAnalysis conducts an analysis of an audio file and outputs the results.
 // It reads an audio file, analyzes it for bird sounds, and prints the results based on the provided configuration.
 func FileAnalysis(ctx *config.Context) error {
+
+	fileInfo, err := os.Stat(ctx.Settings.Input.Path)
+	if err != nil {
+		return fmt.Errorf("error accessing the path: %v", err)
+	}
+
+	// Check if it's a file (not a directory)
+	if fileInfo.IsDir() {
+		return fmt.Errorf("the path is a directory, not a file")
+	}
+
 	// Load and analyze the input audio file.
 	audioData, err := myaudio.ReadAudioFile(ctx)
 	if err != nil {
@@ -36,20 +47,20 @@ func FileAnalysis(ctx *config.Context) error {
 
 	// Prepare the output file path if OutputDir is specified in the configuration.
 	var outputFile string
-	if ctx.Settings.OutputDir != "" {
+	if ctx.Settings.Output.File.Path != "" {
 		// Safely concatenate file paths using filepath.Join to avoid cross-platform issues.
-		outputFile = filepath.Join(ctx.Settings.OutputDir, filepath.Base(ctx.Settings.InputFile))
+		outputFile = filepath.Join(ctx.Settings.Output.File.Path, filepath.Base(ctx.Settings.Input.Path))
 	}
 
 	// Output the notes based on the desired output type in the configuration.
 	// If OutputType is not specified or if it's set to "table", output as a table format.
-	if ctx.Settings.OutputFormat == "" || ctx.Settings.OutputFormat == "table" {
+	if ctx.Settings.Output.File.Type == "" || ctx.Settings.Output.File.Type == "table" {
 		if err := observation.WriteNotesTable(ctx.Settings, notes, outputFile); err != nil {
 			log.Fatalf("failed to write notes table: %v", err)
 		}
 	}
 	// If OutputType is set to "csv", output as CSV format.
-	if ctx.Settings.OutputFormat == "csv" {
+	if ctx.Settings.Output.File.Type == "csv" {
 		if err := observation.WriteNotesCsv(ctx.Settings, notes, outputFile); err != nil {
 			log.Fatalf("failed to write notes CSV: %v", err)
 		}
@@ -67,7 +78,7 @@ func DirectoryAnalysis(ctx *config.Context) error {
 
 		if d.IsDir() {
 			// If recursion is not enabled and this is a subdirectory, skip it.
-			if !ctx.Settings.Recursive && path != ctx.Settings.InputDirectory {
+			if !ctx.Settings.Input.Recursive && path != ctx.Settings.Input.Path {
 				return filepath.SkipDir
 			}
 			// If it's the root directory or recursion is enabled, continue walking.
@@ -76,7 +87,7 @@ func DirectoryAnalysis(ctx *config.Context) error {
 
 		if strings.HasSuffix(d.Name(), ".wav") {
 			fmt.Println("Analyzing file:", path)
-			ctx.Settings.InputFile = path
+			ctx.Settings.Input.Path = path
 			if err := FileAnalysis(ctx); err != nil {
 				// If FileAnalysis returns an error log it and continue
 				log.Printf("Error analyzing file '%s': %v", path, err)
@@ -87,7 +98,7 @@ func DirectoryAnalysis(ctx *config.Context) error {
 	}
 
 	// Start walking through the directory
-	err := filepath.WalkDir(ctx.Settings.InputDirectory, analyzeFunc)
+	err := filepath.WalkDir(ctx.Settings.Input.Path, analyzeFunc)
 	if err != nil {
 		log.Fatalf("Failed to walk directory: %v", err)
 	}
@@ -104,7 +115,7 @@ func RealtimeAnalysis(ctx *config.Context) error {
 	ctx.OccurrenceMonitor = config.NewOccurrenceMonitor(OccurrenceInterval * time.Second)
 
 	fmt.Printf("Starting BirdNET-Go Analyzer in realtime mode, threshold: %.2f, sensitivity: %.2f\n",
-		ctx.Settings.Threshold, ctx.Settings.Sensitivity)
+		ctx.Settings.BirdNET.Threshold, ctx.Settings.BirdNET.Sensitivity)
 
 	// Start necessary routines for real-time analysis.
 	myaudio.StartGoRoutines(ctx)

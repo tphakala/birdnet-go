@@ -19,7 +19,7 @@ func Command(ctx *config.Context) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// The directory to analyze is passed as the first argument
-			ctx.Settings.InputDirectory = args[0]
+			ctx.Settings.Input.Path = args[0]
 			return analysis.DirectoryAnalysis(ctx)
 		},
 	}
@@ -35,9 +35,9 @@ func Command(ctx *config.Context) *cobra.Command {
 
 // setupDirectoryFlags defines flags specific to the directory command.
 func setupFlags(cmd *cobra.Command, settings *config.Settings) error {
-	cmd.Flags().BoolVarP(&settings.Recursive, "recursive", "r", false, "Recursively analyze subdirectories")
-	cmd.Flags().StringVarP(&settings.OutputDir, "output", "o", "", "Path to output directory")
-	cmd.Flags().StringVarP(&settings.OutputFormat, "format", "f", "", "Output format: table, csv")
+	cmd.Flags().BoolVarP(&settings.Input.Recursive, "recursive", "r", false, "Recursively analyze subdirectories")
+	cmd.Flags().StringVarP(&settings.Output.File.Path, "output", "o", "", "Path to output directory")
+	cmd.Flags().StringVar(&settings.Output.File.Type, "type", "table", "Output format: table, csv")
 
 	if err := viper.BindPFlags(cmd.Flags()); err != nil {
 		return fmt.Errorf("error binding flags: %v", err)

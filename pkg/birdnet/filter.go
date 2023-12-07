@@ -25,7 +25,7 @@ const locationFilterThreshold = 0.01
 func GetProbableSpecies(ctx *config.Context) []string {
 
 	// If latitude and longitude are not set, skip filtering
-	if ctx.Settings.Latitude == 0 && ctx.Settings.Longitude == 0 {
+	if ctx.Settings.BirdNET.Latitude == 0 && ctx.Settings.BirdNET.Longitude == 0 {
 		if ctx.Settings.Debug {
 			fmt.Printf("Latitude and longitude not set, not using location based prediction filter\n")
 		}
@@ -65,7 +65,7 @@ func predictFilter(ctx *config.Context) ([]Filter, error) {
 	week := getWeekForFilter()
 
 	// Create a slice with your data
-	data := []float32{float32(ctx.Settings.Latitude), float32(ctx.Settings.Longitude), week}
+	data := []float32{float32(ctx.Settings.BirdNET.Latitude), float32(ctx.Settings.BirdNET.Longitude), week}
 
 	// Assuming input.Float32s() returns a slice of float32
 	float32s := input.Float32s()

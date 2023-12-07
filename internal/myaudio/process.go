@@ -47,7 +47,7 @@ func predictSpecies(sampleData [][]float32, ctx *config.Context) ([]birdnet.Resu
 }
 
 func logProcessingTime(startTime time.Time, ctx *config.Context) time.Duration {
-	if ctx.Settings.ProcessingTime || ctx.Settings.Debug {
+	if ctx.Settings.Realtime.ProcessingTime || ctx.Settings.Debug {
 		elapsedTime := time.Since(startTime)
 		fmt.Printf("\r\033[Kprocessing time %v ms", elapsedTime.Milliseconds())
 		return elapsedTime
@@ -66,7 +66,7 @@ func processPredictionResults(results []birdnet.Result, data []byte, ctx *config
 	// Use custom confidence threshold if it exists for the species, otherwise use the global threshold
 	confidenceThreshold, exists := ctx.CustomConfidence.Thresholds[species]
 	if !exists {
-		confidenceThreshold = float32(ctx.Settings.Threshold)
+		confidenceThreshold = float32(ctx.Settings.BirdNET.Threshold)
 	} else {
 		if ctx.Settings.Debug {
 			fmt.Printf("\nUsing confidence threshold of %.2f for %s\n", confidenceThreshold, species)
@@ -97,21 +97,26 @@ func processPredictionResults(results []birdnet.Result, data []byte, ctx *config
 		return nil
 	}
 
-	clipName := saveAudioClip(data, ctx)
+	var clipName string
+
+	if ctx.Settings.Realtime.AudioExport.Enabled {
+		// save audio clip
+		clipName = saveAudioClip(data, ctx)
+	}
 
 	return logObservation(ctx, results[0], clipName, elapsedTime)
 }
 
 func saveAudioClip(data []byte, ctx *config.Context) string {
-	if ctx.Settings.ClipPath == "" {
+	if ctx.Settings.Realtime.AudioExport.Path == "" {
 		return ""
 	}
 
 	baseFileName := strconv.FormatInt(time.Now().Unix(), 10)
-	clipName := fmt.Sprintf("%s/%s.%s", ctx.Settings.ClipPath, baseFileName, ctx.Settings.ClipType)
+	clipName := fmt.Sprintf("%s/%s.%s", ctx.Settings.Realtime.AudioExport.Path, baseFileName, ctx.Settings.Realtime.AudioExport.Type)
 
 	var err error
-	switch ctx.Settings.ClipType {
+	switch ctx.Settings.Realtime.AudioExport.Type {
 	case "wav":
 		err = savePCMDataToWAV(clipName, data)
 	case "flac":
@@ -121,7 +126,7 @@ func saveAudioClip(data []byte, ctx *config.Context) string {
 	}
 
 	if err != nil {
-		fmt.Printf("error saving audio clip to %s: %s\n", ctx.Settings.ClipType, err)
+		fmt.Printf("error saving audio clip to %s: %s\n", ctx.Settings.Realtime.AudioExport.Type, err)
 		return ""
 	} else if ctx.Settings.Debug {
 		fmt.Printf("Saved audio clip to %s\n", clipName)

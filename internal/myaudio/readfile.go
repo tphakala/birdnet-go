@@ -17,7 +17,7 @@ const SampleRate = 48000
 func ReadAudioFile(ctx *config.Context) ([][]float32, error) {
 	fmt.Print("- Reading audio data")
 
-	file, err := os.Open(ctx.Settings.InputFile)
+	file, err := os.Open(ctx.Settings.Input.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func ReadAudioFile(ctx *config.Context) ([][]float32, error) {
 		return nil, errors.New("unsupported audio file bit depth")
 	}
 
-	step := int((3 - ctx.Settings.Overlap) * SampleRate)
+	step := int((3 - ctx.Settings.BirdNET.Overlap) * SampleRate)
 	minLenSamples := int(1.5 * SampleRate)
 	secondsSamples := int(3 * SampleRate)
 

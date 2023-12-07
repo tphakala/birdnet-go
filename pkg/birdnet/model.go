@@ -136,7 +136,7 @@ func loadLabels(ctx *config.Context) error {
 		return err
 	}
 
-	labelFileName := fmt.Sprintf("labels_%s.txt", ctx.Settings.Locale)
+	labelFileName := fmt.Sprintf("labels_%s.txt", ctx.Settings.Node.Locale)
 
 	// Search for the matching labels file in the zip archive
 	for _, zipFile := range r.File {
