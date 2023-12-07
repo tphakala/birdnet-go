@@ -169,10 +169,8 @@ func WriteNotesCsv(settings *config.Settings, notes []Note, filename string) err
 	// Define an io.Writer to abstract the writing operation.
 	var w io.Writer
 
-	// Determine the output destination based on the provided filename.
-	if filename == "" {
-		w = os.Stdout
-	} else {
+	// Determine the output destination, file or screen
+	if settings.Output.File.Enabled {
 		// Ensure the filename has a .csv extension.
 		if !strings.HasSuffix(filename, ".csv") {
 			filename += ".csv"
@@ -184,6 +182,9 @@ func WriteNotesCsv(settings *config.Settings, notes []Note, filename string) err
 		}
 		defer file.Close()
 		w = file
+	} else {
+		// Print output to stdout if the file output is disabled
+		w = os.Stdout
 	}
 
 	// Define the CSV header.
