@@ -56,7 +56,7 @@ func Setup(ctx *config.Context) error {
 
 // initializeModel loads the model from embedded data and creates a new interpreter
 func initializeModel(ctx *config.Context) error {
-	fmt.Print("Loading BirdNET model")
+	//fmt.Print("Loading BirdNET model")
 	// Load the TensorFlow Lite model from embedded data
 	model := tflite.NewModel(modelData)
 	if model == nil {
@@ -69,8 +69,6 @@ func initializeModel(ctx *config.Context) error {
 	// Configure the interpreter options
 	options := tflite.NewInterpreterOptions()
 	// XNNPACK delegate is commented out for now as interpreter creation fails
-	// if it is used
-	//options.AddDelegate(xnnpack.New(xnnpack.DelegateOptions{NumThreads: 1}))
 	options.SetNumThread(cpuCount)
 	options.SetErrorReporter(func(msg string, user_data interface{}) {
 		fmt.Println(msg)
@@ -88,7 +86,7 @@ func initializeModel(ctx *config.Context) error {
 		return fmt.Errorf("tensor allocation failed")
 	}
 
-	fmt.Printf(" - %s model initialized\n", modelVersion)
+	fmt.Printf("%s model initialized, using %v CPU threads\n", modelVersion, cpuCount)
 	return nil
 }
 
