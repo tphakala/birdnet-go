@@ -1,7 +1,11 @@
 package directory
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/analysis"
 	"github.com/tphakala/birdnet-go/internal/config"
 )
@@ -20,17 +24,24 @@ func Command(ctx *config.Context) *cobra.Command {
 		},
 	}
 
-	setupFlags(cmd, ctx.Settings)
+	// Set up flags specific to the 'file' command
+	if err := setupFlags(cmd, ctx.Settings); err != nil {
+		fmt.Printf("error setting up flags: %v\n", err)
+		os.Exit(1)
+	}
 
 	return cmd
 }
 
 // setupDirectoryFlags defines flags specific to the directory command.
-func setupFlags(cmd *cobra.Command, settings *config.Settings) {
+func setupFlags(cmd *cobra.Command, settings *config.Settings) error {
 	cmd.Flags().BoolVarP(&settings.Recursive, "recursive", "r", false, "Recursively analyze subdirectories")
 	cmd.Flags().StringVarP(&settings.OutputDir, "output", "o", "", "Path to output directory")
 	cmd.Flags().StringVarP(&settings.OutputFormat, "format", "f", "", "Output format: table, csv")
 
-	// Bind flags to configuration
-	config.BindFlags(cmd, settings)
+	if err := viper.BindPFlags(cmd.Flags()); err != nil {
+		return fmt.Errorf("error binding flags: %v", err)
+	}
+
+	return nil
 }
