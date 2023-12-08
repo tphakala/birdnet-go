@@ -36,6 +36,27 @@ type Settings struct {
 		Recursive bool   // true for recursive directory analysis
 	}
 
+	Realtime struct {
+		ProcessingTime bool // true to report processing time for each prediction
+
+		AudioExport struct {
+			Enabled bool   // export audio clips containing indentified bird calls
+			Path    string // path to audio clip export directory
+			Type    string // audio file type, wav, mp3 or flac
+		}
+
+		Log struct {
+			Enabled bool   // true to enable OBS chat log
+			Path    string // path to OBS chat log
+		}
+
+		Birdweather struct {
+			Enabled       bool    // true to enable birdweather uploads
+			BirdweatherID string  // birdweather ID
+			Threshold     float64 // threshold for prediction confidence for uploads
+		}
+	}
+
 	Output struct {
 		File struct {
 			Enabled bool   // true to enable file output
@@ -55,21 +76,6 @@ type Settings struct {
 			Database string // database name for mysql database
 			Host     string // host for mysql database
 			Port     string // port for mysql database
-		}
-	}
-
-	Realtime struct {
-		ProcessingTime bool // true to report processing time for each prediction
-
-		AudioExport struct {
-			Enabled bool
-			Path    string
-			Type    string
-		}
-
-		Log struct {
-			Enabled bool
-			Path    string
 		}
 	}
 }
@@ -245,7 +251,11 @@ realtime:
     type: wav
   log:
     enabled: false
-    path: log/birdnet.txt	
+    path: log/birdnet.txt
+  birdweather:
+    enabled: false
+	birdweatherid: 000000
+	threshold: 0.9
 
 output:
   file:
