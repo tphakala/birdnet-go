@@ -158,7 +158,7 @@ func AnalyzeAudio(chunks [][]float32, ctx *config.Context) ([]observation.Note, 
 
 		// Generate observations from predicted results
 		for _, result := range predictedResults {
-			obs := observation.New(ctx.Settings, predStart, predEnd, result.Species, float64(result.Confidence), "", elapsed)
+			obs := observation.New(ctx, predStart, predEnd, result.Species, float64(result.Confidence), "", elapsed)
 			observations = append(observations, obs)
 		}
 

@@ -43,7 +43,7 @@ type Settings struct {
 			Type    string // table, csv
 		}
 
-		Sqlite struct {
+		SQLite struct {
 			Enabled bool   // true to enable sqlite output
 			Path    string // path to sqlite database
 		}
@@ -52,7 +52,9 @@ type Settings struct {
 			Enabled  bool   // true to enable mysql output
 			Username string // username for mysql database
 			Password string // password for mysql database
+			Database string // database name for mysql database
 			Host     string // host for mysql database
+			Port     string // port for mysql database
 		}
 	}
 
@@ -251,6 +253,8 @@ output:
 	path: output/
 	type: table
 
+# Only one database is supported at a time. If both are enabled, SQLite will be used.
+
   sqlite:
     enabled: false
     path: birdnet.db
@@ -259,6 +263,8 @@ output:
     enabled: false
     username: birdnet
     password: secret
+	database: birdnet
     host: localhost
+	port: 3306
 `
 }
