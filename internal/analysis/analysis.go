@@ -55,13 +55,13 @@ func FileAnalysis(ctx *config.Context) error {
 	// Output the notes based on the desired output type in the configuration.
 	// If OutputType is not specified or if it's set to "table", output as a table format.
 	if ctx.Settings.Output.File.Type == "" || ctx.Settings.Output.File.Type == "table" {
-		if err := observation.WriteNotesTable(ctx.Settings, notes, outputFile); err != nil {
+		if err := observation.WriteNotesTable(ctx, notes, outputFile); err != nil {
 			log.Fatalf("failed to write notes table: %v", err)
 		}
 	}
 	// If OutputType is set to "csv", output as CSV format.
 	if ctx.Settings.Output.File.Type == "csv" {
-		if err := observation.WriteNotesCsv(ctx.Settings, notes, outputFile); err != nil {
+		if err := observation.WriteNotesCsv(ctx, notes, outputFile); err != nil {
 			log.Fatalf("failed to write notes CSV: %v", err)
 		}
 	}

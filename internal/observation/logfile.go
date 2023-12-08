@@ -10,9 +10,9 @@ import (
 )
 
 // LogNoteToFile saves the Note to a log file.
-func LogNoteToFile(settings *config.Settings, note Note) error {
+func LogNoteToFile(ctx *config.Context, note Note) error {
 	// Check if the directory of the log file exists. If not, create it.
-	dir := filepath.Dir(settings.Realtime.Log.Path)
+	dir := filepath.Dir(ctx.Settings.Realtime.Log.Path)
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		err := os.MkdirAll(dir, 0755) // The 0755 permission sets the directory as readable and executable to everyone, and only writable by the owner.
 		if err != nil {
@@ -21,7 +21,7 @@ func LogNoteToFile(settings *config.Settings, note Note) error {
 	}
 
 	// Open the file for appending. If it doesn't exist, create it.
-	file, err := os.OpenFile(settings.Realtime.Log.Path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(ctx.Settings.Realtime.Log.Path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Printf("failed to open file: %v\n", err)
 		return err
@@ -36,7 +36,7 @@ func LogNoteToFile(settings *config.Settings, note Note) error {
 
 	// Determine the time format string based on the user's preference
 	var timeFormat string
-	if settings.Node.TimeAs24h {
+	if ctx.Settings.Node.TimeAs24h {
 		timeFormat = "15:04:05"
 	} else {
 		timeFormat = "03:04:05 PM"

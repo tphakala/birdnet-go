@@ -137,9 +137,9 @@ func saveAudioClip(data []byte, ctx *config.Context) string {
 
 func logObservation(ctx *config.Context, result birdnet.Result, clipName string, elapsedTime time.Duration) error {
 	beginTime, endTime := 0.0, 0.0 // temporary assignments
-	note := observation.New(ctx.Settings, beginTime, endTime, result.Species, float64(result.Confidence), clipName, elapsedTime)
+	note := observation.New(ctx, beginTime, endTime, result.Species, float64(result.Confidence), clipName, elapsedTime)
 
-	if err := observation.LogNote(ctx.Settings, note); err != nil {
+	if err := observation.LogNote(ctx, note); err != nil {
 		fmt.Printf("error logging note: %s\n", err)
 		return err
 	}
