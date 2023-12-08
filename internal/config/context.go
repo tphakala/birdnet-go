@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tphakala/go-tflite"
+	"gorm.io/gorm"
 )
 
 //var globalContext *Context
@@ -33,6 +34,7 @@ type Context struct {
 	FilterInterpreter   *tflite.Interpreter
 	Labels              []string
 	CustomConfidence    SpeciesConfidence
+	Db                  *gorm.DB
 }
 
 // NewOccurrenceMonitor creates a new instance of OccurrenceMonitor with the given reset duration.

@@ -14,14 +14,14 @@ import (
 type Note struct {
 	Id             uint `gorm:"column:id;primaryKey;autoIncrement"`
 	SourceNode     string
-	Date           string
+	Date           string `gorm:"index"` // Index on the 'Date' field
 	Time           string
 	InputFile      string
 	BeginTime      float64
 	EndTime        float64
 	SpeciesCode    string
-	ScientificName string
-	CommonName     string
+	ScientificName string `gorm:"index"` // Index on the 'ScientificName' field
+	CommonName     string `gorm:"index"` // Index on the 'CommonName' field
 	Confidence     float64
 	Latitude       float64
 	Longitude      float64
@@ -46,7 +46,7 @@ func ParseSpeciesString(species string) (string, string, string) {
 
 // New creates and returns a new Note with the provided parameters and current date and time.
 // It uses the configuration and parsing functions to set the appropriate fields.
-func New(settigs *config.Settings, beginTime, endTime float64, species string, confidence float64, clipName string, elapsedTime time.Duration) Note {
+func New(ctx *config.Context, beginTime, endTime float64, species string, confidence float64, clipName string, elapsedTime time.Duration) Note {
 	// Parse the species string to get the scientific name, common name, and species code.
 	scientificName, commonName, speciesCode := ParseSpeciesString(species)
 
@@ -57,45 +57,45 @@ func New(settigs *config.Settings, beginTime, endTime float64, species string, c
 
 	// Return a new Note struct populated with the provided parameters as well as the current date and time.
 	return Note{
-		SourceNode:     settigs.Node.Name,               // From the provided configuration settings.
-		Date:           time.Now().Format("2006-01-02"), // Use ISO 8601 date format.
-		Time:           formattedTime,                   // Use 24-hour time format.
-		InputFile:      settigs.Input.Path,              // From the provided configuration settings.
-		BeginTime:      beginTime,                       // Start time of the observation.
-		EndTime:        endTime,                         // End time of the observation.
-		SpeciesCode:    speciesCode,                     // Parsed species code.
-		ScientificName: scientificName,                  // Parsed scientific name of the species.
-		CommonName:     commonName,                      // Parsed common name of the species.
-		Confidence:     confidence,                      // Confidence score of the observation.
-		Latitude:       settigs.BirdNET.Latitude,        // Geographic latitude where the observation was made.
-		Longitude:      settigs.BirdNET.Longitude,       // Geographic longitude where the observation was made.
-		Threshold:      settigs.BirdNET.Threshold,       // Threshold setting from configuration.
-		Sensitivity:    settigs.BirdNET.Sensitivity,     // Sensitivity setting from configuration.
-		ClipName:       clipName,                        // Name of the audio clip.
-		ProcessingTime: elapsedTime,                     // Time taken to process the observation.
+		SourceNode:     ctx.Settings.Node.Name,           // From the provided configuration settings.
+		Date:           time.Now().Format("2006-01-02"),  // Use ISO 8601 date format.
+		Time:           formattedTime,                    // Use 24-hour time format.
+		InputFile:      ctx.Settings.Input.Path,          // From the provided configuration settings.
+		BeginTime:      beginTime,                        // Start time of the observation.
+		EndTime:        endTime,                          // End time of the observation.
+		SpeciesCode:    speciesCode,                      // Parsed species code.
+		ScientificName: scientificName,                   // Parsed scientific name of the species.
+		CommonName:     commonName,                       // Parsed common name of the species.
+		Confidence:     confidence,                       // Confidence score of the observation.
+		Latitude:       ctx.Settings.BirdNET.Latitude,    // Geographic latitude where the observation was made.
+		Longitude:      ctx.Settings.BirdNET.Longitude,   // Geographic longitude where the observation was made.
+		Threshold:      ctx.Settings.BirdNET.Threshold,   // Threshold setting from configuration.
+		Sensitivity:    ctx.Settings.BirdNET.Sensitivity, // Sensitivity setting from configuration.
+		ClipName:       clipName,                         // Name of the audio clip.
+		ProcessingTime: elapsedTime,                      // Time taken to process the observation.
 	}
 }
 
 // LogNote is the central function for logging observations. It writes a note to a log file and/or database
 // depending on the provided configuration settings.
-func LogNote(settings *config.Settings, note Note) error {
+func LogNote(ctx *config.Context, note Note) error {
 	// If a log file path is specified in the configuration, attempt to log the note to this file.
-	if settings.Realtime.Log.Enabled {
-		if settings.Debug {
+	if ctx.Settings.Realtime.Log.Enabled {
+		if ctx.Settings.Debug {
 			fmt.Println("Logging note to file...")
 		}
-		if err := LogNoteToFile(settings, note); err != nil {
+		if err := LogNoteToFile(ctx, note); err != nil {
 			// If an error occurs when logging to a file, wrap and return the error.
 			fmt.Printf("failed to log note to file: %s", err)
 		}
 	}
 
 	// If the configuration specifies a database (and it's not set to "none"), attempt to save the note to the database.
-	if settings.Output.MySQL.Enabled || settings.Output.Sqlite.Enabled {
-		if settings.Debug {
+	if ctx.Settings.Output.MySQL.Enabled || ctx.Settings.Output.SQLite.Enabled {
+		if ctx.Settings.Debug {
 			fmt.Println("Saving note to database...")
 		}
-		if err := SaveToDatabase(note); err != nil {
+		if err := SaveToDatabase(ctx, note); err != nil {
 			// If an error occurs when saving to the database, wrap and return the error.
 			fmt.Printf("failed to save note to database: %s", err)
 		}
@@ -108,7 +108,7 @@ func LogNote(settings *config.Settings, note Note) error {
 // WriteNotesTable writes a slice of Note structs to a table-formatted text output.
 // The output can be directed to either stdout or a file specified by the filename.
 // If the filename is an empty string, it writes to stdout.
-func WriteNotesTable(settings *config.Settings, notes []Note, filename string) error {
+func WriteNotesTable(ctx *config.Context, notes []Note, filename string) error {
 	var w io.Writer
 	// Determine the output destination based on the filename argument.
 	if filename == "" {
@@ -137,7 +137,7 @@ func WriteNotesTable(settings *config.Settings, notes []Note, filename string) e
 	var err error
 
 	for i, note := range notes {
-		if note.Confidence <= settings.BirdNET.Threshold {
+		if note.Confidence <= ctx.Settings.BirdNET.Threshold {
 			continue // Skip the current iteration as the note doesn't meet the threshold
 		}
 
@@ -165,12 +165,12 @@ func WriteNotesTable(settings *config.Settings, notes []Note, filename string) e
 // WriteNotesCsv writes the slice of notes to the specified destination in CSV format.
 // If filename is an empty string, the function writes to stdout.
 // The function returns an error if writing to the destination fails.
-func WriteNotesCsv(settings *config.Settings, notes []Note, filename string) error {
+func WriteNotesCsv(ctx *config.Context, notes []Note, filename string) error {
 	// Define an io.Writer to abstract the writing operation.
 	var w io.Writer
 
 	// Determine the output destination, file or screen
-	if settings.Output.File.Enabled {
+	if ctx.Settings.Output.File.Enabled {
 		// Ensure the filename has a .csv extension.
 		if !strings.HasSuffix(filename, ".csv") {
 			filename += ".csv"
@@ -198,7 +198,7 @@ func WriteNotesCsv(settings *config.Settings, notes []Note, filename string) err
 	var err error
 
 	for _, note := range notes {
-		if note.Confidence <= settings.BirdNET.Threshold {
+		if note.Confidence <= ctx.Settings.BirdNET.Threshold {
 			continue // Skip the current iteration as the note doesn't meet the threshold
 		}
 
