@@ -30,10 +30,6 @@ func NewClient(birdweatherID, latitude, longitude string) *BirdweatherClient {
 
 // UploadSoundscape uploads a soundscape file to the Birdweather server and returns the soundscape ID.
 func (c *BirdweatherClient) UploadSoundscape(filePath string) (soundscapeID string, err error) {
-	if c.BirdweatherID == "99999" {
-		return "", fmt.Errorf("invalid birdweather ID")
-	}
-
 	currentISO8601 := time.Now().Format(time.RFC3339)
 	soundscapeURL := fmt.Sprintf("https://app.birdweather.com/api/v1/stations/%s/soundscapes?timestamp=%s", c.BirdweatherID, currentISO8601)
 
