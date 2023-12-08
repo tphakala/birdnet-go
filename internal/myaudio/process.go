@@ -163,18 +163,6 @@ func isSpeciesIncluded(species string, includedList []string) bool {
 	return false
 }
 
-/*
-// isSpeciesExcluded checks if the given species is in the excluded list.
-func isSpeciesExcluded(species string, excludedList []string) bool {
-	for _, excludedSpecies := range excludedList {
-		if species == excludedSpecies {
-			return true
-		}
-	}
-	return false
-}
-*/
-
 // ConvertToFloat32 converts a byte slice representing sample to a 2D slice of float32 samples.
 // The function supports 16, 24, and 32 bit depths.
 func ConvertToFloat32(sample []byte, bitDepth int) ([][]float32, error) {
