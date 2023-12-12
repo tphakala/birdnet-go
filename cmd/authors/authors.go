@@ -15,8 +15,8 @@ var authorsFile embed.FS
 func Command() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "authors",
-		Short: "Print the list of authors",
-		Long:  "Prints the contents of the authors.txt file.",
+		Short: "Print authors of BirdNET-Go",
+		Long:  "",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			data, err := fs.ReadFile(authorsFile, "AUTHORS")
 			if err != nil {
