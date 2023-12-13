@@ -66,6 +66,9 @@ func SaveToDatabase(ctx *config.Context, note Note) error {
 		return err
 	}
 
-	log.Println("Note saved successfully")
+	if ctx.Settings.Debug {
+		log.Printf("Saved note: %v\n", note)
+	}
+
 	return nil
 }
