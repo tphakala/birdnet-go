@@ -17,18 +17,6 @@ func Command(ctx *config.Context) *cobra.Command {
 		Short: "Analyze audio in realtime mode",
 		Long:  "Start analyzing incoming audio data in real-time looking for bird calls.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-
-			// Debug print before unmarshaling (to compare values)
-			fmt.Printf("Before unmarshaling - Audio Export Path: %s\n", ctx.Settings.Realtime.AudioExport.Path)
-
-			// Sync the cfg struct with viper's values to ensure command-line arguments take precedence
-			if err := viper.Unmarshal(ctx.Settings); err != nil {
-				return fmt.Errorf("error unmarshalling Viper values to settings: %v", err)
-			}
-
-			// Debug print after unmarshaling (to compare values)
-			fmt.Printf("After unmarshaling - Audio Export Path: %s\n", ctx.Settings.Realtime.AudioExport.Path)
-
 			return analysis.RealtimeAnalysis(ctx)
 		},
 	}
