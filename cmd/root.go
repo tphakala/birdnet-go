@@ -81,6 +81,7 @@ func initialize(ctx *config.Context) error {
 func setupFlags(rootCmd *cobra.Command, settings *config.Settings) error {
 	rootCmd.PersistentFlags().BoolVarP(&settings.Debug, "debug", "d", viper.GetBool("debug"), "Enable debug output")
 	rootCmd.PersistentFlags().StringVar(&settings.Node.Locale, "locale", viper.GetString("node.locale"), "Set the locale for labels. Accepts full name or 2-letter code.")
+	rootCmd.PersistentFlags().IntVarP(&settings.Node.Threads, "threads", "j", viper.GetInt("node.threads"), "Number of CPU threads to use for analysis")
 	rootCmd.PersistentFlags().Float64VarP(&settings.BirdNET.Sensitivity, "sensitivity", "s", viper.GetFloat64("birdnet.sensitivity"), "Sigmoid sensitivity value between 0.0 and 1.5")
 	rootCmd.PersistentFlags().Float64VarP(&settings.BirdNET.Threshold, "threshold", "t", viper.GetFloat64("birdnet.threshold"), "Confidency threshold for detections, value between 0.1 to 1.0")
 	rootCmd.PersistentFlags().Float64Var(&settings.BirdNET.Overlap, "overlap", viper.GetFloat64("birdnet.overlap"), "Overlap value between 0.0 and 2.9")
@@ -91,11 +92,11 @@ func setupFlags(rootCmd *cobra.Command, settings *config.Settings) error {
 	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
 		return fmt.Errorf("error binding flags: %v", err)
 	}
-
-	// Now sync the cfg struct with viper's values to ensure command-line arguments take precedence
-	if err := viper.Unmarshal(settings); err != nil {
-		return fmt.Errorf("error unmarshalling Viper values to settings: %v", err)
-	}
-
+	/*
+		// Now sync the cfg struct with viper's values to ensure command-line arguments take precedence
+		if err := viper.Unmarshal(settings); err != nil {
+			return fmt.Errorf("error unmarshalling Viper values to settings: %v", err)
+		}
+	*/
 	return nil
 }
