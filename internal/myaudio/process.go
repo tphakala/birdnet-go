@@ -74,10 +74,7 @@ func processPredictionResults(results []birdnet.Result, data []byte, ctx *config
 	}
 
 	if confidence <= confidenceThreshold {
-		// if debug print confidence
-		if ctx.Settings.Debug {
-			fmt.Printf("\nConfidence %.2f below threshold %.2f, skipping processing\n", confidence, confidenceThreshold)
-		}
+		// confidence too low, skip processing
 		return nil
 	}
 
