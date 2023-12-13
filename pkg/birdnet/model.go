@@ -63,13 +63,24 @@ func initializeModel(ctx *config.Context) error {
 		return fmt.Errorf("cannot load model from embedded data")
 	}
 
+	// Set the number of threads to use for the interpreter
+	var threads int
+
 	// Get cpu core count for interpreter options
-	cpuCount := runtime.NumCPU()
+	systemCpuCount := runtime.NumCPU()
+
+	// If the number of threads is not specified or exceeds the number of available CPUs,
+	// set threads to number of system CPUs
+	if (ctx.Settings.Node.Threads == 0) || (ctx.Settings.Node.Threads > systemCpuCount) {
+		threads = systemCpuCount
+	} else {
+		threads = ctx.Settings.Node.Threads
+	}
 
 	// Configure the interpreter options
 	options := tflite.NewInterpreterOptions()
 	// XNNPACK delegate is commented out for now as interpreter creation fails
-	options.SetNumThread(cpuCount)
+	options.SetNumThread(threads)
 	options.SetErrorReporter(func(msg string, user_data interface{}) {
 		fmt.Println(msg)
 	}, nil)
@@ -86,7 +97,7 @@ func initializeModel(ctx *config.Context) error {
 		return fmt.Errorf("tensor allocation failed")
 	}
 
-	fmt.Printf("%s model initialized, using %v CPU threads\n", modelVersion, cpuCount)
+	fmt.Printf("%s model initialized, using %v threads of available %v CPUs\n", modelVersion, threads, systemCpuCount)
 	return nil
 }
 
