@@ -21,6 +21,7 @@ type Settings struct {
 		Name      string // name of go-birdnet node, can be used to identify source of notes
 		Locale    string // language to use for labels
 		TimeAs24h bool   // true 24-hour time format, false 12-hour time format
+		Threads   int    // number of CPU threads to use for analysis
 	}
 
 	BirdNET struct {
@@ -235,6 +236,7 @@ node:
   name: BirdNET-Go
   locale: en
   timeas24h: true
+  threads: 0 # 0 to use all available CPU threads
 
 birdnet:
   sensitivity: 1.0
@@ -242,6 +244,12 @@ birdnet:
   overlap: 0.0
   latitude: 00.000
   longitude: 00.000
+
+output:
+  file:
+    enabled: true
+    path: output/
+    type: table
 
 realtime:
   processingtime: false
@@ -256,25 +264,17 @@ realtime:
     enabled: false
 	birdweatherid: 000000
 	threshold: 0.9
-
-output:
-  file:
-    enabled: true
-	path: output/
-	type: table
-
-# Only one database is supported at a time. If both are enabled, SQLite will be used.
-
+  # Only one database is supported at a time
+  # if both are enabled, SQLite will be used.
   sqlite:
     enabled: false
     path: birdnet.db
-
   mysql:
     enabled: false
     username: birdnet
     password: secret
-	database: birdnet
+    database: birdnet
     host: localhost
-	port: 3306
+    port: 3306
 `
 }
