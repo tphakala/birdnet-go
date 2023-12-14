@@ -230,51 +230,55 @@ func createDefaultConfig() error {
 func getDefaultConfig() string {
 	return `# BirdNET-Go configuration
 
-debug: false
+debug: false			# print debug messages, can help with problem solving
 
+# Node specific settings
 node:
-  name: BirdNET-Go
-  locale: en
-  timeas24h: true
-  threads: 0 # 0 to use all available CPU threads
+  name: BirdNET-Go		# name of node, can be used to identify source of notes
+  locale: en			# language to use for labels
+  timeas24h: true		# true for 24-hour time format, false for 12-hour time format
+  threads: 0			# 0 to use all available CPU threads
 
+# BirdNET model specific settings
 birdnet:
-  sensitivity: 1.0
-  threshold: 0.8
-  overlap: 0.0
-  latitude: 00.000
-  longitude: 00.000
+  sensitivity: 1.0		# sigmoid sensitivity, 0.1 to 1.5
+  threshold: 0.8		# threshold for prediction confidence to report, 0.0 to 1.0
+  overlap: 0.0			# overlap between chunks, 0.0 to 2.9
+  latitude: 00.000		# latitude of recording location for prediction filtering
+  longitude: 00.000		# longitude of recording location for prediction filtering
 
+# Realtime processing settings
+realtime:
+  processingtime: false # true to report processing time for each prediction
+  audioexport:
+    enabled: false 		# true to export audio clips containing indentified bird calls
+    path: clips/   		# path to audio clip export directory
+    type: wav      		# audio file type, wav, mp3 or flac
+  log:
+    enabled: false		# true to enable OBS chat log
+    path: birdnet.txt	# path to OBS chat log
+  birdweather:
+    enabled: false		# true to enable birdweather uploads
+    birdweatherid: 0000	# birdweather ID
+    threshold: 0.9		# threshold of prediction confidence for uploads, 0.0 to 1.0
+
+# Ouput settings
 output:
   file:
-    enabled: true
-    path: output/
-    type: table
-
-realtime:
-  processingtime: false
-  audioexport:
-    enabled: false
-    path: clips/
-    type: wav
-  log:
-    enabled: false
-    path: log/birdnet.txt
-  birdweather:
-    enabled: false
-	birdweatherid: 000000
-	threshold: 0.9
+    enabled: true		# true to enable file output for file and directory analysis
+    path: output/		# path to output directory
+    type: table			# ouput format, Raven table or csv
   # Only one database is supported at a time
   # if both are enabled, SQLite will be used.
   sqlite:
-    enabled: false
-    path: birdnet.db
+    enabled: false		# true to enable sqlite output
+    path: birdnet.db	# path to sqlite database
   mysql:
-    enabled: false
-    username: birdnet
-    password: secret
-    database: birdnet
-    host: localhost
-    port: 3306
+    enabled: false		# true to enable mysql output
+    username: birdnet	# mysql database username
+    password: secret	# mysql database user password
+    database: birdnet	# mysql database name
+    host: localhost		# mysql database host
+    port: 3306			# mysql database port
 `
 }
