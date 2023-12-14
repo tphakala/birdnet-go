@@ -18,7 +18,7 @@ BirdNET-Go features
 - Can analyse 48kHz WAV files from single file or directory of WAV files
 - Outputs to Raven selection table and CSV format
 - Realtime analysis of soundcard capture, analysis output to log file, SQLite or MySQL
-- Log file output can be used as overlay in OBS for bird feeder streams etc.
+- Log file output can be used as overlay in OBS for bird feeder streams etc., see it in action at https://www.youtube.com/watch?v=5Ws-87a3gEk
 - Localized species labels thanks to translations by @patlevin
 - Minimal runtime dependencies, BirdNET Tensorflow Lite model is embedded in compiled binary
 
