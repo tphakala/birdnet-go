@@ -47,14 +47,15 @@ type Settings struct {
 		}
 
 		Log struct {
-			Enabled bool   // true to enable OBS chat log
-			Path    string // path to OBS chat log
+			Enabled  bool   // true to enable OBS chat log
+			Path     string // path to OBS chat log
+			Interval int    // minimum interval between log messages in seconds
 		}
 
 		Birdweather struct {
-			Enabled       bool    // true to enable birdweather uploads
-			BirdweatherID string  // birdweather ID
-			Threshold     float64 // threshold for prediction confidence for uploads
+			Enabled   bool    // true to enable birdweather uploads
+			ID        string  // birdweather ID
+			Threshold float64 // threshold for prediction confidence for uploads
 		}
 	}
 
@@ -257,9 +258,10 @@ realtime:
   log:
     enabled: false		# true to enable OBS chat log
     path: birdnet.txt	# path to OBS chat log
+	interval: 15		# minimum interval between repeating log messages in seconds
   birdweather:
     enabled: false		# true to enable birdweather uploads
-    birdweatherid: 0000	# birdweather ID
+    id: 00000			# birdweather ID
     threshold: 0.9		# threshold of prediction confidence for uploads, 0.0 to 1.0
 
 # Ouput settings
