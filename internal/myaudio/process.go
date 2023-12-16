@@ -91,7 +91,8 @@ func processPredictionResults(results []birdnet.Result, data []byte, ctx *config
 
 	var clipName string
 
-	if ctx.Settings.Realtime.AudioExport.Enabled {
+	// if Birdweather is enabled Audio Export is required
+	if ctx.Settings.Realtime.AudioExport.Enabled || ctx.Settings.Realtime.Birdweather.Enabled {
 		// save audio clip
 		clipName = saveAudioClip(data, ctx)
 	}
