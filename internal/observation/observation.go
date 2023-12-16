@@ -52,14 +52,15 @@ func New(ctx *config.Context, beginTime, endTime float64, species string, confid
 
 	// detectionTime is time now minus 3 seconds to account for the delay in the detection
 	now := time.Now()
+	date := now.Format("2006-01-02")
 	detectionTime := now.Add(-3 * time.Second)
-	formattedTime := detectionTime.Format("15:04:05")
+	time := detectionTime.Format("15:04:05")
 
 	// Return a new Note struct populated with the provided parameters as well as the current date and time.
 	return Note{
 		SourceNode:     ctx.Settings.Node.Name,           // From the provided configuration settings.
-		Date:           time.Now().Format("2006-01-02"),  // Use ISO 8601 date format.
-		Time:           formattedTime,                    // Use 24-hour time format.
+		Date:           date,                             // Use ISO 8601 date format.
+		Time:           time,                             // Use 24-hour time format.
 		InputFile:      ctx.Settings.Input.Path,          // From the provided configuration settings.
 		BeginTime:      beginTime,                        // Start time of the observation.
 		EndTime:        endTime,                          // End time of the observation.
@@ -91,7 +92,7 @@ func LogNote(ctx *config.Context, note Note) error {
 	}
 
 	// If the configuration specifies a database (and it's not set to "none"), attempt to save the note to the database.
-	if ctx.Settings.Output.MySQL.Enabled || ctx.Settings.Output.SQLite.Enabled {
+	if ctx.Settings.Output.SQLite.Enabled || ctx.Settings.Output.MySQL.Enabled {
 		if ctx.Settings.Debug {
 			fmt.Println("Saving note to database...")
 		}
@@ -101,7 +102,44 @@ func LogNote(ctx *config.Context, note Note) error {
 		}
 	}
 
+	if ctx.Settings.Realtime.Birdweather.Enabled {
+		// Upload the note to Birdweather as go routine
+		go UploadToBirdweather(ctx, note)
+	}
+
 	// Return nil to indicate that the logging operations completed without error.
+	return nil
+}
+
+func UploadToBirdweather(ctx *config.Context, note Note) error {
+	if ctx.Settings.Debug {
+		fmt.Println("Uploading note to Birdweather...")
+	}
+
+	// Combine date and time strings
+	dateTimeString := fmt.Sprintf("%sT%s", note.Date, note.Time)
+
+	// Parse the combined string into a time.Time object
+	// The format string should match the format of your dateTimeString
+	parsedTime, err := time.Parse("2006-01-02T15:04:05", dateTimeString)
+	if err != nil {
+		return fmt.Errorf("error parsing date: %s", err)
+	}
+
+	// Format the parsed time in ISO8601 format with timezone
+	timestamp := parsedTime.Format("2006-01-02T15:04:05.000Z07:00")
+
+	soundscapeID, err := ctx.BirdweatherClient.UploadSoundscape(timestamp, note.ClipName)
+	if err != nil {
+		return fmt.Errorf("failed to upload soundscape to Birdweather: %s", err)
+	}
+
+	// Post the detection to Birdweather
+	err = ctx.BirdweatherClient.PostDetection(timestamp, soundscapeID)
+	if err != nil {
+		return fmt.Errorf("failed to post detection to Birdweather: %s", err)
+	}
+
 	return nil
 }
 
