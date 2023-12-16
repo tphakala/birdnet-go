@@ -113,6 +113,7 @@ func LogNote(ctx *config.Context, note Note) error {
 	return nil
 }
 
+// Upload detected clip and details to Birdweather
 func UploadToBirdweather(ctx *config.Context, note Note) {
 	// Use system's local timezone
 	loc := time.Local
@@ -147,50 +148,6 @@ func UploadToBirdweather(ctx *config.Context, note Note) {
 		log.Println("Detection succesfully posted to Birdweather")
 	}
 }
-
-/*
-
-func UploadToBirdweather(ctx *config.Context, note Note) error {
-	// Set the desired timezone, for example, EEST (Eastern European Summer Time) UTC+3
-	loc, err := time.LoadLocation("Europe/Helsinki") // Change this to the appropriate timezone
-	if err != nil {
-		fmt.Println("Error loading location:", err)
-		return err
-	}
-
-	// Combine date and time strings
-	dateTimeString := fmt.Sprintf("%sT%s", note.Date, note.Time)
-
-	// Parse the combined string into a time.Time object
-	// The format string should match the format of your dateTimeString
-	parsedTime, err := time.Parse("2006-01-02T15:04:05", dateTimeString)
-	if err != nil {
-		fmt.Println("error parsing date: ", err)
-		return fmt.Errorf("error parsing date: %s", err)
-	}
-
-	// Convert parsedTime to the desired timezone
-	parsedTimeInTimeZone := parsedTime.In(loc)
-
-	// Format the time in ISO8601 format with the actual timezone offset
-	timestamp := parsedTimeInTimeZone.Format("2006-01-02T15:04:05.000Z0700")
-	fmt.Println(timestamp)
-
-	soundscapeID, err := ctx.BirdweatherClient.UploadSoundscape(ctx, timestamp, note.ClipName)
-	if err != nil {
-		return fmt.Errorf("failed to upload soundscape to Birdweather: %s", err)
-	}
-
-	// Post the detection to Birdweather
-	err = ctx.BirdweatherClient.PostDetection(ctx, soundscapeID, timestamp, note.CommonName, note.ScientificName, note.Confidence)
-	if err != nil {
-		return fmt.Errorf("failed to post detection to Birdweather: %s", err)
-	} else if ctx.Settings.Debug {
-		fmt.Println("Detection posted to Birdweather")
-	}
-
-	return nil
-}*/
 
 // WriteNotesTable writes a slice of Note structs to a table-formatted text output.
 // The output can be directed to either stdout or a file specified by the filename.
