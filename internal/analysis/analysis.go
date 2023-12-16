@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/config"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observation"
@@ -109,13 +110,24 @@ func DirectoryAnalysis(ctx *config.Context) error {
 // executeRealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 func RealtimeAnalysis(ctx *config.Context) error {
 	// Do not report repeated observations within this interval
-	const OccurrenceInterval = 15 // seconds
+	//const OccurrenceInterval = 15 // seconds
 
 	// initialize occurrence monitor to filter out repeated observations
-	ctx.OccurrenceMonitor = config.NewOccurrenceMonitor(OccurrenceInterval * time.Second)
+	ctx.OccurrenceMonitor = config.NewOccurrenceMonitor(time.Duration(ctx.Settings.Realtime.Log.Interval) * time.Second)
 
-	fmt.Printf("Starting BirdNET-Go Analyzer in realtime mode, threshold: %.2f, sensitivity: %.2f\n",
-		ctx.Settings.BirdNET.Threshold, ctx.Settings.BirdNET.Sensitivity)
+	// initialize birdweather client
+	if ctx.Settings.Realtime.Birdweather.Enabled {
+		ctx.BirdweatherClient = birdweather.NewClient(
+			ctx.Settings.Realtime.Birdweather.ID,
+			ctx.Settings.BirdNET.Latitude,
+			ctx.Settings.BirdNET.Longitude)
+	}
+
+	fmt.Println("Starting BirdNET-Go Analyzer in realtime mode")
+	fmt.Printf("Threshold: %v, sensitivity: %v, interval: %v\n",
+		ctx.Settings.BirdNET.Threshold,
+		ctx.Settings.BirdNET.Sensitivity,
+		ctx.Settings.Realtime.Log.Interval)
 
 	// Start necessary routines for real-time analysis.
 	myaudio.StartGoRoutines(ctx)
