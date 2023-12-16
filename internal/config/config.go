@@ -54,6 +54,7 @@ type Settings struct {
 
 		Birdweather struct {
 			Enabled   bool    // true to enable birdweather uploads
+			Debug     bool    // true to enable debug mode
 			ID        string  // birdweather ID
 			Threshold float64 // threshold for prediction confidence for uploads
 		}
