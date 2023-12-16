@@ -4,7 +4,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/go-tflite"
 	"gorm.io/gorm"
 )
@@ -22,6 +21,12 @@ type SpeciesConfidence struct {
 	Thresholds map[string]float32 // Maps species names to their custom confidence thresholds
 }
 
+// BirdweatherClientInterface defines what methods a BirdweatherClient must have
+type BirdweatherClientInterface interface {
+	UploadSoundscape(ctx *Context, timestamp, filePath string) (soundscapeID string, err error)
+	PostDetection(ctx *Context, soundscapeID, timestamp, commonName, scientificName string, confidence float64) error
+}
+
 // Context holds the overall application state, including the Settings and the OccurrenceMonitor.
 type Context struct {
 	Db                  *gorm.DB
@@ -34,7 +39,7 @@ type Context struct {
 	FilterInterpreter   *tflite.Interpreter
 	Labels              []string
 	CustomConfidence    SpeciesConfidence
-	BirdweatherClient   *birdweather.BirdweatherClient
+	BirdweatherClient   BirdweatherClientInterface
 }
 
 // NewOccurrenceMonitor creates a new instance of OccurrenceMonitor with the given reset duration.
