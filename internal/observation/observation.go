@@ -3,6 +3,7 @@ package observation
 import (
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -91,7 +92,7 @@ func LogNote(ctx *config.Context, note Note) error {
 		}
 	}
 
-	// If the configuration specifies a database (and it's not set to "none"), attempt to save the note to the database.
+	// If the configuration specifies SQLite or MySQL enabled set to true, attempt to save the note to the database
 	if ctx.Settings.Output.SQLite.Enabled || ctx.Settings.Output.MySQL.Enabled {
 		if ctx.Settings.Debug {
 			fmt.Println("Saving note to database...")
@@ -102,6 +103,7 @@ func LogNote(ctx *config.Context, note Note) error {
 		}
 	}
 
+	// If the configuration specifies Birdweather enabled set to true upload detection to Birdweather
 	if ctx.Settings.Realtime.Birdweather.Enabled {
 		// Upload the note to Birdweather as go routine
 		go UploadToBirdweather(ctx, note)
@@ -111,9 +113,49 @@ func LogNote(ctx *config.Context, note Note) error {
 	return nil
 }
 
+func UploadToBirdweather(ctx *config.Context, note Note) {
+	// Use system's local timezone
+	loc := time.Local
+
+	dateTimeString := fmt.Sprintf("%sT%s", note.Date, note.Time)
+	parsedTime, err := time.ParseInLocation("2006-01-02T15:04:05", dateTimeString, loc)
+	if err != nil {
+		log.Printf("Error parsing date: %v\n", err)
+		return
+	}
+
+	parsedTimeInTimeZone := parsedTime.In(loc)
+	timestamp := parsedTimeInTimeZone.Format("2006-01-02T15:04:05.000-0700")
+
+	soundscapeID, err := ctx.BirdweatherClient.UploadSoundscape(ctx, timestamp, note.ClipName)
+	if err != nil {
+		log.Printf("Failed to upload soundscape to Birdweather: %v\n", err)
+		return
+	}
+
+	if ctx.Settings.Realtime.Birdweather.Debug {
+		log.Println("Soundscape succesfully posted to Birdweather")
+	}
+
+	err = ctx.BirdweatherClient.PostDetection(ctx, soundscapeID, timestamp, note.CommonName, note.ScientificName, note.Confidence)
+	if err != nil {
+		log.Printf("Failed to post detection to Birdweather: %v\n", err)
+		return
+	}
+
+	if ctx.Settings.Realtime.Birdweather.Debug {
+		log.Println("Detection succesfully posted to Birdweather")
+	}
+}
+
+/*
+
 func UploadToBirdweather(ctx *config.Context, note Note) error {
-	if ctx.Settings.Debug {
-		fmt.Println("Uploading note to Birdweather...")
+	// Set the desired timezone, for example, EEST (Eastern European Summer Time) UTC+3
+	loc, err := time.LoadLocation("Europe/Helsinki") // Change this to the appropriate timezone
+	if err != nil {
+		fmt.Println("Error loading location:", err)
+		return err
 	}
 
 	// Combine date and time strings
@@ -123,21 +165,24 @@ func UploadToBirdweather(ctx *config.Context, note Note) error {
 	// The format string should match the format of your dateTimeString
 	parsedTime, err := time.Parse("2006-01-02T15:04:05", dateTimeString)
 	if err != nil {
+		fmt.Println("error parsing date: ", err)
 		return fmt.Errorf("error parsing date: %s", err)
 	}
 
-	// Format the parsed time in ISO8601 format with timezone
-	timestamp := parsedTime.Format("2006-01-02T15:04:05.000Z07:00")
+	// Convert parsedTime to the desired timezone
+	parsedTimeInTimeZone := parsedTime.In(loc)
 
-	soundscapeID, err := ctx.BirdweatherClient.UploadSoundscape(timestamp, note.ClipName)
+	// Format the time in ISO8601 format with the actual timezone offset
+	timestamp := parsedTimeInTimeZone.Format("2006-01-02T15:04:05.000Z0700")
+	fmt.Println(timestamp)
+
+	soundscapeID, err := ctx.BirdweatherClient.UploadSoundscape(ctx, timestamp, note.ClipName)
 	if err != nil {
 		return fmt.Errorf("failed to upload soundscape to Birdweather: %s", err)
-	} else if ctx.Settings.Debug {
-		fmt.Printf("Soundscape ID: %s\n", soundscapeID)
 	}
 
 	// Post the detection to Birdweather
-	err = ctx.BirdweatherClient.PostDetection(timestamp, soundscapeID)
+	err = ctx.BirdweatherClient.PostDetection(ctx, soundscapeID, timestamp, note.CommonName, note.ScientificName, note.Confidence)
 	if err != nil {
 		return fmt.Errorf("failed to post detection to Birdweather: %s", err)
 	} else if ctx.Settings.Debug {
@@ -145,7 +190,7 @@ func UploadToBirdweather(ctx *config.Context, note Note) error {
 	}
 
 	return nil
-}
+}*/
 
 // WriteNotesTable writes a slice of Note structs to a table-formatted text output.
 // The output can be directed to either stdout or a file specified by the filename.
