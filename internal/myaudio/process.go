@@ -17,6 +17,7 @@ func processData(data []byte, ctx *config.Context) error {
 	// temp assignment, fix later
 	const defaultBitDepth = 16
 
+	// get current time to track processing time
 	startTime := time.Now()
 
 	sampleData, err := ConvertToFloat32(data, defaultBitDepth)
@@ -24,26 +25,20 @@ func processData(data []byte, ctx *config.Context) error {
 		return fmt.Errorf("error converting to float32: %w", err)
 	}
 
-	results, err := predictSpecies(sampleData, ctx)
+	// run BirdNET inference
+	results, err := birdnet.Predict(sampleData, ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("error predicting species: %w", err)
 	}
 
+	// get elapsed time and log if enabled
 	elapsedTime := logProcessingTime(startTime, ctx)
 
 	if err := processPredictionResults(results, data, ctx, elapsedTime); err != nil {
-		return err
+		return fmt.Errorf("error processing prediction results: %w", err)
 	}
 
 	return nil
-}
-
-func predictSpecies(sampleData [][]float32, ctx *config.Context) ([]birdnet.Result, error) {
-	results, err := birdnet.Predict(sampleData, ctx)
-	if err != nil {
-		return nil, fmt.Errorf("error predicting: %w", err)
-	}
-	return results, nil
 }
 
 func logProcessingTime(startTime time.Time, ctx *config.Context) time.Duration {
@@ -133,7 +128,7 @@ func saveAudioClip(data []byte, ctx *config.Context) string {
 }
 
 func logObservation(ctx *config.Context, result birdnet.Result, clipName string, elapsedTime time.Duration) error {
-	beginTime, endTime := 0.0, 0.0 // temporary assignments
+	beginTime, endTime := 0.0, 0.0 // FIXME: get from prediction results
 	note := observation.New(ctx, beginTime, endTime, result.Species, float64(result.Confidence), clipName, elapsedTime)
 
 	if err := observation.LogNote(ctx, note); err != nil {
