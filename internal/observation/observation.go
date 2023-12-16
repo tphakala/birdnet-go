@@ -132,12 +132,16 @@ func UploadToBirdweather(ctx *config.Context, note Note) error {
 	soundscapeID, err := ctx.BirdweatherClient.UploadSoundscape(timestamp, note.ClipName)
 	if err != nil {
 		return fmt.Errorf("failed to upload soundscape to Birdweather: %s", err)
+	} else if ctx.Settings.Debug {
+		fmt.Printf("Soundscape ID: %s\n", soundscapeID)
 	}
 
 	// Post the detection to Birdweather
 	err = ctx.BirdweatherClient.PostDetection(timestamp, soundscapeID)
 	if err != nil {
 		return fmt.Errorf("failed to post detection to Birdweather: %s", err)
+	} else if ctx.Settings.Debug {
+		fmt.Println("Detection posted to Birdweather")
 	}
 
 	return nil
