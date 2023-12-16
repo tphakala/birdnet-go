@@ -31,15 +31,20 @@ func (c *BirdweatherClient) UploadSoundscape(timestamp, filePath string) (sounds
 	// Create the URL for the POST request
 	soundscapeURL := fmt.Sprintf("https://app.birdweather.com/api/v1/stations/%s/soundscapes?timestamp=%s", c.BirdweatherID, timestamp)
 
+	// debug print soundscapeURL
+	fmt.Println(soundscapeURL)
+
 	// Read and compress the WAV file
 	wavData, err := os.ReadFile(filePath)
 	if err != nil {
+		fmt.Printf("Failed to read WAV file: %s\n", filePath)
 		return "", err
 	}
 
 	var gzipWavData bytes.Buffer
 	gzipWriter := gzip.NewWriter(&gzipWavData)
 	if _, err := gzipWriter.Write(wavData); err != nil {
+		fmt.Printf("Failed to compress WAV file: %s\n", filePath)
 		return "", err
 	}
 	if err := gzipWriter.Close(); err != nil {
@@ -49,6 +54,7 @@ func (c *BirdweatherClient) UploadSoundscape(timestamp, filePath string) (sounds
 	// Create and send the POST request
 	req, err := http.NewRequest("POST", soundscapeURL, &gzipWavData)
 	if err != nil {
+		fmt.Printf("Failed to create POST request for soundscape: %s\n", filePath)
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
@@ -57,6 +63,7 @@ func (c *BirdweatherClient) UploadSoundscape(timestamp, filePath string) (sounds
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		fmt.Printf("Failed to upload soundscape: %s\n", filePath)
 		return "", err
 	}
 	defer resp.Body.Close()
@@ -69,6 +76,8 @@ func (c *BirdweatherClient) UploadSoundscape(timestamp, filePath string) (sounds
 		}
 		fmt.Println("Successfully uploaded soundscape.")
 		return sdata["soundscape"]["id"], nil
+	} else {
+		fmt.Printf("Failed to upload soundscape: %s\n", filePath)
 	}
 
 	return "", fmt.Errorf("failed to upload soundscape, status code: %d", resp.StatusCode)
