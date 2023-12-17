@@ -183,6 +183,13 @@ func LoadCustomSpeciesConfidence(filePath string) (SpeciesConfidence, error) {
 func getDefaultConfigPaths() ([]string, error) {
 	var configPaths []string
 
+	// Get the executable directory
+	exePath, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("error fetching executable path: %v", err)
+	}
+	exeDir := filepath.Dir(exePath)
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("error fetching user directory: %v", err)
@@ -192,7 +199,7 @@ func getDefaultConfigPaths() ([]string, error) {
 	case "windows":
 		// Windows path, usually in "C:\Users\Username\AppData\Roaming"
 		configPaths = []string{
-			".",
+			exeDir,
 			filepath.Join(homeDir, "AppData", "Local", "birdnet-go"),
 		}
 	default:
@@ -200,7 +207,6 @@ func getDefaultConfigPaths() ([]string, error) {
 		configPaths = []string{
 			filepath.Join(homeDir, ".config", "birdnet-go"),
 			"/etc/birdnet-go",
-			".",
 		}
 	}
 
