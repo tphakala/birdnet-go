@@ -268,7 +268,7 @@ realtime:
     interval: 15		# minimum interval between repeating log messages in seconds
   birdweather:
     enabled: false		# true to enable birdweather uploads
-	debug: false		# true to enable birdweather api debug mode
+    debug: false		# true to enable birdweather api debug mode
     id: 00000			# birdweather ID
     threshold: 0.9		# threshold of prediction confidence for uploads, 0.0 to 1.0
 
