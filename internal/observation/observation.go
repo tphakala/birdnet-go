@@ -84,23 +84,21 @@ func LogNote(ctx *config.Context, note Note) error {
 	// If a log file path is specified in the configuration, attempt to log the note to this file.
 	if ctx.Settings.Realtime.Log.Enabled {
 		if ctx.Settings.Debug {
-			fmt.Println("Logging note to file...")
+			log.Println("Logging note to file")
 		}
 		if err := LogNoteToFile(ctx, note); err != nil {
 			// If an error occurs when logging to a file, wrap and return the error.
-			fmt.Printf("failed to log note to file: %s", err)
+			log.Printf("Failed to log note to file: %v", err)
 		}
 	}
 
 	// If the configuration specifies SQLite or MySQL enabled set to true, attempt to save the note to the database
 	if ctx.Settings.Output.SQLite.Enabled || ctx.Settings.Output.MySQL.Enabled {
 		if ctx.Settings.Debug {
-			fmt.Println("Saving note to database...")
+			log.Println("Saving note to database")
 		}
-		if err := SaveToDatabase(ctx, note); err != nil {
-			// If an error occurs when saving to the database, wrap and return the error.
-			fmt.Printf("failed to save note to database: %s", err)
-		}
+		// Save the note to the database as go routine
+		go SaveToDatabase(ctx, note)
 	}
 
 	// If the configuration specifies Birdweather enabled set to true upload detection to Birdweather
