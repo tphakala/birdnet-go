@@ -97,8 +97,10 @@ func LogNote(ctx *config.Context, note Note) error {
 		if ctx.Settings.Debug {
 			log.Println("Saving note to database")
 		}
-		// Save the note to the database as go routine
-		go SaveToDatabase(ctx, note)
+		if err := SaveToDatabase(ctx, note); err != nil {
+			// If an error occurs when saving to database, wrap and return the error.
+			log.Printf("Failed to save note to database: %v", err)
+		}
 	}
 
 	// If the configuration specifies Birdweather enabled set to true upload detection to Birdweather
