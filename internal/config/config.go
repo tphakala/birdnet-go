@@ -259,7 +259,7 @@ realtime:
   log:
     enabled: false		# true to enable OBS chat log
     path: birdnet.txt	# path to OBS chat log
-	interval: 15		# minimum interval between repeating log messages in seconds
+    interval: 15		# minimum interval between repeating log messages in seconds
   birdweather:
     enabled: false		# true to enable birdweather uploads
 	debug: false		# true to enable birdweather api debug mode
