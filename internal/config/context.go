@@ -21,12 +21,6 @@ type SpeciesConfidence struct {
 	Thresholds map[string]float32 // Maps species names to their custom confidence thresholds
 }
 
-// BirdweatherClientInterface defines what methods a BirdweatherClient must have
-type BirdweatherClientInterface interface {
-	UploadSoundscape(ctx *Context, timestamp, filePath string) (soundscapeID string, err error)
-	PostDetection(ctx *Context, soundscapeID, timestamp, commonName, scientificName string, confidence float64) error
-}
-
 // Context holds the overall application state, including the Settings and the OccurrenceMonitor.
 type Context struct {
 	Db                  *gorm.DB
