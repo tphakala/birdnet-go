@@ -14,18 +14,17 @@ BirdNET-Go is an application inspired by BirdNET Analyzer, developed by the K. L
 
 BirdNET-Go features
 
-- Works on Windows, Linux and macOS
-- Can analyse 48kHz WAV files from single file or directory of WAV files
-- Outputs to Raven selection table and CSV format
-- Realtime analysis of soundcard capture, analysis output to log file, SQLite or MySQL
-- Log file output can be used as overlay in OBS for bird feeder streams etc., see it in action at https://www.youtube.com/watch?v=5Ws-87a3gEk
-- Localized species labels thanks to translations by @patlevin
+- 24/7 realtime bird song analysis of soundcard capture, analysis output to log file, SQLite or MySQL
+- BirdWeather upload support
+- WAV file analysis, outputs to Raven selection table and CSV format
+- Realtime log file output can be used as overlay in OBS for bird feeder streams etc., see it in action at https://www.youtube.com/watch?v=5Ws-87a3gEk
 - Minimal runtime dependencies, BirdNET Tensorflow Lite model is embedded in compiled binary
+- Runs on Windows, Linux and macOS
 
 ## Executable Distributions
 
 Ready to run binaries can be found from releases section https://github.com/tphakala/BirdNET-Go/releases/
-Arhives also contains libtensorflowlite_c library.
+Archives also contains libtensorflowlite_c library.
 
 ## Compiling for Linux
 
