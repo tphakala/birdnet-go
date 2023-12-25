@@ -112,10 +112,6 @@ func saveAudioClip(data []byte, ctx *config.Context) string {
 	switch ctx.Settings.Realtime.AudioExport.Type {
 	case "wav":
 		err = savePCMDataToWAV(clipName, data)
-	case "flac":
-		err = savePCMDataToFlac(clipName, data)
-	case "mp3":
-		err = savePCMDataToMP3(clipName, data)
 	}
 
 	if err != nil {
