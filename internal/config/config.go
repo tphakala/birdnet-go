@@ -107,14 +107,12 @@ func Load() (*Context, error) {
 	// init custom confidence list
 	customConfidence, err := LoadCustomSpeciesConfidence()
 	if err != nil {
-		// print error
-		fmt.Println("error reading species conficende config: ", err)
+		// print error is loading failed
+		fmt.Println("error reading species conficende config:", err)
 		// set customConfidence list as empty if file not found
 		customConfidence = SpeciesConfidence{}
 	}
 	ctx.CustomConfidence = customConfidence
-
-	fmt.Println(ctx.CustomConfidence)
 
 	return ctx, nil
 }
@@ -172,7 +170,8 @@ func LoadCustomSpeciesConfidence() (SpeciesConfidence, error) {
 		}
 	}
 	if file == nil {
-		return SpeciesConfidence{}, fmt.Errorf("custom species confidence file not found in any default config paths")
+		// species confidence file not found, return empty struct and fail silently
+		return SpeciesConfidence{}, nil
 	}
 	defer file.Close()
 
