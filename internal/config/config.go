@@ -94,7 +94,7 @@ func Load() (*Context, error) {
 		SpeciesListUpdated: time.Now().AddDate(0, 0, -1),
 	}
 
-	// Initialize viper to read config
+	// Initialize viper and read config
 	if err := initViper(); err != nil {
 		return nil, fmt.Errorf("error initializing viper: %w", err)
 	}
@@ -105,7 +105,7 @@ func Load() (*Context, error) {
 	}
 
 	// init custom confidence list
-	customConfidence, err := LoadCustomSpeciesConfidence("custom_confidence_list.txt")
+	customConfidence, err := LoadCustomSpeciesConfidence()
 	if err != nil {
 		// set customConfidence list as empty if file not found
 		customConfidence = SpeciesConfidence{}
@@ -145,16 +145,34 @@ func initViper() error {
 }
 
 // Load list of custom thresholds for species
-func LoadCustomSpeciesConfidence(filePath string) (SpeciesConfidence, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return SpeciesConfidence{}, fmt.Errorf("error opening custom species confidence file: %w", err)
-	}
-	defer file.Close()
-
+func LoadCustomSpeciesConfidence() (SpeciesConfidence, error) {
+	// Initialize an empty SpeciesConfidence struct
 	var speciesConfidence SpeciesConfidence
 	speciesConfidence.Thresholds = make(map[string]float32)
 
+	// Get the default config paths
+	configPaths, err := getDefaultConfigPaths()
+	if err != nil {
+		return SpeciesConfidence{}, fmt.Errorf("error getting default config paths: %w", err)
+	}
+
+	var fileName string = "species_confidence.txt"
+
+	var file *os.File
+	// Look for the custom species confidence file in the default config paths
+	for _, path := range configPaths {
+		filePath := filepath.Join(path, fileName)
+		file, err = os.Open(filePath)
+		if err == nil {
+			break // file found
+		}
+	}
+	if file == nil {
+		return SpeciesConfidence{}, fmt.Errorf("custom species confidence file not found in any default config paths")
+	}
+	defer file.Close()
+
+	// Read the custom species confidence file
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -169,6 +187,7 @@ func LoadCustomSpeciesConfidence(filePath string) (SpeciesConfidence, error) {
 			continue // skip lines with invalid confidence values
 		}
 
+		// Add the species and confidence to the SpeciesConfidence struct
 		speciesConfidence.Thresholds[species] = float32(confidence)
 	}
 
@@ -197,10 +216,10 @@ func getDefaultConfigPaths() ([]string, error) {
 
 	switch runtime.GOOS {
 	case "windows":
-		// Windows path, usually in "C:\Users\Username\AppData\Roaming"
+		// Windows path
 		configPaths = []string{
 			exeDir,
-			filepath.Join(homeDir, "AppData", "Local", "birdnet-go"),
+			filepath.Join(homeDir, "AppData", "Roaming", "birdnet-go"),
 		}
 	default:
 		// Linux and macOS path
