@@ -107,10 +107,14 @@ func Load() (*Context, error) {
 	// init custom confidence list
 	customConfidence, err := LoadCustomSpeciesConfidence()
 	if err != nil {
+		// print error
+		fmt.Println("error reading species conficende config: ", err)
 		// set customConfidence list as empty if file not found
 		customConfidence = SpeciesConfidence{}
 	}
 	ctx.CustomConfidence = customConfidence
+
+	fmt.Println(ctx.CustomConfidence)
 
 	return ctx, nil
 }
