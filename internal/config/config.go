@@ -283,7 +283,7 @@ realtime:
   audioexport:
     enabled: false 		# true to export audio clips containing indentified bird calls
     path: clips/   		# path to audio clip export directory
-    type: wav      		# audio file type, wav, mp3 or flac
+    type: wav      		# only wav supported for now
   log:
     enabled: false		# true to enable OBS chat log
     path: birdnet.txt	# path to OBS chat log
