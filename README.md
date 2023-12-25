@@ -17,7 +17,7 @@ BirdNET-Go features
 - 24/7 realtime bird song analysis of soundcard capture, analysis output to log file, SQLite or MySQL
 - BirdWeather upload support
 - WAV file analysis, outputs to Raven selection table and CSV format
-- Realtime log file output can be used as overlay in OBS for bird feeder streams etc., see it in action at https://www.youtube.com/watch?v=5Ws-87a3gEk
+- Realtime log file output can be used as overlay in OBS for bird feeder streams etc., see it in action at https://www.youtube.com/watch?v=FXW1efd9Dro
 - Minimal runtime dependencies, BirdNET Tensorflow Lite model is embedded in compiled binary
 - Runs on Windows, Linux and macOS
 
