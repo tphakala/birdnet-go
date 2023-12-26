@@ -65,9 +65,10 @@ func monitorCtrlC() {
 	// Block until a signal is received
 	<-sigChan
 
+	fmt.Println("\nReceived Ctrl+C, shutting down")
+
 	// When received, send a message to QuitChannel to clean up
 	close(QuitChannel)
-	fmt.Println("\nReceived Ctrl+C, shutting down")
 }
 
 func CaptureAudio(ctx *config.Context, wg *sync.WaitGroup) {
