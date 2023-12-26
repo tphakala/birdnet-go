@@ -188,7 +188,7 @@ func LoadSpeciesConfig() (SpeciesConfig, error) {
 				continue // skip malformed lines
 			}
 
-			species := strings.TrimSpace(record[0])
+			species := strings.ToLower(strings.TrimSpace(record[0])) // Convert species to lowercase
 			confidence, err := strconv.ParseFloat(strings.TrimSpace(record[1]), 32)
 			if err != nil {
 				continue // skip lines with invalid confidence values
