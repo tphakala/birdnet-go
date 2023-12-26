@@ -17,8 +17,8 @@ type OccurrenceMonitor struct {
 	Timer         *time.Timer
 }
 
-type SpeciesConfidence struct {
-	Thresholds map[string]float32 // Maps species names to their custom confidence thresholds
+type SpeciesConfig struct {
+	Threshold map[string]float32 // Maps species names to their custom confidence thresholds
 }
 
 // Context holds the overall application state, including the Settings and the OccurrenceMonitor.
@@ -32,7 +32,7 @@ type Context struct {
 	AnalysisInterpreter *tflite.Interpreter
 	FilterInterpreter   *tflite.Interpreter
 	Labels              []string
-	CustomConfidence    SpeciesConfidence
+	SpeciesConfig       SpeciesConfig
 	BirdweatherClient   BirdweatherClientInterface
 }
 
