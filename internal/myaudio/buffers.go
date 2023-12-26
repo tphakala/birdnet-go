@@ -1,6 +1,7 @@
 package myaudio
 
 import (
+	"sync"
 	"time"
 
 	"github.com/smallnest/ringbuffer"
@@ -65,10 +66,14 @@ func readFromBuffer() []byte {
 }
 
 // BufferMonitor monitors the buffer and processes audio data when enough data is present.
-func BufferMonitor(ctx *config.Context) {
+func BufferMonitor(ctx *config.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	for {
 		select {
 		case <-QuitChannel:
+			// Make sure to complete any ongoing processData before exiting.
+			// This could involve some flag or condition to check if processData is running.
 			return
 		default:
 			data := readFromBuffer()
