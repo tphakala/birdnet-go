@@ -140,6 +140,8 @@ Flags:
 Use "birdnet [command] --help" for more information about a command.
 ```
 
+There is more detailed usage documentation at wiki https://github.com/tphakala/birdnet-go/wiki
+
 ## License
 
 Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
