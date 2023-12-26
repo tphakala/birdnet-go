@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -28,22 +29,31 @@ var QuitChannel = make(chan struct{})
 var restartChannel = make(chan struct{})
 
 func StartGoRoutines(ctx *config.Context) {
+	var wg sync.WaitGroup
+	controlChannel := make(chan struct{}, 1) // Buffered channel for restart control
+
 	InitRingBuffer(bufferSize)
-	go CaptureAudio(ctx)
-	go BufferMonitor(ctx)
+
+	wg.Add(1)
+	go CaptureAudio(ctx, &wg)
+
+	wg.Add(1)
+	go BufferMonitor(ctx, &wg)
+
 	go monitorCtrlC()
 
 	for {
 		select {
 		case <-QuitChannel:
-			// QuitChannel was closed, clean up and return.
+			close(controlChannel) // Signal to stop any restart attempts
+			wg.Wait()
 			return
 		case <-restartChannel:
-			// RestartChannel received a signal, restart CaptureAudio goroutine.
-			go CaptureAudio(ctx)
+			// Restart signal received, restart CaptureAudio goroutine
+			wg.Add(1)
+			go CaptureAudio(ctx, &wg)
 		}
 	}
-
 }
 
 func monitorCtrlC() {
@@ -57,11 +67,12 @@ func monitorCtrlC() {
 
 	// When received, send a message to QuitChannel to clean up
 	close(QuitChannel)
-
 	fmt.Println("\nReceived Ctrl+C, shutting down")
 }
 
-func CaptureAudio(ctx *config.Context) {
+func CaptureAudio(ctx *config.Context, wg *sync.WaitGroup) {
+	defer wg.Done() // Ensure this is called when the goroutine exits
+
 	if ctx.Settings.Debug {
 		fmt.Println("Initializing context")
 	}
@@ -87,9 +98,17 @@ func CaptureAudio(ctx *config.Context) {
 		writeToBuffer(pSamples)
 	}
 
+	// onStopDevice is called when the device stops, either normally or unexpectedly
 	onStopDevice := func() {
-		time.Sleep(1000 * time.Millisecond)
-		restartChannel <- struct{}{}
+		select {
+		case <-QuitChannel:
+			// Quit signal has been received, do not signal for a restart
+			return
+		default:
+			// No quit signal received, safe to signal for a restart
+			fmt.Println("Audio device stopped, restarting capture")
+			restartChannel <- struct{}{}
+		}
 	}
 
 	// Device callback to assign function to call when audio data is received
