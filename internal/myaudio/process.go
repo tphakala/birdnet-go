@@ -100,19 +100,19 @@ func processPredictionResults(results []birdnet.Result, data []byte, ctx *config
 	return logObservation(ctx, results[0], clipName, elapsedTime)
 }
 
+// saveAudioClip saves the given audio data to a file in the configured path
 func saveAudioClip(data []byte, ctx *config.Context) string {
 	if ctx.Settings.Realtime.AudioExport.Path == "" {
 		return ""
 	}
 
-	baseFileName := strconv.FormatInt(time.Now().Unix(), 10)
-	clipName := fmt.Sprintf("%s/%s.%s", ctx.Settings.Realtime.AudioExport.Path, baseFileName, ctx.Settings.Realtime.AudioExport.Type)
+	basePath := config.GetBasePath(ctx.Settings.Realtime.AudioExport.Path)
+	filename := strconv.FormatInt(time.Now().Unix(), 10)
+	fileType := "wav"
+	clipName := fmt.Sprintf("%s/%s.%s", basePath, filename, fileType)
 
-	var err error
-	switch ctx.Settings.Realtime.AudioExport.Type {
-	case "wav":
-		err = savePCMDataToWAV(clipName, data)
-	}
+	// export audio clip as wav
+	err := savePCMDataToWAV(clipName, data)
 
 	if err != nil {
 		fmt.Printf("error saving audio clip to %s: %s\n", ctx.Settings.Realtime.AudioExport.Type, err)

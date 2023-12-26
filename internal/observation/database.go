@@ -3,6 +3,7 @@ package observation
 import (
 	"fmt"
 	"log"
+	"path/filepath"
 
 	"github.com/tphakala/birdnet-go/internal/config"
 	"gorm.io/driver/mysql"
@@ -17,11 +18,20 @@ func InitializeDatabase(ctx *config.Context) error {
 
 	// Prioritize SQLite initialization
 	if ctx.Settings.Output.SQLite.Enabled {
-		ctx.Db, err = gorm.Open(sqlite.Open(ctx.Settings.Output.SQLite.Path), &gorm.Config{})
+		// Separate the directory and file name from the SQLite path
+		dir, fileName := filepath.Split(ctx.Settings.Output.SQLite.Path)
+
+		// Expand the directory path to an absolute path
+		basePath := config.GetBasePath(dir)
+
+		// Recombine to form the full absolute path of the log file
+		absoluteFilePath := filepath.Join(basePath, fileName)
+
+		ctx.Db, err = gorm.Open(sqlite.Open(absoluteFilePath), &gorm.Config{})
 		if err != nil {
 			return fmt.Errorf("failed to open SQLite database: %v", err)
 		} else if ctx.Settings.Debug {
-			log.Println("SQLite database connection initialized")
+			log.Println("SQLite database connection initialized:", absoluteFilePath)
 		}
 
 		// Perform SQLite migration

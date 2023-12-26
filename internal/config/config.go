@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -158,7 +157,7 @@ func LoadCustomSpeciesConfidence() (SpeciesConfidence, error) {
 		return SpeciesConfidence{}, fmt.Errorf("error getting default config paths: %w", err)
 	}
 
-	var fileName string = "species_confidence.txt"
+	var fileName string = "species_confidence.csv"
 
 	var file *os.File
 	// Look for the custom species confidence file in the default config paths
@@ -199,40 +198,6 @@ func LoadCustomSpeciesConfidence() (SpeciesConfidence, error) {
 	}
 
 	return speciesConfidence, nil
-}
-
-// getDefaultConfigPaths returns a list of default config paths for the current OS
-func getDefaultConfigPaths() ([]string, error) {
-	var configPaths []string
-
-	// Get the executable directory
-	exePath, err := os.Executable()
-	if err != nil {
-		return nil, fmt.Errorf("error fetching executable path: %v", err)
-	}
-	exeDir := filepath.Dir(exePath)
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("error fetching user directory: %v", err)
-	}
-
-	switch runtime.GOOS {
-	case "windows":
-		// Windows path
-		configPaths = []string{
-			exeDir,
-			filepath.Join(homeDir, "AppData", "Roaming", "birdnet-go"),
-		}
-	default:
-		// Linux and macOS path
-		configPaths = []string{
-			filepath.Join(homeDir, ".config", "birdnet-go"),
-			"/etc/birdnet-go",
-		}
-	}
-
-	return configPaths, nil
 }
 
 // createDefaultConfig creates a default config file and writes it to the default config path
