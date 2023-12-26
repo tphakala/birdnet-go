@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/config"
@@ -58,8 +59,11 @@ func processPredictionResults(results []birdnet.Result, data []byte, ctx *config
 	_, species, _ := observation.ParseSpeciesString(results[0].Species)
 	confidence := results[0].Confidence
 
+	// Convert species to lowercase for case-insensitive comparison
+	speciesLowercase := strings.ToLower(species)
+
 	// Use custom confidence threshold if it exists for the species, otherwise use the global threshold
-	confidenceThreshold, exists := ctx.SpeciesConfig.Threshold[species]
+	confidenceThreshold, exists := ctx.SpeciesConfig.Threshold[speciesLowercase]
 	if !exists {
 		confidenceThreshold = float32(ctx.Settings.BirdNET.Threshold)
 	} else {
