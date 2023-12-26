@@ -113,7 +113,7 @@ func RealtimeAnalysis(ctx *config.Context) error {
 	//const OccurrenceInterval = 15 // seconds
 
 	// initialize occurrence monitor to filter out repeated observations
-	ctx.OccurrenceMonitor = config.NewOccurrenceMonitor(time.Duration(ctx.Settings.Realtime.Log.Interval) * time.Second)
+	ctx.OccurrenceMonitor = config.NewOccurrenceMonitor(time.Duration(ctx.Settings.Realtime.Interval) * time.Second)
 
 	// initialize birdweather client
 	if ctx.Settings.Realtime.Birdweather.Enabled {
@@ -127,7 +127,7 @@ func RealtimeAnalysis(ctx *config.Context) error {
 	fmt.Printf("Threshold: %v, sensitivity: %v, interval: %v\n",
 		ctx.Settings.BirdNET.Threshold,
 		ctx.Settings.BirdNET.Sensitivity,
-		ctx.Settings.Realtime.Log.Interval)
+		ctx.Settings.Realtime.Interval)
 
 	// Start necessary routines for real-time analysis.
 	myaudio.StartGoRoutines(ctx)

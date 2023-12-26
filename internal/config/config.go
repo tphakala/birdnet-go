@@ -37,6 +37,7 @@ type Settings struct {
 	}
 
 	Realtime struct {
+		Interval       int  // minimum interval between log messages in seconds
 		ProcessingTime bool // true to report processing time for each prediction
 
 		AudioExport struct {
@@ -46,9 +47,8 @@ type Settings struct {
 		}
 
 		Log struct {
-			Enabled  bool   // true to enable OBS chat log
-			Path     string // path to OBS chat log
-			Interval int    // minimum interval between log messages in seconds
+			Enabled bool   // true to enable OBS chat log
+			Path    string // path to OBS chat log
 		}
 
 		Birdweather struct {
@@ -249,6 +249,7 @@ birdnet:
 
 # Realtime processing settings
 realtime:
+  interval: 15		    # duplicate prediction interval in seconds
   processingtime: false # true to report processing time for each prediction
   audioexport:
     enabled: false 		# true to export audio clips containing indentified bird calls
@@ -257,12 +258,11 @@ realtime:
   log:
     enabled: false		# true to enable OBS chat log
     path: birdnet.txt	# path to OBS chat log
-    interval: 15		# minimum interval between repeating log messages in seconds
+    
   birdweather:
     enabled: false		# true to enable birdweather uploads
     debug: false		# true to enable birdweather api debug mode
     id: 00000			# birdweather ID
-    threshold: 0.9		# threshold of prediction confidence for uploads, 0.0 to 1.0
 
 # Ouput settings
 output:
