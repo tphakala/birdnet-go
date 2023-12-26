@@ -2,7 +2,7 @@
 package config
 
 import (
-	"bufio"
+	"encoding/csv"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -104,14 +104,14 @@ func Load() (*Context, error) {
 	}
 
 	// init custom confidence list
-	customConfidence, err := LoadCustomSpeciesConfidence()
+	speciesConfig, err := LoadSpeciesConfig()
 	if err != nil {
 		// print error is loading failed
 		fmt.Println("error reading species conficende config:", err)
 		// set customConfidence list as empty if file not found
-		customConfidence = SpeciesConfidence{}
+		speciesConfig = SpeciesConfig{}
 	}
-	ctx.CustomConfidence = customConfidence
+	ctx.SpeciesConfig = speciesConfig
 
 	return ctx, nil
 }
@@ -145,59 +145,64 @@ func initViper() error {
 	return nil
 }
 
-// Load list of custom thresholds for species
-func LoadCustomSpeciesConfidence() (SpeciesConfidence, error) {
-	// Initialize an empty SpeciesConfidence struct
-	var speciesConfidence SpeciesConfidence
-	speciesConfidence.Thresholds = make(map[string]float32)
+// LoadCustomSpeciesConfidence loads a list of custom thresholds for species from a CSV file.
+func LoadSpeciesConfig() (SpeciesConfig, error) {
+	var speciesConfig SpeciesConfig
+	speciesConfig.Threshold = make(map[string]float32)
 
-	// Get the default config paths
 	configPaths, err := getDefaultConfigPaths()
 	if err != nil {
-		return SpeciesConfidence{}, fmt.Errorf("error getting default config paths: %w", err)
+		return SpeciesConfig{}, fmt.Errorf("error getting default config paths: %w", err)
 	}
 
-	var fileName string = "species_confidence.csv"
+	fileName := "species_config.csv"
 
-	var file *os.File
-	// Look for the custom species confidence file in the default config paths
+	// Search for the file in the provided config paths.
 	for _, path := range configPaths {
 		filePath := filepath.Join(path, fileName)
-		file, err = os.Open(filePath)
-		if err == nil {
-			break // file found
-		}
-	}
-	if file == nil {
-		// species confidence file not found, return empty struct and fail silently
-		return SpeciesConfidence{}, nil
-	}
-	defer file.Close()
-
-	// Read the custom species confidence file
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		parts := strings.Split(line, ",")
-		if len(parts) != 2 {
-			continue // skip malformed lines
-		}
-
-		species := strings.TrimSpace(parts[0])
-		confidence, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 32)
+		file, err := os.Open(filePath)
 		if err != nil {
-			continue // skip lines with invalid confidence values
+			if os.IsNotExist(err) {
+				continue // file not found, try next path
+			}
+			return SpeciesConfig{}, fmt.Errorf("error opening file '%s': %w", filePath, err)
+		}
+		defer file.Close()
+
+		// Read the CSV file using csv.Reader
+		reader := csv.NewReader(file)
+
+		// Customize the reader's settings
+		reader.Comma = ','   // Default delimiter
+		reader.Comment = '#' // Lines beginning with '#' will be ignored
+
+		// Read the CSV file
+		records, err := reader.ReadAll()
+		if err != nil {
+			return SpeciesConfig{}, fmt.Errorf("error reading CSV file '%s': %w", filePath, err)
 		}
 
-		// Add the species and confidence to the SpeciesConfidence struct
-		speciesConfidence.Thresholds[species] = float32(confidence)
+		// Process the records
+		for _, record := range records {
+			if len(record) != 2 {
+				continue // skip malformed lines
+			}
+
+			species := strings.TrimSpace(record[0])
+			confidence, err := strconv.ParseFloat(strings.TrimSpace(record[1]), 32)
+			if err != nil {
+				continue // skip lines with invalid confidence values
+			}
+
+			speciesConfig.Threshold[species] = float32(confidence)
+		}
+
+		fmt.Println("Read species config file:", filePath)
+		return speciesConfig, nil // Return on successful read.
 	}
 
-	if err := scanner.Err(); err != nil {
-		return SpeciesConfidence{}, fmt.Errorf("error reading custom species confidence file: %w", err)
-	}
-
-	return speciesConfidence, nil
+	// File not found in any of the config paths.
+	return SpeciesConfig{}, fmt.Errorf("species confidence file '%s' not found", fileName)
 }
 
 // createDefaultConfig creates a default config file and writes it to the default config path

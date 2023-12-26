@@ -59,7 +59,7 @@ func processPredictionResults(results []birdnet.Result, data []byte, ctx *config
 	confidence := results[0].Confidence
 
 	// Use custom confidence threshold if it exists for the species, otherwise use the global threshold
-	confidenceThreshold, exists := ctx.CustomConfidence.Thresholds[species]
+	confidenceThreshold, exists := ctx.SpeciesConfig.Threshold[species]
 	if !exists {
 		confidenceThreshold = float32(ctx.Settings.BirdNET.Threshold)
 	} else {
