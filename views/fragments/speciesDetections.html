@@ -1,0 +1,37 @@
+{{define "speciesDetections"}}
+
+
+<table class="table w-full text-sm text-left text-gray-500 dark:text-gray-400">
+  <thead class="text-xs">
+    <tr>
+      <th scope="col" class="py-2 px-6">Date</th>
+      <th scope="col" class="py-2 px-6">Time</th>
+      <th scope="col" class="py-2 px-6">Common Name</th>
+      <th scope="col" class="py-2 px-6">Confidence</th>
+      <th scope="col" class="py-2 px-6">Recording</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .}}
+    <tr class="">
+      <td class="py-1 px-6">{{.Date}}</td>
+      <td class="py-1 px-6">{{.Time}}</td>
+      <td class="py-1 px-6">{{title .CommonName}}</td>
+      <td class="py-1 px-6">
+        <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
+          {{confidence .Confidence}}
+        </div>
+      </td>
+      <td class="py-1 px-6">
+        <!-- Make sure the path to the audio files is correct -->
+        <audio controls class="audio-control">
+          <source src="{{.ClipName}}" type="audio/wav">
+          Your browser does not support the audio element.
+        </audio>
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+
+{{end}}

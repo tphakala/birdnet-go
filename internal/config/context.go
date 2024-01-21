@@ -8,19 +8,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// OccurrenceMonitor to track species occurrences and manage state reset.
-type OccurrenceMonitor struct {
-	LastSpecies   string
-	OccurrenceMap map[string]int
-	ResetDuration time.Duration
-	Mutex         sync.Mutex
-	Timer         *time.Timer
-}
-
-type SpeciesConfig struct {
-	Threshold map[string]float32 // Maps species names to their custom confidence thresholds
-}
-
 // Context holds the overall application state, including the Settings and the OccurrenceMonitor.
 type Context struct {
 	Db                  *gorm.DB
@@ -34,6 +21,19 @@ type Context struct {
 	Labels              []string
 	SpeciesConfig       SpeciesConfig
 	BirdweatherClient   BirdweatherClientInterface
+}
+
+// OccurrenceMonitor to track species occurrences and manage state reset.
+type OccurrenceMonitor struct {
+	LastSpecies   string
+	OccurrenceMap map[string]int
+	ResetDuration time.Duration
+	Mutex         sync.Mutex
+	Timer         *time.Timer
+}
+
+type SpeciesConfig struct {
+	Threshold map[string]float32 // Maps species names to their custom confidence thresholds
 }
 
 // NewOccurrenceMonitor creates a new instance of OccurrenceMonitor with the given reset duration.

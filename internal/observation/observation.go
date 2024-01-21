@@ -9,28 +9,8 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/model"
 )
-
-// Observation represents a single observation data point
-type Note struct {
-	Id             uint `gorm:"column:id;primaryKey;autoIncrement"`
-	SourceNode     string
-	Date           string `gorm:"index"` // Index on the 'Date' field
-	Time           string
-	InputFile      string
-	BeginTime      float64
-	EndTime        float64
-	SpeciesCode    string
-	ScientificName string `gorm:"index"` // Index on the 'ScientificName' field
-	CommonName     string `gorm:"index"` // Index on the 'CommonName' field
-	Confidence     float64
-	Latitude       float64
-	Longitude      float64
-	Threshold      float64
-	Sensitivity    float64
-	ClipName       string
-	ProcessingTime time.Duration
-}
 
 // ParseSpeciesString extracts the scientific name, common name, and species code from the species string.
 func ParseSpeciesString(species string) (string, string, string) {
@@ -47,7 +27,7 @@ func ParseSpeciesString(species string) (string, string, string) {
 
 // New creates and returns a new Note with the provided parameters and current date and time.
 // It uses the configuration and parsing functions to set the appropriate fields.
-func New(ctx *config.Context, beginTime, endTime float64, species string, confidence float64, clipName string, elapsedTime time.Duration) Note {
+func New(ctx *config.Context, beginTime, endTime float64, species string, confidence float64, clipName string, elapsedTime time.Duration) model.Note {
 	// Parse the species string to get the scientific name, common name, and species code.
 	scientificName, commonName, speciesCode := ParseSpeciesString(species)
 
@@ -58,8 +38,8 @@ func New(ctx *config.Context, beginTime, endTime float64, species string, confid
 	time := detectionTime.Format("15:04:05")
 
 	// Return a new Note struct populated with the provided parameters as well as the current date and time.
-	return Note{
-		SourceNode:     ctx.Settings.Node.Name,           // From the provided configuration settings.
+	return model.Note{
+		SourceNode:     ctx.Settings.Main.Name,           // From the provided configuration settings.
 		Date:           date,                             // Use ISO 8601 date format.
 		Time:           time,                             // Use 24-hour time format.
 		InputFile:      ctx.Settings.Input.Path,          // From the provided configuration settings.
@@ -80,7 +60,7 @@ func New(ctx *config.Context, beginTime, endTime float64, species string, confid
 
 // LogNote is the central function for logging observations. It writes a note to a log file and/or database
 // depending on the provided configuration settings.
-func LogNote(ctx *config.Context, note Note) error {
+func LogNote(ctx *config.Context, note model.Note) error {
 	// If a log file path is specified in the configuration, attempt to log the note to this file.
 	if ctx.Settings.Realtime.Log.Enabled {
 		if ctx.Settings.Debug {
@@ -114,7 +94,7 @@ func LogNote(ctx *config.Context, note Note) error {
 }
 
 // Upload detected clip and details to Birdweather
-func UploadToBirdweather(ctx *config.Context, note Note) {
+func UploadToBirdweather(ctx *config.Context, note model.Note) {
 	// Use system's local timezone
 	loc := time.Local
 
@@ -152,7 +132,7 @@ func UploadToBirdweather(ctx *config.Context, note Note) {
 // WriteNotesTable writes a slice of Note structs to a table-formatted text output.
 // The output can be directed to either stdout or a file specified by the filename.
 // If the filename is an empty string, it writes to stdout.
-func WriteNotesTable(ctx *config.Context, notes []Note, filename string) error {
+func WriteNotesTable(ctx *config.Context, notes []model.Note, filename string) error {
 	var w io.Writer
 	// Determine the output destination based on the filename argument.
 	if filename == "" {
@@ -209,7 +189,7 @@ func WriteNotesTable(ctx *config.Context, notes []Note, filename string) error {
 // WriteNotesCsv writes the slice of notes to the specified destination in CSV format.
 // If filename is an empty string, the function writes to stdout.
 // The function returns an error if writing to the destination fails.
-func WriteNotesCsv(ctx *config.Context, notes []Note, filename string) error {
+func WriteNotesCsv(ctx *config.Context, notes []model.Note, filename string) error {
 	// Define an io.Writer to abstract the writing operation.
 	var w io.Writer
 

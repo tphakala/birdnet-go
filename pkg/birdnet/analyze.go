@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/model"
 	"github.com/tphakala/birdnet-go/internal/observation"
 	"github.com/tphakala/go-tflite"
 )
@@ -114,8 +115,8 @@ func Predict(sample [][]float32, ctx *config.Context) ([]Result, error) {
 // predictions. Each chunk is processed individually, and the results are aggregated
 // into a slice of Observations. The sensitivity and overlap values affect the
 // prediction process and the timestamp calculation, respectively.
-func AnalyzeAudio(chunks [][]float32, ctx *config.Context) ([]observation.Note, error) {
-	observations := []observation.Note{}
+func AnalyzeAudio(chunks [][]float32, ctx *config.Context) ([]model.Note, error) {
+	observations := []model.Note{}
 
 	start := time.Now()
 	predStart := 0.0

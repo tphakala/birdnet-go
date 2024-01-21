@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/model"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -35,7 +36,7 @@ func InitializeDatabase(ctx *config.Context) error {
 		}
 
 		// Perform SQLite migration
-		if err = ctx.Db.AutoMigrate(&Note{}); err != nil {
+		if err = ctx.Db.AutoMigrate(&model.Note{}); err != nil {
 			return fmt.Errorf("failed to auto-migrate SQLite database: %v", err)
 		}
 
@@ -52,7 +53,7 @@ func InitializeDatabase(ctx *config.Context) error {
 		}
 
 		// Perform MySQL migration
-		if err = ctx.Db.AutoMigrate(&Note{}); err != nil {
+		if err = ctx.Db.AutoMigrate(&model.Note{}); err != nil {
 			return fmt.Errorf("failed to auto-migrate MySQL database: %v", err)
 		}
 	}
@@ -61,7 +62,7 @@ func InitializeDatabase(ctx *config.Context) error {
 }
 
 // SaveToDatabase inserts a new Note record into the database.
-func SaveToDatabase(ctx *config.Context, note Note) error {
+func SaveToDatabase(ctx *config.Context, note model.Note) error {
 	// Initialize the database if it's not already connected.
 	if ctx.Db == nil {
 		if err := InitializeDatabase(ctx); err != nil {

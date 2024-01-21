@@ -71,10 +71,10 @@ func initializeModel(ctx *config.Context) error {
 
 	// If the number of threads is not specified or exceeds the number of available CPUs,
 	// set threads to number of system CPUs
-	if (ctx.Settings.Node.Threads == 0) || (ctx.Settings.Node.Threads > systemCpuCount) {
+	if (ctx.Settings.BirdNET.Threads == 0) || (ctx.Settings.BirdNET.Threads > systemCpuCount) {
 		threads = systemCpuCount
 	} else {
-		threads = ctx.Settings.Node.Threads
+		threads = ctx.Settings.BirdNET.Threads
 	}
 
 	// Configure the interpreter options
@@ -147,7 +147,7 @@ func loadLabels(ctx *config.Context) error {
 		return err
 	}
 
-	labelFileName := fmt.Sprintf("labels_%s.txt", ctx.Settings.Node.Locale)
+	labelFileName := fmt.Sprintf("labels_%s.txt", ctx.Settings.BirdNET.Locale)
 
 	// Search for the matching labels file in the zip archive
 	for _, zipFile := range r.File {

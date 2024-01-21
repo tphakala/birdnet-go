@@ -1,0 +1,31 @@
+
+{{define "settings-birdnet"}}
+<form method="POST" action="/update-birdnet-settings">
+    <div class="form-group">
+        <label for="sensitivity">Sensitivity</label>
+        <input type="number" step="0.01" id="sensitivity" name="BirdNET.Sensitivity" value="{{.BirdNET.Sensitivity}}">
+    </div>
+
+    <div class="form-group">
+        <label for="threshold">Threshold</label>
+        <input type="number" step="0.01" id="threshold" name="BirdNET.Threshold" value="{{.BirdNET.Threshold}}">
+    </div>
+
+    <div class="form-group">
+        <label for="overlap">Overlap</label>
+        <input type="number" step="0.01" id="overlap" name="BirdNET.Overlap" value="{{.BirdNET.Overlap}}">
+    </div>
+
+    <div class="form-group">
+        <label for="longitude">Longitude</label>
+        <input type="number" step="0.0001" id="longitude" name="BirdNET.Longitude" value="{{.BirdNET.Longitude}}">
+    </div>
+
+    <div class="form-group">
+        <label for="latitude">Latitude</label>
+        <input type="number" step="0.0001" id="latitude" name="BirdNET.Latitude" value="{{.BirdNET.Latitude}}">
+    </div>
+
+    <button type="submit">Save</button>
+</form>
+{{end}}
