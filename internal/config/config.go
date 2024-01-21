@@ -16,11 +16,10 @@ import (
 type Settings struct {
 	Debug bool // true to enable debug mode
 
-	Node struct {
+	Main struct {
 		Name      string // name of go-birdnet node, can be used to identify source of notes
-		Locale    string // language to use for labels
 		TimeAs24h bool   // true 24-hour time format, false 12-hour time format
-		Threads   int    // number of CPU threads to use for analysis
+		Log       LogConfig
 	}
 
 	BirdNET struct {
@@ -29,6 +28,8 @@ type Settings struct {
 		Overlap     float64 // birdnet analysis overlap between chunks
 		Longitude   float64 // longitude of recording location for prediction filtering
 		Latitude    float64 // latitude of recording location for prediction filtering
+		Threads     int     // number of CPU threads to use for analysis
+		Locale      string  // language to use for labels
 	}
 
 	Input struct {
@@ -59,6 +60,13 @@ type Settings struct {
 		}
 	}
 
+	WebServer struct {
+		Enabled bool   // true to enable web server
+		Port    string // port for web server
+		AutoTLS bool   // true to enable auto TLS
+		Log     LogConfig
+	}
+
 	Output struct {
 		File struct {
 			Enabled bool   // true to enable file output
@@ -81,6 +89,24 @@ type Settings struct {
 		}
 	}
 }
+
+// LogConfig defines the configuration for a log file
+type LogConfig struct {
+	Enabled     bool         // true to enable this log
+	Path        string       // Path to the log file
+	Rotation    RotationType // Type of log rotation
+	MaxSize     int64        // Max size in bytes for RotationSize
+	RotationDay time.Weekday // Day of the week for RotationWeekly
+}
+
+// RotationType defines different types of log rotations.
+type RotationType string
+
+const (
+	RotationDaily  RotationType = "daily"
+	RotationWeekly RotationType = "weekly"
+	RotationSize   RotationType = "size"
+)
 
 // Load reads the configuration file and environment variables into GlobalConfig.
 func Load() (*Context, error) {
@@ -233,11 +259,15 @@ func getDefaultConfig() string {
 debug: false			# print debug messages, can help with problem solving
 
 # Node specific settings
-node:
+main:
   name: BirdNET-Go		# name of node, can be used to identify source of notes
-  locale: en			# language to use for labels
   timeas24h: true		# true for 24-hour time format, false for 12-hour time format
-  threads: 0			# 0 to use all available CPU threads
+  log:
+    enabled: true		# true to enable log file
+	path: birdnet.log	# path to log file
+	rotation: daily		# daily, weekly or size
+	maxsize: 1048576	# max size in bytes for size rotation
+	rotationday: 0		# day of the week for weekly rotation, 0 = Sunday
 
 # BirdNET model specific settings
 birdnet:
@@ -246,6 +276,8 @@ birdnet:
   overlap: 0.0			# overlap between chunks, 0.0 to 2.9
   latitude: 00.000		# latitude of recording location for prediction filtering
   longitude: 00.000		# longitude of recording location for prediction filtering
+  threads: 0			# 0 to use all available CPU threads
+  locale: en			# language to use for labels
 
 # Realtime processing settings
 realtime:
@@ -263,6 +295,17 @@ realtime:
     enabled: false		# true to enable birdweather uploads
     debug: false		# true to enable birdweather api debug mode
     id: 00000			# birdweather ID
+
+webserver:
+	enabled: true		# true to enable web server
+	port: 8080			# port for web server
+	autotls: false		# true to enable auto TLS
+	log:
+		enabled: true	# true to enable log file
+		path: webui.log	# path to log file
+		rotation: daily	# daily, weekly or size
+		maxsize: 1048576	# max size in bytes for size rotation
+		rotationday: 0	# day of the week for weekly rotation, 0 = Sunday
 
 # Ouput settings
 output:

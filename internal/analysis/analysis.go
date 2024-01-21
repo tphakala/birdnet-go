@@ -11,6 +11,9 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/controller"
+	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/model"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observation"
 	"github.com/tphakala/birdnet-go/pkg/birdnet"
@@ -107,15 +110,12 @@ func DirectoryAnalysis(ctx *config.Context) error {
 	return nil
 }
 
-// executeRealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
+// RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 func RealtimeAnalysis(ctx *config.Context) error {
-	// Do not report repeated observations within this interval
-	//const OccurrenceInterval = 15 // seconds
-
-	// initialize occurrence monitor to filter out repeated observations
+	// Initialize occurrence monitor to filter out repeated observations.
 	ctx.OccurrenceMonitor = config.NewOccurrenceMonitor(time.Duration(ctx.Settings.Realtime.Interval) * time.Second)
 
-	// initialize birdweather client
+	// Initialize birdweather client if enabled in settings.
 	if ctx.Settings.Realtime.Birdweather.Enabled {
 		ctx.BirdweatherClient = birdweather.NewClient(
 			ctx.Settings.Realtime.Birdweather.ID,
@@ -123,22 +123,59 @@ func RealtimeAnalysis(ctx *config.Context) error {
 			ctx.Settings.BirdNET.Longitude)
 	}
 
+	// Log the start of BirdNET-Go Analyzer in realtime mode and its configurations.
 	fmt.Println("Starting BirdNET-Go Analyzer in realtime mode")
 	fmt.Printf("Threshold: %v, sensitivity: %v, interval: %v\n",
 		ctx.Settings.BirdNET.Threshold,
 		ctx.Settings.BirdNET.Sensitivity,
 		ctx.Settings.Realtime.Interval)
 
-	// Start necessary routines for real-time analysis.
+	// Initialize database access.
+	var dataStore model.StoreInterface
+
+	// Initialize the specific store based on settings.
+	if ctx.Settings.Output.SQLite.Enabled {
+		dataStore = &model.SQLiteStore{}
+	} else if ctx.Settings.Output.MySQL.Enabled {
+		dataStore = &model.MySQLStore{}
+	}
+
+	// Check if a database was selected for output and exit if not.
+	if dataStore == nil {
+		return fmt.Errorf("no database selected for output")
+	}
+
+	// Open a connection to the database and handle possible errors.
+	if err := dataStore.Open(ctx); err != nil {
+		logger.Error("main", "Failed to open database: %v", err)
+		return err // Return error to stop execution if database connection fails.
+	} else {
+		logger.Info("main", "Successfully opened database")
+		// Ensure the database connection is closed when the function returns.
+		defer func() {
+			if err := dataStore.Close(); err != nil {
+				logger.Error("main", "Failed to close database: %v", err)
+			} else {
+				logger.Info("main", "Successfully closed database")
+			}
+		}()
+	}
+
+	// Start web server goroutine.
+	if err := controller.Start(ctx, dataStore); err != nil {
+		logger.Error("main", "Failed to start the controller: %v", err)
+		return err // Return error if controller fails to start.
+	}
+
+	// Start audio capture and buffer monitor goroutines.
 	myaudio.StartGoRoutines(ctx)
 
-	// Block until QuitChannel is closed.
+	// Block until QuitChannel is closed, indicating termination signal.
 	<-myaudio.QuitChannel
 
 	// Perform cleanup using sync.Once to ensure it happens only once.
 	once.Do(func() {
 		birdnet.DeleteInterpreter(ctx)
-		//close(myaudio.QuitChannel)
 	})
 
 	return nil

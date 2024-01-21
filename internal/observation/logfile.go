@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/model"
 )
 
 // LogNoteToFile saves the Note to a log file.
-func LogNoteToFile(ctx *config.Context, note Note) error {
+func LogNoteToFile(ctx *config.Context, note model.Note) error {
 	// Separate the directory and file name from the log path
 	dir, fileName := filepath.Split(ctx.Settings.Realtime.Log.Path)
 
@@ -37,7 +38,7 @@ func LogNoteToFile(ctx *config.Context, note Note) error {
 
 	// Determine the time format string based on the user's preference
 	timeFormat := "15:04:05"
-	if !ctx.Settings.Node.TimeAs24h {
+	if !ctx.Settings.Main.TimeAs24h {
 		timeFormat = "03:04:05 PM"
 	}
 

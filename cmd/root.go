@@ -62,12 +62,12 @@ func RootCommand(ctx *config.Context) *cobra.Command {
 // This function is responsible for setting up configurations, ensuring the environment is ready, etc.
 func initialize(ctx *config.Context) error {
 	// Example of locale normalization and checking
-	inputLocale := strings.ToLower(ctx.Settings.Node.Locale)
+	inputLocale := strings.ToLower(ctx.Settings.BirdNET.Locale)
 	normalizedLocale, err := config.NormalizeLocale(inputLocale)
 	if err != nil {
 		return err
 	}
-	ctx.Settings.Node.Locale = normalizedLocale
+	ctx.Settings.BirdNET.Locale = normalizedLocale
 
 	// Initialize the BirdNET system with the normalized locale
 	if err := birdnet.Setup(ctx); err != nil {
@@ -80,8 +80,8 @@ func initialize(ctx *config.Context) error {
 // defineGlobalFlags defines flags that are global to the command line interface
 func setupFlags(rootCmd *cobra.Command, settings *config.Settings) error {
 	rootCmd.PersistentFlags().BoolVarP(&settings.Debug, "debug", "d", viper.GetBool("debug"), "Enable debug output")
-	rootCmd.PersistentFlags().StringVar(&settings.Node.Locale, "locale", viper.GetString("node.locale"), "Set the locale for labels. Accepts full name or 2-letter code.")
-	rootCmd.PersistentFlags().IntVarP(&settings.Node.Threads, "threads", "j", viper.GetInt("node.threads"), "Number of CPU threads to use for analysis (default 0 which is all CPUs)")
+	rootCmd.PersistentFlags().StringVar(&settings.BirdNET.Locale, "locale", viper.GetString("node.locale"), "Set the locale for labels. Accepts full name or 2-letter code.")
+	rootCmd.PersistentFlags().IntVarP(&settings.BirdNET.Threads, "threads", "j", viper.GetInt("node.threads"), "Number of CPU threads to use for analysis (default 0 which is all CPUs)")
 	rootCmd.PersistentFlags().Float64VarP(&settings.BirdNET.Sensitivity, "sensitivity", "s", viper.GetFloat64("birdnet.sensitivity"), "Sigmoid sensitivity value between 0.0 and 1.5")
 	rootCmd.PersistentFlags().Float64VarP(&settings.BirdNET.Threshold, "threshold", "t", viper.GetFloat64("birdnet.threshold"), "Confidency threshold for detections, value between 0.1 to 1.0")
 	rootCmd.PersistentFlags().Float64Var(&settings.BirdNET.Overlap, "overlap", viper.GetFloat64("birdnet.overlap"), "Overlap value between 0.0 and 2.9")

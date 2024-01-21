@@ -2,7 +2,9 @@ bin/birdnet-go
 bin/birdnet-go.exe
 log/
 clips/
+spectrograms/
 tmp
+*.log
 *.exe
 model/labels_en.txt
 model/labels_fi.txt

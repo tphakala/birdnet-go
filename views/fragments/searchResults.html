@@ -1,0 +1,97 @@
+{{define "searchResults"}}
+
+<!-- daisyUI card for top birds chart -->
+<section class="card col-span-12 overflow-hidden bg-base-100 shadow-sm xl:col-span-12">
+	<div class="card-body grow-0 p-1 ml-4">
+		<div class="flex justify-between">
+			<span class="card-title grow"><a class="link-hover link">Search Results for <em>{{.SearchQuery}}</em></a></span>
+			<div class="flex items-center">
+            <!-- Form wrapping the input and select -->
+            <form id="searchForm" 
+                  hx-get="/search" 
+                  hx-target="#mainContent"
+                  hx-swap="innerHTML"
+                  hx-trigger="change from:#numResults"
+                  method="get"
+                  class="flex items-center">
+                <!-- Hidden input for the search query -->
+                <input type="hidden" name="query" value="{{.SearchQuery}}">
+
+                <!-- Number of Results to return -->
+                <label for="numResults" class="label">Show:</label>
+                <!-- Dropdown for selecting number of results -->
+                <select id="numResults" name="numResults" 
+                        hx-trigger="change" 
+                        class="select focus-visible:outline-none">
+                    <option value="25" {{ if eq .NumResults 25}}selected{{end}}>25</option>
+                    <option value="50" {{ if eq .NumResults 50}}selected{{end}}>50</option>
+                    <option value="100" {{ if eq .NumResults 100}}selected{{end}}>100</option>
+                </select>
+            </form>
+          </div>
+		</div>
+	</div>
+  
+<table class="table col-span-12 text-sm text-left text-gray-500 dark:text-gray-400">
+  <thead class="text-xs">
+    <tr>
+      <th scope="col" class="py-2 px-6 w-1/6">Date</th>
+      <th scope="col" class="py-2 px-6 w-1/6">Time</th>
+      <th scope="col" class="py-2 px-6 w-1/6">Common Name</th>
+      <th scope="col" class="py-2 px-6 w-1/6">Confidence</th>
+      <th scope="col" class="py-2 px-6 w-auto">Recording</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Notes}}
+    <tr class="">
+      <td class="py-1 px-6">{{.Date}}</td>
+      <td class="py-1 px-6">{{.Time}}</td>
+      <td class="py-1 px-6">{{title .CommonName}}</td>
+      <td class="py-1 px-6">
+        <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
+          {{confidence .Confidence}}
+        </div>
+      </td>
+      <td class="py-1 px-6 flex justify-center">
+        <div class="w-56">
+          <!-- Spectrogram Image  -->
+          <!--<img src="" alt="Spectrogram Image" style="width: auto; height: auto;">-->
+
+          <!-- Audio player -->
+          <audio controls class="audio-control">
+            <source src="{{.ClipName}}" type="audio/wav">
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+      </td>
+    </tr>
+    {{end}}
+    <tr class="">
+      <!-- Previous Link (only show if offset > 0) -->
+      {{ if gt .Offset 0 }}
+        <td class="py-4 px-6 hover:underline" align="left"
+          hx-get="/search?query={{urlquery .SearchQuery}}&numResults={{.NumResults}}&offset={{ sub .Offset .NumResults }}"
+          hx-target="#mainContent"
+          hx-swap="innerHTML">
+          Prev
+        </td>
+      {{ else }}
+        <td class="py-4 px-6"></td>
+      {{ end }}
+      <td class="py-4 px-6" colspan="3"></td>
+      <!-- Next Link (show if there are more results) -->
+      <td class="py-4 px-6 hover:underline" align="right"
+        hx-get="/search?query={{urlquery .SearchQuery}}&numResults={{.NumResults}}&offset={{ add .Offset .NumResults }}"
+        hx-target="#mainContent"
+        hx-swap="innerHTML">
+        Next
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+</section>
+<!-- /card -->
+
+{{end}}

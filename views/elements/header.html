@@ -1,0 +1,60 @@
+{{define "header"}}
+<!-- header -->
+
+<header class="col-span-12 flex items-center justify-between lg:gap-4">
+	<div>
+		<span class="text-2xl font-bold">{{.Title}}</span>
+	</div>
+
+	<div class="flex-grow flex justify-center relative">
+	{{if eq .Title "Dashboard"}}
+	<!-- Search input  -->
+	
+	    <div class="relative w-1/2">
+        	<input type="text" placeholder="Search" name="query"
+			hx-get="/search"
+			hx-params="query"
+			hx-target="#mainContent"
+			hx-swap="innerHTML"
+			hx-trigger="keyup[key!='ArrowLeft'][key!='ArrowRight'] change delay:100ms"				
+			class="input input-md rounded-full focus:outline-none w-full pl-4 pr-12 text-gray-700" />
+        	<div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+	        	<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+	                <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+            	</svg>
+        	</div>
+    	</div>
+	
+	{{end}}
+	</div>
+	
+	<!-- avatar with dropdown -->
+	<div class="dropdown dropdown-end">
+		<div tabindex="0" class="avatar placeholder m-1 cursor-pointer">
+	  		<div class="bg-neutral text-neutral-content rounded-full w-12">
+				<span class="text-xl">BN</span>
+	  		</div>
+		</div>
+		<!-- Dropdown menu -->
+		<ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-44 z-50">
+	  	<li>
+			<div class="form-control">
+			<label class="flex cursor-pointer gap-2">
+				Theme 
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4">
+					<path d="M8 1a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 8 1ZM10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0ZM12.95 4.11a.75.75 0 1 0-1.06-1.06l-1.062 1.06a.75.75 0 0 0 1.061 1.062l1.06-1.061ZM15 8a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 15 8ZM11.89 12.95a.75.75 0 0 0 1.06-1.06l-1.06-1.062a.75.75 0 0 0-1.062 1.061l1.061 1.06ZM8 12a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 8 12ZM5.172 11.89a.75.75 0 0 0-1.061-1.062L3.05 11.89a.75.75 0 1 0 1.06 1.06l1.06-1.06ZM4 8a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 4 8ZM4.11 5.172A.75.75 0 0 0 5.173 4.11L4.11 3.05a.75.75 0 1 0-1.06 1.06l1.06 1.06Z" />
+				</svg>
+				<input type="checkbox" value="dark" class="toggle toggle-xs theme-controller"/>
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4">
+					<path d="M14.438 10.148c.19-.425-.321-.787-.748-.601A5.5 5.5 0 0 1 6.453 2.31c.186-.427-.176-.938-.6-.748a6.501 6.501 0 1 0 8.585 8.586Z" />
+				</svg>	  
+		  	</label>  
+			</div>
+	  	</li>
+		</ul>
+  </div>
+  
+
+</header>
+<!-- /header -->
+{{end}}
