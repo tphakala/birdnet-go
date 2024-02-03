@@ -6,7 +6,6 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/analysis/queue"
@@ -23,26 +22,26 @@ const (
 )
 
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
-func RealtimeAnalysis(ctx *conf.Context) error {
+func RealtimeAnalysis(settings *conf.Settings) error {
 
 	// Initialize the BirdNET interpreter.
-	bn, err := birdnet.NewBirdNET(ctx.Settings)
+	bn, err := birdnet.NewBirdNET(settings)
 	if err != nil {
 		return fmt.Errorf("failed to initialize BirdNET: %w", err)
 	}
 
 	// Initialize occurrence monitor to filter out repeated observations.
-	ctx.OccurrenceMonitor = conf.NewOccurrenceMonitor(time.Duration(ctx.Settings.Realtime.Interval) * time.Second)
+	//ctx.OccurrenceMonitor = conf.NewOccurrenceMonitor(time.Duration(ctx.Settings.Realtime.Interval) * time.Second)
 
 	// Log the start of BirdNET-Go Analyzer in realtime mode and its configurations.
 	fmt.Println("Starting BirdNET-Go Analyzer in realtime mode")
 	fmt.Printf("Threshold: %v, sensitivity: %v, interval: %v\n",
-		ctx.Settings.BirdNET.Threshold,
-		ctx.Settings.BirdNET.Sensitivity,
-		ctx.Settings.Realtime.Interval)
+		settings.BirdNET.Threshold,
+		settings.BirdNET.Sensitivity,
+		settings.Realtime.Interval)
 
 	// Initialize database access.
-	dataStore := datastore.New(ctx)
+	dataStore := datastore.New(settings)
 
 	// Open a connection to the database and handle possible errors.
 	if err := dataStore.Open(); err != nil {
@@ -68,17 +67,17 @@ func RealtimeAnalysis(ctx *conf.Context) error {
 	queue.Init(5, 5)
 
 	// Start worker pool for processing detections
-	processor.New(ctx, dataStore)
+	processor.New(settings, dataStore, bn)
 
 	// Start http server
-	httpcontroller.New(ctx, dataStore)
+	httpcontroller.New(settings, dataStore)
 
 	// Initialize the wait group to wait for all goroutines to finish
 	var wg sync.WaitGroup
 	// start buffer monitor
-	startBufferMonitor(&wg, ctx, bn, quitChan)
+	startBufferMonitor(&wg, bn, quitChan)
 	// start audio capture
-	startAudioCapture(&wg, ctx, quitChan, restartChan)
+	startAudioCapture(&wg, settings, quitChan, restartChan)
 
 	// start quit signal monitor
 	monitorCtrlC(quitChan)
@@ -99,21 +98,21 @@ func RealtimeAnalysis(ctx *conf.Context) error {
 		case <-restartChan:
 			// Handle the restart signal.
 			fmt.Println("Restarting audio capture")
-			startAudioCapture(&wg, ctx, quitChan, restartChan)
+			startAudioCapture(&wg, settings, quitChan, restartChan)
 		}
 	}
 }
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
-func startAudioCapture(wg *sync.WaitGroup, ctx *conf.Context, quitChan chan struct{}, restartChan chan struct{}) {
+func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan chan struct{}, restartChan chan struct{}) {
 	wg.Add(1)
-	go myaudio.CaptureAudio(ctx, wg, quitChan, restartChan)
+	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan)
 }
 
 // startBufferMonitor initializes and starts the buffer monitoring routine in a new goroutine.
-func startBufferMonitor(wg *sync.WaitGroup, ctx *conf.Context, bn *birdnet.BirdNET, quitChan chan struct{}) {
+func startBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}) {
 	wg.Add(1)
-	go myaudio.BufferMonitor(ctx, wg, bn, quitChan)
+	go myaudio.BufferMonitor(wg, bn, quitChan)
 }
 
 // monitorCtrlC listens for the SIGINT (Ctrl+C) signal and triggers the application shutdown process.

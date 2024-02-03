@@ -13,10 +13,10 @@ import (
 // SQLiteStore implements DataStore for SQLite
 type SQLiteStore struct {
 	DataStore
-	Ctx *conf.Context
+	Settings *conf.Settings
 }
 
-func validateSQLiteConfig(ctx *conf.Context) error {
+func validateSQLiteConfig(settings *conf.Settings) error {
 	// Add validation logic for SQLite configuration
 	// Return an error if the configuration is invalid
 	return nil
@@ -24,11 +24,11 @@ func validateSQLiteConfig(ctx *conf.Context) error {
 
 // InitializeDatabase sets up the SQLite database connection
 func (store *SQLiteStore) Open() error {
-	if err := validateSQLiteConfig(store.Ctx); err != nil {
+	if err := validateSQLiteConfig(store.Settings); err != nil {
 		return err // validateSQLiteConfig returns a properly formatted error
 	}
 
-	dir, fileName := filepath.Split(store.Ctx.Settings.Output.SQLite.Path)
+	dir, fileName := filepath.Split(store.Settings.Output.SQLite.Path)
 	basePath := conf.GetBasePath(dir)
 	absoluteFilePath := filepath.Join(basePath, fileName)
 
@@ -38,7 +38,7 @@ func (store *SQLiteStore) Open() error {
 	}
 
 	store.DB = db
-	return performAutoMigration(db, store.Ctx.Settings.Debug, "SQLite", absoluteFilePath)
+	return performAutoMigration(db, store.Settings.Debug, "SQLite", absoluteFilePath)
 }
 
 // SaveToDatabase inserts a new Note record into the SQLite database

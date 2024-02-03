@@ -33,14 +33,14 @@ type Server struct {
 }
 
 // New initializes a new HTTP server with given context and datastore.
-func New(ctx *conf.Context, dataStore datastore.Interface) *Server {
+func New(settings *conf.Settings, dataStore datastore.Interface) *Server {
 	// Default port configuration
-	configureDefaultSettings(ctx)
+	configureDefaultSettings(settings)
 
 	s := &Server{
 		Echo:     echo.New(),
 		ds:       dataStore,
-		Settings: ctx.Settings,
+		Settings: settings,
 	}
 
 	// Server initialization
@@ -49,7 +49,7 @@ func New(ctx *conf.Context, dataStore datastore.Interface) *Server {
 	// Start the server in a new goroutine and handle errors
 	errChan := make(chan error)
 	go func() {
-		if err := s.Echo.Start(":" + ctx.Settings.WebServer.Port); err != nil {
+		if err := s.Echo.Start(":" + settings.WebServer.Port); err != nil {
 			errChan <- err
 		}
 	}()
@@ -59,9 +59,9 @@ func New(ctx *conf.Context, dataStore datastore.Interface) *Server {
 }
 
 // configureDefaultSettings sets default values for server settings.
-func configureDefaultSettings(ctx *conf.Context) {
-	if ctx.Settings.WebServer.Port == "" {
-		ctx.Settings.WebServer.Port = "8080"
+func configureDefaultSettings(settings *conf.Settings) {
+	if settings.WebServer.Port == "" {
+		settings.WebServer.Port = "8080"
 	}
 }
 

@@ -29,28 +29,28 @@ type SoundscapeResponse struct {
 	} `json:"soundscape"`
 }
 
-// BirdweatherClient holds the configuration for interacting with the Birdweather API.
-type BirdweatherClient struct {
-	Ctx           *conf.Context
+// BwClient holds the configuration for interacting with the Birdweather API.
+type BwClient struct {
+	Settings      *conf.Settings
 	BirdweatherID string
 	Latitude      float64
 	Longitude     float64
 	HTTPClient    *http.Client
 }
 
-// NewClient creates and initializes a new BirdweatherClient with the given parameters.
-func New(ctx *conf.Context) *BirdweatherClient {
-	return &BirdweatherClient{
-		Ctx:           ctx,
-		BirdweatherID: ctx.Settings.Realtime.Birdweather.ID,
-		Latitude:      ctx.Settings.BirdNET.Latitude,
-		Longitude:     ctx.Settings.BirdNET.Longitude,
+// New creates and initializes a new Client with the given parameters.
+func New(settings *conf.Settings) *BwClient {
+	return &BwClient{
+		Settings:      settings,
+		BirdweatherID: settings.Realtime.Birdweather.ID,
+		Latitude:      settings.BirdNET.Latitude,
+		Longitude:     settings.BirdNET.Longitude,
 		HTTPClient:    &http.Client{Timeout: 5 * time.Second}, // 3-second timeout for HTTP requests
 	}
 }
 
 // UploadSoundscape uploads a soundscape file to the Birdweather API and returns the soundscape ID if successful.
-func (b *BirdweatherClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscapeID string, err error) {
+func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscapeID string, err error) {
 	// Convert PCM data to WAV format
 	wavData, err := myaudio.ConvertPCMToWAV(pcmData, conf.SampleRate, conf.BitDepth, conf.NumChannels) // Sample rate, bit depth, and number of channels
 	if err != nil {
@@ -95,7 +95,7 @@ func (b *BirdweatherClient) UploadSoundscape(timestamp string, pcmData []byte) (
 		return "", err
 	}
 
-	if b.Ctx.Settings.Realtime.Birdweather.Debug {
+	if b.Settings.Realtime.Birdweather.Debug {
 		log.Println("Response Body:", string(responseBody))
 	}
 
@@ -114,10 +114,10 @@ func (b *BirdweatherClient) UploadSoundscape(timestamp string, pcmData []byte) (
 }
 
 // PostDetection posts a detection to the Birdweather API matching the specified soundscape ID.
-func (b *BirdweatherClient) PostDetection(soundscapeID, timestamp, commonName, scientificName string, confidence float64) error {
+func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientificName string, confidence float64) error {
 	detectionURL := fmt.Sprintf("https://app.birdweather.com/api/v1/stations/%s/detections", b.BirdweatherID)
 
-	if b.Ctx.Settings.Realtime.Birdweather.Debug {
+	if b.Settings.Realtime.Birdweather.Debug {
 		log.Println("Posting detection to Birdweather: ", detectionURL)
 	}
 
@@ -160,7 +160,7 @@ func (b *BirdweatherClient) PostDetection(soundscapeID, timestamp, commonName, s
 		return err
 	}
 
-	if b.Ctx.Settings.Realtime.Birdweather.Debug {
+	if b.Settings.Realtime.Birdweather.Debug {
 		log.Println("JSON Payload:", string(postDataBytes))
 	}
 
@@ -188,7 +188,7 @@ func (b *BirdweatherClient) PostDetection(soundscapeID, timestamp, commonName, s
 
 // Upload function handles the uploading of detected clips and their details to Birdweather.
 // It first parses the timestamp from the note, then uploads the soundscape, and finally posts the detection.
-func (b *BirdweatherClient) Publish(note datastore.Note, pcmData []byte) error {
+func (b *BwClient) Publish(note datastore.Note, pcmData []byte) error {
 	// Use system's local timezone for timestamp parsing
 	loc := time.Local
 
@@ -213,7 +213,7 @@ func (b *BirdweatherClient) Publish(note datastore.Note, pcmData []byte) error {
 	}
 
 	// Log the successful posting of the soundscape, if debugging is enabled
-	if b.Ctx.Settings.Realtime.Birdweather.Debug {
+	if b.Settings.Realtime.Birdweather.Debug {
 		log.Println("Soundscape successfully posted to Birdweather")
 	}
 

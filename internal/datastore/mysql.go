@@ -13,10 +13,10 @@ import (
 // MySQLStore implements DataStore for MySQL
 type MySQLStore struct {
 	DataStore
-	Ctx *conf.Context
+	Settings *conf.Settings
 }
 
-func validateMySQLConfig(ctx *conf.Context) error {
+func validateMySQLConfig(settings *conf.Settings) error {
 	// Add validation logic for MySQL configuration
 	// Return an error if the configuration is invalid
 	return nil
@@ -24,14 +24,14 @@ func validateMySQLConfig(ctx *conf.Context) error {
 
 // InitializeDatabase sets up the MySQL database connection
 func (store *MySQLStore) Open() error {
-	if err := validateMySQLConfig(store.Ctx); err != nil {
+	if err := validateMySQLConfig(store.Settings); err != nil {
 		return err // validateMySQLConfig returns a properly formatted error
 	}
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		store.Ctx.Settings.Output.MySQL.Username, store.Ctx.Settings.Output.MySQL.Password,
-		store.Ctx.Settings.Output.MySQL.Host, store.Ctx.Settings.Output.MySQL.Port,
-		store.Ctx.Settings.Output.MySQL.Database)
+		store.Settings.Output.MySQL.Username, store.Settings.Output.MySQL.Password,
+		store.Settings.Output.MySQL.Host, store.Settings.Output.MySQL.Port,
+		store.Settings.Output.MySQL.Database)
 
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
@@ -40,7 +40,7 @@ func (store *MySQLStore) Open() error {
 	}
 
 	store.DB = db
-	return performAutoMigration(db, store.Ctx.Settings.Debug, "MySQL", dsn)
+	return performAutoMigration(db, store.Settings.Debug, "MySQL", dsn)
 }
 
 // SaveToDatabase inserts a new Note record into the SQLite database

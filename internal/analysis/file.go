@@ -14,9 +14,9 @@ import (
 
 // executeFileAnalysis conducts an analysis of an audio file and outputs the results.
 // It reads an audio file, analyzes it for bird sounds, and prints the results based on the provided configuration.
-func FileAnalysis(ctx *conf.Context, bn birdnet.BirdNET) error {
+func FileAnalysis(settings *conf.Settings, bn birdnet.BirdNET) error {
 
-	fileInfo, err := os.Stat(ctx.Settings.Input.Path)
+	fileInfo, err := os.Stat(settings.Input.Path)
 	if err != nil {
 		return fmt.Errorf("error accessing the path: %v", err)
 	}
@@ -27,7 +27,7 @@ func FileAnalysis(ctx *conf.Context, bn birdnet.BirdNET) error {
 	}
 
 	// Load and analyze the input audio file.
-	audioData, err := myaudio.ReadAudioFile(ctx)
+	audioData, err := myaudio.ReadAudioFile(settings)
 	if err != nil {
 		// Use log.Fatalf to log the error and exit the program.
 		log.Fatalf("error while reading input audio: %v", err)
@@ -42,21 +42,21 @@ func FileAnalysis(ctx *conf.Context, bn birdnet.BirdNET) error {
 
 	// Prepare the output file path if OutputDir is specified in the configuration.
 	var outputFile string
-	if ctx.Settings.Output.File.Path != "" {
+	if settings.Output.File.Path != "" {
 		// Safely concatenate file paths using filepath.Join to avoid cross-platform issues.
-		outputFile = filepath.Join(ctx.Settings.Output.File.Path, filepath.Base(ctx.Settings.Input.Path))
+		outputFile = filepath.Join(settings.Output.File.Path, filepath.Base(settings.Input.Path))
 	}
 
 	// Output the notes based on the desired output type in the configuration.
 	// If OutputType is not specified or if it's set to "table", output as a table format.
-	if ctx.Settings.Output.File.Type == "" || ctx.Settings.Output.File.Type == "table" {
-		if err := observation.WriteNotesTable(ctx, notes, outputFile); err != nil {
+	if settings.Output.File.Type == "" || settings.Output.File.Type == "table" {
+		if err := observation.WriteNotesTable(settings, notes, outputFile); err != nil {
 			log.Fatalf("failed to write notes table: %v", err)
 		}
 	}
 	// If OutputType is set to "csv", output as CSV format.
-	if ctx.Settings.Output.File.Type == "csv" {
-		if err := observation.WriteNotesCsv(ctx, notes, outputFile); err != nil {
+	if settings.Output.File.Type == "csv" {
+		if err := observation.WriteNotesCsv(settings, notes, outputFile); err != nil {
 			log.Fatalf("failed to write notes CSV: %v", err)
 		}
 	}

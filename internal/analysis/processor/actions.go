@@ -5,7 +5,9 @@ package processor
 import (
 	"fmt"
 	"log"
+	"time"
 
+	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -18,31 +20,37 @@ type Action interface {
 }
 
 type LogAction struct {
-	Ctx  *conf.Context
-	Note datastore.Note
+	Settings *conf.Settings
+	Note     datastore.Note
 }
 
 type DatabaseAction struct {
-	Ctx  *conf.Context
-	Note datastore.Note
-	Ds   datastore.Interface
+	Settings *conf.Settings
+	Note     datastore.Note
+	Ds       datastore.Interface
 }
 
 type SaveAudioAction struct {
-	Ctx      *conf.Context
+	Settings *conf.Settings
 	ClipName string
 	pcmData  []byte
 }
 
 type BirdweatherAction struct {
-	Ctx               *conf.Context
-	Note              datastore.Note
-	pcmData           []byte
-	BirdweatherClient birdweather.Interface
+	Settings *conf.Settings
+	Note     datastore.Note
+	pcmData  []byte
+	BwClient *birdweather.BwClient
+}
+
+type UpdateRangeFilterAction struct {
+	Bn                 *birdnet.BirdNET
+	IncludedSpecies    *[]string
+	SpeciesListUpdated time.Time
 }
 
 func (a LogAction) Execute(data interface{}) error {
-	if err := observation.LogNoteToFile(a.Ctx, a.Note); err != nil {
+	if err := observation.LogNoteToFile(a.Settings, a.Note); err != nil {
 		// If an error occurs when logging to a file, wrap and return the error.
 		log.Printf("Failed to log note to file: %v", err)
 	}
@@ -62,22 +70,31 @@ func (a DatabaseAction) Execute(data interface{}) error {
 
 func (a SaveAudioAction) Execute(data interface{}) error {
 	if err := myaudio.SavePCMDataToWAV(a.ClipName, a.pcmData); err != nil {
-		log.Printf("error saving audio clip to %s: %s\n", a.Ctx.Settings.Realtime.AudioExport.Type, err)
+		log.Printf("error saving audio clip to %s: %s\n", a.Settings.Realtime.AudioExport.Type, err)
 		return err
-	} else if a.Ctx.Settings.Debug {
+	} else if a.Settings.Debug {
 		log.Printf("Saved audio clip to %s\n", a.ClipName)
 	}
 	return nil // return an error if the action fails
 }
 
 func (a BirdweatherAction) Execute(data interface{}) error {
-	if err := a.BirdweatherClient.Publish(a.Note, a.pcmData); err != nil {
-		log.Printf("error uploading to Birdweather: %s\n", err)
+	if err := a.BwClient.Publish(a.Note, a.pcmData); err != nil {
+		log.Printf("error uploading to BirdWeather: %s\n", err)
 		return err
-	} else if a.Ctx.Settings.Debug {
+	} else if a.Settings.Debug {
 		log.Printf("Uploaded %s to Birdweather\n", a.Note.ClipName)
 	}
 	return nil // return an error if the action fails
 }
 
-// Add more actions as needed.
+func (a UpdateRangeFilterAction) Execute(data interface{}) error {
+	today := time.Now().Truncate(24 * time.Hour)
+	if today.After(a.SpeciesListUpdated) {
+		// update location based species list once a day
+		*a.IncludedSpecies = a.Bn.GetProbableSpecies()
+		a.SpeciesListUpdated = today
+	}
+
+	return nil // return an error if the action fails
+}
