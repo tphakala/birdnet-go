@@ -60,7 +60,7 @@ func New(settings *conf.Settings, beginTime, endTime float64, species string, co
 // WriteNotesTable writes a slice of Note structs to a table-formatted text output.
 // The output can be directed to either stdout or a file specified by the filename.
 // If the filename is an empty string, it writes to stdout.
-func WriteNotesTable(ctx *conf.Context, notes []datastore.Note, filename string) error {
+func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename string) error {
 	var w io.Writer
 	// Determine the output destination based on the filename argument.
 	if filename == "" {
@@ -89,7 +89,7 @@ func WriteNotesTable(ctx *conf.Context, notes []datastore.Note, filename string)
 	var err error
 
 	for i, note := range notes {
-		if note.Confidence <= ctx.Settings.BirdNET.Threshold {
+		if note.Confidence <= settings.BirdNET.Threshold {
 			continue // Skip the current iteration as the note doesn't meet the threshold
 		}
 
@@ -117,12 +117,12 @@ func WriteNotesTable(ctx *conf.Context, notes []datastore.Note, filename string)
 // WriteNotesCsv writes the slice of notes to the specified destination in CSV format.
 // If filename is an empty string, the function writes to stdout.
 // The function returns an error if writing to the destination fails.
-func WriteNotesCsv(ctx *conf.Context, notes []datastore.Note, filename string) error {
+func WriteNotesCsv(settings *conf.Settings, notes []datastore.Note, filename string) error {
 	// Define an io.Writer to abstract the writing operation.
 	var w io.Writer
 
 	// Determine the output destination, file or screen
-	if ctx.Settings.Output.File.Enabled {
+	if settings.Output.File.Enabled {
 		// Ensure the filename has a .csv extension.
 		if !strings.HasSuffix(filename, ".csv") {
 			filename += ".csv"
@@ -150,7 +150,7 @@ func WriteNotesCsv(ctx *conf.Context, notes []datastore.Note, filename string) e
 	var err error
 
 	for _, note := range notes {
-		if note.Confidence <= ctx.Settings.BirdNET.Threshold {
+		if note.Confidence <= settings.BirdNET.Threshold {
 			continue // Skip the current iteration as the note doesn't meet the threshold
 		}
 

@@ -2,12 +2,9 @@
 package conf
 
 import (
-	"encoding/csv"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -109,15 +106,9 @@ const (
 )
 
 // Load reads the configuration file and environment variables into GlobalConfig.
-func Load() (*Context, error) {
-	var settings Settings
-
-	// Initialize the Context with the settings
-	ctx := &Context{
-		Settings: &settings,
-		// set SpeciesListUpdated to yesterday to force update on first run
-		SpeciesListUpdated: time.Now().AddDate(0, 0, -1),
-	}
+func Load() (*Settings, error) {
+	// Create a new settings struct
+	settings := &Settings{}
 
 	// Initialize viper and read config
 	if err := initViper(); err != nil {
@@ -125,21 +116,22 @@ func Load() (*Context, error) {
 	}
 
 	// Unmarshal config into struct
-	if err := viper.Unmarshal(ctx.Settings); err != nil {
+	if err := viper.Unmarshal(settings); err != nil {
 		return nil, fmt.Errorf("error unmarshaling config into struct: %w", err)
 	}
 
 	// init custom confidence list
-	speciesConfig, err := LoadSpeciesConfig()
-	if err != nil {
-		// print error is loading failed
-		fmt.Println("error reading species conficende config:", err)
-		// set customConfidence list as empty if file not found
-		speciesConfig = SpeciesConfig{}
-	}
-	ctx.SpeciesConfig = speciesConfig
+	/*
+		speciesConfig, err := LoadSpeciesConfig()
+		if err != nil {
+			// print error is loading failed
+			fmt.Println("error reading species conficende config:", err)
+			// set customConfidence list as empty if file not found
+			speciesConfig = SpeciesConfig{}
+		}
+		ctx.SpeciesConfig = speciesConfig*/
 
-	return ctx, nil
+	return settings, nil
 }
 
 func initViper() error {
@@ -171,6 +163,7 @@ func initViper() error {
 	return nil
 }
 
+/*
 // LoadCustomSpeciesConfidence loads a list of custom thresholds for species from a CSV file.
 func LoadSpeciesConfig() (SpeciesConfig, error) {
 	var speciesConfig SpeciesConfig
@@ -227,7 +220,7 @@ func LoadSpeciesConfig() (SpeciesConfig, error) {
 
 	// File not found in any of the config paths.
 	return SpeciesConfig{}, fmt.Errorf("species confidence file '%s' not found", SpeciesConfigCSV)
-}
+}*/
 
 // createDefaultConfig creates a default config file and writes it to the default config path
 func createDefaultConfig() error {

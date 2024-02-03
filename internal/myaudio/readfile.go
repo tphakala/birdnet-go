@@ -11,10 +11,10 @@ import (
 )
 
 // Read 48000 sample rate WAV file into 3 second chunks
-func ReadAudioFile(ctx *conf.Context) ([][]float32, error) {
+func ReadAudioFile(settings *conf.Settings) ([][]float32, error) {
 	fmt.Print("- Reading audio data")
 
-	file, err := os.Open(ctx.Settings.Input.Path)
+	file, err := os.Open(settings.Input.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -26,7 +26,7 @@ func ReadAudioFile(ctx *conf.Context) ([][]float32, error) {
 		return nil, errors.New("input is not a valid WAV audio file")
 	}
 
-	if ctx.Settings.Debug {
+	if settings.Debug {
 		fmt.Println("File is valid wav: ", decoder.IsValidFile())
 		fmt.Println("Sample rate:", decoder.SampleRate)
 		fmt.Println("Bits per sample:", decoder.BitDepth)
@@ -55,7 +55,7 @@ func ReadAudioFile(ctx *conf.Context) ([][]float32, error) {
 		return nil, errors.New("unsupported audio file bit depth")
 	}
 
-	step := int((3 - ctx.Settings.BirdNET.Overlap) * conf.SampleRate)
+	step := int((3 - settings.BirdNET.Overlap) * conf.SampleRate)
 	minLenSamples := int(1.5 * conf.SampleRate)
 	secondsSamples := int(3 * conf.SampleRate)
 

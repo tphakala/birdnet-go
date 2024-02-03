@@ -11,18 +11,18 @@ import (
 )
 
 // RealtimeCommand creates a new command for real-time audio analysis.
-func Command(ctx *conf.Context) *cobra.Command {
+func Command(settings *conf.Settings) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "realtime",
 		Short: "Analyze audio in realtime mode",
 		Long:  "Start analyzing incoming audio data in real-time looking for bird calls.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return analysis.RealtimeAnalysis(ctx)
+			return analysis.RealtimeAnalysis(settings)
 		},
 	}
 
 	// Set up flags specific to the 'file' command
-	if err := setupFlags(cmd, ctx.Settings); err != nil {
+	if err := setupFlags(cmd, settings); err != nil {
 		fmt.Printf("error setting up flags: %v\n", err)
 		os.Exit(1)
 	}

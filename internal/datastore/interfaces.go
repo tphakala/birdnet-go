@@ -27,15 +27,15 @@ type DataStore struct {
 }
 
 // NewDataStore creates a new DataStore instance based on the provided configuration context.
-func New(ctx *conf.Context) Interface {
+func New(settings *conf.Settings) Interface {
 	switch {
-	case ctx.Settings.Output.SQLite.Enabled:
+	case settings.Output.SQLite.Enabled:
 		return &SQLiteStore{
-			Ctx: ctx,
+			Settings: settings,
 		}
-	case ctx.Settings.Output.MySQL.Enabled:
+	case settings.Output.MySQL.Enabled:
 		return &MySQLStore{
-			Ctx: ctx,
+			Settings: settings,
 		}
 	default:
 		// Consider handling the case where neither database is enabled

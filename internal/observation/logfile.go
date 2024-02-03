@@ -11,9 +11,9 @@ import (
 )
 
 // LogNoteToFile saves the Note to a log file.
-func LogNoteToFile(ctx *conf.Context, note datastore.Note) error {
+func LogNoteToFile(settings *conf.Settings, note datastore.Note) error {
 	// Separate the directory and file name from the log path
-	dir, fileName := filepath.Split(ctx.Settings.Realtime.Log.Path)
+	dir, fileName := filepath.Split(settings.Realtime.Log.Path)
 
 	// Expand the directory path to an absolute path
 	basePath := conf.GetBasePath(dir)
@@ -38,7 +38,7 @@ func LogNoteToFile(ctx *conf.Context, note datastore.Note) error {
 
 	// Determine the time format string based on the user's preference
 	timeFormat := "15:04:05"
-	if !ctx.Settings.Main.TimeAs24h {
+	if !settings.Main.TimeAs24h {
 		timeFormat = "03:04:05 PM"
 	}
 

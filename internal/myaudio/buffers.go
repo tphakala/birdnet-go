@@ -8,7 +8,6 @@ import (
 	"github.com/smallnest/ringbuffer"
 
 	"github.com/tphakala/birdnet-go/internal/birdnet"
-	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 const (
@@ -68,7 +67,7 @@ func readFromBuffer() []byte {
 }
 
 // BufferMonitor monitors the buffer and processes audio data when enough data is present.
-func BufferMonitor(ctx *conf.Context, wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}) {
+func BufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}) {
 	defer wg.Done()
 
 	for {
@@ -86,12 +85,14 @@ func BufferMonitor(ctx *conf.Context, wg *sync.WaitGroup, bn *birdnet.BirdNET, q
 			} else {
 				time.Sleep(pollInterval)
 
-				today := time.Now().Truncate(24 * time.Hour)
-				if today.After(ctx.SpeciesListUpdated) {
-					// update location based species list once a day
-					ctx.IncludedSpeciesList = bn.GetProbableSpecies()
-					ctx.SpeciesListUpdated = today
-				}
+				/*
+					today := time.Now().Truncate(24 * time.Hour)
+									if today.After(ctx.SpeciesListUpdated) {
+						// update location based species list once a day
+						p.IncludedSpeciesList = bn.GetProbableSpecies()
+						p.SpeciesListUpdated = today
+					}
+				*/
 			}
 		}
 	}

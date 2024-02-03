@@ -10,14 +10,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-func CaptureAudio(ctx *conf.Context, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}) {
+func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}) {
 	defer wg.Done() // Ensure this is called when the goroutine exits
 
-	if ctx.Settings.Debug {
+	if settings.Debug {
 		fmt.Println("Initializing context")
 	}
 	malgoCtx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
-		if ctx.Settings.Debug {
+		if settings.Debug {
 			fmt.Print(message)
 		}
 	})
@@ -63,7 +63,7 @@ func CaptureAudio(ctx *conf.Context, wg *sync.WaitGroup, quitChan chan struct{},
 		log.Fatalf("Device init failed %v", err)
 	}
 
-	if ctx.Settings.Debug {
+	if settings.Debug {
 		fmt.Println("Starting device")
 	}
 	err = device.Start()
@@ -72,7 +72,7 @@ func CaptureAudio(ctx *conf.Context, wg *sync.WaitGroup, quitChan chan struct{},
 	}
 	defer device.Stop()
 
-	if ctx.Settings.Debug {
+	if settings.Debug {
 		fmt.Println("Device started")
 	}
 	fmt.Println("Listening ...")
@@ -84,13 +84,13 @@ func CaptureAudio(ctx *conf.Context, wg *sync.WaitGroup, quitChan chan struct{},
 		select {
 		case <-quitChan:
 			// QuitChannel was closed, clean up and return.
-			if ctx.Settings.Debug {
+			if settings.Debug {
 				fmt.Println("Stopping capture due to quit signal.")
 			}
 			return
 		case <-restartChan:
 			// Handle restart signal
-			if ctx.Settings.Debug {
+			if settings.Debug {
 				fmt.Println("Restarting capture.")
 			}
 			return

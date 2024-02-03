@@ -12,7 +12,7 @@ import (
 )
 
 // DirectoryAnalysis processes all .wav files in the given directory for analysis.
-func DirectoryAnalysis(ctx *conf.Context, bn birdnet.BirdNET) error {
+func DirectoryAnalysis(settings *conf.Settings, bn birdnet.BirdNET) error {
 	analyzeFunc := func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			// Return the error to stop the walking process.
@@ -21,7 +21,7 @@ func DirectoryAnalysis(ctx *conf.Context, bn birdnet.BirdNET) error {
 
 		if d.IsDir() {
 			// If recursion is not enabled and this is a subdirectory, skip it.
-			if !ctx.Settings.Input.Recursive && path != ctx.Settings.Input.Path {
+			if !settings.Input.Recursive && path != settings.Input.Path {
 				return filepath.SkipDir
 			}
 			// If it's the root directory or recursion is enabled, continue walking.
@@ -30,8 +30,8 @@ func DirectoryAnalysis(ctx *conf.Context, bn birdnet.BirdNET) error {
 
 		if strings.HasSuffix(d.Name(), ".wav") {
 			fmt.Println("Analyzing file:", path)
-			ctx.Settings.Input.Path = path
-			if err := FileAnalysis(ctx, bn); err != nil {
+			settings.Input.Path = path
+			if err := FileAnalysis(settings, bn); err != nil {
 				// If FileAnalysis returns an error log it and continue
 				log.Printf("Error analyzing file '%s': %v", path, err)
 				return nil
@@ -41,7 +41,7 @@ func DirectoryAnalysis(ctx *conf.Context, bn birdnet.BirdNET) error {
 	}
 
 	// Start walking through the directory
-	err := filepath.WalkDir(ctx.Settings.Input.Path, analyzeFunc)
+	err := filepath.WalkDir(settings.Input.Path, analyzeFunc)
 	if err != nil {
 		log.Fatalf("Failed to walk directory: %v", err)
 	}

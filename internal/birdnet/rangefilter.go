@@ -1,8 +1,11 @@
+// rangefilter.go
+
 package birdnet
 
 import (
 	"encoding/csv"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -30,7 +33,7 @@ func (a ByScore) Less(i, j int) bool { return a[i].Score > a[j].Score } // For d
 const locationFilterThreshold = 0.01
 
 // GetProbableSpecies filters and sorts bird species based on their scores.
-// It also updates the scores for species that have custom actions defined in the speciesActionsFile.
+// It also updates the scores for species that have custom actions defined in the speciesConfigCSV.
 func (bn *BirdNET) GetProbableSpecies() []string {
 	// Skip filtering if location is not set
 	if bn.Settings.BirdNET.Latitude == 0 && bn.Settings.BirdNET.Longitude == 0 {
@@ -52,7 +55,7 @@ func (bn *BirdNET) GetProbableSpecies() []string {
 	}
 
 	// Load species from the CSV file containing species with custom actions
-	speciesFromCSV, err := loadSpeciesFromCSV(conf.SpeciesActionsCSV)
+	speciesFromCSV, err := loadSpeciesFromCSV(conf.SpeciesConfigCSV)
 	if err != nil {
 		// Silently ignore the failure to load CSV
 		speciesFromCSV = []string{} // Ensure speciesFromCSV is an empty slice
@@ -68,7 +71,7 @@ func (bn *BirdNET) GetProbableSpecies() []string {
 	for _, species := range speciesFromCSV {
 		for _, label := range bn.Labels {
 			if strings.Contains(label, species) {
-				updateOrAddSpecies(speciesScoreMap, speciesScores, label)
+				updateOrAddSpecies(speciesScoreMap, &speciesScores, label) // Pass pointer to slice
 				break
 			}
 		}
@@ -156,11 +159,13 @@ func getWeekForFilter() float32 {
 }
 
 // Function to update the score of existing species or add new ones
-func updateOrAddSpecies(scoreMap map[string]*SpeciesScore, scores []SpeciesScore, label string) {
+func updateOrAddSpecies(scoreMap map[string]*SpeciesScore, scores *[]SpeciesScore, label string) {
 	if score, exists := scoreMap[label]; exists {
-		score.Score = 1.0
+		score.Score = 1.0 // Updates the score of the existing species
 	} else {
-		scores = append(scores, SpeciesScore{Score: 1.0, Label: label})
+		newScore := SpeciesScore{Score: 1.0, Label: label}
+		*scores = append(*scores, newScore)          // Adds new species to the slice
+		scoreMap[label] = &(*scores)[len(*scores)-1] // Update map with new score reference
 	}
 }
 
@@ -174,6 +179,7 @@ func loadSpeciesFromCSV(fileName string) ([]string, error) {
 	}
 
 	var file *os.File
+
 	// Try to open the file in one of the default config paths.
 	for _, path := range configPaths {
 		fullPath := filepath.Join(path, fileName)
@@ -182,6 +188,7 @@ func loadSpeciesFromCSV(fileName string) ([]string, error) {
 			break
 		}
 	}
+
 	if file == nil {
 		return nil, fmt.Errorf("file '%s' not found in default config paths", fileName)
 	}
@@ -189,15 +196,24 @@ func loadSpeciesFromCSV(fileName string) ([]string, error) {
 
 	// Read from the CSV file
 	reader := csv.NewReader(file)
-	records, err := reader.ReadAll()
-	if err != nil {
-		return nil, fmt.Errorf("error reading CSV file: %v", err)
-	}
+	reader.Comment = '#'        // Set comment character
+	reader.FieldsPerRecord = -1 // Allow a variable number of fields
 
 	var speciesList []string
-	for _, record := range records {
-		species := record[0] // Assuming species name is in the first column
-		speciesList = append(speciesList, species)
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Printf("error reading CSV file: %v", err)
+			continue // Skip this record and continue with the next
+		}
+
+		if len(record) > 0 {
+			species := record[0] // Assuming species name is in the first column
+			speciesList = append(speciesList, species)
+		}
 	}
 
 	return speciesList, nil

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/queue"
+	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -14,9 +15,14 @@ import (
 )
 
 type Processor struct {
-	Ctx               *conf.Context
-	Ds                datastore.Interface
-	BirdweatherClient *birdweather.BirdweatherClient
+	Settings           *conf.Settings
+	Ds                 datastore.Interface
+	Bn                 *birdnet.BirdNET
+	BwClient           *birdweather.BwClient
+	EventTracker       *EventTracker
+	SpeciesConfig      SpeciesConfig
+	IncludedSpecies    *[]string // Field to hold the list of included species
+	SpeciesListUpdated time.Time
 }
 
 type Detections struct {
@@ -24,25 +30,29 @@ type Detections struct {
 	Note    datastore.Note
 }
 
-func New(ctx *conf.Context, ds datastore.Interface) *Processor {
+func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET) *Processor {
 	p := &Processor{
-		Ctx: ctx,
-		Ds:  ds,
+		Settings:        settings,
+		Ds:              ds,
+		Bn:              bn,
+		EventTracker:    NewEventTracker(),
+		IncludedSpecies: new([]string),
 	}
 
 	// Start the detection processor
 	p.StartDetectionProcessor()
 	p.StartWorkerPool(5)
 
-	// Load species actions from CSV file
-	if err := LoadSpeciesActionsFromCSV(conf.SpeciesActionsCSV); err != nil {
-		log.Printf("Failed to load species actions from %s: %v", conf.SpeciesActionsCSV, err)
-	}
+	// Load Species configs
+	p.SpeciesConfig, _ = LoadSpeciesConfig(conf.SpeciesConfigCSV)
 
 	// Initialize BirdWeather client if enabled in settings.
-	if ctx.Settings.Realtime.Birdweather.Enabled {
-		p.BirdweatherClient = birdweather.New(ctx)
+	if settings.Realtime.Birdweather.Enabled {
+		p.BwClient = birdweather.New(settings)
 	}
+
+	// Initialize included species list
+	*p.IncludedSpecies = bn.GetProbableSpecies()
 
 	return p
 }
@@ -65,6 +75,7 @@ func (p *Processor) processDetections(item *queue.Results) {
 
 	for _, detection := range detections {
 		actionList := p.getActionsForItem(detection)
+		//fmt.Println("Detection:", detection, "Action:", actionList)
 		for _, action := range actionList {
 			workerQueue <- Task{Type: TaskTypeAction, Detection: detection, Action: action}
 		}
@@ -87,11 +98,11 @@ func (p *Processor) processResults(item *queue.Results) ([]Detections, error) {
 		}
 
 		// Use custom confidence threshold if it exists for the species, otherwise use the global threshold
-		confidenceThreshold, exists := p.Ctx.SpeciesConfig.Threshold[speciesLowercase]
+		confidenceThreshold, exists := p.SpeciesConfig.Threshold[speciesLowercase]
 		if !exists {
-			confidenceThreshold = float32(p.Ctx.Settings.BirdNET.Threshold)
+			confidenceThreshold = float32(p.Settings.BirdNET.Threshold)
 		} else {
-			if p.Ctx.Settings.Debug {
+			if p.Settings.Debug {
 				//fmt.Printf("\nUsing confidence threshold of %.2f for %s\n", confidenceThreshold, species)
 			}
 		}
@@ -102,17 +113,9 @@ func (p *Processor) processResults(item *queue.Results) ([]Detections, error) {
 		}
 
 		// match against location based filter
-		if !isSpeciesIncluded(result.Species, p.Ctx.IncludedSpeciesList) {
-			if p.Ctx.Settings.Debug {
+		if !isSpeciesIncluded(result.Species, *p.IncludedSpecies) {
+			if p.Settings.Debug {
 				log.Printf("Species not on included list: %s\n", commonName)
-			}
-			continue
-		}
-
-		// match against occurence monitor to filter too frequent observations for same species
-		if p.Ctx.OccurrenceMonitor.TrackSpecies(commonName) {
-			if p.Ctx.Settings.Debug {
-				log.Printf("Duplicate occurrence detected: %s, skipping processing\n", commonName)
 			}
 			continue
 		}
@@ -121,7 +124,7 @@ func (p *Processor) processResults(item *queue.Results) ([]Detections, error) {
 		//log.Println("clipName: ", item.ClipName)
 
 		beginTime, endTime := 0.0, 0.0
-		note := observation.New(p.Ctx.Settings, beginTime, endTime, result.Species, float64(result.Confidence), item.ClipName, item.ElapsedTime)
+		note := observation.New(p.Settings, beginTime, endTime, result.Species, float64(result.Confidence), item.ClipName, item.ElapsedTime)
 
 		// detection passed all filters, process it
 		detections = append(detections, Detections{
@@ -136,7 +139,7 @@ func (p *Processor) processResults(item *queue.Results) ([]Detections, error) {
 
 func (p *Processor) generateClipName(scientificName string, confidence float32) string {
 	// Get the base path from the configuration
-	basePath := conf.GetBasePath(p.Ctx.Settings.Realtime.AudioExport.Path)
+	basePath := conf.GetBasePath(p.Settings.Realtime.AudioExport.Path)
 
 	// Replace whitespaces with underscores and convert to lowercase
 	formattedName := strings.ToLower(strings.ReplaceAll(scientificName, " ", "_"))

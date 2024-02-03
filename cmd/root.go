@@ -15,7 +15,7 @@ import (
 )
 
 // RootCommand creates and returns the root command
-func RootCommand(ctx *conf.Context) *cobra.Command {
+func RootCommand(settings *conf.Settings) *cobra.Command {
 	//ctx := config.GetGlobalContext()
 
 	rootCmd := &cobra.Command{
@@ -24,12 +24,12 @@ func RootCommand(ctx *conf.Context) *cobra.Command {
 	}
 
 	// Set up the global flags for the root command.
-	setupFlags(rootCmd, ctx.Settings)
+	setupFlags(rootCmd, settings)
 
 	// Add sub-commands to the root command.
 	//fileCmd := file.Command(ctx)
 	//directoryCmd := directory.Command(ctx)
-	realtimeCmd := realtime.Command(ctx)
+	realtimeCmd := realtime.Command(settings)
 	authorsCmd := authors.Command()
 	licenseCmd := license.Command()
 
@@ -46,7 +46,7 @@ func RootCommand(ctx *conf.Context) *cobra.Command {
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		// Skip setup for authors and license commands
 		if cmd.Name() != authorsCmd.Name() && cmd.Name() != licenseCmd.Name() {
-			if err := initialize(ctx); err != nil {
+			if err := initialize(); err != nil {
 				return fmt.Errorf("error initializing: %v", err)
 			}
 		}
@@ -59,14 +59,7 @@ func RootCommand(ctx *conf.Context) *cobra.Command {
 
 // initialize is called before any subcommands are run, but after the context is ready
 // This function is responsible for setting up configurations, ensuring the environment is ready, etc.
-func initialize(ctx *conf.Context) error {
-
-	/*
-		// Initialize the BirdNET system with the normalized locale
-		if err := birdnet.Setup(ctx); err != nil {
-			return fmt.Errorf("failed to setup BirdNET: %w", err)
-		}
-	*/
+func initialize() error {
 	return nil
 }
 
