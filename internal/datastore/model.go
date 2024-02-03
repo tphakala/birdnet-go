@@ -1,4 +1,4 @@
-package model
+package datastore
 
 import "time"
 

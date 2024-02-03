@@ -1,7 +1,5 @@
 package logger
 
-// logger.go file
-
 import (
 	"fmt"
 	"os"
@@ -9,7 +7,7 @@ import (
 	"time"
 )
 
-// Log levels constants.
+// Log level constants.
 const (
 	INFO = iota
 	WARNING
@@ -19,18 +17,18 @@ const (
 
 // Log represents a single log entry.
 type Log struct {
-	Level   int
-	Time    time.Time
-	Message string
+	Level   int       // Log level
+	Time    time.Time // Time of log entry
+	Message string    // Log message
 }
 
-// Logger represents a logging instance with multiple channels.
+// Logger manages logging to various outputs.
 type Logger struct {
-	Outputs map[string]LogOutput
-	Prefix  bool
+	Outputs map[string]LogOutput // Mapping of log channels to their outputs
+	Prefix  bool                 // Indicates if log messages should be prefixed with metadata
 }
 
-// LogOutput defines the interface for log outputs.
+// LogOutput defines an interface for log outputs.
 type LogOutput interface {
 	WriteLog(log Log, prefix bool)
 }
@@ -46,7 +44,7 @@ func (s StdoutOutput) WriteLog(log Log, prefix bool) {
 
 // FileOutput writes logs to a file.
 type FileOutput struct {
-	Handler FileHandler
+	Handler FileHandler // File handler for writing logs
 }
 
 // WriteLog writes a log entry to a file.
@@ -62,7 +60,7 @@ func (f FileOutput) WriteLog(log Log, prefix bool) {
 	}
 }
 
-// formatLog formats the log entry for output.
+// formatLog formats a log entry based on its level and prefix requirement.
 func formatLog(log Log, prefix bool) string {
 	formattedMessage := log.Message
 	if !strings.HasSuffix(formattedMessage, "\n") {
@@ -70,8 +68,8 @@ func formatLog(log Log, prefix bool) string {
 	}
 
 	var logMessage string
-
 	if prefix {
+		// Prepend log level and timestamp if prefix is enabled
 		var level string
 		switch log.Level {
 		case INFO:
@@ -91,6 +89,7 @@ func formatLog(log Log, prefix bool) string {
 	return logMessage
 }
 
+// NewLogger creates a new Logger instance.
 func NewLogger(outputs map[string]LogOutput, prefix bool) *Logger {
 	return &Logger{
 		Outputs: outputs,
@@ -98,13 +97,10 @@ func NewLogger(outputs map[string]LogOutput, prefix bool) *Logger {
 	}
 }
 
-// Write implements the io.Writer interface.
-// It allows the logger to be used with standard Go logging utilities.
+// Write allows Logger to comply with io.Writer interface, enabling compatibility with Go's standard logging utilities.
 func (l *Logger) Write(p []byte) (n int, err error) {
 	message := string(p)
-
-	// Here you can decide how to handle the log message.
-	// For simplicity, let's log it to all outputs as INFO.
+	// Default log level for io.Writer interface is INFO
 	for _, output := range l.Outputs {
 		log := Log{
 			Level:   INFO,
@@ -117,7 +113,7 @@ func (l *Logger) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-// Log logs a message to a specific channel.
+// Log sends a log entry to a specific channel.
 func (l *Logger) Log(channel, message string, level int) {
 	if output, exists := l.Outputs[channel]; exists {
 		log := Log{
@@ -127,31 +123,29 @@ func (l *Logger) Log(channel, message string, level int) {
 		}
 		output.WriteLog(log, l.Prefix)
 	} else {
+		// Handle unknown log channels
 		fmt.Fprintf(os.Stderr, "Unknown log channel: %s\n", channel)
 	}
 }
 
-// Info logs an informational message.
+// Helper functions for logging at specific levels.
 func (l *Logger) Info(channel, format string, a ...interface{}) {
 	l.log(channel, INFO, format, a...)
 }
 
-// Warning logs a warning message.
 func (l *Logger) Warning(channel, format string, a ...interface{}) {
 	l.log(channel, WARNING, format, a...)
 }
 
-// Error logs an error message.
 func (l *Logger) Error(channel, format string, a ...interface{}) {
 	l.log(channel, ERROR, format, a...)
 }
 
-// Debug logs a debug message.
 func (l *Logger) Debug(channel, format string, a ...interface{}) {
 	l.log(channel, DEBUG, format, a...)
 }
 
-// log is a helper function to format and log the message.
+// log is a helper function to format and log a message.
 func (l *Logger) log(channel string, level int, format string, a ...interface{}) {
 	message := fmt.Sprintf(format, a...)
 	log := Log{
@@ -163,6 +157,7 @@ func (l *Logger) log(channel string, level int, format string, a ...interface{})
 	if output, exists := l.Outputs[channel]; exists {
 		output.WriteLog(log, l.Prefix)
 	} else {
+		// Handle unknown log channels
 		fmt.Fprintf(os.Stderr, "Unknown log channel: %s\n", channel)
 	}
 }

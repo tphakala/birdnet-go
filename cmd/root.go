@@ -2,21 +2,20 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/cmd/authors"
-	"github.com/tphakala/birdnet-go/cmd/directory"
-	"github.com/tphakala/birdnet-go/cmd/file"
+
+	//"github.com/tphakala/birdnet-go/cmd/directory"
+	//"github.com/tphakala/birdnet-go/cmd/file"
 	"github.com/tphakala/birdnet-go/cmd/license"
 	"github.com/tphakala/birdnet-go/cmd/realtime"
-	"github.com/tphakala/birdnet-go/internal/config"
-	"github.com/tphakala/birdnet-go/pkg/birdnet"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // RootCommand creates and returns the root command
-func RootCommand(ctx *config.Context) *cobra.Command {
+func RootCommand(ctx *conf.Context) *cobra.Command {
 	//ctx := config.GetGlobalContext()
 
 	rootCmd := &cobra.Command{
@@ -28,15 +27,15 @@ func RootCommand(ctx *config.Context) *cobra.Command {
 	setupFlags(rootCmd, ctx.Settings)
 
 	// Add sub-commands to the root command.
-	fileCmd := file.Command(ctx)
-	directoryCmd := directory.Command(ctx)
+	//fileCmd := file.Command(ctx)
+	//directoryCmd := directory.Command(ctx)
 	realtimeCmd := realtime.Command(ctx)
 	authorsCmd := authors.Command()
 	licenseCmd := license.Command()
 
 	subcommands := []*cobra.Command{
-		fileCmd,
-		directoryCmd,
+		//fileCmd,
+		//directoryCmd,
 		realtimeCmd,
 		authorsCmd,
 		licenseCmd,
@@ -60,25 +59,19 @@ func RootCommand(ctx *config.Context) *cobra.Command {
 
 // initialize is called before any subcommands are run, but after the context is ready
 // This function is responsible for setting up configurations, ensuring the environment is ready, etc.
-func initialize(ctx *config.Context) error {
-	// Example of locale normalization and checking
-	inputLocale := strings.ToLower(ctx.Settings.BirdNET.Locale)
-	normalizedLocale, err := config.NormalizeLocale(inputLocale)
-	if err != nil {
-		return err
-	}
-	ctx.Settings.BirdNET.Locale = normalizedLocale
+func initialize(ctx *conf.Context) error {
 
-	// Initialize the BirdNET system with the normalized locale
-	if err := birdnet.Setup(ctx); err != nil {
-		return fmt.Errorf("failed to setup BirdNET: %w", err)
-	}
-
+	/*
+		// Initialize the BirdNET system with the normalized locale
+		if err := birdnet.Setup(ctx); err != nil {
+			return fmt.Errorf("failed to setup BirdNET: %w", err)
+		}
+	*/
 	return nil
 }
 
 // defineGlobalFlags defines flags that are global to the command line interface
-func setupFlags(rootCmd *cobra.Command, settings *config.Settings) error {
+func setupFlags(rootCmd *cobra.Command, settings *conf.Settings) error {
 	rootCmd.PersistentFlags().BoolVarP(&settings.Debug, "debug", "d", viper.GetBool("debug"), "Enable debug output")
 	rootCmd.PersistentFlags().StringVar(&settings.BirdNET.Locale, "locale", viper.GetString("node.locale"), "Set the locale for labels. Accepts full name or 2-letter code.")
 	rootCmd.PersistentFlags().IntVarP(&settings.BirdNET.Threads, "threads", "j", viper.GetInt("node.threads"), "Number of CPU threads to use for analysis (default 0 which is all CPUs)")

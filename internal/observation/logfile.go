@@ -6,17 +6,17 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/config"
-	"github.com/tphakala/birdnet-go/internal/model"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
 // LogNoteToFile saves the Note to a log file.
-func LogNoteToFile(ctx *config.Context, note model.Note) error {
+func LogNoteToFile(ctx *conf.Context, note datastore.Note) error {
 	// Separate the directory and file name from the log path
 	dir, fileName := filepath.Split(ctx.Settings.Realtime.Log.Path)
 
 	// Expand the directory path to an absolute path
-	basePath := config.GetBasePath(dir)
+	basePath := conf.GetBasePath(dir)
 
 	// Recombine to form the full absolute path of the log file
 	absoluteFilePath := filepath.Join(basePath, fileName)

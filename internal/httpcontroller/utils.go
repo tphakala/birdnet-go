@@ -1,4 +1,4 @@
-package controller
+package httpcontroller
 
 import (
 	"fmt"
@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/model"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
 // NoteWithIndex extends model.Note with additional fields used for template rendering.
 type NoteWithIndex struct {
-	model.Note
+	datastore.Note
 	HourlyCounts    [24]int // Hourly occurrence counts of the note
 	TotalDetections int     // Total number of detections for the note
 	Index           int     // Index in a list for rendering purposes
@@ -58,7 +58,7 @@ func heatmapColor(value int) string {
 // Assumes clips are accessible under the '/clips/' URL path.
 func getAudioURL(fullPath string) string {
 	filename := filepath.Base(fullPath) // Extract the filename from the full path
-	return "/clips/" + filename         // Construct the URL
+	return "/clips/2024/01/" + filename // Construct the URL
 }
 
 // confidence converts a confidence value (0.0 - 1.0) to a percentage string.
@@ -110,7 +110,7 @@ func createSpectrogramWithSox(wavFilePath, spectrogramPath string) error {
 	}
 
 	// Construct and execute the SoX command
-	cmd := exec.Command("sox", wavFilePath, "-n", "spectrogram", "-x", "300", "-y", "200", "-o", spectrogramPath)
+	cmd := exec.Command("sox", wavFilePath, "-n", "rate", "30k", "spectrogram", "-r", "-x", "300", "-y", "200", "-o", spectrogramPath)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("SoX command failed: %w", err)
 	}

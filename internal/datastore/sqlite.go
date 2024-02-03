@@ -1,11 +1,11 @@
-package model
+package datastore
 
 import (
 	"fmt"
+	"log"
 	"path/filepath"
 
-	"github.com/tphakala/birdnet-go/internal/config"
-	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -13,22 +13,23 @@ import (
 // SQLiteStore implements DataStore for SQLite
 type SQLiteStore struct {
 	DataStore
+	Ctx *conf.Context
 }
 
-func validateSQLiteConfig(ctx *config.Context) error {
+func validateSQLiteConfig(ctx *conf.Context) error {
 	// Add validation logic for SQLite configuration
 	// Return an error if the configuration is invalid
 	return nil
 }
 
 // InitializeDatabase sets up the SQLite database connection
-func (store *SQLiteStore) Open(ctx *config.Context) error {
-	if err := validateSQLiteConfig(ctx); err != nil {
+func (store *SQLiteStore) Open() error {
+	if err := validateSQLiteConfig(store.Ctx); err != nil {
 		return err // validateSQLiteConfig returns a properly formatted error
 	}
 
-	dir, fileName := filepath.Split(ctx.Settings.Output.SQLite.Path)
-	basePath := config.GetBasePath(dir)
+	dir, fileName := filepath.Split(store.Ctx.Settings.Output.SQLite.Path)
+	basePath := conf.GetBasePath(dir)
 	absoluteFilePath := filepath.Join(basePath, fileName)
 
 	db, err := gorm.Open(sqlite.Open(absoluteFilePath), &gorm.Config{})
@@ -37,21 +38,20 @@ func (store *SQLiteStore) Open(ctx *config.Context) error {
 	}
 
 	store.DB = db
-	return performAutoMigration(db, ctx.Settings.Debug, "SQLite", absoluteFilePath)
+	return performAutoMigration(db, store.Ctx.Settings.Debug, "SQLite", absoluteFilePath)
 }
 
 // SaveToDatabase inserts a new Note record into the SQLite database
-func (store *SQLiteStore) Save(ctx *config.Context, note Note) error {
+func (store *SQLiteStore) Save(note Note) error {
 	if store.DB == nil {
 		return fmt.Errorf("database connection is not initialized")
 	}
 
 	if err := store.DB.Create(&note).Error; err != nil {
-		logger.Error("main", "Failed to save note: %v\n", err)
+		log.Printf("Failed to save note: %v\n", err)
 		return err
 	}
 
-	logger.Debug("main", "Saved note: %v\n", note)
 	return nil
 }
 
