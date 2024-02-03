@@ -1,16 +1,14 @@
-package config
+package conf
 
 import (
 	"sync"
 	"time"
 
 	"github.com/tphakala/go-tflite"
-	"gorm.io/gorm"
 )
 
 // Context holds the overall application state, including the Settings and the OccurrenceMonitor.
 type Context struct {
-	Db                  *gorm.DB
 	Settings            *Settings
 	OccurrenceMonitor   *OccurrenceMonitor
 	IncludedSpeciesList []string  // Field to hold the list of included species
@@ -20,7 +18,6 @@ type Context struct {
 	FilterInterpreter   *tflite.Interpreter
 	Labels              []string
 	SpeciesConfig       SpeciesConfig
-	BirdweatherClient   BirdweatherClientInterface
 }
 
 // OccurrenceMonitor to track species occurrences and manage state reset.

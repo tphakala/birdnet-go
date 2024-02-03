@@ -1,4 +1,4 @@
-package controller
+package httpcontroller
 
 import (
 	"bytes"
@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/tphakala/birdnet-go/internal/config"
-	"github.com/tphakala/birdnet-go/internal/model"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
 // NoteWithSpectrogram extends the Note model with a spectrogram path.
 type NoteWithSpectrogram struct {
-	model.Note
+	datastore.Note
 	SpectrogramPath string
 }
 
@@ -28,7 +28,7 @@ func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 		C        echo.Context
 		Page     string
 		Title    string
-		Settings *config.Settings
+		Settings *conf.Settings
 	})
 	if !ok {
 		return "", fmt.Errorf("invalid data type")
@@ -77,7 +77,7 @@ func (s *Server) handleRequest(c echo.Context) error {
 		C        echo.Context
 		Page     string
 		Title    string
-		Settings *config.Settings // Include settings here
+		Settings *conf.Settings // Include settings here
 	}{
 		C:        c,
 		Page:     currentRoute.TemplateName,
@@ -119,7 +119,7 @@ func (s *Server) topBirdsHandler(c echo.Context) error {
 	}
 
 	// Process notes with additional data such as hourly occurrences and total detections
-	notesWithIndex, err := processNotes(notes, selectedDate, minConfidenceNormalized, s.ds)
+	notesWithIndex, err := s.processNotes(notes, selectedDate, minConfidenceNormalized)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
@@ -148,13 +148,13 @@ func (s *Server) topBirdsHandler(c echo.Context) error {
 }
 
 // Additional helper functions (processNotes, makeHoursSlice, updateClipNames, etc.) go here...
-func processNotes(notes []model.Note, selectedDate string, minConfidenceNormalized float64, ds model.StoreInterface) ([]NoteWithIndex, error) {
+func (s *Server) processNotes(notes []datastore.Note, selectedDate string, minConfidenceNormalized float64) ([]NoteWithIndex, error) {
 	startTime := time.Now()
 	notesWithIndex := make([]NoteWithIndex, 0, len(notes))
 	for _, note := range notes {
 		//noteStartTime := time.Now() // Start timing for this note
 
-		hourlyCounts, err := ds.GetHourlyOccurrences(selectedDate, note.CommonName, minConfidenceNormalized)
+		hourlyCounts, err := s.ds.GetHourlyOccurrences(selectedDate, note.CommonName, minConfidenceNormalized)
 		if err != nil {
 			return nil, err // Return error to be handled by the caller
 		}
@@ -224,7 +224,7 @@ func (s *Server) searchHandler(c echo.Context) error {
 
 	// Prepare data for rendering in the template
 	data := struct {
-		Notes       []model.Note
+		Notes       []datastore.Note
 		SearchQuery string
 		NumResults  int
 		Offset      int
@@ -285,7 +285,7 @@ func makeHoursSlice() []int {
 	return hours
 }
 
-func updateClipNames(notes []model.Note) {
+func updateClipNames(notes []datastore.Note) {
 	for i := range notes {
 		notes[i].ClipName = getAudioURL(notes[i].ClipName) // Assuming getAudioURL is defined
 	}
@@ -314,7 +314,7 @@ func parseOffset(offsetStr string, defaultOffset int) int {
 	return offset
 }
 
-func wrapNotesWithSpectrogram(notes []model.Note) ([]NoteWithSpectrogram, error) {
+func wrapNotesWithSpectrogram(notes []datastore.Note) ([]NoteWithSpectrogram, error) {
 	notesWithSpectrogram := make([]NoteWithSpectrogram, len(notes))
 	for i, note := range notes {
 		spectrogramPath, err := GetSpectrogramPath(note.ClipName)

@@ -1,10 +1,11 @@
-package model
+package datastore
 
 import (
 	"fmt"
+	"log"
 
-	"github.com/tphakala/birdnet-go/internal/config"
-	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/conf"
+
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
@@ -12,44 +13,46 @@ import (
 // MySQLStore implements DataStore for MySQL
 type MySQLStore struct {
 	DataStore
+	Ctx *conf.Context
 }
 
-func validateMySQLConfig(ctx *config.Context) error {
+func validateMySQLConfig(ctx *conf.Context) error {
 	// Add validation logic for MySQL configuration
 	// Return an error if the configuration is invalid
 	return nil
 }
 
 // InitializeDatabase sets up the MySQL database connection
-func (store *MySQLStore) Open(ctx *config.Context) error {
-	if err := validateMySQLConfig(ctx); err != nil {
+func (store *MySQLStore) Open() error {
+	if err := validateMySQLConfig(store.Ctx); err != nil {
 		return err // validateMySQLConfig returns a properly formatted error
 	}
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		ctx.Settings.Output.MySQL.Username, ctx.Settings.Output.MySQL.Password, ctx.Settings.Output.MySQL.Host, ctx.Settings.Output.MySQL.Port, ctx.Settings.Output.MySQL.Database)
+		store.Ctx.Settings.Output.MySQL.Username, store.Ctx.Settings.Output.MySQL.Password,
+		store.Ctx.Settings.Output.MySQL.Host, store.Ctx.Settings.Output.MySQL.Port,
+		store.Ctx.Settings.Output.MySQL.Database)
 
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
+		log.Printf("Failed to open MySQL database: %v\n", err)
 		return fmt.Errorf("failed to open MySQL database: %v", err)
 	}
 
 	store.DB = db
-	return performAutoMigration(db, ctx.Settings.Debug, "MySQL", dsn)
+	return performAutoMigration(db, store.Ctx.Settings.Debug, "MySQL", dsn)
 }
 
 // SaveToDatabase inserts a new Note record into the SQLite database
-func (store *MySQLStore) Save(ctx *config.Context, note Note) error {
+func (store *MySQLStore) Save(note Note) error {
 	if store.DB == nil {
 		return fmt.Errorf("database connection is not initialized")
 	}
 
 	if err := store.DB.Create(&note).Error; err != nil {
-		logger.Error("main", "Failed to save note: %v\n", err)
+		log.Printf("Failed to save note: %v\n", err)
 		return err
 	}
-
-	logger.Debug("main", "Saved note: %v\n", note)
 
 	return nil
 }
@@ -64,16 +67,15 @@ func (store *MySQLStore) Close() error {
 	// Retrieve the generic database object from the GORM DB object
 	sqlDB, err := store.DB.DB()
 	if err != nil {
-		logger.Error("main", "Failed to retrieve generic DB object: %v", err)
+		log.Printf("Failed to retrieve generic DB object: %v\n", err)
 		return err
 	}
 
 	// Close the generic database object, which closes the underlying SQL database connection
 	if err := sqlDB.Close(); err != nil {
-		logger.Error("main", "Failed to close MySQL database: %v", err)
+		log.Printf("Failed to close MySQL database: %v\n", err)
 		return err
 	}
 
-	logger.Info("main", "MySQL database successfully closed")
 	return nil
 }

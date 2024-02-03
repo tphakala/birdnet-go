@@ -7,11 +7,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/analysis"
-	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // RealtimeCommand creates a new command for real-time audio analysis.
-func Command(ctx *config.Context) *cobra.Command {
+func Command(ctx *conf.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "realtime",
 		Short: "Analyze audio in realtime mode",
@@ -31,7 +31,7 @@ func Command(ctx *config.Context) *cobra.Command {
 }
 
 // setupRealtimeFlags configures flags specific to the realtime command.
-func setupFlags(cmd *cobra.Command, settings *config.Settings) error {
+func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
 	cmd.Flags().StringVar(&settings.Realtime.AudioExport.Path, "clippath", viper.GetString("realtime.audioexport.path"), "Path to save audio clips")
 	cmd.Flags().StringVar(&settings.Realtime.Log.Path, "logpath", viper.GetString("realtime.log.path"), "Path to save log files")
 	cmd.Flags().BoolVar(&settings.Realtime.ProcessingTime, "processingtime", viper.GetBool("realtime.processingtime"), "Report processing time for each detection")

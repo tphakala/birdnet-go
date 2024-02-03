@@ -3,13 +3,12 @@ package observation
 import (
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/config"
-	"github.com/tphakala/birdnet-go/internal/model"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
 // ParseSpeciesString extracts the scientific name, common name, and species code from the species string.
@@ -27,7 +26,7 @@ func ParseSpeciesString(species string) (string, string, string) {
 
 // New creates and returns a new Note with the provided parameters and current date and time.
 // It uses the configuration and parsing functions to set the appropriate fields.
-func New(ctx *config.Context, beginTime, endTime float64, species string, confidence float64, clipName string, elapsedTime time.Duration) model.Note {
+func New(settings *conf.Settings, beginTime, endTime float64, species string, confidence float64, clipName string, elapsedTime time.Duration) datastore.Note {
 	// Parse the species string to get the scientific name, common name, and species code.
 	scientificName, commonName, speciesCode := ParseSpeciesString(species)
 
@@ -38,101 +37,30 @@ func New(ctx *config.Context, beginTime, endTime float64, species string, confid
 	time := detectionTime.Format("15:04:05")
 
 	// Return a new Note struct populated with the provided parameters as well as the current date and time.
-	return model.Note{
-		SourceNode:     ctx.Settings.Main.Name,           // From the provided configuration settings.
-		Date:           date,                             // Use ISO 8601 date format.
-		Time:           time,                             // Use 24-hour time format.
-		InputFile:      ctx.Settings.Input.Path,          // From the provided configuration settings.
-		BeginTime:      beginTime,                        // Start time of the observation.
-		EndTime:        endTime,                          // End time of the observation.
-		SpeciesCode:    speciesCode,                      // Parsed species code.
-		ScientificName: scientificName,                   // Parsed scientific name of the species.
-		CommonName:     commonName,                       // Parsed common name of the species.
-		Confidence:     confidence,                       // Confidence score of the observation.
-		Latitude:       ctx.Settings.BirdNET.Latitude,    // Geographic latitude where the observation was made.
-		Longitude:      ctx.Settings.BirdNET.Longitude,   // Geographic longitude where the observation was made.
-		Threshold:      ctx.Settings.BirdNET.Threshold,   // Threshold setting from configuration.
-		Sensitivity:    ctx.Settings.BirdNET.Sensitivity, // Sensitivity setting from configuration.
-		ClipName:       clipName,                         // Name of the audio clip.
-		ProcessingTime: elapsedTime,                      // Time taken to process the observation.
-	}
-}
-
-// LogNote is the central function for logging observations. It writes a note to a log file and/or database
-// depending on the provided configuration settings.
-func LogNote(ctx *config.Context, note model.Note) error {
-	// If a log file path is specified in the configuration, attempt to log the note to this file.
-	if ctx.Settings.Realtime.Log.Enabled {
-		if ctx.Settings.Debug {
-			log.Println("Logging note to file")
-		}
-		if err := LogNoteToFile(ctx, note); err != nil {
-			// If an error occurs when logging to a file, wrap and return the error.
-			log.Printf("Failed to log note to file: %v", err)
-		}
-	}
-
-	// If the configuration specifies SQLite or MySQL enabled set to true, attempt to save the note to the database
-	if ctx.Settings.Output.SQLite.Enabled || ctx.Settings.Output.MySQL.Enabled {
-		if ctx.Settings.Debug {
-			log.Println("Saving note to database")
-		}
-		if err := SaveToDatabase(ctx, note); err != nil {
-			// If an error occurs when saving to database, wrap and return the error.
-			log.Printf("Failed to save note to database: %v", err)
-		}
-	}
-
-	// If the configuration specifies Birdweather enabled set to true upload detection to Birdweather
-	if ctx.Settings.Realtime.Birdweather.Enabled {
-		// Upload the note to Birdweather as go routine
-		go UploadToBirdweather(ctx, note)
-	}
-
-	// Return nil to indicate that the logging operations completed without error.
-	return nil
-}
-
-// Upload detected clip and details to Birdweather
-func UploadToBirdweather(ctx *config.Context, note model.Note) {
-	// Use system's local timezone
-	loc := time.Local
-
-	dateTimeString := fmt.Sprintf("%sT%s", note.Date, note.Time)
-	parsedTime, err := time.ParseInLocation("2006-01-02T15:04:05", dateTimeString, loc)
-	if err != nil {
-		log.Printf("Error parsing date: %v\n", err)
-		return
-	}
-
-	parsedTimeInTimeZone := parsedTime.In(loc)
-	timestamp := parsedTimeInTimeZone.Format("2006-01-02T15:04:05.000-0700")
-
-	soundscapeID, err := ctx.BirdweatherClient.UploadSoundscape(ctx, timestamp, note.ClipName)
-	if err != nil {
-		log.Printf("Failed to upload soundscape to Birdweather: %v\n", err)
-		return
-	}
-
-	if ctx.Settings.Realtime.Birdweather.Debug {
-		log.Println("Soundscape succesfully posted to Birdweather")
-	}
-
-	err = ctx.BirdweatherClient.PostDetection(ctx, soundscapeID, timestamp, note.CommonName, note.ScientificName, note.Confidence)
-	if err != nil {
-		log.Printf("Failed to post detection to Birdweather: %v\n", err)
-		return
-	}
-
-	if ctx.Settings.Realtime.Birdweather.Debug {
-		log.Println("Detection succesfully posted to Birdweather")
+	return datastore.Note{
+		SourceNode:     settings.Main.Name,           // From the provided configuration settings.
+		Date:           date,                         // Use ISO 8601 date format.
+		Time:           time,                         // Use 24-hour time format.
+		InputFile:      settings.Input.Path,          // From the provided configuration settings.
+		BeginTime:      beginTime,                    // Start time of the observation.
+		EndTime:        endTime,                      // End time of the observation.
+		SpeciesCode:    speciesCode,                  // Parsed species code.
+		ScientificName: scientificName,               // Parsed scientific name of the species.
+		CommonName:     commonName,                   // Parsed common name of the species.
+		Confidence:     confidence,                   // Confidence score of the observation.
+		Latitude:       settings.BirdNET.Latitude,    // Geographic latitude where the observation was made.
+		Longitude:      settings.BirdNET.Longitude,   // Geographic longitude where the observation was made.
+		Threshold:      settings.BirdNET.Threshold,   // Threshold setting from configuration.
+		Sensitivity:    settings.BirdNET.Sensitivity, // Sensitivity setting from configuration.
+		ClipName:       clipName,                     // Name of the audio clip.
+		ProcessingTime: elapsedTime,                  // Time taken to process the observation.
 	}
 }
 
 // WriteNotesTable writes a slice of Note structs to a table-formatted text output.
 // The output can be directed to either stdout or a file specified by the filename.
 // If the filename is an empty string, it writes to stdout.
-func WriteNotesTable(ctx *config.Context, notes []model.Note, filename string) error {
+func WriteNotesTable(ctx *conf.Context, notes []datastore.Note, filename string) error {
 	var w io.Writer
 	// Determine the output destination based on the filename argument.
 	if filename == "" {
@@ -189,7 +117,7 @@ func WriteNotesTable(ctx *config.Context, notes []model.Note, filename string) e
 // WriteNotesCsv writes the slice of notes to the specified destination in CSV format.
 // If filename is an empty string, the function writes to stdout.
 // The function returns an error if writing to the destination fails.
-func WriteNotesCsv(ctx *config.Context, notes []model.Note, filename string) error {
+func WriteNotesCsv(ctx *conf.Context, notes []datastore.Note, filename string) error {
 	// Define an io.Writer to abstract the writing operation.
 	var w io.Writer
 

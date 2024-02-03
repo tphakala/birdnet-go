@@ -1,5 +1,5 @@
-// config/config.go
-package config
+// conf/config.go
+package conf
 
 import (
 	"encoding/csv"
@@ -147,7 +147,7 @@ func initViper() error {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 
-	configPaths, err := getDefaultConfigPaths()
+	configPaths, err := GetDefaultConfigPaths()
 	if err != nil {
 		return fmt.Errorf("error getting default config paths: %w", err)
 	}
@@ -176,16 +176,14 @@ func LoadSpeciesConfig() (SpeciesConfig, error) {
 	var speciesConfig SpeciesConfig
 	speciesConfig.Threshold = make(map[string]float32)
 
-	configPaths, err := getDefaultConfigPaths()
+	configPaths, err := GetDefaultConfigPaths()
 	if err != nil {
 		return SpeciesConfig{}, fmt.Errorf("error getting default config paths: %w", err)
 	}
 
-	fileName := "species_config.csv"
-
 	// Search for the file in the provided config paths.
 	for _, path := range configPaths {
-		filePath := filepath.Join(path, fileName)
+		filePath := filepath.Join(path, SpeciesConfigCSV)
 		file, err := os.Open(filePath)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -228,12 +226,12 @@ func LoadSpeciesConfig() (SpeciesConfig, error) {
 	}
 
 	// File not found in any of the config paths.
-	return SpeciesConfig{}, fmt.Errorf("species confidence file '%s' not found", fileName)
+	return SpeciesConfig{}, fmt.Errorf("species confidence file '%s' not found", SpeciesConfigCSV)
 }
 
 // createDefaultConfig creates a default config file and writes it to the default config path
 func createDefaultConfig() error {
-	configPaths, err := getDefaultConfigPaths() // Again, adjusted for error handling
+	configPaths, err := GetDefaultConfigPaths() // Again, adjusted for error handling
 	if err != nil {
 		return fmt.Errorf("error getting default config paths: %w", err)
 	}

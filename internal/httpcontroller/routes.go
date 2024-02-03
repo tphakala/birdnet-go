@@ -1,4 +1,4 @@
-package controller
+package httpcontroller
 
 import (
 	"embed"
@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
-	"github.com/tphakala/birdnet-go/internal/config"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -61,7 +60,7 @@ func customFileServer(e *echo.Echo, fileSystem fs.FS, root string) {
 }
 
 // initRoutes initializes the routes for the server.
-func (s *Server) initRoutes(ctx *config.Context) {
+func (s *Server) initRoutes() {
 	// Define function map for templates.
 	funcMap := template.FuncMap{
 		"even":            even,
