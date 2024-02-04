@@ -1,15 +1,11 @@
+// httpcontroller/routes.go
 package httpcontroller
 
 import (
 	"embed"
 	"html/template"
 	"io/fs"
-	"mime"
-	"net/http"
-	"path/filepath"
-	"strings"
 
-	"github.com/labstack/echo/v4"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -32,31 +28,6 @@ var routes = []routeConfig{
 	{Path: "/logs", TemplateName: "logs", Title: "Logs"},
 	{Path: "/stats", TemplateName: "stats", Title: "Statistics"},
 	{Path: "/settings", TemplateName: "settings", Title: "General Settings"},
-}
-
-// customFileServer sets up a file server for serving static assets with correct MIME types.
-func customFileServer(e *echo.Echo, fileSystem fs.FS, root string) {
-	fileServer := http.FileServer(http.FS(fileSystem))
-
-	e.GET("/"+root+"/*", echo.WrapHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Correctly set the URL path for the file server
-		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/"+root)
-
-		// Extract the requested file's extension
-		ext := filepath.Ext(r.URL.Path)
-
-		// Set the MIME type based on the file extension
-		mimeType := mime.TypeByExtension(ext)
-		if mimeType != "" {
-			w.Header().Set("Content-Type", mimeType)
-		} else {
-			// Default to 'text/plain' if MIME type is not detected
-			w.Header().Set("Content-Type", "text/plain")
-		}
-
-		// Serve the file
-		fileServer.ServeHTTP(w, r)
-	})))
 }
 
 // initRoutes initializes the routes for the server.
@@ -103,4 +74,9 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/last-detections", s.GetLastDetections)
 	s.Echo.GET("/species-detections", s.speciesDetectionsHandler)
 	s.Echo.GET("/search", s.searchHandler)
+
+	s.Echo.POST("/update-settings", s.updateSettingsHandler)
+
+	// Specific handler for settings route
+	//s.Echo.GET("/settings", s.settingsHandler)
 }
