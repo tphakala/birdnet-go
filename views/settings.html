@@ -1,6 +1,6 @@
 {{define "settings"}}
 
-<form method="POST" action="/update-node-settings" class="col-span-12 xl:col-span-6">     
+<form method="POST" action="/update-settings" class="col-span-12 xl:col-span-6">     
 
 <section class="col-span-12 xl:col-span-6">
     <header class="flex items-center gap-2 lg:gap-4">
@@ -14,7 +14,7 @@
             </svg>                         
             <span class="label-text">Node Name</span>
         </div>    
-        <input type="text" id="nodeName" name="Node.Name" value="{{.Settings.Node.Name}}" class="input input-bordered w-full">
+        <input type="text" id="nodeName" name="Main.Name" value="{{.Settings.Main.Name}}" class="input input-bordered w-full">
     </div>
 
     <div class="form-control">
@@ -24,12 +24,13 @@
             </svg>                        
             <span class="label-text">Locale</span>
         </div>
-        <select id="nodeLocale" name="Node.Locale" value="{{.Settings.Node.Locale}}" class="input input-bordered w-full">
-            <option value="en">English (en)</option>
-            <option value="fi">Finnish (fi)</option>
-            <option value="se">Swedish (se)</option>
-        </select>
+        <select id="birdnetLocale" name="BirdNET.Locale" class="input input-bordered w-full">
+            {{range .Locales}}
+            <option value="{{.Code}}" {{if eq .Code $.Settings.BirdNET.Locale}}selected{{end}}>{{.Name}} ({{.Code}})</option>
+            {{end}}
+        </select>        
     </div>
+
 </section>
 
 <section class="col-span-12 xl:col-span-6">
@@ -66,7 +67,7 @@
         </div>
         <span class="label-text text-xs font-bold text-base-content/50">0 equals use all system cpus</span>
     </div>
-    <input type="range" min="0" max="4" value="4" class="range range-xs" step="1" name="Node.Threads" value="{{.Settings.Node.Threads}}" />
+    <input type="range" min="0" max="4" value="4" class="range range-xs" step="1" name="BirdNET.Threads" value="{{.Settings.BirdNET.Threads}}" />
     <div class="flex w-full justify-between px-2 py-2 text-xs">
         <span>0</span>
         <span>1</span>
