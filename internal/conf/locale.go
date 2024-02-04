@@ -1,3 +1,5 @@
+// conf/locale.go contains all locales application supports
+
 package conf
 
 import (
