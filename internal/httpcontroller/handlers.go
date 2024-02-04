@@ -1,3 +1,4 @@
+// httpcontroller/handlers.go
 package httpcontroller
 
 import (
@@ -21,6 +22,12 @@ type NoteWithSpectrogram struct {
 	SpectrogramPath string
 }
 
+// LocaleData represents a locale with its code and full name.
+type LocaleData struct {
+	Code string
+	Name string
+}
+
 // RenderContentForPage renders content for a given page using Echo's renderer.
 // This method is used to render dynamic content within the page templates.
 func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
@@ -29,6 +36,7 @@ func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 		Page     string
 		Title    string
 		Settings *conf.Settings
+		Locales  []LocaleData
 	})
 	if !ok {
 		return "", fmt.Errorf("invalid data type")
@@ -46,7 +54,7 @@ func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 	}
 
 	if currentRoute == nil {
-		currentRoute = &routeConfig{TemplateName: "default"}
+		currentRoute = &routeConfig{TemplateName: "dashboard"}
 	}
 
 	buf := new(bytes.Buffer)
@@ -70,19 +78,35 @@ func (s *Server) handleRequest(c echo.Context) error {
 	}
 
 	if currentRoute == nil {
-		currentRoute = &routeConfig{TemplateName: "default", Title: "Default"}
+		currentRoute = &routeConfig{TemplateName: "dashboard", Title: "Dashboard"}
 	}
 
 	data := struct {
 		C        echo.Context
 		Page     string
 		Title    string
-		Settings *conf.Settings // Include settings here
+		Settings *conf.Settings
+		Locales  []LocaleData
 	}{
 		C:        c,
 		Page:     currentRoute.TemplateName,
 		Title:    currentRoute.Title,
 		Settings: s.Settings, // Pass the settings from the server
+	}
+
+	// Include settings and locales data only for the settings page
+	if currentRoute.TemplateName == "settings" {
+		var locales []LocaleData
+		for code, name := range conf.LocaleCodes {
+			locales = append(locales, LocaleData{Code: code, Name: name})
+		}
+
+		// Sort locales alphabetically by Name
+		sort.Slice(locales, func(i, j int) bool {
+			return locales[i].Name < locales[j].Name
+		})
+
+		data.Locales = locales
 	}
 
 	return c.Render(http.StatusOK, "index", data)
@@ -104,13 +128,6 @@ func (s *Server) topBirdsHandler(c echo.Context) error {
 		minConfidence = 0.0 // Default value on error
 	}
 	minConfidenceNormalized := minConfidence / 100.0
-
-	// Type assertion for model.DataStore to *model.ObservationDB
-	/*
-		db, ok := s.ds.(*model.DataStore)
-		if !ok {
-			return echo.NewHTTPError(http.StatusInternalServerError, "Database type assertion failed")
-		}*/
 
 	// Get top birds data from the database
 	notes, err := s.ds.GetTopBirdsData(selectedDate, minConfidenceNormalized)
