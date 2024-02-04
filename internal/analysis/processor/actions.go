@@ -5,6 +5,7 @@ package processor
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/birdnet"
@@ -20,51 +21,69 @@ type Action interface {
 }
 
 type LogAction struct {
-	Settings *conf.Settings
-	Note     datastore.Note
+	Settings     *conf.Settings
+	Note         datastore.Note
+	EventTracker *EventTracker
 }
 
 type DatabaseAction struct {
-	Settings *conf.Settings
-	Note     datastore.Note
-	Ds       datastore.Interface
+	Settings     *conf.Settings
+	Note         datastore.Note
+	Ds           datastore.Interface
+	EventTracker *EventTracker
 }
 
 type SaveAudioAction struct {
-	Settings *conf.Settings
-	ClipName string
-	pcmData  []byte
+	Settings     *conf.Settings
+	ClipName     string
+	pcmData      []byte
+	EventTracker *EventTracker
 }
 
-type BirdweatherAction struct {
-	Settings *conf.Settings
-	Note     datastore.Note
-	pcmData  []byte
-	BwClient *birdweather.BwClient
+type BirdWeatherAction struct {
+	Settings     *conf.Settings
+	Note         datastore.Note
+	pcmData      []byte
+	BwClient     *birdweather.BwClient
+	EventTracker *EventTracker
 }
 
 type UpdateRangeFilterAction struct {
 	Bn                 *birdnet.BirdNET
 	IncludedSpecies    *[]string
-	SpeciesListUpdated time.Time
+	SpeciesListUpdated *time.Time
 }
 
 func (a LogAction) Execute(data interface{}) error {
-	if err := observation.LogNoteToFile(a.Settings, a.Note); err != nil {
-		// If an error occurs when logging to a file, wrap and return the error.
-		log.Printf("Failed to log note to file: %v", err)
+	species := strings.ToLower(a.Note.CommonName)
+
+	// Check if the event should be handled for this species
+	if a.EventTracker.TrackEvent(species, LogToFile) {
+		if err := observation.LogNoteToFile(a.Settings, a.Note); err != nil {
+			// If an error occurs when logging to a file, wrap and return the error.
+			log.Printf("Failed to log note to file: %v", err)
+		}
+		fmt.Printf("%s %s %.2f\n", a.Note.Time, a.Note.CommonName, a.Note.Confidence)
+		return nil
 	}
 
-	fmt.Printf("%s %s %.2f\n", a.Note.Time, a.Note.CommonName, a.Note.Confidence)
+	log.Printf("Log action throttled for species: %s", species)
 	return nil
 }
 
 func (a DatabaseAction) Execute(data interface{}) error {
-	if err := a.Ds.Save(a.Note); err != nil {
-		// If an error occurs when saving to database, wrap and return the error.
-		log.Printf("Failed to save note to database: %v", err)
-		return err
+	species := strings.ToLower(a.Note.CommonName)
+
+	// Check if the event should be handled for this species
+	if a.EventTracker.TrackEvent(species, DatabaseSave) {
+		if err := a.Ds.Save(a.Note); err != nil {
+			log.Printf("Failed to save note to database: %v", err)
+			return err
+		}
+		return nil
 	}
+
+	log.Printf("Database save action throttled for species: %s", species)
 	return nil
 }
 
@@ -78,7 +97,7 @@ func (a SaveAudioAction) Execute(data interface{}) error {
 	return nil // return an error if the action fails
 }
 
-func (a BirdweatherAction) Execute(data interface{}) error {
+func (a BirdWeatherAction) Execute(data interface{}) error {
 	if err := a.BwClient.Publish(a.Note, a.pcmData); err != nil {
 		log.Printf("error uploading to BirdWeather: %s\n", err)
 		return err
@@ -90,11 +109,10 @@ func (a BirdweatherAction) Execute(data interface{}) error {
 
 func (a UpdateRangeFilterAction) Execute(data interface{}) error {
 	today := time.Now().Truncate(24 * time.Hour)
-	if today.After(a.SpeciesListUpdated) {
-		// update location based species list once a day
+	if today.After(*a.SpeciesListUpdated) {
+		// Update location based species list
 		*a.IncludedSpecies = a.Bn.GetProbableSpecies()
-		a.SpeciesListUpdated = today
+		*a.SpeciesListUpdated = today // Update the timestamp
 	}
-
-	return nil // return an error if the action fails
+	return nil
 }
