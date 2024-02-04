@@ -1,8 +1,11 @@
+// workers.go contains the worker pool and the worker goroutines that process tasks.
 package processor
 
 import (
+	"fmt"
 	"log"
 	"strings"
+	"time"
 )
 
 // TaskType defines types of tasks that can be handled by the worker.
@@ -80,28 +83,28 @@ func (p *Processor) getDefaultActions(detection Detections) []Action {
 
 	// Append various default actions based on the application settings
 	if p.Settings.Realtime.Log.Enabled {
-		actions = append(actions, LogAction{Settings: p.Settings, Note: detection.Note})
+		actions = append(actions, LogAction{Settings: p.Settings, EventTracker: p.EventTracker, Note: detection.Note})
 	}
 	if p.Settings.Output.SQLite.Enabled || p.Settings.Output.MySQL.Enabled {
-		actions = append(actions, DatabaseAction{Settings: p.Settings, Note: detection.Note, Ds: p.Ds})
+		actions = append(actions, DatabaseAction{Settings: p.Settings, EventTracker: p.EventTracker, Note: detection.Note, Ds: p.Ds})
 	}
 	if p.Settings.Realtime.AudioExport.Enabled {
-		actions = append(actions, SaveAudioAction{Settings: p.Settings, pcmData: detection.pcmData, ClipName: detection.Note.ClipName})
+		actions = append(actions, SaveAudioAction{Settings: p.Settings, EventTracker: p.EventTracker, pcmData: detection.pcmData, ClipName: detection.Note.ClipName})
 	}
 	if p.Settings.Realtime.Birdweather.Enabled {
-		actions = append(actions, BirdweatherAction{Settings: p.Settings, BwClient: p.BwClient, Note: detection.Note})
+		actions = append(actions, BirdWeatherAction{Settings: p.Settings, EventTracker: p.EventTracker, BwClient: p.BwClient, Note: detection.Note})
 	}
 	// Check if UpdateRangeFilterAction needs to be executed for the day
-	/*
-		today := time.Now().Truncate(24 * time.Hour) // Current date with time set to midnight
-		if p.SpeciesListUpdated.Before(today) {
-			// Add UpdateRangeFilterAction if it hasn't been executed today
-			actions = append(actions, UpdateRangeFilterAction{
-				Bn:                 p.Bn,
-				IncludedSpecies:    p.IncludedSpecies,
-				SpeciesListUpdated: p.SpeciesListUpdated, // Pass pointer to update the timestamp
-			})
-		}*/
+	today := time.Now().Truncate(24 * time.Hour) // Current date with time set to midnight
+	if p.SpeciesListUpdated.Before(today) {
+		fmt.Println("Updating species range filter")
+		// Add UpdateRangeFilterAction if it hasn't been executed today
+		actions = append(actions, UpdateRangeFilterAction{
+			Bn:                 p.Bn,
+			IncludedSpecies:    p.IncludedSpecies,
+			SpeciesListUpdated: &p.SpeciesListUpdated, // Pass pointer to update the timestamp
+		})
+	}
 
 	return actions
 }

@@ -52,7 +52,9 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET) *
 	}
 
 	// Initialize included species list
+	today := time.Now().Truncate(24 * time.Hour)
 	*p.IncludedSpecies = bn.GetProbableSpecies()
+	p.SpeciesListUpdated = today
 
 	return p
 }

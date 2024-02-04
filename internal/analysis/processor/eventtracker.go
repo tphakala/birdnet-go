@@ -1,3 +1,4 @@
+// eventtracker.go
 package processor
 
 import (
@@ -72,7 +73,7 @@ type EventTracker struct {
 func NewEventTracker() *EventTracker {
 	return &EventTracker{
 		Handlers: map[EventType]*EventHandler{
-			DatabaseSave:     NewEventHandler(5*time.Second, StandardEventBehavior),
+			DatabaseSave:     NewEventHandler(10*time.Second, StandardEventBehavior),
 			LogToFile:        NewEventHandler(10*time.Second, StandardEventBehavior),
 			SendNotification: NewEventHandler(60*time.Minute, StandardEventBehavior),
 		},
