@@ -202,14 +202,19 @@ func (s *Server) speciesDetectionsHandler(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Species and date parameters are required.")
 	}
 
-	detections, err := s.ds.SpeciesDetections(species, date, hour, false)
+	notes, err := s.ds.SpeciesDetections(species, date, hour, false)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
-	updateClipNames(detections)
+	// Prepare data for rendering in the template
+	data := struct {
+		Notes []datastore.Note
+	}{
+		Notes: notes,
+	}
 
-	return c.Render(http.StatusOK, "speciesDetections", detections)
+	return c.Render(http.StatusOK, "speciesDetections", data)
 }
 
 // searchHandler handles the search functionality.
@@ -231,13 +236,6 @@ func (s *Server) searchHandler(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
-
-	/*
-		notesWithSpectrogram, err := wrapNotesWithSpectrogram(notes)
-		if err != nil {
-			// Handle the error appropriately
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}*/
 
 	// Prepare data for rendering in the template
 	data := struct {
@@ -284,68 +282,4 @@ func (s *Server) GetAllNotes(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, notes)
-}
-
-func sumHourlyCounts(hourlyCounts [24]int) int {
-	total := 0
-	for _, count := range hourlyCounts {
-		total += count
-	}
-	return total
-}
-
-func makeHoursSlice() []int {
-	hours := make([]int, 24)
-	for i := range hours {
-		hours[i] = i
-	}
-	return hours
-}
-
-func updateClipNames(notes []datastore.Note) {
-	for i := range notes {
-		notes[i].ClipName = getAudioURL(notes[i].ClipName) // Assuming getAudioURL is defined
-	}
-}
-
-func parseNumDetections(numDetectionsStr string, defaultValue int) int {
-	if numDetectionsStr == "" {
-		return defaultValue
-	}
-	numDetections, err := strconv.Atoi(numDetectionsStr)
-	if err != nil || numDetections <= 0 {
-		return defaultValue
-	}
-	return numDetections
-}
-
-// parseOffset converts the offset query parameter to an integer.
-func parseOffset(offsetStr string, defaultOffset int) int {
-	if offsetStr == "" {
-		return defaultOffset
-	}
-	offset, err := strconv.Atoi(offsetStr)
-	if err != nil {
-		return defaultOffset
-	}
-	return offset
-}
-
-func wrapNotesWithSpectrogram(notes []datastore.Note) ([]NoteWithSpectrogram, error) {
-	notesWithSpectrogram := make([]NoteWithSpectrogram, len(notes))
-	for i, note := range notes {
-		spectrogramPath, err := GetSpectrogramPath(note.ClipName)
-		if err != nil {
-			// Decide how you want to handle the error.
-			// For example, log it and continue, or return an error.
-			log.Printf("Error generating spectrogram for %s: %v", note.ClipName, err)
-			continue
-		}
-
-		notesWithSpectrogram[i] = NoteWithSpectrogram{
-			Note:            note,
-			SpectrogramPath: spectrogramPath,
-		}
-	}
-	return notesWithSpectrogram, nil
 }
