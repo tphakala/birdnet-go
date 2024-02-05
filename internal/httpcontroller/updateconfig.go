@@ -148,7 +148,6 @@ func updateServerSettings(s *Server, formValues map[string]interface{}) {
 	// Realtime settings - Log
 	if val, ok := formValues["realtime.log.enabled"].(bool); ok {
 		s.Settings.Realtime.Log.Enabled = val
-		fmt.Println("realtime.log.enabled", val)
 	}
 	if logPath, ok := formValues["realtime.log.path"].(string); ok {
 		s.Settings.Realtime.Log.Path = logPath
