@@ -94,7 +94,12 @@ func findChildNodeByKey(key string, node *yaml.Node) *yaml.Node {
 
 // extractFormValues extracts values from the form and converts them to appropriate types.
 func extractFormValues(c echo.Context) map[string]interface{} {
-	return map[string]interface{}{
+	// Check if the checkbox is checked by looking for its presence in the form data.
+	realtimeLogEnabled := c.FormValue("Realtime.Log.Enabled") != ""
+	realtimeAudioExportEnabled := c.FormValue("Realtime.AudioExport.Enabled") != ""
+	realtimeBirdweatherEnabled := c.FormValue("Realtime.Birdweather.Enabled") != ""
+
+	values := map[string]interface{}{
 		"main.name":                    c.FormValue("Main.Name"),
 		"birdnet.locale":               c.FormValue("BirdNET.Locale"),
 		"birdnet.sensitivity":          parseFloat(c.FormValue("BirdNET.Sensitivity")),
@@ -102,13 +107,17 @@ func extractFormValues(c echo.Context) map[string]interface{} {
 		"birdnet.latitude":             parseFloat(c.FormValue("BirdNET.Latitude")),
 		"birdnet.longitude":            parseFloat(c.FormValue("BirdNET.Longitude")),
 		"birdnet.threads":              parseInt(c.FormValue("BirdNET.Threads")),
-		"realtime.audioexport.enabled": c.FormValue("Realtime.AudioExport.Enabled") == "on",
+		"realtime.audioexport.enabled": realtimeAudioExportEnabled,
 		"realtime.audioexport.path":    c.FormValue("Realtime.AudioExport.Path"),
+		"realtime.log.enabled":         realtimeLogEnabled,
 		"realtime.log.path":            c.FormValue("Realtime.Log.Path"),
 		"realtime.interval":            parseInt(c.FormValue("Realtime.Interval")),
+		"realtime.birdweather.enabled": realtimeBirdweatherEnabled,
 		"realtime.birdweather.id":      c.FormValue("Realtime.Birdweather.ID"),
 		"output.sqlite.path":           c.FormValue("Settings.Output.SQLite.Path"),
 	}
+
+	return values
 }
 
 // updateServerSettings updates the server's Settings struct with values from the form.
@@ -128,17 +137,29 @@ func updateServerSettings(s *Server, formValues map[string]interface{}) {
 	s.Settings.BirdNET.Longitude = formValues["birdnet.longitude"].(float64)
 	s.Settings.BirdNET.Threads = formValues["birdnet.threads"].(int)
 
-	// Realtime settings
-	if audioExportEnabled, ok := formValues["realtime.audioexport.enabled"].(bool); ok {
-		s.Settings.Realtime.AudioExport.Enabled = audioExportEnabled
+	// Realtime settings - Audio Export
+	if val, ok := formValues["realtime.audioexport.enabled"].(bool); ok {
+		s.Settings.Realtime.AudioExport.Enabled = val
 	}
 	if audioExportPath, ok := formValues["realtime.audioexport.path"].(string); ok {
 		s.Settings.Realtime.AudioExport.Path = audioExportPath
 	}
+
+	// Realtime settings - Log
+	if val, ok := formValues["realtime.log.enabled"].(bool); ok {
+		s.Settings.Realtime.Log.Enabled = val
+		fmt.Println("realtime.log.enabled", val)
+	}
 	if logPath, ok := formValues["realtime.log.path"].(string); ok {
 		s.Settings.Realtime.Log.Path = logPath
 	}
+
+	// Realtime settings - General and Birdweather
 	s.Settings.Realtime.Interval = formValues["realtime.interval"].(int)
+
+	if val, ok := formValues["realtime.birdweather.enabled"].(bool); ok {
+		s.Settings.Realtime.Birdweather.Enabled = val
+	}
 	if birdweatherID, ok := formValues["realtime.birdweather.id"].(string); ok {
 		s.Settings.Realtime.Birdweather.ID = birdweatherID
 	}
