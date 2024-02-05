@@ -6,16 +6,17 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
 // LogNoteToFile saves the Note to a log file.
-func LogNoteToFile(ctx *config.Context, note Note) error {
+func LogNoteToFile(settings *conf.Settings, note datastore.Note) error {
 	// Separate the directory and file name from the log path
-	dir, fileName := filepath.Split(ctx.Settings.Realtime.Log.Path)
+	dir, fileName := filepath.Split(settings.Realtime.Log.Path)
 
 	// Expand the directory path to an absolute path
-	basePath := config.GetBasePath(dir)
+	basePath := conf.GetBasePath(dir)
 
 	// Recombine to form the full absolute path of the log file
 	absoluteFilePath := filepath.Join(basePath, fileName)
@@ -37,7 +38,7 @@ func LogNoteToFile(ctx *config.Context, note Note) error {
 
 	// Determine the time format string based on the user's preference
 	timeFormat := "15:04:05"
-	if !ctx.Settings.Node.TimeAs24h {
+	if !settings.Main.TimeAs24h {
 		timeFormat = "03:04:05 PM"
 	}
 

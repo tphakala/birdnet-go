@@ -1,13 +1,10 @@
-// config/config.go
-package config
+// conf/config.go
+package conf
 
 import (
-	"encoding/csv"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -16,11 +13,10 @@ import (
 type Settings struct {
 	Debug bool // true to enable debug mode
 
-	Node struct {
+	Main struct {
 		Name      string // name of go-birdnet node, can be used to identify source of notes
-		Locale    string // language to use for labels
 		TimeAs24h bool   // true 24-hour time format, false 12-hour time format
-		Threads   int    // number of CPU threads to use for analysis
+		Log       LogConfig
 	}
 
 	BirdNET struct {
@@ -29,6 +25,8 @@ type Settings struct {
 		Overlap     float64 // birdnet analysis overlap between chunks
 		Longitude   float64 // longitude of recording location for prediction filtering
 		Latitude    float64 // latitude of recording location for prediction filtering
+		Threads     int     // number of CPU threads to use for analysis
+		Locale      string  // language to use for labels
 	}
 
 	Input struct {
@@ -59,6 +57,13 @@ type Settings struct {
 		}
 	}
 
+	WebServer struct {
+		Enabled bool   // true to enable web server
+		Port    string // port for web server
+		AutoTLS bool   // true to enable auto TLS
+		Log     LogConfig
+	}
+
 	Output struct {
 		File struct {
 			Enabled bool   // true to enable file output
@@ -82,16 +87,28 @@ type Settings struct {
 	}
 }
 
-// Load reads the configuration file and environment variables into GlobalConfig.
-func Load() (*Context, error) {
-	var settings Settings
+// LogConfig defines the configuration for a log file
+type LogConfig struct {
+	Enabled     bool         // true to enable this log
+	Path        string       // Path to the log file
+	Rotation    RotationType // Type of log rotation
+	MaxSize     int64        // Max size in bytes for RotationSize
+	RotationDay time.Weekday // Day of the week for RotationWeekly
+}
 
-	// Initialize the Context with the settings
-	ctx := &Context{
-		Settings: &settings,
-		// set SpeciesListUpdated to yesterday to force update on first run
-		SpeciesListUpdated: time.Now().AddDate(0, 0, -1),
-	}
+// RotationType defines different types of log rotations.
+type RotationType string
+
+const (
+	RotationDaily  RotationType = "daily"
+	RotationWeekly RotationType = "weekly"
+	RotationSize   RotationType = "size"
+)
+
+// Load reads the configuration file and environment variables into GlobalConfig.
+func Load() (*Settings, error) {
+	// Create a new settings struct
+	settings := &Settings{}
 
 	// Initialize viper and read config
 	if err := initViper(); err != nil {
@@ -99,21 +116,11 @@ func Load() (*Context, error) {
 	}
 
 	// Unmarshal config into struct
-	if err := viper.Unmarshal(ctx.Settings); err != nil {
+	if err := viper.Unmarshal(settings); err != nil {
 		return nil, fmt.Errorf("error unmarshaling config into struct: %w", err)
 	}
 
-	// init custom confidence list
-	speciesConfig, err := LoadSpeciesConfig()
-	if err != nil {
-		// print error is loading failed
-		fmt.Println("error reading species conficende config:", err)
-		// set customConfidence list as empty if file not found
-		speciesConfig = SpeciesConfig{}
-	}
-	ctx.SpeciesConfig = speciesConfig
-
-	return ctx, nil
+	return settings, nil
 }
 
 func initViper() error {
@@ -121,7 +128,7 @@ func initViper() error {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 
-	configPaths, err := getDefaultConfigPaths()
+	configPaths, err := GetDefaultConfigPaths()
 	if err != nil {
 		return fmt.Errorf("error getting default config paths: %w", err)
 	}
@@ -145,69 +152,9 @@ func initViper() error {
 	return nil
 }
 
-// LoadCustomSpeciesConfidence loads a list of custom thresholds for species from a CSV file.
-func LoadSpeciesConfig() (SpeciesConfig, error) {
-	var speciesConfig SpeciesConfig
-	speciesConfig.Threshold = make(map[string]float32)
-
-	configPaths, err := getDefaultConfigPaths()
-	if err != nil {
-		return SpeciesConfig{}, fmt.Errorf("error getting default config paths: %w", err)
-	}
-
-	fileName := "species_config.csv"
-
-	// Search for the file in the provided config paths.
-	for _, path := range configPaths {
-		filePath := filepath.Join(path, fileName)
-		file, err := os.Open(filePath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue // file not found, try next path
-			}
-			return SpeciesConfig{}, fmt.Errorf("error opening file '%s': %w", filePath, err)
-		}
-		defer file.Close()
-
-		// Read the CSV file using csv.Reader
-		reader := csv.NewReader(file)
-
-		// Customize the reader's settings
-		reader.Comma = ','   // Default delimiter
-		reader.Comment = '#' // Lines beginning with '#' will be ignored
-
-		// Read the CSV file
-		records, err := reader.ReadAll()
-		if err != nil {
-			return SpeciesConfig{}, fmt.Errorf("error reading CSV file '%s': %w", filePath, err)
-		}
-
-		// Process the records
-		for _, record := range records {
-			if len(record) != 2 {
-				continue // skip malformed lines
-			}
-
-			species := strings.ToLower(strings.TrimSpace(record[0])) // Convert species to lowercase
-			confidence, err := strconv.ParseFloat(strings.TrimSpace(record[1]), 32)
-			if err != nil {
-				continue // skip lines with invalid confidence values
-			}
-
-			speciesConfig.Threshold[species] = float32(confidence)
-		}
-
-		fmt.Println("Read species config file:", filePath)
-		return speciesConfig, nil // Return on successful read.
-	}
-
-	// File not found in any of the config paths.
-	return SpeciesConfig{}, fmt.Errorf("species confidence file '%s' not found", fileName)
-}
-
 // createDefaultConfig creates a default config file and writes it to the default config path
 func createDefaultConfig() error {
-	configPaths, err := getDefaultConfigPaths() // Again, adjusted for error handling
+	configPaths, err := GetDefaultConfigPaths() // Again, adjusted for error handling
 	if err != nil {
 		return fmt.Errorf("error getting default config paths: %w", err)
 	}
@@ -233,11 +180,15 @@ func getDefaultConfig() string {
 debug: false			# print debug messages, can help with problem solving
 
 # Node specific settings
-node:
+main:
   name: BirdNET-Go		# name of node, can be used to identify source of notes
-  locale: en			# language to use for labels
   timeas24h: true		# true for 24-hour time format, false for 12-hour time format
-  threads: 0			# 0 to use all available CPU threads
+  log:
+    enabled: true		# true to enable log file
+    path: birdnet.log	# path to log file
+    rotation: daily		# daily, weekly or size
+    maxsize: 1048576	# max size in bytes for size rotation
+    rotationday: 0		# day of the week for weekly rotation, 0 = Sunday
 
 # BirdNET model specific settings
 birdnet:
@@ -246,13 +197,15 @@ birdnet:
   overlap: 0.0			# overlap between chunks, 0.0 to 2.9
   latitude: 00.000		# latitude of recording location for prediction filtering
   longitude: 00.000		# longitude of recording location for prediction filtering
+  threads: 0			# 0 to use all available CPU threads
+  locale: en			# language to use for labels
 
 # Realtime processing settings
 realtime:
   interval: 15		    # duplicate prediction interval in seconds
   processingtime: false # true to report processing time for each prediction
   audioexport:
-    enabled: false 		# true to export audio clips containing indentified bird calls
+    enabled: true 		# true to export audio clips containing indentified bird calls
     path: clips/   		# path to audio clip export directory
     type: wav      		# only wav supported for now
   log:
@@ -264,6 +217,17 @@ realtime:
     debug: false		# true to enable birdweather api debug mode
     id: 00000			# birdweather ID
 
+webserver:
+  enabled: true		# true to enable web server
+  port: 8080			# port for web server
+  autotls: false		# true to enable auto TLS
+  log:
+    enabled: true	# true to enable log file
+    path: webui.log	# path to log file
+    rotation: daily	# daily, weekly or size
+    maxsize: 1048576	# max size in bytes for size rotation
+    rotationday: 0	# day of the week for weekly rotation, 0 = Sunday
+
 # Ouput settings
 output:
   file:
@@ -273,7 +237,7 @@ output:
   # Only one database is supported at a time
   # if both are enabled, SQLite will be used.
   sqlite:
-    enabled: false		# true to enable sqlite output
+    enabled: true		# true to enable sqlite output
     path: birdnet.db	# path to sqlite database
   mysql:
     enabled: false		# true to enable mysql output
