@@ -1,0 +1,57 @@
+{{define "sidebar"}}
+<aside class="drawer-side z-10">
+    <label for="my-drawer" class="drawer-overlay"></label>
+    <!-- sidebar menu -->
+    <nav class="flex min-h-screen w-64 flex-col gap-2 overflow-y-auto bg-base-100 px-4 py-10">
+        <div class="mx-4 flex items-center gap-2 font-black text-2xl">
+            BirdNET-Go
+        </div>
+        <ul class="menu">
+            <li>
+                <a href="/" class="{{if eq .Title "Dashboard"}}active{{end}}">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                        <path fill-rule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clip-rule="evenodd" />
+                    </svg>
+                    Dashboard
+                </a>
+            </li>
+
+            <li>
+                <a href="/stats" class="{{if eq .Title "Statistics"}}active{{end}}">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                        <path d="M12 9a1 1 0 0 1-1-1V3c0-.552.45-1.007.997-.93a7.004 7.004 0 0 1 5.933 5.933c.078.547-.378.997-.93.997h-5Z" />
+                        <path d="M8.003 4.07C8.55 3.994 9 4.449 9 5v5a1 1 0 0 0 1 1h5c.552 0 1.008.45.93.997A7.001 7.001 0 0 1 2 11a7.002 7.002 0 0 1 6.003-6.93Z" />
+                    </svg>                      
+                    Stats
+                </a>
+            </li>
+
+            <li>
+                <a href="/logs" class="{{if eq .Title "Logs"}}active{{end}}">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                        <path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z" clip-rule="evenodd" />
+                    </svg>                     
+                    Logs
+                </a>
+            </li>
+
+            <li>
+                <details {{if or (eq .Title "General Settings") (eq .Title "Themes")}}open{{end}}>
+                    <summary>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                            <path d="M17 2.75a.75.75 0 0 0-1.5 0v5.5a.75.75 0 0 0 1.5 0v-5.5ZM17 15.75a.75.75 0 0 0-1.5 0v1.5a.75.75 0 0 0 1.5 0v-1.5ZM3.75 15a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5a.75.75 0 0 1 .75-.75ZM4.5 2.75a.75.75 0 0 0-1.5 0v5.5a.75.75 0 0 0 1.5 0v-5.5ZM10 11a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5A.75.75 0 0 1 10 11ZM10.75 2.75a.75.75 0 0 0-1.5 0v1.5a.75.75 0 0 0 1.5 0v-1.5ZM10 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM3.75 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM16.25 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" />
+                        </svg>                          
+                        Settings
+                    </summary>
+                    <ul>
+                        <li><a href="/settings" class="{{if eq .Title "General Settings"}}active{{end}}">General</a></li>
+                        <li><a class="{{if eq .Title "Themes"}}active{{end}}">Themes</a></li>
+                    </ul>
+                </details>
+            </li>
+        </ul>
+
+    </nav>
+    <!-- /sidebar menu -->
+</aside>
+{{end}}

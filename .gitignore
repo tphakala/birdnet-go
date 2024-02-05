@@ -2,11 +2,14 @@ bin/birdnet-go
 bin/birdnet-go.exe
 log/
 clips/
+spectrograms/
 tmp
+*.log
 *.exe
 model/labels_en.txt
 model/labels_fi.txt
 output/soundscape.wav.txt
 output/soundscape.wav.csv
 birdnet.db
+birdnet.txt
 custom_confidence_list.txt
