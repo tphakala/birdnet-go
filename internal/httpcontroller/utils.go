@@ -72,13 +72,13 @@ func confidenceColor(confidence float64) string {
 	}
 }
 
-// GetSpectrogramPath returns the path to the spectrogram image for a WAV file.
+// GetSpectrogramPath returns the path to the spectrogram image for a WAV file, stored in the same directory.
 func GetSpectrogramPath(wavFileName string) (string, error) {
-	spectrogramDir := "spectrograms"
 	baseName := filepath.Base(wavFileName)
+	dir := filepath.Dir(wavFileName)
 	ext := filepath.Ext(baseName)
 	baseNameWithoutExt := baseName[:len(baseName)-len(ext)]
-	spectrogramPath := fmt.Sprintf("%s/%s_spectrogram.png", spectrogramDir, baseNameWithoutExt)
+	spectrogramPath := fmt.Sprintf("%s/%s.png", dir, baseNameWithoutExt)
 
 	// Check if spectrogram already exists
 	if _, err := os.Stat(spectrogramPath); os.IsNotExist(err) {
@@ -93,7 +93,7 @@ func GetSpectrogramPath(wavFileName string) (string, error) {
 	return spectrogramPath, nil
 }
 
-// createSpectrogramWithSox generates a spectrogram for a WAV file using SoX.
+// createSpectrogramWithSoX generates a spectrogram for a WAV file using SoX.
 func createSpectrogramWithSoX(wavFilePath, spectrogramPath string) error {
 	// Verify SoX installation
 	if _, err := exec.LookPath("sox"); err != nil {
@@ -101,7 +101,7 @@ func createSpectrogramWithSoX(wavFilePath, spectrogramPath string) error {
 	}
 
 	// Execute SoX command to create spectrogram
-	cmd := exec.Command("sox", wavFilePath, "-n", "rate", "30k", "spectrogram", "-r", "-x", "300", "-y", "200", "-o", spectrogramPath)
+	cmd := exec.Command("sox", wavFilePath, "-n", "spectrogram", "-r", "-x", "300", "-y", "200", "-o", spectrogramPath)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("SoX command failed: %w", err)
 	}
