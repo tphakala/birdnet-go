@@ -144,6 +144,12 @@ func (bn *BirdNET) loadLabels() error {
 		return err
 	}
 
+	// if locale is not set use english as default
+	if bn.Settings.BirdNET.Locale == "" {
+		fmt.Println("BirdNET locale not set, using English as default")
+		bn.Settings.BirdNET.Locale = "en"
+	}
+
 	labelFileName := fmt.Sprintf("labels_%s.txt", bn.Settings.BirdNET.Locale)
 	for _, file := range zipReader.File {
 		if file.Name == labelFileName {
