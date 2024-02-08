@@ -67,7 +67,7 @@ func (a LogAction) Execute(data interface{}) error {
 		return nil
 	}
 
-	log.Printf("Log action throttled for species: %s", species)
+	//log.Printf("Log action throttled for species: %s", species)
 	return nil
 }
 
@@ -83,7 +83,7 @@ func (a DatabaseAction) Execute(data interface{}) error {
 		return nil
 	}
 
-	log.Printf("Database save action throttled for species: %s", species)
+	//log.Printf("Database save action throttled for species: %s", species)
 	return nil
 }
 
@@ -109,7 +109,7 @@ func (a BirdWeatherAction) Execute(data interface{}) error {
 		}
 		return nil
 	}
-	log.Printf("BirdWeather Submit action throttled for species: %s", species)
+	//log.Printf("BirdWeather Submit action throttled for species: %s", species)
 	return nil // return an error if the action fails
 }
 
