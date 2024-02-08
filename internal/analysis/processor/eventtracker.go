@@ -10,9 +10,10 @@ import (
 type EventType int
 
 const (
-	DatabaseSave     EventType = iota // Represents a database save event
-	LogToFile                         // Represents a log to file event
-	SendNotification                  // Represents a send notification event
+	DatabaseSave      EventType = iota // Represents a database save event
+	LogToFile                          // Represents a log to file event
+	SendNotification                   // Represents a send notification event
+	BirdWeatherSubmit                  // Represents a bird weather submit event
 )
 
 // EventBehaviorFunc defines the signature for functions that determine the behavior of an event.
@@ -73,9 +74,10 @@ type EventTracker struct {
 func NewEventTracker() *EventTracker {
 	return &EventTracker{
 		Handlers: map[EventType]*EventHandler{
-			DatabaseSave:     NewEventHandler(10*time.Second, StandardEventBehavior),
-			LogToFile:        NewEventHandler(10*time.Second, StandardEventBehavior),
-			SendNotification: NewEventHandler(60*time.Minute, StandardEventBehavior),
+			DatabaseSave:      NewEventHandler(15*time.Second, StandardEventBehavior),
+			LogToFile:         NewEventHandler(15*time.Second, StandardEventBehavior),
+			SendNotification:  NewEventHandler(60*time.Minute, StandardEventBehavior),
+			BirdWeatherSubmit: NewEventHandler(15*time.Second, StandardEventBehavior),
 		},
 	}
 }

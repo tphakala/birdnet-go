@@ -98,12 +98,18 @@ func (a SaveAudioAction) Execute(data interface{}) error {
 }
 
 func (a BirdWeatherAction) Execute(data interface{}) error {
-	if err := a.BwClient.Publish(a.Note, a.pcmData); err != nil {
-		log.Printf("error uploading to BirdWeather: %s\n", err)
-		return err
-	} else if a.Settings.Debug {
-		log.Printf("Uploaded %s to Birdweather\n", a.Note.ClipName)
+	species := strings.ToLower(a.Note.CommonName)
+
+	if a.EventTracker.TrackEvent(species, BirdWeatherSubmit) {
+		if err := a.BwClient.Publish(a.Note, a.pcmData); err != nil {
+			log.Printf("error uploading to BirdWeather: %s\n", err)
+			return err
+		} else if a.Settings.Debug {
+			log.Printf("Uploaded %s to Birdweather\n", a.Note.ClipName)
+		}
+		return nil
 	}
+	log.Printf("BirdWeather Submit action throttled for species: %s", species)
 	return nil // return an error if the action fails
 }
 
