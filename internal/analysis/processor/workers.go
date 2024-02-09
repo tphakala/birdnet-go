@@ -86,11 +86,11 @@ func (p *Processor) getDefaultActions(detection Detections) []Action {
 		actions = append(actions, LogAction{Settings: p.Settings, EventTracker: p.EventTracker, Note: detection.Note})
 	}
 	if p.Settings.Output.SQLite.Enabled || p.Settings.Output.MySQL.Enabled {
-		actions = append(actions, DatabaseAction{Settings: p.Settings, EventTracker: p.EventTracker, Note: detection.Note, Ds: p.Ds})
+		actions = append(actions, DatabaseAction{Settings: p.Settings, EventTracker: p.EventTracker, Note: detection.Note, pcmData: detection.pcmData, Ds: p.Ds})
 	}
-	if p.Settings.Realtime.AudioExport.Enabled {
+	/*	if p.Settings.Realtime.AudioExport.Enabled {
 		actions = append(actions, SaveAudioAction{Settings: p.Settings, EventTracker: p.EventTracker, pcmData: detection.pcmData, ClipName: detection.Note.ClipName})
-	}
+	}*/
 	if p.Settings.Realtime.Birdweather.Enabled {
 		actions = append(actions, BirdWeatherAction{Settings: p.Settings, EventTracker: p.EventTracker, BwClient: p.BwClient, Note: detection.Note, pcmData: detection.pcmData})
 	}
