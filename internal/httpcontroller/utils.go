@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -72,13 +73,17 @@ func confidenceColor(confidence float64) string {
 	}
 }
 
-// GetSpectrogramPath returns the path to the spectrogram image for a WAV file, stored in the same directory.
+// GetSpectrogramPath returns the web-friendly path to the spectrogram image for a WAV file, stored in the same directory.
 func GetSpectrogramPath(wavFileName string) (string, error) {
 	baseName := filepath.Base(wavFileName)
 	dir := filepath.Dir(wavFileName)
 	ext := filepath.Ext(baseName)
 	baseNameWithoutExt := baseName[:len(baseName)-len(ext)]
-	spectrogramPath := fmt.Sprintf("%s/%s.png", dir, baseNameWithoutExt)
+	// Construct the file system path using filepath.Join to ensure it's valid on the current OS.
+	spectrogramPath := filepath.Join(dir, baseNameWithoutExt+".png")
+
+	// Convert the file system path to a web-friendly path by replacing backslashes with forward slashes.
+	webFriendlyPath := strings.Replace(spectrogramPath, "\\", "/", -1)
 
 	// Check if spectrogram already exists
 	if _, err := os.Stat(spectrogramPath); os.IsNotExist(err) {
@@ -90,7 +95,8 @@ func GetSpectrogramPath(wavFileName string) (string, error) {
 		return "", fmt.Errorf("error checking spectrogram file: %w", err)
 	}
 
-	return spectrogramPath, nil
+	// Return the web-friendly path
+	return webFriendlyPath, nil
 }
 
 // createSpectrogramWithSoX generates a spectrogram for a WAV file using SoX.
