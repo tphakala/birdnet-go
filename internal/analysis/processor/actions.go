@@ -28,8 +28,9 @@ type LogAction struct {
 
 type DatabaseAction struct {
 	Settings     *conf.Settings
-	Note         datastore.Note
 	Ds           datastore.Interface
+	Note         datastore.Note
+	pcmData      []byte
 	EventTracker *EventTracker
 }
 
@@ -76,10 +77,22 @@ func (a DatabaseAction) Execute(data interface{}) error {
 
 	// Check if the event should be handled for this species
 	if a.EventTracker.TrackEvent(species, DatabaseSave) {
+		// Save note to database
 		if err := a.Ds.Save(a.Note); err != nil {
 			log.Printf("Failed to save note to database: %v", err)
 			return err
 		}
+
+		// Save audio clip to file if enabled
+		if a.Settings.Realtime.AudioExport.Enabled {
+			if err := myaudio.SavePCMDataToWAV(a.Note.ClipName, a.pcmData); err != nil {
+				log.Printf("error saving audio clip to %s: %s\n", a.Settings.Realtime.AudioExport.Type, err)
+				return err
+			} else if a.Settings.Debug {
+				log.Printf("Saved audio clip to %s\n", a.Note.ClipName)
+			}
+		}
+
 		return nil
 	}
 
