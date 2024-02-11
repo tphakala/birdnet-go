@@ -21,7 +21,7 @@ var modelData []byte
 
 // Embedded TensorFlow Lite meta model data.
 //
-//go:embed BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite
+//go:embed BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite
 var metaModelData []byte
 
 const modelVersion = "BirdNET GLOBAL 6K V2.4 FP32"
