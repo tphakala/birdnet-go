@@ -9,8 +9,8 @@ type Note struct {
 	Date           string `gorm:"index:idx_notes_date_commonname_confidence"`
 	Time           string
 	InputFile      string
-	BeginTime      float64
-	EndTime        float64
+	BeginTime      time.Time
+	EndTime        time.Time
 	SpeciesCode    string
 	ScientificName string  `gorm:"index"`
 	CommonName     string  `gorm:"index;index:idx_notes_date_commonname_confidence"`

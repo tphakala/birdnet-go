@@ -26,7 +26,7 @@ type Task struct {
 var workerQueue chan Task
 
 // StartWorkerPool initializes a pool of worker goroutines to process tasks.
-func (p *Processor) StartWorkerPool(numWorkers int) {
+func (p *Processor) startWorkerPool(numWorkers int) {
 	workerQueue = make(chan Task, 100) // Initialize the task queue with a buffer
 
 	// Start the specified number of worker goroutines
@@ -86,13 +86,13 @@ func (p *Processor) getDefaultActions(detection Detections) []Action {
 		actions = append(actions, LogAction{Settings: p.Settings, EventTracker: p.EventTracker, Note: detection.Note})
 	}
 	if p.Settings.Output.SQLite.Enabled || p.Settings.Output.MySQL.Enabled {
-		actions = append(actions, DatabaseAction{Settings: p.Settings, EventTracker: p.EventTracker, Note: detection.Note, pcmData: detection.pcmData, Ds: p.Ds})
+		actions = append(actions, DatabaseAction{Settings: p.Settings, EventTracker: p.EventTracker, Note: detection.Note, AudioBuffer: p.AudioBuffer, Ds: p.Ds})
 	}
 	/*	if p.Settings.Realtime.AudioExport.Enabled {
-		actions = append(actions, SaveAudioAction{Settings: p.Settings, EventTracker: p.EventTracker, pcmData: detection.pcmData, ClipName: detection.Note.ClipName})
+		actions = append(actions, SaveAudioAction{Settings: p.Settings, EventTracker: p.EventTracker, pcmData: detection.pcmDataExt, ClipName: detection.Note.ClipName})
 	}*/
 	if p.Settings.Realtime.Birdweather.Enabled {
-		actions = append(actions, BirdWeatherAction{Settings: p.Settings, EventTracker: p.EventTracker, BwClient: p.BwClient, Note: detection.Note, pcmData: detection.pcmData})
+		actions = append(actions, BirdWeatherAction{Settings: p.Settings, EventTracker: p.EventTracker, BwClient: p.BwClient, Note: detection.Note, pcmData: detection.pcmData3s})
 	}
 	// Check if UpdateRangeFilterAction needs to be executed for the day
 	today := time.Now().Truncate(24 * time.Hour) // Current date with time set to midnight

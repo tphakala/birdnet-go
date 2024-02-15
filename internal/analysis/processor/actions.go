@@ -32,6 +32,7 @@ type DatabaseAction struct {
 	Note         datastore.Note
 	pcmData      []byte
 	EventTracker *EventTracker
+	AudioBuffer  *myaudio.AudioBuffer
 }
 
 type SaveAudioAction struct {
@@ -55,6 +56,7 @@ type UpdateRangeFilterAction struct {
 	SpeciesListUpdated *time.Time
 }
 
+// Execute logs the note to the chag log file
 func (a LogAction) Execute(data interface{}) error {
 	species := strings.ToLower(a.Note.CommonName)
 
@@ -72,6 +74,7 @@ func (a LogAction) Execute(data interface{}) error {
 	return nil
 }
 
+// Execute saves the note to the database
 func (a DatabaseAction) Execute(data interface{}) error {
 	species := strings.ToLower(a.Note.CommonName)
 
@@ -85,11 +88,14 @@ func (a DatabaseAction) Execute(data interface{}) error {
 
 		// Save audio clip to file if enabled
 		if a.Settings.Realtime.AudioExport.Enabled {
-			if err := myaudio.SavePCMDataToWAV(a.Note.ClipName, a.pcmData); err != nil {
+			time.Sleep(1 * time.Second) // Sleep for 1 second to allow the audio buffer to fill
+			pcmData, _ := a.AudioBuffer.ReadSegment(a.Note.BeginTime, time.Now())
+			if err := myaudio.SavePCMDataToWAV(a.Note.ClipName, pcmData); err != nil {
 				log.Printf("error saving audio clip to %s: %s\n", a.Settings.Realtime.AudioExport.Type, err)
 				return err
 			} else if a.Settings.Debug {
 				log.Printf("Saved audio clip to %s\n", a.Note.ClipName)
+				log.Printf("detection time %v, begin time %v, end time %v\n", a.Note.Time, a.Note.BeginTime, time.Now())
 			}
 		}
 
@@ -100,6 +106,7 @@ func (a DatabaseAction) Execute(data interface{}) error {
 	return nil
 }
 
+// Execute saves the audio clip to a file
 func (a SaveAudioAction) Execute(data interface{}) error {
 	if err := myaudio.SavePCMDataToWAV(a.ClipName, a.pcmData); err != nil {
 		log.Printf("error saving audio clip to %s: %s\n", a.Settings.Realtime.AudioExport.Type, err)
@@ -110,6 +117,7 @@ func (a SaveAudioAction) Execute(data interface{}) error {
 	return nil // return an error if the action fails
 }
 
+// Execute sends the note to the BirdWeather API
 func (a BirdWeatherAction) Execute(data interface{}) error {
 	species := strings.ToLower(a.Note.CommonName)
 
