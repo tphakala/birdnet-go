@@ -7,6 +7,7 @@ import (
 )
 
 type Results struct {
+	StartTime   time.Time
 	PCMdata     []byte
 	Results     []birdnet.Result
 	ElapsedTime time.Duration
