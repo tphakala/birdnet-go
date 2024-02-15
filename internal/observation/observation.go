@@ -33,17 +33,17 @@ func New(settings *conf.Settings, beginTime, endTime float64, species string, co
 	// detectionTime is time now minus 3 seconds to account for the delay in the detection
 	now := time.Now()
 	date := now.Format("2006-01-02")
-	detectionTime := now.Add(-3 * time.Second)
+	detectionTime := now.Add(-2 * time.Second)
 	time := detectionTime.Format("15:04:05")
 
 	// Return a new Note struct populated with the provided parameters as well as the current date and time.
 	return datastore.Note{
-		SourceNode:     settings.Main.Name,           // From the provided configuration settings.
-		Date:           date,                         // Use ISO 8601 date format.
-		Time:           time,                         // Use 24-hour time format.
-		InputFile:      settings.Input.Path,          // From the provided configuration settings.
-		BeginTime:      beginTime,                    // Start time of the observation.
-		EndTime:        endTime,                      // End time of the observation.
+		SourceNode: settings.Main.Name,  // From the provided configuration settings.
+		Date:       date,                // Use ISO 8601 date format.
+		Time:       time,                // Use 24-hour time format.
+		InputFile:  settings.Input.Path, // From the provided configuration settings.
+		//BeginTime:      beginTime,                    // Start time of the observation.
+		//EndTime:        endTime,                      // End time of the observation.
 		SpeciesCode:    speciesCode,                  // Parsed species code.
 		ScientificName: scientificName,               // Parsed scientific name of the species.
 		CommonName:     commonName,                   // Parsed common name of the species.
