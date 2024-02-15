@@ -63,11 +63,14 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// Initialize the ring buffer.
 	myaudio.InitRingBuffer(bufferSize)
 
+	// Audio buffer for extended audio clip capture
+	audioBuffer := myaudio.NewAudioBuffer(30, conf.SampleRate, 2)
+
 	// init detection queue
 	queue.Init(5, 5)
 
 	// Start worker pool for processing detections
-	processor.New(settings, dataStore, bn)
+	processor.New(settings, dataStore, bn, audioBuffer)
 
 	// Start http server
 	httpcontroller.New(settings, dataStore)
@@ -77,7 +80,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// start buffer monitor
 	startBufferMonitor(&wg, bn, quitChan)
 	// start audio capture
-	startAudioCapture(&wg, settings, quitChan, restartChan)
+	startAudioCapture(&wg, settings, quitChan, restartChan, audioBuffer)
 
 	// start quit signal monitor
 	monitorCtrlC(quitChan)
@@ -98,15 +101,15 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		case <-restartChan:
 			// Handle the restart signal.
 			fmt.Println("Restarting audio capture")
-			startAudioCapture(&wg, settings, quitChan, restartChan)
+			startAudioCapture(&wg, settings, quitChan, restartChan, audioBuffer)
 		}
 	}
 }
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
-func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan chan struct{}, restartChan chan struct{}) {
+func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *myaudio.AudioBuffer) {
 	wg.Add(1)
-	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan)
+	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, audioBuffer)
 }
 
 // startBufferMonitor initializes and starts the buffer monitoring routine in a new goroutine.

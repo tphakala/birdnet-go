@@ -10,7 +10,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}) {
+func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *AudioBuffer) {
 	defer wg.Done() // Ensure this is called when the goroutine exits
 
 	if settings.Debug {
@@ -36,6 +36,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan str
 	// BufferMonitor() will poll this buffer and read data from it
 	onReceiveFrames := func(pSample2, pSamples []byte, framecount uint32) {
 		WriteToBuffer(pSamples)
+		audioBuffer.Write(pSamples)
 	}
 
 	// onStopDevice is called when the device stops, either normally or unexpectedly
