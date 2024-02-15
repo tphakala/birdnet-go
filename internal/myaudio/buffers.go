@@ -32,10 +32,7 @@ func InitRingBuffer(capacity int) {
 
 // writeToBuffer writes audio data into the ring buffer.
 func WriteToBuffer(data []byte) {
-	_, err := ringBuffer.Write(data)
-	if err != nil {
-		// yolo, try again
-	}
+	ringBuffer.Write(data)
 }
 
 // readFromBuffer reads a sliding chunk of audio data from the ring buffer.
@@ -70,29 +67,21 @@ func readFromBuffer() []byte {
 func BufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}) {
 	defer wg.Done()
 
+	// Creating a ticker that ticks every 100ms
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-quitChan:
-			// Make sure to complete any ongoing processData before exiting.
-			// This could involve some flag or condition to check if processData is running.
+			// Quit signal received, stop the buffer monitor
 			return
 
-		default:
+		case <-ticker.C: // Wait for the next tick
 			data := readFromBuffer()
 			// if buffer has 3 seconds of data, process it
 			if len(data) == chunkSize {
 				ProcessData(data, bn)
-			} else {
-				time.Sleep(pollInterval)
-
-				/*
-					today := time.Now().Truncate(24 * time.Hour)
-									if today.After(ctx.SpeciesListUpdated) {
-						// update location based species list once a day
-						p.IncludedSpeciesList = bn.GetProbableSpecies()
-						p.SpeciesListUpdated = today
-					}
-				*/
 			}
 		}
 	}

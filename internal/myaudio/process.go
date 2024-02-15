@@ -9,20 +9,19 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/analysis/queue"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // processData processes the given audio data to detect bird species, logs the detected species
 // and optionally saves the audio clip if a bird species is detected above the configured threshold.
 func ProcessData(data []byte, bn *birdnet.BirdNET) error {
-	// temp assignment, fix later
-	const defaultBitDepth = 16
-
 	// get current time to track processing time
 	startTime := time.Now()
 
-	sampleData, err := ConvertToFloat32(data, defaultBitDepth)
+	// convert audio data to float32
+	sampleData, err := ConvertToFloat32(data, conf.BitDepth)
 	if err != nil {
-		return fmt.Errorf("error converting to float32: %w", err)
+		return fmt.Errorf("error converting %v bit PCM data to float32: %w", conf.BitDepth, err)
 	}
 
 	// run BirdNET inference
@@ -31,7 +30,7 @@ func ProcessData(data []byte, bn *birdnet.BirdNET) error {
 		return fmt.Errorf("error predicting species: %w", err)
 	}
 
-	// print species of all results
+	// DEBUG print species of all results
 	/*for i := 0; i < len(results); i++ {
 		if results[i].Confidence > 0.1 {
 			fmt.Println("	", results[i].Confidence, results[i].Species)
@@ -43,9 +42,10 @@ func ProcessData(data []byte, bn *birdnet.BirdNET) error {
 
 	// Create a Results message to be sent through queue to processor
 	resultsMessage := queue.Results{
+		StartTime:   startTime.Add(-4000 * time.Millisecond),
+		ElapsedTime: elapsedTime,
 		PCMdata:     data,
 		Results:     results,
-		ElapsedTime: elapsedTime,
 	}
 
 	// Send the results to the queue
@@ -62,12 +62,10 @@ func ProcessData(data []byte, bn *birdnet.BirdNET) error {
 func logProcessingTime(startTime time.Time) time.Duration {
 	var elapsedTime time.Duration
 	elapsedTime = time.Since(startTime)
-	/*
-		if ctx.Settings.Realtime.ProcessingTime || ctx.Settings.Debug {
-			fmt.Printf("\r\033[Kprocessing time %v ms", elapsedTime.Milliseconds())
-			return elapsedTime
-		}
-	*/
+	/*if ctx.Settings.Realtime.ProcessingTime || ctx.Settings.Debug {
+		fmt.Printf("\r\033[Kprocessing time %v ms", elapsedTime.Milliseconds())
+		return elapsedTime
+	}*/
 	return elapsedTime
 }
 
