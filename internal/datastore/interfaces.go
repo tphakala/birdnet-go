@@ -3,6 +3,7 @@ package datastore
 import (
 	"fmt"
 	"log"
+	"strconv"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"gorm.io/gorm"
@@ -12,6 +13,7 @@ import (
 type Interface interface {
 	Open() error
 	Save(note Note) error
+	Delete(id string) error
 	Close() error
 	GetAllNotes() ([]Note, error)
 	GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]Note, error)
@@ -19,6 +21,7 @@ type Interface interface {
 	SpeciesDetections(species, date, hour string, sortAscending bool) ([]Note, error)
 	GetLastDetections(numDetections int) ([]Note, error)
 	SearchNotes(query string, sortAscending bool, limit int, offset int) ([]Note, error)
+	GetNoteClipPath(noteID string) (string, error)
 }
 
 // DataStore implements StoreInterface using a GORM database.
@@ -43,6 +46,41 @@ func New(settings *conf.Settings) Interface {
 	}
 }
 
+// Delete removes a note from the database by its ID.
+func (ds *DataStore) Delete(id string) error {
+	// Convert the id from string to integer
+	var noteID int
+	var err error
+	if noteID, err = strconv.Atoi(id); err != nil {
+		return fmt.Errorf("error converting ID to integer: %s", err)
+	}
+
+	// Perform the deletion using the converted integer ID
+	result := ds.DB.Delete(&Note{}, noteID)
+	if result.Error != nil {
+		return fmt.Errorf("error deleting note with ID %d: %w", noteID, result.Error)
+	}
+	return nil
+}
+
+// GetNoteClipPath retrieves the path to the audio clip associated with a note.
+func (ds *DataStore) GetNoteClipPath(noteID string) (string, error) {
+	var clipPath struct {
+		ClipName string
+	}
+
+	err := ds.DB.Model(&Note{}).
+		Select("clip_name").
+		Where("id = ?", noteID).
+		First(&clipPath).Error // Use First to retrieve a single record
+
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve clip path: %w", err)
+	}
+
+	return clipPath.ClipName, nil
+}
+
 // GetAllNotes retrieves all notes from the database.
 func (ds *DataStore) GetAllNotes() ([]Note, error) {
 	var notes []Note
@@ -61,6 +99,7 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 		Select("common_name, COUNT(*) as count").
 		Where("date = ? AND confidence >= ?", selectedDate, minConfidenceNormalized).
 		Group("common_name").
+		//Having("COUNT(*) > ?", 1).
 		Order("count DESC").
 		Limit(reportCount).
 		Scan(&results).Error

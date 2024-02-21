@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"time"
@@ -215,6 +216,40 @@ func (s *Server) speciesDetectionsHandler(c echo.Context) error {
 	}
 
 	return c.Render(http.StatusOK, "speciesDetections", data)
+}
+
+// deleteNoteHandler deletes note object from database and its associated audio file
+func (s *Server) deleteNoteHandler(c echo.Context) error {
+	noteID := c.QueryParam("id")
+	if noteID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "Note ID is required.")
+	}
+
+	// Retrieve the path to the audio file before deleting the note
+	clipPath, err := s.ds.GetNoteClipPath(noteID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to retrieve audio clip path: "+err.Error())
+	}
+
+	// Delete the note from the database
+	err = s.ds.Delete(noteID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to delete note: "+err.Error())
+	}
+
+	// If there's an associated clip, delete the file
+	if clipPath != "" {
+		err = os.Remove(clipPath)
+		if err != nil {
+			log.Println("Failed to delete audio clip: ", err)
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to delete audio clip: "+err.Error())
+		} else {
+			log.Println("Deleted audio clip: ", clipPath)
+		}
+	}
+
+	// Pass this struct to the template or return a success message
+	return c.HTML(http.StatusOK, `<div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 3000)" class="notification-class">Delete successful!</div>`)
 }
 
 // searchHandler handles the search functionality.
