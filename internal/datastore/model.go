@@ -20,6 +20,7 @@ type Note struct {
 	Threshold      float64
 	Sensitivity    float64
 	ClipName       string
+	Comment        string `gorm:"type:text"`
 	ProcessingTime time.Duration
 }
 
