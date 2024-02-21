@@ -75,6 +75,10 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/species-detections", s.speciesDetectionsHandler)
 	s.Echo.GET("/search", s.searchHandler)
 
+	// Handle both GET and DELETE requests for the /note route
+	//s.Echo.Add("GET", "/note", s.noteHandler)
+	s.Echo.Add("DELETE", "/note", s.deleteNoteHandler)
+
 	s.Echo.POST("/update-settings", s.updateSettingsHandler)
 
 	// Specific handler for settings route
