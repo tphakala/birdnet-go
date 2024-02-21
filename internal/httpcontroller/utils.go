@@ -73,6 +73,23 @@ func confidenceColor(confidence float64) string {
 	}
 }
 
+// createSpectrogramWithSoX generates a spectrogram for a WAV file using SoX.
+func createSpectrogramWithSoX(wavFilePath, spectrogramPath string) error {
+	// Verify SoX installation
+	if _, err := exec.LookPath("sox"); err != nil {
+		return fmt.Errorf("SoX binary not found: %w", err)
+	}
+
+	// Execute SoX command to create spectrogram
+	cmd := exec.Command("sox", wavFilePath, "-n", "spectrogram", "-r", "-x", "300", "-y", "200", "-o", spectrogramPath)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("SoX command failed: %w", err)
+	}
+
+	log.Printf("Spectrogram generated at '%s'", spectrogramPath)
+	return nil
+}
+
 // GetSpectrogramPath returns the web-friendly path to the spectrogram image for a WAV file, stored in the same directory.
 func GetSpectrogramPath(wavFileName string) (string, error) {
 	baseName := filepath.Base(wavFileName)
@@ -99,21 +116,22 @@ func GetSpectrogramPath(wavFileName string) (string, error) {
 	return webFriendlyPath, nil
 }
 
-// createSpectrogramWithSoX generates a spectrogram for a WAV file using SoX.
-func createSpectrogramWithSoX(wavFilePath, spectrogramPath string) error {
-	// Verify SoX installation
-	if _, err := exec.LookPath("sox"); err != nil {
-		return fmt.Errorf("SoX binary not found: %w", err)
-	}
+// wrapNotesWithSpectrogram wraps notes with their corresponding spectrogram paths.
+func wrapNotesWithSpectrogram(notes []datastore.Note) ([]NoteWithSpectrogram, error) {
+	notesWithSpectrogram := make([]NoteWithSpectrogram, len(notes))
+	for i, note := range notes {
+		spectrogramPath, err := GetSpectrogramPath(note.ClipName)
+		if err != nil {
+			log.Printf("Error generating spectrogram for %s: %v", note.ClipName, err)
+			continue
+		}
 
-	// Execute SoX command to create spectrogram
-	cmd := exec.Command("sox", wavFilePath, "-n", "spectrogram", "-r", "-x", "300", "-y", "200", "-o", spectrogramPath)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("SoX command failed: %w", err)
+		notesWithSpectrogram[i] = NoteWithSpectrogram{
+			Note:            note,
+			SpectrogramPath: spectrogramPath,
+		}
 	}
-
-	log.Printf("Spectrogram generated at '%s'", spectrogramPath)
-	return nil
+	return notesWithSpectrogram, nil
 }
 
 // sumHourlyCounts calculates the total counts from hourly counts.
@@ -156,22 +174,4 @@ func parseOffset(offsetStr string, defaultOffset int) int {
 		return defaultOffset
 	}
 	return offset
-}
-
-// wrapNotesWithSpectrogram wraps notes with their corresponding spectrogram paths.
-func wrapNotesWithSpectrogram(notes []datastore.Note) ([]NoteWithSpectrogram, error) {
-	notesWithSpectrogram := make([]NoteWithSpectrogram, len(notes))
-	for i, note := range notes {
-		spectrogramPath, err := GetSpectrogramPath(note.ClipName)
-		if err != nil {
-			log.Printf("Error generating spectrogram for %s: %v", note.ClipName, err)
-			continue
-		}
-
-		notesWithSpectrogram[i] = NoteWithSpectrogram{
-			Note:            note,
-			SpectrogramPath: spectrogramPath,
-		}
-	}
-	return notesWithSpectrogram, nil
 }
