@@ -112,7 +112,7 @@ func (f *DefaultFileHandler) rotateFile() error {
 
 	// Rename the existing file with a timestamp before creating a new one
 	if _, err := os.Stat(f.filename); err == nil {
-		newPath := f.filename + "." + time.Now().Format("20060102150405")
+		newPath := f.filename + "." + time.Now().Format("20060102")
 		if err := os.Rename(f.filename, newPath); err != nil {
 			return err
 		}
