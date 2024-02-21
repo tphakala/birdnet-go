@@ -1,13 +1,13 @@
 {{define "recentDetections"}}
 
-<table class="table w-full text-sm text-left text-gray-500 dark:text-gray-400">
+<table class="table w-full text-sm text-left text-gray-600 dark:text-gray-300">
   <thead class="text-xs">
     <tr>
-      <th scope="col" class="py-2 px-6 w-1/6">Date</th>
-      <th scope="col" class="py-2 px-6 w-1/6">Time</th>
-      <th scope="col" class="py-2 px-6 w-1/6">Common Name</th>
-      <th scope="col" class="py-2 px-6 w-1/6">Confidence</th>
-      <th scope="col" class="py-2 px-6 w-auto">Recording</th>
+      <th scope="col" class="py-2 px-6" style="width:15%;">Date</th>
+      <th scope="col" class="py-2 px-6" style="width:15%;">Time</th>
+      <th scope="col" class="py-2 px-6" style="width:25%;">Common Name</th>
+      <th scope="col" class="py-2 px-6" style="width:20%;">Confidence</th>
+      <th scope="col" class="py-2 px-6" style="width:25%;">Recording</th>
     </tr>
   </thead>
   <tbody>
@@ -24,10 +24,10 @@
       <td class="py-1 px-6 flex justify-center">
         <div class="w-full">
           <!-- Spectrogram Image  -->
-          <img src="{{.SpectrogramPath}}" alt="Spectrogram Image" style="width: auto; height: auto;">
+          <img src="{{.SpectrogramPath}}" loading="lazy" alt="Spectrogram Image" style="width: auto; height: auto;">
 
           <!-- Audio player -->
-          <audio controls class="audio-control">
+          <audio controls class="audio-control" preload="none">
             <source src="{{.ClipName}}" type="audio/wav">
             Your browser does not support the audio element.
           </audio>
