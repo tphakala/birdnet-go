@@ -11,8 +11,10 @@
 	<link href="/assets/custom.css" rel="stylesheet" />
 	<!-- htmx -->
 	<script src="/assets/htmx.min.js"></script>
+	<!-- alpine.js -->
+	<script src="/assets/alpinejs.min.js"></script>
 	<!-- svg loader for icons -->
-	<script src="https://cdn.jsdelivr.net/npm/external-svg-loader@1.6.10/svg-loader.min.js" async></script>
+	<!--<script src="https://cdn.jsdelivr.net/npm/external-svg-loader@1.6.10/svg-loader.min.js" async></script>-->
 </head>
 
 <body class="drawer min-h-screen bg-base-200 lg:drawer-open">
@@ -28,6 +30,8 @@
 			<div id="mainContent" class="grid grid-cols-12 grid-rows-[min-content] gap-y-8 p-3 lg:p-8" >
 				{{ RenderContent . }}
 			</div>
+			<!-- Placeholder for dynamic notifications -->
+			<div id="status-message"></div>
 		</main>
 	</div>
 
