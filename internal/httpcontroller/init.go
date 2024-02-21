@@ -69,7 +69,6 @@ func configureDefaultSettings(settings *conf.Settings) {
 func (s *Server) initializeServer() {
 	s.Echo.HideBanner = true
 	s.initLogger()
-	s.setupCustomLogger()
 	s.configureMiddleware()
 	s.initRoutes()
 }
@@ -104,10 +103,8 @@ func (s *Server) initLogger() {
 
 	// Set Echo's Logger to use the custom logger
 	s.Echo.Logger.SetOutput(s.Logger)
-}
 
-// setupCustomLogger sets up the custom logger for the Echo server.
-func (s *Server) setupCustomLogger() {
+	// Set Echo's logging format
 	s.Echo.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogURI:      true,
 		LogStatus:   true,
