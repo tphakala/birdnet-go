@@ -31,19 +31,15 @@ func NewAudioBuffer(durationSeconds int, sampleRate, bytesPerSample int) *AudioB
 	}
 }
 
-// Write method with improved timestamp tracking
+// Write adds PCM audio data to the buffer, updating the startTime if necessary for precise timekeeping.
 func (ab *AudioBuffer) Write(data []byte) {
-	ab.lock.Lock()
-	defer ab.lock.Unlock()
+	// Copy the data to the buffer
+	bytesWritten := copy(ab.data[ab.writeIndex:], data)
+	ab.writeIndex = (ab.writeIndex + bytesWritten) % ab.bufferSize
 
-	for i := 0; i < len(data); i++ {
-		ab.data[ab.writeIndex] = data[i]
-		ab.writeIndex++
-		if ab.writeIndex >= ab.bufferSize {
-			ab.writeIndex = 0
-			// Update startTime on every wraparound to keep track of the latest time
-			ab.startTime = time.Now().Add(-ab.bufferDuration)
-		}
+	// Update startTime only if we've overwritten the old start
+	if bytesWritten > ab.bufferSize-ab.writeIndex {
+		ab.startTime = time.Now().Add(-ab.bufferDuration)
 	}
 }
 
