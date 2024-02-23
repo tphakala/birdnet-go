@@ -1,7 +1,7 @@
 # BirdNET-Go
 
 <p align="center">
-  <img src="doc/birdnet-go-logo.webp" />
+  <img src="doc/BirdNET-Go-logo.webp" />
 </p>
 <p align="center">
 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">
@@ -23,7 +23,7 @@ BirdNET-Go features
 
 ## Web Dashboard
 
-<img src="doc/birdnet-go-dashboard.webp" />
+<img src="doc/BirdNET-Go-dashboard.webp" />
 
 ## Executable Distributions
 
