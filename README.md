@@ -1,7 +1,7 @@
 # BirdNET-Go
 
 <p align="center">
-  <img src="doc/go-birdnet-logo.webp" />
+  <img src="doc/birdnet-go-logo.webp" />
 </p>
 <p align="center">
 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">
@@ -10,16 +10,20 @@
  <img src="https://badgen.net/badge/OS/Linux%2C%20Windows%2C%20macOS/blue">
 </p>
 
-BirdNET-Go is an application inspired by BirdNET Analyzer, developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology. While the original BirdNET is based on Python, BirdNET-Go is built using Golang, aiming for simplified deployment across multiple platforms, from Windows PCs to single board computers like Raspberry Pi.
+BirdNET-Go is an AI solution for continuous avian monitoring and identification
 
 BirdNET-Go features
 
 - 24/7 realtime bird song analysis of soundcard capture, analysis output to log file, SQLite or MySQL
-- BirdWeather upload support
-- WAV file analysis, outputs to Raven selection table and CSV format
-- Realtime log file output can be used as overlay in OBS for bird feeder streams etc., see it in action at https://www.youtube.com/watch?v=FXW1efd9Dro
+- Easy to use Web user interface for data visualisation
+- BirdWeather.com integration
+- Realtime log file output can be used as overlay in OBS for bird feeder streams etc.
 - Minimal runtime dependencies, BirdNET Tensorflow Lite model is embedded in compiled binary
 - Runs on Windows, Linux and macOS
+
+## Web Dashboard
+
+<img src="doc/birdnet-go-dashboard.webp" />
 
 ## Executable Distributions
 
