@@ -32,7 +32,11 @@ func (store *SQLiteStore) Open() error {
 	basePath := conf.GetBasePath(dir)
 	absoluteFilePath := filepath.Join(basePath, fileName)
 
-	db, err := gorm.Open(sqlite.Open(absoluteFilePath), &gorm.Config{})
+	// Create a new GORM logger
+	newLogger := createGormLogger()
+
+	// Open the SQLite database
+	db, err := gorm.Open(sqlite.Open(absoluteFilePath), &gorm.Config{Logger: newLogger})
 	if err != nil {
 		return fmt.Errorf("failed to open SQLite database: %v", err)
 	}

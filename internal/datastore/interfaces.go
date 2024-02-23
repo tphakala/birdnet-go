@@ -3,10 +3,13 @@ package datastore
 import (
 	"fmt"
 	"log"
+	"os"
 	"strconv"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // StoreInterface abstracts the underlying database implementation and defines the interface for database operations.
@@ -216,4 +219,16 @@ func sortAscendingString(asc bool) string {
 		return "ASC"
 	}
 	return "DESC"
+}
+
+// createGormLogger configures and returns a new GORM logger instance.
+func createGormLogger() logger.Interface {
+	return logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		logger.Config{
+			SlowThreshold: 1 * time.Second,
+			LogLevel:      logger.Error,
+			Colorful:      true,
+		},
+	)
 }

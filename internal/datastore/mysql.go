@@ -33,7 +33,11 @@ func (store *MySQLStore) Open() error {
 		store.Settings.Output.MySQL.Host, store.Settings.Output.MySQL.Port,
 		store.Settings.Output.MySQL.Database)
 
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	// Create a new GORM logger
+	newLogger := createGormLogger()
+
+	// Open the MySQL database
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: newLogger})
 	if err != nil {
 		log.Printf("Failed to open MySQL database: %v\n", err)
 		return fmt.Errorf("failed to open MySQL database: %v", err)
