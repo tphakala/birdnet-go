@@ -15,11 +15,13 @@ BirdNET-Go is an AI solution for continuous avian monitoring and identification
 BirdNET-Go features
 
 - 24/7 realtime bird song analysis of soundcard capture, analysis output to log file, SQLite or MySQL
+- Utilizes BirdNET AI model trained with more than 6500 bird species
 - Easy to use Web user interface for data visualisation
 - BirdWeather.com integration
 - Realtime log file output can be used as overlay in OBS for bird feeder streams etc.
 - Minimal runtime dependencies, BirdNET Tensorflow Lite model is embedded in compiled binary
 - Runs on Windows, Linux and macOS
+- Low resource usage, works on Raspberry Pi 3 and equivalent 64-bit single board computers
 
 ## Web Dashboard
 
@@ -154,6 +156,6 @@ Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
 
 Tomi P. Hakala
 
-BirdNET model by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology. Stefan Kahl, Connor Wood, Maximilian Eibl, Holger Klinck.
+BirdNET AI model by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology. Stefan Kahl, Connor Wood, Maximilian Eibl, Holger Klinck.
 
 BirdNET label translations by Patrick Levin for BirdNET-Pi project by Patrick McGuire.
