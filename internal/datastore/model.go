@@ -6,8 +6,8 @@ import "time"
 type Note struct {
 	ID             uint `gorm:"primaryKey"`
 	SourceNode     string
-	Date           string `gorm:"index:idx_notes_date_commonname_confidence"`
-	Time           string
+	Date           string `gorm:"index:idx_notes_date_commonname_confidence,index:idx_notes_date_time"`
+	Time           string `gorm:"index:idx_notes_date_time"`
 	InputFile      string
 	BeginTime      time.Time
 	EndTime        time.Time
