@@ -5,9 +5,11 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"golang.org/x/crypto/acme/autocert"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -46,10 +48,24 @@ func New(settings *conf.Settings, dataStore datastore.Interface) *Server {
 	// Server initialization
 	s.initializeServer()
 
-	// Start the server in a new goroutine and handle errors
+	// Conditional AutoTLS setup
 	errChan := make(chan error)
 	go func() {
-		if err := s.Echo.Start(":" + settings.WebServer.Port); err != nil {
+		var err error
+		if settings.WebServer.AutoTLS {
+			configPaths, err := conf.GetDefaultConfigPaths()
+			if err != nil {
+				log.Fatalf("Failed to get config paths: %v", err)
+			}
+
+			s.Echo.AutoTLSManager.Prompt = autocert.AcceptTOS
+			s.Echo.AutoTLSManager.Cache = autocert.DirCache(configPaths[0])
+			s.Echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist("")
+			err = s.Echo.StartAutoTLS(":" + settings.WebServer.Port)
+		} else {
+			err = s.Echo.Start(":" + settings.WebServer.Port)
+		}
+		if err != nil {
 			errChan <- err
 		}
 	}()
@@ -124,7 +140,26 @@ func (s *Server) initLogger() {
 func (s *Server) configureMiddleware() {
 	s.Echo.Use(middleware.Recover())
 	s.Echo.Use(middleware.GzipWithConfig(middleware.GzipConfig{
-		Level: 5,
+		Level:     6,
+		MinLength: 2048,
 	}))
-	// Additional middleware can be added here
+	// Apply the Cache Control Middleware
+	s.Echo.Use(CacheControlMiddleware())
+}
+
+// CacheControlMiddleware applies cache control headers for specified routes.
+func CacheControlMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			path := c.Request().URL.Path
+			// Apply cache control for assets and clips paths
+			if strings.HasPrefix(path, "/assets/") || strings.HasPrefix(path, "/clips/") {
+				c.Response().Header().Set("Cache-Control", "public, max-age=0") // 1 day
+			} else {
+				// No cache for other routes
+				c.Response().Header().Set("Cache-Control", "no-cache")
+			}
+			return next(c)
+		}
+	}
 }
