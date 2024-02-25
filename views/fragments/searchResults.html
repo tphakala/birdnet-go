@@ -1,34 +1,11 @@
 {{define "searchResults"}}
 
-<!-- daisyUI card for top birds chart -->
+<!-- daisyUI card -->
+{{ if eq .Offset 0 }}
 <section class="card col-span-12 overflow-hidden bg-base-100 shadow-sm xl:col-span-12">
 	<div class="card-body grow-0 p-1 ml-4">
 		<div class="flex justify-between">
 			<span class="card-title grow"><a class="link-hover link">Search Results for <em>{{.SearchQuery}}</em></a></span>
-			<div class="flex items-center">
-            <!-- Form wrapping the input and select -->
-            <form id="searchForm" 
-                  hx-get="/search" 
-                  hx-target="#mainContent"
-                  hx-swap="innerHTML"
-                  hx-trigger="change from:#numResults"
-                  method="get"
-                  class="flex items-center">
-                <!-- Hidden input for the search query -->
-                <input type="hidden" name="query" value="{{.SearchQuery}}">
-
-                <!-- Number of Results to return -->
-                <label for="numResults" class="label">Show:</label>
-                <!-- Dropdown for selecting number of results -->
-                <select id="numResults" name="numResults" 
-                        hx-trigger="change" 
-                        class="select focus-visible:outline-none">
-                    <option value="25" {{ if eq .NumResults 25}}selected{{end}}>25</option>
-                    <option value="50" {{ if eq .NumResults 50}}selected{{end}}>50</option>
-                    <option value="100" {{ if eq .NumResults 100}}selected{{end}}>100</option>
-                </select>
-            </form>
-          </div>
 		</div>
 	</div>
   
@@ -38,12 +15,13 @@
       <th scope="col" class="py-2 px-6" style="width: 15%">Date</th>
       <th scope="col" class="py-2 px-6" style="width: 15%">Time</th>
       <th scope="col" class="py-2 px-6" style="width: auto">Common Name</th>
-      <th scope="col" class="py-2 px-6" style="width: 10%">Confidence</th>
-      <th scope="col" class="py-2 px-6" style="width: 25%">Recording</th>
-      <th scope="col" class="py-2 px-4" style="width: 10%">Actions</th>
+      <th scope="col" class="py-2 px-6" style="width: auto">Confidence</th>
+      <th scope="col" class="py-2 px-6" style="width: 30%">Recording</th>
+      <!--<th scope="col" class="py-2 px-4" style="width: 10%">Actions</th>-->
     </tr>
   </thead>
   <tbody>
+  {{ end}}
     {{range .Notes}}
     <tr class="">
       <td class="py-1 px-6">{{.Date}}</td>
@@ -62,7 +40,7 @@
         </audio>
       </td>
       <!-- Action buttons column -->
-      <td class="py-1 px-4">
+      <!--<td class="py-1 px-4">
         <div class="inline-flex">
           <button hx-delete="/note?id={{.ID}}" type="button" class="inline-flex items-center px-4 py-2 text-xs font-medium rounded-md text-gray-400 bg-white border border-gray-200 hover:bg-gray-100 hover:text-gray-900 focus:z-10 focus:ring-1 focus:ring-gray-900 focus:text-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-white dark:hover:text-white dark:hover:bg-gray-700 dark:focus:ring-blue-500 dark:focus:text-white">
             <svg class="w-4 h-4 me-2" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
@@ -71,29 +49,13 @@
             Delete
           </button>
         </div>
-      </td> 
+      </td> -->
     </tr>
     {{end}}
-    <tr class="">
-      <!-- Previous Link (only show if offset > 0) -->
-      {{ if gt .Offset 0 }}
-      <td class="py-4 px-6 hover:underline" align="left"
-        hx-get="/search?query={{urlquery .SearchQuery}}&numResults={{.NumResults}}&offset={{ sub .Offset .NumResults }}"
-        hx-target="#mainContent"
-        hx-swap="innerHTML">
-        Prev
-      </td>
-      {{ else }}
-      <td class="py-4 px-6"></td>
-      {{ end }}
-      <td class="py-4 px-6" colspan="3"></td>
-      <!-- Next Link (show if there are more results) -->
-      <td class="py-4 px-6 hover:underline" align="right"
-        hx-get="/search?query={{urlquery .SearchQuery}}&numResults={{.NumResults}}&offset={{ add .Offset .NumResults }}"
-        hx-target="#mainContent"
-        hx-swap="innerHTML">
-        Next
-      </td>
+    <!-- Infinite scroll trigger -->
+    <tr hx-get="/search?query={{urlquery .SearchQuery}}&numResults={{.NumResults}}&offset={{ add .Offset .NumResults }}"
+        hx-trigger="revealed"
+        hx-swap="outerHTML">
     </tr>
   </tbody>
 </table>
