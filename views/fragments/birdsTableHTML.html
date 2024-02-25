@@ -1,10 +1,7 @@
 {{define "birdsTableHTML"}}
 
-<!--
-<table class="table table-zebra w-full text-sm text-left text-gray-500 dark:text-gray-400"></table>
--->
 <table class="table table-zebra">
-  <!-- <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400"> -->
+  
   <thead class="text-xs">
     <tr>
       <th scope="col" class="py-2 px-6 w-0">Species</th>
@@ -17,33 +14,31 @@
   </thead>
   <tbody>
     {{range $index, $element := .NotesWithIndex}}
-    <!--<tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"></tr>-->
-    <tr class="">
 
-      <!-- Make the species name clickable and trigger an HTMX request on click -->
-      <!--<th scope="row" class="py-1 px-6 font-medium text-gray-900 whitespace-nowrap dark:text-white"></th>-->
+    <tr class="">
+      <!-- Species row -->
       <th scope="row" class="py-1 px-6 font-medium">
         <a href="#"
-          hx-get="/species-detections?species={{urlquery .Note.CommonName}}&amp;date={{urlquery $.SelectedDate}}"
-          hx-target="#speciesDetections" hx-trigger="click" onclick="speciesDetectionsModal.showModal()">{{title
-          .Note.CommonName}}</a>
+          hx-get="/species-detections?species={{urlquery .Note.CommonName}}&date={{urlquery $.SelectedDate}}"
+          hx-target="#mainContent" hx-trigger="click">{{title .Note.CommonName}}
+        </a>
       </th>
 
-      <!-- <td class="py-1 px-3"> -->
       <td class="py-1 px-3">
         <div class="w-full rounded-full bg-base-300 dark:bg-base-300">
           <div class="progress progress-primary bg-gray-400 dark:bg-gray-400" style="width: {{calcWidth .TotalDetections}}%"></div>
         </div>
       </td>
 
+      <!-- Hourly counts -->
       {{range $hourIndex, $count := $element.HourlyCounts}}
       {{if gt $count 0}}
-        <td class="text-center py-0 px-0 heatmap-color-{{heatmapColor $count}}"
+        <td class="text-center py-0 px-0 heatmap-color-{{heatmapColor $count}}">
+          <a href="#"
             hx-get="/species-detections?species={{urlquery $element.Note.CommonName}}&date={{urlquery $.SelectedDate}}&hour={{$hourIndex}}"
-            hx-target="#speciesDetections" hx-trigger="click"
-            onclick="speciesDetectionsModal.showModal('{{urlquery $element.Note.CommonName}}', '{{urlquery $.SelectedDate}}', '{{urlquery $hourIndex}}')">
-            {{$count}}
-        </td>
+            hx-target="#mainContent" hx-trigger="click">
+            {{$count}}</a>
+        </td> 
       {{else}}
         <td class="text-center py-0 px-0" data-count="{{$count}}">
             -

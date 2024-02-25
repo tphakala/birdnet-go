@@ -1,22 +1,40 @@
 {{define "speciesDetections"}}
 
+<!-- daisyUI card for top birds chart -->
+{{ if eq .Offset 0 }}
+<section class="card col-span-12 overflow-hidden bg-base-100 shadow-sm xl:col-span-12">
+	<div class="card-body grow-0 p-1 ml-4">
+		<div class="flex justify-between">
+			<span class="card-title grow"><a class="link-hover link">Daily Results for <em>{{ .CommonName }}</em></a></span>
+		</div>
+	</div>
+
 <table class="table w-full text-sm text-left text-gray-600 dark:text-gray-300">
   <thead class="text-xs">
     <tr>
       <th scope="col" class="py-2 px-6" style="width: 15%">Date</th>
       <th scope="col" class="py-2 px-2" style="width: 15%">Time</th>
       <th scope="col" class="py-2 px-4" style="width: auto">Common Name</th>
-      <th scope="col" class="py-2 px-4" style="width: 10%">Confidence</th>
-      <th scope="col" class="py-2 px-4" style="width: 25%">Recording</th>
-      <th scope="col" class="py-2 px-4" style="width: 10%">Actions</th>
+      <th scope="col" class="py-2 px-4" style="width: auto">Confidence</th>
+      <th scope="col" class="py-2 px-4" style="width: 30%">Recording</th>
+      <!--<th scope="col" class="py-2 px-4" style="width: 10%">Actions</th>-->
     </tr>
   </thead>
   <tbody>
+  {{ end}}
     {{range .Notes}}
     <tr class="">
       <td class="py-1 px-6">{{.Date}}</td>
       <td class="py-1 px-2">{{.Time}}</td>
-      <td class="py-1 px-4">{{title .CommonName}}</td>
+      <!-- CommonName is a HTMX link which points to getNoteHandler -->
+      <td class="py-1 px-4">
+        <a href="#"
+        hx-get="/note?id={{.ID}}"
+        hx-target="#mainContent"
+        hx-swap="innerHTML"
+        hx-trigger="click">
+        {{.CommonName}}</a>
+      </td>
       <td class="py-1 px-4">
         <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
           {{confidence .Confidence}}
@@ -29,7 +47,7 @@
         </audio>
       </td>
       <!-- Action buttons column -->
-      <td class="py-1 px-4">
+      <!--<td class="py-1 px-4">
         <div class="inline-flex">
           <button hx-delete="/note?id={{.ID}}" hx-target="#status-message" hx-swap="outerHTML" type="button" class="inline-flex items-center px-4 py-2 text-xs font-medium rounded-md text-gray-400 bg-white border border-gray-200 hover:bg-gray-100 hover:text-gray-900 focus:z-10 focus:ring-1 focus:ring-gray-900 focus:text-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-white dark:hover:text-white dark:hover:bg-gray-700 dark:focus:ring-blue-500 dark:focus:text-white">
             <svg class="w-4 h-4 me-2" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
@@ -39,9 +57,17 @@
           </button>
         </div>
       </td> 
-    </tr>
+    </tr>-->
     {{end}}
+    <!-- Infinite scroll trigger -->
+    <tr hx-get="/species-detections?species={{urlquery .CommonName}}&date={{urlquery .Date}}&hour={{urlquery .Hour}}&offset={{ add .Offset 25 }}"
+        hx-trigger="revealed"
+        hx-swap="outerHTML">
+    </tr>
   </tbody>
 </table>
+
+</section>
+<!-- /card --> 
 
 {{end}}
