@@ -20,7 +20,7 @@ import (
 // NoteWithSpectrogram extends the Note model with a spectrogram path.
 type NoteWithSpectrogram struct {
 	datastore.Note
-	SpectrogramPath string
+	Spectrogram string
 }
 
 // LocaleData represents a locale with its code and full name.
@@ -191,6 +191,7 @@ func (s *Server) processNotes(notes []datastore.Note, selectedDate string, minCo
 	}
 	log.Printf("Total time for processing all notes: %v", time.Since(startTime)) // Print the total time for the function
 
+	// return notes with hourly counts and total detections
 	return notesWithIndex, nil
 }
 
@@ -199,23 +200,88 @@ func (s *Server) processNotes(notes []datastore.Note, selectedDate string, minCo
 func (s *Server) speciesDetectionsHandler(c echo.Context) error {
 	species, date, hour := c.QueryParam("species"), c.QueryParam("date"), c.QueryParam("hour")
 
+	// Check if the required parameters are provided
 	if species == "" || date == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "Species and date parameters are required.")
 	}
 
-	notes, err := s.ds.SpeciesDetections(species, date, hour, false)
+	// Number of results to return
+	numResults := parseNumDetections(c.QueryParam("numResults"), 25) // default 25
+
+	// Pagination: Calculate offset
+	offset := parseOffset(c.QueryParam("offset"), 0) // default 25
+
+	notes, err := s.ds.SpeciesDetections(species, date, hour, false, numResults, offset)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
 	// Prepare data for rendering in the template
 	data := struct {
-		Notes []datastore.Note
+		CommonName string
+		Date       string
+		Hour       string
+		Notes      []datastore.Note
+		NumResults int
+		Offset     int
 	}{
-		Notes: notes,
+		CommonName: species,
+		Date:       date,
+		Hour:       hour,
+		Notes:      notes,
+		NumResults: numResults,
+		Offset:     offset,
 	}
 
+	// render the speciesDetections template with the data
 	return c.Render(http.StatusOK, "speciesDetections", data)
+}
+
+// getNoteHandler retrieves a single note from the database and renders it.
+func (s *Server) getNoteHandler(c echo.Context) error {
+	noteID := c.QueryParam("id")
+	if noteID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "Note ID is required.")
+	}
+
+	// Retrieve the note from the database
+	note, err := s.ds.Get(noteID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to retrieve note: "+err.Error())
+	}
+
+	// set spectrogram width, height will be /2
+	const width = 1000 // pixels
+
+	// Generate the spectrogram path for the note
+	spectrogramPath, err := getSpectrogramPath(note.ClipName, width)
+	if err != nil {
+		log.Printf("Error generating spectrogram for %s: %v", note.ClipName, err)
+		spectrogramPath = "" // Set to empty string to avoid breaking the template
+	}
+
+	// Prepare data for rendering in the template
+	data := struct {
+		Note        datastore.Note
+		Spectrogram string
+	}{
+		Note:        note,
+		Spectrogram: spectrogramPath,
+	}
+
+	// render the detectionDetails template with the data
+	return c.Render(http.StatusOK, "detectionDetails", data)
+}
+
+// getAllNotes retrieves all notes from the database.
+// It returns the notes in a JSON format.
+func (s *Server) getAllNotesHandler(c echo.Context) error {
+	notes, err := s.ds.GetAllNotes()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
+	return c.JSON(http.StatusOK, notes)
 }
 
 // deleteNoteHandler deletes note object from database and its associated audio file
@@ -282,16 +348,16 @@ func (s *Server) searchHandler(c echo.Context) error {
 		Notes:       notes,
 		SearchQuery: searchQuery,
 		NumResults:  numResults,
-		Offset:      offset, // Prepare next offset
+		Offset:      offset,
 	}
 
-	// Pass this struct to the template
+	// render the searchResults template with the data
 	return c.Render(http.StatusOK, "searchResults", data)
 }
 
 // GetLastDetections handles requests for the latest detections.
 // It retrieves the last set of detections based on the specified count.
-func (s *Server) GetLastDetections(c echo.Context) error {
+func (s *Server) getLastDetections(c echo.Context) error {
 	numDetections := parseNumDetections(c.QueryParam("numDetections"), 10) // Default value is 10
 
 	notes, err := s.ds.GetLastDetections(numDetections)
@@ -305,16 +371,6 @@ func (s *Server) GetLastDetections(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
+	// render the recentDetections template with the data
 	return c.Render(http.StatusOK, "recentDetections", notesWithSpectrogram)
-}
-
-// getAllNotes retrieves all notes from the database.
-// It returns the notes in a JSON format.
-func (s *Server) GetAllNotes(c echo.Context) error {
-	notes, err := s.ds.GetAllNotes()
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err)
-	}
-
-	return c.JSON(http.StatusOK, notes)
 }
