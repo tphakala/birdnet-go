@@ -74,14 +74,18 @@ func confidenceColor(confidence float64) string {
 }
 
 // createSpectrogramWithSoX generates a spectrogram for a WAV file using SoX.
-func createSpectrogramWithSoX(wavFilePath, spectrogramPath string) error {
+func createSpectrogramWithSoX(wavFilePath, spectrogramPath string, width int) error {
 	// Verify SoX installation
 	if _, err := exec.LookPath("sox"); err != nil {
 		return fmt.Errorf("SoX binary not found: %w", err)
 	}
 
+	// set heigth based on width
+	heightStr := strconv.Itoa(width / 2)
+	widthStr := strconv.Itoa(width)
+
 	// Execute SoX command to create spectrogram
-	cmd := exec.Command("sox", wavFilePath, "-n", "spectrogram", "-r", "-x", "300", "-y", "200", "-o", spectrogramPath)
+	cmd := exec.Command("sox", wavFilePath, "-n", "rate", "30k", "spectrogram", "-r", "-x", widthStr, "-y", heightStr, "-o", spectrogramPath)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("SoX command failed: %w", err)
 	}
@@ -91,13 +95,17 @@ func createSpectrogramWithSoX(wavFilePath, spectrogramPath string) error {
 }
 
 // GetSpectrogramPath returns the web-friendly path to the spectrogram image for a WAV file, stored in the same directory.
-func GetSpectrogramPath(wavFileName string) (string, error) {
+func getSpectrogramPath(wavFileName string, width int) (string, error) {
 	baseName := filepath.Base(wavFileName)
 	dir := filepath.Dir(wavFileName)
 	ext := filepath.Ext(baseName)
 	baseNameWithoutExt := baseName[:len(baseName)-len(ext)]
+
+	// Include width in the filename
+	spectrogramFileName := fmt.Sprintf("%s_%dpx.png", baseNameWithoutExt, width)
+
 	// Construct the file system path using filepath.Join to ensure it's valid on the current OS.
-	spectrogramPath := filepath.Join(dir, baseNameWithoutExt+".png")
+	spectrogramPath := filepath.Join(dir, spectrogramFileName)
 
 	// Convert the file system path to a web-friendly path by replacing backslashes with forward slashes.
 	webFriendlyPath := strings.Replace(spectrogramPath, "\\", "/", -1)
@@ -105,7 +113,7 @@ func GetSpectrogramPath(wavFileName string) (string, error) {
 	// Check if spectrogram already exists
 	if _, err := os.Stat(spectrogramPath); os.IsNotExist(err) {
 		// Create the spectrogram if it doesn't exist
-		if err := createSpectrogramWithSoX(wavFileName, spectrogramPath); err != nil {
+		if err := createSpectrogramWithSoX(wavFileName, spectrogramPath, width); err != nil {
 			return "", fmt.Errorf("error creating spectrogram with SoX: %w", err)
 		}
 	} else if err != nil {
@@ -119,16 +127,20 @@ func GetSpectrogramPath(wavFileName string) (string, error) {
 // wrapNotesWithSpectrogram wraps notes with their corresponding spectrogram paths.
 func wrapNotesWithSpectrogram(notes []datastore.Note) ([]NoteWithSpectrogram, error) {
 	notesWithSpectrogram := make([]NoteWithSpectrogram, len(notes))
+
+	// Set the width of the spectrogram in pixels
+	const width = 400 // pixels
+
 	for i, note := range notes {
-		spectrogramPath, err := GetSpectrogramPath(note.ClipName)
+		spectrogramPath, err := getSpectrogramPath(note.ClipName, width)
 		if err != nil {
 			log.Printf("Error generating spectrogram for %s: %v", note.ClipName, err)
 			continue
 		}
 
 		notesWithSpectrogram[i] = NoteWithSpectrogram{
-			Note:            note,
-			SpectrogramPath: spectrogramPath,
+			Note:        note,
+			Spectrogram: spectrogramPath,
 		}
 	}
 	return notesWithSpectrogram, nil
