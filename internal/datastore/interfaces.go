@@ -17,11 +17,12 @@ type Interface interface {
 	Open() error
 	Save(note Note) error
 	Delete(id string) error
+	Get(id string) (Note, error)
 	Close() error
 	GetAllNotes() ([]Note, error)
 	GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]Note, error)
 	GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error)
-	SpeciesDetections(species, date, hour string, sortAscending bool) ([]Note, error)
+	SpeciesDetections(species, date, hour string, sortAscending bool, limit int, offset int) ([]Note, error)
 	GetLastDetections(numDetections int) ([]Note, error)
 	SearchNotes(query string, sortAscending bool, limit int, offset int) ([]Note, error)
 	GetNoteClipPath(noteID string) (string, error)
@@ -47,6 +48,24 @@ func New(settings *conf.Settings) Interface {
 		// Consider handling the case where neither database is enabled
 		return nil
 	}
+}
+
+// Get retrieves a note from the database by its ID.
+func (ds *DataStore) Get(id string) (Note, error) {
+	// Convert the id from string to integer
+	var noteID int
+	var err error
+	if noteID, err = strconv.Atoi(id); err != nil {
+		return Note{}, fmt.Errorf("error converting ID to integer: %s", err)
+	}
+
+	// Perform the retrieval using the converted integer ID
+	var note Note
+	result := ds.DB.First(&note, noteID)
+	if result.Error != nil {
+		return Note{}, fmt.Errorf("error getting note with ID %d: %w", noteID, result.Error)
+	}
+	return note, nil
 }
 
 // Delete removes a note from the database by its ID.
@@ -154,7 +173,7 @@ func (ds *DataStore) GetHourlyOccurrences(date, commonName string, minConfidence
 }
 
 // SpeciesDetections retrieves bird species detections for a specific date and time period.
-func (ds *DataStore) SpeciesDetections(species, date, hour string, sortAscending bool) ([]Note, error) {
+func (ds *DataStore) SpeciesDetections(species, date, hour string, sortAscending bool, limit int, offset int) ([]Note, error) {
 	sortOrder := sortAscendingString(sortAscending)
 
 	query := ds.DB.Where("common_name = ? AND date = ?", species, date)
@@ -167,7 +186,9 @@ func (ds *DataStore) SpeciesDetections(species, date, hour string, sortAscending
 		query = query.Where("time >= ? AND time <= ?", startTime, endTime)
 	}
 
-	query = query.Order("id " + sortOrder)
+	query = query.Order("id " + sortOrder).
+		Limit(limit).
+		Offset(offset)
 
 	var detections []Note
 	err := query.Find(&detections).Error
@@ -177,9 +198,18 @@ func (ds *DataStore) SpeciesDetections(species, date, hour string, sortAscending
 // GetLastDetections retrieves the most recent bird detections.
 func (ds *DataStore) GetLastDetections(numDetections int) ([]Note, error) {
 	var notes []Note
+
+	// get current time
+	now := time.Now()
+
 	if result := ds.DB.Order("date DESC, time DESC").Limit(numDetections).Find(&notes); result.Error != nil {
 		return nil, fmt.Errorf("error getting last detections: %w", result.Error)
 	}
+
+	// calculate time it took to retrieve the data
+	elapsed := time.Since(now)
+	log.Printf("Retrieved %d detections in %v", numDetections, elapsed)
+
 	return notes, nil
 }
 
@@ -226,8 +256,8 @@ func createGormLogger() logger.Interface {
 	return logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags),
 		logger.Config{
-			SlowThreshold: 1 * time.Second,
-			LogLevel:      logger.Error,
+			SlowThreshold: 200 * time.Millisecond,
+			LogLevel:      logger.Warn,
 			Colorful:      true,
 		},
 	)
