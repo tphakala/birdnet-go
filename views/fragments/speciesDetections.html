@@ -3,9 +3,9 @@
 <!-- daisyUI card for top birds chart -->
 {{ if eq .Offset 0 }}
 <section class="card col-span-12 overflow-hidden bg-base-100 shadow-sm xl:col-span-12">
-	<div class="card-body grow-0 p-1 ml-4">
+	<div class="card-body grow-0 p-4 ml-2">
 		<div class="flex justify-between">
-			<span class="card-title grow"><a class="link-hover link">Daily Results for <em>{{ .CommonName }}</em></a></span>
+			<span class="card-title grow"><a class="link-hover link">{{ if eq .Hour "" }}Daily{{else}}Hourly{{end}} Results for <em>{{ .CommonName }}</em></a></span>
 		</div>
 	</div>
 
