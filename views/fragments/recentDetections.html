@@ -1,6 +1,7 @@
 {{define "recentDetections"}}
 
-<table class="table w-full text-sm text-left text-gray-600 dark:text-gray-300">
+<table class="hidden sm:table table w-full text-sm text-left text-gray-600 dark:text-gray-300">
+<!--<table class="table w-full text-sm text-left text-gray-600 dark:text-gray-300">-->
   <thead class="text-xs">
     <tr>
       <th scope="col" class="py-2 px-6" style="width:15%;">Date</th>
@@ -45,5 +46,37 @@
     {{end}}
   </tbody>
 </table>
+
+<!-- Responsive layout for small screens -->
+<div class="sm:hidden">
+  {{range .}}
+  <div class="bg-white dark:bg-gray-800 shadow-md rounded-lg p-4 mb-4">
+    <div class="flex items-center space-x-2"> <!-- Flex container with centered items and space between them -->
+      <div>{{.Time}}</div>
+      
+      <a href="#"
+         hx-get="/note?id={{.ID}}"
+         hx-target="#mainContent"
+         hx-swap="innerHTML"
+         hx-trigger="click"
+         hx-push-url="true"> <!-- This ensures the link can grow to use available space, if needed -->
+        {{title .CommonName}}
+      </a>
+      
+      <span class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">{{confidence .Confidence}}</span>
+    </div>
+
+    <div class="flex justify-center mt-3">
+      <div class="w-full">
+        <img src="{{.Spectrogram}}" loading="lazy" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
+        <audio controls class="audio-control" preload="none">
+          <source src="{{.ClipName}}" type="audio/wav">
+          Your browser does not support the audio element.
+        </audio>
+      </div>
+    </div>
+  </div>
+  {{end}}
+</div>
 
 {{end}}

@@ -37,12 +37,15 @@
 <!-- Recent Detections -->
 <section class="card col-span-12 overflow-hidden bg-base-100 shadow-sm xl:col-span-12">
 	<div class="card-body grow-0 p-2 ml-4">
-		<div class="flex justify-between gap-2">
+		<div class="flex justify-between">
 			<span class="card-title grow"><a class="link-hover link">Recent detections</a></span>
 			<label for="numDetections" class="label">Show:</label>
 			<!-- Dropdown for selecting number of detections -->
-			<select id="numDetections" name="numDetections" hx-get="/last-detections" hx-target="#lastDetections"
-				hx-trigger="load, change, every 15s" class="select focus-visible:outline-none">
+			<select id="numDetections" name="numDetections"
+				hx-get="/last-detections"
+				hx-target="#lastDetections"
+				hx-trigger="load, change"
+				class="select focus-visible:outline-none">
 				<option value="5" selected>5</option>
 				<option value="10">10</option>
 				<option value="15">15</option>

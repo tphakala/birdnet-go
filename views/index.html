@@ -43,23 +43,6 @@
 			datePicker.value = today;
 		}, 0); // Set timeout for 0ms
 
-		// Function to close the search modal
-		function closeSearchModal() {
-			document.getElementById('searchModal').classList.remove('modal-open');
-		}
-
-		// Add event listener for the search icon button to open the search modal
-		document.querySelector('[hx-get="/search-modal"]').addEventListener('click', function () {
-			document.getElementById('searchModal').classList.add('modal-open');
-		});
-
-		
-		document.getElementById('loadMoreButton').addEventListener('click', function() {
-    		var currentOffset = parseInt(document.querySelector('#searchParams input[name="offset"]').value);
-    		var numResults = parseInt(document.querySelector('#searchParams input[name="numResults"]').value);
-		    window.nextOffset = currentOffset + numResults;
-		});
-
 	</script>
 </body>
 
