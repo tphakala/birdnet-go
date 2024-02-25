@@ -66,17 +66,16 @@ func (s *Server) initRoutes() {
 
 	// Other static routes.
 	s.Echo.Static("/clips", "clips")
-	s.Echo.Static("/spectrograms", "spectrograms")
 
 	// Additional handlers.
 	s.Echo.GET("/top-birds", s.topBirdsHandler)
-	s.Echo.GET("/notes", s.GetAllNotes)
-	s.Echo.GET("/last-detections", s.GetLastDetections)
+	s.Echo.GET("/notes", s.getAllNotesHandler)
+	s.Echo.GET("/last-detections", s.getLastDetections)
 	s.Echo.GET("/species-detections", s.speciesDetectionsHandler)
 	s.Echo.GET("/search", s.searchHandler)
 
 	// Handle both GET and DELETE requests for the /note route
-	//s.Echo.Add("GET", "/note", s.noteHandler)
+	s.Echo.Add("GET", "/note", s.getNoteHandler)
 	s.Echo.Add("DELETE", "/note", s.deleteNoteHandler)
 
 	s.Echo.POST("/update-settings", s.updateSettingsHandler)
