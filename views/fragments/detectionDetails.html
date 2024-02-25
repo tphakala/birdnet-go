@@ -5,7 +5,7 @@
 	<div class="card-body p-4">
 		<div class="flex justify-between items-center mb-4">
 			<h2 class="card-title text-xl font-semibold text-gray-800">
-				<a href="#" class="link-hover underline decoration-dotted">Detection Details for {{.Note.CommonName}} on {{.Note.Date}} at {{.Note.Time}}</a>
+				Detection Details for {{.Note.CommonName}} on {{.Note.Date}} at {{.Note.Time}}
 			</h2>
 		</div>
   
@@ -19,16 +19,17 @@
   
   		<!-- Spectrogram Image -->
   		<div class="flex justify-center items-center mb-4">
-    		<img src="{{.Spectrogram}}" loading="lazy" alt="Spectrogram Image" class="max-w-full h-auto rounded-md shadow-sm">
+    		<img src="{{.Spectrogram}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
   		</div>
   
   		<!-- Audio Player -->
-  		<div class="audio-control bg-gray-50 p-4 rounded-md">
-    		<audio controls preload="none" class="w-full">
+  		<div class="audio-control p-4">
+    		<audio controls preload="auto" class="w-full">
       			<source src="{{.Note.ClipName}}" type="audio/wav">
       			Your browser does not support the audio element.
     		</audio>
   		</div>
+      <br>
 </section>
 
 {{end}}

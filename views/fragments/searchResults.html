@@ -26,7 +26,15 @@
     <tr class="">
       <td class="py-1 px-6">{{.Date}}</td>
       <td class="py-1 px-6">{{.Time}}</td>
-      <td class="py-1 px-6">{{title .CommonName}}</td>
+      <td class="py-1 px-6">
+        <a href="#"
+        hx-get="/note?id={{.ID}}"
+        hx-target="#mainContent"
+        hx-swap="innerHTML"
+        hx-trigger="click"
+        hx-push-url="true">
+        {{ .CommonName}}</a>
+      </td>
       <td class="py-1 px-6">
         <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
           {{confidence .Confidence}}

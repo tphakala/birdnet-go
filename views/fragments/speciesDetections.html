@@ -32,7 +32,8 @@
         hx-get="/note?id={{.ID}}"
         hx-target="#mainContent"
         hx-swap="innerHTML"
-        hx-trigger="click">
+        hx-trigger="click"
+        hx-push-url="true">
         {{.CommonName}}</a>
       </td>
       <td class="py-1 px-4">
