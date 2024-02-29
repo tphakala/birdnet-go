@@ -74,7 +74,7 @@ func confidenceColor(confidence float64) string {
 }
 
 // createSpectrogramWithSoX generates a spectrogram for a WAV file using SoX.
-func createSpectrogramWithSoX(wavFilePath, spectrogramPath string, width int) error {
+func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) error {
 	// Verify SoX installation
 	if _, err := exec.LookPath("sox"); err != nil {
 		return fmt.Errorf("SoX binary not found: %w", err)
@@ -85,7 +85,12 @@ func createSpectrogramWithSoX(wavFilePath, spectrogramPath string, width int) er
 	widthStr := strconv.Itoa(width)
 
 	// Execute SoX command to create spectrogram
-	cmd := exec.Command("sox", wavFilePath, "-n", "rate", "30k", "spectrogram", "-r", "-x", widthStr, "-y", heightStr, "-o", spectrogramPath)
+	//cmd := exec.Command("sox", wavFilePath, "-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-o", spectrogramPath)
+	args := []string{audioClipPath, "-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-o", spectrogramPath}
+	if width < 800 {
+		args = append(args, "-r")
+	}
+	cmd := exec.Command("sox", args...)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("SoX command failed: %w", err)
 	}
@@ -95,7 +100,7 @@ func createSpectrogramWithSoX(wavFilePath, spectrogramPath string, width int) er
 }
 
 // GetSpectrogramPath returns the web-friendly path to the spectrogram image for a WAV file, stored in the same directory.
-func getSpectrogramPath(wavFileName string, width int) (string, error) {
+func (s *Server) getSpectrogramPath(wavFileName string, width int) (string, error) {
 	baseName := filepath.Base(wavFileName)
 	dir := filepath.Dir(wavFileName)
 	ext := filepath.Ext(baseName)
@@ -125,14 +130,68 @@ func getSpectrogramPath(wavFileName string, width int) (string, error) {
 }
 
 // wrapNotesWithSpectrogram wraps notes with their corresponding spectrogram paths.
-func wrapNotesWithSpectrogram(notes []datastore.Note) ([]NoteWithSpectrogram, error) {
+func (s *Server) wrapNotesWithSpectrogram(notes []datastore.Note) ([]NoteWithSpectrogram, error) {
+	notesWithSpectrogram := make([]NoteWithSpectrogram, len(notes))
+
+	// Create a channel to communicate between goroutines for results
+	type result struct {
+		index int
+		path  string
+		err   error
+	}
+	results := make(chan result, len(notes))
+
+	// Create a channel to limit the number of concurrent goroutines
+	semaphore := make(chan struct{}, 4) // Limit to 4
+
+	// Set the width of the spectrogram in pixels
+	const width = 400 // pixels
+
+	for i, note := range notes {
+		// Acquire a slot in the semaphore before starting a goroutine
+		semaphore <- struct{}{}
+
+		// Launch a goroutine for each spectrogram generation
+		go func(i int, note datastore.Note) {
+			defer func() { <-semaphore }() // Release the slot when done
+
+			spectrogramPath, err := s.getSpectrogramPath(note.ClipName, width)
+			results <- result{i, spectrogramPath, err}
+		}(i, note)
+	}
+
+	// Wait for all goroutines to finish
+	for i := 0; i < len(notes); i++ {
+		res := <-results
+		if res.err != nil {
+			log.Printf("Error generating spectrogram for %s: %v", notes[res.index].ClipName, res.err)
+			continue
+		}
+		notesWithSpectrogram[res.index] = NoteWithSpectrogram{
+			Note:        notes[res.index],
+			Spectrogram: res.path,
+		}
+	}
+
+	// Wait for all slots to be released ensuring all goroutines have completed
+	for i := 0; i < cap(semaphore); i++ {
+		semaphore <- struct{}{}
+	}
+	close(results)
+	close(semaphore)
+
+	return notesWithSpectrogram, nil
+}
+
+// wrapNotesWithSpectrogram wraps notes with their corresponding spectrogram paths.
+/*func (s *Server) wrapNotesWithSpectrogram(notes []datastore.Note) ([]NoteWithSpectrogram, error) {
 	notesWithSpectrogram := make([]NoteWithSpectrogram, len(notes))
 
 	// Set the width of the spectrogram in pixels
 	const width = 400 // pixels
 
 	for i, note := range notes {
-		spectrogramPath, err := getSpectrogramPath(note.ClipName, width)
+		spectrogramPath, err := s.getSpectrogramPath(note.ClipName, width)
 		if err != nil {
 			log.Printf("Error generating spectrogram for %s: %v", note.ClipName, err)
 			continue
@@ -144,7 +203,7 @@ func wrapNotesWithSpectrogram(notes []datastore.Note) ([]NoteWithSpectrogram, er
 		}
 	}
 	return notesWithSpectrogram, nil
-}
+}*/
 
 // sumHourlyCounts calculates the total counts from hourly counts.
 func sumHourlyCounts(hourlyCounts [24]int) int {
