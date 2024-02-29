@@ -28,24 +28,29 @@
       <td class="py-1 px-2">{{.Time}}</td>
       <!-- CommonName is a HTMX link which points to getNoteHandler -->
       <td class="py-1 px-4">
-        <a href="#"
-        hx-get="/note?id={{.ID}}"
-        hx-target="#mainContent"
-        hx-swap="innerHTML"
-        hx-trigger="click"
+        <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click"
         hx-push-url="true">
         {{.CommonName}}</a>
       </td>
       <td class="py-1 px-4">
         <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
-          {{confidence .Confidence}}
+          <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click"
+          hx-push-url="true">
+          {{confidence .Confidence}}</a>
         </div>
       </td>
-      <td class="py-1 px-4">
-        <audio controls class="audio-control" preload="none">
-          <source src="{{.ClipName}}" type="audio/wav">
-          Your browser does not support the audio element.
-        </audio>
+      <td class="py-1 px-6 flex justify-center">
+        <div class="w-full">
+          <!-- Spectrogram Image  -->
+          <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click"
+          hx-push-url="true">
+          <img loading="lazy" width="400" src="{{.Spectrogram}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md"></a>
+          <!-- Audio player -->
+          <audio controls class="audio-control" preload="none">
+            <source src="{{.ClipName}}" type="audio/wav">
+            Your browser does not support the audio element.
+          </audio>
+        </div>
       </td>
       <!-- Action buttons column -->
       <!--<td class="py-1 px-4">
