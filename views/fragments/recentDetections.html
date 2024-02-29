@@ -33,7 +33,7 @@
       <td class="py-1 px-6 flex justify-center">
         <div class="w-full">
           <!-- Spectrogram Image  -->
-          <img src="{{.Spectrogram}}" loading="lazy" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
+          <img loading="lazy" width="400" src="{{.Spectrogram}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
 
           <!-- Audio player -->
           <audio controls class="audio-control" preload="none">
@@ -68,7 +68,7 @@
 
     <div class="flex justify-center mt-3">
       <div class="w-full">
-        <img src="{{.Spectrogram}}" loading="lazy" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
+        <img loading="lazy" width="400" src="{{.Spectrogram}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
         <audio controls class="audio-control" preload="none">
           <source src="{{.ClipName}}" type="audio/wav">
           Your browser does not support the audio element.
