@@ -5,7 +5,6 @@ import (
 	"html/template"
 	"io"
 	"log"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -134,32 +133,4 @@ func (s *Server) initLogger() {
 			return nil
 		},
 	}))
-}
-
-// configureMiddleware sets up middleware for the server.
-func (s *Server) configureMiddleware() {
-	s.Echo.Use(middleware.Recover())
-	s.Echo.Use(middleware.GzipWithConfig(middleware.GzipConfig{
-		Level:     6,
-		MinLength: 2048,
-	}))
-	// Apply the Cache Control Middleware
-	s.Echo.Use(CacheControlMiddleware())
-}
-
-// CacheControlMiddleware applies cache control headers for specified routes.
-func CacheControlMiddleware() echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			path := c.Request().URL.Path
-			// Apply cache control for assets and clips paths
-			if strings.HasPrefix(path, "/assets/") || strings.HasPrefix(path, "/clips/") {
-				c.Response().Header().Set("Cache-Control", "public, max-age=0") // 1 day
-			} else {
-				// No cache for other routes
-				c.Response().Header().Set("Cache-Control", "no-cache")
-			}
-			return next(c)
-		}
-	}
 }
