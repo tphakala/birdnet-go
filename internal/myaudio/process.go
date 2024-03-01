@@ -32,7 +32,7 @@ func ProcessData(data []byte, bn *birdnet.BirdNET) error {
 
 	// DEBUG print species of all results
 	/*for i := 0; i < len(results); i++ {
-		if results[i].Confidence > 0.1 {
+		if results[i].Confidence > 0.01 {
 			fmt.Println("	", results[i].Confidence, results[i].Species)
 		}
 	}*/
