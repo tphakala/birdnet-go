@@ -55,6 +55,10 @@ type Settings struct {
 			ID        string  // birdweather ID
 			Threshold float64 // threshold for prediction confidence for uploads
 		}
+
+		PrivacyFilter struct {
+			Enabled bool // true to enable privacy filter
+		}
 	}
 
 	WebServer struct {
@@ -216,6 +220,9 @@ realtime:
     enabled: false		# true to enable birdweather uploads
     debug: false		# true to enable birdweather api debug mode
     id: 00000			# birdweather ID
+
+  privacyfilter:
+    enabled: true
 
 webserver:
   enabled: true		# true to enable web server
