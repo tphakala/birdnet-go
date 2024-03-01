@@ -26,6 +26,8 @@ type Processor struct {
 	IncludedSpecies    *[]string
 	SpeciesListUpdated time.Time
 	AudioBuffer        *myaudio.AudioBuffer
+	LastDogDetection   time.Time // keep track of dog barks to filter out false positive owl detections
+	LastHumanDetection time.Time // keep track of human vocal for privacy filtering
 }
 
 type Detections struct {
@@ -39,10 +41,19 @@ type Detections struct {
 type PendingDetection struct {
 	Detection     Detections // The detection data
 	Confidence    float64    // Confidence level of the detection
+	HumanDetected bool       // Flag to indicate if the clip contains human vocal
 	FirstDetected time.Time  // Time the detection was first detected
 	LastUpdated   time.Time  // Last time this detection was updated
 	FlushDeadline time.Time  // Deadline by which the detection must be processed
 }
+
+// PendingDetections is a map used to store detections temporarily.
+// The map's keys are species' common names, and its values are PendingDetection structs.
+var PendingDetections map[string]PendingDetection = make(map[string]PendingDetection)
+
+// mutex is used to synchronize access to the PendingDetections map,
+// ensuring thread safety when the map is accessed or modified by concurrent goroutines.
+var mutex sync.Mutex
 
 func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffer *myaudio.AudioBuffer) *Processor {
 	p := &Processor{
@@ -98,6 +109,7 @@ func (p *Processor) processDetections(item *queue.Results) {
 		commonName := strings.ToLower(detection.Note.CommonName)
 		confidence := detection.Note.Confidence
 
+		mutex.Lock() // Lock the mutex to ensure thread safety when accessing the PendingDetections map.
 		// Check if this is a new detection or one with higher confidence.
 		if pendingDetection, exists := PendingDetections[commonName]; !exists || confidence > pendingDetection.Confidence {
 			if !exists {
@@ -127,6 +139,7 @@ func (p *Processor) processDetections(item *queue.Results) {
 				LastUpdated:   time.Now(),
 			}
 		}
+		mutex.Unlock() // Unlock the mutex after updating the map
 	}
 }
 
@@ -136,12 +149,22 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 	// item.Results could contain up to 10 results, process all of them
 	for _, result := range item.Results {
 		scientificName, commonName, _ := observation.ParseSpeciesString(result.Species)
-		confidence := result.Confidence
 
 		// Convert species to lowercase for case-insensitive comparison
 		speciesLowercase := strings.ToLower(commonName)
-		if confidence > 0.01 {
-			//fmt.Println("speciesLowercase: ", speciesLowercase)
+
+		// Dog detection handling
+		if strings.Contains(speciesLowercase, "dog") && result.Confidence > 0.1 {
+			log.Printf("Dog detected, updating last detection timestamp for potential owl false positives")
+			p.LastDogDetection = time.Now()
+		}
+
+		// Human detection handling for privacy filter
+		if p.Settings.Realtime.PrivacyFilter.Enabled {
+			if strings.Contains(speciesLowercase, "human") && result.Confidence > 0.1 {
+				log.Printf("Human detected, updating last detection timestamp for privacy filtering")
+				p.LastHumanDetection = time.Now()
+			}
 		}
 
 		// Use custom confidence threshold if it exists for the species, otherwise use the global threshold
@@ -154,7 +177,7 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 			}
 		}
 
-		if confidence <= confidenceThreshold {
+		if result.Confidence <= confidenceThreshold {
 			// confidence too low, skip processing
 			continue
 		}
@@ -167,8 +190,8 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 			continue
 		}
 
-		item.ClipName = p.generateClipName(scientificName, confidence)
-		//log.Println("clipName: ", item.ClipName)
+		// create file name for audio clip
+		item.ClipName = p.generateClipName(scientificName, result.Confidence)
 
 		beginTime, endTime := 0.0, 0.0
 		note := observation.New(p.Settings, beginTime, endTime, result.Species, float64(result.Confidence), item.ClipName, item.ElapsedTime)
@@ -180,7 +203,6 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 		})
 	}
 
-	//return nil, clipName
 	return detections
 }
 
@@ -229,14 +251,6 @@ func isSpeciesIncluded(species string, includedList []string) bool {
 	return false
 }
 
-// PendingDetections is a map used to store detections temporarily.
-// The map's keys are species' common names, and its values are PendingDetection structs.
-var PendingDetections map[string]PendingDetection = make(map[string]PendingDetection)
-
-// mutex is used to synchronize access to the PendingDetections map,
-// ensuring thread safety when the map is accessed or modified by concurrent goroutines.
-var mutex sync.Mutex
-
 // pendingDetectionsFlusher runs a goroutine that periodically checks the pending detections
 // and flushes them to the worker queue if their deadline has passed.
 func (p *Processor) pendingDetectionsFlusher() {
@@ -249,17 +263,27 @@ func (p *Processor) pendingDetectionsFlusher() {
 			<-ticker.C // Wait for the ticker to tick.
 			now := time.Now()
 
-			mutex.Lock()
-			for species, PendingDetection := range PendingDetections {
+			mutex.Lock() // Lock the mutex to ensure thread safety when accessing the PendingDetections map.
+			for species, item := range PendingDetections {
 				// If the current time is past the flush deadline, process the detection.
-				if now.After(PendingDetection.FlushDeadline) {
+				if now.After(item.FlushDeadline) {
+					// Check if human was detected after the first detection and discard if so
+					if p.Settings.Realtime.PrivacyFilter.Enabled {
+						if !strings.Contains(item.Detection.Note.CommonName, "Human") &&
+							p.LastHumanDetection.After(item.FirstDetected) {
+							log.Printf("Discarding detection of %s due to privacy filter", species)
+							delete(PendingDetections, species)
+							continue
+						}
+					}
+
 					// Set the detection's begin time to the time it was first detected, this is
 					// where we start audio export for the detection.
-					PendingDetection.Detection.Note.BeginTime = PendingDetection.FirstDetected
+					item.Detection.Note.BeginTime = item.FirstDetected
 					// Retrieve and execute actions based on the held detection.
-					actionList := p.getActionsForItem(PendingDetection.Detection)
+					actionList := p.getActionsForItem(item.Detection)
 					for _, action := range actionList {
-						workerQueue <- Task{Type: TaskTypeAction, Detection: PendingDetection.Detection, Action: action}
+						workerQueue <- Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
 					}
 					// Detection is now processed, remove it from pending detections map.
 					delete(PendingDetections, species)
