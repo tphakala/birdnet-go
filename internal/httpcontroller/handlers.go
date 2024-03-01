@@ -216,19 +216,26 @@ func (s *Server) speciesDetectionsHandler(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
+	// Wrap the notes with spectrogram paths
+	notesWithSpectrogram, err := s.wrapNotesWithSpectrogram(notes)
+	if err != nil {
+		// Handle the error appropriately
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+
 	// Prepare data for rendering in the template
 	data := struct {
 		CommonName string
 		Date       string
 		Hour       string
-		Notes      []datastore.Note
+		Notes      []NoteWithSpectrogram
 		NumResults int
 		Offset     int
 	}{
 		CommonName: species,
 		Date:       date,
 		Hour:       hour,
-		Notes:      notes,
+		Notes:      notesWithSpectrogram,
 		NumResults: numResults,
 		Offset:     offset,
 	}
@@ -254,7 +261,7 @@ func (s *Server) getNoteHandler(c echo.Context) error {
 	const width = 1000 // pixels
 
 	// Generate the spectrogram path for the note
-	spectrogramPath, err := getSpectrogramPath(note.ClipName, width)
+	spectrogramPath, err := s.getSpectrogramPath(note.ClipName, width)
 	if err != nil {
 		log.Printf("Error generating spectrogram for %s: %v", note.ClipName, err)
 		spectrogramPath = "" // Set to empty string to avoid breaking the template
@@ -365,7 +372,8 @@ func (s *Server) getLastDetections(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error fetching detections"})
 	}
 
-	notesWithSpectrogram, err := wrapNotesWithSpectrogram(notes)
+	// Wrap the notes with spectrogram paths
+	notesWithSpectrogram, err := s.wrapNotesWithSpectrogram(notes)
 	if err != nil {
 		// Handle the error appropriately
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
