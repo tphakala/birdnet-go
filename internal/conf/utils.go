@@ -3,7 +3,9 @@ package conf
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
 )
@@ -64,4 +66,41 @@ func GetBasePath(path string) string {
 	}
 
 	return basePath
+}
+
+// PrintUserInfo checks the operating system. If it's Linux, it prints the current user and their group memberships.
+func PrintUserInfo() {
+	var audioMember bool = false
+	// Get current user
+	if runtime.GOOS == "linux" {
+		currentUser, err := user.Current()
+		if err != nil {
+			fmt.Printf("Failed to get current user: %v\n", err)
+			return
+		}
+
+		// Get group memberships
+		groupIDs, err := currentUser.GroupIds()
+		if err != nil {
+			log.Printf("Failed to get group memberships: %v\n", err)
+			return
+		}
+
+		for _, gid := range groupIDs {
+			group, err := user.LookupGroupId(gid)
+			if err != nil {
+				log.Printf("Failed to lookup group for ID %s: %v\n", gid, err)
+				continue
+			}
+			//fmt.Printf(" - %s (ID: %s)\n", group.Name, group.Gid)
+			// check if audio is one of groups
+			if group.Name == "audio" {
+				audioMember = true
+			}
+		}
+		if !audioMember {
+			log.Printf("ERROR: User '%s' is not member of audio group, add user to audio group by executing", currentUser.Username)
+			log.Println("sudo usermod -a -G audio", currentUser.Username)
+		}
+	}
 }
