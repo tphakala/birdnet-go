@@ -15,7 +15,7 @@ import (
 // StoreInterface abstracts the underlying database implementation and defines the interface for database operations.
 type Interface interface {
 	Open() error
-	Save(note Note) error
+	Save(note *Note, results []Results) error
 	Delete(id string) error
 	Get(id string) (Note, error)
 	Close() error
@@ -50,6 +50,33 @@ func New(settings *conf.Settings) Interface {
 	}
 }
 
+// Save saves a note and its associated results as a single transaction.
+func (ds *DataStore) Save(note *Note, results []Results) error {
+	// Start a transaction
+	tx := ds.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	// Attempt to save the note
+	if err := tx.Create(note).Error; err != nil {
+		tx.Rollback() // Roll back the transaction on error
+		return err
+	}
+
+	// Set the NoteID for each result and attempt to save
+	for _, result := range results {
+		result.NoteID = note.ID // Link the result to the note using its ID
+		if err := tx.Create(&result).Error; err != nil {
+			tx.Rollback() // Roll back the transaction on error
+			return err
+		}
+	}
+
+	// Commit the transaction
+	return tx.Commit().Error
+}
+
 // Get retrieves a note from the database by its ID.
 func (ds *DataStore) Get(id string) (Note, error) {
 	// Convert the id from string to integer
@@ -70,18 +97,36 @@ func (ds *DataStore) Get(id string) (Note, error) {
 
 // Delete removes a note from the database by its ID.
 func (ds *DataStore) Delete(id string) error {
-	// Convert the id from string to integer
-	var noteID int
+	// Convert the id from string to uint
+	var noteID uint64
 	var err error
-	if noteID, err = strconv.Atoi(id); err != nil {
+	if noteID, err = strconv.ParseUint(id, 10, 32); err != nil {
 		return fmt.Errorf("error converting ID to integer: %s", err)
 	}
 
-	// Perform the deletion using the converted integer ID
-	result := ds.DB.Delete(&Note{}, noteID)
-	if result.Error != nil {
-		return fmt.Errorf("error deleting note with ID %d: %w", noteID, result.Error)
+	// Begin a transaction
+	tx := ds.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
 	}
+
+	// First, delete associated Results within the transaction
+	if err := tx.Where("note_id = ?", noteID).Delete(&Results{}).Error; err != nil {
+		tx.Rollback() // Roll back the transaction on error
+		return fmt.Errorf("error deleting results for note with ID %d: %w", noteID, err)
+	}
+
+	// Then, delete the Note within the same transaction
+	if err := tx.Delete(&Note{}, noteID).Error; err != nil {
+		tx.Rollback() // Roll back the transaction on error
+		return fmt.Errorf("error deleting note with ID %d: %w", noteID, err)
+	}
+
+	// Commit the transaction
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -232,7 +277,7 @@ func (ds *DataStore) SearchNotes(query string, sortAscending bool, limit int, of
 
 // performAutoMigration automates database migrations with error handling.
 func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string) error {
-	if err := db.AutoMigrate(&Note{}); err != nil {
+	if err := db.AutoMigrate(&Note{}, &Results{}); err != nil {
 		return fmt.Errorf("failed to auto-migrate %s database: %v", dbType, err)
 	}
 

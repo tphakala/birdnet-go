@@ -70,20 +70,6 @@ func (store *SQLiteStore) Open() error {
 	return performAutoMigration(db, store.Settings.Debug, "SQLite", absoluteFilePath)
 }
 
-// SaveToDatabase inserts a new Note record into the SQLite database
-func (store *SQLiteStore) Save(note Note) error {
-	if store.DB == nil {
-		return fmt.Errorf("database connection is not initialized")
-	}
-
-	if err := store.DB.Create(&note).Error; err != nil {
-		log.Printf("Failed to save note: %v\n", err)
-		return err
-	}
-
-	return nil
-}
-
 // Close the SQLite database connection
 func (store *SQLiteStore) Close() error {
 	if store.DB == nil {

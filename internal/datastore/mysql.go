@@ -47,20 +47,6 @@ func (store *MySQLStore) Open() error {
 	return performAutoMigration(db, store.Settings.Debug, "MySQL", dsn)
 }
 
-// SaveToDatabase inserts a new Note record into the SQLite database
-func (store *MySQLStore) Save(note Note) error {
-	if store.DB == nil {
-		return fmt.Errorf("database connection is not initialized")
-	}
-
-	if err := store.DB.Create(&note).Error; err != nil {
-		log.Printf("Failed to save note: %v\n", err)
-		return err
-	}
-
-	return nil
-}
-
 // Close MySQL database connections
 func (store *MySQLStore) Close() error {
 	// Ensure that the store's DB field is not nil to avoid a panic
