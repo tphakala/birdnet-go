@@ -11,12 +11,6 @@ import (
 	"github.com/tphakala/go-tflite"
 )
 
-// Result represents the identification result with a species name and its confidence level.
-type Result struct {
-	Species    string
-	Confidence float32
-}
-
 // Filter structure is used for filtering predictions based on certain criteria.
 type Filter struct {
 	Score float32
@@ -24,11 +18,11 @@ type Filter struct {
 }
 
 // DetectionsMap maps species names to a list of their detection results.
-type DetectionsMap map[string][]Result
+type DetectionsMap map[string][]datastore.Results
 
 // Predict performs inference on a given sample using the TensorFlow Lite interpreter.
 // It processes the sample to predict species and their confidence levels.
-func (bn *BirdNET) Predict(sample [][]float32) ([]Result, error) {
+func (bn *BirdNET) Predict(sample [][]float32) ([]datastore.Results, error) {
 	inputTensor := bn.AnalysisInterpreter.GetInputTensor(0)
 	if inputTensor == nil {
 		return nil, fmt.Errorf("cannot get input tensor")
@@ -101,21 +95,21 @@ func customSigmoid(x, sensitivity float64) float64 {
 }
 
 // sortResults sorts a slice of Result by their confidence in descending order.
-func sortResults(results []Result) {
+func sortResults(results []datastore.Results) {
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Confidence > results[j].Confidence
 	})
 }
 
 // pairLabelsAndConfidence pairs labels with their corresponding confidence values.
-func pairLabelsAndConfidence(labels []string, preds []float32) ([]Result, error) {
+func pairLabelsAndConfidence(labels []string, preds []float32) ([]datastore.Results, error) {
 	if len(labels) != len(preds) {
 		return nil, fmt.Errorf("mismatched labels and predictions lengths: %d vs %d", len(labels), len(preds))
 	}
 
-	var results []Result
+	var results []datastore.Results
 	for i, label := range labels {
-		results = append(results, Result{Species: label, Confidence: preds[i]})
+		results = append(results, datastore.Results{Species: label, Confidence: preds[i]})
 	}
 	return results, nil
 }
@@ -164,7 +158,7 @@ func applySigmoidToPredictions(predictions []float32, sensitivity float64) []flo
 }
 
 // trimResultsToMax trims the results to a maximum specified count.
-func trimResultsToMax(results []Result, max int) []Result {
+func trimResultsToMax(results []datastore.Results, max int) []datastore.Results {
 	if len(results) > max {
 		return results[:max]
 	}
