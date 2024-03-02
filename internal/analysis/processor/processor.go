@@ -33,7 +33,8 @@ type Processor struct {
 type Detections struct {
 	pcmData3s  []byte
 	pcmDataExt []byte
-	Note       datastore.Note
+	Note       datastore.Note      // Note containing highest match
+	Results    []datastore.Results // Full BirdNET prediction results
 }
 
 // PendingDetection struct represents a single detection held in memory,
@@ -143,6 +144,7 @@ func (p *Processor) processDetections(item *queue.Results) {
 	}
 }
 
+// processResults processes the results from the BirdNET prediction and returns a list of detections.
 func (p *Processor) processResults(item *queue.Results) []Detections {
 	var detections []Detections
 
@@ -200,6 +202,7 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 		detections = append(detections, Detections{
 			pcmData3s: item.PCMdata,
 			Note:      note,
+			Results:   item.Results,
 		})
 	}
 

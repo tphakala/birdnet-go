@@ -22,4 +22,13 @@ type Note struct {
 	ClipName       string
 	Comment        string `gorm:"type:text"`
 	ProcessingTime time.Duration
+	Results        []Results `gorm:"foreignKey:NoteID"`
+}
+
+// Result represents the identification result with a species name and its confidence level, linked to a Note.
+type Results struct {
+	ID         uint `gorm:"primaryKey"`
+	NoteID     uint // Foreign key to associate with Note
+	Species    string
+	Confidence float32
 }
