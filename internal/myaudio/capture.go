@@ -3,6 +3,7 @@ package myaudio
 import (
 	"fmt"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -61,7 +62,9 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan str
 	// Initialize the capture device
 	device, err := malgo.InitDevice(malgoCtx.Context, deviceConfig, deviceCallbacks)
 	if err != nil {
-		log.Fatalf("Device init failed %v", err)
+		log.Printf("Device init failed %v", err)
+		conf.PrintUserInfo()
+		os.Exit(1)
 	}
 
 	if settings.Debug {
