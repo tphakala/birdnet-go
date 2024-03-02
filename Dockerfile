@@ -28,5 +28,8 @@ RUN ldconfig
 VOLUME /config
 RUN mkdir -p /root/.config && ln -s /config /root/.config/birdnet-go
 
+VOLUME /data
+WORKDIR /data
+
 ENTRYPOINT ["/usr/bin/birdnet-go"]
 CMD ["realtime"]
