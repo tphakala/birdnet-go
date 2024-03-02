@@ -85,7 +85,6 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 	widthStr := strconv.Itoa(width)
 
 	// Execute SoX command to create spectrogram
-	//cmd := exec.Command("sox", wavFilePath, "-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-o", spectrogramPath)
 	args := []string{audioClipPath, "-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-o", spectrogramPath}
 	if width < 800 {
 		args = append(args, "-r")
