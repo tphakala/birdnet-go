@@ -41,6 +41,31 @@ func (store *SQLiteStore) Open() error {
 		return fmt.Errorf("failed to open SQLite database: %v", err)
 	}
 
+	// Enable foreign key constraint enforcement for SQLite
+	if err := db.Exec("PRAGMA foreign_keys = ON").Error; err != nil {
+		return fmt.Errorf("failed to enable foreign key support in SQLite: %v", err)
+	}
+
+	// Set SQLite to use MEMORY journal mode, reduces sdcard wear and improves performance
+	if err := db.Exec("PRAGMA journal_mode = MEMORY").Error; err != nil {
+		return fmt.Errorf("failed to enable MEMORY journal mode in SQLite: %v", err)
+	}
+
+	// Set SQLite to use NORMAL synchronous mode
+	if err := db.Exec("PRAGMA synchronous = NORMAL").Error; err != nil {
+		return fmt.Errorf("failed to set synchronous mode in SQLite: %v", err)
+	}
+
+	// Set SQLIte to use MEMORY temp store mode
+	if err := db.Exec("PRAGMA temp_store = MEMORY").Error; err != nil {
+		return fmt.Errorf("failed to set temp store mode in SQLite: %v", err)
+	}
+
+	// Increase cache size
+	if err := db.Exec("PRAGMA cache_size = -4000").Error; err != nil {
+		return fmt.Errorf("failed to set cache size in SQLite: %v", err)
+	}
+
 	store.DB = db
 	return performAutoMigration(db, store.Settings.Debug, "SQLite", absoluteFilePath)
 }
@@ -59,7 +84,19 @@ func (store *SQLiteStore) Save(note Note) error {
 	return nil
 }
 
+// Close the SQLite database connection
 func (store *SQLiteStore) Close() error {
-	// Handle close specific to SQLite
+	if store.DB == nil {
+		return fmt.Errorf("database connection is not initialized or already closed")
+	}
+
+	// Optimize database on close
+	if err := store.DB.Exec("PRAGMA analysis_limit=400").Error; err != nil {
+		log.Printf("Failed to set analysis_limit: %v\n", err)
+	}
+	if err := store.DB.Exec("PRAGMA optimize").Error; err != nil {
+		log.Printf("Failed to optimize database: %v\n", err)
+	}
+
 	return nil
 }
