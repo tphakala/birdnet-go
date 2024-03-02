@@ -3,13 +3,13 @@ package queue
 import (
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
 type Results struct {
 	StartTime   time.Time
 	PCMdata     []byte
-	Results     []birdnet.Result
+	Results     []datastore.Results
 	ElapsedTime time.Duration
 	ClipName    string
 }

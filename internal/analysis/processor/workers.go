@@ -86,7 +86,13 @@ func (p *Processor) getDefaultActions(detection Detections) []Action {
 		actions = append(actions, LogAction{Settings: p.Settings, EventTracker: p.EventTracker, Note: detection.Note})
 	}
 	if p.Settings.Output.SQLite.Enabled || p.Settings.Output.MySQL.Enabled {
-		actions = append(actions, DatabaseAction{Settings: p.Settings, EventTracker: p.EventTracker, Note: detection.Note, AudioBuffer: p.AudioBuffer, Ds: p.Ds})
+		actions = append(actions, DatabaseAction{
+			Settings:     p.Settings,
+			EventTracker: p.EventTracker,
+			Note:         detection.Note,
+			Results:      detection.Results,
+			AudioBuffer:  p.AudioBuffer,
+			Ds:           p.Ds})
 	}
 	/*	if p.Settings.Realtime.AudioExport.Enabled {
 		actions = append(actions, SaveAudioAction{Settings: p.Settings, EventTracker: p.EventTracker, pcmData: detection.pcmDataExt, ClipName: detection.Note.ClipName})
