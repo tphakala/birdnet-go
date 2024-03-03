@@ -7,22 +7,22 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/analysis"
-	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // RealtimeCommand creates a new command for real-time audio analysis.
-func Command(ctx *config.Context) *cobra.Command {
+func Command(settings *conf.Settings) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "realtime",
 		Short: "Analyze audio in realtime mode",
 		Long:  "Start analyzing incoming audio data in real-time looking for bird calls.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return analysis.RealtimeAnalysis(ctx)
+			return analysis.RealtimeAnalysis(settings)
 		},
 	}
 
 	// Set up flags specific to the 'file' command
-	if err := setupFlags(cmd, ctx.Settings); err != nil {
+	if err := setupFlags(cmd, settings); err != nil {
 		fmt.Printf("error setting up flags: %v\n", err)
 		os.Exit(1)
 	}
@@ -31,9 +31,8 @@ func Command(ctx *config.Context) *cobra.Command {
 }
 
 // setupRealtimeFlags configures flags specific to the realtime command.
-func setupFlags(cmd *cobra.Command, settings *config.Settings) error {
+func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
 	cmd.Flags().StringVar(&settings.Realtime.AudioExport.Path, "clippath", viper.GetString("realtime.audioexport.path"), "Path to save audio clips")
-	cmd.Flags().StringVar(&settings.Realtime.AudioExport.Type, "cliptype", viper.GetString("realtime.audioexport.type"), "Audio clip type: wav, flac, mp3")
 	cmd.Flags().StringVar(&settings.Realtime.Log.Path, "logpath", viper.GetString("realtime.log.path"), "Path to save log files")
 	cmd.Flags().BoolVar(&settings.Realtime.ProcessingTime, "processingtime", viper.GetBool("realtime.processingtime"), "Report processing time for each detection")
 

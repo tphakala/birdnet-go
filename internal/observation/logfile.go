@@ -6,49 +6,49 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
 // LogNoteToFile saves the Note to a log file.
-func LogNoteToFile(ctx *config.Context, note Note) error {
-	// Check if the directory of the log file exists. If not, create it.
-	dir := filepath.Dir(ctx.Settings.Realtime.Log.Path)
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		err := os.MkdirAll(dir, 0755) // The 0755 permission sets the directory as readable and executable to everyone, and only writable by the owner.
-		if err != nil {
-			return fmt.Errorf("failed to create directory: %v", err)
-		}
-	}
+func LogNoteToFile(settings *conf.Settings, note datastore.Note) error {
+	// Separate the directory and file name from the log path
+	dir, fileName := filepath.Split(settings.Realtime.Log.Path)
 
-	// Open the file for appending. If it doesn't exist, create it.
-	file, err := os.OpenFile(ctx.Settings.Realtime.Log.Path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// Expand the directory path to an absolute path
+	basePath := conf.GetBasePath(dir)
+
+	// Recombine to form the full absolute path of the log file
+	absoluteFilePath := filepath.Join(basePath, fileName)
+
+	// Open the log file for appending, creating it if it doesn't exist
+	file, err := os.OpenFile(absoluteFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Printf("failed to open file: %v\n", err)
-		return err
+		fmt.Printf("failed to open file '%s': %v\n", absoluteFilePath, err)
+		return fmt.Errorf("failed to open file '%s': %w", absoluteFilePath, err)
 	}
 	defer file.Close()
 
-	// Parse the time from the note
-	t, err := time.Parse("15:04:05", note.Time) // Assuming note.Time is already in this format
+	// Parse the time from the note, assuming it's in the "15:04:05" format
+	t, err := time.Parse("15:04:05", note.Time)
 	if err != nil {
-		return fmt.Errorf("failed to parse time: %v", err)
+		fmt.Printf("failed to parse time '%s': %v\n", note.Time, err)
+		return fmt.Errorf("failed to parse time '%s': %w", note.Time, err)
 	}
 
 	// Determine the time format string based on the user's preference
-	var timeFormat string
-	if ctx.Settings.Node.TimeAs24h {
-		timeFormat = "15:04:05"
-	} else {
+	timeFormat := "15:04:05"
+	if !settings.Main.TimeAs24h {
 		timeFormat = "03:04:05 PM"
 	}
 
-	// Format the note data
+	// Format the note data for logging
 	logString := fmt.Sprintf("%s %s\n", t.Format(timeFormat), note.CommonName)
 
-	// Write the formatted data to the file
+	// Write the formatted log string to the file
 	if _, err := file.WriteString(logString); err != nil {
-		fmt.Printf("failed to write to file: %v\n", err)
-		return err
+		fmt.Printf("failed to write to file '%s': %v\n", absoluteFilePath, err)
+		return fmt.Errorf("failed to write to file '%s': %w", absoluteFilePath, err)
 	}
 
 	return nil

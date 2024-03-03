@@ -7,11 +7,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/analysis"
-	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // FileCommand creates a new file command for analyzing a single audio file.
-func Command(ctx *config.Context) *cobra.Command {
+func Command(ctx *conf.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "file [input.wav]",
 		Short: "Analyze an audio file",
@@ -34,7 +34,7 @@ func Command(ctx *config.Context) *cobra.Command {
 }
 
 // setupFileFlags configures flags specific to the file command.
-func setupFlags(cmd *cobra.Command, settings *config.Settings) error {
+func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
 
 	cmd.Flags().StringVarP(&settings.Output.File.Path, "output", "o", viper.GetString("output.file.path"), "Path to output directory")
 	cmd.Flags().StringVar(&settings.Output.File.Type, "type", viper.GetString("output.file.type"), "Output type: table, csv")

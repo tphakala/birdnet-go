@@ -4,69 +4,23 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
-	"syscall"
+	"sync"
 	"time"
 
 	"github.com/gen2brain/malgo"
-	"github.com/tphakala/birdnet-go/internal/config"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-const (
-	bitDepth       = 16    // for now only 16bit is supported
-	sampleRate     = 48000 // BirdNET requires 48 kHz samples
-	channelCount   = 1     // downmix to mono
-	captureLength  = 3     // in seconds
-	bytesPerSample = bitDepth / 8
-	bufferSize     = (sampleRate * channelCount * captureLength) * bytesPerSample
-)
+func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *AudioBuffer) {
+	defer wg.Done() // Ensure this is called when the goroutine exits
 
-// quitChannel is used to signal the capture goroutine to stop
-var QuitChannel = make(chan struct{})
+	var device *malgo.Device
 
-// restartChannel is used to signal the CaptureAudio goroutine to restart
-var restartChannel = make(chan struct{})
-
-func StartGoRoutines(ctx *config.Context) {
-	InitRingBuffer(bufferSize)
-	go CaptureAudio(ctx)
-	go BufferMonitor(ctx)
-	go monitorCtrlC()
-
-	for {
-		select {
-		case <-QuitChannel:
-			// QuitChannel was closed, clean up and return.
-			return
-		case <-restartChannel:
-			// RestartChannel received a signal, restart CaptureAudio goroutine.
-			go CaptureAudio(ctx)
-		}
-	}
-
-}
-
-func monitorCtrlC() {
-	// Set up channel to receive os signals
-	sigChan := make(chan os.Signal, 1)
-	// Notify sigChan on SIGINT (Ctrl+C)
-	signal.Notify(sigChan, syscall.SIGINT)
-
-	// Block until a signal is received
-	<-sigChan
-
-	// When received, send a message to QuitChannel to clean up
-	close(QuitChannel)
-
-	fmt.Println("\nReceived Ctrl+C, shutting down")
-}
-
-func CaptureAudio(ctx *config.Context) {
-	if ctx.Settings.Debug {
+	if settings.Debug {
 		fmt.Println("Initializing context")
 	}
 	malgoCtx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
-		if ctx.Settings.Debug {
+		if settings.Debug {
 			fmt.Print(message)
 		}
 	})
@@ -77,19 +31,40 @@ func CaptureAudio(ctx *config.Context) {
 
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	deviceConfig.Capture.Format = malgo.FormatS16
-	deviceConfig.Capture.Channels = channelCount
-	deviceConfig.SampleRate = sampleRate
+	deviceConfig.Capture.Channels = conf.NumChannels
+	deviceConfig.SampleRate = conf.SampleRate
 	deviceConfig.Alsa.NoMMap = 1
 
 	// Write to ringbuffer when audio data is received
 	// BufferMonitor() will poll this buffer and read data from it
 	onReceiveFrames := func(pSample2, pSamples []byte, framecount uint32) {
-		writeToBuffer(pSamples)
+		WriteToBuffer(pSamples)
+		audioBuffer.Write(pSamples)
 	}
 
+	// onStopDevice is called when the device stops, either normally or unexpectedly
 	onStopDevice := func() {
-		time.Sleep(1000 * time.Millisecond)
-		restartChannel <- struct{}{}
+		go func() {
+			select {
+			case <-quitChan:
+				// Quit signal has been received, do not attempt to restart
+				return
+			case <-time.After(100 * time.Millisecond):
+				// Wait a bit before restarting to avoid potential rapid restart loops
+				if settings.Debug {
+					fmt.Println("Attempting to restart audio device.")
+				}
+				err := device.Start()
+				if err != nil {
+					log.Printf("Failed to restart audio device: %v", err)
+					log.Println("Attempting full audio context restart in 1 second.")
+					time.Sleep(1 * time.Second)
+					restartChan <- struct{}{}
+				} else if settings.Debug {
+					fmt.Println("Audio device restarted successfully.")
+				}
+			}
+		}()
 	}
 
 	// Device callback to assign function to call when audio data is received
@@ -99,12 +74,14 @@ func CaptureAudio(ctx *config.Context) {
 	}
 
 	// Initialize the capture device
-	device, err := malgo.InitDevice(malgoCtx.Context, deviceConfig, deviceCallbacks)
+	device, err = malgo.InitDevice(malgoCtx.Context, deviceConfig, deviceCallbacks)
 	if err != nil {
-		log.Fatalf("Device init failed %v", err)
+		log.Printf("Device init failed %v", err)
+		conf.PrintUserInfo()
+		os.Exit(1)
 	}
 
-	if ctx.Settings.Debug {
+	if settings.Debug {
 		fmt.Println("Starting device")
 	}
 	err = device.Start()
@@ -113,7 +90,7 @@ func CaptureAudio(ctx *config.Context) {
 	}
 	defer device.Stop()
 
-	if ctx.Settings.Debug {
+	if settings.Debug {
 		fmt.Println("Device started")
 	}
 	fmt.Println("Listening ...")
@@ -123,22 +100,21 @@ func CaptureAudio(ctx *config.Context) {
 	// This loop will keep running until QuitChannel is closed.
 	for {
 		select {
-		case <-QuitChannel:
+		case <-quitChan:
 			// QuitChannel was closed, clean up and return.
-			if ctx.Settings.Debug {
+			if settings.Debug {
 				fmt.Println("Stopping capture due to quit signal.")
 			}
 			return
-		case <-restartChannel:
+		case <-restartChan:
 			// Handle restart signal
-			if ctx.Settings.Debug {
+			if settings.Debug {
 				fmt.Println("Restarting capture.")
 			}
 			return
 		default:
 			// Do nothing and continue with the loop.
-			// This default case prevents blocking if QuitChannel is not closed yet.
-			// You may put a short sleep here to prevent a busy loop that consumes CPU unnecessarily.
+			// This default case prevents blocking if quitChan is not closed yet.
 			time.Sleep(100 * time.Millisecond)
 		}
 	}

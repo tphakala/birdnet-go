@@ -1,0 +1,85 @@
+.audio-control {
+    width: 100%;
+    height: 25px;
+}
+
+.confidence-ball {
+    width: 54px; /* You can adjust the size as needed */
+    height: 25px; /* You can adjust the size as needed */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px; /* This creates the rounded ball shape */
+    font-size: 0.75rem; /* Adjust the font size as needed */
+}
+
+.input:focus-visible {
+    outline: 1px solid transparent;
+    outline-offset: 0px;
+    box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
+}
+
+  /* Define your custom background colors here if the default Tailwind classes aren't working */
+  .bg-confidence-high { background-color: #10b981; } /* Green for high confidence */
+  .bg-confidence-medium { background-color: #f97316; } /* Orange for average confidence */
+  .bg-confidence-low { background-color: #ef4444; } /* Red for low confidence */
+
+.progress {
+    min-height: 14px; /* Adjust this value as needed */
+}   
+
+.heatmap-cell {
+    text-align: center;
+    font-weight: bold;
+}
+
+:root {
+    .heatmap-color-1 { background-color: #e0f3f8; color: #000; } /* Lightest blue */
+    .heatmap-color-2 { background-color: #ccebf6; color: #000; }
+    .heatmap-color-3 { background-color: #99d7ed; color: #000; }
+    .heatmap-color-4 { background-color: #66c2e4; color: #000; }
+    .heatmap-color-5 { background-color: #33ade1; color: #fff; } /* Mid blue */
+    .heatmap-color-6 { background-color: #0099d8; color: #fff; }
+    .heatmap-color-7 { background-color: #0077be; color: #fff; }
+    .heatmap-color-8 { background-color: #005595; color: #fff; }
+    .heatmap-color-9 { background-color: #003366; color: #fff; } /* Darkest blue */
+    
+    
+  }
+  
+  @media (prefers-color-scheme: dark) {
+    :root {
+      .heatmap-color-1 { background-color: #002933; color: #fff; } /* Darkest teal */
+      .heatmap-color-2 { background-color: #004466; color: #fff; }
+      .heatmap-color-3 { background-color: #005c80; color: #fff; }
+      .heatmap-color-4 { background-color: #007399; color: #fff; }
+      .heatmap-color-5 { background-color: #008bb3; color: #fff; } /* Mid teal */
+      .heatmap-color-6 { background-color: #33a3cc; color: #000; }
+      .heatmap-color-7 { background-color: #66b8e2; color: #000; }
+      .heatmap-color-8 { background-color: #99cde9; color: #000; }
+      .heatmap-color-9 { background-color: #cce3f1; color: #000; } /* Lightest teal */
+  }
+  
+:root:has(input.theme-controller[value=dark]:checked) {
+    .heatmap-color-1 { background-color: #002933; color: #fff; } /* Darkest teal */
+    .heatmap-color-2 { background-color: #004466; color: #fff; }
+    .heatmap-color-3 { background-color: #005c80; color: #fff; }
+    .heatmap-color-4 { background-color: #007399; color: #fff; }
+    .heatmap-color-5 { background-color: #008bb3; color: #fff; } /* Mid teal */
+    .heatmap-color-6 { background-color: #33a3cc; color: #000; }
+    .heatmap-color-7 { background-color: #66b8e2; color: #000; }
+    .heatmap-color-8 { background-color: #99cde9; color: #000; }
+    .heatmap-color-9 { background-color: #cce3f1; color: #000; } /* Lightest teal */
+}
+  
+[data-theme=dark] {
+    .heatmap-color-1 { background-color: #002933; color: #fff; } /* Darkest teal */
+    .heatmap-color-2 { background-color: #004466; color: #fff; }
+    .heatmap-color-3 { background-color: #005c80; color: #fff; }
+    .heatmap-color-4 { background-color: #007399; color: #fff; }
+    .heatmap-color-5 { background-color: #008bb3; color: #fff; } /* Mid teal */
+    .heatmap-color-6 { background-color: #33a3cc; color: #000; }
+    .heatmap-color-7 { background-color: #66b8e2; color: #000; }
+    .heatmap-color-8 { background-color: #99cde9; color: #000; }
+    .heatmap-color-9 { background-color: #cce3f1; color: #000; } /* Lightest teal */
+}

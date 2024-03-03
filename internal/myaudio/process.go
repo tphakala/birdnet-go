@@ -1,159 +1,72 @@
+// process.go
 package myaudio
 
 import (
 	"errors"
 	"fmt"
-	"strconv"
+	"log"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/config"
-	"github.com/tphakala/birdnet-go/internal/observation"
-	"github.com/tphakala/birdnet-go/pkg/birdnet"
+	"github.com/tphakala/birdnet-go/internal/analysis/queue"
+	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // processData processes the given audio data to detect bird species, logs the detected species
 // and optionally saves the audio clip if a bird species is detected above the configured threshold.
-func processData(data []byte, ctx *config.Context) error {
-	// temp assignment, fix later
-	const defaultBitDepth = 16
-
+func ProcessData(data []byte, bn *birdnet.BirdNET) error {
 	// get current time to track processing time
 	startTime := time.Now()
 
-	sampleData, err := ConvertToFloat32(data, defaultBitDepth)
+	// convert audio data to float32
+	sampleData, err := ConvertToFloat32(data, conf.BitDepth)
 	if err != nil {
-		return fmt.Errorf("error converting to float32: %w", err)
+		return fmt.Errorf("error converting %v bit PCM data to float32: %w", conf.BitDepth, err)
 	}
 
 	// run BirdNET inference
-	results, err := birdnet.Predict(sampleData, ctx)
+	results, err := bn.Predict(sampleData)
 	if err != nil {
 		return fmt.Errorf("error predicting species: %w", err)
 	}
 
-	// get elapsed time and log if enabled
-	elapsedTime := logProcessingTime(startTime, ctx)
+	// DEBUG print species of all results
+	/*for i := 0; i < len(results); i++ {
+		if results[i].Confidence > 0.01 {
+			fmt.Println("	", results[i].Confidence, results[i].Species)
+		}
+	}*/
 
-	if err := processPredictionResults(results, data, ctx, elapsedTime); err != nil {
-		return fmt.Errorf("error processing prediction results: %w", err)
+	// get elapsed time and log if enabled
+	elapsedTime := logProcessingTime(startTime)
+
+	// Create a Results message to be sent through queue to processor
+	resultsMessage := queue.Results{
+		StartTime:   startTime.Add(-4000 * time.Millisecond),
+		ElapsedTime: elapsedTime,
+		PCMdata:     data,
+		Results:     results,
 	}
 
+	// Send the results to the queue
+	select {
+	case queue.ResultsQueue <- &resultsMessage:
+		// Results enqueued successfully
+	default:
+		log.Println("Queue is full!")
+		// Queue is full
+	}
 	return nil
 }
 
-func logProcessingTime(startTime time.Time, ctx *config.Context) time.Duration {
-	if ctx.Settings.Realtime.ProcessingTime || ctx.Settings.Debug {
-		elapsedTime := time.Since(startTime)
+func logProcessingTime(startTime time.Time) time.Duration {
+	var elapsedTime time.Duration
+	elapsedTime = time.Since(startTime)
+	/*if ctx.Settings.Realtime.ProcessingTime || ctx.Settings.Debug {
 		fmt.Printf("\r\033[Kprocessing time %v ms", elapsedTime.Milliseconds())
 		return elapsedTime
-	}
-	return 0
-}
-
-func processPredictionResults(results []birdnet.Result, data []byte, ctx *config.Context, elapsedTime time.Duration) error {
-	if len(results) == 0 {
-		return nil
-	}
-
-	_, species, _ := observation.ParseSpeciesString(results[0].Species)
-	confidence := results[0].Confidence
-
-	// Use custom confidence threshold if it exists for the species, otherwise use the global threshold
-	confidenceThreshold, exists := ctx.CustomConfidence.Thresholds[species]
-	if !exists {
-		confidenceThreshold = float32(ctx.Settings.BirdNET.Threshold)
-	} else {
-		if ctx.Settings.Debug {
-			fmt.Printf("\nUsing confidence threshold of %.2f for %s\n", confidenceThreshold, species)
-		}
-	}
-
-	if confidence <= confidenceThreshold {
-		// confidence too low, skip processing
-		return nil
-	}
-
-	// match against location based filter
-	if !isSpeciesIncluded(results[0].Species, ctx.IncludedSpeciesList) {
-		if ctx.Settings.Debug {
-			fmt.Printf("\nSpecies not on included list: %s\n", species)
-		}
-		return nil
-	}
-
-	// match against occurence monitor to filter too frequent observations for same species
-	if ctx.OccurrenceMonitor.TrackSpecies(species) {
-		if ctx.Settings.Debug {
-			fmt.Printf("\nDuplicate occurrence detected: %s, skipping processing\n", species)
-		}
-		return nil
-	}
-
-	var clipName string
-
-	// if Birdweather is enabled Audio Export is required
-	if ctx.Settings.Realtime.AudioExport.Enabled || ctx.Settings.Realtime.Birdweather.Enabled {
-		// save audio clip
-		clipName = saveAudioClip(data, ctx)
-	}
-
-	return logObservation(ctx, results[0], clipName, elapsedTime)
-}
-
-func saveAudioClip(data []byte, ctx *config.Context) string {
-	if ctx.Settings.Realtime.AudioExport.Path == "" {
-		return ""
-	}
-
-	baseFileName := strconv.FormatInt(time.Now().Unix(), 10)
-	clipName := fmt.Sprintf("%s/%s.%s", ctx.Settings.Realtime.AudioExport.Path, baseFileName, ctx.Settings.Realtime.AudioExport.Type)
-
-	var err error
-	switch ctx.Settings.Realtime.AudioExport.Type {
-	case "wav":
-		err = savePCMDataToWAV(clipName, data)
-	case "flac":
-		err = savePCMDataToFlac(clipName, data)
-	case "mp3":
-		err = savePCMDataToMP3(clipName, data)
-	}
-
-	if err != nil {
-		fmt.Printf("error saving audio clip to %s: %s\n", ctx.Settings.Realtime.AudioExport.Type, err)
-		return ""
-	} else if ctx.Settings.Debug {
-		fmt.Printf("Saved audio clip to %s\n", clipName)
-	}
-
-	return clipName
-}
-
-func logObservation(ctx *config.Context, result birdnet.Result, clipName string, elapsedTime time.Duration) error {
-	beginTime, endTime := 0.0, 0.0 // FIXME: get from prediction results
-	note := observation.New(ctx, beginTime, endTime, result.Species, float64(result.Confidence), clipName, elapsedTime)
-
-	if err := observation.LogNote(ctx, note); err != nil {
-		fmt.Printf("error logging note: %s\n", err)
-		return err
-	}
-
-	fmt.Printf("%s %s %.2f\n", note.Time, note.CommonName, note.Confidence)
-	return nil
-}
-
-// isSpeciesIncluded checks if the given species is in the included species list.
-// It returns true if the species is in the list, or if the list is empty (no filtering).
-func isSpeciesIncluded(species string, includedList []string) bool {
-	if len(includedList) == 0 {
-		return true // no filtering applied when the list is empty
-	}
-	for _, s := range includedList {
-		if species == s {
-			return true
-		}
-	}
-
-	return false
+	}*/
+	return elapsedTime
 }
 
 // ConvertToFloat32 converts a byte slice representing sample to a 2D slice of float32 samples.
