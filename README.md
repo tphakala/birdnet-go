@@ -31,6 +31,22 @@ BirdNET-Go is an AI solution for continuous avian monitoring and identification
 Ready to run binaries can be found from releases section https://github.com/tphakala/BirdNET-Go/releases/
 Archives also contains libtensorflowlite_c library.
 
+### Docker
+
+```
+docker run -ti \
+  -p 8080:8080 \
+  -v /path/to/config:/config \
+  -v /path/to/data:/data \
+  ghcr.io/tphakala/birdnet-go:latest
+```
+
+| Parameter | Function |
+| :----: | --- |
+| `-p 8080` | BirdNET-GO webserver port. |
+| `-v /config` | Config directory in the container. |
+| `-v /data` | Data such as database and recordings. |
+
 ## Compiling for Linux
 
 ### Install TensorFlow Lite C library and setup headers for compile process
