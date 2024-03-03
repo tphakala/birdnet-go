@@ -1,0 +1,35 @@
+{{define "detectionDetails"}}
+
+<!-- Enhanced daisyUI card -->
+<section class="card col-span-12 overflow-hidden bg-base-100 shadow-sm xl:col-span-12">
+	<div class="card-body p-4">
+		<div class="flex justify-between items-center mb-4">
+			<h2 class="card-title text-xl font-semibold text-gray-800">
+				Detection Details for {{.Note.CommonName}} on {{.Note.Date}} at {{.Note.Time}}
+			</h2>
+		</div>
+  
+  		<!-- Confidence Level -->
+  		<div class="flex items-center justify-between p-3 mb-4">
+    		<span class="text-gray-700 font-medium">Confidence Level:</span>
+    		<div class="confidence-ball {{confidenceColor .Note.Confidence}} text-white font-medium p-2 rounded-full">
+      			{{confidence .Note.Confidence}}
+    		</div>
+  		</div>
+  
+  		<!-- Spectrogram Image -->
+  		<div class="flex justify-center items-center mb-4">
+    		<img src="{{.Spectrogram}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
+  		</div>
+  
+  		<!-- Audio Player -->
+  		<div class="audio-control p-4">
+    		<audio controls preload="auto" class="w-full">
+      			<source src="{{.Note.ClipName}}" type="audio/wav">
+      			Your browser does not support the audio element.
+    		</audio>
+  		</div>
+      <br>
+</section>
+
+{{end}}

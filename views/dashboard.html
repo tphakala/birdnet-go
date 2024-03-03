@@ -1,0 +1,62 @@
+{{define "dashboard"}}
+
+<!-- daisyUI modal  -->
+<dialog class="modal" id="speciesDetectionsModal">
+	<div class="modal-box max-w-full">
+		<div class="card w-full overflow-auto bg-base-100">
+			<div class="card-actions justify-end">
+				<form method="dialog">
+					<button class="btn btn-circle btn-xs mb-4">X</button>
+				</form>
+			</div>
+			<div id="speciesDetections">
+				<!-- Detailed detections will be loaded here -->
+			</div>
+		</div>
+	</div>
+</dialog>
+
+<!-- Daily Summary -->
+<section class="card col-span-12 overflow-hidden bg-base-100 shadow-sm xl:col-span-12">
+	<div class="card-body grow-0 p-2 ml-4">
+		<div class="flex justify-between gap-2">
+			<span class="card-title grow"><a class="link-hover link">Daily Summary</a></span>
+			<!-- Date picker -->
+			<input type="date" hx-get="/top-birds" hx-target="#topBirdsChart" hx-trigger="load, change" hx-include="*[name]"
+				hx-params="date" class="input w-36 text-sm focus-visible:outline-none" id="datePicker" name="date">
+		</div>
+	</div>
+
+	<div class="overflow-x-auto" id="topBirdsChart">
+		<!-- Top Birds Chart will be loaded here -->
+	</div>
+</section>
+<!-- /card -->
+
+
+<!-- Recent Detections -->
+<section class="card col-span-12 overflow-hidden bg-base-100 shadow-sm xl:col-span-12">
+	<div class="card-body grow-0 p-2 ml-4">
+		<div class="flex justify-between">
+			<span class="card-title grow"><a class="link-hover link">Recent detections</a></span>
+			<label for="numDetections" class="label">Show:</label>
+			<!-- Dropdown for selecting number of detections -->
+			<select id="numDetections" name="numDetections"
+				hx-get="/last-detections"
+				hx-target="#lastDetections"
+				hx-trigger="load, change"
+				class="select focus-visible:outline-none">
+				<option value="5" selected>5</option>
+				<option value="10">10</option>
+				<option value="15">15</option>
+				<option value="20">20</option>
+			</select>
+		</div>
+	</div>
+
+	<!-- daisyUI card for latest detections -->
+	<div class="overflow-x-auto" id="lastDetections">
+		<!-- last detections list will be loaded here -->
+	</div>
+</section>
+{{end}}

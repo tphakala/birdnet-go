@@ -1,11 +1,13 @@
+// buffers.go
 package myaudio
 
 import (
+	"sync"
 	"time"
 
 	"github.com/smallnest/ringbuffer"
-	"github.com/tphakala/birdnet-go/internal/config"
-	"github.com/tphakala/birdnet-go/pkg/birdnet"
+
+	"github.com/tphakala/birdnet-go/internal/birdnet"
 )
 
 const (
@@ -29,11 +31,8 @@ func InitRingBuffer(capacity int) {
 }
 
 // writeToBuffer writes audio data into the ring buffer.
-func writeToBuffer(data []byte) {
-	_, err := ringBuffer.Write(data)
-	if err != nil {
-		// yolo, try again
-	}
+func WriteToBuffer(data []byte) {
+	ringBuffer.Write(data)
 }
 
 // readFromBuffer reads a sliding chunk of audio data from the ring buffer.
@@ -65,25 +64,24 @@ func readFromBuffer() []byte {
 }
 
 // BufferMonitor monitors the buffer and processes audio data when enough data is present.
-func BufferMonitor(ctx *config.Context) {
+func BufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}) {
+	defer wg.Done()
+
+	// Creating a ticker that ticks every 100ms
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
-		case <-QuitChannel:
+		case <-quitChan:
+			// Quit signal received, stop the buffer monitor
 			return
-		default:
+
+		case <-ticker.C: // Wait for the next tick
 			data := readFromBuffer()
 			// if buffer has 3 seconds of data, process it
 			if len(data) == chunkSize {
-				processData(data, ctx)
-			} else {
-				time.Sleep(pollInterval)
-
-				today := time.Now().Truncate(24 * time.Hour)
-				if today.After(ctx.SpeciesListUpdated) {
-					// update location based species list once a day
-					ctx.IncludedSpeciesList = birdnet.GetProbableSpecies(ctx)
-					ctx.SpeciesListUpdated = today
-				}
+				ProcessData(data, bn)
 			}
 		}
 	}

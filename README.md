@@ -1,7 +1,7 @@
 # BirdNET-Go
 
 <p align="center">
-  <img src="doc/go-birdnet-logo.webp" />
+  <img src="doc/BirdNET-Go-logo.webp" />
 </p>
 <p align="center">
 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">
@@ -10,21 +10,42 @@
  <img src="https://badgen.net/badge/OS/Linux%2C%20Windows%2C%20macOS/blue">
 </p>
 
-BirdNET-Go is an application inspired by BirdNET Analyzer, developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology. While the original BirdNET is based on Python, BirdNET-Go is built using Golang, aiming for simplified deployment across multiple platforms, from Windows PCs to single board computers like Raspberry Pi.
-
-BirdNET-Go features
+BirdNET-Go is an AI solution for continuous avian monitoring and identification
 
 - 24/7 realtime bird song analysis of soundcard capture, analysis output to log file, SQLite or MySQL
-- BirdWeather upload support
-- WAV file analysis, outputs to Raven selection table and CSV format
-- Realtime log file output can be used as overlay in OBS for bird feeder streams etc., see it in action at https://www.youtube.com/watch?v=FXW1efd9Dro
+- Utilizes BirdNET AI model trained with more than 6500 bird species
+- Local processing, Internet connectivity not required
+- Easy to use Web user interface for data visualisation
+- BirdWeather.com API integration
+- Realtime log file output can be used as overlay in OBS for bird feeder streams etc.
 - Minimal runtime dependencies, BirdNET Tensorflow Lite model is embedded in compiled binary
 - Runs on Windows, Linux and macOS
+- Low resource usage, works on Raspberry Pi 3 and equivalent 64-bit single board computers
+
+## Web Dashboard
+
+<img src="doc/BirdNET-Go-dashboard.webp" />
 
 ## Executable Distributions
 
 Ready to run binaries can be found from releases section https://github.com/tphakala/BirdNET-Go/releases/
 Archives also contains libtensorflowlite_c library.
+
+### Docker
+
+```
+docker run -ti \
+  -p 8080:8080 \
+  -v /path/to/config:/config \
+  -v /path/to/data:/data \
+  ghcr.io/tphakala/birdnet-go:latest
+```
+
+| Parameter | Function |
+| :----: | --- |
+| `-p 8080` | BirdNET-GO webserver port. |
+| `-v /config` | Config directory in the container. |
+| `-v /data` | Data such as database and recordings. |
 
 ## Compiling for Linux
 
@@ -140,6 +161,8 @@ Flags:
 Use "birdnet [command] --help" for more information about a command.
 ```
 
+There is more detailed usage documentation at wiki https://github.com/tphakala/birdnet-go/wiki
+
 ## License
 
 Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
@@ -148,6 +171,6 @@ Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
 
 Tomi P. Hakala
 
-BirdNET model by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology. Stefan Kahl, Connor Wood, Maximilian Eibl, Holger Klinck.
+BirdNET AI model by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology. Stefan Kahl, Connor Wood, Maximilian Eibl, Holger Klinck.
 
 BirdNET label translations by Patrick Levin for BirdNET-Pi project by Patrick McGuire.

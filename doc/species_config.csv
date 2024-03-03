@@ -1,0 +1,32 @@
+# Example configuration for species-specific confidence thresholds
+# Format: species, confidence
+# - Species: Localized common name or scientific name (case insensitive)
+# - Confidence value: Range from 0.0 to 1.0 for species reporting.
+#   Values exceeding 1.0 are used to explicitly exclude species
+
+# Exclude non-bird labels (e.g., environmental sounds, human activities)
+Dog,2.0
+Engine,2.0
+Environmental,2.0
+Fireworks,2.0
+Gun,2.0
+Human non-vocal,2.0
+Human vocal,2.0
+Human whistle,2.0
+Noise,2.0
+Power tools,2.0
+Siren,2.0
+
+# Higher threshold for uncommon species (which are frequently misidentified)
+common kingfisher,1.0
+eurasian moorhen,1.0
+common snipe,1.0
+
+# Lower threshold for owls (due to rarity or specific interest)
+tawny owl,0.4
+long-eared owl,0.4
+boreal owl,0.4
+great grey owl,0.4
+northern hawk-owl,0.4
+snowy owl,0.4
+northern pygmy-owl,0.4
