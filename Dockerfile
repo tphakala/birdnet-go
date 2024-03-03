@@ -1,7 +1,5 @@
 # Use ARGs to define default build-time variables for TensorFlow version and target platform
 ARG TENSORFLOW_VERSION=v2.14.0
-# Use TARGETPLATFORM arg provided by buildx to dynamically set platform
-#ARG TARGETPLATFORM
 
 FROM golang:1.22.0-bookworm as build
 
