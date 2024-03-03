@@ -34,6 +34,9 @@ RUN cd BirdNET-Go && make TARGETPLATFORM=${TARGETPLATFORM}
 # Create final image using a multi-platform base image
 FROM debian:bookworm-slim
 
+# Add docker user to the audio group, allowing for ALSA to be used
+RUN usermod -a -G audio root
+
 # Install ALSA library and SOX
 RUN apt-get update && apt-get install -y \
     libasound2 \
