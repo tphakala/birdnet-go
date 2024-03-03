@@ -14,6 +14,8 @@ import (
 func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *AudioBuffer) {
 	defer wg.Done() // Ensure this is called when the goroutine exits
 
+	var device *malgo.Device
+
 	if settings.Debug {
 		fmt.Println("Initializing context")
 	}
@@ -42,15 +44,27 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan str
 
 	// onStopDevice is called when the device stops, either normally or unexpectedly
 	onStopDevice := func() {
-		select {
-		case <-quitChan:
-			// Quit signal has been received, do not signal for a restart
-			return
-		default:
-			// No quit signal received, safe to signal for a restart
-			fmt.Println("Audio device stopped, restarting capture")
-			restartChan <- struct{}{}
-		}
+		go func() {
+			select {
+			case <-quitChan:
+				// Quit signal has been received, do not attempt to restart
+				return
+			case <-time.After(100 * time.Millisecond):
+				// Wait a bit before restarting to avoid potential rapid restart loops
+				if settings.Debug {
+					fmt.Println("Attempting to restart audio device.")
+				}
+				err := device.Start()
+				if err != nil {
+					log.Printf("Failed to restart audio device: %v", err)
+					log.Println("Attempting full audio context restart in 1 second.")
+					time.Sleep(1 * time.Second)
+					restartChan <- struct{}{}
+				} else if settings.Debug {
+					fmt.Println("Audio device restarted successfully.")
+				}
+			}
+		}()
 	}
 
 	// Device callback to assign function to call when audio data is received
@@ -60,7 +74,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan str
 	}
 
 	// Initialize the capture device
-	device, err := malgo.InitDevice(malgoCtx.Context, deviceConfig, deviceCallbacks)
+	device, err = malgo.InitDevice(malgoCtx.Context, deviceConfig, deviceCallbacks)
 	if err != nil {
 		log.Printf("Device init failed %v", err)
 		conf.PrintUserInfo()
