@@ -36,6 +36,7 @@ Archives also contains libtensorflowlite_c library.
 ```
 docker run -ti \
   -p 8080:8080 \
+  --device /dev/snd \
   -v /path/to/config:/config \
   -v /path/to/data:/data \
   ghcr.io/tphakala/birdnet-go:latest
@@ -44,6 +45,7 @@ docker run -ti \
 | Parameter | Function |
 | :----: | --- |
 | `-p 8080` | BirdNET-GO webserver port. |
+| `--device /dev/snd` | Mounts in audio devices to the container. |
 | `-v /config` | Config directory in the container. |
 | `-v /data` | Data such as database and recordings. |
 
