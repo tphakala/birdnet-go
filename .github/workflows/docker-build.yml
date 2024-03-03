@@ -3,7 +3,7 @@ name: Deploy Image to GHCR
 on:
   push:
     branches:
-      - dev
+      - main
   workflow_dispatch:
 
 jobs:
