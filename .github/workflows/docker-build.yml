@@ -24,7 +24,7 @@ jobs:
       run: |
         echo "REPO=${GITHUB_REPOSITORY,,}" >>${GITHUB_ENV}
 
-    - name: 'Build Inventory Image'
+    - name: 'Build BirdNET-Go Image'
       run: |
         docker build . --tag ghcr.io/${REPO}:latest
         docker push ghcr.io/${REPO}:latest
