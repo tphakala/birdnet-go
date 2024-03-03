@@ -24,5 +24,12 @@ COPY --from=build /root/src/BirdNET-Go/bin /usr/bin/
 COPY --from=build /usr/local/lib/libtensorflowlite_c.so /usr/local/lib/libtensorflowlite_c.so
 RUN ldconfig
 
+# Add symlink to /config directory where configs can be stored 
+VOLUME /config
+RUN mkdir -p /root/.config && ln -s /config /root/.config/birdnet-go
+
+VOLUME /data
+WORKDIR /data
+
 ENTRYPOINT ["/usr/bin/birdnet-go"]
 CMD ["realtime"]
