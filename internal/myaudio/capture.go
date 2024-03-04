@@ -19,7 +19,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan str
 	if settings.Debug {
 		fmt.Println("Initializing context")
 	}
-	malgoCtx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
+	malgoCtx, err := malgo.InitContext([]malgo.Backend{malgo.BackendAlsa}, malgo.ContextConfig{}, func(message string) {
 		if settings.Debug {
 			fmt.Print(message)
 		}
