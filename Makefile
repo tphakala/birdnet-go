@@ -12,7 +12,8 @@ ifeq ($(TARGETPLATFORM),linux/arm64)
 endif
 
 # Common flags
-CGO_FLAGS := CGO_ENABLED=1 CGO_CFLAGS="-I$(HOME)/src/tensorflow -DMA_NO_PULSEAUDIO"
+#CGO_FLAGS := CGO_ENABLED=1 CGO_CFLAGS="-I$(HOME)/src/tensorflow -DMA_NO_PULSEAUDIO"
+CGO_FLAGS := CGO_ENABLED=1 CGO_CFLAGS="-I$(HOME)/src/tensorflow"
 LDFLAGS := -ldflags "-s -w"
 
 # Default build for local development
