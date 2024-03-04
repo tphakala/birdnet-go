@@ -35,6 +35,25 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan str
 	deviceConfig.SampleRate = conf.SampleRate
 	deviceConfig.Alsa.NoMMap = 1
 
+	var infos []malgo.DeviceInfo
+
+	// Get list of capture devices
+	infos, err = malgoCtx.Devices(malgo.Capture)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Capture Devices")
+	for i, info := range infos {
+		e := "ok"
+		_, err := malgoCtx.DeviceInfo(malgo.Capture, info.ID, malgo.Shared)
+		if err != nil {
+			e = err.Error()
+		}
+		fmt.Printf("    %d: %s, [%s]\n", i, info.Name(), e)
+	}
+
 	// Write to ringbuffer when audio data is received
 	// BufferMonitor() will poll this buffer and read data from it
 	onReceiveFrames := func(pSample2, pSamples []byte, framecount uint32) {
