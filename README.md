@@ -36,6 +36,7 @@ Archives also contains libtensorflowlite_c library.
 ```
 docker run -ti \
   -p 8080:8080 \
+  --env ALSA_CARD=<index/name>
   --device /dev/snd \
   -v /path/to/config:/config \
   -v /path/to/data:/data \
@@ -45,9 +46,32 @@ docker run -ti \
 | Parameter | Function |
 | :----: | --- |
 | `-p 8080` | BirdNET-GO webserver port. |
+| `--env ALSA_CARD=<index/name>` | ALSA capture device to use. Find index/name of desired device by executing `arecord -l` on the host. [More info.](#deciding-alsa-card)|
 | `--device /dev/snd` | Mounts in audio devices to the container. |
 | `-v /config` | Config directory in the container. |
 | `-v /data` | Data such as database and recordings. |
+
+
+#### Deciding ALSA_CARD value
+
+Within the BirdNET-Go container, knowledge of the designated microphone is absent. Consequently, it is necessary to specify the appropriate ALSA_CARD environment variable. Determining the correct value for this variable involves the following steps on the host computer:
+1. Open a terminal and execute the command `arecord -l` to list all available capture devices.
+
+```
+> arecord -l
+**** List of CAPTURE Hardware Devices ****
+card 0: PCH [Generic Analog], device 0: Analog [Analog]
+  Subdevices: 1/1
+  Subdevice #0: subdevice #0
+card 0: PCH [Generic Analog], device 2: Alt Analog [Alt Analog]
+  Subdevices: 1/1
+  Subdevice #0: subdevice #0
+card 1: Microphone [USB Microphone], device 0: USB Audio [USB Audio]
+  Subdevices: 1/1
+  Subdevice #0: subdevice #0
+```
+2. Identify the desired capture device. In the example above, cards 0 and 1 are available.
+3. Specify the ALSA_CARD value when running the BirdNET-Go container. For instance, if the USB Microphone device is chosen, set `ALSA_CARD` to either `ALSA_CARD=1` or `ALSA_CARD=Microphone`.
 
 ## Compiling for Linux
 
