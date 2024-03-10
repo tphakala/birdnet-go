@@ -2,12 +2,14 @@
 package conf
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"os"
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // getDefaultConfigPaths returns a list of default configuration paths for the current operating system.
@@ -103,4 +105,40 @@ func PrintUserInfo() {
 			log.Println("sudo usermod -a -G audio", currentUser.Username)
 		}
 	}
+}
+
+// RunningInContainer checks if the program is running inside a container.
+func RunningInContainer() bool {
+	// Check for the existence of the /.dockerenv file (Docker-specific).
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return true
+	}
+
+	// Check for the existence of the /run/.containerenv file (Podman-specific).
+	if _, err := os.Stat("/run/.containerenv"); err == nil {
+		return true
+	}
+
+	// Check the container environment variable.
+	if containerEnv, exists := os.LookupEnv("container"); exists && containerEnv != "" {
+		return true
+	}
+
+	// Check cgroup for hints of container runtime.
+	file, err := os.Open("/proc/self/cgroup")
+	if err != nil {
+		fmt.Println("Error opening /proc/self/cgroup:", err)
+		return false
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, "docker") || strings.Contains(line, "podman") {
+			return true
+		}
+	}
+
+	return false
 }
