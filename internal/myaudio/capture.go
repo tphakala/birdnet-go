@@ -1,11 +1,15 @@
 package myaudio
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"os/exec"
 	"runtime"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gen2brain/malgo"
@@ -13,8 +17,17 @@ import (
 )
 
 func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *AudioBuffer) {
-	defer wg.Done() // Ensure this is called when the goroutine exits
+	if settings.Realtime.RTSP != "" {
+		// RTSP audio capture
+		captureAudioRTSP(settings, wg, quitChan, restartChan, audioBuffer)
+	} else {
+		// Default audio capture
+		captureAudioMalgo(settings, wg, quitChan, restartChan, audioBuffer)
+	}
+}
 
+func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *AudioBuffer) {
+	defer wg.Done() // Ensure this is called when the goroutine exits
 	var device *malgo.Device
 
 	if settings.Debug {
@@ -150,5 +163,92 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan str
 			// This default case prevents blocking if quitChan is not closed yet.
 			time.Sleep(100 * time.Millisecond)
 		}
+	}
+}
+
+func captureAudioRTSP(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *AudioBuffer) {
+	defer wg.Done() // Ensure this is called when the goroutine exits
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start ffmpeg
+	cmd := exec.CommandContext(ctx, "ffmpeg",
+		"-i", settings.Realtime.RTSP,
+		"-loglevel", "error",
+		"-vn",         // No video
+		"-f", "s16le", // 16-bit signed little-endian PCM
+		"-ar", "48000", // Sample rate
+		"-ac", "1", // Single channel (mono)
+		"pipe:1", // Output raw audio data to standard out
+	)
+
+	// ffmpeg audio data to stdout
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Fatalf("Error creating ffmpeg pipe: %v", err)
+	}
+
+	log.Println("Starting ffmpeg with command: ", cmd.String())
+	if err := cmd.Start(); err != nil {
+		log.Fatalf("Error starting FFmpeg: %v", err)
+	}
+	defer cmd.Process.Kill()
+
+	// Process audio data from ffmpeg
+	go func() {
+		defer cancel()
+		buf := make([]byte, 65536) // TODO: Make buffer size configurable
+		for {
+			select {
+			case <-quitChan:
+				// Quit signal has been received, stop the command
+				if err := cmd.Process.Kill(); err != nil {
+					log.Fatal("failed to kill process: ", err)
+				}
+				return
+			default:
+				n, err := stdout.Read(buf)
+				if err != nil {
+					if err == io.EOF {
+						log.Println("ffmpeg EOF")
+					} else {
+						log.Println("Error reading from ffmpeg: ", err)
+					}
+					// Read error, kill the command so it can be restarted
+					err = cmd.Process.Kill()
+					if err != nil {
+						log.Printf("error killing ffmpeg process: ", err)
+					}
+					// Send restart signal
+					restartChan <- struct{}{}
+					return
+				}
+				// Write to ringbuffer when audio data is received
+				WriteToBuffer(buf[:n])
+				audioBuffer.Write(buf[:n])
+			}
+		}
+	}()
+
+	// Wait for ffmpeg to finish
+	if err := cmd.Wait(); err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			if status, ok := exitError.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+				// killed by a signal
+				if settings.Debug {
+					log.Println("ffmpeg command was killed")
+				}
+				return
+			}
+			// exited with an error
+			log.Println("ffmpeg command stopped unexpectedly, retrying: ", err)
+		} else {
+			// Some other error occurred
+			log.Printf("ffmpeg exited unexpectedly: %v", err)
+		}
+		// If we get here, the command exited with an error, so we should retry
+		time.Sleep(1 * time.Second) // Wait a second, then send restart signal
+		restartChan <- struct{}{}
 	}
 }
