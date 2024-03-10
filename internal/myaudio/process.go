@@ -42,7 +42,11 @@ func ProcessData(data []byte, bn *birdnet.BirdNET) error {
 
 	// Create a Results message to be sent through queue to processor
 	resultsMessage := queue.Results{
-		StartTime:   startTime.Add(-4000 * time.Millisecond),
+		// Start time is the time from which point capture audio is started, because of delay
+		// caused by BirdNET analysis etc. we need to go back in time for some amount to start
+		// capture before bird call begins (at least that is the idea, not sure if it is always
+		// working as intended)
+		StartTime:   startTime.Add(-5000 * time.Millisecond),
 		ElapsedTime: elapsedTime,
 		PCMdata:     data,
 		Results:     results,
