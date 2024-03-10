@@ -1,3 +1,4 @@
+// this file defines ring buffer which is used for capturing audio clips
 package myaudio
 
 import (

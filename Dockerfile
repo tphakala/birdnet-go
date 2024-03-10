@@ -34,6 +34,7 @@ FROM debian:bookworm-slim
 
 # Install ALSA library and SOX
 RUN apt-get update && apt-get install -y \
+    ca-certificates \
     libasound2 \
     sox \
     && rm -rf /var/lib/apt/lists/*

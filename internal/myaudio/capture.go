@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 
@@ -19,7 +20,18 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan str
 	if settings.Debug {
 		fmt.Println("Initializing context")
 	}
-	malgoCtx, err := malgo.InitContext(nil, malgo.ContextConfig{}, func(message string) {
+
+	// if Linux set malgo.BackendAlsa, else set nil for auto select
+	var backend malgo.Backend
+	if runtime.GOOS == "linux" {
+		backend = malgo.BackendAlsa
+	} else if runtime.GOOS == "windows" {
+		backend = malgo.BackendWasapi
+	} else if runtime.GOOS == "darwin" {
+		backend = malgo.BackendCoreaudio
+	}
+
+	malgoCtx, err := malgo.InitContext([]malgo.Backend{backend}, malgo.ContextConfig{}, func(message string) {
 		if settings.Debug {
 			fmt.Print(message)
 		}
@@ -34,6 +46,27 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan str
 	deviceConfig.Capture.Channels = conf.NumChannels
 	deviceConfig.SampleRate = conf.SampleRate
 	deviceConfig.Alsa.NoMMap = 1
+
+	var infos []malgo.DeviceInfo
+
+	// Get list of capture devices
+	infos, err = malgoCtx.Devices(malgo.Capture)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Capture Devices")
+	for i, info := range infos {
+		e := "ok"
+		_, err := malgoCtx.DeviceInfo(malgo.Capture, info.ID, malgo.Shared)
+		if err != nil {
+			e = err.Error()
+		}
+		fmt.Printf("    %d: %s, %s, [%s]\n", i, info.Name(), info.ID.String(), e)
+	}
+	//selectedDeviceInfo := infos[2]
+	//deviceConfig.Capture.DeviceID = selectedDeviceInfo.ID.Pointer()
 
 	// Write to ringbuffer when audio data is received
 	// BufferMonitor() will poll this buffer and read data from it

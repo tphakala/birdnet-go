@@ -104,7 +104,7 @@ func (p *Processor) startDetectionProcessor() {
 // processDetections examines each detection from the queue, updating held detections
 // with new or higher-confidence instances and setting an appropriate flush deadline.
 func (p *Processor) processDetections(item *queue.Results) {
-	const delay = 9 * time.Second // Delay before a detection is considered final and is flushed.
+	const delay = 12 * time.Second // Delay before a detection is considered final and is flushed.
 
 	for _, detection := range p.processResults(item) {
 		commonName := strings.ToLower(detection.Note.CommonName)
