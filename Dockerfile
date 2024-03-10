@@ -37,13 +37,14 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     libasound2 \
     sox \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /root/src/BirdNET-Go/bin /usr/bin/
 COPY --from=build /usr/local/lib/libtensorflowlite_c.so /usr/local/lib/
 RUN ldconfig
 
-# Add symlink to /config directory where configs can be stored 
+# Add symlink to /config directory where configs can be stored
 VOLUME /config
 RUN mkdir -p /root/.config && ln -s /config /root/.config/birdnet-go
 
