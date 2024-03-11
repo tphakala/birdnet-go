@@ -59,6 +59,8 @@ type Settings struct {
 		PrivacyFilter struct {
 			Enabled bool // true to enable privacy filter
 		}
+
+		RTSP string // RTSP stream URL
 	}
 
 	WebServer struct {
@@ -215,7 +217,7 @@ realtime:
   log:
     enabled: false		# true to enable OBS chat log
     path: birdnet.txt	# path to OBS chat log
-    
+
   birdweather:
     enabled: false		# true to enable birdweather uploads
     debug: false		# true to enable birdweather api debug mode
