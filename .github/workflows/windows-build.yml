@@ -42,18 +42,31 @@ jobs:
         unzip tflite_c_v2.14.0_windows_amd64.zip -d tflite_c
         sudo cp tflite_c/libtensorflowlite_c.dll /usr/x86_64-w64-mingw32/lib/
     
+    - name: Cache TensorFlow
+      id: cache-tensorflow
+      uses: actions/cache@v2
+      with:
+        path: ~/src/tensorflow
+        key: tensorflow-${{ runner.os }}-${{ hashFiles('**/go.mod') }}
+        restore-keys: |
+          tensorflow-${{ runner.os }}-
+  
     - name: Clone TensorFlow repository
+      if: steps.cache-tensorflow.outputs.cache-hit != 'true'
       run: |
-        mkdir ~/src
-        cd ~/src
-        git clone https://github.com/tensorflow/tensorflow.git
+        mkdir -p ~/src
+        git clone https://github.com/tensorflow/tensorflow.git ~/src/tensorflow
     
     - name: Build BirdNET-Go for Windows
       run: |
         make windows
-    
+
+    - name: Create artifact archive
+      run: |
+        zip -j birdnet-go-windows.zip bin/birdnet-go.exe tflite_c/libtensorflowlite_c.so
+      
     - name: Upload artifact
       uses: actions/upload-artifact@v2
       with:
-        name: birdnet-go-windows-amd64
-        path: bin/birdnet-go.exe
+        name: birdnet-go_windows_amd64
+        path: birdnet-go-windows.zip
