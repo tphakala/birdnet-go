@@ -172,8 +172,14 @@ func captureAudioRTSP(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	rtsp_transport := "udp"
+	if (settings.Realtime.RTSPTransport != "") {
+		rtsp_transport = settings.Realtime.RTSPTransport;
+	}
+
 	// Start ffmpeg
 	cmd := exec.CommandContext(ctx, "ffmpeg",
+		"-rtsp_transport", rtsp_transport, // RTSP transport protocol (tcp/udp)
 		"-i", settings.Realtime.RTSP,
 		"-loglevel", "error",
 		"-vn",         // No video
