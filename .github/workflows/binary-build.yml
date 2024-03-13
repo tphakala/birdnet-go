@@ -50,7 +50,7 @@ jobs:
 
     - name: Clone TensorFlow repository
       run: |
-        git clone --branch 2.14.0 --depth 1 https://github.com/tensorflow/tensorflow.git ~/src/tensorflow
+        git clone --branch v2.14.0 --depth 1 https://github.com/tensorflow/tensorflow.git ~/src/tensorflow
     
     - name: Build BirdNET-Go
       run: make ${{ matrix.make-target }}
