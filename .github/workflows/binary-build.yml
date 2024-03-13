@@ -1,0 +1,58 @@
+name: Build Binaries for BirdNET-Go
+
+on:
+  push:
+    branches: [ dev ]
+  pull_request:
+    branches: [ dev ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            go-version: '1.22'
+            make-target: windows
+            binary-suffix: .exe
+          - platform: linux-amd64
+            go-version: '1.22'
+            make-target: linux_amd64
+            binary-suffix: ''
+          - platform: linux-arm64
+            go-version: '1.22'
+            make-target: linux_arm64
+            binary-suffix: ''
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+        check-latest: true
+
+    - name: Install dependencies for Windows build
+      if: matrix.platform == 'windows'
+      run: |
+        sudo apt update && sudo apt install -y mingw-w64-tools gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 unzip
+
+    - name: Download & Set up TensorFlow Lite C library for Windows
+      if: matrix.platform == 'windows'
+      run: |
+        wget https://github.com/tphakala/tflite_c/releases/download/v2.14.0/tflite_c_v2.14.0_windows_amd64.zip -O tflite_c.zip
+        unzip tflite_c.zip -d tflite_c
+        sudo cp tflite_c/libtensorflowlite_c.dll /usr/x86_64-w64-mingw32/lib/
+    
+    - name: Build BirdNET-Go
+      run: make ${{ matrix.make-target }}
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: birdnet-go_${{ matrix.platform }}
+        path: bin/birdnet-go${{ matrix.binary-suffix }}
