@@ -61,6 +61,7 @@ type Settings struct {
 		}
 
 		RTSP string // RTSP stream URL
+		RTSPTransport string //RTSP Transport Protocol
 	}
 
 	WebServer struct {
