@@ -47,6 +47,7 @@ jobs:
           unzip ${{ matrix.tflite-lib }} -d tflite_c
         else
           tar -xzf ${{ matrix.tflite-lib }} -C tflite_c
+        fi
 
     - name: Install TensorFlow Lite C library to system path (Linux)
       if: matrix.platform == 'linux-amd64'
