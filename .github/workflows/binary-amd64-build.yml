@@ -17,14 +17,12 @@ jobs:
             go-version: '1.22'
             make-target: windows
             binary-suffix: .exe
+            tflite-lib: tflite_c_v2.14.0_windows_amd64.zip
           - platform: linux-amd64
             go-version: '1.22'
             make-target: linux_amd64
             binary-suffix: ''
-          - platform: linux-arm64
-            go-version: '1.22'
-            make-target: linux_arm64
-            binary-suffix: ''
+            tflite-lib: tflite_c_v2.14.0_linux_amd64.tar.gz
     
     steps:
     - name: Checkout code
@@ -41,16 +39,25 @@ jobs:
       run: |
         sudo apt update && sudo apt install -y mingw-w64-tools gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 unzip
 
-    - name: Download & Set up TensorFlow Lite C library for Windows
+    - name: Download & Set up TensorFlow Lite C library
+      run: |
+        wget https://github.com/tphakala/tflite_c/releases/download/v2.14.0/${{ matrix.tflite-lib }}
+        mkdir tflite_c
+        if [[ "${{ matrix.tflite-lib }}" == *.zip ]]; then
+          unzip ${{ matrix.tflite-lib }} -d tflite_c
+        else
+          tar -xzf ${{ matrix.tflite-lib }} -C tflite_c
+
+    - name: Install TensorFlow Lite C library to system path (Linux)
+      if: matrix.platform == 'linux-amd64'
+      run: |
+        sudo cp tflite_c/libtensorflowlite_c.so /usr/local/lib/
+        sudo ldconfig
+
+    - name: Install TensorFlow Lite C library to system path (Windows)
       if: matrix.platform == 'windows'
       run: |
-        wget https://github.com/tphakala/tflite_c/releases/download/v2.14.0/tflite_c_v2.14.0_windows_amd64.zip -O tflite_c.zip
-        unzip tflite_c.zip -d tflite_c
         sudo cp tflite_c/libtensorflowlite_c.dll /usr/x86_64-w64-mingw32/lib/
-
-    - name: Clone TensorFlow repository
-      run: |
-        git clone --branch v2.14.0 --depth 1 https://github.com/tensorflow/tensorflow.git ~/src/tensorflow
     
     - name: Build BirdNET-Go
       run: make ${{ matrix.make-target }}
