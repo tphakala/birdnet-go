@@ -47,6 +47,10 @@ jobs:
         wget https://github.com/tphakala/tflite_c/releases/download/v2.14.0/tflite_c_v2.14.0_windows_amd64.zip -O tflite_c.zip
         unzip tflite_c.zip -d tflite_c
         sudo cp tflite_c/libtensorflowlite_c.dll /usr/x86_64-w64-mingw32/lib/
+
+    - name: Clone TensorFlow repository
+      run: |
+        git clone --branch 2.14.0 --depth 1 https://github.com/tensorflow/tensorflow.git ~/src/tensorflow
     
     - name: Build BirdNET-Go
       run: make ${{ matrix.make-target }}
