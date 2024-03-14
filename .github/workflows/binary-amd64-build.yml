@@ -59,6 +59,10 @@ jobs:
       if: matrix.platform == 'windows'
       run: |
         sudo cp tflite_c/libtensorflowlite_c.dll /usr/x86_64-w64-mingw32/lib/
+
+    - name: Clone TensorFlow repository
+      run: |
+        git clone --branch v2.14.0 --depth 1 https://github.com/tensorflow/tensorflow.git
     
     - name: Build BirdNET-Go
       run: make ${{ matrix.make-target }}
