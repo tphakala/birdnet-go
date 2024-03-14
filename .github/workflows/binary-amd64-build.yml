@@ -8,17 +8,17 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: windows
+          - platform: windows_amd64
             go-version: '1.22'
             make-target: windows
             binary-suffix: .exe
             tflite-lib: tflite_c_v2.14.0_windows_amd64.zip
-          - platform: linux-amd64
+          - platform: linux_amd64
             go-version: '1.22'
             make-target: linux_amd64
             binary-suffix: ''
@@ -50,13 +50,13 @@ jobs:
         fi
 
     - name: Install TensorFlow Lite C library to system path (Linux)
-      if: matrix.platform == 'linux-amd64'
+      if: matrix.platform == 'linux_amd64'
       run: |
         sudo cp tflite_c/libtensorflowlite_c.so /usr/local/lib/
         sudo ldconfig
 
     - name: Install TensorFlow Lite C library to system path (Windows)
-      if: matrix.platform == 'windows'
+      if: matrix.platform == 'windows_amd64'
       run: |
         sudo cp tflite_c/libtensorflowlite_c.dll /usr/x86_64-w64-mingw32/lib/
 
@@ -72,4 +72,6 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: birdnet-go_${{ matrix.platform }}
-        path: bin/birdnet-go${{ matrix.binary-suffix }}
+        path: |
+           bin/birdnet-go${{ matrix.binary-suffix }}
+           tflite_c/libtensorflowlite_c.so
