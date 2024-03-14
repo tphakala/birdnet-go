@@ -35,7 +35,7 @@ jobs:
         check-latest: true
 
     - name: Install dependencies for Windows build
-      if: matrix.platform == 'windows'
+      if: matrix.platform == 'windows_amd64'
       run: |
         sudo apt update && sudo apt install -y mingw-w64-tools gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 unzip
 
