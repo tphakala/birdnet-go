@@ -12,9 +12,11 @@ ifeq ($(TARGETPLATFORM),linux/arm64)
 endif
 
 # Common flags
-#CGO_FLAGS := CGO_ENABLED=1 CGO_CFLAGS="-I$(HOME)/src/tensorflow -DMA_NO_PULSEAUDIO"
 CGO_FLAGS := CGO_ENABLED=1 CGO_CFLAGS="-I$(HOME)/src/tensorflow"
 LDFLAGS := -ldflags "-s -w"
+
+# Detect host architecture
+UNAME_M := $(shell uname -m)
 
 # Default build for local development
 build:
@@ -24,9 +26,15 @@ build:
 linux_amd64:
 	GOOS=linux GOARCH=amd64 $(CGO_FLAGS) go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
-# Build for Linux arm64
+# Build for Linux arm64, with cross-compilation setup if on amd64
 linux_arm64:
-	GOOS=linux GOARCH=arm64 $(CGO_FLAGS) go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
+ifeq ($(UNAME_M),x86_64)
+	@# Cross-compilation setup for amd64 to arm64
+	CC=aarch64-linux-gnu-gcc $(CGO_FLAGS) GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
+else
+	@# Native compilation for arm64
+	$(CGO_FLAGS) GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
+endif
 
 # Windows build
 windows:
@@ -42,4 +50,4 @@ macos_arm:
 
 clean:
 	go clean
-	rm -rf $(BINARY_DIR)/$(BINARY_NAME) $(BINARY_DIR)/$(BINARY_NAME).exe
+	rm -rf $(BINARY_DIR)/*
