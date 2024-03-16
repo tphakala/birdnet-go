@@ -8,4 +8,5 @@ const (
 
 	SpeciesConfigCSV  = "species_config.csv"
 	SpeciesActionsCSV = "species_actions.csv"
+	DogBarkFilterCSV  = "dog_bark_filter.csv"
 )
