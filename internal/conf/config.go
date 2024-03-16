@@ -60,6 +60,10 @@ type Settings struct {
 			Enabled bool // true to enable privacy filter
 		}
 
+		DogBarkFilter struct {
+			Enabled bool // true to enable dog bark filter
+		}
+
 		RTSP string // RTSP stream URL
 	}
 
@@ -224,6 +228,9 @@ realtime:
     id: 00000			# birdweather ID
 
   privacyfilter:
+    enabled: true
+
+  dogbarkfilter:
     enabled: true
 
 webserver:

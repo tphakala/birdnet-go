@@ -22,6 +22,7 @@ type Processor struct {
 	Bn                 *birdnet.BirdNET
 	BwClient           *birdweather.BwClient
 	EventTracker       *EventTracker
+	DogBarkFilter      DogBarkFilter
 	SpeciesConfig      SpeciesConfig
 	IncludedSpecies    *[]string
 	SpeciesListUpdated time.Time
@@ -77,6 +78,9 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, a
 
 	// Load Species configs
 	p.SpeciesConfig, _ = LoadSpeciesConfig(conf.SpeciesConfigCSV)
+
+	// Load dog bark filter config
+	p.DogBarkFilter, _ = LoadDogBarkFilterConfig(conf.DogBarkFilterCSV)
 
 	// Initialize BirdWeather client if enabled in settings.
 	if settings.Realtime.Birdweather.Enabled {
@@ -275,6 +279,24 @@ func (p *Processor) pendingDetectionsFlusher() {
 						if !strings.Contains(item.Detection.Note.CommonName, "Human") &&
 							p.LastHumanDetection.After(item.FirstDetected) {
 							log.Printf("Discarding detection of %s due to privacy filter", species)
+							delete(PendingDetections, species)
+							continue
+						}
+					}
+
+					// Check dog bark filter
+					if p.Settings.Realtime.DogBarkFilter.Enabled {
+						log.Println("Checking dog bark filter")
+						log.Printf("Last dog detection: %s\n", p.LastDogDetection)
+						// Check against common name
+						if p.DogBarkFilter.Check(item.Detection.Note.CommonName, p.LastDogDetection) {
+							log.Printf("Filtering out %s due to recent dog bark\n", item.Detection.Note.CommonName)
+							delete(PendingDetections, species)
+							continue
+						}
+						// Check against scientific name
+						if p.DogBarkFilter.Check(item.Detection.Note.ScientificName, p.LastDogDetection) {
+							log.Printf("Filtering out %s due to recent dog bark\n", item.Detection.Note.CommonName)
 							delete(PendingDetections, species)
 							continue
 						}
