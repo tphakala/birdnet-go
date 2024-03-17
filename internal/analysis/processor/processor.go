@@ -286,17 +286,16 @@ func (p *Processor) pendingDetectionsFlusher() {
 
 					// Check dog bark filter
 					if p.Settings.Realtime.DogBarkFilter.Enabled {
-						log.Println("Checking dog bark filter")
 						log.Printf("Last dog detection: %s\n", p.LastDogDetection)
 						// Check against common name
 						if p.DogBarkFilter.Check(item.Detection.Note.CommonName, p.LastDogDetection) {
-							log.Printf("Filtering out %s due to recent dog bark\n", item.Detection.Note.CommonName)
+							log.Printf("Discarding detection of %s due to recent dog bark\n", item.Detection.Note.CommonName)
 							delete(PendingDetections, species)
 							continue
 						}
 						// Check against scientific name
 						if p.DogBarkFilter.Check(item.Detection.Note.ScientificName, p.LastDogDetection) {
-							log.Printf("Filtering out %s due to recent dog bark\n", item.Detection.Note.CommonName)
+							log.Printf("Discarding detection of %s due to recent dog bark\n", item.Detection.Note.CommonName)
 							delete(PendingDetections, species)
 							continue
 						}

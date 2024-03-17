@@ -13,7 +13,7 @@ import (
 )
 
 // Assuming a predefined time limit for filtering detections after a dog bark.
-const DogBarkFilterTimeLimit = 300 * time.Second
+const DogBarkFilterTimeLimit = 15 * time.Minute
 
 // DogBarkFilter contains a list of species to be filtered within the time limit after a dog bark.
 type DogBarkFilter struct {
