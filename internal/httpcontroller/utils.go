@@ -2,6 +2,7 @@
 package httpcontroller
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -10,8 +11,10 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/shurcooL/graphql"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -236,4 +239,62 @@ func parseOffset(offsetStr string, defaultOffset int) int {
 		return defaultOffset
 	}
 	return offset
+}
+
+var (
+	client            = graphql.NewClient("https://app.birdweather.com/graphql", nil)
+	thumbnailMap      sync.Map
+	thumbnailMutexMap sync.Map
+)
+
+func queryGraphQL(scientificName string) (string, error) {
+	log.Printf("Fetching thumbnail for bird: %s\n", scientificName)
+
+	var query struct {
+		Species struct {
+			ThumbnailUrl graphql.String
+		} `graphql:"species(scientificName: $scientificName)"`
+	}
+
+	variables := map[string]interface{}{
+		"scientificName": graphql.String(scientificName),
+	}
+
+	err := client.Query(context.Background(), &query, variables)
+	if err != nil {
+		return "", err
+	}
+
+	return string(query.Species.ThumbnailUrl), nil
+}
+
+// thumbnail returns the url of a given bird's thumbnail
+func thumbnail(scientificName string) (string, error) {
+	// Check if thumbnail is already cached
+	if thumbnail, ok := thumbnailMap.Load(scientificName); ok {
+		log.Printf("Bird: %s, Thumbnail (cached): %s\n", scientificName, thumbnail)
+		return thumbnail.(string), nil
+	}
+
+	// Use a per-item mutex to ensure only one GraphQL query is performed per item
+	mu, _ := thumbnailMutexMap.LoadOrStore(scientificName, &sync.Mutex{})
+	mutex := mu.(*sync.Mutex)
+
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	// Check again if thumbnail is cached after acquiring the lock
+	if thumbnail, ok := thumbnailMap.Load(scientificName); ok {
+		log.Printf("Bird: %s, Thumbnail (cached): %s\n", scientificName, thumbnail)
+		return thumbnail.(string), nil
+	}
+
+	thumbn, err := queryGraphQL(scientificName)
+	if err != nil {
+		return "", fmt.Errorf("error querying GraphQL endpoint: %v", err)
+	}
+
+	thumbnailMap.Store(scientificName, thumbn)
+	log.Printf("Bird: %s, Thumbnail (fetched): %s\n", scientificName, thumbn)
+	return thumbn, nil
 }
