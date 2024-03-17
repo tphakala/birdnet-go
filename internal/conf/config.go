@@ -223,7 +223,7 @@ realtime:
     path: clips/   		# path to audio clip export directory
     type: wav      		# only wav supported for now
   
-	log:
+  log:
     enabled: false		# true to enable OBS chat log
     path: birdnet.txt	# path to OBS chat log
 
@@ -233,8 +233,8 @@ realtime:
     id: 00000			# birdweather ID
 
   rtsp:
-	url: 				# RTSP stream URL
-	transport: tcp		# RTSP Transport Protocol
+    url:				# RTSP stream URL
+    transport: tcp		# RTSP Transport Protocol
 
   privacyfilter:
     enabled: true
