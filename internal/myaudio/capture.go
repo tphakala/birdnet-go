@@ -17,7 +17,7 @@ import (
 )
 
 func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *AudioBuffer) {
-	if settings.Realtime.RTSP != "" {
+	if settings.Realtime.RTSP.Url != "" {
 		// RTSP audio capture
 		captureAudioRTSP(settings, wg, quitChan, restartChan, audioBuffer)
 	} else {
@@ -172,15 +172,15 @@ func captureAudioRTSP(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rtsp_transport := "udp"
-	if (settings.Realtime.RTSPTransport != "") {
-		rtsp_transport = settings.Realtime.RTSPTransport;
+	rtspTransport := "udp"
+	if settings.Realtime.RTSP.Transport != "" {
+		rtspTransport = settings.Realtime.RTSP.Transport
 	}
 
 	// Start ffmpeg
 	cmd := exec.CommandContext(ctx, "ffmpeg",
-		"-rtsp_transport", rtsp_transport, // RTSP transport protocol (tcp/udp)
-		"-i", settings.Realtime.RTSP,
+		"-rtsp_transport", rtspTransport, // RTSP transport protocol (tcp/udp)
+		"-i", settings.Realtime.RTSP.Url, // RTSP url
 		"-loglevel", "error",
 		"-vn",         // No video
 		"-f", "s16le", // 16-bit signed little-endian PCM
