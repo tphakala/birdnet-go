@@ -27,7 +27,9 @@ RUN git clone --branch ${TENSORFLOW_VERSION} --depth 1 https://github.com/tensor
 
 # Compile BirdNET-Go
 COPY . BirdNET-Go
-RUN cd BirdNET-Go && make TARGETPLATFORM=${TARGETPLATFORM}
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd BirdNET-Go && make TARGETPLATFORM=${TARGETPLATFORM}
 
 # Create final image using a multi-platform base image
 FROM debian:bookworm-slim
