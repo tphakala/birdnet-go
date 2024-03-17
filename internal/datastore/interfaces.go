@@ -163,7 +163,7 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 	const reportCount = 30 // Consider making this a configurable parameter
 
 	err := ds.DB.Table("notes").
-		Select("common_name, COUNT(*) as count").
+		Select("common_name", "scientific_name", "COUNT(*) as count").
 		Where("date = ? AND confidence >= ?", selectedDate, minConfidenceNormalized).
 		Group("common_name").
 		//Having("COUNT(*) > ?", 1).

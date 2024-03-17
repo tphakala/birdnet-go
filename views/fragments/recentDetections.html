@@ -24,6 +24,8 @@
         hx-trigger="click"
         hx-push-url="true">
         {{ .CommonName}}</a>
+        <!-- Bird thumbnail  -->
+        <img loading="lazy" width="40" src="{{thumbnail .ScientificName}}" alt="Bird Image" class="h-auto rounded-md">
       </td>
       <td class="py-1 px-6">
         <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
@@ -54,14 +56,20 @@
     <div class="flex items-center space-x-2"> <!-- Flex container with centered items and space between them -->
       <div>{{.Time}}</div>
       
-      <a href="#"
-         hx-get="/note?id={{.ID}}"
-         hx-target="#mainContent"
-         hx-swap="innerHTML"
-         hx-trigger="click"
-         hx-push-url="true"> <!-- This ensures the link can grow to use available space, if needed -->
-        {{title .CommonName}}
-      </a>
+
+      
+      <div>
+          <a href="#"
+          hx-get="/note?id={{.ID}}"
+          hx-target="#mainContent"
+          hx-swap="innerHTML"
+          hx-trigger="click"
+          hx-push-url="true"> <!-- This ensures the link can grow to use available space, if needed -->
+          {{title .CommonName}}
+        </a>
+        <!-- Bird thumbnail  -->
+        <img loading="lazy" width="40" src="{{thumbnail .ScientificName}}" alt="Bird Image" class="h-auto rounded-md">
+      </div>
       
       <span class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">{{confidence .Confidence}}</span>
     </div>
