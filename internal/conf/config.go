@@ -64,8 +64,10 @@ type Settings struct {
 			Enabled bool // true to enable dog bark filter
 		}
 
-		RTSP string // RTSP stream URL
-		RTSPTransport string //RTSP Transport Protocol
+		RTSP struct {
+			Url       string // RTSP stream URL
+			Transport string // RTSP Transport Protocol
+		}
 	}
 
 	WebServer struct {
@@ -215,11 +217,13 @@ birdnet:
 realtime:
   interval: 15		    # duplicate prediction interval in seconds
   processingtime: false # true to report processing time for each prediction
+  
   audioexport:
     enabled: true 		# true to export audio clips containing indentified bird calls
     path: clips/   		# path to audio clip export directory
     type: wav      		# only wav supported for now
-  log:
+  
+	log:
     enabled: false		# true to enable OBS chat log
     path: birdnet.txt	# path to OBS chat log
 
@@ -227,6 +231,10 @@ realtime:
     enabled: false		# true to enable birdweather uploads
     debug: false		# true to enable birdweather api debug mode
     id: 00000			# birdweather ID
+
+  rtsp:
+	url: 				# RTSP stream URL
+	transport: tcp		# RTSP Transport Protocol
 
   privacyfilter:
     enabled: true

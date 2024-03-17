@@ -35,8 +35,8 @@ func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
 	cmd.Flags().StringVar(&settings.Realtime.AudioExport.Path, "clippath", viper.GetString("realtime.audioexport.path"), "Path to save audio clips")
 	cmd.Flags().StringVar(&settings.Realtime.Log.Path, "logpath", viper.GetString("realtime.log.path"), "Path to save log files")
 	cmd.Flags().BoolVar(&settings.Realtime.ProcessingTime, "processingtime", viper.GetBool("realtime.processingtime"), "Report processing time for each detection")
-	cmd.Flags().StringVar(&settings.Realtime.RTSP, "rtsp", viper.GetString("realtime.rtsp"), "URL of RTSP audio stream to capture")
-	cmd.Flags().StringVar(&settings.Realtime.RTSPTransport, "rtsptransport", viper.GetString("realtime.rtsptransport"), "RTSP transport (tcp/udp)")
+	cmd.Flags().StringVar(&settings.Realtime.RTSP.Url, "rtsp", viper.GetString("realtime.rtsp.url"), "URL of RTSP audio stream to capture")
+	cmd.Flags().StringVar(&settings.Realtime.RTSP.Transport, "rtsptransport", viper.GetString("realtime.rtsp.transport"), "RTSP transport (tcp/udp)")
 
 	// Bind flags to the viper settings
 	if err := viper.BindPFlags(cmd.Flags()); err != nil {
