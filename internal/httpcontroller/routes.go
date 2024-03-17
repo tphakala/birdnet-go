@@ -40,6 +40,7 @@ func (s *Server) initRoutes() {
 		"title":           cases.Title(language.English).String,
 		"confidence":      confidence,
 		"confidenceColor": confidenceColor,
+		"thumbnail":       thumbnail,
 		"RenderContent":   s.RenderContent,
 		"sub":             func(a, b int) int { return a - b },
 		"add":             func(a, b int) int { return a + b },
