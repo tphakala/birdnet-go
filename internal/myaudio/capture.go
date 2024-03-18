@@ -3,13 +3,11 @@ package myaudio
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
 	"runtime"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/gen2brain/malgo"
@@ -167,94 +165,74 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 }
 
 func captureAudioRTSP(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *AudioBuffer) {
-	defer wg.Done() // Ensure this is called when the goroutine exits
+	defer wg.Done()
 
+	// Context to control the lifetime of the FFmpeg command
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Determine the RTSP transport protocol based on settings
 	rtspTransport := "udp"
 	if settings.Realtime.RTSP.Transport != "" {
 		rtspTransport = settings.Realtime.RTSP.Transport
 	}
 
-	// Start ffmpeg
+	// Start FFmpeg with the configured settings
 	cmd := exec.CommandContext(ctx, "ffmpeg",
-		"-rtsp_transport", rtspTransport, // RTSP transport protocol (tcp/udp)
-		"-i", settings.Realtime.RTSP.Url, // RTSP url
+		"-rtsp_transport", rtspTransport,
+		"-i", settings.Realtime.RTSP.Url,
 		"-loglevel", "error",
-		"-vn",         // No video
-		"-f", "s16le", // 16-bit signed little-endian PCM
-		"-ar", "48000", // Sample rate
-		"-ac", "1", // Single channel (mono)
-		"pipe:1", // Output raw audio data to standard out
+		"-vn",
+		"-f", "s16le",
+		"-ar", "48000",
+		"-ac", "1",
+		"pipe:1",
 	)
 
-	// ffmpeg audio data to stdout
+	// Capture FFmpeg's stdout for processing
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Fatalf("Error creating ffmpeg pipe: %v", err)
 	}
 
+	// Attempt to start the FFmpeg process
 	log.Println("Starting ffmpeg with command: ", cmd.String())
 	if err := cmd.Start(); err != nil {
-		log.Fatalf("Error starting FFmpeg: %v", err)
+		log.Printf("Error starting FFmpeg: %v", err)
+		return
 	}
-	defer cmd.Process.Kill()
 
-	// Process audio data from ffmpeg
+	// Start a goroutine to read from FFmpeg's stdout and write to the ring buffer
 	go func() {
+		// Ensure the FFmpeg process is terminated when this goroutine exits.
 		defer cancel()
-		buf := make([]byte, 65536) // TODO: Make buffer size configurable
+
+		// Buffer to hold the audio data read from FFmpeg's stdout.
+		buf := make([]byte, 65536)
 		for {
-			select {
-			case <-quitChan:
-				// Quit signal has been received, stop the command
-				if err := cmd.Process.Kill(); err != nil {
-					log.Fatal("failed to kill process: ", err)
-				}
+			n, err := stdout.Read(buf)
+			// On read error, log the error, signal a restart, and exit the goroutine.
+			if err != nil {
+				log.Printf("Error reading from ffmpeg: %v", err)
+				restartChan <- struct{}{}
 				return
-			default:
-				n, err := stdout.Read(buf)
-				if err != nil {
-					if err == io.EOF {
-						log.Println("ffmpeg EOF")
-					} else {
-						log.Println("Error reading from ffmpeg: ", err)
-					}
-					// Read error, kill the command so it can be restarted
-					err = cmd.Process.Kill()
-					if err != nil {
-						log.Printf("error killing ffmpeg process: ", err)
-					}
-					// Send restart signal
-					restartChan <- struct{}{}
-					return
-				}
-				// Write to ringbuffer when audio data is received
-				WriteToBuffer(buf[:n])
-				audioBuffer.Write(buf[:n])
 			}
+			// Write to ring buffer when audio data is received
+			WriteToBuffer(buf[:n])
+			audioBuffer.Write(buf[:n])
 		}
 	}()
 
-	// Wait for ffmpeg to finish
-	if err := cmd.Wait(); err != nil {
-		if exitError, ok := err.(*exec.ExitError); ok {
-			if status, ok := exitError.Sys().(syscall.WaitStatus); ok && status.Signaled() {
-				// killed by a signal
-				if settings.Debug {
-					log.Println("ffmpeg command was killed")
-				}
-				return
-			}
-			// exited with an error
-			log.Println("ffmpeg command stopped unexpectedly, retrying: ", err)
-		} else {
-			// Some other error occurred
-			log.Printf("ffmpeg exited unexpectedly: %v", err)
+	// Stop here and wait for a quit signal or context cancellation (ffmpeg exit)
+	for {
+		select {
+		case <-quitChan:
+			log.Println("Quit signal received, stopping FFmpeg.")
+			cancel()
+			return
+		case <-ctx.Done():
+			// Context was cancelled, clean up and exit goroutine
+			return
 		}
-		// If we get here, the command exited with an error, so we should retry
-		time.Sleep(1 * time.Second) // Wait a second, then send restart signal
-		restartChan <- struct{}{}
 	}
 }
