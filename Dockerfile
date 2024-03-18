@@ -1,7 +1,7 @@
 # Use ARGs to define default build-time variables for TensorFlow version and target platform
 ARG TENSORFLOW_VERSION=v2.14.0
 
-FROM golang:1.22.0-bookworm as build
+FROM golang:1.22.1-bookworm as build
 
 # Pass in ARGs after FROM to use them in build stage
 ARG TENSORFLOW_VERSION
