@@ -22,6 +22,13 @@ BirdNET-Go is an AI solution for continuous avian monitoring and identification
 - Runs on Windows, Linux and macOS
 - Low resource usage, works on Raspberry Pi 3 and equivalent 64-bit single board computers
 
+## Help Improve BirdNET-Go
+
+I am seeking web developer with experience in Go HTML templating, Tailwind CSS, HTMX, Alpine.js, or
+similar frameworks to join in enhancing the BirdNET-Go application web UI. Your expertise can make
+a real difference in how users engage with this app and connect with birdlife. If you have the
+skills and a keen interest in contributing to a nature-focused project, I'd love to hear from you.
+
 ## Web Dashboard
 
 <img src="doc/BirdNET-Go-dashboard.webp" />
