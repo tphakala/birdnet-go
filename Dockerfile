@@ -27,7 +27,9 @@ RUN git clone --branch ${TENSORFLOW_VERSION} --depth 1 https://github.com/tensor
 
 # Compile BirdNET-Go
 COPY . BirdNET-Go
-RUN cd BirdNET-Go && make TARGETPLATFORM=${TARGETPLATFORM}
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd BirdNET-Go && make TARGETPLATFORM=${TARGETPLATFORM}
 
 # Create final image using a multi-platform base image
 FROM debian:bookworm-slim
@@ -41,7 +43,6 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /root/src/BirdNET-Go/bin /usr/bin/
 COPY --from=build /usr/local/lib/libtensorflowlite_c.so /usr/local/lib/
 RUN ldconfig
 
@@ -54,6 +55,8 @@ WORKDIR /data
 
 # Make port 8080 available to the world outside this container
 EXPOSE 8080
+
+COPY --from=build /root/src/BirdNET-Go/bin /usr/bin/
 
 ENTRYPOINT ["/usr/bin/birdnet-go"]
 CMD ["realtime"]
