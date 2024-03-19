@@ -179,14 +179,14 @@ func captureAudioRTSP(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan
 
 	// Start FFmpeg with the configured settings
 	cmd := exec.CommandContext(ctx, "ffmpeg",
-		"-rtsp_transport", rtspTransport,
-		"-i", settings.Realtime.RTSP.Url,
-		"-loglevel", "error",
-		"-vn",
-		"-f", "s16le",
-		"-ar", "48000",
-		"-ac", "1",
-		"pipe:1",
+		"-rtsp_transport", rtspTransport, // RTSP transport protocol (tcp/udp)
+		"-i", settings.Realtime.RTSP.Url, // RTSP url
+		"-loglevel", "error", // Suppress FFmpeg log output
+		"-vn",         // No video
+		"-f", "s16le", // 16-bit signed little-endian PCM
+		"-ar", "48000", // Sample rate
+		"-ac", "1", // Single channel (mono)
+		"pipe:1", // Output raw audio data to standard out
 	)
 
 	// Capture FFmpeg's stdout for processing
@@ -202,6 +202,13 @@ func captureAudioRTSP(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan
 		return
 	}
 
+	// Ensure cmd.Wait() is called to clean up the process table entry on FFmpeg exit
+	defer func() {
+		if err := cmd.Wait(); err != nil {
+			log.Printf("FFmpeg wait error: %v", err)
+		}
+	}()
+
 	// Start a goroutine to read from FFmpeg's stdout and write to the ring buffer
 	go func() {
 		// Ensure the FFmpeg process is terminated when this goroutine exits.
@@ -214,6 +221,8 @@ func captureAudioRTSP(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan
 			// On read error, log the error, signal a restart, and exit the goroutine.
 			if err != nil {
 				log.Printf("Error reading from ffmpeg: %v", err)
+				cancel()
+				time.Sleep(3 * time.Second) // wait before restarting
 				restartChan <- struct{}{}
 				return
 			}
