@@ -7,6 +7,13 @@ FROM golang:1.22.1-bookworm as build
 ARG TENSORFLOW_VERSION
 ARG TARGETPLATFORM
 
+# Install zip utility along with other dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    zip \
+    && rm -rf /var/lib/apt/lists/*
+
 # Determine PLATFORM based on TARGETPLATFORM
 RUN PLATFORM='unknown'; \
     case "${TARGETPLATFORM}" in \
