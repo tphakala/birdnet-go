@@ -18,6 +18,17 @@ LDFLAGS := -ldflags "-s -w"
 # Detect host architecture
 UNAME_M := $(shell uname -m)
 
+LABELS_FILES := $(wildcard internal/birdnet/labels/*)
+LABELS_ZIP := internal/birdnet/labels.zip
+
+# Default action
+all: $(LABELS_ZIP) build
+
+# labels.zip depends on all files in the labels directory
+$(LABELS_ZIP): $(LABELS_FILES)
+	@echo "Creating or updating labels.zip from contents of internal/birdnet/labels/*"
+	@cd internal/birdnet/labels && zip -j $(CURDIR)/$(LABELS_ZIP) *
+
 # Default build for local development
 build:
 	$(CGO_FLAGS) go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
