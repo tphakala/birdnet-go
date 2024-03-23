@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -80,16 +81,28 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 		return fmt.Errorf("SoX binary not found: %w", err)
 	}
 
-	// set heigth based on width
+	// Set height based on width
 	heightStr := strconv.Itoa(width / 2)
 	widthStr := strconv.Itoa(width)
 
-	// Execute SoX command to create spectrogram
+	// Build SoX command arguments
 	args := []string{audioClipPath, "-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-o", spectrogramPath}
 	if width < 800 {
 		args = append(args, "-r")
 	}
-	cmd := exec.Command("sox", args...)
+
+	// Determine the command based on the OS
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		// Directly use SoX command on Windows
+		cmd = exec.Command("sox", args...)
+	} else {
+		// Prepend 'nice' to the command on Unix-like systems
+		args = append([]string{"-n", "10", "sox"}, args...) // '19' is a nice value for low priority
+		cmd = exec.Command("nice", args...)
+	}
+
+	// Execute the command
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("SoX command failed: %w", err)
 	}
@@ -128,6 +141,7 @@ func (s *Server) getSpectrogramPath(wavFileName string, width int) (string, erro
 	return webFriendlyPath, nil
 }
 
+/*
 // wrapNotesWithSpectrogram wraps notes with their corresponding spectrogram paths.
 func (s *Server) wrapNotesWithSpectrogram(notes []datastore.Note) ([]NoteWithSpectrogram, error) {
 	notesWithSpectrogram := make([]NoteWithSpectrogram, len(notes))
@@ -179,28 +193,6 @@ func (s *Server) wrapNotesWithSpectrogram(notes []datastore.Note) ([]NoteWithSpe
 	close(results)
 	close(semaphore)
 
-	return notesWithSpectrogram, nil
-}
-
-// wrapNotesWithSpectrogram wraps notes with their corresponding spectrogram paths.
-/*func (s *Server) wrapNotesWithSpectrogram(notes []datastore.Note) ([]NoteWithSpectrogram, error) {
-	notesWithSpectrogram := make([]NoteWithSpectrogram, len(notes))
-
-	// Set the width of the spectrogram in pixels
-	const width = 400 // pixels
-
-	for i, note := range notes {
-		spectrogramPath, err := s.getSpectrogramPath(note.ClipName, width)
-		if err != nil {
-			log.Printf("Error generating spectrogram for %s: %v", note.ClipName, err)
-			continue
-		}
-
-		notesWithSpectrogram[i] = NoteWithSpectrogram{
-			Note:        note,
-			Spectrogram: spectrogramPath,
-		}
-	}
 	return notesWithSpectrogram, nil
 }*/
 

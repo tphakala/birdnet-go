@@ -216,26 +216,19 @@ func (s *Server) speciesDetectionsHandler(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
-	// Wrap the notes with spectrogram paths
-	notesWithSpectrogram, err := s.wrapNotesWithSpectrogram(notes)
-	if err != nil {
-		// Handle the error appropriately
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-	}
-
 	// Prepare data for rendering in the template
 	data := struct {
 		CommonName string
 		Date       string
 		Hour       string
-		Notes      []NoteWithSpectrogram
+		Notes      []datastore.Note
 		NumResults int
 		Offset     int
 	}{
 		CommonName: species,
 		Date:       date,
 		Hour:       hour,
-		Notes:      notesWithSpectrogram,
+		Notes:      notes,
 		NumResults: numResults,
 		Offset:     offset,
 	}
@@ -372,13 +365,25 @@ func (s *Server) getLastDetections(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error fetching detections"})
 	}
 
-	// Wrap the notes with spectrogram paths
-	notesWithSpectrogram, err := s.wrapNotesWithSpectrogram(notes)
-	if err != nil {
-		// Handle the error appropriately
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	// render the recentDetections template with the data
+	return c.Render(http.StatusOK, "recentDetections", notes)
+}
+
+// serveSpectrogramHandler serves or generates a spectrogram for a given clip.
+func (s *Server) serveSpectrogramHandler(c echo.Context) error {
+	// Extract clip name from the query parameters
+	clipName := c.QueryParam("clip")
+	if clipName == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "Clip name is required.")
 	}
 
-	// render the recentDetections template with the data
-	return c.Render(http.StatusOK, "recentDetections", notesWithSpectrogram)
+	// Construct the path to the spectrogram image
+	spectrogramPath, err := s.getSpectrogramPath(clipName, 400) // Assuming 400px width
+	if err != nil {
+		log.Printf("Failed to get or generate spectrogram for clip %s: %v", clipName, err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate spectrogram")
+	}
+
+	// Serve the spectrogram image file
+	return c.File(spectrogramPath)
 }
