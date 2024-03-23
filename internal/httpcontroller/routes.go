@@ -5,6 +5,7 @@ import (
 	"embed"
 	"html/template"
 	"io/fs"
+	"sync"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -28,6 +29,26 @@ var routes = []routeConfig{
 	{Path: "/logs", TemplateName: "logs", Title: "Logs"},
 	{Path: "/stats", TemplateName: "stats", Title: "Statistics"},
 	{Path: "/settings", TemplateName: "settings", Title: "General Settings"},
+}
+
+func (s *Server) initThumbnailCache() {
+	notes, err := s.ds.GetAllDetectedSpecies()
+	if err != nil {
+		s.Echo.Logger.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+
+	for _, note := range notes {
+		wg.Add(1)
+
+		go func(note string) {
+			defer wg.Done()
+			thumbnail(note)
+		}(note.ScientificName)
+	}
+
+	wg.Wait()
 }
 
 // initRoutes initializes the routes for the server.
@@ -82,6 +103,9 @@ func (s *Server) initRoutes() {
 	s.Echo.Add("DELETE", "/note", s.deleteNoteHandler)
 
 	s.Echo.POST("/update-settings", s.updateSettingsHandler)
+
+	// Initialize thumbnail cache
+	go s.initThumbnailCache()
 
 	// Specific handler for settings route
 	//s.Echo.GET("/settings", s.settingsHandler)
