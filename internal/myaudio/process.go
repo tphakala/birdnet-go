@@ -14,9 +14,9 @@ import (
 
 // processData processes the given audio data to detect bird species, logs the detected species
 // and optionally saves the audio clip if a bird species is detected above the configured threshold.
-func ProcessData(data []byte, bn *birdnet.BirdNET) error {
+func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time) error {
 	// get current time to track processing time
-	startTime := time.Now()
+	predictStart := time.Now()
 
 	// convert audio data to float32
 	sampleData, err := ConvertToFloat32(data, conf.BitDepth)
@@ -38,15 +38,11 @@ func ProcessData(data []byte, bn *birdnet.BirdNET) error {
 	}*/
 
 	// get elapsed time and log if enabled
-	elapsedTime := logProcessingTime(startTime)
+	elapsedTime := logProcessingTime(predictStart)
 
 	// Create a Results message to be sent through queue to processor
 	resultsMessage := queue.Results{
-		// Start time is the time from which point capture audio is started, because of delay
-		// caused by BirdNET analysis etc. we need to go back in time for some amount to start
-		// capture before bird call begins (at least that is the idea, not sure if it is always
-		// working as intended)
-		StartTime:   startTime.Add(-5000 * time.Millisecond),
+		StartTime:   startTime,
 		ElapsedTime: elapsedTime,
 		PCMdata:     data,
 		Results:     results,
