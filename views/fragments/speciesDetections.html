@@ -44,7 +44,8 @@
           <!-- Spectrogram Image  -->
           <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click"
           hx-push-url="true">
-          <img loading="lazy" width="400" src="{{.Spectrogram}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md"></a>
+          <img loading="lazy" width="400" src="/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md"></a>
+
           <!-- Audio player -->
           <audio controls class="audio-control" preload="none">
             <source src="{{.ClipName}}" type="audio/wav">
