@@ -24,13 +24,29 @@ LABELS_ZIP := internal/birdnet/labels.zip
 # Default action
 all: $(LABELS_ZIP) build
 
+# Check required tools: go, unzip, git
+check-tools:
+	@which go >/dev/null || { echo "go not found. Please download Go 1.22 or newer from https://go.dev/dl/ and follow the installation instructions."; exit 1; }
+	@which unzip >/dev/null || { sudo apt install -y unzip; }
+	@which git >/dev/null || { sudo apt install -y git; }
+
+# Check and clone TensorFlow if not exists
+check-tensorflow:
+	@if [ ! -f "$(HOME)/src/tensorflow/tensorflow/lite/c/c_api.h" ]; then \
+		echo "TensorFlow Lite C API header not found. Cloning TensorFlow source..."; \
+		mkdir -p $(HOME)/src; \
+		git clone --branch v2.14.0 --depth 1 https://github.com/tensorflow/tensorflow.git $(HOME)/src/tensorflow; \
+	else \
+		echo "TensorFlow Lite C API header exists."; \
+	fi
+
 # labels.zip depends on all files in the labels directory
 $(LABELS_ZIP): $(LABELS_FILES)
 	@echo "Creating or updating labels.zip from contents of internal/birdnet/labels/*"
 	@cd internal/birdnet/labels && zip -j $(CURDIR)/$(LABELS_ZIP) *
 
 # Default build for local development
-build:
+build: check-tensorflow
 	$(CGO_FLAGS) go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
 # Build for Linux amd64
