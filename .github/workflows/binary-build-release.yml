@@ -38,7 +38,7 @@ jobs:
       uses: wangyoucao577/go-release-action@v1
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        pre_command: "apt update && apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu mingw-w64-tools gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 unzip"
+        pre_command: "apt update && apt install -y sudo gcc-aarch64-linux-gnu g++-aarch64-linux-gnu mingw-w64-tools gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 unzip"
         build_command: "make"
         build_flags: ${{ matrix.make-target }}
         extra_files: ${{ matrix.tflite-lib }}
