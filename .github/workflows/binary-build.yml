@@ -82,12 +82,22 @@ jobs:
     - name: Set Execute Permission
       if: startsWith(matrix.platform, 'linux')
       run: chmod +x bin/birdnet-go
-    
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        name: birdnet-go_${{ matrix.platform }}
-        path: |
-           bin/birdnet-go${{ matrix.binary-suffix }}
-           tflite_c/libtensorflowlite_c.so
-        retention-days: 30
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./bin/birdnet-go${{ matrix.binary-suffix }}
+        asset_name: birdnet-go-${{ matrix.platform }}${{ matrix.binary-suffix }}
+        asset_content_type: application/octet-stream
+
+#    - name: Upload artifact
+#      uses: actions/upload-artifact@v4
+#      with:
+#        name: birdnet-go_${{ matrix.platform }}
+#        path: |
+#           bin/birdnet-go${{ matrix.binary-suffix }}
+#           tflite_c/libtensorflowlite_c.so
+#        retention-days: 30
