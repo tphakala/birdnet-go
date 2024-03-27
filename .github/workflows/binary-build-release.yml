@@ -34,22 +34,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: ${{ matrix.go-version }}
-        check-latest: true
-
-    - name: Install dependencies for Windows build
-      if: matrix.platform == 'windows_amd64'
-      run: |
-        sudo apt update && sudo apt install -y mingw-w64-tools gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 unzip
-
-    - name: Install dependencies for Linux arm64 build
-      if: matrix.platform == 'linux_arm64'
-      run: |
-        sudo apt update && sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu unzip
-
     - name: Build and release BirdNET-Go
       uses: wangyoucao577/go-release-action@v1
       with:
