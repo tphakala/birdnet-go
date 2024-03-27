@@ -1,0 +1,60 @@
+name: Build Binaries for BirdNET-Go
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows_amd64
+            go-version: '1.22'
+            make-target: windows
+            binary-suffix: .exe
+            tflite-lib: tflite_c_v2.14.0_windows_amd64.zip
+          - platform: linux_amd64
+            go-version: '1.22'
+            make-target: linux_amd64
+            binary-suffix: ''
+            tflite-lib: tflite_c_v2.14.0_linux_amd64.tar.gz
+          - platform: linux_arm64
+            go-version: '1.22'
+            make-target: linux_arm64
+            binary-suffix: ''
+            tflite-lib: tflite_c_v2.14.0_linux_arm64.tar.gz
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+        check-latest: true
+
+    - name: Install dependencies for Windows build
+      if: matrix.platform == 'windows_amd64'
+      run: |
+        sudo apt update && sudo apt install -y mingw-w64-tools gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 unzip
+
+    - name: Install dependencies for Linux arm64 build
+      if: matrix.platform == 'linux_arm64'
+      run: |
+        sudo apt update && sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu unzip
+
+    - name: Build and release BirdNET-Go
+      uses: wangyoucao577/go-release-action@v1
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        pre_command: "sudo apt update && sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu mingw-w64-tools gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 unzip"
+        build_command: "make"
+        build_flags: ${{ matrix.make-target }}
+        extra_files: ${{ matrix.tflite-lib }}
