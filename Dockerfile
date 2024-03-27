@@ -11,6 +11,7 @@ ARG TARGETPLATFORM
 RUN apt-get update && apt-get install -y \
     curl \
     git \
+    sudo \
     zip \
     && rm -rf /var/lib/apt/lists/*
 
@@ -21,7 +22,7 @@ RUN PLATFORM='unknown'; \
         "linux/arm64") PLATFORM='linux_arm64' ;; \
         *) echo "Unsupported platform: '${TARGETPLATFORM}'" && exit 1 ;; \
     esac; \
- # Download and configure precompiled TensorFlow Lite C library for the determined platform
+# Download and configure precompiled TensorFlow Lite C library for the determined platform
     curl -L \
     "https://github.com/tphakala/tflite_c/releases/download/${TENSORFLOW_VERSION}/tflite_c_${TENSORFLOW_VERSION}_${PLATFORM}.tar.gz" | \
     tar -C "/usr/local/lib" -xz \
