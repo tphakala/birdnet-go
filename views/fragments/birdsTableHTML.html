@@ -24,6 +24,8 @@
           hx-trigger="click"
           hx-push-url="true">{{title .Note.CommonName}}
         </a>
+        <!-- Bird thumbnail  -->
+        <img loading="lazy" width="40" src="{{thumbnail .ScientificName}}" alt="Bird Image" class="h-auto rounded-md">
       </th>
 
       <td class="py-1 px-3">
