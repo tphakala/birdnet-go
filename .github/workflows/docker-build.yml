@@ -8,7 +8,8 @@ on:
 
 jobs:
   push-docker-image:
-    runs-on: ubuntu-latest
+    # Ubuntu-20.04 required until this is fixed: https://github.com/actions/runner-images/discussions/9074
+    runs-on: ubuntu-20.04
     steps:
       - name: 'Checkout GitHub Action'
         uses: actions/checkout@v4.1.1
@@ -35,7 +36,32 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: 'Build and Push Inventory Image'
+      - name: 'Build image for testing'
+        uses: docker/build-push-action@v5.1.0
+        with:
+          tags: ghcr.io/${{ env.REPO }}:test
+          load: true
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
+
+      - name: 'Install alsa dummy module for testing built image'
+        run: |
+          sudo apt-get install linux-modules-extra-$(uname -r)
+          sudo modprobe snd-dummy
+
+      - name: 'Test built image'
+        run: |
+          docker run --rm -p 8080:8080 --device /dev/snd --env ALSA_CARD=0 ghcr.io/${{ env.REPO }}:test & p1=$!
+          if ! wget --retry-connrefused --waitretry=1 --tries=5 -q -O /dev/null http://localhost:8080; then
+            echo "Failed to reach container after 5 sec"
+            kill "$p1"
+            exit 1
+          else
+            echo "Container responded to request"
+            kill "$p1"
+          fi
+
+      - name: 'Build and push images for all platforms'
         uses: docker/build-push-action@v5.1.0
         with:
           push: true
