@@ -107,6 +107,9 @@ macos_arm: TFLITE_LIB=tflite_c_$(TFLITE_VERSION)_$(GOOS)_$(GOARCH).tar.gz
 macos_arm: $(LABELS_ZIP) check-tools check-tensorflow download-tflite install-tflite build
 	$(CGO_FLAGS) go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
+dev_server: 
+	$(CGO_FLAGS) air realtime
+
 clean:
 	go clean
 	rm -rf $(BINARY_DIR)/* tflite_c *.tar.gz *.zip

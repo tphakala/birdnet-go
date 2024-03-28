@@ -1,0 +1,14 @@
+{
+	"name": "Go Build Environment",
+	"dockerFile": "../Dockerfile",
+	"build": {
+		"context": "..",
+		"target": "buildenv"
+	},
+	"runArgs": ["--device=/dev/snd"],
+	"containerEnv": {
+		"ALSA_CARD": "0"
+	},
+	"postCreateCommand": "apt-get update && apt-get install -y ca-certificates libasound2 ffmpeg sox && apt-get clean && go install github.com/cosmtrek/air@latest",
+	"postAttachCommand": "make dev_server"
+}
