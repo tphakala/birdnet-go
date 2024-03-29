@@ -2,7 +2,7 @@ name: Build Binaries for BirdNET-Go release
 
 on:
   release:
-    types: [created]
+    types: [created, edited]
 
 permissions:
   contents: write
