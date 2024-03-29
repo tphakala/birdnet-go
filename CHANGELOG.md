@@ -19,6 +19,17 @@ All notable changes to this project will be documented in this file.
 - *(capture)* Increase audio capture length from 9 to 12 seconds
 - *(rtsp)* Wait before restarting FFmpeg and update parent process on exit to prevent zombies
 
+### 💄 Enhancement
+
+- *(database)* Switched sqlite journalling to MEMORY mode and added database optimize on closing
+- *(workflow)* Update GitHub Actions workflow to build and push Docker image to GHCR
+- *(workflow)* Update Docker actions versions
+- *(workflow)* Support multiplatform build with github actions
+- *(docker)* Add ffmpeg to container image
+- *(labels)* Add Greek (el) translations by @hoover67
+- *(ui)* Improve spectrogram generation to enable lazy loading of images
+- *(make)* Improve make file
+
 ### 🚜 Refactor
 
 - Moved middleware code to new file
@@ -38,32 +49,22 @@ All notable changes to this project will be documented in this file.
 ### 📚 Documentation
 
 - *(capture)* Add documentation to audiobuffer.go
+- Add git-cliff for changelog management
 
 ### 🎨 Styling
 
 - Remove old commented code
 - *(docker)* Removed commented out code
 
-### ⚙️ Miscellaneous Tasks
-
-- *(assets)* Upgrade htmx to 1.9.11
-
-### Build
+### 🏗️ Building
 
 - *(deps)* Add zip to build image during build
 - *(deps)* Bump gorm.io/driver/mysql from 1.5.4 to 1.5.6
 - *(deps)* Bump gorm.io/gorm from 1.25.7 to 1.25.8
 
-### Enh
+### ⚙️ Miscellaneous Tasks
 
-- *(database)* Switched sqlite journalling to MEMORY mode and added database optimize on closing
-- *(workflow)* Update GitHub Actions workflow to build and push Docker image to GHCR
-- *(workflow)* Update Docker actions versions
-- *(workflow)* Support multiplatform build with github actions
-- *(docker)* Add ffmpeg to container image
-- *(labels)* Add Greek (el) translations by @hoover67
-- *(ui)* Improve spectrogram generation to enable lazy loading of images
-- *(make)* Improve make file
+- *(assets)* Upgrade htmx to 1.9.11
 
 ### Github
 
