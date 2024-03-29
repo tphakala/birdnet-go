@@ -1,0 +1,37 @@
+name: Build Binaries for BirdNET-Go release
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          - goarch: arm64
+            goos: windows
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+  
+    - name: Build and attach to Release
+      uses: tphakala/go-release-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        goos: ${{ matrix.goos }}
+        goarch: ${{ matrix.goarch }}
+        goversion: "https://dl.google.com/go/go1.22.1.linux-amd64.tar.gz"
+        md5sum: false
+        sha256sum: false
+        compress_assets: auto
+        build_command: make ${{ matrix.goos }}_${{ matrix.goarch }}
+        extra_files: libtensorflowlite_c.so
