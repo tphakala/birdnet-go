@@ -43,20 +43,20 @@ download-tflite:
 	@if [ ! -f "/usr/lib/libtensorflowlite_c.so" ]; then \
 		echo "TensorFlow Lite C library not found. Downloading..."; \
 		wget -q https://github.com/tphakala/tflite_c/releases/download/$(TFLITE_VERSION)/$(TFLITE_LIB) -P ./; \
-		if [ $$(suffix $(TFLITE_LIB)) = .zip ]; then \
+		if [ $(suffix $(TFLITE_LIB)) = .zip ]; then \
 			unzip -o $(TFLITE_LIB) -d .; \
 		else \
 			tar -xzf $(TFLITE_LIB) -C .; \
 		fi; \
 		rm -f $(TFLITE_LIB); \
-		install-tflite; \
+		$(MAKE) install-tflite; \
 	else \
 		echo "TensorFlow Lite C library already exists."; \
 	fi
 
 # Install TensorFlow Lite C library
 install-tflite:
-	@sudo cp libtensorflowlite_c.so $(INSTALL_PATH)
+	@sudo cp libtensorflowlite_c.so /usr/lib
 	@sudo ldconfig
 
 # labels.zip depends on all files in the labels directory
@@ -65,13 +65,11 @@ $(LABELS_ZIP): $(LABELS_FILES)
 	@cd internal/birdnet/labels && zip -j $(CURDIR)/$(LABELS_ZIP) *
 
 # Build for Linux amd64
-linux_amd64: INSTALL_PATH=/usr/lib
 linux_amd64: TFLITE_LIB=tflite_c_$(TFLITE_VERSION)_linux_amd64.tar.gz
 linux_amd64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite 
 	GOOS=linux GOARCH=amd64 $(CGO_FLAGS) go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
 # Build for Linux arm64, with cross-compilation setup if on amd64
-linux_arm64: INSTALL_PATH=/usr/lib
 linux_arm64: TFLITE_LIB=tflite_c_$(TFLITE_VERSION)_linux_arm64.tar.gz
 linux_arm64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite 
 ifeq ($(UNAME_M),x86_64)
@@ -83,7 +81,6 @@ else
 endif
 
 # Windows build
-windows_amd64: INSTALL_PATH=/usr/lib
 windows_amd64: TFLITE_LIB=tflite_c_$(TFLITE_VERSION)_windows_amd64.zip
 windows_amd64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite
 	$(CGO_FLAGS) CC=x86_64-w64-mingw32-gcc go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME).exe
