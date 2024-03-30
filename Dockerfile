@@ -1,7 +1,7 @@
 # Use ARGs to define default build-time variables for TensorFlow version and target platform
 ARG TENSORFLOW_VERSION=v2.14.0
 
-FROM golang:1.22.1-bookworm as build
+FROM golang:1.22.1-bookworm as buildenv
 
 # Pass in ARGs after FROM to use them in build stage
 ARG TENSORFLOW_VERSION
@@ -32,6 +32,8 @@ WORKDIR /root/src
 
 # Download TensorFlow headers
 RUN git clone --branch ${TENSORFLOW_VERSION} --depth 1 https://github.com/tensorflow/tensorflow.git
+
+FROM buildenv as build
 
 # Compile BirdNET-Go
 COPY . BirdNET-Go
