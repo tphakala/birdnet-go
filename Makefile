@@ -100,6 +100,9 @@ darwin_arm64: TFLITE_LIB_ARCH=tflite_c_$(TFLITE_VERSION)_darwin_arm64.tar.gz
 darwin_arm64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite install-tflite build
 	$(CGO_FLAGS) go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
+dev_server: 
+	$(CGO_FLAGS) air realtime
+
 clean:
 	go clean
 	rm -rf $(BINARY_DIR)/* tflite_c *.tar.gz *.zip
