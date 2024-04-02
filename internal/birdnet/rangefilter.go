@@ -30,8 +30,6 @@ func (a ByScore) Len() int           { return len(a) }
 func (a ByScore) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByScore) Less(i, j int) bool { return a[i].Score > a[j].Score } // For descending order
 
-const locationFilterThreshold = 0.01
-
 // GetProbableSpecies filters and sorts bird species based on their scores.
 // It also updates the scores for species that have custom actions defined in the speciesConfigCSV.
 func (bn *BirdNET) GetProbableSpecies() []string {
@@ -46,10 +44,19 @@ func (bn *BirdNET) GetProbableSpecies() []string {
 	// Apply prediction filter based on the context
 	filters, _ := bn.predictFilter()
 
+	// check bn.Settings.BirdNET.LocationFilterThreshold for valid value
+	if bn.Settings.BirdNET.LocationFilterThreshold < 0 ||
+		bn.Settings.BirdNET.LocationFilterThreshold > 1 {
+		fmt.Println("Invalid LocationFilterThreshold value, using default value of 0.01")
+		bn.Settings.BirdNET.LocationFilterThreshold = 0.01
+	}
+
 	// Collect species scores above a certain threshold
 	var speciesScores []SpeciesScore
 	for _, filter := range filters {
-		if filter.Score >= locationFilterThreshold {
+		if filter.Score >= bn.Settings.BirdNET.LocationFilterThreshold {
+			// DEBUG print species which pass location threshold filter
+			//fmt.Println("Filter: ", filter.Label, " Score: ", filter.Score)
 			speciesScores = append(speciesScores, SpeciesScore{Score: float64(filter.Score), Label: filter.Label})
 		}
 	}
