@@ -213,8 +213,7 @@ birdnet:
   locale: en				# language to use for labels
   latitude: 00.000			# latitude of recording location for prediction filtering
   longitude: 00.000			# longitude of recording location for prediction filtering
-  locationfilterthreshold: 0.01 # rangefilter species occurrence threshold, lower value
-  							# increases number of species reported
+  locationfilterthreshold: 0.01 # rangefilter species occurrence threshold
 
 # Realtime processing settings
 realtime:
