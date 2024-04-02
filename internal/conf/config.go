@@ -20,13 +20,14 @@ type Settings struct {
 	}
 
 	BirdNET struct {
-		Sensitivity float64 // birdnet analysis sigmoid sensitivity
-		Threshold   float64 // threshold for prediction confidence to report
-		Overlap     float64 // birdnet analysis overlap between chunks
-		Longitude   float64 // longitude of recording location for prediction filtering
-		Latitude    float64 // latitude of recording location for prediction filtering
-		Threads     int     // number of CPU threads to use for analysis
-		Locale      string  // language to use for labels
+		Sensitivity             float64 // birdnet analysis sigmoid sensitivity
+		Threshold               float64 // threshold for prediction confidence to report
+		Overlap                 float64 // birdnet analysis overlap between chunks
+		Longitude               float64 // longitude of recording location for prediction filtering
+		Latitude                float64 // latitude of recording location for prediction filtering
+		Threads                 int     // number of CPU threads to use for analysis
+		Locale                  string  // language to use for labels
+		LocationFilterThreshold float32 // threshold for prediction confidence to report
 	}
 
 	Input struct {
@@ -205,13 +206,15 @@ main:
 
 # BirdNET model specific settings
 birdnet:
-  sensitivity: 1.0		# sigmoid sensitivity, 0.1 to 1.5
-  threshold: 0.8		# threshold for prediction confidence to report, 0.0 to 1.0
-  overlap: 0.0			# overlap between chunks, 0.0 to 2.9
-  latitude: 00.000		# latitude of recording location for prediction filtering
-  longitude: 00.000		# longitude of recording location for prediction filtering
-  threads: 0			# 0 to use all available CPU threads
-  locale: en			# language to use for labels
+  sensitivity: 1.0			# sigmoid sensitivity, 0.1 to 1.5
+  threshold: 0.8			# threshold for prediction confidence to report, 0.0 to 1.0
+  overlap: 0.0				# overlap between chunks, 0.0 to 2.9
+  threads: 0				# 0 to use all available CPU threads
+  locale: en				# language to use for labels
+  latitude: 00.000			# latitude of recording location for prediction filtering
+  longitude: 00.000			# longitude of recording location for prediction filtering
+  locationfilterthreshold: 0.01 # rangefilter species occurrence threshold, lower value
+  							# increases number of species reported
 
 # Realtime processing settings
 realtime:
