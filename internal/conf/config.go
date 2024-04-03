@@ -69,6 +69,14 @@ type Settings struct {
 			Url       string // RTSP stream URL
 			Transport string // RTSP Transport Protocol
 		}
+
+		MQTT struct {
+			Enabled  bool   // true to enable MQTT
+			Broker   string // MQTT (tcp://host:port)
+			Topic    string // MQTT topic
+			Username string // MQTT username
+			Password string // MQTT password
+		}
 	}
 
 	WebServer struct {
@@ -237,6 +245,13 @@ realtime:
   rtsp:
     url:				# RTSP stream URL
     transport: tcp		# RTSP Transport Protocol
+
+  mqtt:
+    enabled: false					# true to enable MQTT
+    broker: tcp://localhost:1883	# MQTT (tcp://host:port)
+    topic: birdnet					# MQTT topic
+    username: birdnet				# MQTT username
+    password: secret       			# MQTT password
 
   privacyfilter:
     enabled: true

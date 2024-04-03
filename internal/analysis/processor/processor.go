@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observation"
 )
@@ -21,6 +22,7 @@ type Processor struct {
 	Ds                 datastore.Interface
 	Bn                 *birdnet.BirdNET
 	BwClient           *birdweather.BwClient
+	MqttClient         *mqtt.Client
 	EventTracker       *EventTracker
 	DogBarkFilter      DogBarkFilter
 	SpeciesConfig      SpeciesConfig
@@ -85,6 +87,19 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, a
 	// Initialize BirdWeather client if enabled in settings.
 	if settings.Realtime.Birdweather.Enabled {
 		p.BwClient = birdweather.New(settings)
+	}
+
+	if settings.Realtime.MQTT.Enabled {
+		p.MqttClient = mqtt.New(settings)
+
+		// Connect to the MQTT broker in a separate goroutine to avoid blocking the main thread.
+		go func() {
+			log.Println("Connecting to MQTT broker")
+			err := p.MqttClient.Connect()
+			if err != nil {
+				log.Println("Failed to connect to MQTT broker")
+			}
+		}()
 	}
 
 	// Initialize included species list
