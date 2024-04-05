@@ -89,6 +89,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, a
 		p.BwClient = birdweather.New(settings)
 	}
 
+	// Initialize MQTT client if enabled in settings.
 	if settings.Realtime.MQTT.Enabled {
 		p.MqttClient = mqtt.New(settings)
 

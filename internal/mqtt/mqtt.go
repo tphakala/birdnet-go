@@ -14,13 +14,10 @@ type Client struct {
 	internalClient mqtt.Client
 }
 
-func New(settings *conf.Settings) (*Client, error) {
-   if settings == nil || settings.Realtime.MQTT.Broker == "" {
-       return nil, errors.New("invalid MQTT settings provided")
-   }
+func New(settings *conf.Settings) *Client {
 	return &Client{
 		Settings: settings,
-	}, nil
+	}
 }
 
 // Connect to MQTT broker
@@ -41,8 +38,8 @@ func (c *Client) Connect() error {
 
 	// It will wait infinitely until the connection is established
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
-	   log.Printf("Failed to connect to MQTT broker: %s", token.Error())
-	   return errors.New("failed to connect to MQTT broker")
+		log.Printf("Failed to connect to MQTT broker: %s", token.Error())
+		return errors.New("failed to connect to MQTT broker")
 	}
 
 	return nil

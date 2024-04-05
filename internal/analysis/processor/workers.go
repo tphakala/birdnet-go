@@ -85,6 +85,7 @@ func (p *Processor) getDefaultActions(detection Detections) []Action {
 	if p.Settings.Realtime.Log.Enabled {
 		actions = append(actions, LogAction{Settings: p.Settings, EventTracker: p.EventTracker, Note: detection.Note})
 	}
+
 	if p.Settings.Output.SQLite.Enabled || p.Settings.Output.MySQL.Enabled {
 		actions = append(actions, DatabaseAction{
 			Settings:     p.Settings,
@@ -94,19 +95,25 @@ func (p *Processor) getDefaultActions(detection Detections) []Action {
 			AudioBuffer:  p.AudioBuffer,
 			Ds:           p.Ds})
 	}
+
 	/*	if p.Settings.Realtime.AudioExport.Enabled {
 		actions = append(actions, SaveAudioAction{Settings: p.Settings, EventTracker: p.EventTracker, pcmData: detection.pcmDataExt, ClipName: detection.Note.ClipName})
 	}*/
+
+	// Add BirdWeatherAction if enabled
 	if p.Settings.Realtime.Birdweather.Enabled {
 		actions = append(actions, BirdWeatherAction{Settings: p.Settings, EventTracker: p.EventTracker, BwClient: p.BwClient, Note: detection.Note, pcmData: detection.pcmData3s})
 	}
+
+	// Add MQTT action if enabled
 	if p.Settings.Realtime.MQTT.Enabled {
-	   if p.MqttClient == nil {
-	       log.Println("MQTT client is not initialized, skipping MQTT action")
-	       return actions
-	   }
+		if p.MqttClient == nil {
+			log.Println("MQTT client is not initialized, skipping MQTT action")
+			return actions
+		}
 		actions = append(actions, MqttAction{Settings: p.Settings, MqttClient: p.MqttClient, EventTracker: p.EventTracker, Note: detection.Note})
 	}
+
 	// Check if UpdateRangeFilterAction needs to be executed for the day
 	today := time.Now().Truncate(24 * time.Hour) // Current date with time set to midnight
 	if p.SpeciesListUpdated.Before(today) {
