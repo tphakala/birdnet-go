@@ -151,6 +151,9 @@ func (a BirdWeatherAction) Execute(data interface{}) error {
 
 // Execute sends the note to the MQTT broker
 func (a MqttAction) Execute(data interface{}) error {
+    if a.Settings.Realtime.MQTT.Topic == "" {
+        return errors.New("MQTT topic is not specified")
+    }
 	noteJson, err := json.Marshal(a.Note)
 	if err != nil {
 		log.Printf("error marshalling note to JSON: %s\n", err)
