@@ -38,7 +38,8 @@ func (c *Client) Connect() error {
 
 	// It will wait infinitely until the connection is established
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		return token.Error()
+	   log.Printf("Failed to connect to MQTT broker: %s", token.Error())
+	   return errors.New("failed to connect to MQTT broker")
 	}
 
 	return nil
