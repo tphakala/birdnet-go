@@ -4,6 +4,7 @@ package processor
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -150,32 +151,20 @@ func (a BirdWeatherAction) Execute(data interface{}) error {
 }
 
 // Execute sends the note to the MQTT broker
-import (
-"errors"
-  "encoding/json"
-  "fmt"
-  "log"
-  "strings"
-  "time"
-
-  "github.com/tphakala/birdnet-go/internal/birdnet"
-  "github.com/tphakala/birdnet-go/internal/birdweather"
-  "github.com/tphakala/birdnet-go/internal/conf"
-  "github.com/tphakala/birdnet-go/internal/datastore"
-  "github.com/tphakala/birdnet-go/internal/mqtt"
-  "github.com/tphakala/birdnet-go/internal/myaudio"
-  "github.com/tphakala/birdnet-go/internal/observation"
-)
 func (a MqttAction) Execute(data interface{}) error {
-    if a.Settings.Realtime.MQTT.Topic == "" {
-        return errors.New("MQTT topic is not specified")
-    }
+	// Validate MQTT settings
+	if a.Settings.Realtime.MQTT.Topic == "" {
+		return errors.New("MQTT topic is not specified")
+	}
+
+	// Create a JSON representation of the note
 	noteJson, err := json.Marshal(a.Note)
 	if err != nil {
 		log.Printf("error marshalling note to JSON: %s\n", err)
 		return err
 	}
 
+	// Publish the note to the MQTT broker
 	err = a.MqttClient.Publish(a.Settings.Realtime.MQTT.Topic, string(noteJson))
 	if err != nil {
 		return err
