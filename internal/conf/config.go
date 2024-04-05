@@ -77,6 +77,21 @@ type Settings struct {
 			Username string // MQTT username
 			Password string // MQTT password
 		}
+func Load() (*Settings, error) {
+    settings := &Settings{}
+    if err := initViper(); err != nil {
+        return nil, fmt.Errorf("error initializing viper: %w", err)
+    }
+    if err := viper.Unmarshal(settings); err != nil {
+        return nil, fmt.Errorf("error unmarshaling config into struct: %w", err)
+    }
+   if settings.Realtime.MQTT.Enabled {
+       if settings.Realtime.MQTT.Broker == "" {
+           return nil, errors.New("MQTT broker URL is required when MQTT is enabled")
+       }
+   }
+    return settings, nil
+}
 	}
 
 	WebServer struct {
