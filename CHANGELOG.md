@@ -2,7 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [unreleased]
+## [0.5.1] - 2024-04-05
+
+### 🚀 Features
+
+- MQTT publishing support, contribution by @janvrska
+- Location filter threshold is now configurable value under BirdNET node
+
+### 🏗️ Building
+
+- *(deps)* Bump gorm.io/gorm from 1.25.8 to 1.25.9
+
+## [0.5.0] - 2024-03-30
 
 ### 🚀 Features
 
@@ -50,6 +61,7 @@ All notable changes to this project will be documented in this file.
 
 - *(capture)* Add documentation to audiobuffer.go
 - Add git-cliff for changelog management
+- *(changelog)* Update git cliff config
 
 ### 🎨 Styling
 
@@ -61,6 +73,9 @@ All notable changes to this project will be documented in this file.
 - *(deps)* Add zip to build image during build
 - *(deps)* Bump gorm.io/driver/mysql from 1.5.4 to 1.5.6
 - *(deps)* Bump gorm.io/gorm from 1.25.7 to 1.25.8
+- *(makefile)* Update makefile
+- *(makefile)* Fix tensorflow lite lib install step
+- *(makefile)* Fix tflite install
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -70,6 +85,10 @@ All notable changes to this project will be documented in this file.
 
 - *(workflow)* Add windows build workflow
 - *(workflow)* Updated windows build workflow
+- *(workflow)* Add go lint workflow
+- *(workflow)* Remove obsole workflows
+- *(workflow)* Add build and attach to release workflow
+- *(workflow)* Update release-build.yml to trigger workflow on edited releases
 
 ## [0.3.0] - 2023-11-04
 
