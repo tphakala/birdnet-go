@@ -14,10 +14,13 @@ type Client struct {
 	internalClient mqtt.Client
 }
 
-func New(settings *conf.Settings) *Client {
+func New(settings *conf.Settings) (*Client, error) {
+   if settings == nil || settings.Realtime.MQTT.Broker == "" {
+       return nil, errors.New("invalid MQTT settings provided")
+   }
 	return &Client{
 		Settings: settings,
-	}
+	}, nil
 }
 
 // Connect to MQTT broker
