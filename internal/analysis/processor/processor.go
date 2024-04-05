@@ -97,7 +97,9 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, a
 			log.Println("Connecting to MQTT broker")
 			err := p.MqttClient.Connect()
 			if err != nil {
-				log.Println("Failed to connect to MQTT broker")
+				log.Printf("Failed to connect to MQTT broker: %s", err)
+			} else {
+				log.Println("Successfully connected to MQTT broker")
 			}
 		}()
 	}
