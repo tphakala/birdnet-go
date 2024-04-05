@@ -64,9 +64,9 @@ func (c *Client) Publish(topic string, payload string) error {
 }
 
 func (c *Client) onConnect(client mqtt.Client) {
-	log.Println("Connected to MQTT broker")
+	log.Printf("Connected to MQTT broker: %s", c.Settings.Realtime.MQTT.Broker)
 }
 
 func (c *Client) onConnectionLost(client mqtt.Client, err error) {
-	log.Println("Connection to MQTT broker lost")
+	log.Printf("Connection to MQTT broker lost: %s, error: %v", c.Settings.Realtime.MQTT.Broker, err)
 }
