@@ -33,138 +33,14 @@ skills and a keen interest in contributing to a nature-focused project, I'd love
 
 <img src="doc/BirdNET-Go-dashboard.webp" />
 
-## Executable Distributions
+## Installation
 
-Ready to run binaries can be found from releases section https://github.com/tphakala/BirdNET-Go/releases/
-Archives also contains libtensorflowlite_c library.
-
-### Docker
-
-```
-docker run -ti \
-  -p 8080:8080 \
-  --env ALSA_CARD=<index/name>
-  --device /dev/snd \
-  -v /path/to/config:/config \
-  -v /path/to/data:/data \
-  ghcr.io/tphakala/birdnet-go:latest
-```
-
-| Parameter | Function |
-| :----: | --- |
-| `-p 8080` | BirdNET-GO webserver port. |
-| `--env ALSA_CARD=<index/name>` | ALSA capture device to use. Find index/name of desired device by executing `arecord -l` on the host. [More info.](#deciding-alsa-card)|
-| `--device /dev/snd` | Mounts in audio devices to the container. |
-| `-v /config` | Config directory in the container. |
-| `-v /data` | Data such as database and recordings. |
+For detailed installation instructions, see the [installation documentation](doc/installation.md).
 
 
-#### Deciding ALSA_CARD value
+## Building
+For instructions on how to build the project, see the [building documentation](doc/building.md).
 
-Within the BirdNET-Go container, knowledge of the designated microphone is absent. Consequently, it is necessary to specify the appropriate ALSA_CARD environment variable. Determining the correct value for this variable involves the following steps on the host computer:
-1. Open a terminal and execute the command `arecord -l` to list all available capture devices.
-
-```
-> arecord -l
-**** List of CAPTURE Hardware Devices ****
-card 0: PCH [Generic Analog], device 0: Analog [Analog]
-  Subdevices: 1/1
-  Subdevice #0: subdevice #0
-card 0: PCH [Generic Analog], device 2: Alt Analog [Alt Analog]
-  Subdevices: 1/1
-  Subdevice #0: subdevice #0
-card 1: Microphone [USB Microphone], device 0: USB Audio [USB Audio]
-  Subdevices: 1/1
-  Subdevice #0: subdevice #0
-```
-2. Identify the desired capture device. In the example above, cards 0 and 1 are available.
-3. Specify the ALSA_CARD value when running the BirdNET-Go container. For instance, if the USB Microphone device is chosen, set `ALSA_CARD` to either `ALSA_CARD=1` or `ALSA_CARD=Microphone`.
-
-## Compiling for Linux
-
-### Install TensorFlow Lite C library and setup headers for compile process
-
-Download precompiled TensorFlow Lite C library for Linux from https://github.com/tphakala/tflite_c/releases/tag/v2.14.0
-
-Copy libtensorflowlite_c.so to /usr/local/lib and run ```ldconfig```
-
-```bash
-sudo cp libtensorflowlite_c.so /usr/local/lib
-sudo ldconfig
-```
-
-Clone tensorflow repository, this is required for header files to be present while compiling with CGO
-
-```bash
-mkdir ~/src
-cd ~/src
-git clone https://github.com/tensorflow/tensorflow.git
-```
-
-Checkout TensorFlow v2.14.0 release
-
-```bash
-cd tensorflow
-git checkout tags/v2.14.0
-```
-
-### Building BirdNET-Go
-
-Clone BirdNET-Go repository
-
-```bash
-git clone https://github.com/tphakala/BirdNET-Go.git
-```
-
-Build BirdNET-Go by make, compiled binary will be placed in go-birdnet/bin directory
-
-```bash
-cd BirdNET-Go
-make
-```
-
-## Compiling for Windows
-
-Windows build is cross compiled on Linux, for this you need MinGW-w64 on your build system
-
-```bash
-  sudo apt install mingw-w64-tools gcc-mingw-w64-x86-64 gcc-mingw-w64-i686
-```
-
-Download precompiled TensorFlow Lite C library for Windows from https://github.com/tphakala/tflite_c/releases/tag/v2.14.0
-
-Copy **libtensorflowlite_c.dll** to /usr/x86_64-w64-mingw32/lib/
-
-```bash
-sudo cp libtensorflowlite_c.dll /usr/x86_64-w64-mingw32/lib/
-```
-
-Clone tensorflow repository, this is required for header files to be present while compiling with CGO
-
-```bash
-mkdir ~/src
-cd ~/src
-git clone https://github.com/tensorflow/tensorflow.git
-```
-
-### Cross compiling BirdNET-Go
-
-Clone BirdNET-Go repository
-
-```bash
-git clone https://github.com/tphakala/BirdNET-Go.git
-```
-
-Build BirdNET-Go by running make windows
-
-```bash
-cd BirdNET-Go
-make windows
-```
-
-Windows executable is in **bin/birdnet.exe**, copy this and **libtensorflowlite_c.so** to your Windows system, library file must be in PATH for birdnet.exe to run properly.
-
-Yes it is correct that you need **libtensorflowlite_c.dll** in /usr/x86_64-w64-mingw32/lib/ for compile process, and on Windows you need **libtensorflowlite_c.so** for runtime. This sounds backwards but this is how it works.
 
 ## Usage
 
