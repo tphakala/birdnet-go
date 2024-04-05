@@ -150,6 +150,22 @@ func (a BirdWeatherAction) Execute(data interface{}) error {
 }
 
 // Execute sends the note to the MQTT broker
+import (
+"errors"
+  "encoding/json"
+  "fmt"
+  "log"
+  "strings"
+  "time"
+
+  "github.com/tphakala/birdnet-go/internal/birdnet"
+  "github.com/tphakala/birdnet-go/internal/birdweather"
+  "github.com/tphakala/birdnet-go/internal/conf"
+  "github.com/tphakala/birdnet-go/internal/datastore"
+  "github.com/tphakala/birdnet-go/internal/mqtt"
+  "github.com/tphakala/birdnet-go/internal/myaudio"
+  "github.com/tphakala/birdnet-go/internal/observation"
+)
 func (a MqttAction) Execute(data interface{}) error {
     if a.Settings.Realtime.MQTT.Topic == "" {
         return errors.New("MQTT topic is not specified")
