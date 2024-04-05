@@ -18,7 +18,7 @@ To install Docker, follow the instructions in the [official installation guide](
 ### Running BirdNET-GO with Docker - Simple setup
 
 
-The command bellow will start a container with the latest version BirdNET-Go:
+The command below will start a container with the latest version BirdNET-Go:
 
 > docker run -ti -p 8080:8080 --device /dev/snd ghcr.io/tphakala/birdnet-go:latest
 
@@ -61,7 +61,7 @@ docker run -ti \
   --env TZ="Europe/Stockholm"
   --device /dev/snd \
   -v $HOME/BirdNET-Go-Volumes/config:/config \
-  -v $HOME/BirdNET-Go-Volumes/config:/data \
+  -v $HOME/BirdNET-Go-Volumes/data:/data \
   ghcr.io/tphakala/birdnet-go:latest
 ```
 
