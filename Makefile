@@ -66,6 +66,11 @@ $(LABELS_ZIP): $(LABELS_FILES)
 	@echo "Creating or updating labels.zip from contents of internal/birdnet/labels/*"
 	@cd internal/birdnet/labels && zip -j $(CURDIR)/$(LABELS_ZIP) *
 
+# Install dependencies for Linux amd64
+deps_linux_amd64: TFLITE_LIB_DIR="/usr/lib"
+deps_linux_amd64: TFLITE_LIB_ARCH=tflite_c_$(TFLITE_VERSION)_linux_amd64.tar.gz
+deps_linux_amd64: check-tools check-tensorflow download-tflite
+
 # Build for Linux amd64
 linux_amd64: TFLITE_LIB_DIR="/usr/lib"
 linux_amd64: TFLITE_LIB_ARCH=tflite_c_$(TFLITE_VERSION)_linux_amd64.tar.gz

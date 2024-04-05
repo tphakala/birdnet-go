@@ -10,6 +10,13 @@ permissions:
   # Optional: allow read access to pull request. Use with `only-new-issues` option.
   #pull-requests: read
 
+env:
+  CGO_ENABLED: '1'
+  CGO_CFLAGS : -I$(HOME)/src/tensorflow
+  LDFLAGS: -ldflags "-s -w"
+  GOOS: linux
+  GOARCH: amd64
+
 jobs:
   golangci:
     name: lint
@@ -20,6 +27,9 @@ jobs:
         with:
           go-version-file: 'go.mod'
       - run: go version
+
+      - name: Install dependencies
+        run: make deps_linux_amd64
           
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v4
