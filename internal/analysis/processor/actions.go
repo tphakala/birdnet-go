@@ -3,6 +3,7 @@
 package processor
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observation"
 )
@@ -48,6 +50,13 @@ type BirdWeatherAction struct {
 	Note         datastore.Note
 	pcmData      []byte
 	BwClient     *birdweather.BwClient
+	EventTracker *EventTracker
+}
+
+type MqttAction struct {
+	Settings     *conf.Settings
+	Note         datastore.Note
+	MqttClient   *mqtt.Client
 	EventTracker *EventTracker
 }
 
@@ -137,6 +146,41 @@ func (a BirdWeatherAction) Execute(data interface{}) error {
 		return nil
 	}
 	//log.Printf("BirdWeather Submit action throttled for species: %s", species)
+	return nil // return an error if the action fails
+}
+
+// Execute sends the note to the MQTT broker
+import (
+"errors"
+  "encoding/json"
+  "fmt"
+  "log"
+  "strings"
+  "time"
+
+  "github.com/tphakala/birdnet-go/internal/birdnet"
+  "github.com/tphakala/birdnet-go/internal/birdweather"
+  "github.com/tphakala/birdnet-go/internal/conf"
+  "github.com/tphakala/birdnet-go/internal/datastore"
+  "github.com/tphakala/birdnet-go/internal/mqtt"
+  "github.com/tphakala/birdnet-go/internal/myaudio"
+  "github.com/tphakala/birdnet-go/internal/observation"
+)
+func (a MqttAction) Execute(data interface{}) error {
+    if a.Settings.Realtime.MQTT.Topic == "" {
+        return errors.New("MQTT topic is not specified")
+    }
+	noteJson, err := json.Marshal(a.Note)
+	if err != nil {
+		log.Printf("error marshalling note to JSON: %s\n", err)
+		return err
+	}
+
+	err = a.MqttClient.Publish(a.Settings.Realtime.MQTT.Topic, string(noteJson))
+	if err != nil {
+		return err
+	}
+
 	return nil // return an error if the action fails
 }
 

@@ -69,6 +69,29 @@ type Settings struct {
 			Url       string // RTSP stream URL
 			Transport string // RTSP Transport Protocol
 		}
+
+		MQTT struct {
+			Enabled  bool   // true to enable MQTT
+			Broker   string // MQTT (tcp://host:port)
+			Topic    string // MQTT topic
+			Username string // MQTT username
+			Password string // MQTT password
+		}
+func Load() (*Settings, error) {
+    settings := &Settings{}
+    if err := initViper(); err != nil {
+        return nil, fmt.Errorf("error initializing viper: %w", err)
+    }
+    if err := viper.Unmarshal(settings); err != nil {
+        return nil, fmt.Errorf("error unmarshaling config into struct: %w", err)
+    }
+   if settings.Realtime.MQTT.Enabled {
+       if settings.Realtime.MQTT.Broker == "" {
+           return nil, errors.New("MQTT broker URL is required when MQTT is enabled")
+       }
+   }
+    return settings, nil
+}
 	}
 
 	WebServer struct {
@@ -237,6 +260,13 @@ realtime:
   rtsp:
     url:				# RTSP stream URL
     transport: tcp		# RTSP Transport Protocol
+
+  mqtt:
+    enabled: false					# true to enable MQTT
+    broker: tcp://localhost:1883	# MQTT (tcp://host:port)
+    topic: birdnet					# MQTT topic
+    username: birdnet				# MQTT username
+    password: secret       			# MQTT password
 
   privacyfilter:
     enabled: true

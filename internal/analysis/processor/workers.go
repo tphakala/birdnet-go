@@ -100,6 +100,13 @@ func (p *Processor) getDefaultActions(detection Detections) []Action {
 	if p.Settings.Realtime.Birdweather.Enabled {
 		actions = append(actions, BirdWeatherAction{Settings: p.Settings, EventTracker: p.EventTracker, BwClient: p.BwClient, Note: detection.Note, pcmData: detection.pcmData3s})
 	}
+	if p.Settings.Realtime.MQTT.Enabled {
+	   if p.MqttClient == nil {
+	       log.Println("MQTT client is not initialized, skipping MQTT action")
+	       return actions
+	   }
+		actions = append(actions, MqttAction{Settings: p.Settings, MqttClient: p.MqttClient, EventTracker: p.EventTracker, Note: detection.Note})
+	}
 	// Check if UpdateRangeFilterAction needs to be executed for the day
 	today := time.Now().Truncate(24 * time.Hour) // Current date with time set to midnight
 	if p.SpeciesListUpdated.Before(today) {
