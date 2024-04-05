@@ -7,7 +7,7 @@ environment. However, binary releases are convenient option for users who prefer
 
 ## Docker
 
-**Note**: Docker is currently only supported when running inside a Linux based
+**Note**: Docker is currently only supported when running inside a Linux-based
 host system.
 
 
