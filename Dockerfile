@@ -31,7 +31,10 @@ RUN PLATFORM='unknown'; \
 WORKDIR /root/src
 
 # Download TensorFlow headers
-RUN git clone --branch ${TENSORFLOW_VERSION} --depth 1 https://github.com/tensorflow/tensorflow.git
+RUN git clone --branch ${TENSORFLOW_VERSION} --filter=blob:none --depth 1 --no-checkout https://github.com/tensorflow/tensorflow.git \
+    && git -C tensorflow config core.sparseCheckout true \
+    && echo "**/*.h" >> tensorflow/.git/info/sparse-checkout \
+    && git -C tensorflow checkout
 
 FROM buildenv as build
 
