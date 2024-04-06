@@ -33,7 +33,10 @@ check-tensorflow:
 	@if [ ! -f "$(HOME)/src/tensorflow/tensorflow/lite/c/c_api.h" ]; then \
 		echo "TensorFlow Lite C API header not found. Cloning TensorFlow source..."; \
 		mkdir -p $(HOME)/src; \
-		git clone --branch v2.14.0 --depth 1 https://github.com/tensorflow/tensorflow.git $(HOME)/src/tensorflow; \
+		git clone --branch v2.14.0 --filter=blob:none --depth 1 --no-checkout https://github.com/tensorflow/tensorflow.git $(HOME)/src/tensorflow; \
+		git -C $(HOME)/src/tensorflow config core.sparseCheckout true; \
+		echo "**/*.h" >> $(HOME)/src/tensorflow/.git/info/sparse-checkout; \
+		git -C $(HOME)/src/tensorflow checkout; \
 	else \
 		echo "TensorFlow Lite C API header exists."; \
 	fi
