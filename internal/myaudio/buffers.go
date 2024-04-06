@@ -86,7 +86,10 @@ func BufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct
 			// if buffer has 3 seconds of data, process it
 			if len(data) == chunkSize {
 				startTime := time.Now().Add(-4 * time.Second)
-				ProcessData(bn, data, startTime)
+				err := ProcessData(bn, data, startTime)
+				if err != nil {
+					log.Printf("Error processing data: %v", err)
+				}
 			}
 		}
 	}
