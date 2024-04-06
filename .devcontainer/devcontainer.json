@@ -13,4 +13,11 @@
 	},
 	"postCreateCommand": ".devcontainer/postCreateCommand.sh",
 	"postAttachCommand": "make dev_server",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"golang.go"
+			]
+		}
+	}
 }
