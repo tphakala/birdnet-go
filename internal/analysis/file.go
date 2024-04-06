@@ -14,7 +14,12 @@ import (
 
 // executeFileAnalysis conducts an analysis of an audio file and outputs the results.
 // It reads an audio file, analyzes it for bird sounds, and prints the results based on the provided configuration.
-func FileAnalysis(settings *conf.Settings, bn birdnet.BirdNET) error {
+func FileAnalysis(settings *conf.Settings) error {
+	// Initialize the BirdNET interpreter.
+	bn, err := birdnet.NewBirdNET(settings)
+	if err != nil {
+		return fmt.Errorf("failed to initialize BirdNET: %w", err)
+	}
 
 	fileInfo, err := os.Stat(settings.Input.Path)
 	if err != nil {
