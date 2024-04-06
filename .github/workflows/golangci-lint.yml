@@ -20,7 +20,15 @@ jobs:
         with:
           go-version-file: 'go.mod'
       - run: go version
-          
+
+      - name: Install dependencies
+        run: make check-tensorflow
+      
+      - name: Set environment variables for CGO
+        run: |
+          echo "CGO_ENABLED=1" >> $GITHUB_ENV
+          echo "CGO_CFLAGS=-I $HOME/src/tensorflow" >> $GITHUB_ENV
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v4
         with:
