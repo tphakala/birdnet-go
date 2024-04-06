@@ -7,12 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // DirectoryAnalysis processes all .wav files in the given directory for analysis.
-func DirectoryAnalysis(settings *conf.Settings, bn birdnet.BirdNET) error {
+func DirectoryAnalysis(settings *conf.Settings) error {
 	analyzeFunc := func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			// Return the error to stop the walking process.
@@ -31,7 +30,7 @@ func DirectoryAnalysis(settings *conf.Settings, bn birdnet.BirdNET) error {
 		if strings.HasSuffix(d.Name(), ".wav") {
 			fmt.Println("Analyzing file:", path)
 			settings.Input.Path = path
-			if err := FileAnalysis(settings, bn); err != nil {
+			if err := FileAnalysis(settings); err != nil {
 				// If FileAnalysis returns an error log it and continue
 				log.Printf("Error analyzing file '%s': %v", path, err)
 				return nil

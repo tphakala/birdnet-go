@@ -11,7 +11,7 @@ import (
 )
 
 // FileCommand creates a new file command for analyzing a single audio file.
-func Command(ctx *conf.Context) *cobra.Command {
+func Command(settings *conf.Settings) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "file [input.wav]",
 		Short: "Analyze an audio file",
@@ -19,13 +19,13 @@ func Command(ctx *conf.Context) *cobra.Command {
 		Args:  cobra.ExactArgs(1), // the command expects exactly one argument
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Input file path is the first argument
-			ctx.Settings.Input.Path = args[0]
-			return analysis.FileAnalysis(ctx)
+			settings.Input.Path = args[0]
+			return analysis.FileAnalysis(settings)
 		},
 	}
 
 	// Set up flags specific to the 'file' command
-	if err := setupFlags(cmd, ctx.Settings); err != nil {
+	if err := setupFlags(cmd, settings); err != nil {
 		fmt.Printf("error setting up flags: %v\n", err)
 		os.Exit(1)
 	}
