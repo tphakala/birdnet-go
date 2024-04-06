@@ -51,7 +51,7 @@ func (c *Client) Publish(topic string, payload string) error {
 		return errors.New("MQTT client is not initialized")
 	}
 
-	if c.internalClient.IsConnected() == false {
+	if !c.internalClient.IsConnected() {
 		return errors.New("MQTT client is not connected")
 	}
 

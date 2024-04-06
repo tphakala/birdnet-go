@@ -15,7 +15,7 @@ type ExecuteScriptAction struct {
 }
 
 // A map to store the action configurations for different species
-var speciesActionsMap map[string]SpeciesActionConfig
+//var speciesActionsMap map[string]SpeciesActionConfig
 
 func (a ExecuteScriptAction) Execute(data interface{}) error {
 	//log.Println("Executing script:", a.ScriptPath)

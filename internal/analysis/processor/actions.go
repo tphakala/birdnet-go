@@ -34,7 +34,6 @@ type DatabaseAction struct {
 	Ds           datastore.Interface
 	Note         datastore.Note
 	Results      []datastore.Results
-	pcmData      []byte
 	EventTracker *EventTracker
 	AudioBuffer  *myaudio.AudioBuffer
 }

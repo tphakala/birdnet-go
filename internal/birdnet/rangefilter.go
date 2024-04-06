@@ -227,7 +227,7 @@ func loadSpeciesFromCSV(fileName string) ([]string, error) {
 }
 
 // mergeSpeciesLists merges two slices of species, removing duplicates.
-func mergeSpeciesLists(list1, list2 []string) []string {
+/*func mergeSpeciesLists(list1, list2 []string) []string {
 	uniqueSpecies := make(map[string]struct{})
 	for _, species := range list1 {
 		uniqueSpecies[species] = struct{}{}
@@ -238,4 +238,4 @@ func mergeSpeciesLists(list1, list2 []string) []string {
 		}
 	}
 	return list1
-}
+}*/
