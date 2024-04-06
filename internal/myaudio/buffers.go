@@ -2,6 +2,7 @@
 package myaudio
 
 import (
+	"log"
 	"sync"
 	"time"
 
@@ -32,7 +33,10 @@ func InitRingBuffer(capacity int) {
 
 // writeToBuffer writes audio data into the ring buffer.
 func WriteToBuffer(data []byte) {
-	ringBuffer.Write(data)
+	_, err := ringBuffer.Write(data)
+	if err != nil {
+		log.Printf("Error writing to ring buffer: %v", err)
+	}
 }
 
 // readFromBuffer reads a sliding chunk of audio data from the ring buffer.

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -26,7 +27,10 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 	}
 
 	// Set up the global flags for the root command.
-	setupFlags(rootCmd, settings)
+	err := setupFlags(rootCmd, settings)
+	if err != nil {
+		log.Printf("error setting up flags: %v\n", err)
+	}
 
 	// Add sub-commands to the root command.
 	fileCmd := file.Command(settings)

@@ -34,10 +34,9 @@ type Processor struct {
 }
 
 type Detections struct {
-	pcmData3s  []byte
-	pcmDataExt []byte
-	Note       datastore.Note      // Note containing highest match
-	Results    []datastore.Results // Full BirdNET prediction results
+	pcmData3s []byte              // 3s PCM data containing the detection
+	Note      datastore.Note      // Note containing highest match
+	Results   []datastore.Results // Full BirdNET prediction results
 }
 
 // PendingDetection struct represents a single detection held in memory,

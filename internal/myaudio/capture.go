@@ -50,7 +50,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 	if err != nil {
 		log.Fatalf("context init failed %v", err)
 	}
-	defer malgoCtx.Uninit()
+	defer malgoCtx.Uninit() //nolint:errcheck
 
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	deviceConfig.Capture.Format = malgo.FormatS16
@@ -132,7 +132,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 	if err != nil {
 		log.Fatalf("Device start failed %v", err)
 	}
-	defer device.Stop()
+	defer device.Stop() //nolint:errcheck
 
 	if settings.Debug {
 		fmt.Println("Device started")
