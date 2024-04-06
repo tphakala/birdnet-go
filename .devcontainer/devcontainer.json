@@ -7,8 +7,10 @@
 	},
 	"runArgs": ["--device=/dev/snd"],
 	"containerEnv": {
-		"ALSA_CARD": "0"
+		"ALSA_CARD": "0",
+		"CGO_ENABLED": "1",
+		"CGO_CFLAGS": "-I /root/src/tensorflow"
 	},
-	"postCreateCommand": "apt-get update && apt-get install -y ca-certificates libasound2 ffmpeg sox && apt-get clean && go install github.com/cosmtrek/air@latest",
-	"postAttachCommand": "make dev_server"
+	"postCreateCommand": ".devcontainer/postCreateCommand.sh",
+	"postAttachCommand": "make dev_server",
 }
