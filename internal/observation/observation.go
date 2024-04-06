@@ -93,9 +93,9 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 			continue // Skip the current iteration as the note doesn't meet the threshold
 		}
 
-		// Prepare the line for notes above the threshold
-		line := fmt.Sprintf("%d\tSpectrogram 1\t1\t%s\t%.1f\t%.1f\t0\t15000\t%s\t%s\t%.4f\n",
-			i+1, note.InputFile, note.BeginTime, note.EndTime, note.SpeciesCode, note.CommonName, note.Confidence)
+		// Prepare the line for notes above the threshold, assuming note.BeginTime and note.EndTime are of type time.Time
+		line := fmt.Sprintf("%d\tSpectrogram 1\t1\t%s\t%s\t%s\t0\t15000\t%s\t%s\t%.4f\n",
+			i+1, note.InputFile, note.BeginTime.Format("15:04:05"), note.EndTime.Format("15:04:05"), note.SpeciesCode, note.CommonName, note.Confidence)
 
 		// Attempt to write the note
 		if _, err = w.Write([]byte(line)); err != nil {
@@ -154,8 +154,10 @@ func WriteNotesCsv(settings *conf.Settings, notes []datastore.Note, filename str
 			continue // Skip the current iteration as the note doesn't meet the threshold
 		}
 
-		line := fmt.Sprintf("%f,%f,%s,%s,%.4f\n",
-			note.BeginTime, note.EndTime, note.ScientificName, note.CommonName, note.Confidence)
+		line := fmt.Sprintf("%s,%s,%s,%s,%.4f\n",
+			note.BeginTime.Format("2006-01-02 15:04:05"), // Formats BeginTime
+			note.EndTime.Format("2006-01-02 15:04:05"),   // Formats EndTime
+			note.ScientificName, note.CommonName, note.Confidence)
 
 		if _, err = w.Write([]byte(line)); err != nil {
 			// Break out of the loop at the first sign of an error

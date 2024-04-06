@@ -60,8 +60,7 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time) error {
 }
 
 func logProcessingTime(startTime time.Time) time.Duration {
-	var elapsedTime time.Duration
-	elapsedTime = time.Since(startTime)
+	var elapsedTime = time.Since(startTime)
 	/*if ctx.Settings.Realtime.ProcessingTime || ctx.Settings.Debug {
 		fmt.Printf("\r\033[Kprocessing time %v ms", elapsedTime.Milliseconds())
 		return elapsedTime

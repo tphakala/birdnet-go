@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"sync"
@@ -134,8 +135,8 @@ func monitorCtrlC(quitChan chan struct{}) {
 // closeDataStore attempts to close the database connection and logs the result.
 func closeDataStore(store datastore.Interface) {
 	if err := store.Close(); err != nil {
-		//logger.Error("main", "Failed to close database: %v", err)
+		log.Printf("Failed to close database: %v", err)
 	} else {
-		//logger.Info("main", "Successfully closed database")
+		log.Println("Successfully closed database")
 	}
 }

@@ -196,7 +196,7 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 			confidenceThreshold = float32(p.Settings.BirdNET.Threshold)
 		} else {
 			if p.Settings.Debug {
-				//fmt.Printf("\nUsing confidence threshold of %.2f for %s\n", confidenceThreshold, species)
+				log.Printf("\nUsing confidence threshold of %.2f for %s\n", confidenceThreshold, speciesLowercase)
 			}
 		}
 

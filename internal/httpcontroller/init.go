@@ -47,27 +47,38 @@ func New(settings *conf.Settings, dataStore datastore.Interface) *Server {
 	// Server initialization
 	s.initializeServer()
 
-	// Conditional AutoTLS setup
+	// Conditional AutoTLS setup with improved error handling and readability
 	errChan := make(chan error)
+
 	go func() {
-		var err error
+		var err error // Declare err variable at the top of the goroutine scope
+
 		if settings.WebServer.AutoTLS {
-			configPaths, err := conf.GetDefaultConfigPaths()
-			if err != nil {
-				log.Fatalf("Failed to get config paths: %v", err)
+			// Attempt to configure AutoTLS
+			configPaths, configErr := conf.GetDefaultConfigPaths() // Use a different variable name to avoid shadowing err
+			if configErr != nil {
+				errChan <- fmt.Errorf("failed to get config paths: %v", configErr) // Send error to channel
+				return                                                             // Exit the goroutine upon error
 			}
 
+			// Configure AutoTLS Manager
 			s.Echo.AutoTLSManager.Prompt = autocert.AcceptTOS
 			s.Echo.AutoTLSManager.Cache = autocert.DirCache(configPaths[0])
-			s.Echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist("")
-			err = s.Echo.StartAutoTLS(":" + settings.WebServer.Port)
+			s.Echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist("") // Adjust as needed
+
+			// Start server with AutoTLS
+			err = s.Echo.StartAutoTLS(":" + settings.WebServer.Port) //nolint:errcheck
 		} else {
+			// Start server without AutoTLS
 			err = s.Echo.Start(":" + settings.WebServer.Port)
 		}
+
+		// Check if there was an error in starting the server
 		if err != nil {
-			errChan <- err
+			errChan <- err // Send error to channel
 		}
 	}()
+
 	go handleServerError(errChan)
 
 	return s
@@ -90,12 +101,9 @@ func (s *Server) initializeServer() {
 
 // handleServerError listens for server errors and handles them.
 func handleServerError(errChan chan error) {
-	for {
-		select {
-		case err := <-errChan:
-			log.Printf("Server error: %v", err)
-			// Additional error handling logic here
-		}
+	for err := range errChan {
+		log.Printf("Server error: %v", err)
+		// Additional error handling logic here
 	}
 }
 
