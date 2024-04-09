@@ -7,9 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/ricochet2200/go-disk-usage/du"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -84,6 +88,106 @@ func (a LogAction) Execute(data interface{}) error {
 	return nil
 }
 
+type ByModTime []os.FileInfo
+
+func (a ByModTime) Len() int           { return len(a) }
+func (a ByModTime) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByModTime) Less(i, j int) bool { return a[i].ModTime().Before(a[j].ModTime()) }
+
+type DiskUsageCalculator interface {
+	Used(basePath string) (uint64, error) // Returns the amount of disk space used for the given basePath.
+	Size(basePath string) (uint64, error) // Returns the total size of the disk for the given basePath.
+}
+
+// RealDiskUsage implements DiskUsageCalculator using the actual disk usage.
+type RealDiskUsage struct{}
+
+func (r RealDiskUsage) Used(basePath string) (uint64, error) {
+	return du.NewDiskUsage(basePath).Used(), nil
+}
+
+func (r RealDiskUsage) Size(basePath string) (uint64, error) {
+	return du.NewDiskUsage(basePath).Size(), nil
+}
+
+// TODO: Other idea.
+// Have to variables:
+// MinEvictionHours - Minimum time before recording is considered for detection
+// MinRecordingsPerSpecies - Number of recordings to always keep per species
+
+func (a DatabaseAction) DiskCleanUp(calculator DiskUsageCalculator) error {
+	basePath := conf.GetBasePath(a.Settings.Realtime.AudioExport.Path)
+
+	const cleanupThreshold = 0.9 // Example threshold for disk cleanup (90% usage)
+
+	// Calculate bytesToRemove based on available disk space and cleanup threshold
+	diskUsed, err := calculator.Used(basePath)
+	if err != nil {
+		return err
+	}
+
+	diskSize, err := calculator.Size(basePath)
+	if err != nil {
+		return err
+	}
+	bytesToRemove := int64(diskUsed) - int64(float64(diskSize)*cleanupThreshold)
+
+	// Only cleanup if required (positive bytes to remove)
+	if bytesToRemove < 0 {
+		return nil
+	}
+
+	log.Printf("Reached disk usage treshold of %f percent. Will try to remove: %d bytes of files.\n", cleanupThreshold*100, bytesToRemove)
+
+	var files []os.FileInfo
+	var totalSize int64
+
+	errr := filepath.Walk(basePath,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			// Check if the file is a regular file
+			if info.Mode().IsRegular() {
+				files = append(files, info)
+				totalSize += info.Size() // Accumulate file sizes
+			}
+			return nil
+		})
+	if errr != nil {
+		log.Println(errr)
+		return err
+	}
+
+	// Sort files by modification time
+	sort.Sort(ByModTime(files))
+
+	// Check if it's possible to remove X bytes
+	if totalSize < bytesToRemove {
+		return fmt.Errorf("failed to remove %d bytes: insufficient files to meet the target size", bytesToRemove)
+	}
+
+	// Remove files until total size exceeds or equals bytesToRemove
+	var removedSize int64
+	for i := 0; i < len(files) && removedSize < bytesToRemove; i++ {
+		err := os.Remove(filepath.Join(basePath, files[i].Name()))
+		if err != nil {
+			log.Printf("Error removing file %s: %v\n", files[i].Name(), err)
+		} else {
+			removedSize += files[i].Size() // Update removedSize after removal
+			log.Printf("File %s (%d bytes) removed successfully. %d bytes remaning to remove.\n", files[i].Name(), files[i].Size(), max(bytesToRemove-removedSize, 0))
+		}
+	}
+
+	// Perform a check afterward again. It could be the case that because of removal errors,
+	// it is still not possible to remove enough files to reach the threshold
+	if removedSize < bytesToRemove {
+		return fmt.Errorf("only managed to remove %d bytes: insufficient files to meet the target size %d", removedSize, bytesToRemove)
+	}
+
+	return nil
+}
+
 // Execute saves the note to the database
 func (a DatabaseAction) Execute(data interface{}) error {
 	species := strings.ToLower(a.Note.CommonName)
@@ -105,6 +209,9 @@ func (a DatabaseAction) Execute(data interface{}) error {
 		if a.Settings.Realtime.AudioExport.Enabled {
 			time.Sleep(1 * time.Second) // Sleep for 1 second to allow the audio buffer to fill
 			pcmData, _ := a.AudioBuffer.ReadSegment(a.Note.BeginTime, time.Now())
+
+			a.DiskCleanUp(RealDiskUsage{})
+
 			if err := myaudio.SavePCMDataToWAV(a.Note.ClipName, pcmData); err != nil {
 				log.Printf("error saving audio clip to %s: %s\n", a.Settings.Realtime.AudioExport.Type, err)
 				return err
