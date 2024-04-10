@@ -32,20 +32,31 @@ func NewAudioBuffer(durationSeconds int, sampleRate, bytesPerSample int) *AudioB
 	}
 }
 
-// Write adds PCM audio data to the buffer, updating the startTime if necessary for precise timekeeping.
+// Write adds PCM audio data to the buffer, ensuring thread safety and accurate timekeeping.
 func (ab *AudioBuffer) Write(data []byte) {
-	// Copy the data to the buffer
+	// Lock the buffer to prevent concurrent writes or reads from interfering with the update process.
+	ab.lock.Lock()
+	defer ab.lock.Unlock()
+
+	// Store the current write index to determine if we've wrapped around the buffer.
+	prevWriteIndex := ab.writeIndex
+
+	// Copy the incoming data into the buffer starting at the current write index.
 	bytesWritten := copy(ab.data[ab.writeIndex:], data)
+
+	// Update the write index, wrapping around the buffer if necessary.
 	ab.writeIndex = (ab.writeIndex + bytesWritten) % ab.bufferSize
 
-	// Update startTime only if we've overwritten the old start
-	if bytesWritten > ab.bufferSize-ab.writeIndex {
+	// Determine if the write operation has overwritten old data.
+	if ab.writeIndex <= prevWriteIndex && (bytesWritten >= ab.bufferSize) {
+		// If old data has been overwritten, adjust startTime to maintain accurate timekeeping.
 		ab.startTime = time.Now().Add(-ab.bufferDuration)
 	}
 }
 
 // ReadSegment extracts a segment of audio data based on precise start and end times, handling wraparounds.
 func (ab *AudioBuffer) ReadSegment(requestedStartTime, requestedEndTime time.Time) ([]byte, error) {
+	// Lock the buffer to prevent concurrent writes or reads from interfering with the update process.
 	ab.lock.Lock()
 	defer ab.lock.Unlock()
 
