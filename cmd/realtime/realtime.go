@@ -37,6 +37,7 @@ func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
 	cmd.Flags().BoolVar(&settings.Realtime.ProcessingTime, "processingtime", viper.GetBool("realtime.processingtime"), "Report processing time for each detection")
 	cmd.Flags().StringVar(&settings.Realtime.RTSP.Url, "rtsp", viper.GetString("realtime.rtsp.url"), "URL of RTSP audio stream to capture")
 	cmd.Flags().StringVar(&settings.Realtime.RTSP.Transport, "rtsptransport", viper.GetString("realtime.rtsp.transport"), "RTSP transport (tcp/udp)")
+	cmd.Flags().BoolVar(&settings.Realtime.Prometheus, "prometheus", viper.GetBool("realtime.prometheus"), "Enable prometheus metrics")
 
 	// Bind flags to the viper settings
 	if err := viper.BindPFlags(cmd.Flags()); err != nil {
