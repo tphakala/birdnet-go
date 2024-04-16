@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -99,6 +100,8 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	startBufferMonitor(&wg, bn, quitChan)
 	// start audio capture
 	startAudioCapture(&wg, settings, quitChan, restartChan, audioBuffer)
+	// start cleanup of clips
+	startClipCleanupMonitor(&wg, settings, dataStore, quitChan)
 
 	// start quit signal monitor
 	monitorCtrlC(quitChan)
@@ -122,6 +125,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 			startAudioCapture(&wg, settings, quitChan, restartChan, audioBuffer)
 		}
 	}
+
 }
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
@@ -134,6 +138,12 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan cha
 func startBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}) {
 	wg.Add(1)
 	go myaudio.BufferMonitor(wg, bn, quitChan)
+}
+
+// startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
+func startClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, quitChan chan struct{}) {
+	wg.Add(1)
+	go ClipCleanupMonitor(wg, settings, dataStore, quitChan)
 }
 
 // monitorCtrlC listens for the SIGINT (Ctrl+C) signal and triggers the application shutdown process.
@@ -155,5 +165,36 @@ func closeDataStore(store datastore.Interface) {
 		log.Printf("Failed to close database: %v", err)
 	} else {
 		log.Println("Successfully closed database")
+	}
+}
+
+// ClipCleanupMonitor monitors the database and deletes clips that meets the retention policy.
+func ClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, quitChan chan struct{}) {
+	defer wg.Done()
+
+	// Creating a ticker that ticks every 1 minute
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-quitChan:
+			// Quit signal received, stop the clip cleanup monitor
+			return
+
+		case <-ticker.C: // Wait for the next tick
+			clipsForRemoval, _ := dataStore.GetClipsQualifyingForRemoval(settings.Realtime.Retention.MinEvictionHours, settings.Realtime.Retention.MinClipsPerSpecies)
+
+			log.Printf("Found %d clips to remove\n", len(clipsForRemoval))
+
+			for _, clip := range clipsForRemoval {
+				if err := os.Remove(clip.ClipName); err != nil {
+					log.Printf("Failed to remove %s: %s\n", clip.ClipName, err)
+				} else {
+					log.Printf("Removed %s\n", clip.ClipName)
+				}
+				dataStore.DeleteNoteClipPath(clip.ID)
+			}
+		}
 	}
 }

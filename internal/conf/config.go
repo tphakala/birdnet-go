@@ -69,6 +69,11 @@ type Settings struct {
 			Enabled bool // true to enable dog bark filter
 		}
 
+		Retention struct {
+			MinEvictionHours   int // minimum number of hours to keep audio clips
+			MinClipsPerSpecies int // minimum number of clips per species to keep
+		}
+
 		RTSP struct {
 			Url       string // RTSP stream URL
 			Transport string // RTSP Transport Protocol
@@ -268,6 +273,11 @@ realtime:
 
   dogbarkfilter:
     enabled: true
+
+  retention:
+    enabled: true                   # true to enable retention policy of clips
+    minEvictionHours: 72			# minumum number of hours before considering clip for eviction
+    minClipsPerSpecies: 10		    # minumum number of clips per species to keep before starting evictions
 
 webserver:
   enabled: true		# true to enable web server

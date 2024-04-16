@@ -26,6 +26,8 @@ type Interface interface {
 	GetLastDetections(numDetections int) ([]Note, error)
 	SearchNotes(query string, sortAscending bool, limit int, offset int) ([]Note, error)
 	GetNoteClipPath(noteID string) (string, error)
+	DeleteNoteClipPath(noteID string) error
+	GetClipsQualifyingForRemoval(minHours int, minClips int) ([]ClipForRemoval, error)
 }
 
 // DataStore implements StoreInterface using a GORM database.
@@ -148,6 +150,19 @@ func (ds *DataStore) GetNoteClipPath(noteID string) (string, error) {
 	return clipPath.ClipName, nil
 }
 
+// DeleteNoteClipPath deletes the field representing the path to the audio clip associated with a note.
+func (ds *DataStore) DeleteNoteClipPath(noteID string) error {
+	err := ds.DB.Model(&Note{}).
+		Where("id = ?", noteID).
+		Update("clip_name", "").Error
+
+	if err != nil {
+		return fmt.Errorf("failed to delete clip path: %w", err)
+	}
+
+	return nil
+}
+
 // GetAllNotes retrieves all notes from the database.
 func (ds *DataStore) GetAllNotes() ([]Note, error) {
 	var notes []Note
@@ -172,6 +187,36 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 		Scan(&results).Error
 
 	return results, err
+}
+
+type ClipForRemoval struct {
+	ID             string
+	ScientificName string
+	ClipName       string
+	NumRecordings  int
+}
+
+// GetClipsQualifyingForRemoval returns the list of clips that qualify for removal based on retention policy.
+func (ds *DataStore) GetClipsQualifyingForRemoval(minHours int, minClips int) ([]ClipForRemoval, error) {
+
+	if minHours <= 0 || minClips <= 0 {
+		return []ClipForRemoval{}, nil
+	}
+
+	var results []ClipForRemoval
+
+	subquery := ds.DB.Model(&Note{}).
+		Select("ID, scientific_name, ROW_NUMBER () OVER ( PARTITION BY scientific_name ) num_recordings").
+		Where("clip_name != ''")
+
+	ds.DB.Model(&Note{}).
+		Select("n.ID, n.scientific_name, n.clip_name, sub.num_recordings").
+		Joins("n INNER JOIN (?) AS sub ON n.ID = sub.ID", subquery).
+		Where("(strftime('%s', 'now') - strftime('%s', begin_time)) / 3600 > ?", minHours).
+		Where("sub.num_recordings > ?", minClips).
+		Scan(&results)
+
+	return results, nil
 }
 
 // GetHourFormat returns the database-specific SQL fragment for formatting a time column as hour.
