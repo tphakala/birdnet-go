@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/viper"
 )
 
@@ -37,8 +38,10 @@ type Settings struct {
 	}
 
 	Realtime struct {
-		Interval       int  // minimum interval between log messages in seconds
-		ProcessingTime bool // true to report processing time for each prediction
+		Interval                   int  // minimum interval between log messages in seconds
+		ProcessingTime             bool // true to report processing time for each prediction
+		Prometheus                 bool // true to enable Prometheus metrics
+		PrometheusDetectionCounter *prometheus.CounterVec
 
 		AudioExport struct {
 			Enabled bool   // export audio clips containing indentified bird calls
