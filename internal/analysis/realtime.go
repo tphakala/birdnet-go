@@ -3,11 +3,14 @@ package analysis
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/analysis/queue"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
@@ -43,6 +46,20 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 
 	// Initialize database access.
 	dataStore := datastore.New(settings)
+
+	// Initialize Prometheus (if enabled)
+	if settings.Realtime.Prometheus {
+		settings.Realtime.PrometheusDetectionCounter = prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "birdnet_detections",
+				Help: "How many BirdNET detections partitioned by common name.",
+			},
+			[]string{"name"},
+		)
+		prometheus.MustRegister(settings.Realtime.PrometheusDetectionCounter)
+		http.Handle("/metrics", promhttp.Handler())
+		go http.ListenAndServe(":2112", nil)
+	}
 
 	// Open a connection to the database and handle possible errors.
 	if err := dataStore.Open(); err != nil {

@@ -328,6 +328,12 @@ func (p *Processor) pendingDetectionsFlusher() {
 					}
 					// Detection is now processed, remove it from pending detections map.
 					delete(PendingDetections, species)
+
+					// Update prometheus detection counter
+					if p.Settings.Realtime.Prometheus {
+						p.Settings.Realtime.PrometheusDetectionCounter.
+							WithLabelValues(item.Detection.Note.CommonName).Inc()
+					}
 				}
 			}
 			mutex.Unlock() // Unlock the mutex after updating the map.
