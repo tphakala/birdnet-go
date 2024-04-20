@@ -193,24 +193,32 @@ type ClipForRemoval struct {
 }
 
 // GetClipsQualifyingForRemoval returns the list of clips that qualify for removal based on retention policy.
+// It checks each clip's age and count of recordings per scientific name, filtering out clips based on provided minimum hours and clip count criteria.
 func (ds *DataStore) GetClipsQualifyingForRemoval(minHours int, minClips int) ([]ClipForRemoval, error) {
-
+	// Validate input parameters
 	if minHours <= 0 || minClips <= 0 {
-		return []ClipForRemoval{}, nil
+		return nil, fmt.Errorf("invalid parameters: minHours and minClips must be greater than 0")
 	}
 
 	var results []ClipForRemoval
 
-	subquery := ds.DB.Model(&Note{}).
-		Select("ID, scientific_name, ROW_NUMBER () OVER ( PARTITION BY scientific_name ) num_recordings").
+	// Define a subquery to count the number of recordings per scientific name
+	subquery := ds.DB.Model(&Note{}).Select("ID, scientific_name, ROW_NUMBER() OVER (PARTITION BY scientific_name) as num_recordings").
 		Where("clip_name != ''")
+	if err := subquery.Error; err != nil {
+		return nil, fmt.Errorf("error creating subquery: %w", err)
+	}
 
-	ds.DB.Model(&Note{}).
+	// Main query to find clips qualifying for removal based on retention policy
+	err := ds.DB.Model(&Note{}).
 		Select("n.ID, n.scientific_name, n.clip_name, sub.num_recordings").
-		Joins("n INNER JOIN (?) AS sub ON n.ID = sub.ID", subquery).
-		Where("(strftime('%s', 'now') - strftime('%s', begin_time)) / 3600 > ?", minHours).
+		Joins("INNER JOIN (?) AS sub ON n.ID = sub.ID", subquery).
+		Where("strftime('%s', 'now') - strftime('%s', begin_time) > ?", minHours*3600). // Convert hours to seconds for comparison
 		Where("sub.num_recordings > ?", minClips).
-		Scan(&results)
+		Scan(&results).Error
+	if err != nil {
+		return nil, fmt.Errorf("error executing main query: %w", err)
+	}
 
 	return results, nil
 }
