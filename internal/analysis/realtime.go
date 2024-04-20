@@ -168,32 +168,41 @@ func closeDataStore(store datastore.Interface) {
 	}
 }
 
-// ClipCleanupMonitor monitors the database and deletes clips that meets the retention policy.
+// ClipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
 func ClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, quitChan chan struct{}) {
-	defer wg.Done()
+	defer wg.Done() // Ensure that the WaitGroup is marked as done after the function exits
 
-	// Creating a ticker that ticks every 1 minute
+	// Create a ticker that triggers every minute to perform cleanup
 	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
+	defer ticker.Stop() // Ensure the ticker is stopped to prevent leaks
 
 	for {
 		select {
 		case <-quitChan:
-			// Quit signal received, stop the clip cleanup monitor
+			// Handle quit signal to stop the monitor
 			return
 
-		case <-ticker.C: // Wait for the next tick
-			clipsForRemoval, _ := dataStore.GetClipsQualifyingForRemoval(settings.Realtime.Retention.MinEvictionHours, settings.Realtime.Retention.MinClipsPerSpecies)
+		case <-ticker.C:
+			// Perform cleanup operation on every tick
+			clipsForRemoval, err := dataStore.GetClipsQualifyingForRemoval(settings.Realtime.Retention.MinEvictionHours, settings.Realtime.Retention.MinClipsPerSpecies)
+			if err != nil {
+				log.Printf("Error retrieving clips for removal: %s\n", err)
+				continue // Skip this tick's cleanup if there's an error
+			}
 
 			log.Printf("Found %d clips to remove\n", len(clipsForRemoval))
 
 			for _, clip := range clipsForRemoval {
+				// Attempt to remove the clip file from the filesystem
 				if err := os.Remove(clip.ClipName); err != nil {
 					log.Printf("Failed to remove %s: %s\n", clip.ClipName, err)
 				} else {
 					log.Printf("Removed %s\n", clip.ClipName)
+					// Only attempt to delete the database record if the file removal was successful
+					if err := dataStore.DeleteNoteClipPath(clip.ID); err != nil {
+						log.Printf("Failed to delete clip path for %s: %s\n", clip.ID, err)
+					}
 				}
-				dataStore.DeleteNoteClipPath(clip.ID)
 			}
 		}
 	}
