@@ -38,21 +38,23 @@ type BwClient struct {
 	HTTPClient    *http.Client
 }
 
-// New creates and initializes a new Client with the given parameters.
+// New creates and initializes a new BwClient with the given settings.
+// The HTTP client is configured with a 5-second timeout to prevent hanging requests.
 func New(settings *conf.Settings) *BwClient {
 	return &BwClient{
 		Settings:      settings,
 		BirdweatherID: settings.Realtime.Birdweather.ID,
 		Latitude:      settings.BirdNET.Latitude,
 		Longitude:     settings.BirdNET.Longitude,
-		HTTPClient:    &http.Client{Timeout: 5 * time.Second}, // 3-second timeout for HTTP requests
+		HTTPClient:    &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
 // UploadSoundscape uploads a soundscape file to the Birdweather API and returns the soundscape ID if successful.
+// It handles the PCM to WAV conversion, compresses the data, and manages HTTP request creation and response handling safely.
 func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscapeID string, err error) {
 	// Convert PCM data to WAV format
-	wavData, err := myaudio.ConvertPCMToWAV(pcmData, conf.SampleRate, conf.BitDepth, conf.NumChannels) // Sample rate, bit depth, and number of channels
+	wavData, err := myaudio.ConvertPCMToWAV(pcmData, conf.SampleRate, conf.BitDepth, conf.NumChannels)
 	if err != nil {
 		log.Printf("Failed to convert PCM to WAV: %v\n", err)
 		return "", err
@@ -86,7 +88,9 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 		log.Printf("Request to upload soundscape failed: %v\n", err)
 		return "", err
 	}
-	defer resp.Body.Close()
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 
 	// Process the response
 	responseBody, err := io.ReadAll(resp.Body)
