@@ -52,84 +52,79 @@ func New(settings *conf.Settings) Interface {
 	}
 }
 
-// Save saves a note and its associated results as a single transaction.
+// Save stores a note and its associated results as a single transaction in the database.
 func (ds *DataStore) Save(note *Note, results []Results) error {
-	// Start a transaction
+	// Begin a transaction
 	tx := ds.DB.Begin()
 	if tx.Error != nil {
-		return tx.Error
+		return fmt.Errorf("starting transaction: %w", tx.Error)
 	}
 
-	// Attempt to save the note
+	// Roll back the transaction if a panic occurs
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Save the note and its associated results within the transaction
 	if err := tx.Create(note).Error; err != nil {
-		tx.Rollback() // Roll back the transaction on error
-		return err
+		tx.Rollback()
+		return fmt.Errorf("saving note: %w", err)
 	}
 
-	// Set the NoteID for each result and attempt to save
+	// Assign the note ID to each result and save them
 	for _, result := range results {
-		result.NoteID = note.ID // Link the result to the note using its ID
+		result.NoteID = note.ID
 		if err := tx.Create(&result).Error; err != nil {
-			tx.Rollback() // Roll back the transaction on error
-			return err
+			tx.Rollback()
+			return fmt.Errorf("saving result: %w", err)
 		}
 	}
 
 	// Commit the transaction
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("committing transaction: %w", err)
+	}
+	return nil
 }
 
-// Get retrieves a note from the database by its ID.
+// Get retrieves a note by its ID from the database.
 func (ds *DataStore) Get(id string) (Note, error) {
 	// Convert the id from string to integer
-	var noteID int
-	var err error
-	if noteID, err = strconv.Atoi(id); err != nil {
-		return Note{}, fmt.Errorf("error converting ID to integer: %s", err)
+	noteID, err := strconv.Atoi(id)
+	if err != nil {
+		return Note{}, fmt.Errorf("converting ID to integer: %w", err)
 	}
 
-	// Perform the retrieval using the converted integer ID
 	var note Note
-	result := ds.DB.First(&note, noteID)
-	if result.Error != nil {
-		return Note{}, fmt.Errorf("error getting note with ID %d: %w", noteID, result.Error)
+	// Retrieve the note by its ID
+	if err := ds.DB.First(&note, noteID).Error; err != nil {
+		return Note{}, fmt.Errorf("getting note with ID %d: %w", noteID, err)
 	}
 	return note, nil
 }
 
-// Delete removes a note from the database by its ID.
+// Delete removes a note and its associated results from the database.
 func (ds *DataStore) Delete(id string) error {
-	// Convert the id from string to uint
-	var noteID uint64
-	var err error
-	if noteID, err = strconv.ParseUint(id, 10, 32); err != nil {
-		return fmt.Errorf("error converting ID to integer: %s", err)
+	// Convert the id from string to unsigned integer
+	noteID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return fmt.Errorf("converting ID to integer: %w", err)
 	}
 
-	// Begin a transaction
-	tx := ds.DB.Begin()
-	if tx.Error != nil {
-		return tx.Error
-	}
-
-	// First, delete associated Results within the transaction
-	if err := tx.Where("note_id = ?", noteID).Delete(&Results{}).Error; err != nil {
-		tx.Rollback() // Roll back the transaction on error
-		return fmt.Errorf("error deleting results for note with ID %d: %w", noteID, err)
-	}
-
-	// Then, delete the Note within the same transaction
-	if err := tx.Delete(&Note{}, noteID).Error; err != nil {
-		tx.Rollback() // Roll back the transaction on error
-		return fmt.Errorf("error deleting note with ID %d: %w", noteID, err)
-	}
-
-	// Commit the transaction
-	if err := tx.Commit().Error; err != nil {
-		return err
-	}
-
-	return nil
+	// Perform the deletion within a transaction
+	return ds.DB.Transaction(func(tx *gorm.DB) error {
+		// Delete the full results entry associated with the note
+		if err := tx.Where("note_id = ?", noteID).Delete(&Results{}).Error; err != nil {
+			return fmt.Errorf("deleting results for note ID %d: %w", noteID, err)
+		}
+		// Delete the note itself
+		if err := tx.Delete(&Note{}, noteID).Error; err != nil {
+			return fmt.Errorf("deleting note with ID %d: %w", noteID, err)
+		}
+		return nil
+	})
 }
 
 // GetNoteClipPath retrieves the path to the audio clip associated with a note.
@@ -138,6 +133,7 @@ func (ds *DataStore) GetNoteClipPath(noteID string) (string, error) {
 		ClipName string
 	}
 
+	// Retrieve the clip path by note ID
 	err := ds.DB.Model(&Note{}).
 		Select("clip_name").
 		Where("id = ?", noteID).
