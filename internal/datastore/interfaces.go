@@ -148,14 +148,18 @@ func (ds *DataStore) GetNoteClipPath(noteID string) (string, error) {
 
 // DeleteNoteClipPath deletes the field representing the path to the audio clip associated with a note.
 func (ds *DataStore) DeleteNoteClipPath(noteID string) error {
-	err := ds.DB.Model(&Note{}).
-		Where("id = ?", noteID).
-		Update("clip_name", "").Error
-
-	if err != nil {
-		return fmt.Errorf("failed to delete clip path: %w", err)
+	// Validate the input parameter
+	if noteID == "" {
+		return fmt.Errorf("invalid note ID: must not be empty")
 	}
 
+	// Update the clip_name field to an empty string for the specified note ID
+	err := ds.DB.Model(&Note{}).Where("id = ?", noteID).Update("clip_name", "").Error
+	if err != nil {
+		return fmt.Errorf("failed to delete clip path for note ID %s: %w", noteID, err)
+	}
+
+	// Return nil if no errors occurred, indicating successful execution
 	return nil
 }
 
