@@ -278,7 +278,7 @@ realtime:
 
   telemetry:
     enabled: false			# true to enable Prometheus compatible telemetry endpoint
-	listen: "0.0.0.0:8090"	# IP address and port to listen on
+    listen: "0.0.0.0:8090"	# IP address and port to listen on
 
   retention:
     enabled: true           # true to enable retention policy of clips
