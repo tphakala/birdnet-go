@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observation"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 type Processor struct {
@@ -31,6 +32,7 @@ type Processor struct {
 	AudioBuffer        *myaudio.AudioBuffer
 	LastDogDetection   time.Time // keep track of dog barks to filter out false positive owl detections
 	LastHumanDetection time.Time // keep track of human vocal for privacy filtering
+	Metrics            *telemetry.Metrics
 }
 
 type Detections struct {
@@ -58,14 +60,15 @@ var PendingDetections map[string]PendingDetection = make(map[string]PendingDetec
 // ensuring thread safety when the map is accessed or modified by concurrent goroutines.
 var mutex sync.Mutex
 
-func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffer *myaudio.AudioBuffer) *Processor {
+func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffer *myaudio.AudioBuffer, metrics *telemetry.Metrics) *Processor {
 	p := &Processor{
-		Settings:        settings,
-		Ds:              ds,
-		Bn:              bn,
-		EventTracker:    NewEventTracker(),
-		IncludedSpecies: new([]string),
-		AudioBuffer:     audioBuffer,
+		Settings:        settings,          // BirdNET-Go Settings struct
+		Ds:              ds,                // Datastore
+		Bn:              bn,                // BirdNET analyzer
+		EventTracker:    NewEventTracker(), // Duplicate event tracker
+		IncludedSpecies: new([]string),     // Included species list
+		AudioBuffer:     audioBuffer,       // Audio buffer for audio export
+		Metrics:         metrics,           // Prometheus metrics struct
 	}
 
 	// Start the detection processor
@@ -329,10 +332,9 @@ func (p *Processor) pendingDetectionsFlusher() {
 					// Detection is now processed, remove it from pending detections map.
 					delete(PendingDetections, species)
 
-					// Update prometheus detection counter
-					if p.Settings.Realtime.Prometheus {
-						p.Settings.Realtime.PrometheusDetectionCounter.
-							WithLabelValues(item.Detection.Note.CommonName).Inc()
+					// Update Prometheus metrics detection counter
+					if p.Settings.Realtime.Telemetry.Enabled {
+						p.Metrics.IncrementDetectionCounter(item.Detection.Note.CommonName)
 					}
 				}
 			}
