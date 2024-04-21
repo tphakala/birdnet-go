@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/viper"
 )
 
@@ -38,10 +37,8 @@ type Settings struct {
 	}
 
 	Realtime struct {
-		Interval                   int  // minimum interval between log messages in seconds
-		ProcessingTime             bool // true to report processing time for each prediction
-		Prometheus                 bool // true to enable Prometheus metrics
-		PrometheusDetectionCounter *prometheus.CounterVec
+		Interval       int  // minimum interval between log messages in seconds
+		ProcessingTime bool // true to report processing time for each prediction
 
 		AudioExport struct {
 			Enabled bool   // export audio clips containing indentified bird calls
@@ -85,6 +82,11 @@ type Settings struct {
 			Topic    string // MQTT topic
 			Username string // MQTT username
 			Password string // MQTT password
+		}
+
+		Telemetry struct {
+			Enabled bool   // true to enable Prometheus compatible telemetry endpoint
+			Listen  string // IP address and port to listen on
 		}
 	}
 
@@ -268,16 +270,20 @@ realtime:
     username: birdnet				# MQTT username
     password: secret       			# MQTT password
 
-  privacyfilter:
-    enabled: true
+  privacyfilter:        # Privacy filter prevents audio clip saving if human voice 
+    enabled: true       # is detected durin audio capture
 
   dogbarkfilter:
     enabled: true
 
+  telemetry:
+    enabled: false			# true to enable Prometheus compatible telemetry endpoint
+	listen: "0.0.0.0:8090"	# IP address and port to listen on
+
   retention:
-    enabled: true                   # true to enable retention policy of clips
-    minEvictionHours: 72			# minumum number of hours before considering clip for eviction
-    minClipsPerSpecies: 10		    # minumum number of clips per species to keep before starting evictions
+    enabled: true           # true to enable retention policy of clips
+    minEvictionHours: 72	# minumum number of hours before considering clip for eviction
+    minClipsPerSpecies: 10	# minumum number of clips per species to keep before starting evictions
 
 webserver:
   enabled: true		# true to enable web server

@@ -3,15 +3,12 @@ package analysis
 import (
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/analysis/queue"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
@@ -19,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 const (
@@ -28,7 +26,6 @@ const (
 
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 func RealtimeAnalysis(settings *conf.Settings) error {
-
 	// Initialize the BirdNET interpreter.
 	bn, err := birdnet.NewBirdNET(settings)
 	if err != nil {
@@ -47,20 +44,6 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 
 	// Initialize database access.
 	dataStore := datastore.New(settings)
-
-	// Initialize Prometheus (if enabled)
-	if settings.Realtime.Prometheus {
-		settings.Realtime.PrometheusDetectionCounter = prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "birdnet_detections",
-				Help: "How many BirdNET detections partitioned by common name.",
-			},
-			[]string{"name"},
-		)
-		prometheus.MustRegister(settings.Realtime.PrometheusDetectionCounter)
-		http.Handle("/metrics", promhttp.Handler())
-		go http.ListenAndServe(":2112", nil)
-	}
 
 	// Open a connection to the database and handle possible errors.
 	if err := dataStore.Open(); err != nil {
@@ -88,8 +71,14 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// init detection queue
 	queue.Init(5, 5)
 
+	// Initialize Prometheus metrics manager
+	metrics, err := telemetry.NewMetrics()
+	if err != nil {
+		log.Fatalf("Error initializing metrics: %v", err)
+	}
+
 	// Start worker pool for processing detections
-	processor.New(settings, dataStore, bn, audioBuffer)
+	processor.New(settings, dataStore, bn, audioBuffer, metrics)
 
 	// Start http server
 	httpcontroller.New(settings, dataStore)
@@ -98,10 +87,15 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	var wg sync.WaitGroup
 	// start buffer monitor
 	startBufferMonitor(&wg, bn, quitChan)
+
 	// start audio capture
 	startAudioCapture(&wg, settings, quitChan, restartChan, audioBuffer)
+
 	// start cleanup of clips
 	startClipCleanupMonitor(&wg, settings, dataStore, quitChan)
+
+	// start telemetry endpoint
+	startTelemetryEndpoint(&wg, settings, metrics, quitChan)
 
 	// start quit signal monitor
 	monitorCtrlC(quitChan)
@@ -144,6 +138,20 @@ func startBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan s
 func startClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, quitChan chan struct{}) {
 	wg.Add(1)
 	go ClipCleanupMonitor(wg, settings, dataStore, quitChan)
+}
+
+func startTelemetryEndpoint(wg *sync.WaitGroup, settings *conf.Settings, metrics *telemetry.Metrics, quitChan chan struct{}) {
+	// Initialize Prometheus metrics endpoint if enabled
+	if settings.Realtime.Telemetry.Enabled {
+		// Initialize metrics endpoint
+		telemetryEndpoint, err := telemetry.NewEndpoint(settings)
+		if err != nil {
+			log.Printf("Error initializing metrics manager: %v", err)
+		}
+
+		// Start metrics server
+		telemetryEndpoint.Start(metrics, wg, quitChan)
+	}
 }
 
 // monitorCtrlC listens for the SIGINT (Ctrl+C) signal and triggers the application shutdown process.
