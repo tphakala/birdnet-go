@@ -214,7 +214,7 @@ func (ds *DataStore) GetClipsQualifyingForRemoval(minHours int, minClips int) ([
 	}
 
 	// Main query to find clips qualifying for removal based on retention policy
-	err := ds.DB.Model(&Note{}).
+	err := ds.DB.Table("(?) AS n", ds.DB.Model(&Note{})).
 		Select("n.ID, n.scientific_name, n.clip_name, sub.num_recordings").
 		Joins("INNER JOIN (?) AS sub ON n.ID = sub.ID", subquery).
 		Where("strftime('%s', 'now') - strftime('%s', begin_time) > ?", minHours*3600). // Convert hours to seconds for comparison
