@@ -1,3 +1,4 @@
+// birdweather.go this code implements a BirdWeather API client for uploading soundscapes and detections.
 package birdweather
 
 import (
@@ -12,7 +13,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
 // SoundscapeResponse represents the JSON structure of the response from the Birdweather API when uploading a soundscape.
@@ -53,17 +53,17 @@ func New(settings *conf.Settings) *BwClient {
 // UploadSoundscape uploads a soundscape file to the Birdweather API and returns the soundscape ID if successful.
 // It handles the PCM to WAV conversion, compresses the data, and manages HTTP request creation and response handling safely.
 func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscapeID string, err error) {
-	// Convert PCM data to WAV format
-	wavData, err := myaudio.ConvertPCMToWAV(pcmData, conf.SampleRate, conf.BitDepth, conf.NumChannels)
+	// Encode PCM data to WAV format
+	wavBuffer, err := encodePCMtoWAV(pcmData)
 	if err != nil {
-		log.Printf("Failed to convert PCM to WAV: %v\n", err)
+		log.Printf("Failed to encode PCM to WAV: %v\n", err)
 		return "", err
 	}
 
 	// Compress the WAV data
 	var gzipWavData bytes.Buffer
 	gzipWriter := gzip.NewWriter(&gzipWavData)
-	if _, err := gzipWriter.Write(wavData); err != nil {
+	if _, err := gzipWriter.Write(wavBuffer.Bytes()); err != nil {
 		log.Printf("Failed to compress WAV data: %v\n", err)
 		return "", err
 	}
