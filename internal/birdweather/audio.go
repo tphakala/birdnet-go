@@ -4,9 +4,6 @@ package birdweather
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
-	"io"
-	"os"
 )
 
 // encodePCMtoWAV creates WAV data from PCM and returns it in a bytes.Buffer.
@@ -51,8 +48,7 @@ func encodePCMtoWAV(pcmData []byte) (*bytes.Buffer, error) {
 }
 
 // saveBufferToDisk writes a bytes.Buffer to a file, this is only used for debugging.
-// golangci-lint:ignore unused for now
-func saveBufferToDisk(buffer *bytes.Buffer, filename string) error {
+/*func saveBufferToDisk(buffer *bytes.Buffer, filename string) error {
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("error creating file: %w", err)
@@ -64,4 +60,4 @@ func saveBufferToDisk(buffer *bytes.Buffer, filename string) error {
 		return fmt.Errorf("error writing buffer to file: %w", err)
 	}
 	return nil
-}
+}*/
