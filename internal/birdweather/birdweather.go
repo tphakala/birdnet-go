@@ -46,7 +46,7 @@ func New(settings *conf.Settings) *BwClient {
 		BirdweatherID: settings.Realtime.Birdweather.ID,
 		Latitude:      settings.BirdNET.Latitude,
 		Longitude:     settings.BirdNET.Longitude,
-		HTTPClient:    &http.Client{Timeout: 5 * time.Second},
+		HTTPClient:    &http.Client{Timeout: 45 * time.Second},
 	}
 }
 
@@ -83,6 +83,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	req.Header.Set("Content-Encoding", "gzip")
 	req.Header.Set("User-Agent", "BirdNET-Go")
 
+	// Execute the request
 	resp, err := b.HTTPClient.Do(req)
 	if err != nil {
 		log.Printf("Request to upload soundscape failed: %v\n", err)
@@ -158,6 +159,7 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 		Confidence:          fmt.Sprintf("%.2f", confidence),
 	}
 
+	// Marshal JSON data
 	postDataBytes, err := json.Marshal(postData)
 	if err != nil {
 		log.Printf("Failed to marshal JSON data, err: %v\n", err)
