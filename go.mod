@@ -4,7 +4,7 @@ go 1.22.2
 
 require (
 	github.com/eclipse/paho.mqtt.golang v1.4.3
-	github.com/gen2brain/malgo v0.11.21
+	github.com/gen2brain/malgo v0.11.22
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0
 	github.com/labstack/echo/v4 v4.12.0
