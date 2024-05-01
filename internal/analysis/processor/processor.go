@@ -107,9 +107,14 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, a
 		}()
 	}
 
+	var err error
+
 	// Initialize included species list
 	today := time.Now().Truncate(24 * time.Hour)
-	*p.IncludedSpecies = bn.GetProbableSpecies()
+	*p.IncludedSpecies, err = bn.GetProbableSpecies()
+	if err != nil {
+		log.Printf("Failed to get probable species: %s", err)
+	}
 	p.SpeciesListUpdated = today
 
 	return p
