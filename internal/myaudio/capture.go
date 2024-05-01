@@ -76,8 +76,8 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 		}
 		fmt.Printf("    %d: %s, %s, [%s]\n", i, info.Name(), info.ID.String(), e)
 	}
-	//selectedDeviceInfo := infos[2]
-	//deviceConfig.Capture.DeviceID = selectedDeviceInfo.ID.Pointer()
+	selectedDeviceInfo := infos[2]
+	deviceConfig.Capture.DeviceID = selectedDeviceInfo.ID.Pointer()
 
 	// Write to ringbuffer when audio data is received
 	// BufferMonitor() will poll this buffer and read data from it
@@ -137,7 +137,8 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 	if settings.Debug {
 		fmt.Println("Device started")
 	}
-	fmt.Println("Listening ...")
+	// print audio device we are attached to
+	fmt.Printf("Listening on device: %s (device ID %s)\n", selectedDeviceInfo.Name(), selectedDeviceInfo.ID.String())
 
 	// Now, instead of directly waiting on QuitChannel,
 	// check if it's closed in a non-blocking select.
