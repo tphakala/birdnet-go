@@ -147,3 +147,21 @@ func RunningInContainer() bool {
 
 	return false
 }
+
+// isLinuxArm64 checks if the operating system is Linux and the architecture is arm64.
+func IsLinuxArm64() bool {
+	return runtime.GOOS == "linux" && runtime.GOARCH == "arm64"
+}
+
+// getBoardModel reads the SBC board model from the device tree.
+func GetBoardModel() string {
+	// Get the board model from the device tree.
+	data, err := os.ReadFile("/proc/device-tree/model")
+	if err != nil {
+		return ""
+	}
+
+	// Return the board model as a string.
+	model := strings.TrimSpace(string(data))
+	return model
+}
