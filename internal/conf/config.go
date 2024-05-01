@@ -138,6 +138,9 @@ const (
 	RotationSize   RotationType = "size"
 )
 
+// buildTime is the time when the binary was built.
+var buildDate string
+
 // Load reads the configuration file and environment variables into GlobalConfig.
 func Load() (*Settings, error) {
 	// Create a new settings struct
@@ -185,7 +188,8 @@ func initViper() error {
 		}
 		return fmt.Errorf("fatal error reading config file: %w", err)
 	} else {
-		fmt.Println("Read config file:", viper.ConfigFileUsed())
+		// Print build date and config file used
+		fmt.Printf("BirdNET-Go build date: %s, using config file: %s\n", buildDate, viper.ConfigFileUsed())
 	}
 
 	return nil
@@ -287,8 +291,8 @@ realtime:
 
 webserver:
   enabled: true		# true to enable web server
-  port: 8080			# port for web server
-  autotls: false		# true to enable auto TLS
+  port: 8080		# port for web server
+  autotls: false	# true to enable auto TLS
   log:
     enabled: true	# true to enable log file
     path: webui.log	# path to log file

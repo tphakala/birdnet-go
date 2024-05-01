@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/shirou/gopsutil/v3/host"
+
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/analysis/queue"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
@@ -33,11 +35,28 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	}
 
 	// Initialize occurrence monitor to filter out repeated observations.
+	// TODO FIXME
 	//ctx.OccurrenceMonitor = conf.NewOccurrenceMonitor(time.Duration(ctx.Settings.Realtime.Interval) * time.Second)
 
+	// Get system details with golps
+	info, err := host.Info()
+	if err != nil {
+		fmt.Printf("Error retrieving host info: %v\n", err)
+	}
+
+	var hwModel string
+	// Print SBC hardware details
+	if conf.IsLinuxArm64() {
+		hwModel = conf.GetBoardModel()
+	} else {
+		hwModel = "unknown"
+	}
+
+	// Print platform, OS etc. details
+	fmt.Printf("System details: %s %s %s on %s hardware\n", info.OS, info.Platform, info.PlatformVersion, hwModel)
+
 	// Log the start of BirdNET-Go Analyzer in realtime mode and its configurations.
-	fmt.Println("Starting BirdNET-Go Analyzer in realtime mode")
-	fmt.Printf("Threshold: %v, sensitivity: %v, interval: %v\n",
+	fmt.Printf("Starting analyzer in realtime mode. Threshold: %v, sensitivity: %v, interval: %v\n",
 		settings.BirdNET.Threshold,
 		settings.BirdNET.Sensitivity,
 		settings.Realtime.Interval)
