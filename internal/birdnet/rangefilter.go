@@ -32,17 +32,20 @@ func (a ByScore) Less(i, j int) bool { return a[i].Score > a[j].Score } // For d
 
 // GetProbableSpecies filters and sorts bird species based on their scores.
 // It also updates the scores for species that have custom actions defined in the speciesConfigCSV.
-func (bn *BirdNET) GetProbableSpecies() []string {
+func (bn *BirdNET) GetProbableSpecies() ([]string, error) {
 	// Skip filtering if location is not set
 	if bn.Settings.BirdNET.Latitude == 0 && bn.Settings.BirdNET.Longitude == 0 {
 		if bn.Settings.Debug {
 			log.Println("Latitude and longitude not set, not using location based prediction filter")
 		}
-		return bn.Labels
+		return bn.Labels, nil
 	}
 
 	// Apply prediction filter based on the context
-	filters, _ := bn.predictFilter()
+	filters, err := bn.predictFilter()
+	if err != nil {
+		return nil, fmt.Errorf("error during prediction filter: %v", err)
+	}
 
 	// check bn.Settings.BirdNET.LocationFilterThreshold for valid value
 	if bn.Settings.BirdNET.LocationFilterThreshold < 0 ||
@@ -96,7 +99,7 @@ func (bn *BirdNET) GetProbableSpecies() []string {
 	// Update the SpeciesListUpdated time in the context
 	bn.SpeciesListUpdated = time.Now().Truncate(24 * time.Hour)
 
-	return labels
+	return labels, nil
 }
 
 // predictFilter applies a TensorFlow Lite model to predict species based on the context.
@@ -239,3 +242,46 @@ func loadSpeciesFromCSV(fileName string) ([]string, error) {
 	}
 	return list1
 }*/
+
+// debug functions
+
+// getWeekForFilter calculates the week number for a given date.
+func getWeekForFilterDebug(date time.Time) float32 {
+	_, week := date.ISOWeek()
+	return float32(week)
+}
+
+// PrintSpeciesScores prints out the list of species scores in a human-readable format.
+func PrintSpeciesScores(date time.Time, labels []string, locationFilterThreshold float64) {
+	currentWeek := getWeekForFilterDebug(date)
+	fmt.Printf("Debugging Species Scores - %s\n", date.Format(time.RFC1123))
+	fmt.Printf("LocationFilterThreshold: %.2f, Current Week: %d\n", locationFilterThreshold, int(currentWeek))
+	fmt.Println("Scores List:")
+
+	for _, label := range labels {
+		fmt.Printf("Species: %s", label)
+	}
+	fmt.Println("End of Scores List\n")
+}
+
+// RunFilterProcess executes the filter process on demand and prints the results.
+func (bn *BirdNET) RunFilterProcess(dateStr string, dateFormat string) {
+	layout := "02/01/2006" // Default to European date format (DD/MM/YYYY)
+	if dateFormat == "us" {
+		layout = "01/02/2006" // US date format (MM/DD/YYYY)
+	}
+
+	parsedDate, err := time.Parse(layout, dateStr)
+	if err != nil {
+		fmt.Printf("Error parsing date: %s\n", err)
+		return
+	}
+
+	labels, err := bn.GetProbableSpecies()
+	if err != nil {
+		fmt.Printf("Error during species prediction: %s\n", err)
+		return
+	}
+
+	PrintSpeciesScores(parsedDate, labels, float64(bn.Settings.BirdNET.LocationFilterThreshold))
+}
