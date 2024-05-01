@@ -2,6 +2,53 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.2] - 2024-05-01
+
+### 🚀 Features
+
+ - Prometheus metrics support, endpoint reports BirdNET detections and application Golang runtime metrics - contributed by @aster1sk
+ - Disk management by old audio capture cleanup - contributed by @isZumpo
+
+### 🐛 Bug Fixes
+
+- *(analysis)* File analysis restored
+- *(capture)* Improve audio buffer write function time keeping
+- *(datastore)* Refactor datastore Get, Delete and Save methods for efficient transaction and error handling
+- *(datastore)* Refactor GetClipsQualifyingForRemoval method in interfaces.go for improved input validation and error handling
+- *(birdweather)* Improve handling of HTTP Responses in UploadSoundscape to prevent possible panics
+- *(birdweather)* Fixed PCM to WAV encoding for soundscape uploads
+- *(birdweather)* Increase HTTP timeout to 45 seconds
+- *(utils)* Do not report root user as missing from audio group
+- *(tests)* Refactor createDatabase function in interfaces_test.go for improved error handling
+
+### 💄 Enhancement
+
+- *(audio)* Print selected audio capture device on realtime mode startup
+- *(startup)* Enhance realtime mode startup message with system details to help troubleshooting
+
+### 🚜 Refactor
+
+- *(conf)* Remove unused Context struct from internal/conf/context.go
+- *(processor)* Update range filter action to handle error when getting probable species
+
+### 🏗️ Building
+
+- *(deps)* Bump golang.org/x/crypto from 0.21.0 to 0.22.0
+- *(deps)* Bump google.golang.org/protobuf from 1.32.0 to 1.33.0
+- *(deps)* Bump golang.org/x/net from 0.21.0 to 0.23.0
+- *(go)* Bump Go version from 1.21.6 to 1.22.2 in go.mod
+- *(deps)* Bump labstack echo version from 4.11.4 to 4.12.0
+- *(deps)* Bump gorm.io/gorm from 1.25.9 to 1.25.10
+- *(deps)* Bump github.com/gen2brain/malgo from 0.11.21 to 0.11.22
+
+### ⚙️ Miscellaneous Tasks
+
+- Fix linter errors
+
+### Github
+
+- *(workflow)* Add tensorflow dependencies to golangci-lint
+
 ## [0.5.1] - 2024-04-05
 
 ### 🚀 Features
