@@ -19,8 +19,7 @@ import (
 
 // RootCommand creates and returns the root command
 func RootCommand(settings *conf.Settings) *cobra.Command {
-	//ctx := config.GetGlobalContext()
-
+	// Create the root command
 	rootCmd := &cobra.Command{
 		Use:   "birdnet",
 		Short: "BirdNET-Go CLI",
