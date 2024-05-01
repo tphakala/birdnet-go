@@ -81,6 +81,11 @@ func PrintUserInfo() {
 			return
 		}
 
+		// if current user is root, return as it has all permissions anyway
+		if currentUser.Username == "root" {
+			return
+		}
+
 		// Get group memberships
 		groupIDs, err := currentUser.GroupIds()
 		if err != nil {
