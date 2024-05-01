@@ -67,17 +67,25 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 		os.Exit(1)
 	}
 
+	// Keep record of default capture device
+	var captureDeviceName string
+	var captureDeviceID string
+
 	fmt.Println("Capture Devices")
 	for i, info := range infos {
-		e := "ok"
-		_, err := malgoCtx.DeviceInfo(malgo.Capture, info.ID, malgo.Shared)
-		if err != nil {
-			e = err.Error()
+		// Check if the device is the default device
+		defaultStatus := ""
+		if info.IsDefault == 1 {
+			defaultStatus = "[default]" // mark as default
+			captureDeviceName = info.Name()
+			captureDeviceID = info.ID.String()
 		}
-		fmt.Printf("    %d: %s, %s, [%s]\n", i, info.Name(), info.ID.String(), e)
+		// Output device information
+		fmt.Printf("    %d: %s, %s, %s\n", i, info.Name(), info.ID.String(), defaultStatus)
 	}
-	selectedDeviceInfo := infos[2]
-	deviceConfig.Capture.DeviceID = selectedDeviceInfo.ID.Pointer()
+
+	//selectedDeviceInfo := infos[2]
+	//deviceConfig.Capture.DeviceID = selectedDeviceInfo.ID.Pointer()
 
 	// Write to ringbuffer when audio data is received
 	// BufferMonitor() will poll this buffer and read data from it
@@ -138,7 +146,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 		fmt.Println("Device started")
 	}
 	// print audio device we are attached to
-	fmt.Printf("Listening on device: %s (device ID %s)\n", selectedDeviceInfo.Name(), selectedDeviceInfo.ID.String())
+	fmt.Printf("Listening on device: %s (device ID %s)\n", captureDeviceName, captureDeviceID)
 
 	// Now, instead of directly waiting on QuitChannel,
 	// check if it's closed in a non-blocking select.
