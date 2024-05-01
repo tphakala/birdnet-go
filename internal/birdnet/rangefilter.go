@@ -261,7 +261,7 @@ func PrintSpeciesScores(date time.Time, labels []string, locationFilterThreshold
 	for _, label := range labels {
 		fmt.Printf("Species: %s", label)
 	}
-	fmt.Println("End of Scores List\n")
+	fmt.Println("End of Scores List")
 }
 
 // RunFilterProcess executes the filter process on demand and prints the results.
