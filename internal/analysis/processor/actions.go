@@ -175,8 +175,12 @@ func (a MqttAction) Execute(data interface{}) error {
 func (a UpdateRangeFilterAction) Execute(data interface{}) error {
 	today := time.Now().Truncate(24 * time.Hour)
 	if today.After(*a.SpeciesListUpdated) {
+		var err error
 		// Update location based species list
-		*a.IncludedSpecies = a.Bn.GetProbableSpecies()
+		*a.IncludedSpecies, err = a.Bn.GetProbableSpecies()
+		if err != nil {
+			return err
+		}
 		*a.SpeciesListUpdated = today // Update the timestamp
 	}
 	return nil
