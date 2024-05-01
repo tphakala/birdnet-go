@@ -22,14 +22,14 @@ func main() {
 	httpcontroller.ViewsFs = viewsFs
 
 	// Load the configuration
-	ctx, err := conf.Load()
+	settings, err := conf.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Execute the root command
-	rootCmd := cmd.RootCommand(ctx)
+	rootCmd := cmd.RootCommand(settings)
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Command execution error: %v\n", err)
 		os.Exit(1)
