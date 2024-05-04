@@ -262,7 +262,7 @@ realtime:
   birdweather:
     enabled: false		  # true to enable birdweather uploads
     locationaccuracy: 500 # accuracy of location in meters
-	debug: false		  # true to enable birdweather api debug mode
+    debug: false		  # true to enable birdweather api debug mode
     id: 00000			  # birdweather ID
 	
   rtsp:
