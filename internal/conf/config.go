@@ -52,10 +52,11 @@ type Settings struct {
 		}
 
 		Birdweather struct {
-			Enabled   bool    // true to enable birdweather uploads
-			Debug     bool    // true to enable debug mode
-			ID        string  // birdweather ID
-			Threshold float64 // threshold for prediction confidence for uploads
+			Enabled          bool    // true to enable birdweather uploads
+			Debug            bool    // true to enable debug mode
+			ID               string  // birdweather ID
+			Threshold        float64 // threshold for prediction confidence for uploads
+			LocationAccuracy float64 // accuracy of location in meters
 		}
 
 		PrivacyFilter struct {
@@ -259,10 +260,11 @@ realtime:
     path: birdnet.txt	# path to OBS chat log
 
   birdweather:
-    enabled: false		# true to enable birdweather uploads
-    debug: false		# true to enable birdweather api debug mode
-    id: 00000			# birdweather ID
-
+    enabled: false		  # true to enable birdweather uploads
+    locationaccuracy: 500 # accuracy of location in meters
+    debug: false		  # true to enable birdweather api debug mode
+    id: 00000			  # birdweather ID
+	
   rtsp:
     url:				# RTSP stream URL
     transport: tcp		# RTSP Transport Protocol
