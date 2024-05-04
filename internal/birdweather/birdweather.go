@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
+	"math/rand"
 	"net/http"
 	"time"
 
@@ -33,6 +35,7 @@ type SoundscapeResponse struct {
 type BwClient struct {
 	Settings      *conf.Settings
 	BirdweatherID string
+	Accuracy      float64
 	Latitude      float64
 	Longitude     float64
 	HTTPClient    *http.Client
@@ -44,10 +47,33 @@ func New(settings *conf.Settings) *BwClient {
 	return &BwClient{
 		Settings:      settings,
 		BirdweatherID: settings.Realtime.Birdweather.ID,
+		Accuracy:      settings.Realtime.Birdweather.LocationAccuracy,
 		Latitude:      settings.BirdNET.Latitude,
 		Longitude:     settings.BirdNET.Longitude,
 		HTTPClient:    &http.Client{Timeout: 45 * time.Second},
 	}
+}
+
+// RandomizeLocation adds a random offset to the given latitude and longitude to fuzz the location
+// within a specified radius in meters for privacy, truncating the result to 4 decimal places.
+// radiusMeters - the maximum radius in meters to adjust the coordinates
+func (b *BwClient) RandomizeLocation(radiusMeters float64) (float64, float64) {
+	// Create a new local random generator seeded with current Unix time
+	src := rand.NewSource(time.Now().UnixNano())
+	rnd := rand.New(src)
+
+	// Calculate the degree offset using an approximation that 111,000 meters equals 1 degree
+	degreeOffset := radiusMeters / 111000
+
+	// Generate random offsets within +/- degreeOffset
+	latOffset := (rnd.Float64() - 0.5) * 2 * degreeOffset
+	lonOffset := (rnd.Float64() - 0.5) * 2 * degreeOffset
+
+	// Apply the offsets to the original coordinates and truncate to 4 decimal places
+	newLatitude := math.Floor((b.Latitude+latOffset)*10000) / 10000
+	newLongitude := math.Floor((b.Longitude+lonOffset)*10000) / 10000
+
+	return newLatitude, newLongitude
 }
 
 // UploadSoundscape uploads a soundscape file to the Birdweather API and returns the soundscape ID if successful.
@@ -126,6 +152,9 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 		log.Println("Posting detection to Birdweather: ", detectionURL)
 	}
 
+	// Fuzz location coordinates with a radius of 500 meters
+	fuzzedLatitude, fuzzedLongitude := b.RandomizeLocation(b.Accuracy)
+
 	// Convert timestamp to time.Time and calculate end time
 	parsedTime, err := time.Parse("2006-01-02T15:04:05.000-0700", timestamp)
 	if err != nil {
@@ -148,8 +177,8 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 		Confidence          string  `json:"confidence"`
 	}{
 		Timestamp:           timestamp,
-		Latitude:            b.Latitude,
-		Longitude:           b.Longitude,
+		Latitude:            fuzzedLatitude,
+		Longitude:           fuzzedLongitude,
 		SoundscapeID:        soundscapeID,
 		SoundscapeStartTime: timestamp,
 		SoundscapeEndTime:   endTime,
