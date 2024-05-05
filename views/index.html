@@ -39,7 +39,7 @@
 		// Set the date picker to today's date
 		setTimeout(function () {
 			var datePicker = document.getElementById('datePicker');
-			var today = new Date().toISOString().split('T')[0];
+			var today = new Date().toLocaleString('sv').split(' ')[0];
 			datePicker.value = today;
 		}, 0); // Set timeout for 0ms
 
