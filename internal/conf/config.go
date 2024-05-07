@@ -264,7 +264,7 @@ realtime:
     locationaccuracy: 500 # accuracy of location in meters
     debug: false		  # true to enable birdweather api debug mode
     id: 00000			  # birdweather ID
-	
+
   rtsp:
     url:				# RTSP stream URL
     transport: tcp		# RTSP Transport Protocol
