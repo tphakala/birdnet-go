@@ -222,7 +222,16 @@ func ClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore d
 			for _, clip := range clipsForRemoval {
 				// Attempt to remove the clip file from the filesystem
 				if err := os.Remove(clip.ClipName); err != nil {
-					log.Printf("Failed to remove %s: %s\n", clip.ClipName, err)
+					if os.IsNotExist(err) {
+						// Only attempt to delete the database record if the file removal was successful
+						if err := dataStore.DeleteNoteClipPath(clip.ID); err != nil {
+							log.Printf("Failed to delete clip path for %s: %s\n", clip.ID, err)
+						} else {
+							log.Printf("Cleared clip path of missing clip for %s\n", clip.ID)
+						}
+					} else {
+						log.Printf("Failed to remove %s: %s\n", clip.ClipName, err)
+					}
 				} else {
 					log.Printf("Removed %s\n", clip.ClipName)
 					// Only attempt to delete the database record if the file removal was successful
