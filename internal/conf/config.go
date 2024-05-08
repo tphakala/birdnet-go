@@ -2,14 +2,20 @@
 package conf
 
 import (
+	"embed"
 	"errors"
 	"fmt"
+	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/spf13/viper"
 )
+
+//go:embed config.yaml
+var configFiles embed.FS
 
 type Settings struct {
 	Debug bool // true to enable debug mode
@@ -166,32 +172,38 @@ func Load() (*Settings, error) {
 	return settings, nil
 }
 
+// initViper initializes viper with default values and reads the configuration file.
 func initViper() error {
-	// Set config file name and type
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 
+	// Get OS specific config paths
 	configPaths, err := GetDefaultConfigPaths()
 	if err != nil {
 		return fmt.Errorf("error getting default config paths: %w", err)
 	}
 
+	// Assign config paths to Viper
 	for _, path := range configPaths {
 		viper.AddConfigPath(path)
 	}
+
+	// Set default values for each configuration parameter
+	// function defined in defaults.go
+	setDefaultConfig()
 
 	// Read configuration file
 	err = viper.ReadInConfig()
 	if err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			// config file not found, create config with defaults
+			// Config file not found, create config with defaults
 			return createDefaultConfig()
 		}
 		return fmt.Errorf("fatal error reading config file: %w", err)
-	} else {
-		// Print build date and config file used
-		fmt.Printf("BirdNET-Go build date: %s, using config file: %s\n", buildDate, viper.ConfigFileUsed())
 	}
+
+	// Print build date and config file used
+	fmt.Printf("BirdNET-Go build date: %s, using config file: %s\n", buildDate, viper.ConfigFileUsed())
 
 	return nil
 }
@@ -217,108 +229,11 @@ func createDefaultConfig() error {
 	return viper.ReadInConfig()
 }
 
-// getDefaultConfig returns the default configuration as a string.
+// getDefaultConfig reads the default configuration from the embedded config.yaml file.
 func getDefaultConfig() string {
-	return `# BirdNET-Go configuration
-
-debug: false			# print debug messages, can help with problem solving
-
-# Node specific settings
-main:
-  name: BirdNET-Go		# name of node, can be used to identify source of notes
-  timeas24h: true		# true for 24-hour time format, false for 12-hour time format
-  log:
-    enabled: true		# true to enable log file
-    path: birdnet.log	# path to log file
-    rotation: daily		# daily, weekly or size
-    maxsize: 1048576	# max size in bytes for size rotation
-    rotationday: 0		# day of the week for weekly rotation, 0 = Sunday
-
-# BirdNET model specific settings
-birdnet:
-  sensitivity: 1.0			# sigmoid sensitivity, 0.1 to 1.5
-  threshold: 0.8			# threshold for prediction confidence to report, 0.0 to 1.0
-  overlap: 0.0				# overlap between chunks, 0.0 to 2.9
-  threads: 0				# 0 to use all available CPU threads
-  locale: en				# language to use for labels
-  latitude: 00.000			# latitude of recording location for prediction filtering
-  longitude: 00.000			# longitude of recording location for prediction filtering
-  locationfilterthreshold: 0.01 # rangefilter species occurrence threshold
-
-# Realtime processing settings
-realtime:
-  interval: 15		    # duplicate prediction interval in seconds
-  processingtime: false # true to report processing time for each prediction
-  
-  audioexport:
-    enabled: true 		# true to export audio clips containing indentified bird calls
-    path: clips/   		# path to audio clip export directory
-    type: wav      		# only wav supported for now
-  
-  log:
-    enabled: false		# true to enable OBS chat log
-    path: birdnet.txt	# path to OBS chat log
-
-  birdweather:
-    enabled: false		  # true to enable birdweather uploads
-    locationaccuracy: 500 # accuracy of location in meters
-    debug: false		  # true to enable birdweather api debug mode
-    id: 00000			  # birdweather ID
-	
-  rtsp:
-    url:				# RTSP stream URL
-    transport: tcp		# RTSP Transport Protocol
-
-  mqtt:
-    enabled: false					# true to enable MQTT
-    broker: tcp://localhost:1883	# MQTT (tcp://host:port)
-    topic: birdnet					# MQTT topic
-    username: birdnet				# MQTT username
-    password: secret       			# MQTT password
-
-  privacyfilter:        # Privacy filter prevents audio clip saving if human voice 
-    enabled: true       # is detected durin audio capture
-
-  dogbarkfilter:
-    enabled: true
-
-  telemetry:
-    enabled: false			# true to enable Prometheus compatible telemetry endpoint
-    listen: "0.0.0.0:8090"	# IP address and port to listen on
-
-  retention:
-    enabled: true           # true to enable retention policy of clips
-    minEvictionHours: 72	# minumum number of hours before considering clip for eviction
-    minClipsPerSpecies: 10	# minumum number of clips per species to keep before starting evictions
-
-webserver:
-  enabled: true		# true to enable web server
-  port: 8080		# port for web server
-  autotls: false	# true to enable auto TLS
-  log:
-    enabled: true	# true to enable log file
-    path: webui.log	# path to log file
-    rotation: daily	# daily, weekly or size
-    maxsize: 1048576	# max size in bytes for size rotation
-    rotationday: 0	# day of the week for weekly rotation, 0 = Sunday
-
-# Ouput settings
-output:
-  file:
-    enabled: true		# true to enable file output for file and directory analysis
-    path: output/		# path to output directory
-    type: table			# ouput format, Raven table or csv
-  # Only one database is supported at a time
-  # if both are enabled, SQLite will be used.
-  sqlite:
-    enabled: true		# true to enable sqlite output
-    path: birdnet.db	# path to sqlite database
-  mysql:
-    enabled: false		# true to enable mysql output
-    username: birdnet	# mysql database username
-    password: secret	# mysql database user password
-    database: birdnet	# mysql database name
-    host: localhost		# mysql database host
-    port: 3306			# mysql database port
-`
+	data, err := fs.ReadFile(configFiles, "config.yaml")
+	if err != nil {
+		log.Fatalf("Error reading config file: %v", err)
+	}
+	return string(data)
 }
