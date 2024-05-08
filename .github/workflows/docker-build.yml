@@ -7,9 +7,51 @@ on:
   workflow_dispatch:
 
 jobs:
-  push-docker-image:
+  test-docker-image:
     # Ubuntu-20.04 required until this is fixed: https://github.com/actions/runner-images/discussions/9074
     runs-on: ubuntu-20.04
+    steps:
+      - name: 'Checkout GitHub Action'
+        uses: actions/checkout@v4.1.1
+
+      - name: 'Set up Docker Buildx'
+        uses: docker/setup-buildx-action@v3.1.0
+
+      - name: 'Build amd64 image for testing'
+        uses: docker/build-push-action@v5.1.0
+        with:
+          context: .
+          tags: birdnet-go:test
+          load: true
+          platforms: linux/amd64
+          cache-from: type=gha,scope=linux/amd64
+          cache-to: type=gha,mode=max,scope=linux/amd64
+
+      - name: 'Install alsa dummy module for testing built image'
+        run: |
+          sudo apt-get install linux-modules-extra-$(uname -r)
+          sudo modprobe snd-dummy
+
+      - name: 'Test built amd64 image'
+        run: |
+          docker run --rm -p 8080:8080 --device /dev/snd --env ALSA_CARD=0 birdnet-go:test realtime --source "Dummy" & p1=$!
+          if ! wget --retry-connrefused --waitretry=1 --tries=5 -q -O /dev/null http://localhost:8080; then
+            echo "Failed to reach container after 5 sec"
+            kill "$p1"
+            exit 1
+          else
+            echo "Container responded to request"
+            kill "$p1"
+          fi
+
+  push-docker-image:
+    needs: test-docker-image
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        include:
+          - platform: linux/arm64
+          - platform: linux/amd64
     steps:
       - name: 'Checkout GitHub Action'
         uses: actions/checkout@v4.1.1
@@ -28,46 +70,14 @@ jobs:
       - name: 'Set up Docker Buildx'
         uses: docker/setup-buildx-action@v3.1.0
 
-      - name: 'Cache Docker layers'
-        uses: actions/cache@v4.0.1
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
-      - name: 'Build image for testing'
+      - name: 'Build and push docker image'
         uses: docker/build-push-action@v5.1.0
         with:
-          tags: ghcr.io/${{ env.REPO }}:test
-          load: true
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new
-
-      - name: 'Install alsa dummy module for testing built image'
-        run: |
-          sudo apt-get install linux-modules-extra-$(uname -r)
-          sudo modprobe snd-dummy
-
-      - name: 'Test built image'
-        run: |
-          docker run --rm -p 8080:8080 --device /dev/snd --env ALSA_CARD=0 ghcr.io/${{ env.REPO }}:test realtime --source "Dummy" & p1=$!
-          if ! wget --retry-connrefused --waitretry=1 --tries=5 -q -O /dev/null http://localhost:8080; then
-            echo "Failed to reach container after 5 sec"
-            kill "$p1"
-            exit 1
-          else
-            echo "Container responded to request"
-            kill "$p1"
-          fi
-
-      - name: 'Build and push images for all platforms'
-        uses: docker/build-push-action@v5.1.0
-        with:
+          context: .
           push: true
           tags: |
             ghcr.io/${{ env.REPO }}:dev
             ghcr.io/${{ env.REPO }}:${{ github.sha }}
-          platforms: linux/amd64,linux/arm64
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          platforms: ${{ matrix.platform }}
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
