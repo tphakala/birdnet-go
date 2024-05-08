@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   build:
@@ -35,3 +36,36 @@ jobs:
         compress_assets: auto
         build_command: make ${{ matrix.goos }}_${{ matrix.goarch }}
         extra_files: libtensorflowlite_c.so
+
+  docker-tagging:
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3.0.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Generate downcase repository name
+      run: |
+        echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+
+    - name: Extract metadata (tags, labels) for Docker
+      id: meta
+      uses: docker/metadata-action@v5.5.1
+      with:
+        images: ghcr.io/${{ env.REPO }}
+        tags: |
+          type=semver,pattern={{version}}
+
+    - name: Tag docker image with release version
+      run: |
+        docker pull ghcr.io/${{ env.REPO }}:${{ github.sha }}
+        docker tag ghcr.io/${{ env.REPO }}:${{ github.sha }} ghcr.io/${{ env.REPO }}:${{ steps.meta.outputs.version }}
+        docker tag ghcr.io/${{ env.REPO }}:${{ github.sha }} ghcr.io/${{ env.REPO }}:latest
+
+    - name: Push tagged docker images
+      run: |
+        docker push ghcr.io/${{ env.REPO }}:${{ steps.meta.outputs.version }}
+        docker push ghcr.io/${{ env.REPO }}:latest
