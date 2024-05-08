@@ -15,7 +15,7 @@ require (
 	github.com/spf13/viper v1.18.2
 	github.com/tphakala/go-tflite v0.0.0-20231013114437-e78004b1b843
 	golang.org/x/crypto v0.22.0
-	golang.org/x/text v0.14.0
+	golang.org/x/text v0.15.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.5.6
 	gorm.io/driver/sqlite v1.5.5
