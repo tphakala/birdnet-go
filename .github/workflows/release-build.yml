@@ -61,11 +61,5 @@ jobs:
 
     - name: Tag docker image with release version
       run: |
-        docker pull ghcr.io/${{ env.REPO }}:${{ github.sha }}
-        docker tag ghcr.io/${{ env.REPO }}:${{ github.sha }} ghcr.io/${{ env.REPO }}:${{ steps.meta.outputs.version }}
-        docker tag ghcr.io/${{ env.REPO }}:${{ github.sha }} ghcr.io/${{ env.REPO }}:latest
-
-    - name: Push tagged docker images
-      run: |
-        docker push ghcr.io/${{ env.REPO }}:${{ steps.meta.outputs.version }}
-        docker push ghcr.io/${{ env.REPO }}:latest
+        docker buildx imagetools create -t ghcr.io/${{ env.REPO }}:${{ steps.meta.outputs.version }} ghcr.io/${{ env.REPO }}:${{ github.sha }}
+        docker buildx imagetools create -t ghcr.io/${{ env.REPO }}:latest ghcr.io/${{ env.REPO }}:${{ github.sha }}
