@@ -2,13 +2,16 @@ package myaudio
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/gen2brain/malgo"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -22,6 +25,75 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan str
 		// Default audio capture
 		captureAudioMalgo(settings, wg, quitChan, restartChan, audioBuffer)
 	}
+}
+
+// captureSource holds information about an audio capture source.
+type captureSource struct {
+	Name    string
+	ID      string
+	Pointer unsafe.Pointer
+}
+
+// selectCaptureSource selects an appropriate capture device based on the provided settings and available device information.
+// It prints available devices and returns the selected device and any error encountered.
+func selectCaptureSource(settings *conf.Settings, infos []malgo.DeviceInfo) (captureSource, error) {
+	fmt.Println("Available Capture Sources:")
+
+	var selectedSource captureSource
+	var deviceFound bool
+
+	for i, info := range infos {
+		// Decode the device ID from hex to ASCII
+		decodedID, err := hexToASCII(info.ID.String())
+		if err != nil {
+			fmt.Printf("Error decoding ID for device %d: %v\n", i, err)
+			continue
+		}
+
+		// Prepare the output string for listing available devices
+		output := fmt.Sprintf("  %d: %s", i, info.Name())
+		if runtime.GOOS == "linux" {
+			output = fmt.Sprintf("%s, %s", output, decodedID) // Include decoded ID in the output for Linux
+		}
+
+		// Determine if the current device matches the specified settings
+		if matchesDeviceSettings(decodedID, info, settings.Realtime.Audio.Source) {
+			selectedSource = captureSource{
+				Name:    info.Name(),
+				ID:      decodedID,
+				Pointer: info.ID.Pointer(),
+			}
+			deviceFound = true
+		}
+
+		fmt.Println(output)
+	}
+
+	// If no device was found, return an error
+	if !deviceFound {
+		return captureSource{}, fmt.Errorf("no suitable capture source found for device setting %s", settings.Realtime.Audio.Source)
+	}
+
+	return selectedSource, nil
+}
+
+// matchesDeviceSettings checks if the device matches the settings specified by the user.
+func matchesDeviceSettings(decodedID string, info malgo.DeviceInfo, audioSource string) bool {
+	if runtime.GOOS == "windows" && audioSource == "sysdefault" {
+		// On Windows, there is no "sysdefault" device. Use miniaudio's default device instead.
+		return info.IsDefault == 1
+	}
+	// Check if the decoded ID or device name matches the user's setting.
+	return decodedID == audioSource || strings.Contains(info.Name(), audioSource)
+}
+
+// hexToASCII converts a hexadecimal string to an ASCII string.
+func hexToASCII(hexStr string) (string, error) {
+	bytes, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return "", err // return the error if hex decoding fails
+	}
+	return string(bytes), nil
 }
 
 func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *AudioBuffer) {
@@ -60,32 +132,20 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 
 	var infos []malgo.DeviceInfo
 
-	// Get list of capture devices
+	// Get list of capture sources
 	infos, err = malgoCtx.Devices(malgo.Capture)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	// Keep record of default capture device
-	var captureDeviceName string
-	var captureDeviceID string
-
-	fmt.Println("Capture Devices")
-	for i, info := range infos {
-		// Check if the device is the default device
-		defaultStatus := ""
-		if info.IsDefault == 1 {
-			defaultStatus = "[default]" // mark as default
-			captureDeviceName = info.Name()
-			captureDeviceID = info.ID.String()
-		}
-		// Output device information
-		fmt.Printf("    %d: %s, %s, %s\n", i, info.Name(), info.ID.String(), defaultStatus)
+	// Select the capture source based on the settings
+	captureSource, err := selectCaptureSource(settings, infos)
+	if err != nil {
+		log.Fatalf("Error selecting capture source: %v", err)
+		panic(err)
 	}
-
-	//selectedDeviceInfo := infos[2]
-	//deviceConfig.Capture.DeviceID = selectedDeviceInfo.ID.Pointer()
+	deviceConfig.Capture.DeviceID = captureSource.Pointer
 
 	// Write to ringbuffer when audio data is received
 	// BufferMonitor() will poll this buffer and read data from it
@@ -146,7 +206,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 		fmt.Println("Device started")
 	}
 	// print audio device we are attached to
-	fmt.Printf("Listening on device: %s (device ID %s)\n", captureDeviceName, captureDeviceID)
+	fmt.Printf("Listening on source: %s (%s)\n", captureSource.Name, captureSource.ID)
 
 	// Now, instead of directly waiting on QuitChannel,
 	// check if it's closed in a non-blocking select.
