@@ -211,7 +211,7 @@ func ClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore d
 
 		case <-ticker.C:
 			// Perform cleanup operation on every tick
-			clipsForRemoval, err := dataStore.GetClipsQualifyingForRemoval(settings.Realtime.Retention.MinEvictionHours, settings.Realtime.Retention.MinClipsPerSpecies)
+			clipsForRemoval, err := dataStore.GetClipsQualifyingForRemoval(settings.Realtime.Audio.Export.Retention.MinEvictionHours, settings.Realtime.Audio.Export.Retention.MinClipsPerSpecies)
 			if err != nil {
 				log.Printf("Error retrieving clips for removal: %s\n", err)
 				continue // Skip this tick's cleanup if there's an error

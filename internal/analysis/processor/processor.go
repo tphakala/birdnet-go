@@ -192,9 +192,10 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 
 		// Human detection handling for privacy filter
 		if p.Settings.Realtime.PrivacyFilter.Enabled {
-			if strings.Contains(speciesLowercase, "human") && result.Confidence > 0.1 {
+			if strings.Contains(speciesLowercase, "human") && result.Confidence > 0.05 {
 				log.Printf("Human detected, updating last detection timestamp for privacy filtering")
-				p.LastHumanDetection = time.Now()
+				// now minus 2 seconds
+				p.LastHumanDetection = time.Now().Add(-3 * time.Second)
 			}
 		}
 
@@ -240,7 +241,7 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 
 func (p *Processor) generateClipName(scientificName string, confidence float32) string {
 	// Get the base path from the configuration
-	basePath := conf.GetBasePath(p.Settings.Realtime.AudioExport.Path)
+	basePath := conf.GetBasePath(p.Settings.Realtime.Audio.Export.Path)
 
 	// Replace whitespaces with underscores and convert to lowercase
 	formattedName := strings.ToLower(strings.ReplaceAll(scientificName, " ", "_"))

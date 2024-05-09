@@ -46,10 +46,18 @@ type Settings struct {
 		Interval       int  // minimum interval between log messages in seconds
 		ProcessingTime bool // true to report processing time for each prediction
 
-		AudioExport struct {
-			Enabled bool   // export audio clips containing indentified bird calls
-			Path    string // path to audio clip export directory
-			Type    string // audio file type, wav, mp3 or flac
+		Audio struct {
+			Device string // audio device to use for analysis
+			Export struct {
+				Enabled   bool   // export audio clips containing indentified bird calls
+				Path      string // path to audio clip export directory
+				Type      string // audio file type, wav, mp3 or flac
+				Retention struct {
+					Enabled            bool // true to enable audio clip retention
+					MinEvictionHours   int  // minimum number of hours to keep audio clips
+					MinClipsPerSpecies int  // minimum number of clips per species to keep
+				}
+			}
 		}
 
 		Log struct {
@@ -71,11 +79,6 @@ type Settings struct {
 
 		DogBarkFilter struct {
 			Enabled bool // true to enable dog bark filter
-		}
-
-		Retention struct {
-			MinEvictionHours   int // minimum number of hours to keep audio clips
-			MinClipsPerSpecies int // minimum number of clips per species to keep
 		}
 
 		RTSP struct {
