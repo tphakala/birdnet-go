@@ -387,3 +387,19 @@ func (s *Server) serveSpectrogramHandler(c echo.Context) error {
 	// Serve the spectrogram image file
 	return c.File(spectrogramPath)
 }
+
+// getLogsHandler handles GET requests to the /logs endpoint.
+// It reads the content of the webui.log file and renders the logs view with the content.
+func (s *Server) getLogsHandler(c echo.Context) error {
+	// Read the content of web.log
+	logContent, err := readWebLog()
+	if err != nil {
+		// Return an HTTP error if there is an issue reading the file
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to read web.log: "+err.Error())
+	}
+
+	// Render the logs view and pass the logContent as data
+	return c.Render(http.StatusOK, "logs", map[string]interface{}{
+		"LogContent": logContent,
+	})
+}
