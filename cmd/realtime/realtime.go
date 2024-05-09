@@ -33,6 +33,7 @@ func Command(settings *conf.Settings) *cobra.Command {
 // setupRealtimeFlags configures flags specific to the realtime command.
 func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
 	cmd.Flags().StringVar(&settings.Realtime.Audio.Export.Path, "clippath", viper.GetString("realtime.audio.export.path"), "Path to save audio clips")
+	cmd.Flags().StringVar(&settings.Realtime.Audio.Source, "source", viper.GetString("realtime.audio.source"), "Audio capture source (\"sysdefault\", \"USB Audio\", \":0,0\", etc.)")
 	cmd.Flags().StringVar(&settings.Realtime.Log.Path, "logpath", viper.GetString("realtime.log.path"), "Path to save log files")
 	cmd.Flags().BoolVar(&settings.Realtime.ProcessingTime, "processingtime", viper.GetBool("realtime.processingtime"), "Report processing time for each detection")
 	cmd.Flags().StringVar(&settings.Realtime.RTSP.Url, "rtsp", viper.GetString("realtime.rtsp.url"), "URL of RTSP audio stream to capture")
