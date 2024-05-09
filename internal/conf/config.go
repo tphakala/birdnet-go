@@ -47,7 +47,7 @@ type Settings struct {
 		ProcessingTime bool // true to report processing time for each prediction
 
 		Audio struct {
-			Device string // audio device to use for analysis
+			Source string // audio source to use for analysis
 			Export struct {
 				Enabled   bool   // export audio clips containing indentified bird calls
 				Path      string // path to audio clip export directory

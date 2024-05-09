@@ -30,7 +30,7 @@ realtime:
   processingtime: false # true to report processing time for each prediction
   
   audio:
-    device: sysdefault    # audio device to use for analysis
+    source: "sysdefault"  # audio source to use for analysis
     export:
       enabled: true       # true to export audio clips containing indentified bird calls
       path: clips/        # path to audio clip export directory
