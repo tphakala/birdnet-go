@@ -1,4 +1,4 @@
- # BirdNET-Go configuration
+# BirdNET-Go configuration
 
 debug: false            # print debug messages, can help with problem solving
 
