@@ -102,11 +102,11 @@ func (a DatabaseAction) Execute(data interface{}) error {
 		}
 
 		// Save audio clip to file if enabled
-		if a.Settings.Realtime.AudioExport.Enabled {
+		if a.Settings.Realtime.Audio.Export.Enabled {
 			time.Sleep(1 * time.Second) // Sleep for 1 second to allow the audio buffer to fill
 			pcmData, _ := a.AudioBuffer.ReadSegment(a.Note.BeginTime, time.Now())
 			if err := myaudio.SavePCMDataToWAV(a.Note.ClipName, pcmData); err != nil {
-				log.Printf("error saving audio clip to %s: %s\n", a.Settings.Realtime.AudioExport.Type, err)
+				log.Printf("error saving audio clip to %s: %s\n", a.Settings.Realtime.Audio.Export.Type, err)
 				return err
 			} else if a.Settings.Debug {
 				log.Printf("Saved audio clip to %s\n", a.Note.ClipName)
@@ -124,7 +124,7 @@ func (a DatabaseAction) Execute(data interface{}) error {
 // Execute saves the audio clip to a file
 func (a SaveAudioAction) Execute(data interface{}) error {
 	if err := myaudio.SavePCMDataToWAV(a.ClipName, a.pcmData); err != nil {
-		log.Printf("error saving audio clip to %s: %s\n", a.Settings.Realtime.AudioExport.Type, err)
+		log.Printf("error saving audio clip to %s: %s\n", a.Settings.Realtime.Audio.Export.Type, err)
 		return err
 	} else if a.Settings.Debug {
 		log.Printf("Saved audio clip to %s\n", a.ClipName)
