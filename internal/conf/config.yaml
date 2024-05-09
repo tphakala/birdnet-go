@@ -29,10 +29,16 @@ realtime:
   interval: 15          # duplicate prediction interval in seconds
   processingtime: false # true to report processing time for each prediction
   
-  audioexport:
-    enabled: true       # true to export audio clips containing indentified bird calls
-    path: clips/        # path to audio clip export directory
-    type: wav           # only wav supported for now
+  audio:
+    source: "sysdefault"  # audio source to use for analysis
+    export:
+      enabled: true       # true to export audio clips containing indentified bird calls
+      path: clips/        # path to audio clip export directory
+      type: wav           # only wav supported for now
+      retention:
+        enabled: false         # true to enable retention policy of clips
+        minEvictionHours: 0    # minumum number of hours before considering clip for eviction
+        minClipsPerSpecies: 0  # minumum number of clips per species to keep before starting evictions
   
   log:
     enabled: false      # true to enable OBS chat log
@@ -65,10 +71,7 @@ realtime:
     enabled: false         # true to enable Prometheus compatible telemetry endpoint
     listen: "0.0.0.0:8090" # IP address and port to listen on
 
-  retention:
-    enabled: false         # true to enable retention policy of clips
-    minEvictionHours: 0    # minumum number of hours before considering clip for eviction
-    minClipsPerSpecies: 0  # minumum number of clips per species to keep before starting evictions
+
 
 webserver:
   enabled: true         # true to enable web server

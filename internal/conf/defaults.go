@@ -31,9 +31,15 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.interval", 15)
 	viper.SetDefault("realtime.processingtime", false)
 
-	viper.SetDefault("realtime.audioexport.enabled", true)
-	viper.SetDefault("realtime.audioexport.path", "clips/")
-	viper.SetDefault("realtime.audioexport.type", "wav")
+	viper.SetDefault("realtime.audio.source", "sysdefault")
+
+	viper.SetDefault("realtime.audio.export.enabled", true)
+	viper.SetDefault("realtime.audio.export.path", "clips/")
+	viper.SetDefault("realtime.audio.export.type", "wav")
+
+	viper.SetDefault("realtime.audio.export.retention.enabled", false)
+	viper.SetDefault("realtime.audio.export.retention.minEvictionHours", 0)
+	viper.SetDefault("realtime.audio.export.retention.minClipsPerSpecies", 0)
 
 	viper.SetDefault("realtime.log.enabled", false)
 	viper.SetDefault("realtime.log.path", "birdnet.txt")
@@ -58,10 +64,6 @@ func setDefaultConfig() {
 
 	viper.SetDefault("realtime.telemetry.enabled", false)
 	viper.SetDefault("realtime.telemetry.listen", "0.0.0.0:8090")
-
-	viper.SetDefault("realtime.retention.enabled", false)
-	viper.SetDefault("realtime.retention.minEvictionHours", 0)
-	viper.SetDefault("realtime.retention.minClipsPerSpecies", 0)
 
 	viper.SetDefault("webserver.enabled", true)
 	viper.SetDefault("webserver.port", "8080")

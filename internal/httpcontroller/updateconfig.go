@@ -139,10 +139,10 @@ func updateServerSettings(s *Server, formValues map[string]interface{}) {
 
 	// Realtime settings - Audio Export
 	if val, ok := formValues["realtime.audioexport.enabled"].(bool); ok {
-		s.Settings.Realtime.AudioExport.Enabled = val
+		s.Settings.Realtime.Audio.Export.Enabled = val
 	}
 	if audioExportPath, ok := formValues["realtime.audioexport.path"].(string); ok {
-		s.Settings.Realtime.AudioExport.Path = audioExportPath
+		s.Settings.Realtime.Audio.Export.Path = audioExportPath
 	}
 
 	// Realtime settings - Log
