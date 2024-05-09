@@ -51,7 +51,7 @@ jobs:
 
       - name: 'Test built image'
         run: |
-          docker run --rm -p 8080:8080 --device /dev/snd --env ALSA_CARD=0 ghcr.io/${{ env.REPO }}:test --source "Dummy" & p1=$!
+          docker run --rm -p 8080:8080 --device /dev/snd --env ALSA_CARD=0 ghcr.io/${{ env.REPO }}:test realtime --source "Dummy" & p1=$!
           if ! wget --retry-connrefused --waitretry=1 --tries=5 -q -O /dev/null http://localhost:8080; then
             echo "Failed to reach container after 5 sec"
             kill "$p1"
