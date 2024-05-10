@@ -1,6 +1,6 @@
 module github.com/tphakala/birdnet-go
 
-go 1.22.2
+go 1.22.3
 
 require (
 	github.com/eclipse/paho.mqtt.golang v1.4.3
