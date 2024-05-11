@@ -5,7 +5,7 @@
   <thead class="text-xs">
     <tr>
       <th scope="col" class="py-2 px-6 w-0">Species</th>
-      <th scope="col" class="py-2 px-4 w-100">Detections</th>
+      <th scope="col" class="py-2 px-4 w-100 hidden md:table-cell">Detections</th>
       {{range .Hours}}
       <th scope="col" class="text-center py-2 px-0">{{printf "%02d" .}}</th>      
       {{end}}
@@ -26,7 +26,7 @@
         </a>
       </th>
 
-      <td class="py-1 px-3">
+      <td class="py-1 px-3 hidden md:table-cell">
         <div class="w-full rounded-full bg-base-300 dark:bg-base-300">
           <div class="progress progress-primary bg-gray-400 dark:bg-gray-400" style="width: {{calcWidth .TotalDetections}}%"></div>
         </div>
