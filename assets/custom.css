@@ -43,8 +43,6 @@
     .heatmap-color-7 { background-color: #0077be; color: #fff; }
     .heatmap-color-8 { background-color: #005595; color: #fff; }
     .heatmap-color-9 { background-color: #003366; color: #fff; } /* Darkest blue */
-    
-    
   }
   
   @media (prefers-color-scheme: dark) {
@@ -60,7 +58,7 @@
       .heatmap-color-9 { background-color: #cce3f1; color: #000; } /* Lightest teal */
   }
   
-:root:has(input.theme-controller[value=dark]:checked) {
+  :root:has(input.theme-controller[value=dark]:checked) {
     .heatmap-color-1 { background-color: #002933; color: #fff; } /* Darkest teal */
     .heatmap-color-2 { background-color: #004466; color: #fff; }
     .heatmap-color-3 { background-color: #005c80; color: #fff; }
@@ -70,9 +68,9 @@
     .heatmap-color-7 { background-color: #66b8e2; color: #000; }
     .heatmap-color-8 { background-color: #99cde9; color: #000; }
     .heatmap-color-9 { background-color: #cce3f1; color: #000; } /* Lightest teal */
-}
+  }
   
-[data-theme=dark] {
+  [data-theme=dark] {
     .heatmap-color-1 { background-color: #002933; color: #fff; } /* Darkest teal */
     .heatmap-color-2 { background-color: #004466; color: #fff; }
     .heatmap-color-3 { background-color: #005c80; color: #fff; }
@@ -82,4 +80,5 @@
     .heatmap-color-7 { background-color: #66b8e2; color: #000; }
     .heatmap-color-8 { background-color: #99cde9; color: #000; }
     .heatmap-color-9 { background-color: #cce3f1; color: #000; } /* Lightest teal */
+  }
 }
