@@ -1,9 +1,8 @@
-name: Deploy Image to GHCR
+name: Build docker image
 
 on:
   push:
-    branches:
-      - main
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -46,6 +45,7 @@ jobs:
 
   push-docker-image:
     needs: test-docker-image
+    if: github.event_name == 'push' && github.ref_name == 'main'
     runs-on: ubuntu-20.04
     strategy:
       matrix:
