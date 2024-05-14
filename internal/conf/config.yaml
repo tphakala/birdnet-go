@@ -1,6 +1,6 @@
  # BirdNET-Go configuration
 
-debug: false           # print debug messages, can help with problem solving
+debug: false            # print debug messages, can help with problem solving
 
 # Node specific settings
 main:
