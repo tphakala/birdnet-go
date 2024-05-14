@@ -14,4 +14,3 @@ output/soundscape.wav.csv
 birdnet.db
 birdnet.txt
 custom_confidence_list.txt
-conf/config.yaml
