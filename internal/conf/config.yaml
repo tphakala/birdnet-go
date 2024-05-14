@@ -1,6 +1,6 @@
  # BirdNET-Go configuration
 
-debug: true           # print debug messages, can help with problem solving
+debug: false           # print debug messages, can help with problem solving
 
 # Node specific settings
 main:
@@ -45,8 +45,8 @@ realtime:
     id: 00000             # birdweather ID
 
   rtsp:
-    url: rtsp://192.168.1.33:8554/             # RTSP stream URL
-    transport: udp      # RTSP Transport Protocol
+    url:                # RTSP stream URL
+    transport: tcp      # RTSP Transport Protocol
 
   mqtt:
     enabled: false      # true to enable MQTT
