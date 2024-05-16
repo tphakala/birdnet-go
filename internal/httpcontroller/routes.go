@@ -5,6 +5,7 @@ import (
 	"embed"
 	"html/template"
 	"io/fs"
+	"log"
 	"sync"
 
 	"golang.org/x/text/cases"
@@ -44,7 +45,9 @@ func (s *Server) initThumbnailCache() {
 
 		go func(note string) {
 			defer wg.Done()
-			thumbnail(note)
+			if _, err := thumbnail(note); err != nil {
+				log.Printf("Error fetching thumbnail for %s: %v", note, err)
+			}
 		}(note.ScientificName)
 	}
 
@@ -96,7 +99,6 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/species-detections", s.speciesDetectionsHandler)
 	s.Echo.GET("/search", s.searchHandler)
 	s.Echo.GET("/spectrogram", s.serveSpectrogramHandler)
-
 
 	// Handle both GET and DELETE requests for the /note route
 	s.Echo.Add("GET", "/note", s.getNoteHandler)
