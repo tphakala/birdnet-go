@@ -2,7 +2,6 @@
 package httpcontroller
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
@@ -14,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/shurcooL/graphql"
+	"cgt.name/pkg/go-mwclient"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -242,30 +241,45 @@ func parseOffset(offsetStr string, defaultOffset int) int {
 }
 
 var (
-	client            = graphql.NewClient("https://app.birdweather.com/graphql", nil)
 	thumbnailMap      sync.Map
 	thumbnailMutexMap sync.Map
 )
 
-func queryGraphQL(scientificName string) (string, error) {
-	log.Printf("Fetching thumbnail for bird: %s\n", scientificName)
-
-	var query struct {
-		Species struct {
-			ThumbnailUrl graphql.String
-		} `graphql:"species(scientificName: $scientificName)"`
-	}
-
-	variables := map[string]interface{}{
-		"scientificName": graphql.String(scientificName),
-	}
-
-	err := client.Query(context.Background(), &query, variables)
+func queryWikiMedia(scientificName string) (string, error) {
+	w, err := mwclient.New("https://wikipedia.org/w/api.php", "Birdnet-Go")
 	if err != nil {
 		return "", err
 	}
 
-	return string(query.Species.ThumbnailUrl), nil
+	// Specify parameters to send.
+	parameters := map[string]string{
+		"action":      "query",
+		"prop":        "pageimages",
+		"piprop":      "thumbnail",
+		"pilicense":   "free",
+		"titles":      scientificName,
+		"pithumbsize": "400",
+		"redirects":   "",
+	}
+
+	// Make the request.
+	resp, err := w.Get(parameters)
+	if err != nil {
+		return "", err
+	}
+
+	// Print the *jason.Object
+	pages, err := resp.GetObjectArray("query", "pages")
+	if err != nil {
+		return "", err
+	}
+
+	thumbnail, err := pages[0].GetString("thumbnail", "source")
+	if err != nil {
+		return "", err
+	}
+
+	return string(thumbnail), nil
 }
 
 // thumbnail returns the url of a given bird's thumbnail
@@ -289,9 +303,9 @@ func thumbnail(scientificName string) (string, error) {
 		return thumbnail.(string), nil
 	}
 
-	thumbn, err := queryGraphQL(scientificName)
+	thumbn, err := queryWikiMedia(scientificName)
 	if err != nil {
-		return "", fmt.Errorf("error querying GraphQL endpoint: %v", err)
+		log.Printf("error querying wikimedia endpoint: %v", err)
 	}
 
 	thumbnailMap.Store(scientificName, thumbn)
