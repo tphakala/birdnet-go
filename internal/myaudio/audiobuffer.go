@@ -3,9 +3,10 @@ package myaudio
 
 import (
 	"errors"
-	"log"
 	"sync"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // AudioBuffer represents a circular buffer for storing PCM audio data, with timestamp tracking.
@@ -19,7 +20,7 @@ type AudioBuffer struct {
 	startTime      time.Time
 	initialized    bool
 	lock           sync.Mutex
-	cond           *sync.Cond // Condition variable for signaling when the buffer is full
+	settings       *conf.Settings
 }
 
 // NewAudioBuffer initializes a new AudioBuffer with timestamp tracking
@@ -34,7 +35,7 @@ func NewAudioBuffer(durationSeconds int, sampleRate, bytesPerSample int) *AudioB
 		bufferDuration: time.Second * time.Duration(durationSeconds),
 		initialized:    false,
 	}
-	ab.cond = sync.NewCond(&ab.lock) // Initialize the condition variable with the buffer's lock
+
 	return ab
 }
 
@@ -65,9 +66,6 @@ func (ab *AudioBuffer) Write(data []byte) {
 		ab.startTime = time.Now().Add(-ab.bufferDuration)
 		//log.Printf("Buffer has wrapped around, adjusting start time to %v", ab.startTime)
 	}
-
-	// Signal any waiting readers that the buffer has been updated.
-	ab.cond.Broadcast()
 }
 
 // ReadSegment extracts a segment of audio data based on precise start and end times, handling wraparounds.
@@ -104,12 +102,13 @@ func (ab *AudioBuffer) ReadSegment(requestedStartTime time.Time, duration int) (
 		if time.Now().After(requestedEndTime) {
 			var segment []byte
 			if startIndex < endIndex {
-				log.Printf("Reading segment from %d to %d", startIndex, endIndex)
+
+				//log.Printf("Reading segment from %d to %d", startIndex, endIndex)
 				segmentSize := endIndex - startIndex
 				segment = make([]byte, segmentSize)
 				copy(segment, ab.data[startIndex:endIndex])
 			} else {
-				log.Printf("Buffer has wrapped, reading segment from %d to %d", startIndex, endIndex)
+				//log.Printf("Buffer has wrapped, reading segment from %d to %d", startIndex, endIndex)
 				segmentSize := (ab.bufferSize - startIndex) + endIndex
 				segment = make([]byte, segmentSize)
 				firstPartSize := ab.bufferSize - startIndex
