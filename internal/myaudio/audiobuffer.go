@@ -5,8 +5,6 @@ import (
 	"errors"
 	"sync"
 	"time"
-
-	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // AudioBuffer represents a circular buffer for storing PCM audio data, with timestamp tracking.
@@ -20,7 +18,6 @@ type AudioBuffer struct {
 	startTime      time.Time
 	initialized    bool
 	lock           sync.Mutex
-	settings       *conf.Settings
 }
 
 // NewAudioBuffer initializes a new AudioBuffer with timestamp tracking
