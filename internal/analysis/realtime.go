@@ -85,7 +85,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	myaudio.InitRingBuffer(bufferSize)
 
 	// Audio buffer for extended audio clip capture
-	audioBuffer := myaudio.NewAudioBuffer(30, conf.SampleRate, 2)
+	audioBuffer := myaudio.NewAudioBuffer(60, conf.SampleRate, conf.BitDepth/8)
 
 	// init detection queue
 	queue.Init(5, 5)
