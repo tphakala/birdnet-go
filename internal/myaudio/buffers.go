@@ -13,7 +13,7 @@ import (
 
 const (
 	chunkSize    = 288000 // 3 seconds of 16-bit PCM data at 48 kHz
-	pollInterval = time.Millisecond * 100
+	pollInterval = time.Millisecond * 10
 )
 
 // A variable to set the overlap. Can range from 0 to 2 seconds, represented in bytes.
@@ -85,7 +85,7 @@ func BufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct
 			data := readFromBuffer()
 			// if buffer has 3 seconds of data, process it
 			if len(data) == chunkSize {
-				startTime := time.Now().Add(-4 * time.Second)
+				startTime := time.Now().Add(-4500 * time.Millisecond)
 				err := ProcessData(bn, data, startTime)
 				if err != nil {
 					log.Printf("Error processing data: %v", err)
