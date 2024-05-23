@@ -2,24 +2,56 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.5.2] - 2024-05-01
+## [0.5.3] - 2024-05-21
 
 ### 🚀 Features
 
- - Prometheus metrics support, endpoint reports BirdNET detections and application Golang runtime metrics - contributed by @aster1sk
- - Disk management by old audio capture cleanup - contributed by @isZumpo
+- *(birdweather)* Added location fuzzing support for BirdWeather uploads, requires support for BirdWeather.com
+- *(audio)* Audio source device is now user configurable
 
 ### 🐛 Bug Fixes
 
-- *(analysis)* File analysis restored
-- *(capture)* Improve audio buffer write function time keeping
-- *(datastore)* Refactor datastore Get, Delete and Save methods for efficient transaction and error handling
-- *(datastore)* Refactor GetClipsQualifyingForRemoval method in interfaces.go for improved input validation and error handling
+- *(audio)* Audio clip extraction fixed for occassional non-contiguous clips
+
+### 🚜 Refactor
+
+- *(conf)* Move default config file from .go to .yaml and add proper default value initialization
+- *(conf)* Update audio export settings in updateconfig.go and realtime.go
+
+### 🏗️ Building
+
+- *(deps)* Bump golang.org/x/text from 0.14.0 to 0.15.0
+- *(deps)* Bump golang.org/x/crypto from 0.22.0 to 0.23.0
+- *(deps)* Bump github.com/prometheus/client_golang
+
+### ⚙️ Miscellaneous Tasks
+
+- Update go version to 1.22.3
+- Update golang version to 1.22.3
+- Bump HTMX version from 1.9.11 to 1.9.12
+- Bump daisyUI to 4.11.1
+- Update custom.css to fix theme controller styles
+- Update tailwindcss to v3.4.3
+- Hide "Detections" column on smaller screens
+- Update audio buffer initialization in realtime analysis
+- Remove unused import and struct field in audiobuffer.go
+
+## [0.5.2] - 2024-05-01
+
+### 🐛 Bug Fixes
+
+- File analysis restored
+- Improve audio buffer write function time keeping
 - *(birdweather)* Improve handling of HTTP Responses in UploadSoundscape to prevent possible panics
-- *(birdweather)* Fixed PCM to WAV encoding for soundscape uploads
+- *(datastore)* Refactor datastore Get, Delete and Save methods for efficient transaction and error handling
+- *(tests)* Refactor createDatabase function in interfaces_test.go for improved error handling
+- *(datastore)* Refactor GetClipsQualifyingForRemoval method in interfaces.go for improved input validation and error handling
+- Refactor ClipCleanupMonitor function for improved error handling and logging
+- *(birdweather)* Fixed PCM to WAV encoding
+- *(birdweather)* Fixed PCM to WAV encoding
 - *(birdweather)* Increase HTTP timeout to 45 seconds
 - *(utils)* Do not report root user as missing from audio group
-- *(tests)* Refactor createDatabase function in interfaces_test.go for improved error handling
+- *(audio)* Fix default audio device reporting
 
 ### 💄 Enhancement
 
@@ -28,6 +60,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🚜 Refactor
 
+- *(telemetry)* Move Prometheus metrics to dedicated package and add pprof debug
 - *(conf)* Remove unused Context struct from internal/conf/context.go
 - *(processor)* Update range filter action to handle error when getting probable species
 
@@ -44,6 +77,7 @@ All notable changes to this project will be documented in this file.
 ### ⚙️ Miscellaneous Tasks
 
 - Fix linter errors
+- Fix linter errors
 
 ### Github
 
@@ -51,10 +85,10 @@ All notable changes to this project will be documented in this file.
 
 ## [0.5.1] - 2024-04-05
 
-### 🚀 Features
+### 🐛 Bug Fixes
 
-- MQTT publishing support, contribution by @janvrska
-- Location filter threshold is now configurable value under BirdNET node
+- *(birdnet)* Make location filter threshold as configurable value under BirdNET node
+- *(mqtt)* Fix CodeRabbit magled code
 
 ### 🏗️ Building
 
