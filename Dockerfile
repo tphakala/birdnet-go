@@ -1,11 +1,7 @@
 # Use ARGs to define default build-time variables for TensorFlow version and target platform
 ARG TENSORFLOW_VERSION=v2.14.0
 
-FROM golang:1.22.3-bookworm as buildenv
-
-# Pass in ARGs after FROM to use them in build stage
-ARG TENSORFLOW_VERSION
-ARG TARGETPLATFORM
+FROM --platform=$BUILDPLATFORM golang:1.22.3-bookworm as buildenv
 
 # Install zip utility along with other dependencies
 RUN apt-get update && apt-get install -y \
@@ -14,6 +10,18 @@ RUN apt-get update && apt-get install -y \
     sudo \
     zip \
     && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /root/src
+
+ARG TENSORFLOW_VERSION
+
+# Download TensorFlow headers
+RUN git clone --branch ${TENSORFLOW_VERSION} --filter=blob:none --depth 1 --no-checkout https://github.com/tensorflow/tensorflow.git \
+    && git -C tensorflow config core.sparseCheckout true \
+    && echo "**/*.h" >> tensorflow/.git/info/sparse-checkout \
+    && git -C tensorflow checkout
+
+ARG TARGETPLATFORM
 
 # Determine PLATFORM based on TARGETPLATFORM
 RUN PLATFORM='unknown'; \
@@ -28,18 +36,11 @@ RUN PLATFORM='unknown'; \
     tar -C "/usr/local/lib" -xz \
     && ldconfig
 
-WORKDIR /root/src
-
-# Download TensorFlow headers
-RUN git clone --branch ${TENSORFLOW_VERSION} --filter=blob:none --depth 1 --no-checkout https://github.com/tensorflow/tensorflow.git \
-    && git -C tensorflow config core.sparseCheckout true \
-    && echo "**/*.h" >> tensorflow/.git/info/sparse-checkout \
-    && git -C tensorflow checkout
-
-FROM buildenv as build
+FROM --platform=$BUILDPLATFORM buildenv as build
 
 # Compile BirdNET-Go
 COPY . BirdNET-Go
+ARG TARGETPLATFORM
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     cd BirdNET-Go && make TARGETPLATFORM=${TARGETPLATFORM}
