@@ -1,10 +1,11 @@
+// conf/consts.go hard coded constants
 package conf
 
 const (
-	SampleRate    = 48000
-	BitDepth      = 16
-	NumChannels   = 1
-	CaptureLength = 3
+	SampleRate    = 48000 // Sample rate of the audio fed to BirdNET Analyzer
+	BitDepth      = 16    // Bit depth of the audio fed to BirdNET Analyzer
+	NumChannels   = 1     // Number of channels of the audio fed to BirdNET Analyzer
+	CaptureLength = 3     // Length of audio data fed to BirdNET Analyzer in seconds
 
 	SpeciesConfigCSV  = "species_config.csv"
 	SpeciesActionsCSV = "species_actions.csv"
