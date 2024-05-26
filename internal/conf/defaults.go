@@ -38,9 +38,12 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.export.path", "clips/")
 	viper.SetDefault("realtime.audio.export.type", "wav")
 
-	viper.SetDefault("realtime.audio.export.retention.enabled", false)
+	viper.SetDefault("realtime.audio.export.retention.enabled", true)
+	viper.SetDefault("realtime.audio.export.retention.debug", false)
+	viper.SetDefault("realtime.audio.export.retention.mode", "priority")
+	viper.SetDefault("realtime.audio.export.retention.diskusagelimit", "80%")
+	viper.SetDefault("realtime.audio.export.retention.minClipsPerSpecies", 10)
 	viper.SetDefault("realtime.audio.export.retention.minEvictionHours", 0)
-	viper.SetDefault("realtime.audio.export.retention.minClipsPerSpecies", 0)
 
 	viper.SetDefault("realtime.log.enabled", false)
 	viper.SetDefault("realtime.log.path", "birdnet.txt")

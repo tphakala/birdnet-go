@@ -54,9 +54,11 @@ type Settings struct {
 				Path      string // path to audio clip export directory
 				Type      string // audio file type, wav, mp3 or flac
 				Retention struct {
-					Enabled            bool // true to enable audio clip retention
-					MinEvictionHours   int  // minimum number of hours to keep audio clips
-					MinClipsPerSpecies int  // minimum number of clips per species to keep
+					Enabled            bool   // true to enable audio clip retention
+					Mode               string // retention mode, "age" or "priority"
+					DiskUsageLimit     string // maximum disk usage percentage before retention
+					MinEvictionHours   int    // minimum number of hours to keep audio clips
+					MinClipsPerSpecies int    // minimum number of clips per species to keep
 				}
 			}
 		}
