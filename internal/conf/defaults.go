@@ -1,4 +1,4 @@
-// contains default values for settings
+// conf/defaults.go default values for settings
 package conf
 
 import (
@@ -33,6 +33,7 @@ func setDefaultConfig() {
 
 	viper.SetDefault("realtime.audio.source", "sysdefault")
 
+	viper.SetDefault("realtime.audio.export.debug", false)
 	viper.SetDefault("realtime.audio.export.enabled", true)
 	viper.SetDefault("realtime.audio.export.path", "clips/")
 	viper.SetDefault("realtime.audio.export.type", "wav")
