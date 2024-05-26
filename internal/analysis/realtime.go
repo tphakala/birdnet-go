@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -156,7 +157,7 @@ func startBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan s
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
 func startClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, quitChan chan struct{}) {
 	wg.Add(1)
-	go ClipCleanupMonitor(wg, settings, dataStore, quitChan)
+	go ClipCleanupMonitor(wg, dataStore, quitChan)
 }
 
 func startTelemetryEndpoint(wg *sync.WaitGroup, settings *conf.Settings, metrics *telemetry.Metrics, quitChan chan struct{}) {
@@ -196,10 +197,10 @@ func closeDataStore(store datastore.Interface) {
 }
 
 // ClipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
-func ClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, quitChan chan struct{}) {
+func ClipCleanupMonitor(wg *sync.WaitGroup, dataStore datastore.Interface, quitChan chan struct{}) {
 	defer wg.Done() // Ensure that the WaitGroup is marked as done after the function exits
 
-	// Create a ticker that triggers every minute to perform cleanup
+	// Create a ticker that triggers every five minutes to perform cleanup
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop() // Ensure the ticker is stopped to prevent leaks
 
@@ -210,34 +211,21 @@ func ClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore d
 			return
 
 		case <-ticker.C:
-			// Perform cleanup operation on every tick
-			clipsForRemoval, err := dataStore.GetClipsQualifyingForRemoval(settings.Realtime.Audio.Export.Retention.MinEvictionHours, settings.Realtime.Audio.Export.Retention.MinClipsPerSpecies)
-			if err != nil {
-				log.Printf("Error retrieving clips for removal: %s\n", err)
-				continue // Skip this tick's cleanup if there's an error
+			log.Println("Cleanup ticker triggered")
+
+			// age based cleanup method
+			if conf.Setting().Realtime.Audio.Export.Retention.Mode == "age" {
+				log.Println("Running age based cleanup")
+				if err := diskmanager.AgeBasedCleanup(dataStore); err != nil {
+					log.Println("Error cleaning up clips: ", err)
+				}
 			}
 
-			log.Printf("Found %d clips to remove\n", len(clipsForRemoval))
-
-			for _, clip := range clipsForRemoval {
-				// Attempt to remove the clip file from the filesystem
-				if err := os.Remove(clip.ClipName); err != nil {
-					if os.IsNotExist(err) {
-						// Attempt to delete the database record if the clip file aleady doesn't exist
-						if err := dataStore.DeleteNoteClipPath(clip.ID); err != nil {
-							log.Printf("Failed to delete clip path for %s: %s\n", clip.ID, err)
-						} else {
-							log.Printf("Cleared clip path of missing clip for %s\n", clip.ID)
-						}
-					} else {
-						log.Printf("Failed to remove %s: %s\n", clip.ClipName, err)
-					}
-				} else {
-					log.Printf("Removed %s\n", clip.ClipName)
-					// Attempt to delete the database record if the file removal was successful
-					if err := dataStore.DeleteNoteClipPath(clip.ID); err != nil {
-						log.Printf("Failed to delete clip path for %s: %s\n", clip.ID, err)
-					}
+			// priority based cleanup method
+			if conf.Setting().Realtime.Audio.Export.Retention.Mode == "priority" {
+				log.Println("Running priority based cleanup")
+				if err := diskmanager.PriorityBasedCleanup(quitChan); err != nil {
+					log.Println("Error cleaning up clips: ", err)
 				}
 			}
 		}
