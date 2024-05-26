@@ -3,12 +3,12 @@ package conf
 
 import (
 	"embed"
-	"errors"
 	"fmt"
 	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/spf13/viper"
@@ -151,8 +151,18 @@ const (
 // buildTime is the time when the binary was built.
 var buildDate string
 
+// settingsInstance is the current settings instance
+var (
+	settingsInstance *Settings
+	once             sync.Once
+	settingsMutex    sync.RWMutex
+)
+
 // Load reads the configuration file and environment variables into GlobalConfig.
 func Load() (*Settings, error) {
+	settingsMutex.Lock()
+	defer settingsMutex.Unlock()
+
 	// Create a new settings struct
 	settings := &Settings{}
 
@@ -166,12 +176,11 @@ func Load() (*Settings, error) {
 		return nil, fmt.Errorf("error unmarshaling config into struct: %w", err)
 	}
 
-	// Validate MQTT settings
-	if settings.Realtime.MQTT.Enabled {
-		if settings.Realtime.MQTT.Broker == "" {
-			return nil, errors.New("MQTT broker URL is required when MQTT is enabled")
-		}
-	}
+	// Validate settings
+	validateSettings(settings)
+
+	// Save settings instance
+	settingsInstance = settings
 	return settings, nil
 }
 
@@ -220,10 +229,12 @@ func createDefaultConfig() error {
 	configPath := filepath.Join(configPaths[0], "config.yaml")
 	defaultConfig := getDefaultConfig()
 
+	// Create directories for config file
 	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
 		return fmt.Errorf("error creating directories for config file: %w", err)
 	}
 
+	// Write default config file
 	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
 		return fmt.Errorf("error writing default config file: %w", err)
 	}
@@ -239,4 +250,73 @@ func getDefaultConfig() string {
 		log.Fatalf("Error reading config file: %v", err)
 	}
 	return string(data)
+}
+
+// GetSettings returns the current settings instance
+func GetSettings() *Settings {
+	settingsMutex.RLock()
+	defer settingsMutex.RUnlock()
+	return settingsInstance
+}
+
+// SaveSettings saves the current settings to the YAML file
+func SaveSettings() error {
+	settingsMutex.RLock()
+	defer settingsMutex.RUnlock()
+
+	// Convert settingsInstance to a map
+	settingsMap, err := structToMap(settingsInstance)
+	if err != nil {
+		return fmt.Errorf("error converting settings to map: %w", err)
+	}
+
+	// Merge the settings map with viper
+	err = viper.MergeConfigMap(settingsMap)
+	if err != nil {
+		return fmt.Errorf("error merging settings with viper: %w", err)
+	}
+
+	// Write the updated settings to the config file
+	return viper.WriteConfig()
+}
+
+// UpdateSettings updates the settings in memory and persists them to the YAML file
+func UpdateSettings(newSettings *Settings) error {
+	settingsMutex.Lock()
+	defer settingsMutex.Unlock()
+
+	// Validate new settings
+	if err := validateSettings(newSettings); err != nil {
+		return fmt.Errorf("invalid settings: %w", err)
+	}
+
+	settingsInstance = newSettings
+
+	// Convert newSettings to a map
+	settingsMap, err := structToMap(newSettings)
+	if err != nil {
+		return fmt.Errorf("error converting settings to map: %w", err)
+	}
+
+	// Merge the settings map with viper
+	err = viper.MergeConfigMap(settingsMap)
+	if err != nil {
+		return fmt.Errorf("error merging settings with viper: %w", err)
+	}
+
+	// Write the updated settings to the config file
+	return viper.WriteConfig()
+}
+
+// Settings returns the current settings instance, initializing it if necessary
+func Setting() *Settings {
+	once.Do(func() {
+		if settingsInstance == nil {
+			_, err := Load()
+			if err != nil {
+				log.Fatalf("Error loading settings: %v", err)
+			}
+		}
+	})
+	return GetSettings()
 }
