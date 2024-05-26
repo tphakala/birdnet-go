@@ -38,6 +38,7 @@ func AgeBasedCleanup(dataStore datastore.Interface) error {
 			} else {
 				log.Printf("Failed to remove %s: %s\n", clip.ClipName, err)
 			}
+			return err
 		} else {
 			log.Printf("Removed %s\n", clip.ClipName)
 			// Attempt to delete the database record if the file removal was successful
@@ -45,7 +46,6 @@ func AgeBasedCleanup(dataStore datastore.Interface) error {
 				log.Printf("Failed to delete clip path for %s: %s\n", clip.ID, err)
 			}
 		}
-		return err
 	}
 
 	return nil
