@@ -33,6 +33,7 @@ realtime:
     source: "sysdefault"  # audio source to use for analysis
     export:
       enabled: true       # true to export audio clips containing indentified bird calls
+      debug: false        # true to enable audio export debug messages
       path: clips/        # path to audio clip export directory
       type: wav           # only wav supported for now
       retention:
