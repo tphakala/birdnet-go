@@ -3,12 +3,14 @@ package conf
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/mitchellh/mapstructure"
@@ -176,4 +178,16 @@ func structToMap(settings *Settings) (map[string]interface{}, error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+// ParsePercentage converts a percentage string (e.g., "80%") to a float64
+func ParsePercentage(percentage string) (float64, error) {
+	if strings.HasSuffix(percentage, "%") {
+		value, err := strconv.ParseFloat(strings.TrimSuffix(percentage, "%"), 64)
+		if err != nil {
+			return 0, err
+		}
+		return value, nil
+	}
+	return 0, errors.New("invalid percentage format")
 }
