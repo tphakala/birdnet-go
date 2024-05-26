@@ -3,8 +3,11 @@ package myaudio
 
 import (
 	"errors"
+	"log"
 	"sync"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // AudioBuffer represents a circular buffer for storing PCM audio data, with timestamp tracking.
@@ -61,7 +64,9 @@ func (ab *AudioBuffer) Write(data []byte) {
 	if ab.writeIndex <= prevWriteIndex {
 		// If old data has been overwritten, adjust startTime to maintain accurate timekeeping.
 		ab.startTime = time.Now().Add(-ab.bufferDuration)
-		//log.Printf("Buffer has wrapped around, adjusting start time to %v", ab.startTime)
+		if conf.Setting().Realtime.Audio.Export.Debug {
+			log.Printf("Buffer has wrapped around, adjusting start time to %v", ab.startTime)
+		}
 	}
 }
 
@@ -99,13 +104,16 @@ func (ab *AudioBuffer) ReadSegment(requestedStartTime time.Time, duration int) (
 		if time.Now().After(requestedEndTime) {
 			var segment []byte
 			if startIndex < endIndex {
-
-				//log.Printf("Reading segment from %d to %d", startIndex, endIndex)
+				if conf.Setting().Realtime.Audio.Export.Debug {
+					log.Printf("Reading segment from %d to %d", startIndex, endIndex)
+				}
 				segmentSize := endIndex - startIndex
 				segment = make([]byte, segmentSize)
 				copy(segment, ab.data[startIndex:endIndex])
 			} else {
-				//log.Printf("Buffer has wrapped, reading segment from %d to %d", startIndex, endIndex)
+				if conf.Setting().Realtime.Audio.Export.Debug {
+					log.Printf("Buffer has wrapped, reading segment from %d to %d", startIndex, endIndex)
+				}
 				segmentSize := (ab.bufferSize - startIndex) + endIndex
 				segment = make([]byte, segmentSize)
 				firstPartSize := ab.bufferSize - startIndex
@@ -116,7 +124,9 @@ func (ab *AudioBuffer) ReadSegment(requestedStartTime time.Time, duration int) (
 			return segment, nil
 		}
 
-		//log.Printf("Buffer is not filled yet, waiting for data to be available")
+		if conf.Setting().Realtime.Audio.Export.Debug {
+			log.Printf("Buffer is not filled yet, waiting for data to be available")
+		}
 		ab.lock.Unlock()
 		time.Sleep(1 * time.Second) // Sleep briefly to avoid busy waiting
 	}

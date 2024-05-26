@@ -49,6 +49,7 @@ type Settings struct {
 		Audio struct {
 			Source string // audio source to use for analysis
 			Export struct {
+				Debug     bool   // true to enable audio export debug
 				Enabled   bool   // export audio clips containing indentified bird calls
 				Path      string // path to audio clip export directory
 				Type      string // audio file type, wav, mp3 or flac
