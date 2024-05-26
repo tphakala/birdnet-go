@@ -1,4 +1,4 @@
-// conf/utils.go
+// conf/utils.go various util functions for configuration package
 package conf
 
 import (
@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/mitchellh/mapstructure"
 )
 
 // getDefaultConfigPaths returns a list of default configuration paths for the current operating system.
@@ -164,4 +166,14 @@ func GetBoardModel() string {
 	// Return the board model as a string.
 	model := strings.TrimSpace(string(data))
 	return model
+}
+
+// structToMap converts a struct to a map using mapstructure
+func structToMap(settings *Settings) (map[string]interface{}, error) {
+	var result map[string]interface{}
+	err := mapstructure.Decode(settings, &result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
