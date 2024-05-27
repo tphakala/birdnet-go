@@ -201,7 +201,7 @@ func ClipCleanupMonitor(wg *sync.WaitGroup, dataStore datastore.Interface, quitC
 	defer wg.Done() // Ensure that the WaitGroup is marked as done after the function exits
 
 	// Create a ticker that triggers every five minutes to perform cleanup
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop() // Ensure the ticker is stopped to prevent leaks
 
 	for {
