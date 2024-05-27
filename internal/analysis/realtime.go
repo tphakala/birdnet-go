@@ -112,7 +112,9 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	startAudioCapture(&wg, settings, quitChan, restartChan, audioBuffer)
 
 	// start cleanup of clips
-	startClipCleanupMonitor(&wg, settings, dataStore, quitChan)
+	if conf.Setting().Realtime.Audio.Export.Retention.Enabled {
+		startClipCleanupMonitor(&wg, settings, dataStore, quitChan)
+	}
 
 	// start telemetry endpoint
 	startTelemetryEndpoint(&wg, settings, metrics, quitChan)
@@ -157,7 +159,7 @@ func startBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan s
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
 func startClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, quitChan chan struct{}) {
 	wg.Add(1)
-	go ClipCleanupMonitor(wg, dataStore, quitChan)
+	go clipCleanupMonitor(wg, dataStore, quitChan)
 }
 
 func startTelemetryEndpoint(wg *sync.WaitGroup, settings *conf.Settings, metrics *telemetry.Metrics, quitChan chan struct{}) {
@@ -197,7 +199,7 @@ func closeDataStore(store datastore.Interface) {
 }
 
 // ClipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
-func ClipCleanupMonitor(wg *sync.WaitGroup, dataStore datastore.Interface, quitChan chan struct{}) {
+func clipCleanupMonitor(wg *sync.WaitGroup, dataStore datastore.Interface, quitChan chan struct{}) {
 	defer wg.Done() // Ensure that the WaitGroup is marked as done after the function exits
 
 	// Create a ticker that triggers every five minutes to perform cleanup
@@ -211,11 +213,15 @@ func ClipCleanupMonitor(wg *sync.WaitGroup, dataStore datastore.Interface, quitC
 			return
 
 		case <-ticker.C:
-			log.Println("Cleanup ticker triggered")
+			if conf.Setting().Realtime.Audio.Export.Debug {
+				log.Println("Cleanup ticker triggered")
+			}
 
 			// age based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Mode == "age" {
-				log.Println("Running age based cleanup")
+				if conf.Setting().Realtime.Audio.Export.Debug {
+					log.Println("Running age based cleanup")
+				}
 				if err := diskmanager.AgeBasedCleanup(dataStore); err != nil {
 					log.Println("Error cleaning up clips: ", err)
 				}
@@ -223,7 +229,9 @@ func ClipCleanupMonitor(wg *sync.WaitGroup, dataStore datastore.Interface, quitC
 
 			// priority based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Mode == "priority" {
-				log.Println("Running priority based cleanup")
+				if conf.Setting().Realtime.Audio.Export.Debug {
+					log.Println("Running priority based cleanup")
+				}
 				if err := diskmanager.PriorityBasedCleanup(quitChan); err != nil {
 					log.Println("Error cleaning up clips: ", err)
 				}
