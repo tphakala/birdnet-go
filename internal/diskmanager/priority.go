@@ -78,9 +78,9 @@ func GetAudioFiles(baseDir string, allowedExts []string, debug bool) ([]FileInfo
 				if err != nil {
 					return err
 				}
-				if debug {
+				/*if debug {
 					log.Printf("Found file: %s, Species: %s, Confidence: %d, Timestamp: %s", fileInfo.Path, fileInfo.Species, fileInfo.Confidence, fileInfo.Timestamp)
-				}
+				}*/
 				files = append(files, fileInfo)
 			}
 		}
