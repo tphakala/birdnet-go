@@ -16,7 +16,7 @@ func GetDiskUsage(baseDir string) (float64, error) {
 	}
 
 	total := stat.Blocks * uint64(stat.Bsize)
-	free := stat.Bfree * uint64(stat.Bsize)
+	free := stat.Bavail * uint64(stat.Bsize)
 	used := total - free
 
 	return (float64(used) / float64(total)) * 100, nil
