@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -64,21 +63,6 @@ func LoadPolicy(policyFile string) (*Policy, error) {
 	return policy, nil
 }
 
-// GetDiskUsage returns the disk usage percentage
-func GetDiskUsage(baseDir string) (float64, error) {
-	var stat syscall.Statfs_t
-	err := syscall.Statfs(baseDir, &stat)
-	if err != nil {
-		return 0, err
-	}
-
-	total := stat.Blocks * uint64(stat.Bsize)
-	free := stat.Bfree * uint64(stat.Bsize)
-	used := total - free
-
-	return (float64(used) / float64(total)) * 100, nil
-}
-
 // GetAudioFiles returns a list of audio files in the directory and its subdirectories
 func GetAudioFiles(baseDir string, allowedExts []string, debug bool) ([]FileInfo, error) {
 	var files []FileInfo
@@ -94,9 +78,9 @@ func GetAudioFiles(baseDir string, allowedExts []string, debug bool) ([]FileInfo
 				if err != nil {
 					return err
 				}
-				/*if debug {
+				if debug {
 					log.Printf("Found file: %s, Species: %s, Confidence: %d, Timestamp: %s", fileInfo.Path, fileInfo.Species, fileInfo.Confidence, fileInfo.Timestamp)
-				}*/
+				}
 				files = append(files, fileInfo)
 			}
 		}
@@ -104,16 +88,6 @@ func GetAudioFiles(baseDir string, allowedExts []string, debug bool) ([]FileInfo
 	})
 
 	return files, err
-}
-
-// contains checks if a string is in a slice
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }
 
 // parseFileInfo parses the file information from the file path and os.FileInfo
@@ -170,6 +144,32 @@ func PriorityBasedCleanup(quitChan chan struct{}) error {
 		log.Printf("Starting cleanup process. Base directory: %s, Threshold: %.1f%%", baseDir, threshold)
 	}
 
+	// Check and handle disk usage
+	if err := handleDiskUsage(baseDir, threshold, debug); err != nil {
+		return err
+	}
+
+	// Get the list of audio files
+	files, err := GetAudioFiles(baseDir, allowedExts, debug)
+	if err != nil {
+		return err
+	}
+
+	// Sort files by the cleanup priority and get the initial count of files per species per subdirectory
+	speciesMonthCount := sortFiles(files, debug)
+
+	// Debug: write sorted files to a file
+	if debug {
+		if err := WriteSortedFilesToFile(files, "file_cleanup_order.txt"); err != nil {
+			return err
+		}
+	}
+
+	// Perform the cleanup
+	return performCleanup(files, baseDir, threshold, minClipsPerSpecies, speciesMonthCount, debug, quitChan)
+}
+
+func handleDiskUsage(baseDir string, threshold float64, debug bool) error {
 	// Get the current disk usage
 	diskUsage, err := GetDiskUsage(baseDir)
 	if err != nil {
@@ -192,26 +192,15 @@ func PriorityBasedCleanup(quitChan chan struct{}) error {
 		}
 	}
 
-	// Get the list of audio files
-	files, err := GetAudioFiles(baseDir, allowedExts, debug)
-	if err != nil {
-		return err
-	}
+	return nil
+}
 
-	// Sort files by the cleanup priority and get the initial count of files per species per subdirectory
-	speciesMonthCount := sortFiles(files, debug)
-
-	// Debug: write sorted files to a file
-	if debug {
-		if err := WriteSortedFilesToFile(files, "file_cleanup_order.txt"); err != nil {
-			return err
-		}
-	}
-
+func performCleanup(files []FileInfo, baseDir string, threshold float64, minClipsPerSpecies int, speciesMonthCount map[string]map[string]int, debug bool, quitChan chan struct{}) error {
 	// Delete files until disk usage is below the threshold or 100 files have been deleted
 	deletedFiles := 0
 	maxDeletions := 1000
 	totalFreedSpace := int64(0)
+
 	for _, file := range files {
 		select {
 		case <-quitChan:
@@ -222,6 +211,10 @@ func PriorityBasedCleanup(quitChan chan struct{}) error {
 		default:
 			// Get the subdirectory name
 			subDir := filepath.Dir(file.Path)
+			diskUsage, err := GetDiskUsage(baseDir)
+			if err != nil {
+				return err
+			}
 			if diskUsage < threshold || deletedFiles >= maxDeletions || speciesMonthCount[file.Species][subDir] <= minClipsPerSpecies {
 				continue
 			}
@@ -242,12 +235,6 @@ func PriorityBasedCleanup(quitChan chan struct{}) error {
 
 			// Add file size to total freed space
 			totalFreedSpace += file.Size
-
-			// Update disk usage
-			diskUsage, err = GetDiskUsage(baseDir)
-			if err != nil {
-				return err
-			}
 		}
 	}
 

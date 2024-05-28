@@ -31,3 +31,13 @@ func WriteSortedFilesToFile(files []FileInfo, filePath string) error {
 	log.Printf("Sorted files have been written to %s", filePath)
 	return nil
 }
+
+// contains checks if a string is in a slice
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
