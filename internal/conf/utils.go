@@ -191,3 +191,43 @@ func ParsePercentage(percentage string) (float64, error) {
 	}
 	return 0, errors.New("invalid percentage format")
 }
+
+// ParseRetentionPeriod converts a string like "24h", "7d", "1w", "3m", "1y" to hours.
+func ParseRetentionPeriod(retention string) (int, error) {
+	if len(retention) == 0 {
+		return 0, fmt.Errorf("retention period cannot be empty")
+	}
+
+	// Try to parse the retention period
+	lastChar := retention[len(retention)-1]
+	numberPart := retention[:len(retention)-1]
+
+	// Handle case where the input is a plain integer
+	if lastChar >= '0' && lastChar <= '9' {
+		hours, err := strconv.Atoi(retention)
+		if err != nil {
+			return 0, fmt.Errorf("invalid retention period format: %s", retention)
+		}
+		return hours, nil
+	}
+
+	number, err := strconv.Atoi(numberPart)
+	if err != nil {
+		return 0, fmt.Errorf("invalid retention period format: %s", retention)
+	}
+
+	switch lastChar {
+	case 'h':
+		return number, nil
+	case 'd':
+		return number * 24, nil
+	case 'w':
+		return number * 24 * 7, nil
+	case 'm':
+		return number * 24 * 30, nil // Approximation, as months can vary in length
+	case 'y':
+		return number * 24 * 365, nil // Ignoring leap years for simplicity
+	default:
+		return 0, fmt.Errorf("invalid suffix for retention period: %c", lastChar)
+	}
+}

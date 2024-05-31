@@ -112,7 +112,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	startAudioCapture(&wg, settings, quitChan, restartChan, audioBuffer)
 
 	// start cleanup of clips
-	if conf.Setting().Realtime.Audio.Export.Retention.Enabled {
+	if conf.Setting().Realtime.Audio.Export.Retention.Policy != "none" {
 		startClipCleanupMonitor(&wg, settings, dataStore, quitChan)
 	}
 
@@ -206,6 +206,8 @@ func clipCleanupMonitor(wg *sync.WaitGroup, dataStore datastore.Interface, quitC
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop() // Ensure the ticker is stopped to prevent leaks
 
+	log.Println("Clip retention policy:", conf.Setting().Realtime.Audio.Export.Retention.Policy)
+
 	for {
 		select {
 		case <-quitChan:
@@ -213,26 +215,16 @@ func clipCleanupMonitor(wg *sync.WaitGroup, dataStore datastore.Interface, quitC
 			return
 
 		case <-ticker.C:
-			if conf.Setting().Realtime.Audio.Export.Debug {
-				log.Println("Cleanup ticker triggered")
-			}
-
 			// age based cleanup method
-			if conf.Setting().Realtime.Audio.Export.Retention.Mode == "age" {
-				if conf.Setting().Realtime.Audio.Export.Debug {
-					log.Println("Running age based cleanup")
-				}
-				if err := diskmanager.AgeBasedCleanup(dataStore); err != nil {
+			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "age" {
+				if err := diskmanager.AgeBasedCleanup(quitChan); err != nil {
 					log.Println("Error cleaning up clips: ", err)
 				}
 			}
 
 			// priority based cleanup method
-			if conf.Setting().Realtime.Audio.Export.Retention.Mode == "priority" {
-				if conf.Setting().Realtime.Audio.Export.Debug {
-					log.Println("Running priority based cleanup")
-				}
-				if err := diskmanager.PriorityBasedCleanup(quitChan); err != nil {
+			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "usage" {
+				if err := diskmanager.UsageBasedCleanup(quitChan); err != nil {
 					log.Println("Error cleaning up clips: ", err)
 				}
 			}

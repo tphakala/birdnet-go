@@ -36,12 +36,11 @@ realtime:
       debug: false        # true to enable audio export debug messages
       path: clips/        # path to audio clip export directory
       type: wav           # only wav supported for now
-      retention:
-        enabled: true           # true to enable retention policy of clips
-        mode: priority          # age or priority
-        diskusagelimit: 80%     # percentage of disk usage to trigger eviction        
-        minClipsPerSpecies: 10  # minumum number of clips per species to keep before starting evictions
-        minEvictionHours: 0     # minumum number of hours before considering clip for eviction
+      retention:        
+        policy: usage     # retention policy: none, age or usage
+        maxage: 30d       # age policy: maximum age of clips to keep before starting evictions
+        maxusage: 80%     # usage policy: percentage of disk usage to trigger eviction        
+        minclips: 10      # minumum number of clips per species to keep before starting evictions
   
   log:
     enabled: false      # true to enable OBS chat log
