@@ -40,7 +40,7 @@ func setDefaultConfig() {
 
 	viper.SetDefault("realtime.audio.export.retention.enabled", true)
 	viper.SetDefault("realtime.audio.export.retention.debug", false)
-	viper.SetDefault("realtime.audio.export.retention.policy", "use")
+	viper.SetDefault("realtime.audio.export.retention.policy", "usage")
 	viper.SetDefault("realtime.audio.export.retention.maxusage", "80%")
 	viper.SetDefault("realtime.audio.export.retention.maxage", "30d")
 	viper.SetDefault("realtime.audio.export.retention.minclips", 10)
