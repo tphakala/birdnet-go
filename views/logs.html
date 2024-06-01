@@ -1,5 +1,57 @@
 {{define "logs"}}
 
-<span class="col-span-12">Nothing here yet ..</span>
+<!doctype html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8" />
+	<title>BirdNET-Go Logs</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<link href="/assets/tailwind.css" rel="stylesheet" />
+	<link href="/assets/custom.css" rel="stylesheet" />
+	<!-- htmx -->
+	<script src="/assets/htmx.min.js" defer></script>
+	<!-- alpine.js -->
+	<script src="/assets/alpinejs.min.js" defer></script>
+</head>
+
+<body class="drawer min-h-screen bg-base-200 lg:drawer-open">
+	<input id="my-drawer" type="checkbox" class="drawer-toggle" />
+
+	<div class="drawer-content">
+		<div class="grid grid-cols-12 grid-rows-[min-content] gap-y-0 p-3 lg:pt-4 lg:pr-8 lg:pl-8 lg:pb-0">
+			{{ template "header" . }}
+		</div>
+	
+		<!-- content -->
+		<main>
+			<div id="mainContent" class="grid grid-cols-12 grid-rows-[min-content] gap-y-8 p-3 lg:p-8" >
+				<span class="col-span-12">
+          {{if .LogContent}}
+              <pre>{{.LogContent}}</pre>
+          {{else}}
+              It didn't work
+          {{end}}
+      </span>
+			</div>
+			<!-- Placeholder for dynamic notifications -->
+			<div id="status-message"></div>
+		</main>
+	</div>
+
+	{{ template "sidebar" . }}
+
+	<script>
+		// Set the date picker to today's date
+		setTimeout(function () {
+			var datePicker = document.getElementById('datePicker');
+			var today = new Date().toLocaleString('sv').split(' ')[0];
+			datePicker.value = today;
+		}, 0); // Set timeout for 0ms
+
+	</script>
+</body>
+
+</html>
 
 {{end}}

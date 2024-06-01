@@ -1,9 +1,11 @@
 package httpcontroller
 
 import (
+	"bufio"
 	"io/fs"
 	"mime"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -33,4 +35,31 @@ func customFileServer(e *echo.Echo, fileSystem fs.FS, root string) {
 		// Serve the file
 		fileServer.ServeHTTP(w, r)
 	})))
+}
+
+// readWebLog reads the content of the web.log file from the root directory and returns it as a string.
+// It returns an error if there is an issue opening or reading the file.
+func readWebLog() (string, error) {
+	// Open the web.log file
+	file, err := os.Open("webui.log")
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	var content string
+	scanner := bufio.NewScanner(file)
+
+	// Read the file line by line and append each line to the content string
+	for scanner.Scan() {
+		content += scanner.Text() + "\n"
+	}
+
+	// Check if there was an error during scanning
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+
+	// Return the content of the file
+	return content, nil
 }
