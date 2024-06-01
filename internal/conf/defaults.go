@@ -65,11 +65,12 @@ func setDefaultConfig() {
 
 	viper.SetDefault("realtime.privacyfilter.enabled", true)
 	viper.SetDefault("realtime.privacyfilter.debug", false)
-	viper.SetDefault("realtime.privacyfilter.threshold", 0.05)
+	viper.SetDefault("realtime.privacyfilter.confidence", 0.05)
 
 	viper.SetDefault("realtime.dogbarkfilter.enabled", false)
 	viper.SetDefault("realtime.dogbarkfilter.debug", false)
 	viper.SetDefault("realtime.dogbarkfilter.remember", 5)
+	viper.SetDefault("realtime.dogbarkfilter.confidence", 0.1)
 
 	viper.SetDefault("realtime.telemetry.enabled", false)
 	viper.SetDefault("realtime.telemetry.listen", "0.0.0.0:8090")
