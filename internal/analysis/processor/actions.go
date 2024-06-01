@@ -91,11 +91,6 @@ func (a DatabaseAction) Execute(data interface{}) error {
 	// Check if the event should be handled for this species
 	if a.EventTracker.TrackEvent(species, DatabaseSave) {
 		// Save note to database
-		/*
-			if err := a.Ds.Save(a.Note); err != nil {
-				log.Printf("Failed to save note to database: %v", err)
-				return err
-			}*/
 		if err := a.Ds.Save(&a.Note, a.Results); err != nil {
 			log.Printf("Failed to save note and results to database: %v", err)
 			return err
