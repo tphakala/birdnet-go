@@ -196,7 +196,7 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 		if p.Settings.Realtime.PrivacyFilter.Enabled {
 			// if debug is enabled print results
 			if strings.Contains(speciesLowercase, "human") && result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
-				log.Printf("Human detected, confidence %s", result.Confidence)
+				log.Printf("Human detected, confidence %.6f", result.Confidence)
 				// now minus 4 seconds
 				p.LastHumanDetection = time.Now().Add(-4 * time.Second)
 			}
