@@ -65,11 +65,11 @@ realtime:
 
   privacyfilter:          # Privacy filter prevents audio clip saving if human voice 
     enabled: true         # is detected durin audio capture
-    threshold: 0.05       # threshold for human voice detection
+    confidence: 0.05      # threshold for human voice detection
 
   dogbarkfilter:
     enabled: true
-    condidence: 0.1       # confidence threshold for dog bark detection
+    confidence: 0.1       # confidence threshold for dog bark detection
     remember: 5           # number of minutes to remember dog barks
 
   telemetry:
