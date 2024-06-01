@@ -185,17 +185,21 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 		speciesLowercase := strings.ToLower(commonName)
 
 		// Dog detection handling
-		if strings.Contains(speciesLowercase, "dog") && result.Confidence > 0.1 {
+		if strings.Contains(speciesLowercase, "dog") && result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
 			log.Printf("Dog detected, updating last detection timestamp for potential owl false positives")
 			p.LastDogDetection = time.Now()
 		}
 
 		// Human detection handling for privacy filter
 		if p.Settings.Realtime.PrivacyFilter.Enabled {
-			if strings.Contains(speciesLowercase, "human") && result.Confidence > 0.05 {
+			// if debug is enabled print results
+			if p.Settings.Realtime.PrivacyFilter.Debug {
+				log.Printf("[Privacy filter] species: %s, confidence: %.2f\n", speciesLowercase, result.Confidence)
+			}
+			if strings.Contains(speciesLowercase, "human") && result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
 				log.Printf("Human detected, updating last detection timestamp for privacy filtering")
-				// now minus 2 seconds
-				p.LastHumanDetection = time.Now().Add(-3 * time.Second)
+				// now minus 4 seconds
+				p.LastHumanDetection = time.Now().Add(-4 * time.Second)
 			}
 		}
 
@@ -312,7 +316,9 @@ func (p *Processor) pendingDetectionsFlusher() {
 
 					// Check dog bark filter
 					if p.Settings.Realtime.DogBarkFilter.Enabled {
-						log.Printf("Last dog detection: %s\n", p.LastDogDetection)
+						if p.Settings.Realtime.DogBarkFilter.Debug {
+							log.Printf("Last dog detection: %s\n", p.LastDogDetection)
+						}
 						// Check against common name
 						if p.DogBarkFilter.Check(item.Detection.Note.CommonName, p.LastDogDetection) {
 							log.Printf("Discarding detection of %s due to recent dog bark\n", item.Detection.Note.CommonName)

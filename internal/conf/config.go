@@ -77,11 +77,16 @@ type Settings struct {
 		}
 
 		PrivacyFilter struct {
-			Enabled bool // true to enable privacy filter
+			Debug      bool    // true to enable debug mode
+			Enabled    bool    // true to enable privacy filter
+			Confidence float32 // confidence threshold for human detection
 		}
 
 		DogBarkFilter struct {
-			Enabled bool // true to enable dog bark filter
+			Debug      bool    // true to enable debug mode
+			Enabled    bool    // true to enable dog bark filter
+			Confidence float32 // confidence threshold for dog bark detection
+			Remember   int     // how long we should remember bark for filtering?
 		}
 
 		RTSP struct {

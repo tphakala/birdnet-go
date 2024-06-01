@@ -26,8 +26,8 @@ birdnet:
 
 # Realtime processing settings
 realtime:
-  interval: 15          # duplicate prediction interval in seconds
-  processingtime: false # true to report processing time for each prediction
+  interval: 15            # duplicate prediction interval in seconds
+  processingtime: false   # true to report processing time for each prediction
   
   audio:
     source: "sysdefault"  # audio source to use for analysis
@@ -43,8 +43,8 @@ realtime:
         minclips: 10      # minumum number of clips per species to keep before starting evictions
   
   log:
-    enabled: false      # true to enable OBS chat log
-    path: birdnet.txt   # path to OBS chat log
+    enabled: false        # true to enable OBS chat log
+    path: birdnet.txt     # path to OBS chat log
 
   birdweather:
     enabled: false        # true to enable birdweather uploads
@@ -53,54 +53,55 @@ realtime:
     id: 00000             # birdweather ID
 
   rtsp:
-    url:                # RTSP stream URL
-    transport: tcp      # RTSP Transport Protocol
+    url:                  # RTSP stream URL
+    transport: tcp        # RTSP Transport Protocol
 
   mqtt:
-    enabled: false      # true to enable MQTT
+    enabled: false        # true to enable MQTT
     broker: tcp://localhost:1883 # MQTT (tcp://host:port)
-    topic: birdnet      # MQTT topic
-    username: birdnet   # MQTT username
-    password: secret    # MQTT password
+    topic: birdnet        # MQTT topic
+    username: birdnet     # MQTT username
+    password: secret      # MQTT password
 
-  privacyfilter:        # Privacy filter prevents audio clip saving if human voice 
-    enabled: true       # is detected durin audio capture
+  privacyfilter:          # Privacy filter prevents audio clip saving if human voice 
+    enabled: true         # is detected durin audio capture
+    threshold: 0.05       # threshold for human voice detection
 
   dogbarkfilter:
     enabled: true
+    condidence: 0.1       # confidence threshold for dog bark detection
+    remember: 5           # number of minutes to remember dog barks
 
   telemetry:
     enabled: false         # true to enable Prometheus compatible telemetry endpoint
     listen: "0.0.0.0:8090" # IP address and port to listen on
 
-
-
 webserver:
-  enabled: true         # true to enable web server
-  port: 8080            # port for web server
-  autotls: false        # true to enable auto TLS
+  enabled: true           # true to enable web server
+  port: 8080              # port for web server
+  autotls: false          # true to enable auto TLS
   log:
-    enabled: true       # true to enable log file
-    path: webui.log     # path to log file
-    rotation: daily     # daily, weekly or size
-    maxsize: 1048576    # max size in bytes for size rotation
-    rotationday: 0      # day of the week for weekly rotation, 0 = Sunday
+    enabled: false        # true to enable log file
+    path: webui.log       # path to log file
+    rotation: daily       # daily, weekly or size
+    maxsize: 1048576      # max size in bytes for size rotation
+    rotationday: 0        # day of the week for weekly rotation, 0 = Sunday
 
 # Ouput settings
 output:
   file:
-    enabled: true       # true to enable file output for file and directory analysis
-    path: output/       # path to output directory
-    type: table         # ouput format, Raven table or csv
+    enabled: true         # true to enable file output for file and directory analysis
+    path: output/         # path to output directory
+    type: table           # ouput format, Raven table or csv
   # Only one database is supported at a time
   # if both are enabled, SQLite will be used.
   sqlite:
-    enabled: true       # true to enable sqlite output
-    path: birdnet.db    # path to sqlite database
+    enabled: true         # true to enable sqlite output
+    path: birdnet.db      # path to sqlite database
   mysql:
-    enabled: false      # true to enable mysql output
-    username: birdnet   # mysql database username
-    password: secret    # mysql database user password
-    database: birdnet   # mysql database name
-    host: localhost     # mysql database host
-    port: 3306          # mysql database port
+    enabled: false        # true to enable mysql output
+    username: birdnet     # mysql database username
+    password: secret      # mysql database user password
+    database: birdnet     # mysql database name
+    host: localhost       # mysql database host
+    port: 3306            # mysql database port
