@@ -180,7 +180,9 @@ func Load() (*Settings, error) {
 	}
 
 	// Validate settings
-	validateSettings(settings)
+	if err := validateSettings(settings); err != nil {
+		return nil, fmt.Errorf("error validating settings: %w", err)
+	}
 
 	// Save settings instance
 	settingsInstance = settings
