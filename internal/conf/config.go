@@ -90,8 +90,8 @@ type Settings struct {
 		}
 
 		RTSP struct {
-			Url       string // RTSP stream URL
-			Transport string // RTSP Transport Protocol
+			Transport string   // RTSP Transport Protocol
+			Urls      []string // RTSP stream URL
 		}
 
 		MQTT struct {

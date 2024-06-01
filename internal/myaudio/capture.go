@@ -1,3 +1,4 @@
+// capture.go this file contains code for capturing audio
 package myaudio
 
 import (
@@ -15,21 +16,25 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *AudioBuffer) {
-	if settings.Realtime.RTSP.Url != "" {
-		// RTSP audio capture
-		captureAudioRTSP(settings, wg, quitChan, restartChan, audioBuffer)
-	} else {
-		// Default audio capture
-		captureAudioMalgo(settings, wg, quitChan, restartChan, audioBuffer)
-	}
-}
-
 // captureSource holds information about an audio capture source.
 type captureSource struct {
 	Name    string
 	ID      string
 	Pointer unsafe.Pointer
+}
+
+func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *AudioBuffer) {
+	if len(settings.Realtime.RTSP.Urls) > 0 {
+		// RTSP audio capture for each URL
+		for _, url := range settings.Realtime.RTSP.Urls {
+			wg.Add(1)
+			go captureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, audioBuffer)
+		}
+	} else {
+		// Default audio capture
+		wg.Add(1)
+		captureAudioMalgo(settings, wg, quitChan, restartChan, audioBuffer)
+	}
 }
 
 // selectCaptureSource selects an appropriate capture device based on the provided settings and available device information.
