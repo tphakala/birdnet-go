@@ -64,7 +64,12 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.mqtt.password", "secret")
 
 	viper.SetDefault("realtime.privacyfilter.enabled", true)
+	viper.SetDefault("realtime.privacyfilter.debug", false)
+	viper.SetDefault("realtime.privacyfilter.threshold", 0.05)
+
 	viper.SetDefault("realtime.dogbarkfilter.enabled", false)
+	viper.SetDefault("realtime.dogbarkfilter.debug", false)
+	viper.SetDefault("realtime.dogbarkfilter.remember", 5)
 
 	viper.SetDefault("realtime.telemetry.enabled", false)
 	viper.SetDefault("realtime.telemetry.listen", "0.0.0.0:8090")
@@ -73,7 +78,7 @@ func setDefaultConfig() {
 	viper.SetDefault("webserver.port", "8080")
 	viper.SetDefault("webserver.autotls", false)
 
-	viper.SetDefault("webserver.log.enabled", true)
+	viper.SetDefault("webserver.log.enabled", false)
 	viper.SetDefault("webserver.log.path", "webui.log")
 	viper.SetDefault("webserver.log.rotation", RotationDaily)
 	viper.SetDefault("webserver.log.maxsize", 1048576)
