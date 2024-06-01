@@ -55,7 +55,7 @@ func captureAudioRTSP(url string, transport string, wg *sync.WaitGroup, quitChan
 		defer cancel()
 
 		// Buffer to hold the audio data read from FFmpeg's stdout.
-		buf := make([]byte, 65536)
+		buf := make([]byte, 144000)
 		for {
 			select {
 			case <-stopReadingChan:
