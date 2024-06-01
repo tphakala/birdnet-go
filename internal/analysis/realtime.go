@@ -82,8 +82,12 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// quitChannel is used to signal the goroutines to stop.
 	quitChan := make(chan struct{})
 
-	// Initialize the ring buffer.
-	myaudio.InitRingBuffer(bufferSize)
+	// Calculate buffer multiplier based on number of RTSP streams
+	bufferMultiplier := len(settings.Realtime.RTSP.Urls)
+	if bufferMultiplier == 0 {
+		bufferMultiplier = 1
+	}
+	myaudio.InitRingBuffer(bufferSize * bufferMultiplier)
 
 	// Audio buffer for extended audio clip capture
 	audioBuffer := myaudio.NewAudioBuffer(60, conf.SampleRate, conf.BitDepth/8)
@@ -146,7 +150,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
 func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *myaudio.AudioBuffer) {
-	wg.Add(1)
+	// waitgroup is managed within CaptureAudio
 	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, audioBuffer)
 }
 
@@ -184,7 +188,7 @@ func monitorCtrlC(quitChan chan struct{}) {
 
 		<-sigChan // Block until a SIGINT signal is received
 
-		fmt.Println("\nReceived Ctrl+C, shutting down")
+		log.Println("Received Ctrl+C, shutting down")
 		close(quitChan) // Close the quit channel to signal other goroutines to stop
 	}()
 }
