@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.4] - 2024-06-01
+
+### 🚀 Features
+
+- *(audio)* Disk usage based audio clip retention policy, enabled by default with 80% disk usage treshold
+- *(conf)* Privacy filter Confidence threshold setting
+- *(conf)* Dog bark filter Confidence threshold setting
+- *(conf)* Dog bark filter time to remember bark setting
+
+### 🐛 Bug Fixes
+
+- *(webui*) Fix Settings interface load error
+
+### 🚜 Refactor
+
+- *(conf)* Refactor configuration package to improve settings handling, easier access to settings in code
+- *(audio)* Audio clip retention policy setting: none, age, usage
+- *(audio)* Age base audio clip retention policy accepts time in days, weeks, months and years instead of hours
+- *(conf)* Many settings renamed
+
+### ⚙️ Miscellaneous Tasks
+
+- Update go.mod with github.com/mitchellh/mapstructure v1.5.0
+
 ## [0.5.3] - 2024-05-21
 
 ### 🚀 Features
