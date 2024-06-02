@@ -3,6 +3,7 @@ package myaudio
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -23,6 +24,17 @@ type AudioBuffer struct {
 	lock           sync.Mutex
 }
 
+// map to store audio buffers for each audio source
+var audioBuffers map[string]*AudioBuffer
+var mu sync.Mutex // Mutex for concurrency control
+
+func InitAudioBuffers(durationSeconds int, sampleRate, bytesPerSample int, sources []string) {
+	audioBuffers = make(map[string]*AudioBuffer)
+	for _, source := range sources {
+		audioBuffers[source] = NewAudioBuffer(durationSeconds, sampleRate, bytesPerSample)
+	}
+}
+
 // NewAudioBuffer initializes a new AudioBuffer with timestamp tracking
 func NewAudioBuffer(durationSeconds int, sampleRate, bytesPerSample int) *AudioBuffer {
 	bufferSize := durationSeconds * sampleRate * bytesPerSample
@@ -37,6 +49,30 @@ func NewAudioBuffer(durationSeconds int, sampleRate, bytesPerSample int) *AudioB
 	}
 
 	return ab
+}
+
+// Write adds PCM audio data to the buffer for a given source.
+func WriteToCaptureBuffer(source string, data []byte) {
+	ab, exists := audioBuffers[source]
+	if !exists {
+		log.Printf("No audio buffer found for source: %s", source)
+		return
+	}
+
+	ab.Write(data)
+}
+
+// ReadSegment extracts a segment of audio data from the buffer for a given source.
+func ReadSegmentFromCaptureBuffer(source string, requestedStartTime time.Time, duration int) ([]byte, error) {
+	ab, exists := audioBuffers[source]
+	if !exists {
+		return nil, fmt.Errorf("No audio buffer found for source: %s", source)
+	} else {
+		// DEBUG
+		log.Printf("Reading segment from buffer for source: %s", source)
+	}
+
+	return ab.ReadSegment(requestedStartTime, duration)
 }
 
 // Write adds PCM audio data to the buffer, ensuring thread safety and accurate timekeeping.

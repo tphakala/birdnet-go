@@ -13,7 +13,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observation"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
@@ -29,7 +28,8 @@ type Processor struct {
 	SpeciesConfig      SpeciesConfig
 	IncludedSpecies    *[]string
 	SpeciesListUpdated time.Time
-	AudioBuffer        *myaudio.AudioBuffer
+	//AudioBuffer        *myaudio.AudioBuffer
+	//AudioBuffers       map[string]*myaudio.AudioBuffer
 	LastDogDetection   time.Time // keep track of dog barks to filter out false positive owl detections
 	LastHumanDetection time.Time // keep track of human vocal for privacy filtering
 	Metrics            *telemetry.Metrics
@@ -46,6 +46,7 @@ type Detections struct {
 type PendingDetection struct {
 	Detection     Detections // The detection data
 	Confidence    float64    // Confidence level of the detection
+	Source        string     // Audio source of the detection, RTSP URL or audio card name
 	HumanDetected bool       // Flag to indicate if the clip contains human vocal
 	FirstDetected time.Time  // Time the detection was first detected
 	LastUpdated   time.Time  // Last time this detection was updated
@@ -60,15 +61,16 @@ var PendingDetections map[string]PendingDetection = make(map[string]PendingDetec
 // ensuring thread safety when the map is accessed or modified by concurrent goroutines.
 var mutex sync.Mutex
 
-func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffer *myaudio.AudioBuffer, metrics *telemetry.Metrics) *Processor {
+// func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *telemetry.Metrics) *Processor {
+func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics) *Processor {
 	p := &Processor{
 		Settings:        settings,          // BirdNET-Go Settings struct
 		Ds:              ds,                // Datastore
 		Bn:              bn,                // BirdNET analyzer
 		EventTracker:    NewEventTracker(), // Duplicate event tracker
 		IncludedSpecies: new([]string),     // Included species list
-		AudioBuffer:     audioBuffer,       // Audio buffer for audio export
-		Metrics:         metrics,           // Prometheus metrics struct
+		//AudioBuffers:    audioBuffers,      // Audio buffer for audio export
+		Metrics: metrics, // Prometheus metrics struct
 	}
 
 	// Start the detection processor
@@ -143,7 +145,7 @@ func (p *Processor) processDetections(item *queue.Results) {
 		// Check if this is a new detection or one with higher confidence.
 		if pendingDetection, exists := PendingDetections[commonName]; !exists || confidence > pendingDetection.Confidence {
 			if !exists {
-				log.Printf("New detection: %s with confidence: %f\n", detection.Note.CommonName, confidence)
+				log.Printf("New detection: %s with confidence: %f, source: %v\n", detection.Note.CommonName, confidence, item.Source)
 			}
 
 			// Set the flush deadline for new detections or if the current detection's deadline has passed.
@@ -151,7 +153,7 @@ func (p *Processor) processDetections(item *queue.Results) {
 			flushDeadline := firstDetected.Add(delay)
 
 			if exists {
-				log.Printf("Updating detection: %s with confidence: %f\n", detection.Note.CommonName, confidence)
+				log.Printf("Updating detection: %s with confidence: %f, source: %v\n", detection.Note.CommonName, confidence, item.Source)
 				// If updating an existing detection, keep the original firstDetected timestamp.
 				firstDetected = pendingDetection.FirstDetected
 				if !time.Now().After(pendingDetection.FlushDeadline) {
@@ -229,7 +231,7 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 		item.ClipName = p.generateClipName(scientificName, result.Confidence)
 
 		beginTime, endTime := 0.0, 0.0
-		note := observation.New(p.Settings, beginTime, endTime, result.Species, float64(result.Confidence), item.ClipName, item.ElapsedTime)
+		note := observation.New(p.Settings, beginTime, endTime, result.Species, float64(result.Confidence), item.Source, item.ClipName, item.ElapsedTime)
 
 		// detection passed all filters, process it
 		detections = append(detections, Detections{

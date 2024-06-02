@@ -8,7 +8,8 @@ import (
 	"time"
 )
 
-func captureAudioRTSP(url string, transport string, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *AudioBuffer) {
+// func captureAudioRTSP(url string, transport string, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *AudioBuffer) {
+func captureAudioRTSP(url string, transport string, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}) {
 	defer wg.Done()
 
 	// Context to control the lifetime of the FFmpeg command
@@ -55,8 +56,7 @@ func captureAudioRTSP(url string, transport string, wg *sync.WaitGroup, quitChan
 		defer cancel()
 
 		// Buffer to hold the audio data read from FFmpeg's stdout.
-		buf := make([]byte, 144000)
-		tempBuffer := make([]byte, 0, 144000) // Temporary buffer to store partial reads
+		buf := make([]byte, 65535)
 
 		for {
 			select {
@@ -75,15 +75,8 @@ func captureAudioRTSP(url string, transport string, wg *sync.WaitGroup, quitChan
 					return
 				}
 
-				// Append the read bytes to the temporary buffer
-				tempBuffer = append(tempBuffer, buf[:n]...)
-
-				// If the temporary buffer has 144000 or more bytes, write in chunks of 144000 bytes
-				for len(tempBuffer) >= 144000 {
-					WriteToBuffer(tempBuffer[:144000])
-					audioBuffer.Write(tempBuffer[:144000])
-					tempBuffer = tempBuffer[144000:] // Remove the bytes that have been written
-				}
+				WriteToAnalysisBuffer(url, buf[:n])
+				WriteToCaptureBuffer(url, buf[:n])
 			}
 		}
 	}()
