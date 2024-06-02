@@ -82,15 +82,21 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// quitChannel is used to signal the goroutines to stop.
 	quitChan := make(chan struct{})
 
-	// Calculate buffer multiplier based on number of RTSP streams
-	bufferMultiplier := len(settings.Realtime.RTSP.Urls)
-	if bufferMultiplier == 0 {
-		bufferMultiplier = 1
+	// Initialize ring buffers for each audio source
+	var sources []string
+	if settings.Realtime.RTSP.Urls != nil {
+		sources = settings.Realtime.RTSP.Urls
+		// DEBUG
+		//log.Println("RTSP sources configured, using RTSP for audio capture")
+	} else {
+		// DEBUG
+		//log.Println("No RTSP sources configured, using malgo for audio capture")
+		sources = []string{"malgo"}
 	}
-	myaudio.InitRingBuffer(bufferSize * bufferMultiplier)
+	myaudio.InitRingBuffers(bufferSize*2, sources)
 
 	// Audio buffer for extended audio clip capture
-	audioBuffer := myaudio.NewAudioBuffer(60, conf.SampleRate, conf.BitDepth/8)
+	myaudio.InitAudioBuffers(60, conf.SampleRate, conf.BitDepth/8, sources)
 
 	// init detection queue
 	queue.Init(5, 5)
@@ -102,18 +108,22 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	}
 
 	// Start worker pool for processing detections
-	processor.New(settings, dataStore, bn, audioBuffer, metrics)
+	processor.New(settings, dataStore, bn, metrics)
 
 	// Start http server
 	httpcontroller.New(settings, dataStore)
 
 	// Initialize the wait group to wait for all goroutines to finish
 	var wg sync.WaitGroup
-	// start buffer monitor
-	startBufferMonitor(&wg, bn, quitChan)
+
+	// Start buffer monitors for each audio source
+	for _, source := range sources {
+		wg.Add(1)
+		go myaudio.BufferMonitor(&wg, bn, quitChan, source)
+	}
 
 	// start audio capture
-	startAudioCapture(&wg, settings, quitChan, restartChan, audioBuffer)
+	startAudioCapture(&wg, settings, quitChan, restartChan)
 
 	// start cleanup of clips
 	if conf.Setting().Realtime.Audio.Export.Retention.Policy != "none" {
@@ -142,22 +152,16 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		case <-restartChan:
 			// Handle the restart signal.
 			fmt.Println("Restarting audio capture")
-			startAudioCapture(&wg, settings, quitChan, restartChan, audioBuffer)
+			startAudioCapture(&wg, settings, quitChan, restartChan)
 		}
 	}
 
 }
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
-func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *myaudio.AudioBuffer) {
+func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan chan struct{}, restartChan chan struct{}) {
 	// waitgroup is managed within CaptureAudio
-	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, audioBuffer)
-}
-
-// startBufferMonitor initializes and starts the buffer monitoring routine in a new goroutine.
-func startBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}) {
-	wg.Add(1)
-	go myaudio.BufferMonitor(wg, bn, quitChan)
+	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan)
 }
 
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.

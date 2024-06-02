@@ -23,17 +23,17 @@ type captureSource struct {
 	Pointer unsafe.Pointer
 }
 
-func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *AudioBuffer) {
+func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}) {
 	if len(settings.Realtime.RTSP.Urls) > 0 {
 		// RTSP audio capture for each URL
 		for _, url := range settings.Realtime.RTSP.Urls {
 			wg.Add(1)
-			go captureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, audioBuffer)
+			go captureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan)
 		}
 	} else {
 		// Default audio capture
 		wg.Add(1)
-		captureAudioMalgo(settings, wg, quitChan, restartChan, audioBuffer)
+		captureAudioMalgo(settings, wg, quitChan, restartChan)
 	}
 }
 
@@ -99,7 +99,7 @@ func hexToASCII(hexStr string) (string, error) {
 	return string(bytes), nil
 }
 
-func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *AudioBuffer) {
+func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}) {
 	defer wg.Done() // Ensure this is called when the goroutine exits
 	var device *malgo.Device
 
@@ -153,8 +153,8 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 	// Write to ringbuffer when audio data is received
 	// BufferMonitor() will poll this buffer and read data from it
 	onReceiveFrames := func(pSample2, pSamples []byte, framecount uint32) {
-		WriteToBuffer(pSamples)
-		audioBuffer.Write(pSamples)
+		WriteToAnalysisBuffer("malgo", pSamples)
+		WriteToCaptureBuffer("malgo", pSamples)
 	}
 
 	// onStopDevice is called when the device stops, either normally or unexpectedly

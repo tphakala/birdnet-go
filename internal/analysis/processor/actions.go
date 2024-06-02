@@ -35,7 +35,8 @@ type DatabaseAction struct {
 	Note         datastore.Note
 	Results      []datastore.Results
 	EventTracker *EventTracker
-	AudioBuffer  *myaudio.AudioBuffer
+	//AudioBuffer  *myaudio.AudioBuffer
+	//AudioBuffers *map[string]*myaudio.AudioBuffer
 }
 
 type SaveAudioAction struct {
@@ -99,7 +100,8 @@ func (a DatabaseAction) Execute(data interface{}) error {
 		// Save audio clip to file if enabled
 		if a.Settings.Realtime.Audio.Export.Enabled {
 			// export audio clip from capture buffer
-			pcmData, err := a.AudioBuffer.ReadSegment(a.Note.BeginTime, 15)
+			//pcmData, err := a.AudioBuffer.ReadSegment(a.Note.BeginTime, 15)
+			pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source, a.Note.BeginTime, 15)
 			if err != nil {
 				log.Printf("Failed to read audio segment from buffer: %v", err)
 				return err
