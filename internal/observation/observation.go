@@ -26,7 +26,7 @@ func ParseSpeciesString(species string) (string, string, string) {
 
 // New creates and returns a new Note with the provided parameters and current date and time.
 // It uses the configuration and parsing functions to set the appropriate fields.
-func New(settings *conf.Settings, beginTime, endTime float64, species string, confidence float64, clipName string, elapsedTime time.Duration) datastore.Note {
+func New(settings *conf.Settings, beginTime, endTime float64, species string, confidence float64, source string, clipName string, elapsedTime time.Duration) datastore.Note {
 	// Parse the species string to get the scientific name, common name, and species code.
 	scientificName, commonName, speciesCode := ParseSpeciesString(species)
 
@@ -36,12 +36,19 @@ func New(settings *conf.Settings, beginTime, endTime float64, species string, co
 	detectionTime := now.Add(-2 * time.Second)
 	time := detectionTime.Format("15:04:05")
 
+	var audioSource string
+	if settings.Input.Path != "" {
+		audioSource = settings.Input.Path
+	} else {
+		audioSource = source
+	}
+
 	// Return a new Note struct populated with the provided parameters as well as the current date and time.
 	return datastore.Note{
-		SourceNode: settings.Main.Name,  // From the provided configuration settings.
-		Date:       date,                // Use ISO 8601 date format.
-		Time:       time,                // Use 24-hour time format.
-		InputFile:  settings.Input.Path, // From the provided configuration settings.
+		SourceNode: settings.Main.Name, // From the provided configuration settings.
+		Date:       date,               // Use ISO 8601 date format.
+		Time:       time,               // Use 24-hour time format.
+		Source:     audioSource,        // From the provided configuration settings.
 		//BeginTime:      beginTime,                    // Start time of the observation.
 		//EndTime:        endTime,                      // End time of the observation.
 		SpeciesCode:    speciesCode,                  // Parsed species code.
@@ -95,7 +102,7 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 
 		// Prepare the line for notes above the threshold, assuming note.BeginTime and note.EndTime are of type time.Time
 		line := fmt.Sprintf("%d\tSpectrogram 1\t1\t%s\t%s\t%s\t0\t15000\t%s\t%s\t%.4f\n",
-			i+1, note.InputFile, note.BeginTime.Format("15:04:05"), note.EndTime.Format("15:04:05"), note.SpeciesCode, note.CommonName, note.Confidence)
+			i+1, note.Source, note.BeginTime.Format("15:04:05"), note.EndTime.Format("15:04:05"), note.SpeciesCode, note.CommonName, note.Confidence)
 
 		// Attempt to write the note
 		if _, err = w.Write([]byte(line)); err != nil {

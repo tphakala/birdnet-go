@@ -14,7 +14,7 @@ import (
 
 // processData processes the given audio data to detect bird species, logs the detected species
 // and optionally saves the audio clip if a bird species is detected above the configured threshold.
-func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time) error {
+func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source string) error {
 	// get current time to track processing time
 	predictStart := time.Now()
 
@@ -42,10 +42,11 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time) error {
 
 	// Create a Results message to be sent through queue to processor
 	resultsMessage := queue.Results{
-		StartTime:   startTime,
-		ElapsedTime: elapsedTime,
-		PCMdata:     data,
-		Results:     results,
+		StartTime:   startTime,   // Timestamp when the audio data was received
+		ElapsedTime: elapsedTime, // Time taken to process the audio data
+		PCMdata:     data,        // BirdNET analyzed audio data
+		Results:     results,     // Detected species and their confidence levels
+		Source:      source,      // Source of the audio data, RSTP URL or audio card name
 	}
 
 	// Send the results to the queue

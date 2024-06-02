@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -38,6 +39,7 @@ type BirdNET struct {
 	Labels              []string
 	Settings            *conf.Settings
 	SpeciesListUpdated  time.Time // Timestamp for the last update of the species list.
+	mu                  sync.Mutex
 }
 
 // NewBirdNET initializes a new BirdNET instance with given settings.
