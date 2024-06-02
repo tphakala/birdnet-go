@@ -2,7 +2,6 @@
 package myaudio
 
 import (
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -118,7 +117,7 @@ func BufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct
 	}
 }
 
-func validatePCMData(data []byte) error {
+/*func validatePCMData(data []byte) error {
 	// Check if the data size is a multiple of the sample size (e.g., 2 bytes for 16-bit audio)
 	if len(data)%2 != 0 {
 		return fmt.Errorf("invalid PCM data size: %d", len(data))
@@ -155,4 +154,4 @@ func validatePCMData(data []byte) error {
 	}
 
 	return nil
-}
+}*/
