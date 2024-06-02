@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -83,6 +84,9 @@ func AgeBasedCleanup(quit <-chan struct{}) error {
 				if debug {
 					log.Printf("File %s deleted", file.Path)
 				}
+
+				// Yield to other goroutines
+				runtime.Gosched()
 
 				// Check if we have reached the maximum number of deletions
 				if deletedFiles >= maxDeletions {
