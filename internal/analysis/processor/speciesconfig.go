@@ -63,6 +63,8 @@ func LoadSpeciesConfig(fileName string) (SpeciesConfig, error) {
 	reader.Comment = '#'        // Set comment character
 	reader.FieldsPerRecord = -1 // Allow a variable number of fields
 
+	log.Println("Loading species config from file:", fileName)
+
 	records, err := reader.ReadAll()
 	if err != nil {
 		log.Printf("Error reading CSV file '%s': %v", fileName, err)
@@ -80,6 +82,10 @@ func LoadSpeciesConfig(fileName string) (SpeciesConfig, error) {
 		if err != nil {
 			log.Printf("Invalid confidence value for species '%s': %v", species, err)
 			continue
+		} else {
+			if conf.Setting().Debug {
+				log.Printf("Config loaded species: %s confidence: %.3f\n", species, confidence)
+			}
 		}
 
 		// Initialize default actions and exclude
