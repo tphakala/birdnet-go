@@ -164,12 +164,6 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan cha
 	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan)
 }
 
-// startBufferMonitor initializes and starts the buffer monitoring routine in a new goroutine.
-func startBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}, source string) {
-	wg.Add(1)
-	go myaudio.BufferMonitor(wg, bn, quitChan, source)
-}
-
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
 func startClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, quitChan chan struct{}) {
 	wg.Add(1)

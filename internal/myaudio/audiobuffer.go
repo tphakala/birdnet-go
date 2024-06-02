@@ -26,7 +26,6 @@ type AudioBuffer struct {
 
 // map to store audio buffers for each audio source
 var audioBuffers map[string]*AudioBuffer
-var mu sync.Mutex // Mutex for concurrency control
 
 func InitAudioBuffers(durationSeconds int, sampleRate, bytesPerSample int, sources []string) {
 	audioBuffers = make(map[string]*AudioBuffer)
