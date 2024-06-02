@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -132,6 +133,9 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 			if debug {
 				log.Printf("File deleted. %d clips left for species %s in %s", speciesMonthCount[file.Species][subDir], file.Species, subDir)
 			}
+
+			// Yield to other goroutines
+			runtime.Gosched()
 		}
 	}
 
