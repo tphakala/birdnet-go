@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -73,6 +74,10 @@ func GetAudioFiles(baseDir string, allowedExts []string, debug bool) ([]FileInfo
 				files = append(files, fileInfo)
 			}
 		}
+
+		// Yield to other goroutines
+		runtime.Gosched()
+
 		return nil
 	})
 
