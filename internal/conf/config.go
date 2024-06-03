@@ -34,7 +34,7 @@ type Settings struct {
 		Latitude                float64 // latitude of recording location for prediction filtering
 		Threads                 int     // number of CPU threads to use for analysis
 		Locale                  string  // language to use for labels
-		LocationFilterThreshold float32 // threshold for prediction confidence to report
+		LocationFilterThreshold float32 // rangefilter species occurrence threshold
 	}
 
 	Input struct {
