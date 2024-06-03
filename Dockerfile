@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     git \
     sudo \
     zip \
+    gcc-aarch64-linux-gnu \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root/src
@@ -43,7 +44,13 @@ COPY . BirdNET-Go
 ARG TARGETPLATFORM
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    cd BirdNET-Go && make TARGETPLATFORM=${TARGETPLATFORM}
+    PLATFORM='unknown'; \
+    case "${TARGETPLATFORM}" in \
+        "linux/amd64") PLATFORM='linux_amd64' ;; \
+        "linux/arm64") PLATFORM='linux_arm64' ;; \
+        *) echo "Unsupported platform: '${TARGETPLATFORM}'" && exit 1 ;; \
+    esac; \
+    cd BirdNET-Go && make ${PLATFORM}
 
 # Create final image using a multi-platform base image
 FROM debian:bookworm-slim
