@@ -56,12 +56,11 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 FROM debian:bookworm-slim
 
 # Install ALSA library and SOX
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libasound2 \
     ffmpeg \
     sox \
-    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /usr/local/lib/libtensorflowlite_c.so /usr/local/lib/
