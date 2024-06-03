@@ -54,7 +54,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.birdweather.threshold", 0.8)
 	viper.SetDefault("realtime.birdweather.locationaccuracy", 500)
 
-	viper.SetDefault("realtime.rtsp.url", "")
+	viper.SetDefault("realtime.rtsp.urls", []string{})
 	viper.SetDefault("realtime.rtsp.transport", "tcp")
 
 	viper.SetDefault("realtime.mqtt.enabled", false)
