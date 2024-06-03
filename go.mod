@@ -10,7 +10,7 @@ require (
 	github.com/labstack/echo/v4 v4.12.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/prometheus/client_golang v1.19.1
-	github.com/shirou/gopsutil/v3 v3.24.4
+	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/smallnest/ringbuffer v0.0.0-20230728150354-35801fa39d0e
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.19.0
