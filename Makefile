@@ -33,7 +33,7 @@ check-tensorflow:
 	@if [ ! -f "$(HOME)/src/tensorflow/tensorflow/lite/c/c_api.h" ]; then \
 		echo "TensorFlow Lite C API header not found. Cloning TensorFlow source..."; \
 		mkdir -p $(HOME)/src; \
-		git clone --branch v2.14.0 --filter=blob:none --depth 1 --no-checkout https://github.com/tensorflow/tensorflow.git $(HOME)/src/tensorflow; \
+		git clone --branch $(TFLITE_VERSION) --filter=blob:none --depth 1 --no-checkout https://github.com/tensorflow/tensorflow.git $(HOME)/src/tensorflow; \
 		git -C $(HOME)/src/tensorflow config core.sparseCheckout true; \
 		echo "**/*.h" >> $(HOME)/src/tensorflow/.git/info/sparse-checkout; \
 		git -C $(HOME)/src/tensorflow checkout; \
@@ -42,16 +42,17 @@ check-tensorflow:
 	fi
 
 # Download and extract TensorFlow Lite C library
+download-tflite: TFLITE_C_FILE=tflite_c_$(TFLITE_VERSION)_$(TFLITE_LIB_ARCH)
 download-tflite:
 	@if [ ! -f "/usr/lib/libtensorflowlite_c.so" ]; then \
 		echo "TensorFlow Lite C library not found. Downloading..."; \
-		wget -q https://github.com/tphakala/tflite_c/releases/download/$(TFLITE_VERSION)/$(TFLITE_LIB_ARCH) -P ./; \
-		if [ $(suffix $(TFLITE_LIB_ARCH)) = .zip ]; then \
-			unzip -o $(TFLITE_LIB_ARCH) -d .; \
+		wget -q https://github.com/tphakala/tflite_c/releases/download/$(TFLITE_VERSION)/$(TFLITE_C_FILE) -P ./; \
+		if [ $(suffix $(TFLITE_C_FILE)) = .zip ]; then \
+			unzip -o $(TFLITE_C_FILE) -d .; \
 		else \
-			tar -xzf $(TFLITE_LIB_ARCH) -C .; \
+			tar -xzf $(TFLITE_C_FILE) -C .; \
 		fi; \
-		rm -f $(TFLITE_LIB_ARCH); \
+		rm -f $(TFLITE_C_FILE); \
 		sudo cp libtensorflowlite_c.* $(TFLITE_LIB_DIR)/; \
 		sudo ldconfig; \
 	else \
@@ -71,13 +72,13 @@ $(LABELS_ZIP): $(LABELS_FILES)
 
 # Build for Linux amd64
 linux_amd64: TFLITE_LIB_DIR="/usr/lib"
-linux_amd64: TFLITE_LIB_ARCH=tflite_c_$(TFLITE_VERSION)_linux_amd64.tar.gz
+linux_amd64: TFLITE_LIB_ARCH=linux_amd64.tar.gz
 linux_amd64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite 
 	GOOS=linux GOARCH=amd64 $(CGO_FLAGS) go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
 # Build for Linux arm64, with cross-compilation setup if on amd64
 linux_arm64: TFLITE_LIB_DIR="/usr/lib"
-linux_arm64: TFLITE_LIB_ARCH=tflite_c_$(TFLITE_VERSION)_linux_arm64.tar.gz
+linux_arm64: TFLITE_LIB_ARCH=linux_arm64.tar.gz
 linux_arm64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite 
 ifeq ($(UNAME_M),x86_64)
 	@# Cross-compilation setup for amd64 to arm64
@@ -89,17 +90,17 @@ endif
 
 # Windows build
 windows_amd64: TFLITE_LIB_DIR="/usr/x86_64-w64-mingw32/lib"
-windows_amd64: TFLITE_LIB_ARCH=tflite_c_$(TFLITE_VERSION)_windows_amd64.zip
+windows_amd64: TFLITE_LIB_ARCH=windows_amd64.zip
 windows_amd64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite
 	$(CGO_FLAGS) CC=x86_64-w64-mingw32-gcc go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME).exe
 
 # macOS Intel build
-darwin_amd64: TFLITE_LIB_ARCH=tflite_c_$(TFLITE_VERSION)_darwin_amd64.tar.gz
+darwin_amd64: TFLITE_LIB_ARCH=darwin_amd64.tar.gz
 darwin_amd64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite install-tflite
 	$(CGO_FLAGS) go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
 # macOS ARM build
-darwin_arm64: TFLITE_LIB_ARCH=tflite_c_$(TFLITE_VERSION)_darwin_arm64.tar.gz
+darwin_arm64: TFLITE_LIB_ARCH=darwin_arm64.tar.gz
 darwin_arm64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite install-tflite build
 	$(CGO_FLAGS) go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
