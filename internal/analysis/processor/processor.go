@@ -1,3 +1,4 @@
+// processor.go
 package processor
 
 import (
@@ -30,8 +31,8 @@ type Processor struct {
 	SpeciesListUpdated time.Time
 	//AudioBuffer        *myaudio.AudioBuffer
 	//AudioBuffers       map[string]*myaudio.AudioBuffer
-	LastDogDetection   time.Time // keep track of dog barks to filter out false positive owl detections
-	LastHumanDetection time.Time // keep track of human vocal for privacy filtering
+	LastDogDetection   map[string]time.Time // keep track of dog barks per audio source
+	LastHumanDetection map[string]time.Time // keep track of human vocal per audio source
 	Metrics            *telemetry.Metrics
 }
 
@@ -64,13 +65,14 @@ var mutex sync.Mutex
 // func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *telemetry.Metrics) *Processor {
 func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics) *Processor {
 	p := &Processor{
-		Settings:        settings,          // BirdNET-Go Settings struct
-		Ds:              ds,                // Datastore
-		Bn:              bn,                // BirdNET analyzer
-		EventTracker:    NewEventTracker(), // Duplicate event tracker
-		IncludedSpecies: new([]string),     // Included species list
-		//AudioBuffers:    audioBuffers,      // Audio buffer for audio export
-		Metrics: metrics, // Prometheus metrics struct
+		Settings:           settings,          // BirdNET-Go Settings struct
+		Ds:                 ds,                // Datastore
+		Bn:                 bn,                // BirdNET analyzer
+		EventTracker:       NewEventTracker(), // Duplicate event tracker
+		IncludedSpecies:    new([]string),     // Included species list
+		Metrics:            metrics,           // Prometheus metrics struct
+		LastDogDetection:   make(map[string]time.Time),
+		LastHumanDetection: make(map[string]time.Time),
 	}
 
 	// Start the detection processor
@@ -190,17 +192,16 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 		if p.Settings.Realtime.DogBarkFilter.Enabled {
 			if strings.Contains(speciesLowercase, "dog") && result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
 				log.Printf("Dog detected, updating last detection timestamp for potential owl false positives")
-				p.LastDogDetection = time.Now()
+				p.LastDogDetection[item.Source] = time.Now()
 			}
 		}
 
 		// Human detection handling for privacy filter
 		if p.Settings.Realtime.PrivacyFilter.Enabled {
-			// if debug is enabled print results
 			if strings.Contains(speciesLowercase, "human") && result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
 				log.Printf("Human detected, confidence %.6f", result.Confidence)
 				// now minus 4 seconds
-				p.LastHumanDetection = time.Now().Add(-4 * time.Second)
+				p.LastHumanDetection[item.Source] = time.Now().Add(-4 * time.Second)
 			}
 		}
 
@@ -308,8 +309,8 @@ func (p *Processor) pendingDetectionsFlusher() {
 					// Check if human was detected after the first detection and discard if so
 					if p.Settings.Realtime.PrivacyFilter.Enabled {
 						if !strings.Contains(item.Detection.Note.CommonName, "Human") &&
-							p.LastHumanDetection.After(item.FirstDetected) {
-							log.Printf("Discarding detection of %s due to privacy filter", species)
+							p.LastHumanDetection[item.Source].After(item.FirstDetected) {
+							log.Printf("Discarding detection of %s from source %s due to privacy filter\n", species, item.Source)
 							delete(PendingDetections, species)
 							continue
 						}
@@ -321,14 +322,14 @@ func (p *Processor) pendingDetectionsFlusher() {
 							log.Printf("Last dog detection: %s\n", p.LastDogDetection)
 						}
 						// Check against common name
-						if p.DogBarkFilter.Check(item.Detection.Note.CommonName, p.LastDogDetection) {
-							log.Printf("Discarding detection of %s due to recent dog bark\n", item.Detection.Note.CommonName)
+						if p.DogBarkFilter.Check(item.Detection.Note.CommonName, p.LastDogDetection[item.Source]) {
+							log.Printf("Discarding detection of %s from source %s due to recent dog bark\n", item.Detection.Note.CommonName, item.Source)
 							delete(PendingDetections, species)
 							continue
 						}
 						// Check against scientific name
-						if p.DogBarkFilter.Check(item.Detection.Note.ScientificName, p.LastDogDetection) {
-							log.Printf("Discarding detection of %s due to recent dog bark\n", item.Detection.Note.CommonName)
+						if p.DogBarkFilter.Check(item.Detection.Note.ScientificName, p.LastDogDetection[item.Source]) {
+							log.Printf("Discarding detection of %s from source %s due to recent dog bark\n", item.Detection.Note.CommonName, item.Source)
 							delete(PendingDetections, species)
 							continue
 						}
