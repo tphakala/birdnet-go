@@ -38,9 +38,10 @@ RUN PLATFORM='unknown'; \
     && ldconfig
 
 FROM --platform=$BUILDPLATFORM buildenv as build
+WORKDIR /root/src/BirdNET-Go
 
 # Compile BirdNET-Go
-COPY . BirdNET-Go
+COPY . ./
 ARG TARGETPLATFORM
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
