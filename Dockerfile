@@ -58,6 +58,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 \
     ffmpeg \
     sox \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 ARG TFLITE_LIB_DIR
@@ -68,9 +69,16 @@ RUN ldconfig
 COPY --from=build /home/dev-user/src/BirdNET-Go/reset_auth.sh /usr/bin/
 RUN chmod +x /usr/bin/reset_auth.sh
 
-# Add symlink to /config directory where configs can be stored
+# Create birdnet-user for running the application
+RUN groupadd --gid 10002 birdnet-user; \
+    useradd --uid 10002 --gid birdnet-user --shell /bin/bash --create-home birdnet-user; \
+    usermod -aG audio birdnet-user
+
+# Create config and data directories
+RUN mkdir -p  /config /data
+
 VOLUME /config
-RUN mkdir -p /root/.config && ln -s /config /root/.config/birdnet-go
+ENV CONFIG_PATH /config
 
 VOLUME /data
 WORKDIR /data
@@ -80,5 +88,7 @@ EXPOSE 8080
 
 COPY --from=build /home/dev-user/src/BirdNET-Go/bin /usr/bin/
 
-ENTRYPOINT ["/usr/bin/birdnet-go"]
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+
 CMD ["realtime"]
