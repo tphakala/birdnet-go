@@ -4,7 +4,7 @@ TFLITE_VERSION := v2.14.0
 
 # Common flags
 CGO_FLAGS := CGO_ENABLED=1 CGO_CFLAGS="-I$(HOME)/src/tensorflow"
-LDFLAGS := -ldflags "-s -w -X 'github.com/tphakala/birdnet-go/internal/conf.buildDate=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)'"
+LDFLAGS := -ldflags "-s -w -X 'main.buildDate=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)'"
 
 # Detect host architecture
 UNAME_M := $(shell uname -m)

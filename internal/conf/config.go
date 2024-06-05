@@ -227,9 +227,6 @@ func initViper() error {
 		return fmt.Errorf("fatal error reading config file: %w", err)
 	}
 
-	// Print build date and config file used
-	fmt.Printf("BirdNET-Go build date: %s, using config file: %s\n", buildDate, viper.ConfigFileUsed())
-
 	return nil
 }
 
