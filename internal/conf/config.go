@@ -159,9 +159,6 @@ const (
 	RotationSize   RotationType = "size"
 )
 
-// buildTime is the time when the binary was built.
-var buildDate string
-
 // settingsInstance is the current settings instance
 var (
 	settingsInstance *Settings
