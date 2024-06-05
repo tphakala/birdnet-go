@@ -48,16 +48,16 @@ func (bn *BirdNET) GetProbableSpecies() ([]string, error) {
 	}
 
 	// check bn.Settings.BirdNET.LocationFilterThreshold for valid value
-	if bn.Settings.BirdNET.LocationFilterThreshold < 0 ||
-		bn.Settings.BirdNET.LocationFilterThreshold > 1 {
+	if bn.Settings.BirdNET.RangeFilter.Threshold < 0 ||
+		bn.Settings.BirdNET.RangeFilter.Threshold > 1 {
 		fmt.Println("Invalid LocationFilterThreshold value, using default value of 0.01")
-		bn.Settings.BirdNET.LocationFilterThreshold = 0.01
+		bn.Settings.BirdNET.RangeFilter.Threshold = 0.01
 	}
 
 	// Collect species scores above a certain threshold
 	var speciesScores []SpeciesScore
 	for _, filter := range filters {
-		if filter.Score >= bn.Settings.BirdNET.LocationFilterThreshold {
+		if filter.Score >= bn.Settings.BirdNET.RangeFilter.Threshold {
 			// DEBUG print species which pass location threshold filter
 			//fmt.Println("Filter: ", filter.Label, " Score: ", filter.Score)
 			speciesScores = append(speciesScores, SpeciesScore{Score: float64(filter.Score), Label: filter.Label})
@@ -283,5 +283,5 @@ func (bn *BirdNET) RunFilterProcess(dateStr string, dateFormat string) {
 		return
 	}
 
-	PrintSpeciesScores(parsedDate, labels, float64(bn.Settings.BirdNET.LocationFilterThreshold))
+	PrintSpeciesScores(parsedDate, labels, float64(bn.Settings.BirdNET.RangeFilter.Threshold))
 }
