@@ -1,5 +1,4 @@
-# Use ARGs to define default build-time variables for TensorFlow version and target platform
-ARG TENSORFLOW_VERSION=v2.14.0
+ARG TFLITE_LIB_DIR=/usr/lib
 
 FROM --platform=$BUILDPLATFORM golang:1.22.3-bookworm as buildenv
 
@@ -12,59 +11,44 @@ RUN apt-get update && apt-get install -y \
     gcc-aarch64-linux-gnu \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /root/src
+WORKDIR /root/src/BirdNET-Go
 
-ARG TENSORFLOW_VERSION
+
+COPY ./Makefile ./
 
 # Download TensorFlow headers
-RUN git clone --branch ${TENSORFLOW_VERSION} --filter=blob:none --depth 1 --no-checkout https://github.com/tensorflow/tensorflow.git \
-    && git -C tensorflow config core.sparseCheckout true \
-    && echo "**/*.h" >> tensorflow/.git/info/sparse-checkout \
-    && git -C tensorflow checkout
+ARG TENSORFLOW_VERSION
+RUN make check-tensorflow
 
+# Download and configure precompiled TensorFlow Lite C library
 ARG TARGETPLATFORM
-
-# Determine PLATFORM based on TARGETPLATFORM
-RUN PLATFORM='unknown'; \
-    case "${TARGETPLATFORM}" in \
-        "linux/amd64") PLATFORM='linux_amd64' ;; \
-        "linux/arm64") PLATFORM='linux_arm64' ;; \
-        *) echo "Unsupported platform: '${TARGETPLATFORM}'" && exit 1 ;; \
-    esac; \
-# Download and configure precompiled TensorFlow Lite C library for the determined platform
-    curl -L \
-    "https://github.com/tphakala/tflite_c/releases/download/${TENSORFLOW_VERSION}/tflite_c_${TENSORFLOW_VERSION}_${PLATFORM}.tar.gz" | \
-    tar -C "/usr/local/lib" -xz \
-    && ldconfig
+ARG TFLITE_LIB_DIR
+RUN TFLITE_LIB_ARCH=$(echo ${TARGETPLATFORM} | tr '/' '_').tar.gz \
+    make download-tflite
 
 FROM --platform=$BUILDPLATFORM buildenv as build
+WORKDIR /root/src/BirdNET-Go
 
 # Compile BirdNET-Go
-COPY . BirdNET-Go
+COPY . ./
 ARG TARGETPLATFORM
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    PLATFORM='unknown'; \
-    case "${TARGETPLATFORM}" in \
-        "linux/amd64") PLATFORM='linux_amd64' ;; \
-        "linux/arm64") PLATFORM='linux_arm64' ;; \
-        *) echo "Unsupported platform: '${TARGETPLATFORM}'" && exit 1 ;; \
-    esac; \
-    cd BirdNET-Go && make ${PLATFORM}
+    make $(echo ${TARGETPLATFORM} | tr '/' '_')
 
 # Create final image using a multi-platform base image
 FROM debian:bookworm-slim
 
 # Install ALSA library and SOX
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libasound2 \
     ffmpeg \
     sox \
-    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /usr/local/lib/libtensorflowlite_c.so /usr/local/lib/
+ARG TFLITE_LIB_DIR
+COPY --from=build ${TFLITE_LIB_DIR}/libtensorflowlite_c.so ${TFLITE_LIB_DIR}
 RUN ldconfig
 
 # Add symlink to /config directory where configs can be stored

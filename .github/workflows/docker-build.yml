@@ -23,8 +23,8 @@ jobs:
           tags: birdnet-go:test
           load: true
           platforms: linux/amd64
-          cache-from: type=gha,scope=linux/amd64
-          cache-to: type=gha,mode=max,scope=linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Install alsa dummy module for testing built image
         run: |
