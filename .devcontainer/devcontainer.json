@@ -1,6 +1,7 @@
 {
 	"name": "Go Build Environment",
 	"dockerFile": "../Dockerfile",
+	"forwardPorts": [8080],
 	"build": {
 		"context": "..",
 		"target": "buildenv"
