@@ -229,20 +229,6 @@ func loadSpeciesFromCSV(fileName string) ([]string, error) {
 	return speciesList, nil
 }
 
-// mergeSpeciesLists merges two slices of species, removing duplicates.
-/*func mergeSpeciesLists(list1, list2 []string) []string {
-	uniqueSpecies := make(map[string]struct{})
-	for _, species := range list1 {
-		uniqueSpecies[species] = struct{}{}
-	}
-	for _, species := range list2 {
-		if _, exists := uniqueSpecies[species]; !exists {
-			list1 = append(list1, species)
-		}
-	}
-	return list1
-}*/
-
 // debug functions
 
 // getWeekForFilter calculates the week number for a given date.
