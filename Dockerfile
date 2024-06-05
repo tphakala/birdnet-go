@@ -11,10 +11,17 @@ RUN apt-get update && apt-get install -y \
     gcc-aarch64-linux-gnu \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /root/src/BirdNET-Go
+# Create dev-user for building and devcontainer usage
+RUN groupadd --gid 10001 dev-user; \
+    useradd --uid 10001 --gid dev-user --shell /bin/bash --create-home dev-user; \
+    usermod -aG sudo dev-user; \
+    usermod -aG audio dev-user; \
+    echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+USER dev-user
 
+WORKDIR /home/dev-user/src/BirdNET-Go
 
-COPY ./Makefile ./
+COPY --chown=dev-user ./Makefile ./
 
 # Download TensorFlow headers
 ARG TENSORFLOW_VERSION
@@ -27,13 +34,13 @@ RUN TFLITE_LIB_ARCH=$(echo ${TARGETPLATFORM} | tr '/' '_').tar.gz \
     make download-tflite
 
 FROM --platform=$BUILDPLATFORM buildenv as build
-WORKDIR /root/src/BirdNET-Go
+WORKDIR /home/dev-user/src/BirdNET-Go
 
 # Compile BirdNET-Go
-COPY . ./
+COPY --chown=dev-user . ./
 ARG TARGETPLATFORM
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
+RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
+    --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
     make $(echo ${TARGETPLATFORM} | tr '/' '_')
 
 # Create final image using a multi-platform base image
@@ -61,7 +68,7 @@ WORKDIR /data
 # Make port 8080 available to the world outside this container
 EXPOSE 8080
 
-COPY --from=build /root/src/BirdNET-Go/bin /usr/bin/
+COPY --from=build /home/dev-user/src/BirdNET-Go/bin /usr/bin/
 
 ENTRYPOINT ["/usr/bin/birdnet-go"]
 CMD ["realtime"]
