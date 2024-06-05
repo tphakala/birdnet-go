@@ -1,10 +1,15 @@
 #!/bin/bash
 
-# Install required apt dependencies
 apt-get update
-apt-get install -y ca-certificates libasound2 ffmpeg sox
+
+# Install required runtime dependencies
+apt-get install -y ca-certificates libasound2 ffmpeg sox alsa-utils
+
+# Install file editors
 apt-get install -y nano vim
-apt-get clean
+
+# Install extras
+apt-get install -y dialog
 
 # Install air to support live reloading of server on code changes
 go install github.com/air-verse/air@latest

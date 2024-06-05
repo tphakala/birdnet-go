@@ -104,8 +104,9 @@ darwin_arm64: TFLITE_LIB_ARCH=darwin_arm64.tar.gz
 darwin_arm64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite install-tflite build
 	$(CGO_FLAGS) go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
+dev_server: REALTIME_ARGS=""
 dev_server: 
-	$(CGO_FLAGS) air realtime
+	$(CGO_FLAGS) air realtime $(REALTIME_ARGS)
 
 clean:
 	go clean
