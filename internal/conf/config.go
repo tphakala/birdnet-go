@@ -27,14 +27,17 @@ type Settings struct {
 	}
 
 	BirdNET struct {
-		Sensitivity             float64 // birdnet analysis sigmoid sensitivity
-		Threshold               float64 // threshold for prediction confidence to report
-		Overlap                 float64 // birdnet analysis overlap between chunks
-		Longitude               float64 // longitude of recording location for prediction filtering
-		Latitude                float64 // latitude of recording location for prediction filtering
-		Threads                 int     // number of CPU threads to use for analysis
-		Locale                  string  // language to use for labels
-		LocationFilterThreshold float32 // rangefilter species occurrence threshold
+		Sensitivity float64 // birdnet analysis sigmoid sensitivity
+		Threshold   float64 // threshold for prediction confidence to report
+		Overlap     float64 // birdnet analysis overlap between chunks
+		Longitude   float64 // longitude of recording location for prediction filtering
+		Latitude    float64 // latitude of recording location for prediction filtering
+		Threads     int     // number of CPU threads to use for analysis
+		Locale      string  // language to use for labels
+		RangeFilter struct {
+			Version   string  // version of range filter model
+			Threshold float32 // rangefilter species occurrence threshold
+		}
 	}
 
 	Input struct {
