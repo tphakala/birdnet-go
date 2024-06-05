@@ -26,7 +26,8 @@ func setDefaultConfig() {
 	viper.SetDefault("birdnet.locale", "en")
 	viper.SetDefault("birdnet.latitude", 0.000)
 	viper.SetDefault("birdnet.longitude", 0.000)
-	viper.SetDefault("birdnet.locationfilterthreshold", 0.01)
+	viper.SetDefault("birdnet.rangefilter.model", "latest")
+	viper.SetDefault("birdnet.rangefilter.threshold", 0.01)
 
 	viper.SetDefault("realtime.interval", 15)
 	viper.SetDefault("realtime.processingtime", false)
