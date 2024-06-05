@@ -13,7 +13,7 @@
 		"CGO_CFLAGS": "-I /root/src/tensorflow"
 	},
 	"postCreateCommand": ".devcontainer/postCreateCommand.sh",
-	"postAttachCommand": "make dev_server",
+	"postAttachCommand": ".devcontainer/start_dev_server.sh",
 	"customizations": {
 		"vscode": {
 			"extensions": [
