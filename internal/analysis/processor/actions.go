@@ -177,12 +177,19 @@ func (a MqttAction) Execute(data interface{}) error {
 func (a UpdateRangeFilterAction) Execute(data interface{}) error {
 	today := time.Now().Truncate(24 * time.Hour)
 	if today.After(*a.SpeciesListUpdated) {
-		var err error
 		// Update location based species list
-		*a.IncludedSpecies, err = a.Bn.GetProbableSpecies()
+		speciesScores, err := a.Bn.GetProbableSpecies()
 		if err != nil {
 			return err
 		}
+
+		// Convert the speciesScores slice to a slice of species labels
+		var includedSpecies []string
+		for _, speciesScore := range speciesScores {
+			includedSpecies = append(includedSpecies, speciesScore.Label)
+		}
+
+		*a.IncludedSpecies = includedSpecies
 		*a.SpeciesListUpdated = today // Update the timestamp
 	}
 	return nil
