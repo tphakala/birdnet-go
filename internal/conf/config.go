@@ -35,7 +35,7 @@ type Settings struct {
 		Threads     int     // number of CPU threads to use for analysis
 		Locale      string  // language to use for labels
 		RangeFilter struct {
-			Version   string  // version of range filter model
+			Model     string  // range filter model model
 			Threshold float32 // rangefilter species occurrence threshold
 		}
 	}
