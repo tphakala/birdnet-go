@@ -1,3 +1,4 @@
+// root.go viper root command code
 package cmd
 
 import (
@@ -9,10 +10,8 @@ import (
 	"github.com/tphakala/birdnet-go/cmd/authors"
 	"github.com/tphakala/birdnet-go/cmd/directory"
 	"github.com/tphakala/birdnet-go/cmd/file"
-
-	//"github.com/tphakala/birdnet-go/cmd/directory"
-	//"github.com/tphakala/birdnet-go/cmd/file"
 	"github.com/tphakala/birdnet-go/cmd/license"
+	"github.com/tphakala/birdnet-go/cmd/rangefilter"
 	"github.com/tphakala/birdnet-go/cmd/realtime"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -37,6 +36,7 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 	realtimeCmd := realtime.Command(settings)
 	authorsCmd := authors.Command()
 	licenseCmd := license.Command()
+	rangeCmd := rangefilter.Command(settings)
 
 	subcommands := []*cobra.Command{
 		fileCmd,
@@ -44,6 +44,7 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 		realtimeCmd,
 		authorsCmd,
 		licenseCmd,
+		rangeCmd,
 	}
 
 	rootCmd.AddCommand(subcommands...)

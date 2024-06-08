@@ -108,7 +108,7 @@ func (bn *BirdNET) initializeModel() error {
 
 // getMetaModelData returns the appropriate meta model data based on the settings.
 func (bn *BirdNET) getMetaModelData() []byte {
-	if bn.Settings.BirdNET.RangeFilter.Version == "legacy" {
+	if bn.Settings.BirdNET.RangeFilter.Model == "legacy" {
 		log.Printf("Using legacy range filter model")
 		return metaModelDataV1
 	}
