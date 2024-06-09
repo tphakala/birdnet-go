@@ -68,7 +68,7 @@ func ReadSegmentFromCaptureBuffer(source string, requestedStartTime time.Time, d
 		return nil, fmt.Errorf("No audio buffer found for source: %s", source)
 	} else {
 		// DEBUG
-		log.Printf("Reading segment from buffer for source: %s", source)
+		//log.Printf("Reading segment from buffer for source: %s", source)
 	}
 
 	return ab.ReadSegment(requestedStartTime, duration)
