@@ -115,10 +115,20 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 
 	// Initialize included species list
 	today := time.Now().Truncate(24 * time.Hour)
-	*p.IncludedSpecies, err = bn.GetProbableSpecies()
+
+	// Update location based species list
+	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
 	if err != nil {
 		log.Printf("Failed to get probable species: %s", err)
 	}
+
+	// Convert the speciesScores slice to a slice of species labels
+	var includedSpecies []string
+	for _, speciesScore := range speciesScores {
+		includedSpecies = append(includedSpecies, speciesScore.Label)
+	}
+
+	*p.IncludedSpecies = includedSpecies
 	p.SpeciesListUpdated = today
 
 	return p

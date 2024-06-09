@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/observation"
 	"github.com/tphakala/go-tflite"
 )
 
@@ -32,17 +33,21 @@ func (a ByScore) Less(i, j int) bool { return a[i].Score > a[j].Score } // For d
 
 // GetProbableSpecies filters and sorts bird species based on their scores.
 // It also updates the scores for species that have custom actions defined in the speciesConfigCSV.
-func (bn *BirdNET) GetProbableSpecies() ([]string, error) {
+func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
 	// Skip filtering if location is not set
 	if bn.Settings.BirdNET.Latitude == 0 && bn.Settings.BirdNET.Longitude == 0 {
 		if bn.Settings.Debug {
 			log.Println("Latitude and longitude not set, not using location based prediction filter")
 		}
-		return bn.Labels, nil
+		var speciesScores []SpeciesScore
+		for _, label := range bn.Labels {
+			speciesScores = append(speciesScores, SpeciesScore{Score: 0.0, Label: label})
+		}
+		return speciesScores, nil
 	}
 
 	// Apply prediction filter based on the context
-	filters, err := bn.predictFilter()
+	filters, err := bn.predictFilter(date, week)
 	if err != nil {
 		return nil, fmt.Errorf("error during prediction filter: %v", err)
 	}
@@ -58,8 +63,6 @@ func (bn *BirdNET) GetProbableSpecies() ([]string, error) {
 	var speciesScores []SpeciesScore
 	for _, filter := range filters {
 		if filter.Score >= bn.Settings.BirdNET.RangeFilter.Threshold {
-			// DEBUG print species which pass location threshold filter
-			//fmt.Println("Filter: ", filter.Label, " Score: ", filter.Score)
 			speciesScores = append(speciesScores, SpeciesScore{Score: float64(filter.Score), Label: filter.Label})
 		}
 	}
@@ -90,27 +93,20 @@ func (bn *BirdNET) GetProbableSpecies() ([]string, error) {
 	// Sort species scores in descending order
 	sort.Sort(ByScore(speciesScores))
 
-	// Extract labels from the sorted scores
-	var labels []string
-	for _, speciesScore := range speciesScores {
-		labels = append(labels, speciesScore.Label)
-	}
-
-	// Update the SpeciesListUpdated time in the context
-	bn.SpeciesListUpdated = time.Now().Truncate(24 * time.Hour)
-
-	return labels, nil
+	return speciesScores, nil
 }
 
 // predictFilter applies a TensorFlow Lite model to predict species based on the context.
-func (bn *BirdNET) predictFilter() ([]Filter, error) {
+func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error) {
 	input := bn.RangeInterpreter.GetInputTensor(0)
 	if input == nil {
 		return nil, fmt.Errorf("cannot get input tensor")
 	}
 
-	// Calculate the week number for the filter model
-	week := getWeekForFilter()
+	// If week is not set, use current date to get week
+	if week == 0 {
+		week = getWeekForFilter(date)
+	}
 
 	// Prepare the input data
 	data := []float32{float32(bn.Settings.BirdNET.Latitude), float32(bn.Settings.BirdNET.Longitude), week}
@@ -157,14 +153,21 @@ func (bn *BirdNET) predictFilter() ([]Filter, error) {
 }
 
 // getWeekForFilter calculates the current week number for the filter model.
-func getWeekForFilter() float32 {
-	current := time.Now()
-	month := int(current.Month())
-	day := current.Day()
+func getWeekForFilter(date time.Time) float32 {
+	var month int
+	var day int
+
+	if date.IsZero() {
+		date = time.Now()
+	}
+
+	month = int(date.Month())
+	day = int(date.Day())
+
+	// Calculate the week number
 	weeksFromMonths := (month - 1) * 4
 	weekInMonth := (day-1)/7 + 1
 
-	// Calculate the week number
 	return float32(weeksFromMonths + weekInMonth)
 }
 
@@ -231,43 +234,50 @@ func loadSpeciesFromCSV(fileName string) ([]string, error) {
 
 // debug functions
 
-// getWeekForFilter calculates the week number for a given date.
-func getWeekForFilterDebug(date time.Time) float32 {
-	_, week := date.ISOWeek()
-	return float32(week)
-}
-
-// PrintSpeciesScores prints out the list of species scores in a human-readable format.
-func PrintSpeciesScores(date time.Time, labels []string, locationFilterThreshold float64) {
-	currentWeek := getWeekForFilterDebug(date)
-	fmt.Printf("Debugging Species Scores - %s\n", date.Format(time.RFC1123))
-	fmt.Printf("LocationFilterThreshold: %.2f, Current Week: %d\n", locationFilterThreshold, int(currentWeek))
-	fmt.Println("Scores List:")
-
-	for _, label := range labels {
-		fmt.Printf("Species: %s", label)
-	}
-	fmt.Println("End of Scores List")
-}
-
 // RunFilterProcess executes the filter process on demand and prints the results.
-func (bn *BirdNET) RunFilterProcess(dateStr string, dateFormat string) {
-	layout := "02/01/2006" // Default to European date format (DD/MM/YYYY)
-	if dateFormat == "us" {
-		layout = "01/02/2006" // US date format (MM/DD/YYYY)
+func (bn *BirdNET) RunFilterProcess(dateStr string, week float32) {
+	// If dateStr is not empty, parse the date
+	var parsedDate time.Time
+	var err error
+	if dateStr != "" {
+		parsedDate, err = time.Parse("2006-01-02", dateStr)
+		if err != nil {
+			fmt.Printf("Error parsing date: %s\n", err)
+			return
+		}
 	}
 
-	parsedDate, err := time.Parse(layout, dateStr)
-	if err != nil {
-		fmt.Printf("Error parsing date: %s\n", err)
-		return
-	}
-
-	labels, err := bn.GetProbableSpecies()
+	// Get the probable species
+	speciesScores, err := bn.GetProbableSpecies(parsedDate, week)
 	if err != nil {
 		fmt.Printf("Error during species prediction: %s\n", err)
 		return
 	}
 
-	PrintSpeciesScores(parsedDate, labels, float64(bn.Settings.BirdNET.RangeFilter.Threshold))
+	PrintSpeciesScores(parsedDate, speciesScores)
+}
+
+// PrintSpeciesScores prints out the list of species scores in a human-readable format.
+func PrintSpeciesScores(date time.Time, speciesScores []SpeciesScore) {
+	// Get settings
+	threshold := conf.Setting().BirdNET.RangeFilter.Threshold
+	lat := conf.Setting().BirdNET.Latitude
+	lon := conf.Setting().BirdNET.Longitude
+
+	week := int(getWeekForFilter(date))
+	fmt.Printf("Included species for %v, %v on date %s, week %d, threshold %.6f\n\n", lat, lon, date.Format("2006-01-02"), week, threshold)
+
+	// Get number of species in speciesScores slice
+	numSpecies := len(speciesScores)
+
+	// Print header
+	fmt.Printf("%-33s %-33s %-6s\n", "Scientific Name", "Common Name", "Score")
+	fmt.Println(strings.Repeat("-", 33), strings.Repeat("-", 33), strings.Repeat("-", 6))
+
+	for _, speciesScore := range speciesScores {
+		scientificName, commonName, _ := observation.ParseSpeciesString(speciesScore.Label)
+		fmt.Printf("%-33s %-33s %.4f\n", scientificName, commonName, speciesScore.Score)
+	}
+
+	fmt.Printf("\nTotal number of species: %d\n", numSpecies)
 }
