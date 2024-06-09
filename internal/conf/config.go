@@ -66,6 +66,13 @@ type Settings struct {
 			}
 		}
 
+		DynamicThreshold struct {
+			Enabled    bool    // true to enable dynamic threshold
+			Debug      bool    // true to enable debug mode
+			Min        float64 // minimum threshold for dynamic threshold
+			ValidHours int     // number of hours to consider for dynamic threshold
+		}
+
 		Log struct {
 			Enabled bool   // true to enable OBS chat log
 			Path    string // path to OBS chat log
