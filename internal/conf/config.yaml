@@ -43,6 +43,13 @@ realtime:
         maxage: 30d       # age policy: maximum age of clips to keep before starting evictions
         maxusage: 80%     # usage policy: percentage of disk usage to trigger eviction        
         minclips: 10      # minumum number of clips per species to keep before starting evictions
+
+  rtsp:    
+    transport: tcp        # RTSP Transport Protocol
+    urls:                 # RTSP stream URLs
+      # - rtsp://user:password@example.com/stream1
+      # - rtsp://user:password@example.com/stream2
+      # - rtsp://user:password@example.com/stream3
   
   log:
     enabled: false        # true to enable OBS chat log
@@ -53,10 +60,6 @@ realtime:
     locationaccuracy: 500 # accuracy of location in meters
     debug: false          # true to enable birdweather api debug mode
     id: 00000             # birdweather ID
-
-  rtsp:
-    url:                  # RTSP stream URL
-    transport: tcp        # RTSP Transport Protocol
 
   mqtt:
     enabled: false        # true to enable MQTT
