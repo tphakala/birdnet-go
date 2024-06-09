@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.5] - 2024-06-09
+
+### 🚀 Features
+
+- *(audio)* Support for multiple RTSP streams
+- *(birdnet)* Range filter model is now selectable between latest and previous "legacy" version
+- *(birdnet)* Added "birdnet-go range print" command which lists all species included by range filter model
+- *(birdnet)* BirdNET overlap setting impacts now realtime process also
+
+### 🐛 Bug Fixes
+
+- *(privacy)* Fix defaults for privacy and dog bark filters and fix incorrect setting names in default config.yaml
+- *(privacy)* Do not print dog bark detections if dog bark filter is not enabled
+- *(privacy)* Fix printf declaration for human detection confidence reporting
+- *(audio)* Yield to other goroutines in file_utils, policy_age, and policy_usage
+- *(build)* Linux/arm64 cross-compilation in docker build
+
+### 🚜 Refactor
+
+- *(audio)* Refactor analysis and capture buffers to support multiple individual buffers for different audio sources
+- *(audio)* Move RTSP code to rtsp.go
+- *(rtsp)* Update default RTSP URLs to an empty slice
+- *(rtsp)* Update RTSP stream URLs example in config.yaml
+- *(privacy)* Make pricacy filter and dog bark filter source specific
+- *(build)* Move buildDate variable to main.go
+
+### 🏗️ Building
+
+- *(deps)* Bump github.com/spf13/viper from 1.18.2 to 1.19.0
+- *(deps)* Bump github.com/shirou/gopsutil/v3 from 3.24.4 to 3.24.5
+
 ## [0.5.4] - 2024-06-01
 
 ### 🚀 Features
