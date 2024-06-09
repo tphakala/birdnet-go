@@ -46,7 +46,7 @@ realtime:
 
   dynamicthreshold:
     enabled: true         # true to enable dynamic confidence threshold
-    min: 0.2              # minimum dynamic confidence threshold value
+    min: 0.20             # minimum dynamic confidence threshold value
     validhours: 24        # number of hours to consider for dynamic confidence
 
   rtsp:    
