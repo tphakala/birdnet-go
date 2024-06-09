@@ -57,8 +57,9 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	fmt.Printf("System details: %s %s %s on %s hardware\n", info.OS, info.Platform, info.PlatformVersion, hwModel)
 
 	// Log the start of BirdNET-Go Analyzer in realtime mode and its configurations.
-	fmt.Printf("Starting analyzer in realtime mode. Threshold: %v, sensitivity: %v, interval: %v\n",
+	fmt.Printf("Starting analyzer in realtime mode. Threshold: %v, overlap: %v, sensitivity: %v, interval: %v\n",
 		settings.BirdNET.Threshold,
+		settings.BirdNET.Overlap,
 		settings.BirdNET.Sensitivity,
 		settings.Realtime.Interval)
 
