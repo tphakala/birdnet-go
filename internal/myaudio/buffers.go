@@ -8,6 +8,7 @@ import (
 
 	"github.com/smallnest/ringbuffer"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 const (
@@ -17,15 +18,32 @@ const (
 
 // A variable to set the overlap. Can range from 0 to 2 seconds, represented in bytes.
 // For example, for 1.5-second overlap: overlapSize = 144000
+/*
 var overlapSize int = 144000 // Set as required
-var readSize int = chunkSize - overlapSize
+var readSize int = chunkSize - overlapSize*/
+
+var overlapSize int
+var readSize int
 
 // ringBuffers is a map to store ring buffers for each audio source
 var ringBuffers map[string]*ringbuffer.RingBuffer
 var prevData map[string][]byte
 
+// ConvertSecondsToBytes converts overlap in seconds to bytes
+func ConvertSecondsToBytes(seconds float64) int {
+	const sampleRate = 48000 // 48 kHz
+	const bytesPerSample = 2 // 16-bit PCM data (2 bytes per sample)
+	return int(seconds * sampleRate * bytesPerSample)
+}
+
 // InitRingBuffers initializes the ring buffers for each audio source with a given capacity.
 func InitRingBuffers(capacity int, sources []string) {
+	settings := conf.Setting()
+
+	// Set overlapSize based on user setting in seconds
+	overlapSize = ConvertSecondsToBytes(settings.BirdNET.Overlap)
+	readSize = chunkSize - overlapSize
+
 	ringBuffers = make(map[string]*ringbuffer.RingBuffer)
 	prevData = make(map[string][]byte)
 	for _, source := range sources {
