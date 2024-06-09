@@ -29,11 +29,19 @@ type Processor struct {
 	SpeciesConfig      SpeciesConfig
 	IncludedSpecies    *[]string
 	SpeciesListUpdated time.Time
-	//AudioBuffer        *myaudio.AudioBuffer
-	//AudioBuffers       map[string]*myaudio.AudioBuffer
 	LastDogDetection   map[string]time.Time // keep track of dog barks per audio source
 	LastHumanDetection map[string]time.Time // keep track of human vocal per audio source
 	Metrics            *telemetry.Metrics
+	DynamicThresholds  map[string]*DynamicThreshold
+}
+
+// DynamicThreshold represents the dynamic threshold configuration for a species.
+type DynamicThreshold struct {
+	Level         int
+	CurrentValue  float64
+	Timer         time.Time
+	HighConfCount int
+	ValidHours    int
 }
 
 type Detections struct {
@@ -65,14 +73,15 @@ var mutex sync.Mutex
 // func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *telemetry.Metrics) *Processor {
 func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics) *Processor {
 	p := &Processor{
-		Settings:           settings,          // BirdNET-Go Settings struct
-		Ds:                 ds,                // Datastore
-		Bn:                 bn,                // BirdNET analyzer
-		EventTracker:       NewEventTracker(), // Duplicate event tracker
-		IncludedSpecies:    new([]string),     // Included species list
-		Metrics:            metrics,           // Prometheus metrics struct
+		Settings:           settings,
+		Ds:                 ds,
+		Bn:                 bn,
+		EventTracker:       NewEventTracker(),
+		IncludedSpecies:    new([]string),
+		Metrics:            metrics,
 		LastDogDetection:   make(map[string]time.Time),
 		LastHumanDetection: make(map[string]time.Time),
+		DynamicThresholds:  make(map[string]*DynamicThreshold),
 	}
 
 	// Start the detection processor
@@ -131,6 +140,20 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	*p.IncludedSpecies = includedSpecies
 	p.SpeciesListUpdated = today
 
+	if p.Settings.Realtime.DynamicThreshold.Enabled {
+		// Initialize dynamic thresholds for included species
+		for _, species := range includedSpecies {
+			speciesLowercase := strings.ToLower(species)
+			p.DynamicThresholds[speciesLowercase] = &DynamicThreshold{
+				Level:         0,
+				CurrentValue:  float64(p.Settings.BirdNET.Threshold),
+				Timer:         time.Now(),
+				HighConfCount: 0,
+				ValidHours:    p.Settings.Realtime.DynamicThreshold.ValidHours, // Default to 1 hour, can be configured
+			}
+		}
+	}
+
 	return p
 }
 
@@ -157,7 +180,7 @@ func (p *Processor) processDetections(item *queue.Results) {
 		// Check if this is a new detection or one with higher confidence.
 		if pendingDetection, exists := PendingDetections[commonName]; !exists || confidence > pendingDetection.Confidence {
 			if !exists {
-				log.Printf("New detection: %s with confidence: %f, source: %v\n", detection.Note.CommonName, confidence, item.Source)
+				log.Printf("New detection: %s with confidence: %.2f, source: %v\n", detection.Note.CommonName, confidence, item.Source)
 			}
 
 			// Set the flush deadline for new detections or if the current detection's deadline has passed.
@@ -165,7 +188,7 @@ func (p *Processor) processDetections(item *queue.Results) {
 			flushDeadline := firstDetected.Add(delay)
 
 			if exists {
-				log.Printf("Updating detection: %s with confidence: %f, source: %v\n", detection.Note.CommonName, confidence, item.Source)
+				log.Printf("Updating detection: %s with confidence: %.2f, source: %v\n", detection.Note.CommonName, confidence, item.Source)
 				// If updating an existing detection, keep the original firstDetected timestamp.
 				firstDetected = pendingDetection.FirstDetected
 				if !time.Now().After(pendingDetection.FlushDeadline) {
@@ -182,6 +205,14 @@ func (p *Processor) processDetections(item *queue.Results) {
 				FlushDeadline: flushDeadline,
 				LastUpdated:   time.Now(),
 			}
+
+			if p.Settings.Realtime.DynamicThreshold.Enabled {
+				// Reset dynamic threshold timer if high confidence detection
+				dt, exists := p.DynamicThresholds[commonName]
+				if exists && confidence > float64(p.getBaseConfidenceThreshold(commonName)) {
+					dt.Timer = time.Now().Add(time.Duration(dt.ValidHours) * time.Hour)
+				}
+			}
 		}
 		mutex.Unlock() // Unlock the mutex after updating the map
 	}
@@ -191,46 +222,35 @@ func (p *Processor) processDetections(item *queue.Results) {
 func (p *Processor) processResults(item *queue.Results) []Detections {
 	var detections []Detections
 
-	// item.Results could contain up to 10 results, process all of them
+	// Process each result in item.Results
 	for _, result := range item.Results {
+		var confidenceThreshold float32
 		scientificName, commonName, _ := observation.ParseSpeciesString(result.Species)
 
 		// Convert species to lowercase for case-insensitive comparison
 		speciesLowercase := strings.ToLower(commonName)
 
-		// Dog detection handling
-		if p.Settings.Realtime.DogBarkFilter.Enabled {
-			if strings.Contains(speciesLowercase, "dog") && result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
-				log.Printf("Dog detected, updating last detection timestamp for potential owl false positives")
-				p.LastDogDetection[item.Source] = time.Now()
-			}
-		}
+		// Handle dog and human detection
+		p.handleDogDetection(item, speciesLowercase, result)
+		p.handleHumanDetection(item, speciesLowercase, result)
 
-		// Human detection handling for privacy filter
-		if p.Settings.Realtime.PrivacyFilter.Enabled {
-			if strings.Contains(speciesLowercase, "human") && result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
-				log.Printf("Human detected, confidence %.6f", result.Confidence)
-				// now minus 4 seconds
-				p.LastHumanDetection[item.Source] = time.Now().Add(-4 * time.Second)
-			}
-		}
+		// Determine base confidence threshold
+		baseThreshold := p.getBaseConfidenceThreshold(speciesLowercase)
 
-		// Use custom confidence threshold if it exists for the species, otherwise use the global threshold
-		confidenceThreshold, exists := p.SpeciesConfig.Threshold[speciesLowercase]
-		if !exists {
-			confidenceThreshold = float32(p.Settings.BirdNET.Threshold)
+		if p.Settings.Realtime.DynamicThreshold.Enabled {
+			// Apply dynamic threshold adjustments
+			confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, result, baseThreshold)
 		} else {
-			if p.Settings.Debug {
-				log.Printf("\nUsing confidence threshold of %.2f for %s\n", confidenceThreshold, speciesLowercase)
-			}
+			// Use the base threshold if dynamic thresholds are disabled
+			confidenceThreshold = baseThreshold
 		}
 
+		// Skip processing if confidence is too low
 		if result.Confidence <= confidenceThreshold {
-			// confidence too low, skip processing
 			continue
 		}
 
-		// match against location based filter
+		// Match against location-based filter
 		if !isSpeciesIncluded(result.Species, *p.IncludedSpecies) {
 			if p.Settings.Debug {
 				log.Printf("Species not on included list: %s\n", commonName)
@@ -238,13 +258,18 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 			continue
 		}
 
-		// create file name for audio clip
+		if p.Settings.Realtime.DynamicThreshold.Enabled {
+			// Add species to dynamic thresholds if it passes the filter
+			p.addSpeciesToDynamicThresholds(speciesLowercase, baseThreshold)
+		}
+
+		// Create file name for audio clip
 		item.ClipName = p.generateClipName(scientificName, result.Confidence)
 
 		beginTime, endTime := 0.0, 0.0
 		note := observation.New(p.Settings, beginTime, endTime, result.Species, float64(result.Confidence), item.Source, item.ClipName, item.ElapsedTime)
 
-		// detection passed all filters, process it
+		// Detection passed all filters, process it
 		detections = append(detections, Detections{
 			pcmData3s: item.PCMdata,
 			Note:      note,
@@ -253,6 +278,110 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 	}
 
 	return detections
+}
+
+// addSpeciesToDynamicThresholds adds a species to the dynamic thresholds map if it doesn't already exist.
+func (p *Processor) addSpeciesToDynamicThresholds(speciesLowercase string, baseThreshold float32) {
+	_, exists := p.DynamicThresholds[speciesLowercase]
+	if !exists {
+		log.Printf("Initializing dynamic threshold for %s\n", speciesLowercase)
+		p.DynamicThresholds[speciesLowercase] = &DynamicThreshold{
+			Level:         0,
+			CurrentValue:  float64(baseThreshold),
+			Timer:         time.Now(),
+			HighConfCount: 0,
+			ValidHours:    1, // Default to 1 hour, can be configured
+		}
+	}
+}
+
+// handleDogDetection handles the detection of dog barks and updates the last detection timestamp.
+func (p *Processor) handleDogDetection(item *queue.Results, speciesLowercase string, result datastore.Results) {
+	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, "dog") && result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
+		log.Printf("Dog detected, updating last detection timestamp for potential owl false positives")
+		p.LastDogDetection[item.Source] = time.Now()
+	}
+}
+
+// handleHumanDetection handles the detection of human vocalizations and updates the last detection timestamp.
+func (p *Processor) handleHumanDetection(item *queue.Results, speciesLowercase string, result datastore.Results) {
+	if p.Settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human") && result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
+		log.Printf("Human detected, confidence %.6f", result.Confidence)
+		p.LastHumanDetection[item.Source] = time.Now().Add(-4 * time.Second)
+	}
+}
+
+// getConfidenceThreshold retrieves the confidence threshold for a species, using custom or global thresholds.
+func (p *Processor) getConfidenceThreshold(speciesLowercase string) float32 {
+	confidenceThreshold, exists := p.SpeciesConfig.Threshold[speciesLowercase]
+	if !exists {
+		confidenceThreshold = float32(p.Settings.BirdNET.Threshold)
+	} else if p.Settings.Debug {
+		log.Printf("\nUsing confidence threshold of %.2f for %s\n", confidenceThreshold, speciesLowercase)
+	}
+	return confidenceThreshold
+}
+
+// getBaseConfidenceThreshold retrieves the confidence threshold for a species, using custom or global thresholds.
+func (p *Processor) getBaseConfidenceThreshold(speciesLowercase string) float32 {
+	confidenceThreshold, exists := p.SpeciesConfig.Threshold[speciesLowercase]
+	if !exists {
+		confidenceThreshold = float32(p.Settings.BirdNET.Threshold)
+	} else if p.Settings.Debug {
+		log.Printf("\nUsing confidence threshold of %.2f for %s\n", confidenceThreshold, speciesLowercase)
+	}
+	return confidenceThreshold
+}
+
+// getAdjustedConfidenceThreshold applies dynamic threshold logic to adjust the confidence threshold based on recent detections.
+func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, result datastore.Results, baseThreshold float32) float32 {
+	dt, exists := p.DynamicThresholds[speciesLowercase]
+	if !exists {
+		return baseThreshold
+	}
+
+	// If the detection confidence exceeds the base threshold
+	if result.Confidence > baseThreshold {
+		log.Printf("High confidence detection of %s\n", speciesLowercase)
+		dt.HighConfCount++
+		dt.Timer = time.Now().Add(time.Duration(dt.ValidHours) * time.Hour)
+
+		// Adjust the dynamic threshold based on the number of high-confidence detections
+		switch dt.HighConfCount {
+		case 1:
+			dt.Level = 1
+			dt.CurrentValue = float64(baseThreshold * 0.75)
+		case 2:
+			dt.Level = 2
+			dt.CurrentValue = float64(baseThreshold * 0.5)
+		case 3:
+			dt.Level = 3
+			dt.CurrentValue = float64(baseThreshold * 0.25)
+		}
+
+		log.Printf("Applying dynamic threshold for %s to %.2f", speciesLowercase, dt.CurrentValue)
+	} else if time.Now().After(dt.Timer) {
+		//log.Printf("Dynamic threshold timer expired for %s\n", speciesLowercase)
+		// Reset the dynamic threshold if the timer has expired
+		dt.Level = 0
+		dt.CurrentValue = float64(baseThreshold)
+		dt.HighConfCount = 0
+		//log.Printf("Reset dynamic threshold for %s", speciesLowercase)
+	}
+	return float32(dt.CurrentValue)
+}
+
+// cleanUpDynamicThresholds removes stale dynamic thresholds for species that haven't been detected for a long time.
+func (p *Processor) cleanUpDynamicThresholds() {
+	staleDuration := 24 * time.Hour // Duration after which a dynamic threshold is considered stale
+	now := time.Now()
+
+	for species, dt := range p.DynamicThresholds {
+		if now.Sub(dt.Timer) > staleDuration {
+			log.Printf("Removing stale dynamic threshold for %s", species)
+			delete(p.DynamicThresholds, species)
+		}
+	}
 }
 
 func (p *Processor) generateClipName(scientificName string, confidence float32) string {
@@ -363,6 +492,9 @@ func (p *Processor) pendingDetectionsFlusher() {
 				}
 			}
 			mutex.Unlock() // Unlock the mutex after updating the map.
+
+			// Perform cleanup of stale dynamic thresholds
+			p.cleanUpDynamicThresholds()
 		}
 	}()
 }

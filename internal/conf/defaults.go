@@ -46,6 +46,11 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.export.retention.maxage", "30d")
 	viper.SetDefault("realtime.audio.export.retention.minclips", 10)
 
+	viper.SetDefault("realtime.dynamicthreshold.enabled", true)
+	viper.SetDefault("realtime.dynamicthreshold.debug", false)
+	viper.SetDefault("realtime.dynamicthreshold.min", 0.10)
+	viper.SetDefault("realtime.dynamicthreshold.validhours", 24)
+
 	viper.SetDefault("realtime.log.enabled", false)
 	viper.SetDefault("realtime.log.path", "birdnet.txt")
 
