@@ -117,7 +117,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	today := time.Now().Truncate(24 * time.Hour)
 
 	// Update location based species list
-	speciesScores, err := bn.GetProbableSpecies()
+	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
 	if err != nil {
 		log.Printf("Failed to get probable species: %s", err)
 	}

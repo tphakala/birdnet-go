@@ -178,7 +178,7 @@ func (a UpdateRangeFilterAction) Execute(data interface{}) error {
 	today := time.Now().Truncate(24 * time.Hour)
 	if today.After(*a.SpeciesListUpdated) {
 		// Update location based species list
-		speciesScores, err := a.Bn.GetProbableSpecies()
+		speciesScores, err := a.Bn.GetProbableSpecies(today, 0.0)
 		if err != nil {
 			return err
 		}
