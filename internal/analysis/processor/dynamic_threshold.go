@@ -65,7 +65,7 @@ func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, resu
 
 // cleanUpDynamicThresholds removes stale dynamic thresholds for species that haven't been detected for a long time.
 func (p *Processor) cleanUpDynamicThresholds() {
-	staleDuration := 24 * time.Hour // Duration after which a dynamic threshold is considered stale
+	staleDuration := time.Duration(p.Settings.Realtime.DynamicThreshold.ValidHours) * time.Hour // Duration after which a dynamic threshold is considered stale
 	now := time.Now()
 
 	for species, dt := range p.DynamicThresholds {
