@@ -69,6 +69,7 @@ type Settings struct {
 		DynamicThreshold struct {
 			Enabled    bool    // true to enable dynamic threshold
 			Debug      bool    // true to enable debug mode
+			Trigger    float64 // trigger threshold for dynamic threshold
 			Min        float64 // minimum threshold for dynamic threshold
 			ValidHours int     // number of hours to consider for dynamic threshold
 		}

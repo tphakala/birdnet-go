@@ -46,7 +46,8 @@ realtime:
 
   dynamicthreshold:
     enabled: true         # true to enable dynamic confidence threshold
-    min: 0.20             # minimum dynamic confidence threshold value
+    trigger: 0.90         # dynamic threshold is activated on detections at this confidence level
+    min: 0.20             # dynamic threshold will not go lower than this
     validhours: 24        # number of hours to consider for dynamic confidence
 
   rtsp:    
