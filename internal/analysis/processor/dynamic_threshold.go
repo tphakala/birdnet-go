@@ -17,7 +17,7 @@ func (p *Processor) addSpeciesToDynamicThresholds(speciesLowercase string, baseT
 			CurrentValue:  float64(baseThreshold),
 			Timer:         time.Now(),
 			HighConfCount: 0,
-			ValidHours:    1, // Default to 1 hour, can be configured
+			ValidHours:    p.Settings.Realtime.DynamicThreshold.ValidHours,
 		}
 	}
 }
@@ -44,7 +44,7 @@ func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, resu
 			dt.CurrentValue = float64(baseThreshold * 0.5)
 		case 3:
 			dt.Level = 3
-			dt.CurrentValue = p.Settings.Realtime.DynamicThreshold.Min
+			dt.CurrentValue = float64(baseThreshold * 0.25)
 		}
 	} else if time.Now().After(dt.Timer) {
 		// Reset the dynamic threshold if the timer has expired
@@ -52,6 +52,12 @@ func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, resu
 		dt.CurrentValue = float64(baseThreshold)
 		dt.HighConfCount = 0
 	}
+
+	// Ensure the dynamic threshold doesn't fall below the minimum threshold
+	if dt.CurrentValue < p.Settings.Realtime.DynamicThreshold.Min {
+		dt.CurrentValue = p.Settings.Realtime.DynamicThreshold.Min
+	}
+
 	return float32(dt.CurrentValue)
 }
 
