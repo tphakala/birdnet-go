@@ -1,6 +1,7 @@
 {
 	"name": "Go Build Environment",
 	"dockerFile": "../Dockerfile",
+	"forwardPorts": [8080],
 	"build": {
 		"context": "..",
 		"target": "buildenv"
@@ -9,10 +10,12 @@
 	"containerEnv": {
 		"ALSA_CARD": "0",
 		"CGO_ENABLED": "1",
-		"CGO_CFLAGS": "-I /root/src/tensorflow"
+		"CGO_CFLAGS": "-I /home/dev-user/src/tensorflow"
 	},
+	"containerUser": "dev-user",
+	"updateRemoteUserUID": true,
 	"postCreateCommand": ".devcontainer/postCreateCommand.sh",
-	"postAttachCommand": "make dev_server",
+	"postAttachCommand": ".devcontainer/start_dev_server.sh",
 	"customizations": {
 		"vscode": {
 			"extensions": [
