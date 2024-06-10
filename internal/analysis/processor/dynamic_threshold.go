@@ -11,7 +11,9 @@ import (
 func (p *Processor) addSpeciesToDynamicThresholds(speciesLowercase string, baseThreshold float32) {
 	_, exists := p.DynamicThresholds[speciesLowercase]
 	if !exists {
-		log.Printf("Initializing dynamic threshold for %s\n", speciesLowercase)
+		if p.Settings.Realtime.DynamicThreshold.Debug {
+			log.Printf("Initializing dynamic threshold for %s\n", speciesLowercase)
+		}
 		p.DynamicThresholds[speciesLowercase] = &DynamicThreshold{
 			Level:         0,
 			CurrentValue:  float64(baseThreshold),
@@ -68,7 +70,9 @@ func (p *Processor) cleanUpDynamicThresholds() {
 
 	for species, dt := range p.DynamicThresholds {
 		if now.Sub(dt.Timer) > staleDuration {
-			log.Printf("Removing stale dynamic threshold for %s", species)
+			if p.Settings.Realtime.DynamicThreshold.Debug {
+				log.Printf("Removing stale dynamic threshold for %s", species)
+			}
 			delete(p.DynamicThresholds, species)
 		}
 	}
