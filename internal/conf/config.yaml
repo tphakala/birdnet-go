@@ -44,6 +44,12 @@ realtime:
         maxusage: 80%     # usage policy: percentage of disk usage to trigger eviction        
         minclips: 10      # minumum number of clips per species to keep before starting evictions
 
+  dynamicthreshold:
+    enabled: true         # true to enable dynamic confidence threshold
+    trigger: 0.90         # dynamic threshold is activated on detections at this confidence level
+    min: 0.20             # dynamic threshold will not go lower than this
+    validhours: 24        # number of hours to consider for dynamic confidence
+
   rtsp:    
     transport: tcp        # RTSP Transport Protocol
     urls:                 # RTSP stream URLs
