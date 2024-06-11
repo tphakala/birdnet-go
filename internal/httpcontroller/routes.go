@@ -5,8 +5,6 @@ import (
 	"embed"
 	"html/template"
 	"io/fs"
-	"log"
-	"sync"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -32,42 +30,21 @@ var routes = []routeConfig{
 	{Path: "/settings", TemplateName: "settings", Title: "General Settings"},
 }
 
-func (s *Server) initThumbnailCache() {
-	notes, err := s.ds.GetAllDetectedSpecies()
-	if err != nil {
-		s.Echo.Logger.Fatal(err)
-	}
-
-	var wg sync.WaitGroup
-
-	for _, note := range notes {
-		wg.Add(1)
-
-		go func(note string) {
-			defer wg.Done()
-			if _, err := thumbnail(note); err != nil {
-				log.Printf("Error fetching thumbnail for %s: %v", note, err)
-			}
-		}(note.ScientificName)
-	}
-
-	wg.Wait()
-}
-
 // initRoutes initializes the routes for the server.
 func (s *Server) initRoutes() {
 	// Define function map for templates.
 	funcMap := template.FuncMap{
-		"even":            even,
-		"calcWidth":       calcWidth,
-		"heatmapColor":    heatmapColor,
-		"title":           cases.Title(language.English).String,
-		"confidence":      confidence,
-		"confidenceColor": confidenceColor,
-		"thumbnail":       thumbnail,
-		"RenderContent":   s.RenderContent,
-		"sub":             func(a, b int) int { return a - b },
-		"add":             func(a, b int) int { return a + b },
+		"even":                 even,
+		"calcWidth":            calcWidth,
+		"heatmapColor":         heatmapColor,
+		"title":                cases.Title(language.English).String,
+		"confidence":           confidence,
+		"confidenceColor":      confidenceColor,
+		"thumbnail":            s.thumbnail,
+		"thumbnailAttribution": s.thumbnailAttribution,
+		"RenderContent":        s.RenderContent,
+		"sub":                  func(a, b int) int { return a - b },
+		"add":                  func(a, b int) int { return a + b },
 	}
 
 	// Parse templates from the embedded filesystem.
@@ -105,9 +82,6 @@ func (s *Server) initRoutes() {
 	s.Echo.Add("DELETE", "/note", s.deleteNoteHandler)
 
 	s.Echo.POST("/update-settings", s.updateSettingsHandler)
-
-	// Initialize thumbnail cache
-	go s.initThumbnailCache()
 
 	// Specific handler for settings route
 	//s.Echo.GET("/settings", s.settingsHandler)

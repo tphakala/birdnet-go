@@ -6,8 +6,9 @@
     <tr>
       <th scope="col" class="py-2 px-6" style="width:15%;">Date</th>
       <th scope="col" class="py-2 px-6" style="width:15%;">Time</th>
-      <th scope="col" class="py-2 px-6" style="width:25%;">Common Name</th>
-      <th scope="col" class="py-2 px-6" style="width:20%;">Confidence</th>
+      <th scope="col" class="py-2 px-6" style="width:15%;">Common Name</th>
+      <th scope="col" class="py-2 px-6" style="width:20%;">Thumbnail</th>
+      <th scope="col" class="py-2 px-6" style="width:15%;">Confidence</th>
       <th scope="col" class="py-2 px-6" style="width:25%;">Recording</th>
     </tr>
   </thead>
@@ -24,8 +25,13 @@
         hx-trigger="click"
         hx-push-url="true">
         {{ .CommonName}}</a>
+      </td>
+      <td class="py-1 px-6">
         <!-- Bird thumbnail  -->
-        <img loading="lazy" width="40" src="{{thumbnail .ScientificName}}" alt="Bird Image" class="h-auto rounded-md">
+        <img loading="lazy" width="50%" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
+        <div style="font-size:0.5em;" >
+          {{thumbnailAttribution .ScientificName}}
+        </div>
       </td>
       <td class="py-1 px-6">
         <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
@@ -68,7 +74,12 @@
           {{title .CommonName}}
         </a>
         <!-- Bird thumbnail  -->
-        <img loading="lazy" width="40" src="{{thumbnail .ScientificName}}" alt="Bird Image" class="h-auto rounded-md">
+        <div>
+          <img loading="lazy" width="100" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
+          <div style="font-size:0.5em;" >
+            {{thumbnailAttribution .ScientificName}}
+          </div>
+        </div>
       </div>
       
       <span class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">{{confidence .Confidence}}</span>
