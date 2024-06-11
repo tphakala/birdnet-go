@@ -5,6 +5,7 @@
   <thead class="text-xs">
     <tr>
       <th scope="col" class="py-2 px-6 w-0">Species</th>
+      <th scope="col" class="py-2 px-6 w-0">Thumbnail</th>
       <th scope="col" class="py-2 px-4 w-100 hidden md:table-cell">Detections</th>
       {{range .Hours}}
       <th scope="col" class="text-center py-2 px-0">{{printf "%02d" .}}</th>      
@@ -24,8 +25,14 @@
           hx-trigger="click"
           hx-push-url="true">{{title .Note.CommonName}}
         </a>
+      </th>
+      <th scope="row" class="py-1 px-6">
         <!-- Bird thumbnail  -->
-        <img loading="lazy" width="40" src="{{thumbnail .ScientificName}}" alt="Bird Image" class="h-auto rounded-md">
+        <img loading="lazy" width="100%" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
+        <!-- TODO add credits back in -->
+        <div style="font-size:0.5em;" >
+          {{thumbnailAttribution .ScientificName}}
+        </div>
       </th>
 
       <td class="py-1 px-3 hidden md:table-cell">

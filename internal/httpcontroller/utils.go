@@ -3,6 +3,7 @@ package httpcontroller
 
 import (
 	"fmt"
+	"html/template"
 	"log"
 	"os"
 	"os/exec"
@@ -10,10 +11,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"cgt.name/pkg/go-mwclient"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -240,75 +239,35 @@ func parseOffset(offsetStr string, defaultOffset int) int {
 	return offset
 }
 
-var (
-	thumbnailMap      sync.Map
-	thumbnailMutexMap sync.Map
-)
-
-func queryWikiMedia(scientificName string) (string, error) {
-	w, err := mwclient.New("https://wikipedia.org/w/api.php", "Birdnet-Go")
+// thumbnail returns the url of a given bird's thumbnail
+func (s *Server) thumbnail(scientificName string) string {
+	birdImage, err := s.BirdImageCache.Get(scientificName)
 	if err != nil {
-		return "", err
+		return ""
 	}
 
-	// Specify parameters to send.
-	parameters := map[string]string{
-		"action":      "query",
-		"prop":        "pageimages",
-		"piprop":      "thumbnail",
-		"pilicense":   "free",
-		"titles":      scientificName,
-		"pithumbsize": "400",
-		"redirects":   "",
-	}
-
-	// Make the request.
-	resp, err := w.Get(parameters)
-	if err != nil {
-		return "", err
-	}
-
-	// Print the *jason.Object
-	pages, err := resp.GetObjectArray("query", "pages")
-	if err != nil {
-		return "", err
-	}
-
-	thumbnail, err := pages[0].GetString("thumbnail", "source")
-	if err != nil {
-		return "", err
-	}
-
-	return string(thumbnail), nil
+	return birdImage.Url
 }
 
-// thumbnail returns the url of a given bird's thumbnail
-func thumbnail(scientificName string) (string, error) {
-	// Check if thumbnail is already cached
-	if thumbnail, ok := thumbnailMap.Load(scientificName); ok {
-		log.Printf("Bird: %s, Thumbnail (cached): %s\n", scientificName, thumbnail)
-		return thumbnail.(string), nil
-	}
-
-	// Use a per-item mutex to ensure only one GraphQL query is performed per item
-	mu, _ := thumbnailMutexMap.LoadOrStore(scientificName, &sync.Mutex{})
-	mutex := mu.(*sync.Mutex)
-
-	mutex.Lock()
-	defer mutex.Unlock()
-
-	// Check again if thumbnail is cached after acquiring the lock
-	if thumbnail, ok := thumbnailMap.Load(scientificName); ok {
-		log.Printf("Bird: %s, Thumbnail (cached): %s\n", scientificName, thumbnail)
-		return thumbnail.(string), nil
-	}
-
-	thumbn, err := queryWikiMedia(scientificName)
+// thumbnailAttribution returns the thumbnail credits of a given bird.
+func (s *Server) thumbnailAttribution(scientificName string) template.HTML {
+	birdImage, err := s.BirdImageCache.Get(scientificName)
 	if err != nil {
-		log.Printf("error querying wikimedia endpoint: %v", err)
+		log.Printf("Error getting thumbnail info for %s: %v", scientificName, err)
+		return template.HTML("")
 	}
 
-	thumbnailMap.Store(scientificName, thumbn)
-	log.Printf("Bird: %s, Thumbnail (fetched): %s\n", scientificName, thumbn)
-	return thumbn, nil
+	// Skip if no author or license information
+	if birdImage.AuthorName == "" || birdImage.LicenseName == "" {
+		return template.HTML("")
+	}
+
+	var toReturn string
+	if birdImage.AuthorUrl == "" {
+		toReturn = fmt.Sprintf("© %s / <a href=%s>%s</a>", birdImage.AuthorName, birdImage.LicenseUrl, birdImage.LicenseName)
+	} else {
+		toReturn = fmt.Sprintf("© <a href=%s>%s</a> / <a href=%s>%s</a>", birdImage.AuthorUrl, birdImage.AuthorName, birdImage.LicenseUrl, birdImage.LicenseName)
+	}
+
+	return template.HTML(toReturn)
 }
