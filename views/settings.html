@@ -112,7 +112,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="m9 9 10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 0 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z" />
             </svg>
             <span class="label-text grow">Save Audio Clips</span>
-            <input type="checkbox" class="toggle toggle-sm" {{if .Settings.Realtime.AudioExport.Enabled}}checked{{end}} name="Realtime.AudioExport.Enabled" value="true" />
+            <input type="checkbox" class="toggle toggle-sm" {{if .Settings.Realtime.Audio.Export.Enabled}}checked{{end}} name="Realtime.AudioExport.Enabled" value="true" />
         </label>
     </div>
 
@@ -123,7 +123,7 @@
             </svg>                      
             <span class="label-text">Clip Save Path</span>
         </label>
-        <input type="text" id="audioExportPath" name="Realtime.AudioExport.Path" value="{{.Settings.Realtime.AudioExport.Path}}" class="input input-bordered w-full">
+        <input type="text" id="audioExportPath" name="Realtime.AudioExport.Path" value="{{.Settings.Realtime.Audio.Export.Path}}" class="input input-bordered w-full">
     </div>
 
     <br>

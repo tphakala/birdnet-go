@@ -35,7 +35,8 @@ type DatabaseAction struct {
 	Note         datastore.Note
 	Results      []datastore.Results
 	EventTracker *EventTracker
-	AudioBuffer  *myaudio.AudioBuffer
+	//AudioBuffer  *myaudio.AudioBuffer
+	//AudioBuffers *map[string]*myaudio.AudioBuffer
 }
 
 type SaveAudioAction struct {
@@ -91,11 +92,6 @@ func (a DatabaseAction) Execute(data interface{}) error {
 	// Check if the event should be handled for this species
 	if a.EventTracker.TrackEvent(species, DatabaseSave) {
 		// Save note to database
-		/*
-			if err := a.Ds.Save(a.Note); err != nil {
-				log.Printf("Failed to save note to database: %v", err)
-				return err
-			}*/
 		if err := a.Ds.Save(&a.Note, a.Results); err != nil {
 			log.Printf("Failed to save note and results to database: %v", err)
 			return err
@@ -103,8 +99,14 @@ func (a DatabaseAction) Execute(data interface{}) error {
 
 		// Save audio clip to file if enabled
 		if a.Settings.Realtime.Audio.Export.Enabled {
-			time.Sleep(1 * time.Second) // Sleep for 1 second to allow the audio buffer to fill
-			pcmData, _ := a.AudioBuffer.ReadSegment(a.Note.BeginTime, time.Now())
+			// export audio clip from capture buffer
+			//pcmData, err := a.AudioBuffer.ReadSegment(a.Note.BeginTime, 15)
+			pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source, a.Note.BeginTime, 15)
+			if err != nil {
+				log.Printf("Failed to read audio segment from buffer: %v", err)
+				return err
+			}
+
 			if err := myaudio.SavePCMDataToWAV(a.Note.ClipName, pcmData); err != nil {
 				log.Printf("error saving audio clip to %s: %s\n", a.Settings.Realtime.Audio.Export.Type, err)
 				return err
@@ -175,12 +177,19 @@ func (a MqttAction) Execute(data interface{}) error {
 func (a UpdateRangeFilterAction) Execute(data interface{}) error {
 	today := time.Now().Truncate(24 * time.Hour)
 	if today.After(*a.SpeciesListUpdated) {
-		var err error
 		// Update location based species list
-		*a.IncludedSpecies, err = a.Bn.GetProbableSpecies()
+		speciesScores, err := a.Bn.GetProbableSpecies(today, 0.0)
 		if err != nil {
 			return err
 		}
+
+		// Convert the speciesScores slice to a slice of species labels
+		var includedSpecies []string
+		for _, speciesScore := range speciesScores {
+			includedSpecies = append(includedSpecies, speciesScore.Label)
+		}
+
+		*a.IncludedSpecies = includedSpecies
 		*a.SpeciesListUpdated = today // Update the timestamp
 	}
 	return nil

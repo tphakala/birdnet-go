@@ -47,7 +47,7 @@
           <img loading="lazy" width="400" src="/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md"></a>
 
           <!-- Audio player -->
-          <audio controls class="audio-control" preload="none">
+          <audio controls class="audio-control" preload="metadata">
             <source src="{{.ClipName}}" type="audio/wav">
             Your browser does not support the audio element.
           </audio>

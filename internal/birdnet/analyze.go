@@ -23,18 +23,29 @@ type DetectionsMap map[string][]datastore.Results
 // Predict performs inference on a given sample using the TensorFlow Lite interpreter.
 // It processes the sample to predict species and their confidence levels.
 func (bn *BirdNET) Predict(sample [][]float32) ([]datastore.Results, error) {
+	// implement locking to prevent concurrent access to the interpreter, not
+	// necessarily best way to manage multiple audio sources but works for now
+	bn.mu.Lock()
+	defer bn.mu.Unlock()
+
+	// Get the input tensor from the interpreter
 	inputTensor := bn.AnalysisInterpreter.GetInputTensor(0)
 	if inputTensor == nil {
 		return nil, fmt.Errorf("cannot get input tensor")
 	}
 
-	// Preparing input tensor with the sample data.
+	// Preparing input tensor with the sample data
 	copy(inputTensor.Float32s(), sample[0])
 
+	// DEBUG: Log the length of the sample data
+	//log.Printf("Invoking tensor with sample length: %d", len(sample[0]))
+
+	// Invoke the interpreter to perform inference
 	if status := bn.AnalysisInterpreter.Invoke(); status != tflite.OK {
 		return nil, fmt.Errorf("tensor invoke failed: %v", status)
 	}
 
+	// Read the results from the output tensor
 	outputTensor := bn.AnalysisInterpreter.GetOutputTensor(0)
 	predictions := extractPredictions(outputTensor)
 
@@ -48,6 +59,7 @@ func (bn *BirdNET) Predict(sample [][]float32) ([]datastore.Results, error) {
 	// Sorting results by confidence in descending order.
 	sortResults(results)
 
+	// Return the top 10 results
 	return trimResultsToMax(results, 10), nil
 }
 
@@ -81,9 +93,12 @@ func (bn *BirdNET) processChunk(chunk []float32, predStart float64) ([]datastore
 		return nil, fmt.Errorf("prediction failed: %v", err)
 	}
 
+	var source = ""
+	var clipName = ""
+
 	var notes []datastore.Note
 	for _, result := range results {
-		note := observation.New(bn.Settings, predStart, predStart+3.0, result.Species, float64(result.Confidence), "", 0)
+		note := observation.New(bn.Settings, predStart, predStart+3.0, result.Species, float64(result.Confidence), source, clipName, 0)
 		notes = append(notes, note)
 	}
 	return notes, nil

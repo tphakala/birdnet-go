@@ -1,4 +1,4 @@
-// contains default values for settings
+// conf/defaults.go default values for settings
 package conf
 
 import (
@@ -26,20 +26,31 @@ func setDefaultConfig() {
 	viper.SetDefault("birdnet.locale", "en")
 	viper.SetDefault("birdnet.latitude", 0.000)
 	viper.SetDefault("birdnet.longitude", 0.000)
-	viper.SetDefault("birdnet.locationfilterthreshold", 0.01)
+	viper.SetDefault("birdnet.rangefilter.model", "latest")
+	viper.SetDefault("birdnet.rangefilter.threshold", 0.01)
 
 	viper.SetDefault("realtime.interval", 15)
 	viper.SetDefault("realtime.processingtime", false)
 
 	viper.SetDefault("realtime.audio.source", "sysdefault")
 
+	viper.SetDefault("realtime.audio.export.debug", false)
 	viper.SetDefault("realtime.audio.export.enabled", true)
 	viper.SetDefault("realtime.audio.export.path", "clips/")
 	viper.SetDefault("realtime.audio.export.type", "wav")
 
-	viper.SetDefault("realtime.audio.export.retention.enabled", false)
-	viper.SetDefault("realtime.audio.export.retention.minEvictionHours", 0)
-	viper.SetDefault("realtime.audio.export.retention.minClipsPerSpecies", 0)
+	viper.SetDefault("realtime.audio.export.retention.enabled", true)
+	viper.SetDefault("realtime.audio.export.retention.debug", false)
+	viper.SetDefault("realtime.audio.export.retention.policy", "usage")
+	viper.SetDefault("realtime.audio.export.retention.maxusage", "80%")
+	viper.SetDefault("realtime.audio.export.retention.maxage", "30d")
+	viper.SetDefault("realtime.audio.export.retention.minclips", 10)
+
+	viper.SetDefault("realtime.dynamicthreshold.enabled", true)
+	viper.SetDefault("realtime.dynamicthreshold.debug", false)
+	viper.SetDefault("realtime.dynamicthreshold.trigger", 0.90)
+	viper.SetDefault("realtime.dynamicthreshold.min", 0.20)
+	viper.SetDefault("realtime.dynamicthreshold.validhours", 24)
 
 	viper.SetDefault("realtime.log.enabled", false)
 	viper.SetDefault("realtime.log.path", "birdnet.txt")
@@ -50,7 +61,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.birdweather.threshold", 0.8)
 	viper.SetDefault("realtime.birdweather.locationaccuracy", 500)
 
-	viper.SetDefault("realtime.rtsp.url", "")
+	viper.SetDefault("realtime.rtsp.urls", []string{})
 	viper.SetDefault("realtime.rtsp.transport", "tcp")
 
 	viper.SetDefault("realtime.mqtt.enabled", false)
@@ -60,7 +71,13 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.mqtt.password", "secret")
 
 	viper.SetDefault("realtime.privacyfilter.enabled", true)
+	viper.SetDefault("realtime.privacyfilter.debug", false)
+	viper.SetDefault("realtime.privacyfilter.confidence", 0.05)
+
 	viper.SetDefault("realtime.dogbarkfilter.enabled", false)
+	viper.SetDefault("realtime.dogbarkfilter.debug", false)
+	viper.SetDefault("realtime.dogbarkfilter.remember", 5)
+	viper.SetDefault("realtime.dogbarkfilter.confidence", 0.1)
 
 	viper.SetDefault("realtime.telemetry.enabled", false)
 	viper.SetDefault("realtime.telemetry.listen", "0.0.0.0:8090")
@@ -69,7 +86,7 @@ func setDefaultConfig() {
 	viper.SetDefault("webserver.port", "8080")
 	viper.SetDefault("webserver.autotls", false)
 
-	viper.SetDefault("webserver.log.enabled", true)
+	viper.SetDefault("webserver.log.enabled", false)
 	viper.SetDefault("webserver.log.path", "webui.log")
 	viper.SetDefault("webserver.log.rotation", RotationDaily)
 	viper.SetDefault("webserver.log.maxsize", 1048576)

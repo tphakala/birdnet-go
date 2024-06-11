@@ -1,15 +1,19 @@
-// conf/utils.go
+// conf/utils.go various util functions for configuration package
 package conf
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+
+	"github.com/mitchellh/mapstructure"
 )
 
 // getDefaultConfigPaths returns a list of default configuration paths for the current operating system.
@@ -164,4 +168,66 @@ func GetBoardModel() string {
 	// Return the board model as a string.
 	model := strings.TrimSpace(string(data))
 	return model
+}
+
+// structToMap converts a struct to a map using mapstructure
+func structToMap(settings *Settings) (map[string]interface{}, error) {
+	var result map[string]interface{}
+	err := mapstructure.Decode(settings, &result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// ParsePercentage converts a percentage string (e.g., "80%") to a float64
+func ParsePercentage(percentage string) (float64, error) {
+	if strings.HasSuffix(percentage, "%") {
+		value, err := strconv.ParseFloat(strings.TrimSuffix(percentage, "%"), 64)
+		if err != nil {
+			return 0, err
+		}
+		return value, nil
+	}
+	return 0, errors.New("invalid percentage format")
+}
+
+// ParseRetentionPeriod converts a string like "24h", "7d", "1w", "3m", "1y" to hours.
+func ParseRetentionPeriod(retention string) (int, error) {
+	if len(retention) == 0 {
+		return 0, fmt.Errorf("retention period cannot be empty")
+	}
+
+	// Try to parse the retention period
+	lastChar := retention[len(retention)-1]
+	numberPart := retention[:len(retention)-1]
+
+	// Handle case where the input is a plain integer
+	if lastChar >= '0' && lastChar <= '9' {
+		hours, err := strconv.Atoi(retention)
+		if err != nil {
+			return 0, fmt.Errorf("invalid retention period format: %s", retention)
+		}
+		return hours, nil
+	}
+
+	number, err := strconv.Atoi(numberPart)
+	if err != nil {
+		return 0, fmt.Errorf("invalid retention period format: %s", retention)
+	}
+
+	switch lastChar {
+	case 'h':
+		return number, nil
+	case 'd':
+		return number * 24, nil
+	case 'w':
+		return number * 24 * 7, nil
+	case 'm':
+		return number * 24 * 30, nil // Approximation, as months can vary in length
+	case 'y':
+		return number * 24 * 365, nil // Ignoring leap years for simplicity
+	default:
+		return 0, fmt.Errorf("invalid suffix for retention period: %c", lastChar)
+	}
 }
