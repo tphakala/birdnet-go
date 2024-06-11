@@ -23,8 +23,8 @@ jobs:
           tags: birdnet-go:test
           load: true
           platforms: linux/amd64
-          cache-from: type=gha,scope=linux/amd64
-          cache-to: type=gha,mode=max,scope=linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Install alsa dummy module for testing built image
         run: |
@@ -47,11 +47,6 @@ jobs:
     needs: test-docker-image
     if: github.event_name == 'push' && github.ref_name == 'main'
     runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        include:
-          - platform: linux/arm64
-          - platform: linux/amd64
     steps:
       - name: Checkout GitHub Action
         uses: actions/checkout@v4.1.5
@@ -78,6 +73,7 @@ jobs:
           tags: |
             ghcr.io/${{ env.REPO }}:dev
             ghcr.io/${{ env.REPO }}:${{ github.sha }}
-          platforms: ${{ matrix.platform }}
-          cache-from: type=gha,scope=${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
+          platforms: linux/arm64, linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false

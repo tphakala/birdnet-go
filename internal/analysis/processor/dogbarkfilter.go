@@ -1,3 +1,4 @@
+// dogbarkfilter.go
 package processor
 
 import (
@@ -13,7 +14,7 @@ import (
 )
 
 // Assuming a predefined time limit for filtering detections after a dog bark.
-const DogBarkFilterTimeLimit = 15 * time.Minute
+var DogBarkFilterTimeLimit = time.Duration(conf.Setting().Realtime.DogBarkFilter.Remember) * time.Minute
 
 // DogBarkFilter contains a list of species to be filtered within the time limit after a dog bark.
 type DogBarkFilter struct {

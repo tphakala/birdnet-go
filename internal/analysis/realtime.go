@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -56,8 +57,9 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	fmt.Printf("System details: %s %s %s on %s hardware\n", info.OS, info.Platform, info.PlatformVersion, hwModel)
 
 	// Log the start of BirdNET-Go Analyzer in realtime mode and its configurations.
-	fmt.Printf("Starting analyzer in realtime mode. Threshold: %v, sensitivity: %v, interval: %v\n",
+	fmt.Printf("Starting analyzer in realtime mode. Threshold: %v, overlap: %v, sensitivity: %v, interval: %v\n",
 		settings.BirdNET.Threshold,
+		settings.BirdNET.Overlap,
 		settings.BirdNET.Sensitivity,
 		settings.Realtime.Interval)
 
@@ -81,11 +83,21 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// quitChannel is used to signal the goroutines to stop.
 	quitChan := make(chan struct{})
 
-	// Initialize the ring buffer.
-	myaudio.InitRingBuffer(bufferSize)
+	// Initialize ring buffers for each audio source
+	var sources []string
+	if len(settings.Realtime.RTSP.Urls) > 0 {
+		sources = settings.Realtime.RTSP.Urls
+		// DEBUG
+		//log.Println("RTSP sources configured, using RTSP for audio capture")
+	} else {
+		// DEBUG
+		//log.Println("No RTSP sources configured, using malgo for audio capture")
+		sources = []string{"malgo"}
+	}
+	myaudio.InitRingBuffers(bufferSize*2, sources)
 
 	// Audio buffer for extended audio clip capture
-	audioBuffer := myaudio.NewAudioBuffer(30, conf.SampleRate, 2)
+	myaudio.InitAudioBuffers(60, conf.SampleRate, conf.BitDepth/8, sources)
 
 	// init detection queue
 	queue.Init(5, 5)
@@ -97,21 +109,27 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	}
 
 	// Start worker pool for processing detections
-	processor.New(settings, dataStore, bn, audioBuffer, metrics)
+	processor.New(settings, dataStore, bn, metrics)
 
 	// Start http server
 	httpcontroller.New(settings, dataStore)
 
 	// Initialize the wait group to wait for all goroutines to finish
 	var wg sync.WaitGroup
-	// start buffer monitor
-	startBufferMonitor(&wg, bn, quitChan)
+
+	// Start buffer monitors for each audio source
+	for _, source := range sources {
+		wg.Add(1)
+		go myaudio.BufferMonitor(&wg, bn, quitChan, source)
+	}
 
 	// start audio capture
-	startAudioCapture(&wg, settings, quitChan, restartChan, audioBuffer)
+	startAudioCapture(&wg, settings, quitChan, restartChan)
 
 	// start cleanup of clips
-	startClipCleanupMonitor(&wg, settings, dataStore, quitChan)
+	if conf.Setting().Realtime.Audio.Export.Retention.Policy != "none" {
+		startClipCleanupMonitor(&wg, settings, dataStore, quitChan)
+	}
 
 	// start telemetry endpoint
 	startTelemetryEndpoint(&wg, settings, metrics, quitChan)
@@ -135,28 +153,22 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		case <-restartChan:
 			// Handle the restart signal.
 			fmt.Println("Restarting audio capture")
-			startAudioCapture(&wg, settings, quitChan, restartChan, audioBuffer)
+			startAudioCapture(&wg, settings, quitChan, restartChan)
 		}
 	}
 
 }
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
-func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan chan struct{}, restartChan chan struct{}, audioBuffer *myaudio.AudioBuffer) {
-	wg.Add(1)
-	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, audioBuffer)
-}
-
-// startBufferMonitor initializes and starts the buffer monitoring routine in a new goroutine.
-func startBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}) {
-	wg.Add(1)
-	go myaudio.BufferMonitor(wg, bn, quitChan)
+func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan chan struct{}, restartChan chan struct{}) {
+	// waitgroup is managed within CaptureAudio
+	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan)
 }
 
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
 func startClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, quitChan chan struct{}) {
 	wg.Add(1)
-	go ClipCleanupMonitor(wg, settings, dataStore, quitChan)
+	go clipCleanupMonitor(wg, dataStore, quitChan)
 }
 
 func startTelemetryEndpoint(wg *sync.WaitGroup, settings *conf.Settings, metrics *telemetry.Metrics, quitChan chan struct{}) {
@@ -181,7 +193,7 @@ func monitorCtrlC(quitChan chan struct{}) {
 
 		<-sigChan // Block until a SIGINT signal is received
 
-		fmt.Println("\nReceived Ctrl+C, shutting down")
+		log.Println("Received Ctrl+C, shutting down")
 		close(quitChan) // Close the quit channel to signal other goroutines to stop
 	}()
 }
@@ -196,12 +208,14 @@ func closeDataStore(store datastore.Interface) {
 }
 
 // ClipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
-func ClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, quitChan chan struct{}) {
+func clipCleanupMonitor(wg *sync.WaitGroup, dataStore datastore.Interface, quitChan chan struct{}) {
 	defer wg.Done() // Ensure that the WaitGroup is marked as done after the function exits
 
-	// Create a ticker that triggers every minute to perform cleanup
-	ticker := time.NewTicker(1 * time.Minute)
+	// Create a ticker that triggers every five minutes to perform cleanup
+	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop() // Ensure the ticker is stopped to prevent leaks
+
+	log.Println("Clip retention policy:", conf.Setting().Realtime.Audio.Export.Retention.Policy)
 
 	for {
 		select {
@@ -210,34 +224,17 @@ func ClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore d
 			return
 
 		case <-ticker.C:
-			// Perform cleanup operation on every tick
-			clipsForRemoval, err := dataStore.GetClipsQualifyingForRemoval(settings.Realtime.Audio.Export.Retention.MinEvictionHours, settings.Realtime.Audio.Export.Retention.MinClipsPerSpecies)
-			if err != nil {
-				log.Printf("Error retrieving clips for removal: %s\n", err)
-				continue // Skip this tick's cleanup if there's an error
+			// age based cleanup method
+			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "age" {
+				if err := diskmanager.AgeBasedCleanup(quitChan); err != nil {
+					log.Println("Error cleaning up clips: ", err)
+				}
 			}
 
-			log.Printf("Found %d clips to remove\n", len(clipsForRemoval))
-
-			for _, clip := range clipsForRemoval {
-				// Attempt to remove the clip file from the filesystem
-				if err := os.Remove(clip.ClipName); err != nil {
-					if os.IsNotExist(err) {
-						// Attempt to delete the database record if the clip file aleady doesn't exist
-						if err := dataStore.DeleteNoteClipPath(clip.ID); err != nil {
-							log.Printf("Failed to delete clip path for %s: %s\n", clip.ID, err)
-						} else {
-							log.Printf("Cleared clip path of missing clip for %s\n", clip.ID)
-						}
-					} else {
-						log.Printf("Failed to remove %s: %s\n", clip.ClipName, err)
-					}
-				} else {
-					log.Printf("Removed %s\n", clip.ClipName)
-					// Attempt to delete the database record if the file removal was successful
-					if err := dataStore.DeleteNoteClipPath(clip.ID); err != nil {
-						log.Printf("Failed to delete clip path for %s: %s\n", clip.ID, err)
-					}
+			// priority based cleanup method
+			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "usage" {
+				if err := diskmanager.UsageBasedCleanup(quitChan); err != nil {
+					log.Println("Error cleaning up clips: ", err)
 				}
 			}
 		}

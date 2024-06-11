@@ -12,6 +12,7 @@ type Results struct {
 	Results     []datastore.Results
 	ElapsedTime time.Duration
 	ClipName    string
+	Source      string // Source of the audio data, RSTP URL or audio card name
 }
 
 var (

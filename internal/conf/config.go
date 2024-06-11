@@ -3,12 +3,12 @@ package conf
 
 import (
 	"embed"
-	"errors"
 	"fmt"
 	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/spf13/viper"
@@ -27,14 +27,17 @@ type Settings struct {
 	}
 
 	BirdNET struct {
-		Sensitivity             float64 // birdnet analysis sigmoid sensitivity
-		Threshold               float64 // threshold for prediction confidence to report
-		Overlap                 float64 // birdnet analysis overlap between chunks
-		Longitude               float64 // longitude of recording location for prediction filtering
-		Latitude                float64 // latitude of recording location for prediction filtering
-		Threads                 int     // number of CPU threads to use for analysis
-		Locale                  string  // language to use for labels
-		LocationFilterThreshold float32 // threshold for prediction confidence to report
+		Sensitivity float64 // birdnet analysis sigmoid sensitivity
+		Threshold   float64 // threshold for prediction confidence to report
+		Overlap     float64 // birdnet analysis overlap between chunks
+		Longitude   float64 // longitude of recording location for prediction filtering
+		Latitude    float64 // latitude of recording location for prediction filtering
+		Threads     int     // number of CPU threads to use for analysis
+		Locale      string  // language to use for labels
+		RangeFilter struct {
+			Model     string  // range filter model model
+			Threshold float32 // rangefilter species occurrence threshold
+		}
 	}
 
 	Input struct {
@@ -49,15 +52,26 @@ type Settings struct {
 		Audio struct {
 			Source string // audio source to use for analysis
 			Export struct {
+				Debug     bool   // true to enable audio export debug
 				Enabled   bool   // export audio clips containing indentified bird calls
 				Path      string // path to audio clip export directory
 				Type      string // audio file type, wav, mp3 or flac
 				Retention struct {
-					Enabled            bool // true to enable audio clip retention
-					MinEvictionHours   int  // minimum number of hours to keep audio clips
-					MinClipsPerSpecies int  // minimum number of clips per species to keep
+					Debug    bool   // true to enable retention debug
+					Policy   string // retention policy, "none", "age" or "usage"
+					MaxAge   string // maximum age of audio clips to keep
+					MaxUsage string // maximum disk usage percentage before cleanup
+					MinClips int    // minimum number of clips per species to keep
 				}
 			}
+		}
+
+		DynamicThreshold struct {
+			Enabled    bool    // true to enable dynamic threshold
+			Debug      bool    // true to enable debug mode
+			Trigger    float64 // trigger threshold for dynamic threshold
+			Min        float64 // minimum threshold for dynamic threshold
+			ValidHours int     // number of hours to consider for dynamic threshold
 		}
 
 		Log struct {
@@ -74,16 +88,21 @@ type Settings struct {
 		}
 
 		PrivacyFilter struct {
-			Enabled bool // true to enable privacy filter
+			Debug      bool    // true to enable debug mode
+			Enabled    bool    // true to enable privacy filter
+			Confidence float32 // confidence threshold for human detection
 		}
 
 		DogBarkFilter struct {
-			Enabled bool // true to enable dog bark filter
+			Debug      bool    // true to enable debug mode
+			Enabled    bool    // true to enable dog bark filter
+			Confidence float32 // confidence threshold for dog bark detection
+			Remember   int     // how long we should remember bark for filtering?
 		}
 
 		RTSP struct {
-			Url       string // RTSP stream URL
-			Transport string // RTSP Transport Protocol
+			Transport string   // RTSP Transport Protocol
+			Urls      []string // RTSP stream URL
 		}
 
 		MQTT struct {
@@ -148,11 +167,18 @@ const (
 	RotationSize   RotationType = "size"
 )
 
-// buildTime is the time when the binary was built.
-var buildDate string
+// settingsInstance is the current settings instance
+var (
+	settingsInstance *Settings
+	once             sync.Once
+	settingsMutex    sync.RWMutex
+)
 
 // Load reads the configuration file and environment variables into GlobalConfig.
 func Load() (*Settings, error) {
+	settingsMutex.Lock()
+	defer settingsMutex.Unlock()
+
 	// Create a new settings struct
 	settings := &Settings{}
 
@@ -166,12 +192,13 @@ func Load() (*Settings, error) {
 		return nil, fmt.Errorf("error unmarshaling config into struct: %w", err)
 	}
 
-	// Validate MQTT settings
-	if settings.Realtime.MQTT.Enabled {
-		if settings.Realtime.MQTT.Broker == "" {
-			return nil, errors.New("MQTT broker URL is required when MQTT is enabled")
-		}
+	// Validate settings
+	if err := validateSettings(settings); err != nil {
+		return nil, fmt.Errorf("error validating settings: %w", err)
 	}
+
+	// Save settings instance
+	settingsInstance = settings
 	return settings, nil
 }
 
@@ -205,9 +232,6 @@ func initViper() error {
 		return fmt.Errorf("fatal error reading config file: %w", err)
 	}
 
-	// Print build date and config file used
-	fmt.Printf("BirdNET-Go build date: %s, using config file: %s\n", buildDate, viper.ConfigFileUsed())
-
 	return nil
 }
 
@@ -220,10 +244,12 @@ func createDefaultConfig() error {
 	configPath := filepath.Join(configPaths[0], "config.yaml")
 	defaultConfig := getDefaultConfig()
 
+	// Create directories for config file
 	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
 		return fmt.Errorf("error creating directories for config file: %w", err)
 	}
 
+	// Write default config file
 	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
 		return fmt.Errorf("error writing default config file: %w", err)
 	}
@@ -239,4 +265,73 @@ func getDefaultConfig() string {
 		log.Fatalf("Error reading config file: %v", err)
 	}
 	return string(data)
+}
+
+// GetSettings returns the current settings instance
+func GetSettings() *Settings {
+	settingsMutex.RLock()
+	defer settingsMutex.RUnlock()
+	return settingsInstance
+}
+
+// SaveSettings saves the current settings to the YAML file
+func SaveSettings() error {
+	settingsMutex.RLock()
+	defer settingsMutex.RUnlock()
+
+	// Convert settingsInstance to a map
+	settingsMap, err := structToMap(settingsInstance)
+	if err != nil {
+		return fmt.Errorf("error converting settings to map: %w", err)
+	}
+
+	// Merge the settings map with viper
+	err = viper.MergeConfigMap(settingsMap)
+	if err != nil {
+		return fmt.Errorf("error merging settings with viper: %w", err)
+	}
+
+	// Write the updated settings to the config file
+	return viper.WriteConfig()
+}
+
+// UpdateSettings updates the settings in memory and persists them to the YAML file
+func UpdateSettings(newSettings *Settings) error {
+	settingsMutex.Lock()
+	defer settingsMutex.Unlock()
+
+	// Validate new settings
+	if err := validateSettings(newSettings); err != nil {
+		return fmt.Errorf("invalid settings: %w", err)
+	}
+
+	settingsInstance = newSettings
+
+	// Convert newSettings to a map
+	settingsMap, err := structToMap(newSettings)
+	if err != nil {
+		return fmt.Errorf("error converting settings to map: %w", err)
+	}
+
+	// Merge the settings map with viper
+	err = viper.MergeConfigMap(settingsMap)
+	if err != nil {
+		return fmt.Errorf("error merging settings with viper: %w", err)
+	}
+
+	// Write the updated settings to the config file
+	return viper.WriteConfig()
+}
+
+// Settings returns the current settings instance, initializing it if necessary
+func Setting() *Settings {
+	once.Do(func() {
+		if settingsInstance == nil {
+			_, err := Load()
+			if err != nil {
+				log.Fatalf("Error loading settings: %v", err)
+			}
+		}
+	})
+	return GetSettings()
 }

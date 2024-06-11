@@ -1,3 +1,4 @@
+// birdnet.go BirdNET model specific code
 package birdnet
 
 import (
@@ -6,8 +7,10 @@ import (
 	"bytes"
 	_ "embed" // Embedding data directly into the binary.
 	"fmt"
+	"log"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -19,10 +22,13 @@ import (
 //go:embed BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite
 var modelData []byte
 
-// Embedded TensorFlow Lite meta model data.
+// Embedded TensorFlow Lite range filter model data.
 //
+//go:embed BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite
+var metaModelDataV1 []byte
+
 //go:embed BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite
-var metaModelData []byte
+var metaModelDataV2 []byte
 
 const modelVersion = "BirdNET GLOBAL 6K V2.4 FP32"
 
@@ -38,6 +44,7 @@ type BirdNET struct {
 	Labels              []string
 	Settings            *conf.Settings
 	SpeciesListUpdated  time.Time // Timestamp for the last update of the species list.
+	mu                  sync.Mutex
 }
 
 // NewBirdNET initializes a new BirdNET instance with given settings.
@@ -99,8 +106,20 @@ func (bn *BirdNET) initializeModel() error {
 	return nil
 }
 
+// getMetaModelData returns the appropriate meta model data based on the settings.
+func (bn *BirdNET) getMetaModelData() []byte {
+	if bn.Settings.BirdNET.RangeFilter.Model == "legacy" {
+		log.Printf("Using legacy range filter model")
+		return metaModelDataV1
+	}
+	log.Printf("Using latest range filter model")
+	return metaModelDataV2
+}
+
 // initializeMetaModel loads and initializes the meta model used for additional analysis.
 func (bn *BirdNET) initializeMetaModel() error {
+	metaModelData := bn.getMetaModelData()
+
 	model := tflite.NewModel(metaModelData)
 	if model == nil {
 		return fmt.Errorf("cannot load meta model from embedded data")

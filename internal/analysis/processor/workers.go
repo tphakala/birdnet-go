@@ -92,8 +92,8 @@ func (p *Processor) getDefaultActions(detection Detections) []Action {
 			EventTracker: p.EventTracker,
 			Note:         detection.Note,
 			Results:      detection.Results,
-			AudioBuffer:  p.AudioBuffer,
-			Ds:           p.Ds})
+			//AudioBuffer:  p.AudioBuffer,
+			Ds: p.Ds})
 	}
 
 	/*	if p.Settings.Realtime.AudioExport.Enabled {

@@ -2,24 +2,111 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.5.2] - 2024-05-01
+## [0.5.5] - 2024-06-09
 
 ### 🚀 Features
 
- - Prometheus metrics support, endpoint reports BirdNET detections and application Golang runtime metrics - contributed by @aster1sk
- - Disk management by old audio capture cleanup - contributed by @isZumpo
+- *(audio)* Support for multiple RTSP streams
+- *(birdnet)* Range filter model is now selectable between latest and previous "legacy" version
+- *(birdnet)* Added "birdnet-go range print" command which lists all species included by range filter model
+- *(birdnet)* BirdNET overlap setting impacts now realtime process also
 
 ### 🐛 Bug Fixes
 
-- *(analysis)* File analysis restored
-- *(capture)* Improve audio buffer write function time keeping
-- *(datastore)* Refactor datastore Get, Delete and Save methods for efficient transaction and error handling
-- *(datastore)* Refactor GetClipsQualifyingForRemoval method in interfaces.go for improved input validation and error handling
+- *(privacy)* Fix defaults for privacy and dog bark filters and fix incorrect setting names in default config.yaml
+- *(privacy)* Do not print dog bark detections if dog bark filter is not enabled
+- *(privacy)* Fix printf declaration for human detection confidence reporting
+- *(audio)* Yield to other goroutines in file_utils, policy_age, and policy_usage
+- *(build)* Linux/arm64 cross-compilation in docker build
+
+### 🚜 Refactor
+
+- *(audio)* Refactor analysis and capture buffers to support multiple individual buffers for different audio sources
+- *(audio)* Move RTSP code to rtsp.go
+- *(rtsp)* Update default RTSP URLs to an empty slice
+- *(rtsp)* Update RTSP stream URLs example in config.yaml
+- *(privacy)* Make pricacy filter and dog bark filter source specific
+- *(build)* Move buildDate variable to main.go
+
+### 🏗️ Building
+
+- *(deps)* Bump github.com/spf13/viper from 1.18.2 to 1.19.0
+- *(deps)* Bump github.com/shirou/gopsutil/v3 from 3.24.4 to 3.24.5
+
+## [0.5.4] - 2024-06-01
+
+### 🚀 Features
+
+- *(audio)* Disk usage based audio clip retention policy, enabled by default with 80% disk usage treshold
+- *(conf)* Privacy filter Confidence threshold setting
+- *(conf)* Dog bark filter Confidence threshold setting
+- *(conf)* Dog bark filter time to remember bark setting
+
+### 🐛 Bug Fixes
+
+- *(webui*) Fix Settings interface load error
+
+### 🚜 Refactor
+
+- *(conf)* Refactor configuration package to improve settings handling, easier access to settings in code
+- *(audio)* Audio clip retention policy setting: none, age, usage
+- *(audio)* Age base audio clip retention policy accepts time in days, weeks, months and years instead of hours
+- *(conf)* Many settings renamed
+
+### ⚙️ Miscellaneous Tasks
+
+- Update go.mod with github.com/mitchellh/mapstructure v1.5.0
+
+## [0.5.3] - 2024-05-21
+
+### 🚀 Features
+
+- *(birdweather)* Added location fuzzing support for BirdWeather uploads, requires support for BirdWeather.com
+- *(audio)* Audio source device is now user configurable
+
+### 🐛 Bug Fixes
+
+- *(audio)* Audio clip extraction fixed for occassional non-contiguous clips
+
+### 🚜 Refactor
+
+- *(conf)* Move default config file from .go to .yaml and add proper default value initialization
+- *(conf)* Update audio export settings in updateconfig.go and realtime.go
+
+### 🏗️ Building
+
+- *(deps)* Bump golang.org/x/text from 0.14.0 to 0.15.0
+- *(deps)* Bump golang.org/x/crypto from 0.22.0 to 0.23.0
+- *(deps)* Bump github.com/prometheus/client_golang
+
+### ⚙️ Miscellaneous Tasks
+
+- Update go version to 1.22.3
+- Update golang version to 1.22.3
+- Bump HTMX version from 1.9.11 to 1.9.12
+- Bump daisyUI to 4.11.1
+- Update custom.css to fix theme controller styles
+- Update tailwindcss to v3.4.3
+- Hide "Detections" column on smaller screens
+- Update audio buffer initialization in realtime analysis
+- Remove unused import and struct field in audiobuffer.go
+
+## [0.5.2] - 2024-05-01
+
+### 🐛 Bug Fixes
+
+- File analysis restored
+- Improve audio buffer write function time keeping
 - *(birdweather)* Improve handling of HTTP Responses in UploadSoundscape to prevent possible panics
-- *(birdweather)* Fixed PCM to WAV encoding for soundscape uploads
+- *(datastore)* Refactor datastore Get, Delete and Save methods for efficient transaction and error handling
+- *(tests)* Refactor createDatabase function in interfaces_test.go for improved error handling
+- *(datastore)* Refactor GetClipsQualifyingForRemoval method in interfaces.go for improved input validation and error handling
+- Refactor ClipCleanupMonitor function for improved error handling and logging
+- *(birdweather)* Fixed PCM to WAV encoding
+- *(birdweather)* Fixed PCM to WAV encoding
 - *(birdweather)* Increase HTTP timeout to 45 seconds
 - *(utils)* Do not report root user as missing from audio group
-- *(tests)* Refactor createDatabase function in interfaces_test.go for improved error handling
+- *(audio)* Fix default audio device reporting
 
 ### 💄 Enhancement
 
@@ -28,6 +115,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🚜 Refactor
 
+- *(telemetry)* Move Prometheus metrics to dedicated package and add pprof debug
 - *(conf)* Remove unused Context struct from internal/conf/context.go
 - *(processor)* Update range filter action to handle error when getting probable species
 
@@ -44,6 +132,7 @@ All notable changes to this project will be documented in this file.
 ### ⚙️ Miscellaneous Tasks
 
 - Fix linter errors
+- Fix linter errors
 
 ### Github
 
@@ -51,10 +140,10 @@ All notable changes to this project will be documented in this file.
 
 ## [0.5.1] - 2024-04-05
 
-### 🚀 Features
+### 🐛 Bug Fixes
 
-- MQTT publishing support, contribution by @janvrska
-- Location filter threshold is now configurable value under BirdNET node
+- *(birdnet)* Make location filter threshold as configurable value under BirdNET node
+- *(mqtt)* Fix CodeRabbit magled code
 
 ### 🏗️ Building
 
