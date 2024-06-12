@@ -12,6 +12,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
+const (
+	MaxRetries       = 3
+	CooldownDuration = 10 * time.Minute
+	RequestTimeout   = 10 * time.Second
+	UserAgent        = "BirdNET-Go"
+)
+
 // WeatherData represents the structure of weather data returned by the OpenWeather API
 type WeatherData struct {
 	Coord struct {
@@ -74,8 +81,20 @@ func FetchWeather(settings *conf.Settings) (*WeatherData, error) {
 		settings.Realtime.OpenWeather.Language,
 	)
 
-	// Fetch weather data from the OpenWeather API
-	resp, err := http.Get(url)
+	client := &http.Client{
+		Timeout: RequestTimeout,
+	}
+
+	// Create a new HTTP request
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", UserAgent)
+
+	// Perform the HTTP request
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching weather data: %w", err)
 	}
@@ -201,21 +220,41 @@ func StartWeatherPolling(settings *conf.Settings, db datastore.Interface, stopCh
 	}
 }
 
-// fetchAndSaveWeatherData is a helper function to fetch and save weather data
+// fetchAndSaveWeatherData is a helper function to fetch and save weather data with retry and cooldown logic
 func fetchAndSaveWeatherData(settings *conf.Settings, db datastore.Interface) error {
-	weatherData, err := FetchWeather(settings)
-	if err != nil {
-		return fmt.Errorf("error fetching weather data: %w", err)
+	var lastErr error
+
+	// Retry fetching and saving weather data up to MaxRetries times
+	for i := 0; i < MaxRetries; i++ {
+		weatherData, err := FetchWeather(settings)
+		if err != nil {
+			lastErr = err
+			if settings.Realtime.OpenWeather.Debug {
+				log.Printf("Retry %d/%d: error fetching weather data: %v", i+1, MaxRetries, err)
+			}
+			time.Sleep(2 * time.Second) // Brief sleep before retrying
+			continue
+		}
+
+		// Save the fetched weather data
+		if err := SaveWeatherData(db, weatherData); err != nil {
+			lastErr = err
+			if settings.Realtime.OpenWeather.Debug {
+				log.Printf("Retry %d/%d: error saving weather data: %v", i+1, MaxRetries, err)
+			}
+			time.Sleep(2 * time.Second) // Brief sleep before retrying
+			continue
+		}
+
+		// If we reached here, the fetch and save were successful
+		if settings.Realtime.OpenWeather.Debug {
+			log.Printf("Fetched and saved weather data: %v", weatherData)
+		}
+		return nil
 	}
 
-	if err := SaveWeatherData(db, weatherData); err != nil {
-		return fmt.Errorf("error saving weather data: %w", err)
-	}
-
-	// Log the successful fetch and save
-	if settings.Realtime.OpenWeather.Debug {
-		log.Printf("Fetched and saved weather data: %v", weatherData)
-	}
-
-	return nil
+	// If we reached here, all retries failed
+	log.Printf("Failed to fetch weather data from openweather.org: %v", lastErr)
+	time.Sleep(CooldownDuration)
+	return fmt.Errorf("all retries failed: %w", lastErr)
 }
