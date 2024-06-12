@@ -34,6 +34,7 @@ type Interface interface {
 	GetDailyEvents(date string) (DailyEvents, error)
 	SaveHourlyWeather(hourlyWeather *HourlyWeather) error
 	GetHourlyWeather(date string) ([]HourlyWeather, error)
+	LatestHourlyWeather() (*HourlyWeather, error)
 }
 
 // DataStore implements StoreInterface using a GORM database.
@@ -398,6 +399,15 @@ func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
 		return nil, err
 	}
 	return hourlyWeather, nil
+}
+
+// LatestHourlyWeather retrieves the latest hourly weather entry from the database.
+func (ds *DataStore) LatestHourlyWeather() (*HourlyWeather, error) {
+	var weather HourlyWeather
+	if err := ds.DB.Order("time DESC").First(&weather).Error; err != nil {
+		return nil, err
+	}
+	return &weather, nil
 }
 
 // sortOrderAscendingString returns "ASC" or "DESC" based on the boolean input.

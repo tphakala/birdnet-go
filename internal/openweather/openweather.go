@@ -145,33 +145,77 @@ func SaveWeatherData(db datastore.Interface, weatherData *WeatherData) error {
 
 // StartWeatherPolling starts a ticker to fetch weather data at the configured interval
 func StartWeatherPolling(settings *conf.Settings, db datastore.Interface, stopChan <-chan struct{}) {
+	var initialDelay time.Duration
+
+	// Get the latest hourly weather entry from the database
+	latestWeather, err := db.LatestHourlyWeather()
+	if err != nil {
+		if err.Error() == "record not found" {
+			// If no records are found, poll immediately
+			initialDelay = 0
+		} else {
+			// Log other errors and continue with immediate polling
+			log.Printf("Error retrieving latest hourly weather: %v", err)
+			initialDelay = 0
+		}
+	} else {
+		// Calculate the time since the latest entry
+		timeSinceLastEntry := time.Since(latestWeather.Time)
+		// if previsous entry is older than poll interval then poll immediately
+		if timeSinceLastEntry > time.Duration(settings.Realtime.OpenWeather.Interval) {
+			// If the last entry is older than 1 hour, poll immediately
+			initialDelay = 0
+		} else {
+			// Otherwise, delay until the next full hour
+			initialDelay = time.Hour - timeSinceLastEntry
+		}
+	}
+
+	log.Printf("Starting weather polling with initial delay of %v", initialDelay)
+
+	// Create a ticker with the specified interval
 	ticker := time.NewTicker(time.Duration(settings.Realtime.OpenWeather.Interval) * time.Minute)
 	defer ticker.Stop()
 
-	log.Printf("Starting weather polling every %d minutes", settings.Realtime.OpenWeather.Interval)
+	// Use a timer for the initial delay
+	initialTimer := time.NewTimer(initialDelay)
+	defer initialTimer.Stop()
 
 	for {
 		select {
+		case <-initialTimer.C:
+			// Perform the initial fetch and save
+			if err := fetchAndSaveWeatherData(settings, db); err != nil {
+				log.Printf("Error during initial weather fetch: %v", err)
+			}
+
 		case <-ticker.C:
-			weatherData, err := FetchWeather(settings)
-			if err != nil {
-				fmt.Printf("Error fetching weather data: %v\n", err)
-				continue
-			}
-
-			// Save fetched weather data to the database
-			if err := SaveWeatherData(db, weatherData); err != nil {
-				fmt.Printf("Error saving weather data: %v\n", err)
-				continue
-			}
-
-			// Log the successful fetch and save
-			if settings.Realtime.OpenWeather.Debug {
-				fmt.Printf("Fetched and saved weather data: %v\n", weatherData)
+			// Perform the scheduled fetch and save
+			if err := fetchAndSaveWeatherData(settings, db); err != nil {
+				log.Printf("Error during scheduled weather fetch: %v", err)
 			}
 
 		case <-stopChan:
 			return
 		}
 	}
+}
+
+// fetchAndSaveWeatherData is a helper function to fetch and save weather data
+func fetchAndSaveWeatherData(settings *conf.Settings, db datastore.Interface) error {
+	weatherData, err := FetchWeather(settings)
+	if err != nil {
+		return fmt.Errorf("error fetching weather data: %w", err)
+	}
+
+	if err := SaveWeatherData(db, weatherData); err != nil {
+		return fmt.Errorf("error saving weather data: %w", err)
+	}
+
+	// Log the successful fetch and save
+	if settings.Realtime.OpenWeather.Debug {
+		log.Printf("Fetched and saved weather data: %v", weatherData)
+	}
+
+	return nil
 }
