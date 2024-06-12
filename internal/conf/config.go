@@ -87,6 +87,16 @@ type Settings struct {
 			LocationAccuracy float64 // accuracy of location in meters
 		}
 
+		OpenWeather struct {
+			Enabled  bool   // true to enable OpenWeather integration
+			Debug    bool   // true to enable debug mode
+			APIKey   string // OpenWeather API key
+			Endpoint string // OpenWeather API endpoint
+			Interval int    // interval for fetching weather data in minutes
+			Units    string // units of measurement: standard, metric, or imperial
+			Language string // language code for the response
+		}
+
 		PrivacyFilter struct {
 			Debug      bool    // true to enable debug mode
 			Enabled    bool    // true to enable privacy filter
