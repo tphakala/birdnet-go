@@ -1,3 +1,4 @@
+// model.go this code defines the data model for the application
 package datastore
 
 import "time"
@@ -32,4 +33,35 @@ type Results struct {
 	NoteID     uint // Foreign key to associate with Note
 	Species    string
 	Confidence float32
+}
+
+// DailyEvents represents the daily weather data that doesn't change throughout the day
+type DailyEvents struct {
+	ID       uint   `gorm:"primaryKey"`
+	Date     string `gorm:"index:idx_dailyweather_date"`
+	Sunrise  int64
+	Sunset   int64
+	Country  string
+	CityName string
+}
+
+// HourlyWeather represents the hourly weather data that changes throughout the day
+type HourlyWeather struct {
+	ID            uint `gorm:"primaryKey"`
+	DailyEventsID uint `gorm:"index"` // Foreign key to associate with DailyEvents
+	Time          time.Time
+	Temperature   float64
+	FeelsLike     float64
+	TempMin       float64
+	TempMax       float64
+	Pressure      int
+	Humidity      int
+	Visibility    int
+	WindSpeed     float64
+	WindDeg       int
+	WindGust      float64
+	Clouds        int
+	WeatherMain   string
+	WeatherDesc   string
+	WeatherIcon   string
 }
