@@ -19,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/openweather"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -131,6 +132,11 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		startClipCleanupMonitor(&wg, settings, dataStore, quitChan)
 	}
 
+	// start weather polling
+	if settings.Realtime.OpenWeather.Enabled {
+		startWeatherPolling(&wg, settings, dataStore, quitChan)
+	}
+
 	// start telemetry endpoint
 	startTelemetryEndpoint(&wg, settings, metrics, quitChan)
 
@@ -169,6 +175,15 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan cha
 func startClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, quitChan chan struct{}) {
 	wg.Add(1)
 	go clipCleanupMonitor(wg, dataStore, quitChan)
+}
+
+// startWeatherPolling initializes and starts the weather polling routine in a new goroutine.
+func startWeatherPolling(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, quitChan chan struct{}) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		openweather.StartWeatherPolling(settings, dataStore, quitChan)
+	}()
 }
 
 func startTelemetryEndpoint(wg *sync.WaitGroup, settings *conf.Settings, metrics *telemetry.Metrics, quitChan chan struct{}) {

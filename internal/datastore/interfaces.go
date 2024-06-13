@@ -1,3 +1,4 @@
+// interfaces.go this code defines the interface for the database operations
 package datastore
 
 import (
@@ -28,6 +29,12 @@ type Interface interface {
 	GetNoteClipPath(noteID string) (string, error)
 	DeleteNoteClipPath(noteID string) error
 	GetClipsQualifyingForRemoval(minHours int, minClips int) ([]ClipForRemoval, error)
+	// weather data
+	SaveDailyEvents(dailyEvents *DailyEvents) error
+	GetDailyEvents(date string) (DailyEvents, error)
+	SaveHourlyWeather(hourlyWeather *HourlyWeather) error
+	GetHourlyWeather(date string) ([]HourlyWeather, error)
+	LatestHourlyWeather() (*HourlyWeather, error)
 }
 
 // DataStore implements StoreInterface using a GORM database.
@@ -330,7 +337,7 @@ func (ds *DataStore) SearchNotes(query string, sortAscending bool, limit int, of
 
 // performAutoMigration automates database migrations with error handling.
 func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string) error {
-	if err := db.AutoMigrate(&Note{}, &Results{}); err != nil {
+	if err := db.AutoMigrate(&Note{}, &Results{}, &DailyEvents{}, &HourlyWeather{}); err != nil {
 		return fmt.Errorf("failed to auto-migrate %s database: %v", dbType, err)
 	}
 
@@ -339,6 +346,68 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 	}
 
 	return nil
+}
+
+// SaveDailyEvents saves daily events data to the database.
+func (ds *DataStore) SaveDailyEvents(dailyEvents *DailyEvents) error {
+	// Check if daily events data already exists for the date
+	var existingDailyEvents DailyEvents
+	if err := ds.DB.Where("date = ?", dailyEvents.Date).First(&existingDailyEvents).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// Insert new daily events data
+			if err := ds.DB.Create(dailyEvents).Error; err != nil {
+				return err
+			}
+			return nil
+		}
+		return err
+	}
+
+	// Update existing daily events data
+	existingDailyEvents.Sunrise = dailyEvents.Sunrise
+	existingDailyEvents.Sunset = dailyEvents.Sunset
+	existingDailyEvents.Country = dailyEvents.Country
+	existingDailyEvents.CityName = dailyEvents.CityName
+	if err := ds.DB.Save(&existingDailyEvents).Error; err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GetDailyEvents retrieves daily events data by date from the database.
+func (ds *DataStore) GetDailyEvents(date string) (DailyEvents, error) {
+	var dailyEvents DailyEvents
+	if err := ds.DB.Where("date = ?", date).First(&dailyEvents).Error; err != nil {
+		return dailyEvents, err
+	}
+	return dailyEvents, nil
+}
+
+// SaveHourlyWeather saves hourly weather data to the database.
+func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
+	if err := ds.DB.Create(hourlyWeather).Error; err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetHourlyWeather retrieves hourly weather data by date from the database.
+func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
+	var hourlyWeather []HourlyWeather
+	if err := ds.DB.Where("date(time) = ?", date).Find(&hourlyWeather).Error; err != nil {
+		return nil, err
+	}
+	return hourlyWeather, nil
+}
+
+// LatestHourlyWeather retrieves the latest hourly weather entry from the database.
+func (ds *DataStore) LatestHourlyWeather() (*HourlyWeather, error) {
+	var weather HourlyWeather
+	if err := ds.DB.Order("time DESC").First(&weather).Error; err != nil {
+		return nil, err
+	}
+	return &weather, nil
 }
 
 // sortOrderAscendingString returns "ASC" or "DESC" based on the boolean input.
