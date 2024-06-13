@@ -161,10 +161,10 @@ func SaveWeatherData(db datastore.Interface, weatherData *WeatherData) error {
 
 	// Validation checks for data integrity
 	if hourlyWeather.Temperature < -273.15 {
-		return fmt.Errorf("temperature cannot be below absolute zero")
+		return fmt.Errorf("temperature cannot be below absolute zero: %f", hourlyWeather.Temperature)
 	}
 	if hourlyWeather.WindSpeed < 0 {
-		return fmt.Errorf("wind speed cannot be negative")
+		return fmt.Errorf("wind speed cannot be negative: %f", hourlyWeather.WindSpeed)
 	}
 
 	// Save hourly weather data
