@@ -121,6 +121,11 @@ func FetchWeather(settings *conf.Settings) (*WeatherData, error) {
 
 // SaveWeatherData saves the fetched weather data into the database
 func SaveWeatherData(db datastore.Interface, weatherData *WeatherData) error {
+	// Check for incomplete or invalid weather data
+	if weatherData == nil || weatherData.Sys.Country == "" {
+		return fmt.Errorf("incomplete or invalid weather data")
+	}
+
 	dailyEvents := &datastore.DailyEvents{
 		Date:     time.Unix(weatherData.Dt, 0).Format("2006-01-02"),
 		Sunrise:  weatherData.Sys.Sunrise,
@@ -154,6 +159,14 @@ func SaveWeatherData(db datastore.Interface, weatherData *WeatherData) error {
 		WeatherIcon:   weatherData.Weather[0].Icon,
 	}
 
+	// Validation checks for data integrity
+	if hourlyWeather.Temperature < -273.15 {
+		return fmt.Errorf("temperature cannot be below absolute zero")
+	}
+	if hourlyWeather.WindSpeed < 0 {
+		return fmt.Errorf("wind speed cannot be negative")
+	}
+
 	// Save hourly weather data
 	if err := db.SaveHourlyWeather(hourlyWeather); err != nil {
 		return fmt.Errorf("failed to save hourly weather: %w", err)
@@ -165,35 +178,30 @@ func SaveWeatherData(db datastore.Interface, weatherData *WeatherData) error {
 // StartWeatherPolling starts a ticker to fetch weather data at the configured interval
 func StartWeatherPolling(settings *conf.Settings, db datastore.Interface, stopChan <-chan struct{}) {
 	var initialDelay time.Duration
+	var interval = settings.Realtime.OpenWeather.Interval
 
 	// Get the latest hourly weather entry from the database
 	latestWeather, err := db.LatestHourlyWeather()
-	if err != nil {
-		if err.Error() == "record not found" {
-			// If no records are found, poll immediately
-			initialDelay = 0
-		} else {
-			// Log other errors and continue with immediate polling
-			log.Printf("Error retrieving latest hourly weather: %v", err)
-			initialDelay = 0
-		}
-	} else {
+	if err != nil && err.Error() != "record not found" {
+		// Log other errors and continue with immediate polling
+		log.Printf("Error retrieving latest hourly weather: %v", err)
+		initialDelay = 0
+	} else if err == nil {
 		// Calculate the time since the latest entry
 		timeSinceLastEntry := time.Since(latestWeather.Time)
-		// if previsous entry is older than poll interval then poll immediately
-		if timeSinceLastEntry > time.Duration(settings.Realtime.OpenWeather.Interval) {
-			// If the last entry is older than 1 hour, poll immediately
+		if timeSinceLastEntry > time.Duration(interval)*time.Minute {
+			// If the last entry is older than the polling interval, poll immediately
 			initialDelay = 0
 		} else {
-			// Otherwise, delay until the next full hour
-			initialDelay = time.Hour - timeSinceLastEntry
+			// Otherwise, delay until the next interval
+			initialDelay = time.Duration(interval)*time.Minute - timeSinceLastEntry
 		}
 	}
 
-	log.Printf("Starting weather polling with initial delay of %v", initialDelay)
+	log.Printf("Starting weather polling with %v min interval", interval)
 
 	// Create a ticker with the specified interval
-	ticker := time.NewTicker(time.Duration(settings.Realtime.OpenWeather.Interval) * time.Minute)
+	ticker := time.NewTicker(time.Duration(interval) * time.Minute)
 	defer ticker.Stop()
 
 	// Use a timer for the initial delay
