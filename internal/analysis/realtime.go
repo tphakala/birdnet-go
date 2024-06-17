@@ -114,7 +114,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	birdImageCache := initBirdImageCache(dataStore)
 
 	// Start worker pool for processing detections
-	processor.New(settings, dataStore, bn, metrics)
+	processor.New(settings, dataStore, bn, metrics, birdImageCache)
 
 	// Start http server
 	httpcontroller.New(settings, dataStore, birdImageCache)
