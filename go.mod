@@ -12,7 +12,7 @@ require (
 	github.com/prometheus/client_golang v1.19.1
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/smallnest/ringbuffer v0.0.0-20230728150354-35801fa39d0e
-	github.com/spf13/cobra v1.8.0
+	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.19.0
 	github.com/tphakala/go-tflite v0.0.0-20231013114437-e78004b1b843
 	golang.org/x/crypto v0.24.0
