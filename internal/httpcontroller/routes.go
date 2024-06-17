@@ -34,15 +34,17 @@ var routes = []routeConfig{
 func (s *Server) initRoutes() {
 	// Define function map for templates.
 	funcMap := template.FuncMap{
-		"even":            even,
-		"calcWidth":       calcWidth,
-		"heatmapColor":    heatmapColor,
-		"title":           cases.Title(language.English).String,
-		"confidence":      confidence,
-		"confidenceColor": confidenceColor,
-		"RenderContent":   s.RenderContent,
-		"sub":             func(a, b int) int { return a - b },
-		"add":             func(a, b int) int { return a + b },
+		"even":                 even,
+		"calcWidth":            calcWidth,
+		"heatmapColor":         heatmapColor,
+		"title":                cases.Title(language.English).String,
+		"confidence":           confidence,
+		"confidenceColor":      confidenceColor,
+		"thumbnail":            s.thumbnail,
+		"thumbnailAttribution": s.thumbnailAttribution,
+		"RenderContent":        s.RenderContent,
+		"sub":                  func(a, b int) int { return a - b },
+		"add":                  func(a, b int) int { return a + b },
 	}
 
 	// Parse templates from the embedded filesystem.
@@ -74,7 +76,6 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/species-detections", s.speciesDetectionsHandler)
 	s.Echo.GET("/search", s.searchHandler)
 	s.Echo.GET("/spectrogram", s.serveSpectrogramHandler)
-
 
 	// Handle both GET and DELETE requests for the /note route
 	s.Echo.Add("GET", "/note", s.getNoteHandler)

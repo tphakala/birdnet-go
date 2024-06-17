@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"sync"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/httpcontroller/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -27,10 +29,11 @@ func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c 
 
 // Server encapsulates Echo server and related configurations.
 type Server struct {
-	Echo     *echo.Echo          // Echo framework instance
-	ds       datastore.Interface // Datastore interface
-	Settings *conf.Settings      // Application settings
-	Logger   *logger.Logger      // Custom logger
+	Echo           *echo.Echo          // Echo framework instance
+	ds             datastore.Interface // Datastore interface
+	Settings       *conf.Settings      // Application settings
+	Logger         *logger.Logger      // Custom logger
+	BirdImageCache *imageprovider.BirdImageCache
 }
 
 // New initializes a new HTTP server with given context and datastore.
@@ -38,10 +41,16 @@ func New(settings *conf.Settings, dataStore datastore.Interface) *Server {
 	// Default port configuration
 	configureDefaultSettings(settings)
 
+	cache, err := imageprovider.CreateDefaultCache()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	s := &Server{
-		Echo:     echo.New(),
-		ds:       dataStore,
-		Settings: settings,
+		Echo:           echo.New(),
+		ds:             dataStore,
+		Settings:       settings,
+		BirdImageCache: cache,
 	}
 
 	// Server initialization
@@ -97,6 +106,7 @@ func (s *Server) initializeServer() {
 	s.initLogger()
 	s.configureMiddleware()
 	s.initRoutes()
+	go s.initBirdImageCache()
 }
 
 // handleServerError listens for server errors and handles them.
@@ -141,4 +151,27 @@ func (s *Server) initLogger() {
 			return nil
 		},
 	}))
+}
+
+func (s *Server) initBirdImageCache() {
+	speciesList, err := s.ds.GetAllDetectedSpecies()
+	if err != nil {
+		s.Echo.Logger.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+
+	for _, species := range speciesList {
+		wg.Add(1)
+
+		go func(speciesName string) {
+			defer wg.Done()
+			_, err := s.BirdImageCache.Get(speciesName)
+			if err != nil {
+				s.Echo.Logger.Error(err)
+			}
+		}(species.ScientificName)
+	}
+
+	wg.Wait()
 }
