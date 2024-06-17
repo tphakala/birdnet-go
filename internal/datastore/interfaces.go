@@ -25,6 +25,7 @@ type Interface interface {
 	GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error)
 	SpeciesDetections(species, date, hour string, sortAscending bool, limit int, offset int) ([]Note, error)
 	GetLastDetections(numDetections int) ([]Note, error)
+	GetAllDetectedSpecies() ([]Note, error)
 	SearchNotes(query string, sortAscending bool, limit int, offset int) ([]Note, error)
 	GetNoteClipPath(noteID string) (string, error)
 	DeleteNoteClipPath(noteID string) error
@@ -185,7 +186,7 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 	const reportCount = 30 // Consider making this a configurable parameter
 
 	err := ds.DB.Table("notes").
-		Select("common_name, COUNT(*) as count").
+		Select("common_name", "scientific_name", "COUNT(*) as count").
 		Where("date = ? AND confidence >= ?", selectedDate, minConfidenceNormalized).
 		Group("common_name").
 		//Having("COUNT(*) > ?", 1).
@@ -316,6 +317,18 @@ func (ds *DataStore) GetLastDetections(numDetections int) ([]Note, error) {
 	log.Printf("Retrieved %d detections in %v", numDetections, elapsed)
 
 	return notes, nil
+}
+
+// GetLastDetections retrieves all detected species.
+func (ds *DataStore) GetAllDetectedSpecies() ([]Note, error) {
+	var results []Note
+
+	err := ds.DB.Table("notes").
+		Select("scientific_name").
+		Group("scientific_name").
+		Scan(&results).Error
+
+	return results, err
 }
 
 // SearchNotes performs a search on notes with optional sorting, pagination, and limits.

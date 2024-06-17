@@ -3,6 +3,7 @@ package httpcontroller
 
 import (
 	"fmt"
+	"html/template"
 	"log"
 	"os"
 	"os/exec"
@@ -236,4 +237,37 @@ func parseOffset(offsetStr string, defaultOffset int) int {
 		return defaultOffset
 	}
 	return offset
+}
+
+// thumbnail returns the url of a given bird's thumbnail
+func (s *Server) thumbnail(scientificName string) string {
+	birdImage, err := s.BirdImageCache.Get(scientificName)
+	if err != nil {
+		return ""
+	}
+
+	return birdImage.Url
+}
+
+// thumbnailAttribution returns the thumbnail credits of a given bird.
+func (s *Server) thumbnailAttribution(scientificName string) template.HTML {
+	birdImage, err := s.BirdImageCache.Get(scientificName)
+	if err != nil {
+		log.Printf("Error getting thumbnail info for %s: %v", scientificName, err)
+		return template.HTML("")
+	}
+
+	// Skip if no author or license information
+	if birdImage.AuthorName == "" || birdImage.LicenseName == "" {
+		return template.HTML("")
+	}
+
+	var toReturn string
+	if birdImage.AuthorUrl == "" {
+		toReturn = fmt.Sprintf("© %s / <a href=%s>%s</a>", birdImage.AuthorName, birdImage.LicenseUrl, birdImage.LicenseName)
+	} else {
+		toReturn = fmt.Sprintf("© <a href=%s>%s</a> / <a href=%s>%s</a>", birdImage.AuthorUrl, birdImage.AuthorName, birdImage.LicenseUrl, birdImage.LicenseName)
+	}
+
+	return template.HTML(toReturn)
 }
