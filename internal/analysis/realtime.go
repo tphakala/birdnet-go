@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/shirou/gopsutil/v3/host"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/analysis/queue"
@@ -109,11 +110,14 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		log.Fatalf("Error initializing metrics: %v", err)
 	}
 
+	// Intialize bird image cache
+	birdImageCache := initBirdImageCache(dataStore)
+
 	// Start worker pool for processing detections
 	processor.New(settings, dataStore, bn, metrics)
 
 	// Start http server
-	httpcontroller.New(settings, dataStore)
+	httpcontroller.New(settings, dataStore, birdImageCache)
 
 	// Initialize the wait group to wait for all goroutines to finish
 	var wg sync.WaitGroup
@@ -254,4 +258,39 @@ func clipCleanupMonitor(wg *sync.WaitGroup, dataStore datastore.Interface, quitC
 			}
 		}
 	}
+}
+
+func initBirdImageCache(ds datastore.Interface) *imageprovider.BirdImageCache {
+
+	birdImageCache, err := imageprovider.CreateDefaultCache()
+	if err != nil {
+		log.Fatalf("Failed to create image cache: %v", err)
+	}
+
+	// Initialize the image cache by fetching all detectes species in database
+	go func() error {
+		speciesList, err := ds.GetAllDetectedSpecies()
+		if err != nil {
+			return fmt.Errorf("failed to get detected species: %v", err)
+		}
+
+		var wg sync.WaitGroup
+
+		for _, species := range speciesList {
+			wg.Add(1)
+
+			go func(speciesName string) {
+				defer wg.Done()
+				_, err := birdImageCache.Get(speciesName)
+				if err != nil {
+					fmt.Printf("Failed to get image for species %s: %v\n", speciesName, err)
+				}
+			}(species.ScientificName)
+		}
+
+		wg.Wait()
+		return nil
+	}()
+
+	return birdImageCache
 }
