@@ -26,13 +26,11 @@
         hx-push-url="true">
         {{ .CommonName}}</a>
       </td>
-      <td class="py-1 px-6">
-        <!-- Bird thumbnail  -->
+      <!-- Bird thumbnail  -->
+      <td class="py-1 px-6">  
         <img loading="lazy" width="50%" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
-        <div style="font-size:0.5em;" >
-          {{thumbnailAttribution .ScientificName}}
-        </div>
       </td>
+      <!-- Confidence indicator -->
       <td class="py-1 px-6">
         <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
           {{ confidence .Confidence}}
@@ -61,9 +59,7 @@
   <div class="bg-white dark:bg-gray-800 shadow-md rounded-lg p-4 mb-4">
     <div class="flex items-center space-x-2"> <!-- Flex container with centered items and space between them -->
       <div>{{.Time}}</div>
-      
-
-      
+            
       <div>
           <a href="#"
           hx-get="/note?id={{.ID}}"
@@ -73,12 +69,10 @@
           hx-push-url="true"> <!-- This ensures the link can grow to use available space, if needed -->
           {{title .CommonName}}
         </a>
+
         <!-- Bird thumbnail  -->
         <div>
           <img loading="lazy" width="100" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
-          <div style="font-size:0.5em;" >
-            {{thumbnailAttribution .ScientificName}}
-          </div>
         </div>
       </div>
       

@@ -1,8 +1,10 @@
 package imageprovider
 
 import (
-	"slices"
 	"sync"
+	"unsafe"
+
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 type ImageProvider interface {
@@ -17,20 +19,24 @@ type BirdImage struct {
 	AuthorUrl   string
 }
 
+// BirdImageCache represents a cache for bird images.
 type BirdImageCache struct {
 	dataMap              sync.Map
 	dataMutexMap         sync.Map
 	birdImageProvider    ImageProvider
 	nonBirdImageProvider ImageProvider
+	Metrics              *telemetry.Metrics
 }
 
 type emptyImageProvider struct {
 }
 
+// fetch returns an empty BirdImage
 func (l *emptyImageProvider) fetch(scientificName string) (BirdImage, error) {
 	return BirdImage{}, nil
 }
 
+// initCache initializes the bird image cache with the given image provider
 func initCache(e ImageProvider) *BirdImageCache {
 	return &BirdImageCache{
 		birdImageProvider:    e,
@@ -38,6 +44,7 @@ func initCache(e ImageProvider) *BirdImageCache {
 	}
 }
 
+// CreateDefaultCache creates a new bird image cache with the default image provider
 func CreateDefaultCache() (*BirdImageCache, error) {
 	provider, err := NewWikiMediaProvider()
 	if err != nil {
@@ -46,10 +53,10 @@ func CreateDefaultCache() (*BirdImageCache, error) {
 	return initCache(provider), nil
 }
 
-func (c *BirdImageCache) Get(scientificName string) (info BirdImage, err error) {
+// Get retrieves the bird image for a given scientific name from the cache or fetches it if not present
+func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 	// Check if the bird image is already in the cache
-	birdImage, ok := c.dataMap.Load(scientificName)
-	if ok {
+	if birdImage, ok := c.dataMap.Load(scientificName); ok {
 		return birdImage.(BirdImage), nil
 	}
 
@@ -61,15 +68,14 @@ func (c *BirdImageCache) Get(scientificName string) (info BirdImage, err error) 
 	defer mutex.Unlock()
 
 	// Check again if bird image is cached after acquiring the lock
-	birdImage, ok = c.dataMap.Load(scientificName)
-	if ok {
+	if birdImage, ok := c.dataMap.Load(scientificName); ok {
 		return birdImage.(BirdImage), nil
 	}
 
 	// Fetch the bird image from the image provider
 	fetchedBirdImage, err := c.fetch(scientificName)
 	if err != nil {
-		// TODO for now store a empty result in the cache to avoid future queries that would fail.
+		// TODO for now store an empty result in the cache to avoid future queries that would fail.
 		// In the future, look at the error and decide if it was caused by networking and is recoverable.
 		// And if it was, do not store the empty result in the cache.
 		c.dataMap.Store(scientificName, BirdImage{})
@@ -82,23 +88,17 @@ func (c *BirdImageCache) Get(scientificName string) (info BirdImage, err error) 
 	return fetchedBirdImage, nil
 }
 
-func (c *BirdImageCache) fetch(scientificName string) (info BirdImage, err error) {
+// fetch retrieves the bird image for a given scientific name
+func (c *BirdImageCache) fetch(scientificName string) (BirdImage, error) {
+	nonBirdScientificNames := map[string]struct{}{
+		"Dog": {}, "Engine": {}, "Environmental": {}, "Fireworks": {},
+		"Gun": {}, "Human non-vocal": {}, "Human vocal": {}, "Human whistle": {},
+		"Noise": {}, "Power tools": {}, "Siren": {},
+	}
+
 	var imageProviderToUse ImageProvider
 
-	// Determine the image provider based on the scientific name
-	if slices.Contains([]string{
-		"Dog",
-		"Engine",
-		"Environmental",
-		"Fireworks",
-		"Gun",
-		"Human non-vocal",
-		"Human vocal",
-		"Human whistle",
-		"Noise",
-		"Power tools",
-		"Siren",
-	}, scientificName) {
+	if _, isNonBird := nonBirdScientificNames[scientificName]; isNonBird {
 		imageProviderToUse = c.nonBirdImageProvider
 	} else {
 		imageProviderToUse = c.birdImageProvider
@@ -106,4 +106,31 @@ func (c *BirdImageCache) fetch(scientificName string) (info BirdImage, err error
 
 	// Fetch the image from the image provider
 	return imageProviderToUse.fetch(scientificName)
+}
+
+// EstimateSize estimates the memory size of a BirdImage instance in bytes
+func (img *BirdImage) EstimateSize() int {
+	return int(unsafe.Sizeof(*img)) +
+		len(img.Url) + len(img.LicenseName) +
+		len(img.LicenseUrl) + len(img.AuthorName) +
+		len(img.AuthorUrl)
+}
+
+// MemoryUsage returns the approximate memory usage of the image cache in bytes
+func (c *BirdImageCache) MemoryUsage() int {
+	totalSize := 0
+	c.dataMap.Range(func(key, value interface{}) bool {
+		if img, ok := value.(BirdImage); ok {
+			totalSize += img.EstimateSize()
+		}
+		return true
+	})
+	return totalSize
+}
+
+// UpdateMetrics updates all metrics associated with the image cache.
+func (c *BirdImageCache) UpdateMetrics() {
+	if c.Metrics != nil {
+		c.Metrics.SetImageCacheSize(c.MemoryUsage())
+	}
 }
