@@ -22,8 +22,9 @@ type wikiMediaAuthor struct {
 	licenseUrl  string
 }
 
+// NewWikiMediaProvider creates a new Wikipedia media provider
 func NewWikiMediaProvider() (*wikiMediaProvider, error) {
-	client, err := mwclient.New("https://wikipedia.org/w/api.php", "Birdnet-Go")
+	client, err := mwclient.New("https://wikipedia.org/w/api.php", "BirdNET-Go")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create mwclient: %w", err)
 	}
@@ -32,7 +33,7 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 	}, nil
 }
 
-// queryAndGetFirstPage helper function that queries Wikipedia with given parameters and returns the first page hit
+// queryAndGetFirstPage queries Wikipedia with given parameters and returns the first page hit
 func (l *wikiMediaProvider) queryAndGetFirstPage(params map[string]string) (*jason.Object, error) {
 	resp, err := l.client.Get(params)
 	if err != nil {
@@ -51,7 +52,7 @@ func (l *wikiMediaProvider) queryAndGetFirstPage(params map[string]string) (*jas
 	return pages[0], nil
 }
 
-// fetch retrieves the bird image for a given scientific name.
+// fetch retrieves the bird image for a given scientific name
 func (l *wikiMediaProvider) fetch(scientificName string) (BirdImage, error) {
 	// Query for the thumbnail image URL and source file name
 	thumbnailUrl, thumbnailSourceFile, err := l.queryThumbnail(scientificName)
@@ -75,6 +76,7 @@ func (l *wikiMediaProvider) fetch(scientificName string) (BirdImage, error) {
 	}, nil
 }
 
+// queryThumbnail queries Wikipedia for the thumbnail image of the given scientific name
 func (l *wikiMediaProvider) queryThumbnail(scientificName string) (url, fileName string, err error) {
 	params := map[string]string{
 		"action":      "query",
@@ -104,6 +106,7 @@ func (l *wikiMediaProvider) queryThumbnail(scientificName string) (url, fileName
 	return url, fileName, nil
 }
 
+// queryAuthorInfo queries Wikipedia for the author information of the given thumbnail URL
 func (l *wikiMediaProvider) queryAuthorInfo(thumbnailURL string) (*wikiMediaAuthor, error) {
 	params := map[string]string{
 		"action":    "query",
@@ -160,7 +163,7 @@ func (l *wikiMediaProvider) queryAuthorInfo(thumbnailURL string) (*wikiMediaAuth
 }
 
 // extractArtistInfo tries to extract the author information as best as possible
-// from the given input which may consist of nested html tags.
+// from the given input which may consist of nested html tags
 func extractArtistInfo(htmlStr string) (href, text string, err error) {
 	// Parse the HTML string into an HTML document
 	doc, err := html.Parse(strings.NewReader(htmlStr))
@@ -220,6 +223,7 @@ func extractArtistInfo(htmlStr string) (href, text string, err error) {
 	return "", "", fmt.Errorf("multiple Wikipedia user links found in HTML: %s", htmlStr)
 }
 
+// findWikipediaUserLinks traverses the list of nodes and returns only Wikipedia user links.
 func findWikipediaUserLinks(nodes []*html.Node) []*html.Node {
 	var wikiUserLinks []*html.Node
 
@@ -259,6 +263,7 @@ func findLinks(doc *html.Node) []*html.Node {
 	return linkNodes
 }
 
+// extractHref extracts the href attribute from an anchor tag
 func extractHref(link *html.Node) string {
 	for _, attr := range link.Attr {
 		if attr.Key == "href" {
@@ -268,6 +273,7 @@ func extractHref(link *html.Node) string {
 	return ""
 }
 
+// extractText extracts the inner text from an anchor tag
 func extractText(link *html.Node) string {
 	if link.FirstChild != nil {
 		var b bytes.Buffer

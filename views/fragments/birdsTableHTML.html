@@ -26,14 +26,13 @@
           hx-push-url="true">{{title .Note.CommonName}}
         </a>
       </th>
+
+      <!-- Bird thumbnail  -->
       <th scope="row" class="py-1 px-6">
-        <!-- Bird thumbnail  -->
-        <img loading="lazy" width="100%" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
-        <div style="font-size:0.5em;" >
-          {{thumbnailAttribution .ScientificName}}
-        </div>
+        <img loading="lazy" width="100%" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">       
       </th>
 
+      <!-- Total detections -->
       <td class="py-1 px-3 hidden md:table-cell">
         <div class="w-full rounded-full bg-base-300 dark:bg-base-300">
           <div class="progress progress-primary bg-gray-400 dark:bg-gray-400" style="width: {{calcWidth .TotalDetections}}%"></div>
