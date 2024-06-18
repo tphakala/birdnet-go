@@ -265,7 +265,8 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 	// Create a default bird image cache
 	birdImageCache, err := imageprovider.CreateDefaultCache()
 	if err != nil {
-		log.Fatalf("Failed to create image cache: %v", err)
+		log.Printf("Failed to create image cache: %v", err)
+		return nil
 	}
 	birdImageCache.Metrics = metrics
 
@@ -311,51 +312,3 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 
 	return birdImageCache
 }
-
-/*
-// initBirdImageCache initializes the bird image cache by fetching all detected species from the database
-func initBirdImageCache(ds datastore.Interface) *imageprovider.BirdImageCache {
-	// Create a default bird image cache
-	birdImageCache, err := imageprovider.CreateDefaultCache()
-	if err != nil {
-		log.Fatalf("Failed to create image cache: %v", err)
-	}
-
-	// Initialize the image cache by fetching all detected species in the database
-	go func() {
-		// Retrieve the list of all detected species from the datastore
-		speciesList, err := ds.GetAllDetectedSpecies()
-		if err != nil {
-			//DEBUG
-			//log.Printf("Failed to get detected species: %v", err)
-			return
-		}
-
-		// Use a WaitGroup to wait for all goroutines to complete
-		var wg sync.WaitGroup
-
-		for _, species := range speciesList {
-			wg.Add(1)
-
-			// Launch a goroutine to fetch the image for each species
-			go func(speciesName string) {
-				defer wg.Done()
-				// Attempt to fetch the image for the given species
-				_, err := birdImageCache.Get(speciesName)
-				if err != nil {
-					//DEBUG, temporarily disabled
-					//TODO add settings for thumbnails and its debug
-					if false {
-						log.Printf("Failed to get image for species %s: %v\n", speciesName, err)
-					}
-				}
-			}(species.ScientificName)
-		}
-
-		// Wait for all goroutines to complete
-		wg.Wait()
-	}()
-
-	return birdImageCache
-}
-*/
