@@ -268,10 +268,11 @@ func initBirdImageCache(ds datastore.Interface) *imageprovider.BirdImageCache {
 	}
 
 	// Initialize the image cache by fetching all detectes species in database
-	go func() error {
+	go func() {
 		speciesList, err := ds.GetAllDetectedSpecies()
 		if err != nil {
-			return fmt.Errorf("failed to get detected species: %v", err)
+			log.Printf("Failed to get detected species: %v", err)
+			return
 		}
 
 		var wg sync.WaitGroup
@@ -289,7 +290,6 @@ func initBirdImageCache(ds datastore.Interface) *imageprovider.BirdImageCache {
 		}
 
 		wg.Wait()
-		return nil
 	}()
 
 	return birdImageCache
