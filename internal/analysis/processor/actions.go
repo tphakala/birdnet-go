@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observation"
@@ -55,10 +56,11 @@ type BirdWeatherAction struct {
 }
 
 type MqttAction struct {
-	Settings     *conf.Settings
-	Note         datastore.Note
-	MqttClient   *mqtt.Client
-	EventTracker *EventTracker
+	Settings       *conf.Settings
+	Note           datastore.Note
+	BirdImageCache *imageprovider.BirdImageCache
+	MqttClient     *mqtt.Client
+	EventTracker   *EventTracker
 }
 
 type UpdateRangeFilterAction struct {
@@ -151,6 +153,11 @@ func (a BirdWeatherAction) Execute(data interface{}) error {
 	return nil // return an error if the action fails
 }
 
+type NoteWithBirdImage struct {
+	datastore.Note
+	BirdImage imageprovider.BirdImage
+}
+
 // Execute sends the note to the MQTT broker
 func (a MqttAction) Execute(data interface{}) error {
 	// Validate MQTT settings
@@ -158,8 +165,17 @@ func (a MqttAction) Execute(data interface{}) error {
 		return errors.New("MQTT topic is not specified")
 	}
 
+	// Get bird image of detected bird
+	birdImage, err := a.BirdImageCache.Get(a.Note.ScientificName)
+	if err != nil {
+		birdImage = imageprovider.BirdImage{}
+	}
+
+	// Wrap note with bird image
+	noteWithBirdImage := NoteWithBirdImage{Note: a.Note, BirdImage: birdImage}
+
 	// Create a JSON representation of the note
-	noteJson, err := json.Marshal(a.Note)
+	noteJson, err := json.Marshal(noteWithBirdImage)
 	if err != nil {
 		log.Printf("error marshalling note to JSON: %s\n", err)
 		return err

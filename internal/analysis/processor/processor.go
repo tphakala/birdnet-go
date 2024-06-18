@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/observation"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -24,6 +25,7 @@ type Processor struct {
 	Bn                 *birdnet.BirdNET
 	BwClient           *birdweather.BwClient
 	MqttClient         *mqtt.Client
+	BirdImageCache     *imageprovider.BirdImageCache
 	EventTracker       *EventTracker
 	DogBarkFilter      DogBarkFilter
 	SpeciesConfig      SpeciesConfig
@@ -71,11 +73,12 @@ var PendingDetections map[string]PendingDetection = make(map[string]PendingDetec
 var mutex sync.Mutex
 
 // func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *telemetry.Metrics) *Processor {
-func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics) *Processor {
+func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics, birdImageCache *imageprovider.BirdImageCache) *Processor {
 	p := &Processor{
 		Settings:           settings,
 		Ds:                 ds,
 		Bn:                 bn,
+		BirdImageCache:     birdImageCache,
 		EventTracker:       NewEventTracker(),
 		IncludedSpecies:    new([]string),
 		Metrics:            metrics,
