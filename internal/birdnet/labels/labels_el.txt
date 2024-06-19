@@ -1731,7 +1731,7 @@ Curruca boehmi_Banded Parisoma_banwar2
 Curruca communis_Greater Whitethroat_grewhi1
 Curruca conspicillata_Spectacled Warbler_spewar2
 Curruca crassirostris_Eastern Orphean Warbler_eaowar2
-Curruca curruca_Lesser Whitethroat_leswhi4
+Curruca curruca_Λαλοτσιροβάκος_leswhi4
 Curruca hortensis_Western Orphean Warbler_weowar2
 Curruca iberiae_Western Subalpine Warbler_subwar6
 Curruca melanocephala_Sardinian Warbler_sarwar1
