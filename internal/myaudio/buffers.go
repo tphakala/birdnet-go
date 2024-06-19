@@ -28,6 +28,7 @@ var readSize int
 // ringBuffers is a map to store ring buffers for each audio source
 var ringBuffers map[string]*ringbuffer.RingBuffer
 var prevData map[string][]byte
+var rbMutex sync.RWMutex // Mutex to protect access to the ringBuffers and prevData maps
 
 // ConvertSecondsToBytes converts overlap in seconds to bytes
 func ConvertSecondsToBytes(seconds float64) int {
@@ -44,6 +45,7 @@ func InitRingBuffers(capacity int, sources []string) {
 	overlapSize = ConvertSecondsToBytes(settings.BirdNET.Overlap)
 	readSize = chunkSize - overlapSize
 
+	// Initialize ring buffers and prevData map for each source
 	ringBuffers = make(map[string]*ringbuffer.RingBuffer)
 	prevData = make(map[string][]byte)
 	for _, source := range sources {
@@ -54,7 +56,9 @@ func InitRingBuffers(capacity int, sources []string) {
 
 // WriteToBuffer writes audio data into the ring buffer for a given stream.
 func WriteToAnalysisBuffer(stream string, data []byte) {
+	rbMutex.RLock()
 	rb, exists := ringBuffers[stream]
+	rbMutex.RUnlock()
 	if !exists {
 		log.Printf("No ring buffer found for stream: %s", stream)
 		return
@@ -67,7 +71,9 @@ func WriteToAnalysisBuffer(stream string, data []byte) {
 
 // readFromBuffer reads a sliding chunk of audio data from the ring buffer for a given stream.
 func readFromBuffer(stream string) []byte {
+	rbMutex.RLock()
 	rb, exists := ringBuffers[stream]
+	rbMutex.RUnlock()
 	if !exists {
 		log.Printf("No ring buffer found for stream: %s", stream)
 		return nil
