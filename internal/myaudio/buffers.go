@@ -1,4 +1,4 @@
-// buffers.go
+// buffers.go: The file contains the implementation of the buffer monitor that reads audio data from the ring buffer and processes it when enough data is present.
 package myaudio
 
 import (
@@ -22,13 +22,13 @@ const (
 var overlapSize int = 144000 // Set as required
 var readSize int = chunkSize - overlapSize*/
 
-var overlapSize int
-var readSize int
-
-// ringBuffers is a map to store ring buffers for each audio source
-var ringBuffers map[string]*ringbuffer.RingBuffer
-var prevData map[string][]byte
-var rbMutex sync.RWMutex // Mutex to protect access to the ringBuffers and prevData maps
+var (
+	overlapSize int                               // overlapSize is the number of bytes to overlap between chunks
+	readSize    int                               // readSize is the number of bytes to read from the ring buffer
+	ringBuffers map[string]*ringbuffer.RingBuffer // ringBuffers is a map to store ring buffers for each audio source
+	prevData    map[string][]byte                 // prevData is a map to store the previous data for each audio source
+	rbMutex     sync.RWMutex                      // Mutex to protect access to the ringBuffers and prevData maps
+)
 
 // ConvertSecondsToBytes converts overlap in seconds to bytes
 func ConvertSecondsToBytes(seconds float64) int {
@@ -39,6 +39,9 @@ func ConvertSecondsToBytes(seconds float64) int {
 
 // InitRingBuffers initializes the ring buffers for each audio source with a given capacity.
 func InitRingBuffers(capacity int, sources []string) {
+	//rbMutex.Lock()
+	//defer rbMutex.Unlock()
+
 	settings := conf.Setting()
 
 	// Set overlapSize based on user setting in seconds
@@ -57,13 +60,15 @@ func InitRingBuffers(capacity int, sources []string) {
 // WriteToBuffer writes audio data into the ring buffer for a given stream.
 func WriteToAnalysisBuffer(stream string, data []byte) {
 	rbMutex.RLock()
-	defer rbMutex.Unlock()
-
 	rb, exists := ringBuffers[stream]
+	rbMutex.RUnlock()
+
 	if !exists {
 		log.Printf("No ring buffer found for stream: %s", stream)
 		return
 	}
+
+	// Write data to the ring buffer
 	_, err := rb.Write(data)
 	if err != nil {
 		log.Printf("Error writing to ring buffer for stream %s: %v", stream, err)
@@ -72,7 +77,7 @@ func WriteToAnalysisBuffer(stream string, data []byte) {
 
 // readFromBuffer reads a sliding chunk of audio data from the ring buffer for a given stream.
 func readFromBuffer(stream string) []byte {
-	rbMutex.RLock()
+	rbMutex.Lock()
 	defer rbMutex.Unlock()
 
 	rb, exists := ringBuffers[stream]
