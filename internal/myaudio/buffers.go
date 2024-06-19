@@ -57,8 +57,9 @@ func InitRingBuffers(capacity int, sources []string) {
 // WriteToBuffer writes audio data into the ring buffer for a given stream.
 func WriteToAnalysisBuffer(stream string, data []byte) {
 	rbMutex.RLock()
+	defer rbMutex.Unlock()
+
 	rb, exists := ringBuffers[stream]
-	rbMutex.RUnlock()
 	if !exists {
 		log.Printf("No ring buffer found for stream: %s", stream)
 		return
@@ -72,8 +73,9 @@ func WriteToAnalysisBuffer(stream string, data []byte) {
 // readFromBuffer reads a sliding chunk of audio data from the ring buffer for a given stream.
 func readFromBuffer(stream string) []byte {
 	rbMutex.RLock()
+	defer rbMutex.Unlock()
+
 	rb, exists := ringBuffers[stream]
-	rbMutex.RUnlock()
 	if !exists {
 		log.Printf("No ring buffer found for stream: %s", stream)
 		return nil
