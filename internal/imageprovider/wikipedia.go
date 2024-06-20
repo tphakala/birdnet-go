@@ -1,3 +1,4 @@
+// wikipedia.go: contains code for wikipedia image provider
 package imageprovider
 
 import (
