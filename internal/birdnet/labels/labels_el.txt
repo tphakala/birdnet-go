@@ -3224,7 +3224,7 @@ Limosa fedoa_Marbled Godwit_margod
 Limosa haemastica_Hudsonian Godwit_hudgod
 Limosa lapponica_Ακτοτούρλι_batgod
 Limosa limosa_Λιμόζα_bktgod
-Linaria cannabina_Eurasian Linnet_eurlin1
+Linaria cannabina_Φανέτο_eurlin1
 Linaria flavirostris_Twite_twite1
 Linaria yemenensis_Yemen Linnet_yemlin1
 Liocichla phoenicea_Red-faced Liocichla_reflio2
@@ -3390,7 +3390,7 @@ Mareca americana_American Wigeon_amewig
 Mareca falcata_Falcated Duck_falduc
 Mareca penelope_Eurasian Wigeon_eurwig
 Mareca sibilatrix_Chiloe Wigeon_chiwig1
-Mareca strepera_Gadwall_gadwal
+Mareca strepera_Καπακλής_gadwal
 Margarops fuscatus_Pearly-eyed Thrasher_peethr1
 Margarornis rubiginosus_Ruddy Treerunner_rudtre1
 Margarornis squamiger_Pearled Treerunner_peatre1
