@@ -1,3 +1,4 @@
+// imageprovider.go: contains code for fetching bird images from an image provider
 package imageprovider
 
 import (
