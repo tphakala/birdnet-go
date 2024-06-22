@@ -56,52 +56,52 @@
     font-weight: bold;
 }
 
+/* Light theme (default) */
 :root {
-    .heatmap-color-1 { background-color: #e0f3f8; color: #000; } /* Lightest blue */
-    .heatmap-color-2 { background-color: #ccebf6; color: #000; }
-    .heatmap-color-3 { background-color: #99d7ed; color: #000; }
-    .heatmap-color-4 { background-color: #66c2e4; color: #000; }
-    .heatmap-color-5 { background-color: #33ade1; color: #fff; } /* Mid blue */
-    .heatmap-color-6 { background-color: #0099d8; color: #fff; }
-    .heatmap-color-7 { background-color: #0077be; color: #fff; }
-    .heatmap-color-8 { background-color: #005595; color: #fff; }
-    .heatmap-color-9 { background-color: #003366; color: #fff; } /* Darkest blue */
-  }
-  
-  @media (prefers-color-scheme: dark) {
-    :root {
-      .heatmap-color-1 { background-color: #002933; color: #fff; } /* Darkest teal */
-      .heatmap-color-2 { background-color: #004466; color: #fff; }
-      .heatmap-color-3 { background-color: #005c80; color: #fff; }
-      .heatmap-color-4 { background-color: #007399; color: #fff; }
-      .heatmap-color-5 { background-color: #008bb3; color: #fff; } /* Mid teal */
-      .heatmap-color-6 { background-color: #33a3cc; color: #000; }
-      .heatmap-color-7 { background-color: #66b8e2; color: #000; }
-      .heatmap-color-8 { background-color: #99cde9; color: #000; }
-      .heatmap-color-9 { background-color: #cce3f1; color: #000; } /* Lightest teal */
-  }
-  
-  :root:has(input.theme-controller[value=dark]:checked) {
-    .heatmap-color-1 { background-color: #002933; color: #fff; } /* Darkest teal */
-    .heatmap-color-2 { background-color: #004466; color: #fff; }
-    .heatmap-color-3 { background-color: #005c80; color: #fff; }
-    .heatmap-color-4 { background-color: #007399; color: #fff; }
-    .heatmap-color-5 { background-color: #008bb3; color: #fff; } /* Mid teal */
-    .heatmap-color-6 { background-color: #33a3cc; color: #000; }
-    .heatmap-color-7 { background-color: #66b8e2; color: #000; }
-    .heatmap-color-8 { background-color: #99cde9; color: #000; }
-    .heatmap-color-9 { background-color: #cce3f1; color: #000; } /* Lightest teal */
-  }
-  
-  [data-theme=dark] {
-    .heatmap-color-1 { background-color: #002933; color: #fff; } /* Darkest teal */
-    .heatmap-color-2 { background-color: #004466; color: #fff; }
-    .heatmap-color-3 { background-color: #005c80; color: #fff; }
-    .heatmap-color-4 { background-color: #007399; color: #fff; }
-    .heatmap-color-5 { background-color: #008bb3; color: #fff; } /* Mid teal */
-    .heatmap-color-6 { background-color: #33a3cc; color: #000; }
-    .heatmap-color-7 { background-color: #66b8e2; color: #000; }
-    .heatmap-color-8 { background-color: #99cde9; color: #000; }
-    .heatmap-color-9 { background-color: #cce3f1; color: #000; } /* Lightest teal */
-  }
+  --heatmap-color-1: #e0f3f8;
+  --heatmap-color-2: #ccebf6;
+  --heatmap-color-3: #99d7ed;
+  --heatmap-color-4: #66c2e4;
+  --heatmap-color-5: #33ade1;
+  --heatmap-color-6: #0099d8;
+  --heatmap-color-7: #0077be;
+  --heatmap-color-8: #005595;
+  --heatmap-color-9: #003366;
+}
+
+/* Dark theme */
+[data-theme=dark] {
+  --heatmap-color-1: #002933;
+  --heatmap-color-2: #004466;
+  --heatmap-color-3: #005c80;
+  --heatmap-color-4: #007399;
+  --heatmap-color-5: #008bb3;
+  --heatmap-color-6: #33a3cc;
+  --heatmap-color-7: #66b8e2;
+  --heatmap-color-8: #99cde9;
+  --heatmap-color-9: #cce3f1;
+}
+
+/* Heatmap cell styles */
+.heatmap-color-1 { background-color: var(--heatmap-color-1); color: var(--heatmap-text-1, #000); }
+.heatmap-color-2 { background-color: var(--heatmap-color-2); color: var(--heatmap-text-2, #000); }
+.heatmap-color-3 { background-color: var(--heatmap-color-3); color: var(--heatmap-text-3, #000); }
+.heatmap-color-4 { background-color: var(--heatmap-color-4); color: var(--heatmap-text-4, #000); }
+.heatmap-color-5 { background-color: var(--heatmap-color-5); color: var(--heatmap-text-5, #fff); }
+.heatmap-color-6 { background-color: var(--heatmap-color-6); color: var(--heatmap-text-6, #fff); }
+.heatmap-color-7 { background-color: var(--heatmap-color-7); color: var(--heatmap-text-7, #fff); }
+.heatmap-color-8 { background-color: var(--heatmap-color-8); color: var(--heatmap-text-8, #fff); }
+.heatmap-color-9 { background-color: var(--heatmap-color-9); color: var(--heatmap-text-9, #fff); }
+
+/* Text color adjustments for dark theme */
+[data-theme=dark] {
+  --heatmap-text-1: #fff;
+  --heatmap-text-2: #fff;
+  --heatmap-text-3: #fff;
+  --heatmap-text-4: #fff;
+  --heatmap-text-5: #fff;
+  --heatmap-text-6: #000;
+  --heatmap-text-7: #000;
+  --heatmap-text-8: #000;
+  --heatmap-text-9: #000;
 }
