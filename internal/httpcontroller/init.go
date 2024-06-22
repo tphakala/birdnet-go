@@ -28,11 +28,12 @@ func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c 
 
 // Server encapsulates Echo server and related configurations.
 type Server struct {
-	Echo           *echo.Echo          // Echo framework instance
-	ds             datastore.Interface // Datastore interface
-	Settings       *conf.Settings      // Application settings
-	Logger         *logger.Logger      // Custom logger
-	BirdImageCache *imageprovider.BirdImageCache
+	Echo              *echo.Echo          // Echo framework instance
+	ds                datastore.Interface // Datastore interface
+	Settings          *conf.Settings      // Application settings
+	DashboardSettings *conf.Dashboard     // Dashboard settings
+	Logger            *logger.Logger      // Custom logger
+	BirdImageCache    *imageprovider.BirdImageCache
 }
 
 // New initializes a new HTTP server with given context and datastore.
@@ -41,10 +42,11 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 	configureDefaultSettings(settings)
 
 	s := &Server{
-		Echo:           echo.New(),
-		ds:             dataStore,
-		Settings:       settings,
-		BirdImageCache: birdImageCache,
+		Echo:              echo.New(),
+		ds:                dataStore,
+		Settings:          settings,
+		BirdImageCache:    birdImageCache,
+		DashboardSettings: &settings.Realtime.Dashboard,
 	}
 
 	// Server initialization

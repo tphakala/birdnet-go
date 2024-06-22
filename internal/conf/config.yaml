@@ -44,6 +44,11 @@ realtime:
         maxusage: 80%     # usage policy: percentage of disk usage to trigger eviction        
         minclips: 10      # minumum number of clips per species to keep before starting evictions
 
+  dashboard:
+    thumbnails:
+      summary: false
+      recent: true
+ 
   dynamicthreshold:
     enabled: true         # true to enable dynamic confidence threshold
     trigger: 0.90         # dynamic threshold is activated on detections at this confidence level
