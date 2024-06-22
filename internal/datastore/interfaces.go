@@ -1,4 +1,4 @@
-// interfaces.go this code defines the interface for the database operations
+// interfaces.go: this code defines the interface for the database operations
 package datastore
 
 import (
@@ -36,6 +36,7 @@ type Interface interface {
 	SaveHourlyWeather(hourlyWeather *HourlyWeather) error
 	GetHourlyWeather(date string) ([]HourlyWeather, error)
 	LatestHourlyWeather() (*HourlyWeather, error)
+	GetHourlyDetections(date, hour string) ([]Note, error)
 }
 
 // DataStore implements StoreInterface using a GORM database.
@@ -441,4 +442,18 @@ func createGormLogger() logger.Interface {
 			Colorful:      true,
 		},
 	)
+}
+
+// GetHourlyDetections retrieves bird detections for a specific date and hour.
+func (ds *DataStore) GetHourlyDetections(date, hour string) ([]Note, error) {
+	var detections []Note
+
+	startTime := hour + ":00:00"
+	endTime := hour + ":59:59"
+
+	err := ds.DB.Where("date = ? AND time >= ? AND time <= ?", date, startTime, endTime).
+		Order("time ASC").
+		Find(&detections).Error
+
+	return detections, err
 }
