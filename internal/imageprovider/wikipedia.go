@@ -18,9 +18,9 @@ type wikiMediaProvider struct {
 
 type wikiMediaAuthor struct {
 	name        string
-	url         string
+	URL         string
 	licenseName string
-	licenseUrl  string
+	licenseURL  string
 }
 
 // NewWikiMediaProvider creates a new Wikipedia media provider
@@ -56,7 +56,7 @@ func (l *wikiMediaProvider) queryAndGetFirstPage(params map[string]string) (*jas
 // fetch retrieves the bird image for a given scientific name
 func (l *wikiMediaProvider) fetch(scientificName string) (BirdImage, error) {
 	// Query for the thumbnail image URL and source file name
-	thumbnailUrl, thumbnailSourceFile, err := l.queryThumbnail(scientificName)
+	thumbnailURL, thumbnailSourceFile, err := l.queryThumbnail(scientificName)
 	if err != nil {
 		return BirdImage{}, fmt.Errorf("failed to query thumbnail of bird: %s : %w", scientificName, err)
 	}
@@ -69,11 +69,11 @@ func (l *wikiMediaProvider) fetch(scientificName string) (BirdImage, error) {
 
 	// Return the bird image struct with the image URL and author information
 	return BirdImage{
-		Url:         thumbnailUrl,
+		URL:         thumbnailURL,
 		AuthorName:  authorInfo.name,
-		AuthorUrl:   authorInfo.url,
+		AuthorURL:   authorInfo.URL,
 		LicenseName: authorInfo.licenseName,
-		LicenseUrl:  authorInfo.licenseUrl,
+		LicenseURL:  authorInfo.licenseURL,
 	}, nil
 }
 
@@ -157,9 +157,9 @@ func (l *wikiMediaProvider) queryAuthorInfo(thumbnailURL string) (*wikiMediaAuth
 
 	return &wikiMediaAuthor{
 		name:        text,
-		url:         href,
+		URL:         href,
 		licenseName: licenseName,
-		licenseUrl:  licenseURL,
+		licenseURL:  licenseURL,
 	}, nil
 }
 

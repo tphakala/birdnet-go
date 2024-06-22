@@ -5,7 +5,9 @@
   <thead class="text-xs">
     <tr>
       <th scope="col" class="py-2 px-6 w-0">Species</th>
+      {{if .DashboardSettings.Thumbnails.Summary}}
       <th scope="col" class="py-2 px-6 w-0">Thumbnail</th>
+      {{end}}
       <th scope="col" class="py-2 px-4 w-100 hidden md:table-cell">Detections</th>
       {{range .Hours}}
       <th scope="col" class="text-center py-2 px-0">{{printf "%02d" .}}</th>      
@@ -28,9 +30,16 @@
       </th>
 
       <!-- Bird thumbnail  -->
+      {{if $.DashboardSettings.Thumbnails.Summary}}
       <th scope="row" class="py-1 px-6">
-        <img loading="lazy" width="100%" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">       
+        <div class="thumbnail-container">
+          <img loading="lazy" width="100%" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
+          <div class="thumbnail-tooltip hidden">
+            {{thumbnailAttribution .ScientificName}}
+          </div>
+        </div>
       </th>
+      {{end}}
 
       <!-- Total detections -->
       <td class="py-1 px-3 hidden md:table-cell">

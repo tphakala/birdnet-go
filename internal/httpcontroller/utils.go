@@ -1,8 +1,9 @@
-// utils.go
+// utils.go: This file contains utility functions for the HTTP controller package.
 package httpcontroller
 
 import (
 	"fmt"
+	"html"
 	"html/template"
 	"log"
 	"os"
@@ -142,61 +143,6 @@ func (s *Server) getSpectrogramPath(wavFileName string, width int) (string, erro
 	return webFriendlyPath, nil
 }
 
-/*
-// wrapNotesWithSpectrogram wraps notes with their corresponding spectrogram paths.
-func (s *Server) wrapNotesWithSpectrogram(notes []datastore.Note) ([]NoteWithSpectrogram, error) {
-	notesWithSpectrogram := make([]NoteWithSpectrogram, len(notes))
-
-	// Create a channel to communicate between goroutines for results
-	type result struct {
-		index int
-		path  string
-		err   error
-	}
-	results := make(chan result, len(notes))
-
-	// Create a channel to limit the number of concurrent goroutines
-	semaphore := make(chan struct{}, 4) // Limit to 4
-
-	// Set the width of the spectrogram in pixels
-	const width = 400 // pixels
-
-	for i, note := range notes {
-		// Acquire a slot in the semaphore before starting a goroutine
-		semaphore <- struct{}{}
-
-		// Launch a goroutine for each spectrogram generation
-		go func(i int, note datastore.Note) {
-			defer func() { <-semaphore }() // Release the slot when done
-
-			spectrogramPath, err := s.getSpectrogramPath(note.ClipName, width)
-			results <- result{i, spectrogramPath, err}
-		}(i, note)
-	}
-
-	// Wait for all goroutines to finish
-	for i := 0; i < len(notes); i++ {
-		res := <-results
-		if res.err != nil {
-			log.Printf("Error generating spectrogram for %s: %v", notes[res.index].ClipName, res.err)
-			continue
-		}
-		notesWithSpectrogram[res.index] = NoteWithSpectrogram{
-			Note:        notes[res.index],
-			Spectrogram: res.path,
-		}
-	}
-
-	// Wait for all slots to be released ensuring all goroutines have completed
-	for i := 0; i < cap(semaphore); i++ {
-		semaphore <- struct{}{}
-	}
-	close(results)
-	close(semaphore)
-
-	return notesWithSpectrogram, nil
-}*/
-
 // sumHourlyCounts calculates the total counts from hourly counts.
 func sumHourlyCounts(hourlyCounts [24]int) int {
 	total := 0
@@ -239,35 +185,56 @@ func parseOffset(offsetStr string, defaultOffset int) int {
 	return offset
 }
 
-// thumbnail returns the url of a given bird's thumbnail
+// Thumbnail returns the URL of a given bird's thumbnail image.
+// It takes the bird's scientific name as input and returns the image URL as a string.
+// If the image is not found or an error occurs, it returns an empty string.
 func (s *Server) thumbnail(scientificName string) string {
-	birdImage, err := s.BirdImageCache.Get(scientificName)
-	if err != nil {
+	if s.BirdImageCache == nil {
+		// Return empty string if the cache is not initialized
 		return ""
 	}
 
-	return birdImage.Url
+	birdImage, err := s.BirdImageCache.Get(scientificName)
+	if err != nil {
+		// Return empty string if an error occurs
+		return ""
+	}
+
+	return birdImage.URL
 }
 
-// thumbnailAttribution returns the thumbnail credits of a given bird.
+// ThumbnailAttribution returns the HTML-formatted attribution for a bird's thumbnail image.
+// It takes the bird's scientific name as input and returns a template.HTML string.
+// If the attribution information is incomplete or an error occurs, it returns an empty template.HTML.
 func (s *Server) thumbnailAttribution(scientificName string) template.HTML {
+	if s.BirdImageCache == nil {
+		// Return empty string if the cache is not initialized
+		return template.HTML("")
+	}
+
 	birdImage, err := s.BirdImageCache.Get(scientificName)
 	if err != nil {
 		log.Printf("Error getting thumbnail info for %s: %v", scientificName, err)
 		return template.HTML("")
 	}
 
-	// Skip if no author or license information
 	if birdImage.AuthorName == "" || birdImage.LicenseName == "" {
 		return template.HTML("")
 	}
 
-	var toReturn string
-	if birdImage.AuthorUrl == "" {
-		toReturn = fmt.Sprintf("© %s / <a href=%s>%s</a>", birdImage.AuthorName, birdImage.LicenseUrl, birdImage.LicenseName)
+	var attribution string
+	if birdImage.AuthorURL == "" {
+		attribution = fmt.Sprintf("© %s / <a href=\"%s\">%s</a>",
+			html.EscapeString(birdImage.AuthorName),
+			html.EscapeString(birdImage.LicenseURL),
+			html.EscapeString(birdImage.LicenseName))
 	} else {
-		toReturn = fmt.Sprintf("© <a href=%s>%s</a> / <a href=%s>%s</a>", birdImage.AuthorUrl, birdImage.AuthorName, birdImage.LicenseUrl, birdImage.LicenseName)
+		attribution = fmt.Sprintf("© <a href=\"%s\">%s</a> / <a href=\"%s\">%s</a>",
+			html.EscapeString(birdImage.AuthorURL),
+			html.EscapeString(birdImage.AuthorName),
+			html.EscapeString(birdImage.LicenseURL),
+			html.EscapeString(birdImage.LicenseName))
 	}
 
-	return template.HTML(toReturn)
+	return template.HTML(attribution)
 }
