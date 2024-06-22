@@ -45,6 +45,39 @@
 			datePicker.value = today;
 		}, 0); // Set timeout for 0ms
 
+
+    // Function to set theme
+    function setTheme(themeName) {
+        localStorage.setItem('theme', themeName);
+        document.documentElement.setAttribute('data-theme', themeName);
+    }
+
+    // Function to toggle theme
+    function toggleTheme() {
+        if (localStorage.getItem('theme') === 'dark') {
+            setTheme('light');
+        } else {
+            setTheme('dark');
+        }
+    }
+
+    // Immediately invoked function to set the theme on initial load
+    (function () {
+        if (localStorage.getItem('theme') === 'dark') {
+            setTheme('dark');
+            document.querySelector('.theme-controller').checked = true;
+        } else {
+            setTheme('light');
+            document.querySelector('.theme-controller').checked = false;
+        }
+    })();
+
+    // Event listener for theme toggle
+    document.querySelector('.theme-controller').addEventListener('change', function() {
+        toggleTheme();
+        this.checked = localStorage.getItem('theme') === 'dark';
+    });
+
 	</script>
 </body>
 
