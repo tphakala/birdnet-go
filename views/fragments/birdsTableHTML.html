@@ -10,7 +10,15 @@
       {{end}}
       <th scope="col" class="py-2 px-4 w-100 hidden md:table-cell">Detections</th>
       {{range .Hours}}
-      <th scope="col" class="text-center py-2 px-0">{{printf "%02d" .}}</th>      
+      <th scope="col" class="text-center py-2 px-0">
+        <a href="#"
+           hx-get="/hourly-detections?date={{urlquery $.SelectedDate}}&hour={{printf "%02d" .}}"
+           hx-target="#mainContent"
+           hx-trigger="click"
+           hx-push-url="true">
+          {{printf "%02d" .}}
+        </a>
+      </th>      
       {{end}}
       <th scope="col" class="py-2 px-0"></th>
     </tr>

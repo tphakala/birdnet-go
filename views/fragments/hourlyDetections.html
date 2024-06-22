@@ -1,0 +1,90 @@
+{{define "hourlyDetections"}}
+<section class="card col-span-12 overflow-hidden bg-base-100 shadow-sm xl:col-span-12">
+    <div class="card-body grow-0 p-4 ml-2">
+        <div class="flex justify-between">
+            <span class="card-title grow"><a class="link-hover link">Hourly Results for {{.Hour}}:00 on {{.Date}}</a></span>
+        </div>
+    </div>
+
+    <table class="table w-full text-sm text-left text-gray-600 dark:text-gray-300">
+        <thead class="text-xs">
+            <tr>
+                <!-- Date Column -->
+                <th scope="col" class="py-2 px-6" style="width: 15%">Date</th>
+                
+                <!-- Time Column -->
+                <th scope="col" class="py-2 px-2" style="width: 15%">Time</th>
+                
+                <!-- Common Name Column -->
+                <th scope="col" class="py-2 px-4" style="width: auto">Common Name</th>
+                
+                <!-- Thumbnail Column -->
+                {{if .DashboardSettings.Thumbnails.Summary}}
+                <th scope="col" class="py-2 px-4" style="width: 20%">Thumbnail</th>
+                {{end}}
+                
+                <!-- Confidence Column -->
+                <th scope="col" class="py-2 px-4" style="width: auto">Confidence</th>
+                
+                <!-- Recording Column -->
+                <th scope="col" class="py-2 px-4" style="width: 30%">Recording</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Detections}}
+            <tr class="">
+                <!-- Date Column -->
+                <td class="py-1 px-6">{{.Date}}</td>
+                
+                <!-- Time Column -->
+                <td class="py-1 px-2">{{.Time}}</td>
+                
+                <!-- Common Name Column -->
+                <td class="py-1 px-4">
+                    <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
+                        {{.CommonName}}
+                    </a>
+                </td>
+                
+                <!-- Thumbnail Column -->
+                {{if $.DashboardSettings.Thumbnails.Summary}}
+                <td class="py-1 px-4">
+                    <div class="thumbnail-container">
+                        <img loading="lazy" width="150" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
+                        <div class="thumbnail-tooltip hidden">
+                            {{thumbnailAttribution .ScientificName}}
+                        </div>
+                    </div>
+                </td>
+                {{end}}
+                
+                <!-- Confidence Column -->
+                <td class="py-1 px-4">
+                    <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
+                        <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
+                            {{confidence .Confidence}}
+                        </a>
+                    </div>
+                </td>
+                
+                <!-- Recording Column -->
+                <td class="py-1 px-6 flex justify-center">
+                    <div class="w-full">
+                        <!-- Spectrogram Image  -->
+                        <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
+                            <img loading="lazy" width="400" src="/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
+                        </a>
+
+                        <!-- Audio player -->
+                        <audio controls class="audio-control" preload="metadata">
+                            <source src="{{.ClipName}}" type="audio/wav">
+                            Your browser does not support the audio element.
+                        </audio>
+                    </div>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</section>
+{{end}}
