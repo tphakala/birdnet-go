@@ -399,3 +399,35 @@ func (s *Server) serveSpectrogramHandler(c echo.Context) error {
 	// Serve the spectrogram image file
 	return c.File(spectrogramPath)
 }
+
+// hourlyDetectionsHandler handles requests for hourly detections
+func (s *Server) hourlyDetectionsHandler(c echo.Context) error {
+	date := c.QueryParam("date")
+	hour := c.QueryParam("hour")
+
+	if date == "" || hour == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "Date and hour are required.")
+	}
+
+	// Fetch all detections for the specified date and hour
+	detections, err := s.ds.GetHourlyDetections(date, hour)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+
+	// Prepare data for rendering in the template
+	data := struct {
+		Date              string
+		Hour              string
+		Detections        []datastore.Note
+		DashboardSettings *conf.Dashboard
+	}{
+		Date:              date,
+		Hour:              hour,
+		Detections:        detections,
+		DashboardSettings: s.DashboardSettings,
+	}
+
+	// Render the hourlyDetections template with the data
+	return c.Render(http.StatusOK, "hourlyDetections", data)
+}

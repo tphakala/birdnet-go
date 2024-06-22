@@ -28,6 +28,7 @@ var routes = []routeConfig{
 	{Path: "/logs", TemplateName: "logs", Title: "Logs"},
 	{Path: "/stats", TemplateName: "stats", Title: "Statistics"},
 	{Path: "/settings", TemplateName: "settings", Title: "General Settings"},
+	{Path: "/hourly-detections", TemplateName: "hourlyDetections", Title: "Hourly Detections"},
 }
 
 // initRoutes initializes the routes for the server.
@@ -76,6 +77,7 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/species-detections", s.speciesDetectionsHandler)
 	s.Echo.GET("/search", s.searchHandler)
 	s.Echo.GET("/spectrogram", s.serveSpectrogramHandler)
+	s.Echo.GET("/hourly-detections", s.hourlyDetectionsHandler)
 
 	// Handle both GET and DELETE requests for the /note route
 	s.Echo.Add("GET", "/note", s.getNoteHandler)
