@@ -6,7 +6,8 @@
 <head>
 	<meta charset="utf-8" />
 	<title>BirdNET-Go Dashboard</title>
-	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
 	<link href="/assets/tailwind.css" rel="stylesheet" />
 	<link href="/assets/custom.css" rel="stylesheet" />
 	<!-- htmx -->
@@ -21,13 +22,14 @@
 	<input id="my-drawer" type="checkbox" class="drawer-toggle" />
 
 	<div class="drawer-content">
-		<div class="grid grid-cols-12 grid-rows-[min-content] gap-y-0 p-3 lg:pt-4 lg:pr-8 lg:pl-8 lg:pb-0">
+		<!-- header -->
+		<div class="grid grid-cols-12 grid-rows-[min-content] p-3 pt-0 lg:px-8 lg:pb-0">
 			{{ template "header" . }}
 		</div>
-
+	
 		<!-- content -->
 		<main>
-			<div id="mainContent" class="grid grid-cols-12 grid-rows-[min-content] gap-y-8 p-3 lg:p-8" >
+			<div id="mainContent" class="grid grid-cols-12 grid-rows-[min-content] gap-y-8 p-3 pt-0 lg:p-8 lg:pt-0">
 				{{ RenderContent . }}
 			</div>
 			<!-- Placeholder for dynamic notifications -->
