@@ -1,4 +1,4 @@
-// conf/config.go
+// config.go: This file contains the configuration for the BirdNET-Go application. It defines the settings struct and functions to load and save the settings.
 package conf
 
 import (
@@ -17,11 +17,18 @@ import (
 //go:embed config.yaml
 var configFiles embed.FS
 
+type Dashboard struct {
+	Thumbnails struct {
+		Summary bool // show thumbnails on summary table
+		Recent  bool // show thumbnails on recent table
+	}
+}
+
 type Settings struct {
 	Debug bool // true to enable debug mode
 
 	Main struct {
-		Name      string // name of go-birdnet node, can be used to identify source of notes
+		Name      string // name of BirdNET-Go node, can be used to identify source of notes
 		TimeAs24h bool   // true 24-hour time format, false 12-hour time format
 		Log       LogConfig
 	}
@@ -65,6 +72,9 @@ type Settings struct {
 				}
 			}
 		}
+
+		// Apply dashboard settings
+		Dashboard Dashboard
 
 		DynamicThreshold struct {
 			Enabled    bool    // true to enable dynamic threshold

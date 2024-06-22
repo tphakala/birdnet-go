@@ -19,6 +19,29 @@
     box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
 }
 
+.thumbnail-container {
+  position: relative;
+  display: inline-block;
+}
+
+.thumbnail-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 10;
+}
+
+.thumbnail-container:hover .thumbnail-tooltip {
+  display: block;
+}
+
   /* Define your custom background colors here if the default Tailwind classes aren't working */
   .bg-confidence-high { background-color: #10b981; } /* Green for high confidence */
   .bg-confidence-medium { background-color: #f97316; } /* Orange for average confidence */

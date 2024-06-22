@@ -13,11 +13,11 @@ type ImageProvider interface {
 }
 
 type BirdImage struct {
-	Url         string
+	URL         string
 	LicenseName string
-	LicenseUrl  string
+	LicenseURL  string
 	AuthorName  string
-	AuthorUrl   string
+	AuthorURL   string
 }
 
 // BirdImageCache represents a cache for bird images.
@@ -112,9 +112,9 @@ func (c *BirdImageCache) fetch(scientificName string) (BirdImage, error) {
 // EstimateSize estimates the memory size of a BirdImage instance in bytes
 func (img *BirdImage) EstimateSize() int {
 	return int(unsafe.Sizeof(*img)) +
-		len(img.Url) + len(img.LicenseName) +
-		len(img.LicenseUrl) + len(img.AuthorName) +
-		len(img.AuthorUrl)
+		len(img.URL) + len(img.LicenseName) +
+		len(img.LicenseURL) + len(img.AuthorName) +
+		len(img.AuthorURL)
 }
 
 // MemoryUsage returns the approximate memory usage of the image cache in bytes

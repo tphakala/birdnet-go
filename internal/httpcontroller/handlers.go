@@ -1,4 +1,4 @@
-// httpcontroller/handlers.go
+// handlers.go: This file contains the request handlers for the web server.
 package httpcontroller
 
 import (
@@ -152,13 +152,15 @@ func (s *Server) topBirdsHandler(c echo.Context) error {
 
 	// Preparing data for rendering in the template
 	data := struct {
-		NotesWithIndex []NoteWithIndex
-		Hours          []int
-		SelectedDate   string
+		NotesWithIndex    []NoteWithIndex
+		Hours             []int
+		SelectedDate      string
+		DashboardSettings *conf.Dashboard
 	}{
-		NotesWithIndex: notesWithIndex,
-		Hours:          hours,
-		SelectedDate:   selectedDate,
+		NotesWithIndex:    notesWithIndex,
+		Hours:             hours,
+		SelectedDate:      selectedDate,
+		DashboardSettings: s.DashboardSettings,
 	}
 
 	// Render the birdsTableHTML template with the data
@@ -360,13 +362,23 @@ func (s *Server) searchHandler(c echo.Context) error {
 func (s *Server) getLastDetections(c echo.Context) error {
 	numDetections := parseNumDetections(c.QueryParam("numDetections"), 10) // Default value is 10
 
+	// Retrieve the last detections from the database
 	notes, err := s.ds.GetLastDetections(numDetections)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error fetching detections"})
 	}
 
+	// Preparing data for rendering in the template
+	data := struct {
+		Notes             []datastore.Note
+		DashboardSettings conf.Dashboard
+	}{
+		Notes:             notes,
+		DashboardSettings: *s.DashboardSettings,
+	}
+
 	// render the recentDetections template with the data
-	return c.Render(http.StatusOK, "recentDetections", notes)
+	return c.Render(http.StatusOK, "recentDetections", data)
 }
 
 // serveSpectrogramHandler serves or generates a spectrogram for a given clip.

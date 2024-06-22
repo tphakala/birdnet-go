@@ -110,8 +110,13 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		log.Fatalf("Error initializing metrics: %v", err)
 	}
 
-	// Intialize bird image cache
-	birdImageCache := initBirdImageCache(dataStore, metrics)
+	var birdImageCache *imageprovider.BirdImageCache
+	if settings.Realtime.Dashboard.Thumbnails.Summary || settings.Realtime.Dashboard.Thumbnails.Recent {
+		// Initialize the bird image cache
+		birdImageCache = initBirdImageCache(dataStore, metrics)
+	} else {
+		birdImageCache = nil
+	}
 
 	// Start worker pool for processing detections
 	processor.New(settings, dataStore, bn, metrics, birdImageCache)
