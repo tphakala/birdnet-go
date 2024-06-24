@@ -3,6 +3,7 @@
 package processor
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -181,13 +182,20 @@ func (a MqttAction) Execute(data interface{}) error {
 		return err
 	}
 
+	// Create a context with timeout for publishing
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	// Publish the note to the MQTT broker
-	err = a.MqttClient.Publish(a.Settings.Realtime.MQTT.Topic, string(noteJson))
+	err = a.MqttClient.Publish(ctx, a.Settings.Realtime.MQTT.Topic, string(noteJson))
 	if err != nil {
+		if err == context.DeadlineExceeded {
+			return errors.New("MQTT publish timeout")
+		}
 		return err
 	}
 
-	return nil // return an error if the action fails
+	return nil
 }
 
 func (a UpdateRangeFilterAction) Execute(data interface{}) error {
