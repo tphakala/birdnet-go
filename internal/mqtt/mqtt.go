@@ -1,6 +1,7 @@
 package mqtt
 
 import (
+	"context"
 	"errors"
 	"log"
 
@@ -20,8 +21,12 @@ func New(settings *conf.Settings) *Client {
 	}
 }
 
-// Connect to MQTT broker
-func (c *Client) Connect() error {
+// Connect to MQTT broker with a timeout
+func (c *Client) Connect(ctx context.Context) error {
+	if c.internalClient != nil && c.internalClient.IsConnected() {
+		return errors.New("already connected")
+	}
+
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(c.Settings.Realtime.MQTT.Broker)
 	opts.SetClientID("birdnet-go")
@@ -36,17 +41,23 @@ func (c *Client) Connect() error {
 	client := mqtt.NewClient(opts)
 	c.internalClient = client
 
-	// It will wait infinitely until the connection is established
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		log.Printf("Failed to connect to MQTT broker: %s", token.Error())
-		return errors.New("failed to connect to MQTT broker")
-	}
+	connectToken := client.Connect()
 
-	return nil
+	// Use a select statement to implement the timeout
+	select {
+	case <-connectToken.Done():
+		if connectToken.Error() != nil {
+			log.Printf("Failed to connect to MQTT broker: %s", connectToken.Error())
+			return errors.New("failed to connect to MQTT broker")
+		}
+		return nil
+	case <-ctx.Done():
+		return errors.New("connection timeout")
+	}
 }
 
 // Publish a message to a topic
-func (c *Client) Publish(topic string, payload string) error {
+func (c *Client) Publish(ctx context.Context, topic string, payload string) error {
 	if c.internalClient == nil {
 		return errors.New("MQTT client is not initialized")
 	}
@@ -55,9 +66,15 @@ func (c *Client) Publish(topic string, payload string) error {
 		return errors.New("MQTT client is not connected")
 	}
 
-	token := c.internalClient.Publish(topic, 0, false, payload)
-	token.Wait()
-	return token.Error()
+	publishToken := c.internalClient.Publish(topic, 0, false, payload)
+
+	// Use a select statement to implement the timeout
+	select {
+	case <-publishToken.Done():
+		return publishToken.Error()
+	case <-ctx.Done():
+		return errors.New("publish timeout")
+	}
 }
 
 func (c *Client) onConnect(client mqtt.Client) {
