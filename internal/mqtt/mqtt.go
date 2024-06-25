@@ -27,10 +27,14 @@ func New(settings *conf.Settings) *Client {
 	}
 }
 
-// Resolve hostname to IP address
+// Resolve hostname to IP address and log any errors
 func (c *Client) resolveHostname(hostname string) error {
 	_, err := net.LookupHost(hostname)
-	return err
+	if err != nil {
+		log.Printf("Failed to resolve hostname %s: %v", hostname, err)
+		return fmt.Errorf("failed to resolve hostname %s: %w", hostname, err)
+	}
+	return nil
 }
 
 // Connect to MQTT broker

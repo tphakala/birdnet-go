@@ -26,6 +26,7 @@ type Processor struct {
 	BwClient           *birdweather.BwClient
 	MqttClient         *mqtt.Client
 	mqttReconnectTimer *time.Timer
+	mqttReconnectStop  chan struct{}
 	BirdImageCache     *imageprovider.BirdImageCache
 	EventTracker       *EventTracker
 	DogBarkFilter      DogBarkFilter
@@ -74,7 +75,7 @@ var PendingDetections map[string]PendingDetection = make(map[string]PendingDetec
 var mutex sync.Mutex
 
 // func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *telemetry.Metrics) *Processor {
-func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics, birdImageCache *imageprovider.BirdImageCache) *Processor {
+func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics, birdImageCache *imageprovider.BirdImageCache) (*Processor, error) {
 	p := &Processor{
 		Settings:           settings,
 		Ds:                 ds,
@@ -109,7 +110,9 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	}
 
 	// Initialize MQTT client if enabled in settings.
-	p.initializeMQTT()
+	if err := p.initializeMQTT(); err != nil {
+		return nil, fmt.Errorf("failed to initialize MQTT: %w", err)
+	}
 
 	// Initialize included species list
 	today := time.Now().Truncate(24 * time.Hour)
@@ -144,7 +147,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		}
 	}
 
-	return p
+	return p, nil
 }
 
 // Start goroutine to process detections from the queue

@@ -3,6 +3,7 @@ package processor
 
 import (
 	"context"
+	"errors"
 	"log"
 	"time"
 
@@ -10,15 +11,49 @@ import (
 )
 
 // initializeMQTT initializes the MQTT client and attempts to connect
-func (p *Processor) initializeMQTT() {
+func (p *Processor) initializeMQTT() error {
 	if !p.Settings.Realtime.MQTT.Enabled {
-		return
+		return nil
 	}
 
 	p.MqttClient = mqtt.New(p.Settings)
-	p.mqttReconnectTimer = time.AfterFunc(time.Minute, p.reconnectMQTT)
+	p.mqttReconnectStop = make(chan struct{})
+	p.startReconnectTimer()
 
+	// Attempt to connect to the MQTT broker
 	go p.connectMQTT()
+
+	// Wait for initial connection attempt
+	select {
+	case <-time.After(5 * time.Second):
+		if !p.MqttClient.IsConnected() {
+			return errors.New("initial MQTT connection attempt failed")
+		}
+	}
+
+	return nil
+}
+
+// startReconnectTimer starts the reconnect timer for the MQTT client
+func (p *Processor) startReconnectTimer() {
+	p.mqttReconnectTimer = time.AfterFunc(time.Minute, func() {
+		select {
+		case <-p.mqttReconnectStop:
+			return
+		default:
+			p.reconnectMQTT()
+		}
+	})
+}
+
+// cleanupMQTT cleans up the MQTT client and reconnect timer
+func (p *Processor) cleanupMQTT() {
+	if p.mqttReconnectTimer != nil {
+		p.mqttReconnectTimer.Stop()
+	}
+	if p.mqttReconnectStop != nil {
+		close(p.mqttReconnectStop)
+	}
 }
 
 // connectMQTT attempts to connect to the MQTT broker with retries
@@ -50,14 +85,34 @@ func (p *Processor) connectMQTT() {
 	log.Println("Failed to connect to MQTT broker after maximum retries")
 }
 
-// reconnectMQTT attempts to reconnect to the MQTT broker
+// reconnectMQTT attempts to reconnect to the MQTT broker with exponential backoff
 func (p *Processor) reconnectMQTT() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	backoff := time.Second
+	maxBackoff := 5 * time.Minute
 
-	if err := p.MqttClient.EnsureConnection(ctx); err != nil {
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		err := p.MqttClient.Connect(ctx)
+		cancel()
+
+		if err == nil {
+			log.Println("Successfully reconnected to MQTT broker")
+			p.startReconnectTimer()
+			return
+		}
+
 		log.Printf("Failed to reconnect to MQTT broker: %s", err)
-		// Schedule next reconnection attempt
-		p.mqttReconnectTimer.Reset(time.Minute)
+		log.Printf("Retrying in %v", backoff)
+
+		// Exponential backoff with a maximum backoff time
+		select {
+		case <-time.After(backoff):
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+		case <-p.mqttReconnectStop:
+			return
+		}
 	}
 }
