@@ -3,7 +3,11 @@ package mqtt
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
+	"net"
+	"sync"
+	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 
@@ -11,8 +15,10 @@ import (
 )
 
 type Client struct {
-	Settings       *conf.Settings
-	internalClient mqtt.Client
+	Settings        *conf.Settings
+	internalClient  mqtt.Client
+	lastConnAttempt time.Time
+	mu              sync.Mutex
 }
 
 func New(settings *conf.Settings) *Client {
@@ -21,10 +27,26 @@ func New(settings *conf.Settings) *Client {
 	}
 }
 
-// Connect to MQTT broker with a timeout
+// Resolve hostname to IP address
+func (c *Client) resolveHostname(hostname string) error {
+	_, err := net.LookupHost(hostname)
+	return err
+}
+
+// Connect to MQTT broker
 func (c *Client) Connect(ctx context.Context) error {
-	if c.internalClient != nil && c.internalClient.IsConnected() {
-		return errors.New("already connected")
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Check if we've tried to connect recently
+	if time.Since(c.lastConnAttempt) < 1*time.Minute {
+		return errors.New("connection attempt too recent")
+	}
+	c.lastConnAttempt = time.Now()
+
+	// Resolve hostname
+	if err := c.resolveHostname(c.Settings.Realtime.MQTT.Broker); err != nil {
+		return fmt.Errorf("failed to resolve broker hostname: %w", err)
 	}
 
 	opts := mqtt.NewClientOptions()
@@ -42,39 +64,37 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.internalClient = client
 
 	connectToken := client.Connect()
-
-	// Use a select statement to implement the timeout
-	select {
-	case <-connectToken.Done():
-		if connectToken.Error() != nil {
-			log.Printf("Failed to connect to MQTT broker: %s", connectToken.Error())
-			return errors.New("failed to connect to MQTT broker")
-		}
-		return nil
-	case <-ctx.Done():
+	if !connectToken.WaitTimeout(30 * time.Second) {
 		return errors.New("connection timeout")
 	}
+	if err := connectToken.Error(); err != nil {
+		return fmt.Errorf("connection error: %w", err)
+	}
+
+	return nil
 }
 
 // Publish a message to a topic
 func (c *Client) Publish(ctx context.Context, topic string, payload string) error {
-	if c.internalClient == nil {
-		return errors.New("MQTT client is not initialized")
-	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	if !c.internalClient.IsConnected() {
+	if c.internalClient == nil || !c.internalClient.IsConnected() {
 		return errors.New("MQTT client is not connected")
 	}
 
 	publishToken := c.internalClient.Publish(topic, 0, false, payload)
-
-	// Use a select statement to implement the timeout
-	select {
-	case <-publishToken.Done():
-		return publishToken.Error()
-	case <-ctx.Done():
+	if !publishToken.WaitTimeout(10 * time.Second) {
 		return errors.New("publish timeout")
 	}
+	return publishToken.Error()
+}
+
+func (c *Client) ensureConnection(ctx context.Context) error {
+	if c.internalClient == nil || !c.internalClient.IsConnected() {
+		return c.Connect(ctx)
+	}
+	return nil
 }
 
 func (c *Client) onConnect(client mqtt.Client) {
@@ -83,4 +103,11 @@ func (c *Client) onConnect(client mqtt.Client) {
 
 func (c *Client) onConnectionLost(client mqtt.Client, err error) {
 	log.Printf("Connection to MQTT broker lost: %s, error: %v", c.Settings.Realtime.MQTT.Broker, err)
+}
+
+// IsConnected returns true if the client is connected to the broker
+func (c *Client) IsConnected() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.internalClient != nil && c.internalClient.IsConnected()
 }

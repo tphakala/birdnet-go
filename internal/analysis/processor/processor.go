@@ -2,7 +2,6 @@
 package processor
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -26,6 +25,7 @@ type Processor struct {
 	Bn                 *birdnet.BirdNET
 	BwClient           *birdweather.BwClient
 	MqttClient         *mqtt.Client
+	mqttReconnectTimer *time.Timer
 	BirdImageCache     *imageprovider.BirdImageCache
 	EventTracker       *EventTracker
 	DogBarkFilter      DogBarkFilter
@@ -109,46 +109,12 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	}
 
 	// Initialize MQTT client if enabled in settings.
-	if settings.Realtime.MQTT.Enabled {
-		p.MqttClient = mqtt.New(settings)
-
-		// Connect to the MQTT broker in a separate goroutine to avoid blocking the main thread.
-		go func() {
-			const maxRetries = 5
-			retryDelay := time.Second
-
-			for i := 0; i < maxRetries; i++ {
-				log.Println("Connecting to MQTT broker")
-
-				// Create a context with a timeout for the connection attempt
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-
-				err := p.MqttClient.Connect(ctx)
-				cancel() // Cancel the context to release resources
-
-				if err == nil {
-					log.Println("Successfully connected to MQTT broker")
-					return
-				}
-
-				log.Printf("Failed to connect to MQTT broker (attempt %d/%d): %s", i+1, maxRetries, err)
-
-				if i < maxRetries-1 {
-					log.Printf("Retrying in %v", retryDelay)
-					time.Sleep(retryDelay)
-					retryDelay *= 2 // Exponential backoff
-				}
-			}
-
-			log.Println("Failed to connect to MQTT broker after maximum retries")
-		}()
-	}
-
-	var err error
+	p.initializeMQTT()
 
 	// Initialize included species list
 	today := time.Now().Truncate(24 * time.Hour)
 
+	var err error
 	// Update location based species list
 	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
 	if err != nil {

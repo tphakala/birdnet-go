@@ -189,8 +189,9 @@ func (a MqttAction) Execute(data interface{}) error {
 	// Publish the note to the MQTT broker
 	err = a.MqttClient.Publish(ctx, a.Settings.Realtime.MQTT.Topic, string(noteJson))
 	if err != nil {
-		if err == context.DeadlineExceeded {
-			return errors.New("MQTT publish timeout")
+		if errors.Is(err, errors.New("MQTT client is not connected")) {
+			log.Println("MQTT client is not connected, skipping publish")
+			return nil
 		}
 		return err
 	}
