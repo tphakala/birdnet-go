@@ -55,7 +55,7 @@ func (p *Processor) reconnectMQTT() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := p.MqttClient.Connect(ctx); err != nil {
+	if err := p.MqttClient.EnsureConnection(ctx); err != nil {
 		log.Printf("Failed to reconnect to MQTT broker: %s", err)
 		// Schedule next reconnection attempt
 		p.mqttReconnectTimer.Reset(time.Minute)

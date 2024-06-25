@@ -79,8 +79,8 @@ func (c *Client) Publish(ctx context.Context, topic string, payload string) erro
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.internalClient == nil || !c.internalClient.IsConnected() {
-		return errors.New("MQTT client is not connected")
+	if err := c.EnsureConnection(ctx); err != nil {
+		return fmt.Errorf("failed to ensure connection: %w", err)
 	}
 
 	publishToken := c.internalClient.Publish(topic, 0, false, payload)
@@ -90,8 +90,10 @@ func (c *Client) Publish(ctx context.Context, topic string, payload string) erro
 	return publishToken.Error()
 }
 
-func (c *Client) ensureConnection(ctx context.Context) error {
+// EnsureConnection ensures that the client is connected to the broker
+func (c *Client) EnsureConnection(ctx context.Context) error {
 	if c.internalClient == nil || !c.internalClient.IsConnected() {
+		log.Println("MQTT connection not established, attempting to connect")
 		return c.Connect(ctx)
 	}
 	return nil
