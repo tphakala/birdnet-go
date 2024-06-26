@@ -74,7 +74,7 @@ var PendingDetections map[string]PendingDetection = make(map[string]PendingDetec
 var mutex sync.Mutex
 
 // func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *telemetry.Metrics) *Processor {
-func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics, birdImageCache *imageprovider.BirdImageCache) (*Processor, error) {
+func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics, birdImageCache *imageprovider.BirdImageCache) *Processor {
 	p := &Processor{
 		Settings:           settings,
 		Ds:                 ds,
@@ -114,7 +114,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := p.MqttClient.Connect(ctx); err != nil {
-			return nil, fmt.Errorf("failed to connect to MQTT broker: %w", err)
+			log.Printf("failed to connect to MQTT broker: %w", err)
 		}
 	}
 
@@ -150,7 +150,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		}
 	}
 
-	return p, nil
+	return p
 }
 
 // Start goroutine to process detections from the queue
