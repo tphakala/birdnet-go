@@ -17,6 +17,7 @@ import (
 //go:embed config.yaml
 var configFiles embed.FS
 
+// Dashboard contains settings for the web dashboard.
 type Dashboard struct {
 	Thumbnails struct {
 		Summary bool // show thumbnails on summary table
@@ -24,13 +25,117 @@ type Dashboard struct {
 	}
 }
 
+// AudioSettings contains settings for audio processing and export.
+type AudioSettings struct {
+	Source string // audio source to use for analysis
+	Export struct {
+		Debug     bool   // true to enable audio export debug
+		Enabled   bool   // export audio clips containing indentified bird calls
+		Path      string // path to audio clip export directory
+		Type      string // audio file type, wav, mp3 or flac
+		Retention struct {
+			Debug    bool   // true to enable retention debug
+			Policy   string // retention policy, "none", "age" or "usage"
+			MaxAge   string // maximum age of audio clips to keep
+			MaxUsage string // maximum disk usage percentage before cleanup
+			MinClips int    // minimum number of clips per species to keep
+		}
+	}
+}
+
+// DynamicThresholdSettings contains settings for dynamic threshold adjustment.
+type DynamicThresholdSettings struct {
+	Enabled    bool    // true to enable dynamic threshold
+	Debug      bool    // true to enable debug mode
+	Trigger    float64 // trigger threshold for dynamic threshold
+	Min        float64 // minimum threshold for dynamic threshold
+	ValidHours int     // number of hours to consider for dynamic threshold
+}
+
+// BirdweatherSettings contains settings for Birdweather integration.
+type BirdweatherSettings struct {
+	Enabled          bool    // true to enable birdweather uploads
+	Debug            bool    // true to enable debug mode
+	ID               string  // birdweather ID
+	Threshold        float64 // threshold for prediction confidence for uploads
+	LocationAccuracy float64 // accuracy of location in meters
+}
+
+// OpenWeatherSettings contains settings for OpenWeather integration.
+type OpenWeatherSettings struct {
+	Enabled  bool   // true to enable OpenWeather integration
+	Debug    bool   // true to enable debug mode
+	APIKey   string // OpenWeather API key
+	Endpoint string // OpenWeather API endpoint
+	Interval int    // interval for fetching weather data in minutes
+	Units    string // units of measurement: standard, metric, or imperial
+	Language string // language code for the response
+}
+
+// PrivacyFilterSettings contains settings for the privacy filter.
+type PrivacyFilterSettings struct {
+	Debug      bool    // true to enable debug mode
+	Enabled    bool    // true to enable privacy filter
+	Confidence float32 // confidence threshold for human detection
+}
+
+// DogBarkFilterSettings contains settings for the dog bark filter.
+type DogBarkFilterSettings struct {
+	Debug      bool    // true to enable debug mode
+	Enabled    bool    // true to enable dog bark filter
+	Confidence float32 // confidence threshold for dog bark detection
+	Remember   int     // how long we should remember bark for filtering?
+}
+
+// RTSPSettings contains settings for RTSP streaming.
+type RTSPSettings struct {
+	Transport string   // RTSP Transport Protocol
+	Urls      []string // RTSP stream URL
+}
+
+// MQTTSettings contains settings for MQTT integration.
+type MQTTSettings struct {
+	Enabled  bool   // true to enable MQTT
+	Broker   string // MQTT (tcp://host:port)
+	Topic    string // MQTT topic
+	Username string // MQTT username
+	Password string // MQTT password
+}
+
+// TelemetrySettings contains settings for telemetry.
+type TelemetrySettings struct {
+	Enabled bool   // true to enable Prometheus compatible telemetry endpoint
+	Listen  string // IP address and port to listen on
+}
+
+// RealtimeSettings contains all settings related to realtime processing.
+type RealtimeSettings struct {
+	Interval         int                      // minimum interval between log messages in seconds
+	ProcessingTime   bool                     // true to report processing time for each prediction
+	Audio            AudioSettings            // Audio processing settings
+	Dashboard        Dashboard                // Dashboard settings
+	DynamicThreshold DynamicThresholdSettings // Dynamic threshold settings
+	Log              struct {
+		Enabled bool   // true to enable OBS chat log
+		Path    string // path to OBS chat log
+	}
+	Birdweather   BirdweatherSettings   // Birdweather integration settings
+	OpenWeather   OpenWeatherSettings   // OpenWeather integration settings
+	PrivacyFilter PrivacyFilterSettings // Privacy filter settings
+	DogBarkFilter DogBarkFilterSettings // Dog bark filter settings
+	RTSP          RTSPSettings          // RTSP settings
+	MQTT          MQTTSettings          // MQTT settings
+	Telemetry     TelemetrySettings     // Telemetry settings
+}
+
+// Settings contains all configuration options for the BirdNET-Go application.
 type Settings struct {
 	Debug bool // true to enable debug mode
 
 	Main struct {
-		Name      string // name of BirdNET-Go node, can be used to identify source of notes
-		TimeAs24h bool   // true 24-hour time format, false 12-hour time format
-		Log       LogConfig
+		Name      string    // name of BirdNET-Go node, can be used to identify source of notes
+		TimeAs24h bool      // true 24-hour time format, false 12-hour time format
+		Log       LogConfig // logging configuration
 	}
 
 	BirdNET struct {
@@ -52,98 +157,13 @@ type Settings struct {
 		Recursive bool   // true for recursive directory analysis
 	}
 
-	Realtime struct {
-		Interval       int  // minimum interval between log messages in seconds
-		ProcessingTime bool // true to report processing time for each prediction
-
-		Audio struct {
-			Source string // audio source to use for analysis
-			Export struct {
-				Debug     bool   // true to enable audio export debug
-				Enabled   bool   // export audio clips containing indentified bird calls
-				Path      string // path to audio clip export directory
-				Type      string // audio file type, wav, mp3 or flac
-				Retention struct {
-					Debug    bool   // true to enable retention debug
-					Policy   string // retention policy, "none", "age" or "usage"
-					MaxAge   string // maximum age of audio clips to keep
-					MaxUsage string // maximum disk usage percentage before cleanup
-					MinClips int    // minimum number of clips per species to keep
-				}
-			}
-		}
-
-		// Apply dashboard settings
-		Dashboard Dashboard
-
-		DynamicThreshold struct {
-			Enabled    bool    // true to enable dynamic threshold
-			Debug      bool    // true to enable debug mode
-			Trigger    float64 // trigger threshold for dynamic threshold
-			Min        float64 // minimum threshold for dynamic threshold
-			ValidHours int     // number of hours to consider for dynamic threshold
-		}
-
-		Log struct {
-			Enabled bool   // true to enable OBS chat log
-			Path    string // path to OBS chat log
-		}
-
-		Birdweather struct {
-			Enabled          bool    // true to enable birdweather uploads
-			Debug            bool    // true to enable debug mode
-			ID               string  // birdweather ID
-			Threshold        float64 // threshold for prediction confidence for uploads
-			LocationAccuracy float64 // accuracy of location in meters
-		}
-
-		OpenWeather struct {
-			Enabled  bool   // true to enable OpenWeather integration
-			Debug    bool   // true to enable debug mode
-			APIKey   string // OpenWeather API key
-			Endpoint string // OpenWeather API endpoint
-			Interval int    // interval for fetching weather data in minutes
-			Units    string // units of measurement: standard, metric, or imperial
-			Language string // language code for the response
-		}
-
-		PrivacyFilter struct {
-			Debug      bool    // true to enable debug mode
-			Enabled    bool    // true to enable privacy filter
-			Confidence float32 // confidence threshold for human detection
-		}
-
-		DogBarkFilter struct {
-			Debug      bool    // true to enable debug mode
-			Enabled    bool    // true to enable dog bark filter
-			Confidence float32 // confidence threshold for dog bark detection
-			Remember   int     // how long we should remember bark for filtering?
-		}
-
-		RTSP struct {
-			Transport string   // RTSP Transport Protocol
-			Urls      []string // RTSP stream URL
-		}
-
-		MQTT struct {
-			Enabled  bool   // true to enable MQTT
-			Broker   string // MQTT (tcp://host:port)
-			Topic    string // MQTT topic
-			Username string // MQTT username
-			Password string // MQTT password
-		}
-
-		Telemetry struct {
-			Enabled bool   // true to enable Prometheus compatible telemetry endpoint
-			Listen  string // IP address and port to listen on
-		}
-	}
+	Realtime RealtimeSettings // Realtime processing settings
 
 	WebServer struct {
-		Enabled bool   // true to enable web server
-		Port    string // port for web server
-		AutoTLS bool   // true to enable auto TLS
-		Log     LogConfig
+		Enabled bool      // true to enable web server
+		Port    string    // port for web server
+		AutoTLS bool      // true to enable auto TLS
+		Log     LogConfig // logging configuration for web server
 	}
 
 	Output struct {
