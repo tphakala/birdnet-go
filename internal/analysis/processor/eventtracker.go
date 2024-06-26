@@ -14,6 +14,7 @@ const (
 	LogToFile                          // Represents a log to file event
 	SendNotification                   // Represents a send notification event
 	BirdWeatherSubmit                  // Represents a bird weather submit event
+	MQTTPublish                        // Represents an MQTT publish event
 )
 
 // EventBehaviorFunc defines the signature for functions that determine the behavior of an event.

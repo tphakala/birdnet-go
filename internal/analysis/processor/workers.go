@@ -106,12 +106,14 @@ func (p *Processor) getDefaultActions(detection Detections) []Action {
 	}
 
 	// Add MQTT action if enabled
-	if p.Settings.Realtime.MQTT.Enabled {
-		if p.MqttClient == nil {
-			log.Println("MQTT client is not initialized, skipping MQTT action")
-			return actions
-		}
-		actions = append(actions, MqttAction{Settings: p.Settings, MqttClient: p.MqttClient, EventTracker: p.EventTracker, Note: detection.Note, BirdImageCache: p.BirdImageCache})
+	if p.Settings.Realtime.MQTT.Enabled && p.MqttClient != nil {
+		actions = append(actions, MqttAction{
+			Settings:       p.Settings,
+			MqttClient:     p.MqttClient,
+			EventTracker:   p.EventTracker,
+			Note:           detection.Note,
+			BirdImageCache: p.BirdImageCache,
+		})
 	}
 
 	// Check if UpdateRangeFilterAction needs to be executed for the day
