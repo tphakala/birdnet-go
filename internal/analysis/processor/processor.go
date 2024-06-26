@@ -114,7 +114,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := p.MqttClient.Connect(ctx); err != nil {
-			log.Printf("failed to connect to MQTT broker: %w", err)
+			log.Printf("failed to connect to MQTT broker: %s", err)
 		}
 	}
 
