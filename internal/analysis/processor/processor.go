@@ -2,6 +2,7 @@
 package processor
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -24,9 +25,7 @@ type Processor struct {
 	Ds                 datastore.Interface
 	Bn                 *birdnet.BirdNET
 	BwClient           *birdweather.BwClient
-	MqttClient         *mqtt.Client
-	mqttReconnectTimer *time.Timer
-	mqttReconnectStop  chan struct{}
+	MqttClient         mqtt.Client
 	BirdImageCache     *imageprovider.BirdImageCache
 	EventTracker       *EventTracker
 	DogBarkFilter      DogBarkFilter
@@ -110,14 +109,18 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	}
 
 	// Initialize MQTT client if enabled in settings.
-	if err := p.initializeMQTT(); err != nil {
-		return nil, fmt.Errorf("failed to initialize MQTT: %w", err)
+	if settings.Realtime.MQTT.Enabled {
+		p.MqttClient = mqtt.NewClient(settings)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := p.MqttClient.Connect(ctx); err != nil {
+			return nil, fmt.Errorf("failed to connect to MQTT broker: %w", err)
+		}
 	}
 
 	// Initialize included species list
 	today := time.Now().Truncate(24 * time.Hour)
 
-	var err error
 	// Update location based species list
 	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
 	if err != nil {

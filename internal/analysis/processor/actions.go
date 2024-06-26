@@ -5,7 +5,6 @@ package processor
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -60,7 +59,7 @@ type MqttAction struct {
 	Settings       *conf.Settings
 	Note           datastore.Note
 	BirdImageCache *imageprovider.BirdImageCache
-	MqttClient     *mqtt.Client
+	MqttClient     mqtt.Client
 	EventTracker   *EventTracker
 }
 
@@ -161,9 +160,20 @@ type NoteWithBirdImage struct {
 
 // Execute sends the note to the MQTT broker
 func (a MqttAction) Execute(data interface{}) error {
+	// First, check if the MQTT client is connected
+	if !a.MqttClient.IsConnected() {
+		log.Println("MQTT client is not connected, skipping publish")
+		return nil
+	}
+
 	// Validate MQTT settings
 	if a.Settings.Realtime.MQTT.Topic == "" {
-		return errors.New("MQTT topic is not specified")
+		return fmt.Errorf("MQTT topic is not specified")
+	}
+
+	species := strings.ToLower(a.Note.CommonName)
+	if !a.EventTracker.TrackEvent(species, MQTTPublish) {
+		return nil // Event throttled, skip publishing
 	}
 
 	// Get bird image of detected bird
@@ -189,16 +199,13 @@ func (a MqttAction) Execute(data interface{}) error {
 	// Publish the note to the MQTT broker
 	err = a.MqttClient.Publish(ctx, a.Settings.Realtime.MQTT.Topic, string(noteJson))
 	if err != nil {
-		if errors.Is(err, errors.New("MQTT client is not connected")) {
-			log.Println("MQTT client is not connected, skipping publish")
-			return nil
-		}
-		return err
+		return fmt.Errorf("failed to publish to MQTT: %w", err)
 	}
 
 	return nil
 }
 
+// Execute updates the range filter species list, this is run every day
 func (a UpdateRangeFilterAction) Execute(data interface{}) error {
 	today := time.Now().Truncate(24 * time.Hour)
 	if today.After(*a.SpeciesListUpdated) {
