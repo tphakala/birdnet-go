@@ -1,4 +1,4 @@
-// client.go
+// client.go: Package mqtt provides an abstraction for MQTT client functionality.
 package mqtt
 
 import (
@@ -27,10 +27,11 @@ type client struct {
 func NewClient(settings *conf.Settings) Client {
 	return &client{
 		config: Config{
-			Broker:   settings.Realtime.MQTT.Broker,
-			ClientID: "birdnet-go",
-			Username: settings.Realtime.MQTT.Username,
-			Password: settings.Realtime.MQTT.Password,
+			Broker:            settings.Realtime.MQTT.Broker,
+			ClientID:          settings.Main.Name, // Use the node name as client ID
+			Username:          settings.Realtime.MQTT.Username,
+			Password:          settings.Realtime.MQTT.Password,
+			ReconnectCooldown: 5 * time.Second, // default to 5 seconds
 		},
 		reconnectStop: make(chan struct{}),
 	}
@@ -42,14 +43,31 @@ func (c *client) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if time.Since(c.lastConnAttempt) < 1*time.Minute {
-		return fmt.Errorf("connection attempt too recent")
+	if time.Since(c.lastConnAttempt) < c.config.ReconnectCooldown {
+		return fmt.Errorf("connection attempt too recent, last attempt was %v ago", time.Since(c.lastConnAttempt))
 	}
 	c.lastConnAttempt = time.Now()
 
-	// Resolve the broker's hostname
-	if err := c.resolveBrokerHostname(); err != nil {
-		return fmt.Errorf("failed to resolve broker hostname: %w", err)
+	// Parse the broker URL
+	u, err := url.Parse(c.config.Broker)
+	if err != nil {
+		return fmt.Errorf("invalid broker URL: %w", err)
+	}
+
+	host := u.Hostname()
+
+	// Check if the host is an IP address
+	if net.ParseIP(host) == nil {
+		// It's not an IP address, so attempt to resolve it
+		_, err = net.DefaultResolver.LookupHost(ctx, host)
+		if err != nil {
+			// If it's a DNS error, return it directly
+			if dnsErr, ok := err.(*net.DNSError); ok {
+				return dnsErr
+			}
+			// For other errors, wrap it
+			return fmt.Errorf("failed to resolve hostname %s: %w", host, err)
+		}
 	}
 
 	opts := mqtt.NewClientOptions()
