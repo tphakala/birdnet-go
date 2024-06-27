@@ -94,23 +94,6 @@ func (c *client) Connect(ctx context.Context) error {
 	return nil
 }
 
-// resolveBrokerHostname attempts to resolve the hostname of the MQTT broker.
-// It returns an error if the resolution fails.
-func (c *client) resolveBrokerHostname() error {
-	u, err := url.Parse(c.config.Broker)
-	if err != nil {
-		return fmt.Errorf("invalid broker URL: %w", err)
-	}
-
-	host := u.Hostname()
-	_, err = net.LookupHost(host)
-	if err != nil {
-		return fmt.Errorf("failed to resolve hostname %s: %w", host, err)
-	}
-
-	return nil
-}
-
 // Publish sends a message to the specified topic on the MQTT broker.
 func (c *client) Publish(ctx context.Context, topic string, payload string) error {
 	c.mu.Lock()
