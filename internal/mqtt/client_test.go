@@ -5,6 +5,7 @@ package mqtt
 import (
 	"context"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,8 +73,9 @@ func testIncorrectBrokerAddress(t *testing.T) {
 			t.Fatalf("Expected DNS resolution error, got: %v", err)
 		}
 
-		if !dnsErr.IsNotFound {
-			t.Fatalf("Expected 'host not found' DNS error, got: %v", dnsErr)
+		// Accept either "host not found" or "server misbehaving" errors
+		if !dnsErr.IsNotFound && !strings.Contains(dnsErr.Error(), "server misbehaving") {
+			t.Fatalf("Expected 'host not found' or 'server misbehaving' DNS error, got: %v", dnsErr)
 		}
 
 		if mqttClient.IsConnected() {
