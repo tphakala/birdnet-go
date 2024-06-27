@@ -1,8 +1,9 @@
-// Package mqtt provides an abstraction for MQTT client functionality.
+// mqtt.go: Package mqtt provides an abstraction for MQTT client functionality.
 package mqtt
 
 import (
 	"context"
+	"time"
 )
 
 // Client defines the interface for MQTT client operations.
@@ -24,8 +25,9 @@ type Client interface {
 
 // Config holds the configuration for the MQTT client.
 type Config struct {
-	Broker   string
-	ClientID string
-	Username string
-	Password string
+	Broker            string
+	ClientID          string
+	Username          string
+	Password          string
+	ReconnectCooldown time.Duration
 }
