@@ -1,6 +1,6 @@
 {{define "recentDetections"}}
 
-<table class="hidden sm:table table w-full text-sm text-left text-gray-600 dark:text-gray-300">
+<table class="hidden sm:table table w-full text-sm text-left">
   <thead class="text-xs">
     <tr>
       <th scope="col" class="py-2 px-6" style="width:15%;">Date</th>
@@ -16,9 +16,14 @@
   <tbody>
     {{range .Notes}}
     <tr class="">
-      <td class="py-1 px-6">{{.Date}}</td>
-      <td class="py-1 px-6">{{.Time}}</td>
-      <td class="py-1 px-6">
+      <!-- Date -->
+      <td class="py-1 px-6 font-normal">{{.Date}}</td>
+
+      <!-- Time --> 
+      <td class="py-1 px-6 font-normal">{{.Time}}</td>
+
+      <!-- Bird species -->
+      <td class="py-1 px-6 font-normal">
         <a href="#"
         hx-get="/note?id={{.ID}}"
         hx-target="#mainContent"
@@ -66,42 +71,47 @@
 <!-- Responsive layout for small screens -->
 <div class="sm:hidden">
   {{range .Notes}}
-  <div class="bg-white dark:bg-gray-800 shadow-md rounded-lg p-4 mb-4">
-    <div class="flex items-center space-x-2">
-      <div>{{.Time}}</div>
-            
-      <div>
-          <a href="#"
-          hx-get="/note?id={{.ID}}"
-          hx-target="#mainContent"
-          hx-swap="innerHTML"
-          hx-trigger="click"
-          hx-push-url="true">
-          {{title .CommonName}}
-        </a>
-
-        <!-- Bird thumbnail  -->
-        {{if $.DashboardSettings.Thumbnails.Recent}}
-        <div class="thumbnail-container">
-          <img loading="lazy" width="100" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
-          <div class="thumbnail-tooltip hidden">
-            {{thumbnailAttribution .ScientificName}}
-          </div>
-        </div>
-        {{end}}
-      </div>
+  <div class="shadow-md rounded-lg p-4 mb-4">
+    <!-- First row: timestamp, bird species, thumbnail, and confidence -->
+    <div class="flex items-center mb-3">
+      <!-- Timestamp -->
+      <span class="text-sm font-normal mr-2">{{.Time}}</span>
       
-      <span class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">{{confidence .Confidence}}</span>
+      <!-- Bird species -->
+      <a href="#"
+        hx-get="/note?id={{.ID}}"
+        hx-target="#mainContent"
+        hx-swap="innerHTML"
+        hx-trigger="click"
+        hx-push-url="true"
+        class="text-sm font-normal flex-grow">
+        {{title .CommonName}}
+      </a>
+
+      <!-- Thumbnail -->
+      {{if $.DashboardSettings.Thumbnails.Recent}}
+      <div class="thumbnail-container w-20 mx-2">
+        <img loading="lazy" src="{{thumbnail .ScientificName}}" class="rounded-md">
+      </div>
+      {{end}}
+
+      <!-- Confidence indicator -->
+      <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium text-xs px-2 py-1 rounded">
+        {{confidence .Confidence}}
+      </div>
     </div>
 
-    <div class="flex justify-center mt-3">
-      <div class="w-full">
-        <img loading="lazy" width="400" src="/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
-        <audio controls class="audio-control" preload="metadata">
-          <source src="{{.ClipName}}" type="audio/wav">
+    <!-- Second row: Spectrogram -->
+    <div class="mb-3">
+      <img loading="lazy" src="/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram" class="w-full h-auto rounded-md shadow-sm">
+    </div>
+   
+    <!-- Audio player -->
+    <div>
+      <audio controls class="audio-control w-full" preload="metadata">
+        <source src="{{.ClipName}}" type="audio/wav">
           Your browser does not support the audio element.
-        </audio>
-      </div>
+      </audio>
     </div>
   </div>
   {{end}}
