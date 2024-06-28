@@ -243,7 +243,7 @@ func (ds *DataStore) GetHourFormat() string {
 	case "sqlite":
 		return "strftime('%H', time)"
 	case "mysql":
-		return "DATE_FORMAT(time, '%H')"
+		return "TIME_FORMAT(time, '%H')"
 	default:
 		// Log or handle unsupported database types
 		return ""
