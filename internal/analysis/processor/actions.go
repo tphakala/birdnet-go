@@ -171,11 +171,6 @@ func (a MqttAction) Execute(data interface{}) error {
 		return fmt.Errorf("MQTT topic is not specified")
 	}
 
-	species := strings.ToLower(a.Note.CommonName)
-	if !a.EventTracker.TrackEvent(species, MQTTPublish) {
-		return nil // Event throttled, skip publishing
-	}
-
 	// Get bird image of detected bird
 	birdImage, err := a.BirdImageCache.Get(a.Note.ScientificName)
 	if err != nil {
