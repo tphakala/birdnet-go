@@ -59,7 +59,7 @@ func (l *wikiMediaProvider) queryAndGetFirstPage(params map[string]string) (*jas
 
 // fetch retrieves the bird image for a given scientific name.
 // It queries for the thumbnail and author information, then constructs a BirdImage.
-func (l *wikiMediaProvider) fetch(scientificName string) (BirdImage, error) {
+func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
 	thumbnailURL, thumbnailSourceFile, err := l.queryThumbnail(scientificName)
 	if err != nil {
 		return BirdImage{}, fmt.Errorf("failed to query thumbnail of bird: %s : %w", scientificName, err)

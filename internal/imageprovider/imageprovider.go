@@ -13,7 +13,7 @@ import (
 
 // ImageProvider defines the interface for fetching bird images.
 type ImageProvider interface {
-	fetch(scientificName string) (BirdImage, error)
+	Fetch(scientificName string) (BirdImage, error)
 }
 
 // BirdImage represents the metadata of a bird image.
@@ -37,12 +37,22 @@ type BirdImageCache struct {
 // emptyImageProvider is an ImageProvider that always returns an empty BirdImage.
 type emptyImageProvider struct{}
 
-func (l *emptyImageProvider) fetch(scientificName string) (BirdImage, error) {
+func (l *emptyImageProvider) Fetch(scientificName string) (BirdImage, error) {
 	return BirdImage{}, nil
 }
 
+// SetNonBirdImageProvider allows setting a custom ImageProvider for non-bird entries
+func (c *BirdImageCache) SetNonBirdImageProvider(provider ImageProvider) {
+	c.nonBirdImageProvider = provider
+}
+
+// SetImageProvider allows setting a custom ImageProvider for testing purposes.
+func (c *BirdImageCache) SetImageProvider(provider ImageProvider) {
+	c.birdImageProvider = provider
+}
+
 // initCache initializes a new BirdImageCache with the given ImageProvider.
-func initCache(e ImageProvider, t *telemetry.Metrics) *BirdImageCache {
+func InitCache(e ImageProvider, t *telemetry.Metrics) *BirdImageCache {
 	return &BirdImageCache{
 		birdImageProvider:    e,
 		nonBirdImageProvider: &emptyImageProvider{},
@@ -56,7 +66,7 @@ func CreateDefaultCache(metrics *telemetry.Metrics) (*BirdImageCache, error) {
 	if err != nil {
 		return nil, err
 	}
-	return initCache(provider, metrics), nil
+	return InitCache(provider, metrics), nil
 }
 
 // Get retrieves the BirdImage for a given scientific name from the cache,
@@ -121,7 +131,7 @@ func (c *BirdImageCache) fetch(scientificName string) (BirdImage, error) {
 	}
 
 	startTime := time.Now()
-	birdImage, err := imageProviderToUse.fetch(scientificName)
+	birdImage, err := imageProviderToUse.Fetch(scientificName)
 	duration := time.Since(startTime).Seconds()
 	c.metrics.ObserveDownloadDuration(duration)
 
