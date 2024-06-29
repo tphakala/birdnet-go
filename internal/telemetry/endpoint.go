@@ -1,4 +1,4 @@
-// endpoint.go: Prohmetheus compatible telemetry endpoint
+// Package telemetry provides tools for monitoring and debugging the BirdNET-Go application.
 package telemetry
 
 import (
@@ -12,52 +12,84 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// Endpoint handles all operations related to Prometehus compatible telemetry
+// Endpoint handles all operations related to Prometheus-compatible telemetry.
 type Endpoint struct {
 	server        *http.Server
-	ListenAddress string
+	listenAddress string
+	metrics       *Metrics
 }
 
-// New creates a new instance of telemetry Endpoint
-func NewEndpoint(settings *conf.Settings) (*Endpoint, error) {
+// NewEndpoint creates a new instance of telemetry Endpoint.
+//
+// It initializes the Endpoint with the provided settings and metrics.
+// If telemetry is not enabled in the settings, it returns an error.
+//
+// Parameters:
+//   - settings: A pointer to the application settings.
+//   - metrics: A pointer to the Metrics instance containing all telemetry metrics.
+//
+// Returns:
+//   - A pointer to the new Endpoint instance and nil error on success.
+//   - nil and an error if telemetry is not enabled in the settings.
+//
+// The function does not create new metrics but uses the provided Metrics instance.
+// Ensure that the Metrics instance is properly initialized before calling this function.
+func NewEndpoint(settings *conf.Settings, metrics *Metrics) (*Endpoint, error) {
 	if !settings.Realtime.Telemetry.Enabled {
-		return nil, fmt.Errorf("metrics not enabled")
+		return nil, fmt.Errorf("telemetry not enabled in settings")
 	}
 
 	return &Endpoint{
-		ListenAddress: settings.Realtime.Telemetry.Listen,
+		listenAddress: settings.Realtime.Telemetry.Listen,
+		metrics:       metrics,
 	}, nil
 }
 
-// Start the HTTP server for telemetry endpoint and listen for the quit signal to shut down.
-func (e *Endpoint) Start(metrics *Metrics, wg *sync.WaitGroup, quitChan <-chan struct{}) {
+// Start initializes and runs the HTTP server for the telemetry endpoint.
+//
+// It sets up the necessary routes, starts the server in a separate goroutine,
+// and listens for a quit signal to shut down gracefully.
+//
+// Parameters:
+//   - wg: A pointer to a WaitGroup for coordinating goroutine completion.
+//   - quitChan: A channel for receiving the quit signal.
+func (e *Endpoint) Start(wg *sync.WaitGroup, quitChan <-chan struct{}) {
 	mux := http.NewServeMux()
-	RegisterMetricsHandlers(mux) // Registering metrics handlers
-	RegisterDebugHandlers(mux)   // Registering debug handlers
+	e.metrics.RegisterHandlers(mux)
+	RegisterDebugHandlers(mux)
 
 	e.server = &http.Server{
-		Addr:    e.ListenAddress,
+		Addr:    e.listenAddress,
 		Handler: mux,
 	}
 
-	// Run the server in a separate goroutine so that it doesn't block.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		log.Printf("Telemetry endpoint starting at %s", e.ListenAddress)
+		log.Printf("Telemetry endpoint starting at %s", e.listenAddress)
 		if err := e.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start telemetry HTTP server at %s: %v", e.ListenAddress, err)
+			log.Printf("Telemetry HTTP server error: %v", err)
 		}
 	}()
 
-	// Listen for quit signal
-	go func() {
-		<-quitChan
-		log.Println("Quit signal received, stopping telemetry server.")
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := e.server.Shutdown(ctx); err != nil {
-			log.Printf("Failed to shutdown telemetry server gracefully: %v", err)
-		}
-	}()
+	go e.gracefulShutdown(quitChan)
+}
+
+// gracefulShutdown waits for the quit signal and shuts down the server gracefully.
+func (e *Endpoint) gracefulShutdown(quitChan <-chan struct{}) {
+	<-quitChan
+	log.Println("Stopping telemetry server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := e.server.Shutdown(ctx); err != nil {
+		log.Printf("Telemetry server shutdown error: %v", err)
+	}
+}
+
+// GetMetrics returns the Metrics instance associated with this Endpoint.
+//
+// Returns:
+//   - A pointer to the Metrics instance.
+func (e *Endpoint) GetMetrics() *Metrics {
+	return e.metrics
 }

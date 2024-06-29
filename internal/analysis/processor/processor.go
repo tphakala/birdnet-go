@@ -108,13 +108,18 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		p.BwClient = birdweather.New(settings)
 	}
 
+	var err error
 	// Initialize MQTT client if enabled in settings.
 	if settings.Realtime.MQTT.Enabled {
-		p.MqttClient = mqtt.NewClient(settings)
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if err := p.MqttClient.Connect(ctx); err != nil {
-			log.Printf("failed to connect to MQTT broker: %s", err)
+		p.MqttClient, err = mqtt.NewClient(settings, p.Metrics)
+		if err != nil {
+			log.Printf("failed to create MQTT client: %s", err)
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := p.MqttClient.Connect(ctx); err != nil {
+				log.Printf("failed to connect to MQTT broker: %s", err)
+			}
 		}
 	}
 
@@ -217,6 +222,11 @@ func (p *Processor) processDetections(item *queue.Results) {
 // processResults processes the results from the BirdNET prediction and returns a list of detections.
 func (p *Processor) processResults(item *queue.Results) []Detections {
 	var detections []Detections
+
+	// Collect processing time metric
+	if p.Settings.Realtime.Telemetry.Enabled && p.Metrics != nil && p.Metrics.BirdNET != nil {
+		p.Metrics.BirdNET.SetProcessTime(float64(item.ElapsedTime.Milliseconds()))
+	}
 
 	// Process each result in item.Results
 	for _, result := range item.Results {
@@ -404,9 +414,9 @@ func (p *Processor) pendingDetectionsFlusher() {
 					// Detection is now processed, remove it from pending detections map.
 					delete(PendingDetections, species)
 
-					// Update Prometheus metrics detection counter
-					if p.Settings.Realtime.Telemetry.Enabled {
-						p.Metrics.IncrementDetectionCounter(item.Detection.Note.CommonName)
+					// Update BirdNET metrics detection counter
+					if p.Settings.Realtime.Telemetry.Enabled && p.Metrics != nil && p.Metrics.BirdNET != nil {
+						p.Metrics.BirdNET.IncrementDetectionCounter(item.Detection.Note.CommonName)
 					}
 				}
 			}

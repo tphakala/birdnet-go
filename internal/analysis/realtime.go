@@ -199,13 +199,14 @@ func startTelemetryEndpoint(wg *sync.WaitGroup, settings *conf.Settings, metrics
 	// Initialize Prometheus metrics endpoint if enabled
 	if settings.Realtime.Telemetry.Enabled {
 		// Initialize metrics endpoint
-		telemetryEndpoint, err := telemetry.NewEndpoint(settings)
+		telemetryEndpoint, err := telemetry.NewEndpoint(settings, metrics)
 		if err != nil {
-			log.Printf("Error initializing metrics manager: %v", err)
+			log.Printf("Error initializing telemetry endpoint: %v", err)
+			return
 		}
 
 		// Start metrics server
-		telemetryEndpoint.Start(metrics, wg, quitChan)
+		telemetryEndpoint.Start(wg, quitChan)
 	}
 }
 
@@ -267,23 +268,22 @@ func clipCleanupMonitor(wg *sync.WaitGroup, dataStore datastore.Interface, quitC
 
 // initBirdImageCache initializes the bird image cache by fetching all detected species from the database.
 func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *imageprovider.BirdImageCache {
-	// Create a default bird image cache
-	birdImageCache, err := imageprovider.CreateDefaultCache()
+	birdImageCache, err := imageprovider.CreateDefaultCache(metrics)
 	if err != nil {
 		log.Printf("Failed to create image cache: %v", err)
 		return nil
 	}
-	birdImageCache.Metrics = metrics
 
 	// Initialize the image cache by fetching all detected species in the database
 	go func() {
 		// Retrieve the list of all detected species from the datastore
 		speciesList, err := ds.GetAllDetectedSpecies()
 		if err != nil {
-			// DEBUG
-			//log.Printf("Failed to get detected species: %v", err)
+			log.Printf("Failed to get detected species: %v", err)
 			return
 		}
+
+		//log.Printf("Fetching images for %d species", len(speciesList))
 
 		// Use a WaitGroup to wait for all goroutines to complete
 		var wg sync.WaitGroup
@@ -297,22 +297,16 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 				// Attempt to fetch the image for the given species
 				_, err := birdImageCache.Get(speciesName)
 				if err != nil {
-					//DEBUG, temporarily disabled
-					//TODO add settings for thumbnails and its debug
-					if false {
-						log.Printf("Failed to get image for species %s: %v\n", speciesName, err)
-					}
+					//log.Printf("Failed to get image for species %s: %v\n", speciesName, err)
+				} else {
+					//log.Printf("Successfully fetched image for species %s\n", speciesName)
 				}
-				// Update metrics after fetching
-				birdImageCache.UpdateMetrics()
 			}(species.ScientificName)
 		}
 
 		// Wait for all goroutines to complete
 		wg.Wait()
-
-		// Update metrics after initialization
-		birdImageCache.UpdateMetrics()
+		log.Println("Finished initializing BirdImageCache")
 	}()
 
 	return birdImageCache

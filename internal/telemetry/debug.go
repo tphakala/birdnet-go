@@ -1,4 +1,4 @@
-// debug.go: pprof debug routes and helpers for telemetry package
+// Package telemetry provides tools for monitoring and debugging the BirdNET-Go application.
 package telemetry
 
 import (
@@ -6,9 +6,30 @@ import (
 	"net/http/pprof"
 )
 
+// debugPath is the base URL path for pprof debugging endpoints.
 const debugPath = "/debug/pprof/"
 
-// RegisterDebugHandlers adds pprof debugging routes to the provided mux
+// RegisterDebugHandlers adds pprof debugging routes to the provided http.ServeMux.
+//
+// This function registers various pprof handlers for profiling and debugging purposes.
+// It should only be used in development or controlled environments, as it can expose
+// sensitive information about the application's internals.
+//
+// The following endpoints are registered:
+//   - /debug/pprof/
+//   - /debug/pprof/cmdline
+//   - /debug/pprof/profile
+//   - /debug/pprof/symbol
+//   - /debug/pprof/trace
+//   - /debug/pprof/allocs
+//   - /debug/pprof/goroutine
+//   - /debug/pprof/heap
+//   - /debug/pprof/threadcreate
+//   - /debug/pprof/block
+//   - /debug/pprof/mutex
+//
+// Parameters:
+//   - mux: The http.ServeMux to which the debug handlers will be added.
 func RegisterDebugHandlers(mux *http.ServeMux) {
 	mux.HandleFunc(debugPath, pprof.Index)
 	mux.HandleFunc(debugPath+"cmdline", pprof.Cmdline)
