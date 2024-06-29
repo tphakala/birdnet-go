@@ -30,4 +30,5 @@ type Config struct {
 	Username          string
 	Password          string
 	ReconnectCooldown time.Duration
+	ReconnectDelay    time.Duration
 }
