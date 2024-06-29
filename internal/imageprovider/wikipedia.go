@@ -1,4 +1,4 @@
-// wikipedia.go: contains code for wikipedia image provider
+// wikipedia.go: Package imageprovider provides functionality for fetching and caching bird images.
 package imageprovider
 
 import (
@@ -12,10 +12,12 @@ import (
 	"golang.org/x/net/html"
 )
 
+// wikiMediaProvider implements the ImageProvider interface for Wikipedia.
 type wikiMediaProvider struct {
 	client *mwclient.Client
 }
 
+// wikiMediaAuthor represents the author information for a Wikipedia image.
 type wikiMediaAuthor struct {
 	name        string
 	URL         string
@@ -23,7 +25,8 @@ type wikiMediaAuthor struct {
 	licenseURL  string
 }
 
-// NewWikiMediaProvider creates a new Wikipedia media provider
+// NewWikiMediaProvider creates a new Wikipedia media provider.
+// It initializes a new mwclient for interacting with the Wikipedia API.
 func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 	client, err := mwclient.New("https://wikipedia.org/w/api.php", "BirdNET-Go")
 	if err != nil {
@@ -34,7 +37,8 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 	}, nil
 }
 
-// queryAndGetFirstPage queries Wikipedia with given parameters and returns the first page hit
+// queryAndGetFirstPage queries Wikipedia with given parameters and returns the first page hit.
+// It handles the API request and response parsing.
 func (l *wikiMediaProvider) queryAndGetFirstPage(params map[string]string) (*jason.Object, error) {
 	resp, err := l.client.Get(params)
 	if err != nil {
@@ -53,21 +57,19 @@ func (l *wikiMediaProvider) queryAndGetFirstPage(params map[string]string) (*jas
 	return pages[0], nil
 }
 
-// fetch retrieves the bird image for a given scientific name
-func (l *wikiMediaProvider) fetch(scientificName string) (BirdImage, error) {
-	// Query for the thumbnail image URL and source file name
+// fetch retrieves the bird image for a given scientific name.
+// It queries for the thumbnail and author information, then constructs a BirdImage.
+func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
 	thumbnailURL, thumbnailSourceFile, err := l.queryThumbnail(scientificName)
 	if err != nil {
 		return BirdImage{}, fmt.Errorf("failed to query thumbnail of bird: %s : %w", scientificName, err)
 	}
 
-	// Query for the image author information
 	authorInfo, err := l.queryAuthorInfo(thumbnailSourceFile)
 	if err != nil {
 		return BirdImage{}, fmt.Errorf("failed to query thumbnail credit of bird: %s : %w", scientificName, err)
 	}
 
-	// Return the bird image struct with the image URL and author information
 	return BirdImage{
 		URL:         thumbnailURL,
 		AuthorName:  authorInfo.name,
@@ -77,7 +79,8 @@ func (l *wikiMediaProvider) fetch(scientificName string) (BirdImage, error) {
 	}, nil
 }
 
-// queryThumbnail queries Wikipedia for the thumbnail image of the given scientific name
+// queryThumbnail queries Wikipedia for the thumbnail image of the given scientific name.
+// It returns the URL and file name of the thumbnail.
 func (l *wikiMediaProvider) queryThumbnail(scientificName string) (url, fileName string, err error) {
 	params := map[string]string{
 		"action":      "query",
@@ -107,7 +110,8 @@ func (l *wikiMediaProvider) queryThumbnail(scientificName string) (url, fileName
 	return url, fileName, nil
 }
 
-// queryAuthorInfo queries Wikipedia for the author information of the given thumbnail URL
+// queryAuthorInfo queries Wikipedia for the author information of the given thumbnail URL.
+// It returns a wikiMediaAuthor struct containing the author and license information.
 func (l *wikiMediaProvider) queryAuthorInfo(thumbnailURL string) (*wikiMediaAuthor, error) {
 	params := map[string]string{
 		"action":    "query",
@@ -163,24 +167,20 @@ func (l *wikiMediaProvider) queryAuthorInfo(thumbnailURL string) (*wikiMediaAuth
 	}, nil
 }
 
-// extractArtistInfo tries to extract the author information as best as possible
-// from the given input which may consist of nested html tags
+// extractArtistInfo tries to extract the author information from the given HTML string.
+// It parses the HTML and attempts to find the most relevant link and text.
 func extractArtistInfo(htmlStr string) (href, text string, err error) {
-	// Parse the HTML string into an HTML document
 	doc, err := html.Parse(strings.NewReader(htmlStr))
 	if err != nil {
 		return "", "", err
 	}
 
-	// Find all the links in the document
 	links := findLinks(doc)
 
-	// If no links are found, extract the inner text and return it
 	if len(links) == 0 {
 		return "", html2text.HTML2Text(htmlStr), nil
 	}
 
-	// If there is only one link, extract the href and inner text and return them
 	if len(links) == 1 {
 		link := links[0]
 		href = extractHref(link)
@@ -188,7 +188,6 @@ func extractArtistInfo(htmlStr string) (href, text string, err error) {
 		return href, text, nil
 	}
 
-	// Look for a Wikipedia user link and extract the href and inner text
 	wikipediaUserLinks := findWikipediaUserLinks(links)
 
 	if len(wikipediaUserLinks) == 0 {
@@ -196,14 +195,12 @@ func extractArtistInfo(htmlStr string) (href, text string, err error) {
 	}
 
 	if len(wikipediaUserLinks) == 1 {
-		// Return the href and inner text of the Wikipedia user link
 		wikipediaLink := wikipediaUserLinks[0]
 		href = extractHref(wikipediaLink)
 		text = extractText(wikipediaLink)
 		return href, text, nil
 	}
 
-	// Check if all the links have the same href value
 	firstHref := extractHref(wikipediaUserLinks[0])
 	allSameHref := true
 	for _, link := range wikipediaUserLinks[1:] {
@@ -214,7 +211,6 @@ func extractArtistInfo(htmlStr string) (href, text string, err error) {
 	}
 
 	if allSameHref {
-		// Return the href and inner text of the first Wikipedia user link
 		wikipediaLink := wikipediaUserLinks[0]
 		href = extractHref(wikipediaLink)
 		text = extractText(wikipediaLink)
@@ -264,7 +260,7 @@ func findLinks(doc *html.Node) []*html.Node {
 	return linkNodes
 }
 
-// extractHref extracts the href attribute from an anchor tag
+// extractHref extracts the href attribute from an anchor tag.
 func extractHref(link *html.Node) string {
 	for _, attr := range link.Attr {
 		if attr.Key == "href" {
@@ -274,7 +270,7 @@ func extractHref(link *html.Node) string {
 	return ""
 }
 
-// extractText extracts the inner text from an anchor tag
+// extractText extracts the inner text from an anchor tag.
 func extractText(link *html.Node) string {
 	if link.FirstChild != nil {
 		var b bytes.Buffer

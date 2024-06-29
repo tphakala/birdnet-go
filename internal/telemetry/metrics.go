@@ -1,62 +1,65 @@
-// metrics.go: Prometheus metrics setup and manipulation for telemetry
+// Package telemetry provides metrics and monitoring capabilities for the BirdNET-Go application.
 package telemetry
 
 import (
+	"fmt"
+	"log"
 	"net/http"
+	"os"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/tphakala/birdnet-go/internal/telemetry/metrics"
 )
 
+// Metrics holds all the metric collectors for the application.
 type Metrics struct {
-	DetectionCounter    *prometheus.CounterVec
-	ImageCacheSizeGauge prometheus.Gauge
-	// Additional metrics can be added here
+	registry      *prometheus.Registry
+	MQTT          *metrics.MQTTMetrics
+	BirdNET       *metrics.BirdNETMetrics
+	ImageProvider *metrics.ImageProviderMetrics
 }
 
-const metricsPath = "/metrics"
-
-// NewMetrics initializes and registers all Prometheus metrics used in the telemetry system.
+// NewMetrics creates a new instance of Metrics, initializing all metric collectors.
+// It returns an error if any metric collector fails to initialize.
 func NewMetrics() (*Metrics, error) {
-	metrics := &Metrics{}
+	registry := prometheus.NewRegistry()
 
-	// Setup DetectionCounter
-	counterOpts := prometheus.CounterOpts{
-		Name: "birdnet_detections",
-		Help: "Counts of BirdNET detections partitioned by common name.",
-	}
-	labels := []string{"name"}
-	metrics.DetectionCounter = prometheus.NewCounterVec(counterOpts, labels)
-	if err := prometheus.Register(metrics.DetectionCounter); err != nil {
-		return nil, err
+	mqttMetrics, err := metrics.NewMQTTMetrics(registry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MQTT metrics: %w", err)
 	}
 
-	// Setup ImageCacheSizeGauge
-	gaugeOpts := prometheus.GaugeOpts{
-		Name: "birdnet_image_cache_size_bytes",
-		Help: "Current size of the bird image cache in bytes.",
-	}
-	metrics.ImageCacheSizeGauge = prometheus.NewGauge(gaugeOpts)
-	if err := prometheus.Register(metrics.ImageCacheSizeGauge); err != nil {
-		return nil, err
+	birdnetMetrics, err := metrics.NewBirdNETMetrics(registry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create BirdNET metrics: %w", err)
 	}
 
-	// Additional metrics can be initialized here
+	imageProviderMetrics, err := metrics.NewImageProviderMetrics(registry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ImageProvider metrics: %w", err)
+	}
 
-	return metrics, nil
+	m := &Metrics{
+		registry:      registry,
+		MQTT:          mqttMetrics,
+		BirdNET:       birdnetMetrics,
+		ImageProvider: imageProviderMetrics,
+	}
+
+	return m, nil
 }
 
-// RegisterMetricsHandlers adds metrics routes to the provided mux
-func RegisterMetricsHandlers(mux *http.ServeMux) {
-	mux.Handle(metricsPath, promhttp.Handler())
+// RegisterHandlers registers the metrics endpoint with the provided http.ServeMux.
+func (m *Metrics) RegisterHandlers(mux *http.ServeMux) {
+	mux.HandleFunc("/metrics", m.metricsHandler)
 }
 
-// IncrementDetectionCounter increments the detection counter for a given species
-func (m *Metrics) IncrementDetectionCounter(speciesName string) {
-	m.DetectionCounter.WithLabelValues(speciesName).Inc()
-}
-
-// SetImageCacheSize sets the current size of the image cache
-func (m *Metrics) SetImageCacheSize(size int) {
-	m.ImageCacheSizeGauge.Set(float64(size))
+// metricsHandler is the HTTP handler for the /metrics endpoint.
+func (m *Metrics) metricsHandler(w http.ResponseWriter, r *http.Request) {
+	h := promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{
+		ErrorLog:      log.New(os.Stderr, "metrics handler: ", log.LstdFlags),
+		ErrorHandling: promhttp.HTTPErrorOnError,
+	})
+	h.ServeHTTP(w, r)
 }

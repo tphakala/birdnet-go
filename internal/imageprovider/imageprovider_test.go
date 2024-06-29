@@ -1,54 +1,156 @@
-package imageprovider
+package imageprovider_test
 
 import (
+	"errors"
 	"testing"
+
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
-type mockProvider struct {
+// mockImageProvider is a mock implementation of the ImageProvider interface
+type mockImageProvider struct {
 	fetchCounter int
+	shouldFail   bool
 }
 
-func (l *mockProvider) fetch(scientificName string) (BirdImage, error) {
-	l.fetchCounter++
-	return BirdImage{}, nil
+func (m *mockImageProvider) Fetch(scientificName string) (imageprovider.BirdImage, error) {
+	m.fetchCounter++
+	if m.shouldFail {
+		return imageprovider.BirdImage{}, errors.New("mock fetch error")
+	}
+	return imageprovider.BirdImage{
+		URL:         "http://example.com/" + scientificName + ".jpg",
+		LicenseName: "CC BY-SA 4.0",
+		LicenseURL:  "https://creativecommons.org/licenses/by-sa/4.0/",
+		AuthorName:  "Mock Author",
+		AuthorURL:   "http://example.com/author",
+	}, nil
 }
 
-// TestBirdImageCache ensures the bird image cache behaves as expected.
-// It tests whether the cache correctly handles duplicate requests.
+// TestBirdImageCache tests the BirdImageCache implementation
 func TestBirdImageCache(t *testing.T) {
-	// Create a mock image provider and initialize the cache.
-	mockBirdProvider := &mockProvider{}
-	mockNonBirdProvider := &mockProvider{}
-	cache := &BirdImageCache{
-		birdImageProvider:    mockBirdProvider,
-		nonBirdImageProvider: mockNonBirdProvider,
+	mockBirdProvider := &mockImageProvider{}
+	mockNonBirdProvider := &mockImageProvider{}
+	metrics, err := telemetry.NewMetrics()
+	if err != nil {
+		t.Fatalf("Failed to create metrics: %v", err)
+	}
+	cache, err := imageprovider.CreateDefaultCache(metrics)
+	if err != nil {
+		t.Fatalf("Failed to create default cache: %v", err)
+	}
+	cache.SetImageProvider(mockBirdProvider)
+	cache.SetNonBirdImageProvider(mockNonBirdProvider)
+
+	tests := []struct {
+		name                  string
+		scientificName        string
+		wantBirdFetchCount    int
+		wantNonBirdFetchCount int
+		wantErr               bool
+	}{
+		{"Bird species", "Turdus merula", 1, 0, false},
+		{"Cached bird species", "Turdus merula", 1, 0, false},
+		{"Another bird species", "Parus major", 2, 0, false},
+		{"Non-bird entry", "Human non-vocal", 2, 1, false},
+		{"Cached non-bird entry", "Human non-vocal", 2, 1, false},
 	}
 
-	entriesToTest := []string{
-		"a",
-		"b",
-		"a",               // Duplicate request
-		"Human non-vocal", // Non-bird request
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := cache.Get(tt.scientificName)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("BirdImageCache.Get() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if mockBirdProvider.fetchCounter != tt.wantBirdFetchCount {
+				t.Errorf("Bird fetch count = %d, want %d", mockBirdProvider.fetchCounter, tt.wantBirdFetchCount)
+			}
+			if mockNonBirdProvider.fetchCounter != tt.wantNonBirdFetchCount {
+				t.Errorf("Non-bird fetch count = %d, want %d", mockNonBirdProvider.fetchCounter, tt.wantNonBirdFetchCount)
+			}
+			if !tt.wantErr && got.URL == "" {
+				t.Errorf("BirdImageCache.Get() returned empty URL for %s", tt.scientificName)
+			}
+		})
+	}
+}
+
+// TestBirdImageCacheError tests the BirdImageCache error handling
+func TestBirdImageCacheError(t *testing.T) {
+	mockProvider := &mockImageProvider{shouldFail: true}
+	metrics, err := telemetry.NewMetrics()
+	if err != nil {
+		t.Fatalf("Failed to create metrics: %v", err)
+	}
+	cache, err := imageprovider.CreateDefaultCache(metrics)
+	if err != nil {
+		t.Fatalf("Failed to create default cache: %v", err)
+	}
+	cache.SetImageProvider(mockProvider)
+
+	_, err = cache.Get("Turdus merula")
+	if err == nil {
+		t.Error("BirdImageCache.Get() error = nil, want error")
+	}
+}
+
+// TestBirdImageCacheSetImageProvider tests the BirdImageCache.SetImageProvider method
+func TestCreateDefaultCache(t *testing.T) {
+	metrics, err := telemetry.NewMetrics()
+	if err != nil {
+		t.Fatalf("Failed to create metrics: %v", err)
+	}
+	cache, err := imageprovider.CreateDefaultCache(metrics)
+	if err != nil {
+		t.Fatalf("CreateDefaultCache() error = %v", err)
+	}
+	if cache == nil {
+		t.Error("CreateDefaultCache() returned nil cache")
+	}
+}
+
+// TestBirdImageCacheSetImageProvider tests the BirdImageCache.SetImageProvider method
+func TestBirdImageEstimateSize(t *testing.T) {
+	img := imageprovider.BirdImage{
+		URL:         "http://example.com/bird.jpg",
+		LicenseName: "CC BY-SA 4.0",
+		LicenseURL:  "https://creativecommons.org/licenses/by-sa/4.0/",
+		AuthorName:  "Test Author",
+		AuthorURL:   "http://example.com/author",
 	}
 
-	for _, entry := range entriesToTest {
-		_, err := cache.Get(entry)
-		if err != nil {
-			t.Errorf("Unexpected error for entry %s: %v", entry, err)
-		}
+	size := img.EstimateSize()
+	if size <= 0 {
+		t.Errorf("BirdImage.EstimateSize() = %d, want > 0", size)
+	}
+}
+
+// TestBirdImageCacheMemoryUsage tests the BirdImageCache.MemoryUsage method// TestBirdImageCacheMemoryUsage tests the BirdImageCache.MemoryUsage method
+func TestBirdImageCacheMemoryUsage(t *testing.T) {
+	metrics, err := telemetry.NewMetrics()
+	if err != nil {
+		t.Fatalf("Failed to create metrics: %v", err)
+	}
+	cache, err := imageprovider.CreateDefaultCache(metrics)
+	if err != nil {
+		t.Fatalf("Failed to create default cache: %v", err)
 	}
 
-	// Verify that the bird provider's fetch method was called exactly twice.
-	expectedBirdFetchCalls := 2
-	if mockBirdProvider.fetchCounter != expectedBirdFetchCalls {
-		t.Errorf("Expected %d calls to bird provider, got %d",
-			expectedBirdFetchCalls, mockBirdProvider.fetchCounter)
+	// Add some entries to the cache
+	_, err = cache.Get("Turdus merula")
+	if err != nil {
+		t.Fatalf("Failed to get 'Turdus merula': %v", err)
 	}
 
-	// Verify that the non-bird provider's fetch method was called exactly once.
-	expectedNonBirdFetchCalls := 1
-	if mockNonBirdProvider.fetchCounter != expectedNonBirdFetchCalls {
-		t.Errorf("Expected %d calls to non-bird provider, got %d",
-			expectedNonBirdFetchCalls, mockNonBirdProvider.fetchCounter)
+	_, err = cache.Get("Parus major")
+	if err != nil {
+		t.Fatalf("Failed to get 'Parus major': %v", err)
+	}
+
+	usage := cache.MemoryUsage()
+	if usage <= 0 {
+		t.Errorf("BirdImageCache.MemoryUsage() = %d, want > 0", usage)
 	}
 }

@@ -9,23 +9,27 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // TestMQTTClient runs a suite of tests for the MQTT client implementation.
-// It covers basic functionality, error handling, and reconnection scenarios.
+// It covers basic functionality, error handling, reconnection scenarios, and metrics collection.
 func TestMQTTClient(t *testing.T) {
 	t.Run("Basic Functionality", testBasicFunctionality)
 	t.Run("Incorrect Broker Address", testIncorrectBrokerAddress)
 	t.Run("Connection Loss Before Publish", testConnectionLossBeforePublish)
 	t.Run("Publish While Disconnected", testPublishWhileDisconnected)
 	t.Run("Reconnection With Backoff", testReconnectionWithBackoff)
+	t.Run("Metrics Collection", testMetricsCollection)
 }
 
 // testBasicFunctionality verifies the basic operations of the MQTT client:
 // connection, publishing a message, and disconnection.
 func testBasicFunctionality(t *testing.T) {
-	mqttClient := createTestClient(t, "tcp://test.mosquitto.org:1883")
+	mqttClient, _ := createTestClient(t, "tcp://test.mosquitto.org:1883")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -57,7 +61,7 @@ func testBasicFunctionality(t *testing.T) {
 // It includes subtests for unresolvable hostnames and invalid IP addresses.
 func testIncorrectBrokerAddress(t *testing.T) {
 	t.Run("Unresolvable Hostname", func(t *testing.T) {
-		mqttClient := createTestClient(t, "tcp://unresolvable.invalid:1883")
+		mqttClient, _ := createTestClient(t, "tcp://unresolvable.invalid:1883")
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -84,7 +88,7 @@ func testIncorrectBrokerAddress(t *testing.T) {
 	})
 
 	t.Run("Invalid IP Address", func(t *testing.T) {
-		mqttClient := createTestClient(t, "tcp://256.0.0.1:1883") // Invalid IP address
+		mqttClient, _ := createTestClient(t, "tcp://256.0.0.1:1883") // Invalid IP address
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -112,7 +116,7 @@ func testIncorrectBrokerAddress(t *testing.T) {
 // attempting to publish a message. It verifies that the publish operation fails and
 // the client reports as disconnected after the connection loss.
 func testConnectionLossBeforePublish(t *testing.T) {
-	mqttClient := createTestClient(t, "tcp://test.mosquitto.org:1883")
+	mqttClient, _ := createTestClient(t, "tcp://test.mosquitto.org:1883")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -141,7 +145,7 @@ func testConnectionLossBeforePublish(t *testing.T) {
 // testPublishWhileDisconnected attempts to publish a message while the client is disconnected.
 // It verifies that the publish operation fails when the client is not connected to a broker.
 func testPublishWhileDisconnected(t *testing.T) {
-	mqttClient := createTestClient(t, "tcp://test.mosquitto.org:1883")
+	mqttClient, _ := createTestClient(t, "tcp://test.mosquitto.org:1883")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -156,7 +160,7 @@ func testPublishWhileDisconnected(t *testing.T) {
 // It simulates a connection loss, attempts an immediate reconnection (which should fail due to cooldown),
 // waits for the cooldown period, and then attempts another reconnection which should succeed.
 func testReconnectionWithBackoff(t *testing.T) {
-	mqttClient := createTestClient(t, "tcp://test.mosquitto.org:1883")
+	mqttClient, _ := createTestClient(t, "tcp://test.mosquitto.org:1883")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -192,16 +196,98 @@ func testReconnectionWithBackoff(t *testing.T) {
 	}
 }
 
+// testMetricsCollection checks the collection and accuracy of various metrics related to
+// MQTT client operations, including connection status, message delivery, and error counts.
+func testMetricsCollection(t *testing.T) {
+	mqttClient, metrics := createTestClient(t, "tcp://test.mosquitto.org:1883")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Connect to the broker
+	err := mqttClient.Connect(ctx)
+	if err != nil {
+		t.Fatalf("Failed to connect to MQTT broker: %v", err)
+	}
+
+	// Check initial connection status
+	connectionStatus := getGaugeValue(t, metrics.MQTT.ConnectionStatus)
+	if connectionStatus != 1 {
+		t.Errorf("Initial connection status metric incorrect. Expected 1, got %v", connectionStatus)
+	}
+
+	// Publish a message and check delivery metric
+	err = mqttClient.Publish(ctx, "birdnet-go/test", "Test message")
+	if err != nil {
+		t.Fatalf("Failed to publish message: %v", err)
+	}
+	time.Sleep(time.Second) // Allow time for metric to update
+	messagesDelivered := getCounterValue(t, metrics.MQTT.MessagesDelivered)
+	if messagesDelivered != 1 {
+		t.Errorf("Messages delivered metric incorrect. Expected 1, got %v", messagesDelivered)
+	}
+
+	// Check message size metric
+	messageSize := getHistogramValue(t, metrics.MQTT.MessageSize)
+	expectedSize := float64(len("Test message"))
+	if messageSize != expectedSize {
+		t.Errorf("Message size metric incorrect. Expected %v, got %v", expectedSize, messageSize)
+	}
+
+	// Disconnect and check connection status
+	mqttClient.Disconnect()
+	time.Sleep(time.Second) // Allow time for metric to update
+	connectionStatus = getGaugeValue(t, metrics.MQTT.ConnectionStatus)
+	if connectionStatus != 0 {
+		t.Errorf("Connection status metric after disconnection incorrect. Expected 0, got %v", connectionStatus)
+	}
+
+	// Log other metrics for informational purposes
+	t.Logf("Error count: %v", getCounterValue(t, metrics.MQTT.Errors))
+	t.Logf("Reconnect attempts: %v", getCounterValue(t, metrics.MQTT.ReconnectAttempts))
+	t.Logf("Publish latency: %v", getHistogramValue(t, metrics.MQTT.PublishLatency))
+}
+
+// Add this helper function to get Histogram values
+func getHistogramValue(t *testing.T, histogram prometheus.Histogram) float64 {
+	var metric dto.Metric
+	err := histogram.Write(&metric)
+	if err != nil {
+		t.Fatalf("Failed to write metric: %v", err)
+	}
+	return metric.Histogram.GetSampleSum()
+}
+
+// Helper function to get the value of a Gauge metric
+func getGaugeValue(t *testing.T, gauge prometheus.Gauge) float64 {
+	var metric dto.Metric
+	err := gauge.Write(&metric)
+	if err != nil {
+		t.Fatalf("Failed to write metric: %v", err)
+	}
+	return *metric.Gauge.Value
+}
+
+// Helper function to get the value of a Counter metric
+func getCounterValue(t *testing.T, counter prometheus.Counter) float64 {
+	var metric dto.Metric
+	err := counter.Write(&metric)
+	if err != nil {
+		t.Fatalf("Failed to write metric: %v", err)
+	}
+	return *metric.Counter.Value
+}
+
 // createTestClient is a helper function that creates and configures an MQTT client for testing purposes.
-// It sets up the client with the provided broker address and a custom reconnect cooldown period.
-func createTestClient(t *testing.T, broker string) Client {
+// It sets up the client with the provided broker address, a custom reconnect cooldown period, and metrics.
+func createTestClient(t *testing.T, broker string) (Client, *telemetry.Metrics) {
 	testSettings := &conf.Settings{
 		Main: struct {
 			Name      string
 			TimeAs24h bool
 			Log       conf.LogConfig
 		}{
-			Name: "TestNode", // Set a default name for testing
+			Name: "TestNode",
 		},
 		Realtime: conf.RealtimeSettings{
 			MQTT: conf.MQTTSettings{
@@ -211,8 +297,13 @@ func createTestClient(t *testing.T, broker string) Client {
 			},
 		},
 	}
-	client := NewClient(testSettings).(*client) // type assertion
-	// We can adjust the cooldown for testing if needed
-	client.config.ReconnectCooldown = 5 * time.Second
-	return client
+	metrics, err := telemetry.NewMetrics()
+	if err != nil {
+		t.Fatalf("Failed to create metrics: %v", err)
+	}
+	client, err := NewClient(testSettings, metrics)
+	if err != nil {
+		t.Fatalf("Failed to create MQTT client: %v", err)
+	}
+	return client, metrics
 }
