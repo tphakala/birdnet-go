@@ -127,7 +127,7 @@ func TestBirdImageEstimateSize(t *testing.T) {
 	}
 }
 
-// TestBirdImageCacheMemoryUsage tests the BirdImageCache.MemoryUsage method
+// TestBirdImageCacheMemoryUsage tests the BirdImageCache.MemoryUsage method// TestBirdImageCacheMemoryUsage tests the BirdImageCache.MemoryUsage method
 func TestBirdImageCacheMemoryUsage(t *testing.T) {
 	metrics, err := telemetry.NewMetrics()
 	if err != nil {
@@ -139,8 +139,15 @@ func TestBirdImageCacheMemoryUsage(t *testing.T) {
 	}
 
 	// Add some entries to the cache
-	cache.Get("Turdus merula")
-	cache.Get("Parus major")
+	_, err = cache.Get("Turdus merula")
+	if err != nil {
+		t.Fatalf("Failed to get 'Turdus merula': %v", err)
+	}
+
+	_, err = cache.Get("Parus major")
+	if err != nil {
+		t.Fatalf("Failed to get 'Parus major': %v", err)
+	}
 
 	usage := cache.MemoryUsage()
 	if usage <= 0 {
