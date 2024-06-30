@@ -40,7 +40,7 @@ func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
 	cmd.Flags().StringVar(&settings.Output.File.Type, "type", viper.GetString("output.file.type"), "Output type: table, csv")
 
 	if err := viper.BindPFlags(cmd.Flags()); err != nil {
-		return fmt.Errorf("error binding flags: %v", err)
+		return fmt.Errorf("error binding flags: %w", err)
 	}
 
 	return nil

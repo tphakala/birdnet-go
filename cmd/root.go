@@ -53,7 +53,7 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 		// Skip setup for authors and license commands
 		if cmd.Name() != authorsCmd.Name() && cmd.Name() != licenseCmd.Name() {
 			if err := initialize(); err != nil {
-				return fmt.Errorf("error initializing: %v", err)
+				return fmt.Errorf("error initializing: %w", err)
 			}
 		}
 
@@ -82,7 +82,7 @@ func setupFlags(rootCmd *cobra.Command, settings *conf.Settings) error {
 
 	// Bind flags to the viper settings
 	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
-		return fmt.Errorf("error binding flags: %v", err)
+		return fmt.Errorf("error binding flags: %w", err)
 	}
 
 	return nil
