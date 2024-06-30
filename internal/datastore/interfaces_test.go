@@ -18,7 +18,7 @@ func createDatabase(t *testing.T, settings *conf.Settings) Interface {
 
 	// Attempt to open a database connection.
 	if err := dataStore.Open(); err != nil {
-		t.Fatalf("Failed to open database: %v", err)  // Use t.Fatalf to immediately fail the test on error.
+		t.Fatalf("Failed to open database: %v", err) // Use t.Fatalf to immediately fail the test on error.
 	}
 
 	// Ensure the database is closed after the test completes.

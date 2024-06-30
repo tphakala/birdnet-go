@@ -2,6 +2,7 @@
 package datastore
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -352,7 +353,7 @@ func (ds *DataStore) SearchNotes(query string, sortAscending bool, limit int, of
 // performAutoMigration automates database migrations with error handling.
 func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string) error {
 	if err := db.AutoMigrate(&Note{}, &Results{}, &DailyEvents{}, &HourlyWeather{}); err != nil {
-		return fmt.Errorf("failed to auto-migrate %s database: %v", dbType, err)
+		return fmt.Errorf("failed to auto-migrate %s database: %w", dbType, err)
 	}
 
 	if debug {
@@ -366,8 +367,9 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 func (ds *DataStore) SaveDailyEvents(dailyEvents *DailyEvents) error {
 	// Check if daily events data already exists for the date
 	var existingDailyEvents DailyEvents
-	if err := ds.DB.Where("date = ?", dailyEvents.Date).First(&existingDailyEvents).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	err := ds.DB.Where("date = ?", dailyEvents.Date).First(&existingDailyEvents).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// Insert new daily events data
 			if err := ds.DB.Create(dailyEvents).Error; err != nil {
 				return err

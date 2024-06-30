@@ -38,32 +38,32 @@ func (store *SQLiteStore) Open() error {
 	// Open the SQLite database
 	db, err := gorm.Open(sqlite.Open(absoluteFilePath), &gorm.Config{Logger: newLogger})
 	if err != nil {
-		return fmt.Errorf("failed to open SQLite database: %v", err)
+		return fmt.Errorf("failed to open SQLite database: %w", err)
 	}
 
 	// Enable foreign key constraint enforcement for SQLite
 	if err := db.Exec("PRAGMA foreign_keys = ON").Error; err != nil {
-		return fmt.Errorf("failed to enable foreign key support in SQLite: %v", err)
+		return fmt.Errorf("failed to enable foreign key support in SQLite: %w", err)
 	}
 
 	// Set SQLite to use MEMORY journal mode, reduces sdcard wear and improves performance
 	if err := db.Exec("PRAGMA journal_mode = MEMORY").Error; err != nil {
-		return fmt.Errorf("failed to enable MEMORY journal mode in SQLite: %v", err)
+		return fmt.Errorf("failed to enable MEMORY journal mode in SQLite: %w", err)
 	}
 
 	// Set SQLite to use NORMAL synchronous mode
 	if err := db.Exec("PRAGMA synchronous = NORMAL").Error; err != nil {
-		return fmt.Errorf("failed to set synchronous mode in SQLite: %v", err)
+		return fmt.Errorf("failed to set synchronous mode in SQLite: %w", err)
 	}
 
 	// Set SQLIte to use MEMORY temp store mode
 	if err := db.Exec("PRAGMA temp_store = MEMORY").Error; err != nil {
-		return fmt.Errorf("failed to set temp store mode in SQLite: %v", err)
+		return fmt.Errorf("failed to set temp store mode in SQLite: %w", err)
 	}
 
 	// Increase cache size
 	if err := db.Exec("PRAGMA cache_size = -4000").Error; err != nil {
-		return fmt.Errorf("failed to set cache size in SQLite: %v", err)
+		return fmt.Errorf("failed to set cache size in SQLite: %w", err)
 	}
 
 	store.DB = db
