@@ -295,12 +295,13 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 			go func(speciesName string) {
 				defer wg.Done()
 				// Attempt to fetch the image for the given species
-				_, err := birdImageCache.Get(speciesName)
+				_, _ = birdImageCache.Get(speciesName)
+				/* TODO add debug flag to image cache and enable prints only if debug is true
 				if err != nil {
 					//log.Printf("Failed to get image for species %s: %v\n", speciesName, err)
 				} else {
 					//log.Printf("Successfully fetched image for species %s\n", speciesName)
-				}
+				}*/
 			}(species.ScientificName)
 		}
 

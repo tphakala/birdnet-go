@@ -72,7 +72,7 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 			s.Echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist("") // Adjust as needed
 
 			// Start server with AutoTLS
-			err = s.Echo.StartAutoTLS(":" + settings.WebServer.Port) //nolint:errcheck
+			err = s.Echo.StartAutoTLS(":" + settings.WebServer.Port)
 		} else {
 			// Start server without AutoTLS
 			err = s.Echo.Start(":" + settings.WebServer.Port)
