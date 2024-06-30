@@ -86,7 +86,7 @@ func FetchWeather(settings *conf.Settings) (*WeatherData, error) {
 	}
 
 	// Create a new HTTP request
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
