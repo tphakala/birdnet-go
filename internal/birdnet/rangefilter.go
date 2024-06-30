@@ -162,7 +162,7 @@ func getWeekForFilter(date time.Time) float32 {
 	}
 
 	month = int(date.Month())
-	day = int(date.Day())
+	day = date.Day()
 
 	// Calculate the week number
 	weeksFromMonths := (month - 1) * 4
