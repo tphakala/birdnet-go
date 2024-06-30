@@ -80,7 +80,7 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 		// Create or truncate the file with the specified filename.
 		file, err := os.Create(filename)
 		if err != nil {
-			return fmt.Errorf("failed to create file: %v", err)
+			return fmt.Errorf("failed to create file: %w", err)
 		}
 		defer file.Close() // Ensure the file is closed when the function exits.
 		w = file
@@ -89,7 +89,7 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 	// Write the header to the output destination.
 	header := "Selection\tView\tChannel\tBegin File\tBegin Time (s)\tEnd Time (s)\tLow Freq (Hz)\tHigh Freq (Hz)\tSpecies Code\tCommon Name\tConfidence\n"
 	if _, err := w.Write([]byte(header)); err != nil {
-		return fmt.Errorf("failed to write header: %v", err)
+		return fmt.Errorf("failed to write header: %w", err)
 	}
 
 	// Pre-declare err outside the loop to avoid re-declaration
@@ -112,7 +112,7 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 
 	// Check if an error occurred during the loop and return it
 	if err != nil {
-		return fmt.Errorf("failed to write note: %v", err)
+		return fmt.Errorf("failed to write note: %w", err)
 	} else if filename != "" {
 		fmt.Println("Output written to", filename)
 	}

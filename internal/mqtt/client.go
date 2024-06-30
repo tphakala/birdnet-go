@@ -3,6 +3,7 @@ package mqtt
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -65,10 +66,11 @@ func (c *client) Connect(ctx context.Context) error {
 	// Check if the host is an IP address
 	if net.ParseIP(host) == nil {
 		// It's not an IP address, so attempt to resolve it
-		_, err = net.DefaultResolver.LookupHost(ctx, host)
+		_, err := net.DefaultResolver.LookupHost(ctx, host)
 		if err != nil {
-			// If it's a DNS error, return it directly
-			if dnsErr, ok := err.(*net.DNSError); ok {
+			var dnsErr *net.DNSError
+			if errors.As(err, &dnsErr) {
+				// If it's a DNS error, return it directly
 				return dnsErr
 			}
 			// For other errors, wrap it
