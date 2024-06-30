@@ -4,6 +4,7 @@ package mqtt
 
 import (
 	"context"
+	"errors"
 	"net"
 	"strings"
 	"testing"
@@ -72,8 +73,8 @@ func testIncorrectBrokerAddress(t *testing.T) {
 			t.Fatal("Expected connection to fail with invalid broker address")
 		}
 
-		dnsErr, ok := err.(*net.DNSError)
-		if !ok {
+		var dnsErr *net.DNSError
+		if !errors.As(err, &dnsErr) {
 			t.Fatalf("Expected DNS resolution error, got: %v", err)
 		}
 
@@ -100,10 +101,11 @@ func testIncorrectBrokerAddress(t *testing.T) {
 		}
 
 		// The error could be either a DNS error or a connection error
-		if _, ok := err.(*net.DNSError); !ok {
-			if _, ok := err.(net.Error); !ok {
-				t.Fatalf("Expected either a DNS error or a net.Error, got: %v", err)
-			}
+		var dnsErr *net.DNSError
+		var netErr net.Error
+
+		if !errors.As(err, &dnsErr) && !errors.As(err, &netErr) {
+			t.Fatalf("Expected either a DNS error or a net.Error, got: %v", err)
 		}
 
 		if mqttClient.IsConnected() {

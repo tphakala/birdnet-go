@@ -62,7 +62,7 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 			// Attempt to configure AutoTLS
 			configPaths, configErr := conf.GetDefaultConfigPaths() // Use a different variable name to avoid shadowing err
 			if configErr != nil {
-				errChan <- fmt.Errorf("failed to get config paths: %v", configErr) // Send error to channel
+				errChan <- fmt.Errorf("failed to get config paths: %w", configErr) // Send error to channel
 				return                                                             // Exit the goroutine upon error
 			}
 
