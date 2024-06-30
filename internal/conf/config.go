@@ -3,6 +3,7 @@ package conf
 
 import (
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -265,7 +266,8 @@ func initViper() error {
 	// Read configuration file
 	err = viper.ReadInConfig()
 	if err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if errors.As(err, &configFileNotFoundError) {
 			// Config file not found, create config with defaults
 			return createDefaultConfig()
 		}

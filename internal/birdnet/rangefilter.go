@@ -49,7 +49,7 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 	// Apply prediction filter based on the context
 	filters, err := bn.predictFilter(date, week)
 	if err != nil {
-		return nil, fmt.Errorf("error during prediction filter: %v", err)
+		return nil, fmt.Errorf("error during prediction filter: %w", err)
 	}
 
 	// check bn.Settings.BirdNET.LocationFilterThreshold for valid value
@@ -188,7 +188,7 @@ func loadSpeciesFromCSV(fileName string) ([]string, error) {
 	// Retrieve the default config paths.
 	configPaths, err := conf.GetDefaultConfigPaths()
 	if err != nil {
-		return nil, fmt.Errorf("error getting default config paths: %v", err)
+		return nil, fmt.Errorf("error getting default config paths: %w", err)
 	}
 
 	var file *os.File

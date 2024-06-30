@@ -23,7 +23,7 @@ func FileAnalysis(settings *conf.Settings) error {
 
 	fileInfo, err := os.Stat(settings.Input.Path)
 	if err != nil {
-		return fmt.Errorf("error accessing the path: %v", err)
+		return fmt.Errorf("error accessing the path: %w", err)
 	}
 
 	// Check if it's a file (not a directory)

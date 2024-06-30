@@ -90,7 +90,7 @@ func (bn *BirdNET) AnalyzeAudio(chunks [][]float32) ([]datastore.Note, error) {
 func (bn *BirdNET) processChunk(chunk []float32, predStart float64) ([]datastore.Note, error) {
 	results, err := bn.Predict([][]float32{chunk})
 	if err != nil {
-		return nil, fmt.Errorf("prediction failed: %v", err)
+		return nil, fmt.Errorf("prediction failed: %w", err)
 	}
 
 	var source = ""
