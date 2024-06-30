@@ -47,9 +47,9 @@ func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 
 	// Find the current route configuration based on the request URL.
 	var currentRoute *routeConfig
-	for _, route := range routes {
-		if route.Path == c.Request().URL.Path {
-			currentRoute = &route
+	for i := range routes {
+		if routes[i].Path == c.Request().URL.Path {
+			currentRoute = &routes[i]
 			break
 		}
 	}
@@ -70,10 +70,11 @@ func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 // handleRequest handles generic route requests.
 // It identifies the current route and renders the appropriate template.
 func (s *Server) handleRequest(c echo.Context) error {
+	// Find the current route configuration based on the request URL.
 	var currentRoute *routeConfig
-	for _, route := range routes {
-		if route.Path == c.Request().URL.Path {
-			currentRoute = &route
+	for i := range routes {
+		if routes[i].Path == c.Request().URL.Path {
+			currentRoute = &routes[i]
 			break
 		}
 	}
