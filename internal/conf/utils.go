@@ -24,14 +24,14 @@ func GetDefaultConfigPaths() ([]string, error) {
 	// Fetch the directory of the executable.
 	exePath, err := os.Executable()
 	if err != nil {
-		return nil, fmt.Errorf("error fetching executable path: %v", err)
+		return nil, fmt.Errorf("error fetching executable path: %w", err)
 	}
 	exeDir := filepath.Dir(exePath)
 
 	// Fetch the user's home directory.
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("error fetching user home directory: %v", err)
+		return nil, fmt.Errorf("error fetching user home directory: %w", err)
 	}
 
 	// Define default paths based on the operating system.

@@ -42,7 +42,7 @@ func (a ExecuteScriptAction) Execute(data interface{}) error {
 	cmd := exec.Command(a.ScriptPath, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("error executing script: %v, output: %s", err, string(output))
+		return fmt.Errorf("error executing script: %w, output: %s", err, string(output))
 	}
 
 	//fmt.Printf("Script executed successfully: %s", string(output))
