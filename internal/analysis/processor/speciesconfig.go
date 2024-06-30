@@ -80,7 +80,7 @@ func LoadSpeciesConfig(fileName string) (SpeciesConfig, error) {
 		species := strings.ToLower(strings.TrimSpace(record[0]))
 		confidence, err := strconv.ParseFloat(strings.TrimSpace(record[1]), 32)
 		if err != nil {
-			log.Printf("Invalid confidence value for species '%s': %w", species, err)
+			log.Printf("Invalid confidence value for species '%s': %v", species, err)
 			continue
 		} else {
 			if conf.Setting().Debug {
