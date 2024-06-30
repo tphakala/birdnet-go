@@ -306,15 +306,13 @@ func (ds *DataStore) SpeciesDetections(species, date, hour string, sortAscending
 // GetLastDetections retrieves the most recent bird detections.
 func (ds *DataStore) GetLastDetections(numDetections int) ([]Note, error) {
 	var notes []Note
-
-	// get current time
 	now := time.Now()
 
-	if result := ds.DB.Order("date DESC, time DESC").Limit(numDetections).Find(&notes); result.Error != nil {
+	// Retrieve the most recent detections based on the ID in descending order
+	if result := ds.DB.Order("id DESC").Limit(numDetections).Find(&notes); result.Error != nil {
 		return nil, fmt.Errorf("error getting last detections: %w", result.Error)
 	}
 
-	// calculate time it took to retrieve the data
 	elapsed := time.Since(now)
 	log.Printf("Retrieved %d detections in %v", numDetections, elapsed)
 
