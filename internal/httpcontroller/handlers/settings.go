@@ -1,5 +1,5 @@
-// updateconfig.go
-package httpcontroller
+// File: internal/handlers/settings.go
+package handlers
 
 import (
 	"fmt"
@@ -14,8 +14,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// updateSettingsHandler handles the settings update request.
-func (s *Server) updateSettingsHandler(c echo.Context) error {
+// UpdateSettings handles the settings update request.
+func (h *Handlers) UpdateSettings(c echo.Context) error {
 	// Extract form values from the request context.
 	formValues := extractFormValues(c)
 
@@ -49,8 +49,8 @@ func (s *Server) updateSettingsHandler(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
-	// Update the server's settings struct with new values from the form.
-	updateServerSettings(s, formValues)
+	// Update the handler's settings struct with new values from the form.
+	h.updateSettings(formValues)
 
 	// Redirect to the settings page, indicating success.
 	return c.Redirect(http.StatusFound, "/settings?update=success")
@@ -120,52 +120,52 @@ func extractFormValues(c echo.Context) map[string]interface{} {
 	return values
 }
 
-// updateServerSettings updates the server's Settings struct with values from the form.
-func updateServerSettings(s *Server, formValues map[string]interface{}) {
+// updateSettings updates the handler's Settings struct with values from the form.
+func (h *Handlers) updateSettings(formValues map[string]interface{}) {
 	// Main settings
 	if name, ok := formValues["main.name"].(string); ok {
-		s.Settings.Main.Name = name
+		h.Settings.Main.Name = name
 	}
 
 	// BirdNET settings
 	if locale, ok := formValues["birdnet.locale"].(string); ok {
-		s.Settings.BirdNET.Locale = locale
+		h.Settings.BirdNET.Locale = locale
 	}
-	s.Settings.BirdNET.Sensitivity = formValues["birdnet.sensitivity"].(float64)
-	s.Settings.BirdNET.Threshold = formValues["birdnet.threshold"].(float64)
-	s.Settings.BirdNET.Latitude = formValues["birdnet.latitude"].(float64)
-	s.Settings.BirdNET.Longitude = formValues["birdnet.longitude"].(float64)
-	s.Settings.BirdNET.Threads = formValues["birdnet.threads"].(int)
+	h.Settings.BirdNET.Sensitivity = formValues["birdnet.sensitivity"].(float64)
+	h.Settings.BirdNET.Threshold = formValues["birdnet.threshold"].(float64)
+	h.Settings.BirdNET.Latitude = formValues["birdnet.latitude"].(float64)
+	h.Settings.BirdNET.Longitude = formValues["birdnet.longitude"].(float64)
+	h.Settings.BirdNET.Threads = formValues["birdnet.threads"].(int)
 
 	// Realtime settings - Audio Export
 	if val, ok := formValues["realtime.audioexport.enabled"].(bool); ok {
-		s.Settings.Realtime.Audio.Export.Enabled = val
+		h.Settings.Realtime.Audio.Export.Enabled = val
 	}
 	if audioExportPath, ok := formValues["realtime.audioexport.path"].(string); ok {
-		s.Settings.Realtime.Audio.Export.Path = audioExportPath
+		h.Settings.Realtime.Audio.Export.Path = audioExportPath
 	}
 
 	// Realtime settings - Log
 	if val, ok := formValues["realtime.log.enabled"].(bool); ok {
-		s.Settings.Realtime.Log.Enabled = val
+		h.Settings.Realtime.Log.Enabled = val
 	}
 	if logPath, ok := formValues["realtime.log.path"].(string); ok {
-		s.Settings.Realtime.Log.Path = logPath
+		h.Settings.Realtime.Log.Path = logPath
 	}
 
 	// Realtime settings - General and Birdweather
-	s.Settings.Realtime.Interval = formValues["realtime.interval"].(int)
+	h.Settings.Realtime.Interval = formValues["realtime.interval"].(int)
 
 	if val, ok := formValues["realtime.birdweather.enabled"].(bool); ok {
-		s.Settings.Realtime.Birdweather.Enabled = val
+		h.Settings.Realtime.Birdweather.Enabled = val
 	}
 	if birdweatherID, ok := formValues["realtime.birdweather.id"].(string); ok {
-		s.Settings.Realtime.Birdweather.ID = birdweatherID
+		h.Settings.Realtime.Birdweather.ID = birdweatherID
 	}
 
 	// SQLite settings
 	if sqlitePath, ok := formValues["output.sqlite.path"].(string); ok {
-		s.Settings.Output.SQLite.Path = sqlitePath
+		h.Settings.Output.SQLite.Path = sqlitePath
 	}
 }
 

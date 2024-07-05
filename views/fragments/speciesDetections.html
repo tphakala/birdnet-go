@@ -28,13 +28,13 @@
       <td class="py-1 px-2">{{.Time}}</td>
       <!-- CommonName is a HTMX link which points to getNoteHandler -->
       <td class="py-1 px-4">
-        <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click"
+        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click"
         hx-push-url="true">
         {{.CommonName}}</a>
       </td>
       <td class="py-1 px-4">
         <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
-          <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click"
+          <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click"
           hx-push-url="true">
           {{confidence .Confidence}}</a>
         </div>
@@ -42,9 +42,9 @@
       <td class="py-1 px-6 flex justify-center">
         <div class="w-full">
           <!-- Spectrogram Image  -->
-          <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click"
+          <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click"
           hx-push-url="true">
-          <img loading="lazy" width="400" src="/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md"></a>
+          <img loading="lazy" width="400" src="/media/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md"></a>
 
           <!-- Audio player -->
           <audio controls class="audio-control" preload="metadata">
@@ -67,7 +67,7 @@
     </tr>-->
     {{end}}
     <!-- Infinite scroll trigger -->
-    <tr hx-get="/species-detections?species={{urlquery .CommonName}}&date={{urlquery .Date}}&hour={{urlquery .Hour}}&offset={{ add .Offset 25 }}"
+    <tr hx-get="/detections/species?species={{urlquery .CommonName}}&date={{urlquery .Date}}&hour={{urlquery .Hour}}&offset={{ add .Offset 25 }}"
         hx-trigger="revealed"
         hx-swap="outerHTML">
     </tr>

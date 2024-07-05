@@ -1,4 +1,4 @@
-{{define "searchResults"}}
+{{define "searchDetections"}}
 
 <!-- daisyUI card -->
 {{ if eq .Offset 0 }}
@@ -28,7 +28,7 @@
       <td class="py-1 px-6">{{.Time}}</td>
       <td class="py-1 px-6">
         <a href="#"
-        hx-get="/note?id={{.ID}}"
+        hx-get="/detections/details?id={{.ID}}"
         hx-target="#mainContent"
         hx-swap="innerHTML"
         hx-trigger="click"

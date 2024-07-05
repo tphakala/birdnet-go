@@ -1,5 +1,46 @@
 {{define "stats"}}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<!-- Stats Content -->
+<section class="col-span-12 xl:col-span-12">
+    <div class="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden">
+        <div class="p-6">
+            <div id="chart-container" class="w-full" style="height: 400px;">
+                <!-- Stats content will be loaded here -->
+                {{.Charts}}
+            </div>
+        </div>
+    </div>
+</section>
 
-<span class="col-span-12">Nothing here yet ..</span>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var chartContainer = document.getElementById('chart-container');
+        var chartElement = chartContainer.querySelector('.item');
+        
+        if (chartElement) {
+            var chart = echarts.getInstanceByDom(chartElement) || echarts.init(chartElement);
+            
+            function resizeChart() {
+                chart.resize({
+                    width: chartContainer.clientWidth,
+                    height: chartContainer.clientHeight
+                });
+            }
 
+            // Initial resize
+            resizeChart();
+
+            // Resize on window resize
+            window.addEventListener('resize', resizeChart);
+
+            // Resize on sidebar toggle (if applicable)
+            var sidebarToggle = document.getElementById('my-drawer');
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('change', function() {
+                    setTimeout(resizeChart, 300); // Delay to allow for transition
+                });
+            }
+        }
+    });
+</script>
 {{end}}
