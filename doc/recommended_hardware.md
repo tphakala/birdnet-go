@@ -1,5 +1,5 @@
 # List of Recommended Hardware
-BirdNet-Go works with many,  many different setups. This is meant to give an overview of what has been tried and found working.
+BirdNet-Go works with many different setups. This is meant to give an overview of what has been tried and found to work.
 ## Microphones
 Microphones begin at a few Euros, but you can easily spend several hundred euros on a microphone, if you like. Generally, we are usually looking for omnidirectional microphones with a low signal-noise-ratio.
 ### Low Cost
