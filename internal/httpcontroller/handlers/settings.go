@@ -203,3 +203,45 @@ func parseInt(str string) int {
 	}
 	return val
 }
+
+// HandleMainSettings handles the request for the main settings page
+func (h *Handlers) HandleMainSettings(c echo.Context) error {
+	return c.Render(http.StatusOK, "mainSettings", map[string]interface{}{
+		"Settings": h.Settings,
+	})
+}
+
+// HandleBirdNETSettings handles the request for the BirdNET settings page
+func (h *Handlers) HandleBirdNETSettings(c echo.Context) error {
+	return c.Render(http.StatusOK, "birdnetSettings", map[string]interface{}{
+		"Settings": h.Settings,
+	})
+}
+
+// HandleInputSettings handles the request for the input settings page
+func (h *Handlers) HandleInputSettings(c echo.Context) error {
+	return c.Render(http.StatusOK, "inputSettings", map[string]interface{}{
+		"Settings": h.Settings,
+	})
+}
+
+// HandleRealtimeSettings handles the request for the realtime settings page
+func (h *Handlers) HandleRealtimeSettings(c echo.Context) error {
+	return c.Render(http.StatusOK, "realtimeSettings", map[string]interface{}{
+		"Settings": h.Settings,
+	})
+}
+
+// HandleWebServerSettings handles the request for the web server settings page
+func (h *Handlers) HandleWebServerSettings(c echo.Context) error {
+	return c.Render(http.StatusOK, "webServerSettings", map[string]interface{}{
+		"Settings": h.Settings,
+	})
+}
+
+// HandleOutputSettings handles the request for the output settings page
+func (h *Handlers) HandleOutputSettings(c echo.Context) error {
+	return c.Render(http.StatusOK, "outputSettings", map[string]interface{}{
+		"Settings": h.Settings,
+	})
+}

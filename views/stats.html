@@ -1,43 +1,74 @@
 {{define "stats"}}
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
-<!-- Stats Content -->
 <section class="col-span-12 xl:col-span-12">
-    <div class="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden">
-        <div class="p-6">
-            <div id="chart-container" class="w-full" style="height: 400px;">
-                <!-- Stats content will be loaded here -->
-                {{.Charts}}
+<div x-data="{ activeTab: 'daily' }" class="p-6">
+    
+    <div class="flex flex-wrap gap-4 mb-8">
+        <button 
+            @click="activeTab = 'daily'" 
+            :class="{'btn-primary': activeTab === 'daily'}"
+            class="btn btn-sm"
+            hx-get="/api/stats/daily" 
+            hx-target="#stats-content">
+            Daily Statistics
+        </button>
+        <button 
+            @click="activeTab = 'weekly'" 
+            :class="{'btn-primary': activeTab === 'weekly'}"
+            class="btn btn-sm"
+            hx-get="/api/stats/weekly" 
+            hx-target="#stats-content">
+            Weekly Summary
+        </button>
+        <button 
+            @click="activeTab = 'monthly'" 
+            :class="{'btn-primary': activeTab === 'monthly'}"
+            class="btn btn-sm"
+            hx-get="/api/stats/monthly" 
+            hx-target="#stats-content">
+            Monthly Trends
+        </button>
+        <button 
+            @click="activeTab = 'species'" 
+            :class="{'btn-primary': activeTab === 'species'}"
+            class="btn btn-sm"
+            hx-get="/api/stats/species" 
+            hx-target="#stats-content">
+            Species Distribution
+        </button>
+    </div>
+    
+    <div id="stats-content" class="grid gap-6 mt-6">
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title text-xl">Daily Bird Detections</h2>
+                <div id="daily-detections-chart" class="w-full h-[400px]">{{.Charts}}</div>
+            </div>
+        </div>
+        
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title text-xl">Species Diversity</h2>
+                <div id="species-diversity-chart" class="w-full h-[400px]"></div>
+            </div>
+        </div>
+        
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title text-xl">Top 5 Species</h2>
+                <div id="top-species-chart" class="w-full h-[400px]"></div>
             </div>
         </div>
     </div>
+</div>
 </section>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        var chartContainer = document.getElementById('chart-container');
-        var chartElement = chartContainer.querySelector('.item');
-        
-        if (chartElement) {
-            var chart = echarts.getInstanceByDom(chartElement) || echarts.init(chartElement);
-            
-            function resizeChart() {
-                chart.resize({
-                    width: chartContainer.clientWidth,
-                    height: chartContainer.clientHeight
-                });
-            }
-
-            // Initial resize
-            resizeChart();
-
-            // Resize on window resize
-            window.addEventListener('resize', resizeChart);
-
-            // Resize on sidebar toggle (if applicable)
-            var sidebarToggle = document.getElementById('my-drawer');
-            if (sidebarToggle) {
-                sidebarToggle.addEventListener('change', function() {
-                    setTimeout(resizeChart, 300); // Delay to allow for transition
+    document.addEventListener('htmx:afterSettle', function(event) {
+        if (event.detail.target.id === 'stats-content') {
+            // Reinitialize charts if needed
+            if (typeof echarts !== 'undefined') {
+                document.querySelectorAll('[id$="-chart"]').forEach(function(chartElement) {
+                    echarts.init(chartElement).resize();
                 });
             }
         }

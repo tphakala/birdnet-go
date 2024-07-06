@@ -148,22 +148,3 @@ func (h *Handlers) DeleteNote(c echo.Context) error {
 	// Pass this struct to the template or return a success message
 	return c.HTML(http.StatusOK, `<div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 3000)" class="notification-class">Delete successful!</div>`)
 }
-
-// serveSpectrogramHandler serves or generates a spectrogram for a given clip.
-func (h *Handlers) ServeSpectrogram(c echo.Context) error {
-	// Extract clip name from the query parameters
-	clipName := c.QueryParam("clip")
-	if clipName == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "Clip name is required.")
-	}
-
-	// Construct the path to the spectrogram image
-	spectrogramPath, err := h.getSpectrogramPath(clipName, 400) // Assuming 400px width
-	if err != nil {
-		log.Printf("Failed to get or generate spectrogram for clip %s: %v", clipName, err)
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate spectrogram")
-	}
-
-	// Serve the spectrogram image file
-	return c.File(spectrogramPath)
-}

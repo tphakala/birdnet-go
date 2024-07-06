@@ -1,0 +1,24 @@
+{{define "dailyStats"}}
+<div x-data="chartData" class="grid gap-6">
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="card-title text-xl">Daily Bird Detections</h2>
+            <div id="daily-detections-chart" class="w-full h-[400px]" data-options='{{.DetectionsChartOptions}}'></div>
+        </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="card-title text-xl">Species Diversity (Daily)</h2>
+            <div id="daily-diversity-chart" class="w-full h-[400px]" data-options='{{.DiversityChartOptions}}'></div>
+        </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="card-title text-xl">Top 5 Species (Today)</h2>
+            <div id="daily-top-species-chart" class="w-full h-[400px]" data-options='{{.TopSpeciesChartOptions}}'></div>
+        </div>
+    </div>
+</div>
+{{end}}

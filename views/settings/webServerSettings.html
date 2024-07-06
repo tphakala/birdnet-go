@@ -1,0 +1,81 @@
+{{define "webServerSettings"}}
+<div class="col-span-12 grid grid-cols-1 md:grid-cols-2 gap-6">
+    
+    <div class="form-control">
+        <label class="label" for="webServerEnabled">
+            <span class="label-text">Enable Web Server</span>
+        </label>
+        <input type="checkbox" id="webServerEnabled" name="webServer.enabled" class="toggle" {{if .Settings.WebServer.Enabled}}checked{{end}}>
+    </div>
+
+    <div class="form-control">
+        <label class="label" for="webServerPort">
+            <span class="label-text">Port</span>
+        </label>
+        <input type="text" id="webServerPort" name="webServer.port" value="{{.Settings.WebServer.Port}}" class="input input-bordered" placeholder="Enter port number">
+    </div>
+
+    <div class="form-control">
+        <label class="label" for="webServerAutoTLS">
+            <span class="label-text">Enable Auto TLS</span>
+        </label>
+        <input type="checkbox" id="webServerAutoTLS" name="webServer.autoTLS" class="toggle" {{if .Settings.WebServer.AutoTLS}}checked{{end}}>
+    </div>
+
+    <!-- Web Server Log Settings -->
+    <div class="col-span-full">
+        <h2 class="text-xl font-light mb-4">Web Server Log Settings</h2>
+    </div>
+
+    <div class="form-control">
+        <label class="label" for="webServerLogEnabled">
+            <span class="label-text">Enable Logging</span>
+        </label>
+        <input type="checkbox" id="webServerLogEnabled" name="webServer.log.enabled" class="toggle" {{if .Settings.WebServer.Log.Enabled}}checked{{end}}>
+    </div>
+
+    <div class="form-control">
+        <label class="label" for="webServerLogPath">
+            <span class="label-text">Log Path</span>
+        </label>
+        <input type="text" id="webServerLogPath" name="webServer.log.path" value="{{.Settings.WebServer.Log.Path}}" class="input input-bordered" placeholder="Enter log path">
+    </div>
+
+    <div class="form-control">
+        <label class="label" for="webServerLogRotation">
+            <span class="label-text">Log Rotation</span>
+        </label>
+        <select id="webServerLogRotation" name="webServer.log.rotation" class="select select-bordered">
+            <option value="daily" {{if eq .Settings.WebServer.Log.Rotation "daily"}}selected{{end}}>Daily</option>
+            <option value="weekly" {{if eq .Settings.WebServer.Log.Rotation "weekly"}}selected{{end}}>Weekly</option>
+            <option value="size" {{if eq .Settings.WebServer.Log.Rotation "size"}}selected{{end}}>Size-based</option>
+        </select>
+    </div>
+
+    <div class="form-control">
+        <label class="label" for="webServerLogMaxSize">
+            <span class="label-text">Max Log Size (bytes)</span>
+        </label>
+        <input type="number" id="webServerLogMaxSize" name="webServer.log.maxSize" value="{{.Settings.WebServer.Log.MaxSize}}" class="input input-bordered" placeholder="Enter max log size">
+    </div>
+
+    <div class="form-control">
+        <label class="label" for="webServerLogRotationDay">
+            <span class="label-text">Log Rotation Day (for weekly)</span>
+        </label>
+        <select id="webServerLogRotationDay" name="webServer.log.rotationDay" class="select select-bordered">
+            <option value="0" {{if eq .Settings.WebServer.Log.RotationDay 0}}selected{{end}}>Sunday</option>
+            <option value="1" {{if eq .Settings.WebServer.Log.RotationDay 1}}selected{{end}}>Monday</option>
+            <option value="2" {{if eq .Settings.WebServer.Log.RotationDay 2}}selected{{end}}>Tuesday</option>
+            <option value="3" {{if eq .Settings.WebServer.Log.RotationDay 3}}selected{{end}}>Wednesday</option>
+            <option value="4" {{if eq .Settings.WebServer.Log.RotationDay 4}}selected{{end}}>Thursday</option>
+            <option value="5" {{if eq .Settings.WebServer.Log.RotationDay 5}}selected{{end}}>Friday</option>
+            <option value="6" {{if eq .Settings.WebServer.Log.RotationDay 6}}selected{{end}}>Saturday</option>
+        </select>
+    </div>
+
+    <div class="col-span-full">
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+    </div>
+</div>
+{{end}}

@@ -3,8 +3,6 @@ package handlers
 
 import (
 	"fmt"
-	"html"
-	"html/template"
 	"log"
 	"os"
 	"os/exec"
@@ -183,58 +181,4 @@ func parseOffset(offsetStr string, defaultOffset int) int {
 		return defaultOffset
 	}
 	return offset
-}
-
-// Thumbnail returns the URL of a given bird's thumbnail image.
-// It takes the bird's scientific name as input and returns the image URL as a string.
-// If the image is not found or an error occurs, it returns an empty string.
-func (h *Handlers) Thumbnail(scientificName string) string {
-	if h.BirdImageCache == nil {
-		// Return empty string if the cache is not initialized
-		return ""
-	}
-
-	birdImage, err := h.BirdImageCache.Get(scientificName)
-	if err != nil {
-		// Return empty string if an error occurs
-		return ""
-	}
-
-	return birdImage.URL
-}
-
-// ThumbnailAttribution returns the HTML-formatted attribution for a bird's thumbnail image.
-// It takes the bird's scientific name as input and returns a template.HTML string.
-// If the attribution information is incomplete or an error occurs, it returns an empty template.HTML.
-func (h *Handlers) ThumbnailAttribution(scientificName string) template.HTML {
-	if h.BirdImageCache == nil {
-		// Return empty string if the cache is not initialized
-		return template.HTML("")
-	}
-
-	birdImage, err := h.BirdImageCache.Get(scientificName)
-	if err != nil {
-		log.Printf("Error getting thumbnail info for %s: %v", scientificName, err)
-		return template.HTML("")
-	}
-
-	if birdImage.AuthorName == "" || birdImage.LicenseName == "" {
-		return template.HTML("")
-	}
-
-	var attribution string
-	if birdImage.AuthorURL == "" {
-		attribution = fmt.Sprintf("© %s / <a href=\"%s\">%s</a>",
-			html.EscapeString(birdImage.AuthorName),
-			html.EscapeString(birdImage.LicenseURL),
-			html.EscapeString(birdImage.LicenseName))
-	} else {
-		attribution = fmt.Sprintf("© <a href=\"%s\">%s</a> / <a href=\"%s\">%s</a>",
-			html.EscapeString(birdImage.AuthorURL),
-			html.EscapeString(birdImage.AuthorName),
-			html.EscapeString(birdImage.LicenseURL),
-			html.EscapeString(birdImage.LicenseName))
-	}
-
-	return template.HTML(attribution)
 }

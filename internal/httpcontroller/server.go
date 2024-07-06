@@ -177,6 +177,7 @@ func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 		Title    string
 		Settings *conf.Settings
 		Locales  []LocaleData
+		Charts   template.HTML
 	})
 	if !ok {
 		return "", fmt.Errorf("invalid data type")
@@ -211,6 +212,7 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 		Title    string
 		Settings *conf.Settings
 		Locales  []LocaleData
+		Charts   template.HTML
 	}{
 		C:        c,
 		Page:     route.TemplateName,
@@ -221,6 +223,13 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 	// Include settings and locales data only for the settings page
 	if route.TemplateName == "settingsMain" {
 		data.Locales = s.getLocalesData()
+	}
+
+	if route.TemplateName == "stats" {
+		// Render charts to HTML
+		birdVocalizationChartHTML := s.Handlers.BirdStats()
+		// Prepare data for the template
+		data.Charts = template.HTML(birdVocalizationChartHTML)
 	}
 
 	return c.Render(http.StatusOK, "index", data)

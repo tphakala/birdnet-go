@@ -55,7 +55,27 @@ func (s *Server) initRoutes() {
 		{Path: "/top-birds", TemplateName: "birdsTableHTML", Title: "Top Birds", Handler: h.WithErrorHandling(h.TopBirds)},
 		{Path: "/notes", TemplateName: "notes", Title: "All Notes", Handler: h.WithErrorHandling(h.GetAllNotes)},
 		{Path: "/media/spectrogram", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.ServeSpectrogram)},
+		{Path: "/api/stats/daily", TemplateName: "dailyStats", Title: "Daily Statistics", Handler: h.WithErrorHandling(h.GetDailyStats)},
+		{Path: "/api/stats/weekly", TemplateName: "weeklyStats", Title: "Weekly Statistics", Handler: h.WithErrorHandling(h.GetWeeklyStats)},
+		{Path: "/api/stats/monthly", TemplateName: "monthlyStats", Title: "Monthly Statistics", Handler: h.WithErrorHandling(h.GetMonthlyStats)},
+		{Path: "/api/stats/species", TemplateName: "speciesStats", Title: "Species Statistics", Handler: h.WithErrorHandling(h.GetSpeciesStats)},
 	}
+
+	// Add new routes for settings pages
+	s.pageRoutes["/settings/main"] = PageRouteConfig{Path: "/settings/main", TemplateName: "mainSettings", Title: "Main Settings"}
+	s.pageRoutes["/settings/birdnet"] = PageRouteConfig{Path: "/settings/birdnet", TemplateName: "birdnetSettings", Title: "BirdNET Settings"}
+	s.pageRoutes["/settings/input"] = PageRouteConfig{Path: "/settings/input", TemplateName: "inputSettings", Title: "Input Settings"}
+	s.pageRoutes["/settings/realtime"] = PageRouteConfig{Path: "/settings/realtime", TemplateName: "realtimeSettings", Title: "Realtime Settings"}
+	s.pageRoutes["/settings/webserver"] = PageRouteConfig{Path: "/settings/webserver", TemplateName: "webServerSettings", Title: "Web Server Settings"}
+	s.pageRoutes["/settings/output"] = PageRouteConfig{Path: "/settings/output", TemplateName: "outputSettings", Title: "Output Settings"}
+
+	// Add handlers for settings pages
+	s.Echo.GET("/settings/main", h.WithErrorHandling(h.HandleMainSettings))
+	s.Echo.GET("/settings/birdnet", h.WithErrorHandling(h.HandleBirdNETSettings))
+	s.Echo.GET("/settings/input", h.WithErrorHandling(h.HandleInputSettings))
+	s.Echo.GET("/settings/realtime", h.WithErrorHandling(h.HandleRealtimeSettings))
+	s.Echo.GET("/settings/webserver", h.WithErrorHandling(h.HandleWebServerSettings))
+	s.Echo.GET("/settings/output", h.WithErrorHandling(h.HandleOutputSettings))
 
 	// Set up full page routes
 	for _, route := range s.pageRoutes {

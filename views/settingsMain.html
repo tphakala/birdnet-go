@@ -1,10 +1,9 @@
 {{define "settingsMain"}}
 <div class="col-span-12">
-    <h1 class="text-2xl font-light mb-6">General Settings</h1>
 
     <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <!-- Main Settings -->
-        <div class="card bg-base-100 shadow-xl">
+        <div class="card bg-base-100 shadow-sm">
             <div class="card-body">
                 <h2 class="card-title">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
@@ -21,7 +20,7 @@
         </div>
 
         <!-- BirdNET Settings -->
-        <div class="card bg-base-100 shadow-xl">
+        <div class="card bg-base-100 shadow-sm">
             <div class="card-body">
                 <h2 class="card-title">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
@@ -37,7 +36,7 @@
         </div>
 
         <!-- Input Settings -->
-        <div class="card bg-base-100 shadow-xl">
+        <div class="card bg-base-100 shadow-sm">
             <div class="card-body">
                 <h2 class="card-title">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
@@ -48,6 +47,54 @@
                 <p>Set input path and recursion options</p>
                 <div class="card-actions justify-end">
                     <a href="/settings/input" class="btn btn-primary">Configure</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Realtime Settings -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Realtime Settings
+                </h2>
+                <p>Configure realtime processing options</p>
+                <div class="card-actions justify-end">
+                    <a href="/settings/realtime" class="btn btn-primary">Configure</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Web Server Settings -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
+                    </svg>
+                    Web Server Settings
+                </h2>
+                <p>Configure web server options</p>
+                <div class="card-actions justify-end">
+                    <a href="/settings/webserver" class="btn btn-primary">Configure</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output Settings -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                    </svg>
+                    Output Settings
+                </h2>
+                <p>Configure file, SQLite, and MySQL output options</p>
+                <div class="card-actions justify-end">
+                    <a href="/settings/output" class="btn btn-primary">Configure</a>
                 </div>
             </div>
         </div>
