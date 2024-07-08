@@ -1,71 +1,85 @@
 {{define "birdnetSettings"}}
-<div class="col-span-12 grid grid-cols-1 md:grid-cols-2 gap-6">
-    
-    <div class="form-control">
-        <label class="label" for="sensitivity">
-            <span class="label-text">Sensitivity</span>
-        </label>
-        <input type="number" id="sensitivity" name="birdnet.sensitivity" value="{{.Settings.BirdNET.Sensitivity}}" step="0.1" min="0" max="1" class="input input-bordered" placeholder="Enter sensitivity">
-    </div>
+<div class="card bg-base-100 shadow-sm col-span-3">
+    <div class="card-body p-6">
+        <h2 class="card-title">BirdNET Settings</h2>
 
-    <div class="form-control">
-        <label class="label" for="threshold">
-            <span class="label-text">Threshold</span>
-        </label>
-        <input type="number" id="threshold" name="birdnet.threshold" value="{{.Settings.BirdNET.Threshold}}" step="0.1" min="0" max="1" class="input input-bordered" placeholder="Enter threshold">
-    </div>
+        <div class="form-control">
+            <label class="label" for="birdnetSensitivity">
+                <span class="label-text">Sensitivity</span>
+            </label>
+            <input type="number" id="birdnetSensitivity" name="birdnet.sensitivity" value="{{.Settings.BirdNET.Sensitivity}}" step="0.1" min="0.1" max="1.5" class="input input-bordered w-full">
+        </div>
 
-    <div class="form-control">
-        <label class="label" for="overlap">
-            <span class="label-text">Overlap</span>
-        </label>
-        <input type="number" id="overlap" name="birdnet.overlap" value="{{.Settings.BirdNET.Overlap}}" step="0.1" min="0" max="1" class="input input-bordered" placeholder="Enter overlap">
-    </div>
+        <div class="form-control">
+            <label class="label" for="birdnetThreshold">
+                <span class="label-text">Threshold</span>
+                </label>
+            <input type="number" id="birdnetThreshold" name="birdnet.threshold" value="{{.Settings.BirdNET.Threshold}}" step="0.01" min="0" max="1" class="input input-bordered w-full">
+        </div>
+   
+        <div class="form-control">
+            <label class="label" for="birdnetOverlap">
+                <span class="label-text">Overlap</span>
+            </label>
+            <input type="number" id="birdnetOverlap" name="birdnet.overlap" value="{{.Settings.BirdNET.Overlap}}" step="0.1" min="0" max="2.9" class="input input-bordered w-full">
+        </div>
 
-    <div class="form-control">
-        <label class="label" for="longitude">
-            <span class="label-text">Longitude</span>
-        </label>
-        <input type="number" id="longitude" name="birdnet.longitude" value="{{.Settings.BirdNET.Longitude}}" step="0.000001" class="input input-bordered" placeholder="Enter longitude">
-    </div>
-
-    <div class="form-control">
-        <label class="label" for="latitude">
-            <span class="label-text">Latitude</span>
-        </label>
-        <input type="number" id="latitude" name="birdnet.latitude" value="{{.Settings.BirdNET.Latitude}}" step="0.000001" class="input input-bordered" placeholder="Enter latitude">
-    </div>
-
-    <div class="form-control">
-        <label class="label" for="threads">
-            <span class="label-text">Threads</span>
-        </label>
-        <input type="number" id="threads" name="birdnet.threads" value="{{.Settings.BirdNET.Threads}}" min="1" class="input input-bordered" placeholder="Enter number of threads">
-    </div>
-
-    <div class="form-control">
-        <label class="label" for="locale">
-            <span class="label-text">Locale</span>
-        </label>
-        <input type="text" id="locale" name="birdnet.locale" value="{{.Settings.BirdNET.Locale}}" class="input input-bordered" placeholder="Enter locale">
-    </div>
-
-    <div class="form-control">
-        <label class="label" for="rangeFilterModel">
-            <span class="label-text">Range Filter Model</span>
-        </label>
-        <input type="text" id="rangeFilterModel" name="birdnet.rangeFilter.model" value="{{.Settings.BirdNET.RangeFilter.Model}}" class="input input-bordered" placeholder="Enter range filter model">
-    </div>
-
-    <div class="form-control">
-        <label class="label" for="rangeFilterThreshold">
-            <span class="label-text">Range Filter Threshold</span>
-        </label>
-        <input type="number" id="rangeFilterThreshold" name="birdnet.rangeFilter.threshold" value="{{.Settings.BirdNET.RangeFilter.Threshold}}" step="0.1" min="0" max="1" class="input input-bordered" placeholder="Enter range filter threshold">
-    </div>
-
-    <div class="col-span-full">
-        <button type="submit" class="btn btn-primary">Save Changes</button>
     </div>
 </div>
+
+<div class="card bg-base-100 shadow-sm col-span-3">
+    <div class="card-body p-6">
+        <h2 class="card-title">Locale Settings</h2>
+
+        <div class="form-control">
+            <label class="label" for="birdnetLocale">
+                <span class="label-text">Locale</span>
+            </label>
+            <input type="text" id="birdnetLocale" name="birdnet.locale" value="{{.Settings.BirdNET.Locale}}" class="input input-bordered w-full">
+        </div>
+
+        <div class="form-control">
+            <label class="label" for="birdnetThreads">
+                <span class="label-text">Threads</span>
+            </label>
+            <input type="number" id="birdnetThreads" name="birdnet.threads" value="{{.Settings.BirdNET.Threads}}" min="0" class="input input-bordered w-full">
+        </div>
+    </div>
+</div>
+
+<div class="card bg-base-100 shadow-sm col-span-3">
+    <div class="card-body p-6">
+        <h2 class="card-title">Range Filter Settings</h2>
+
+        <div class="form-control">
+            <label class="label" for="birdnetLongitude">
+                <span class="label-text">Longitude</span>
+            </label>
+            <input type="number" id="birdnetLongitude" name="birdnet.longitude" value="{{.Settings.BirdNET.Longitude}}" step="0.000001" class="input input-bordered w-full">
+        </div>
+
+        <div class="form-control">
+            <label class="label" for="birdnetLatitude">
+                <span class="label-text">Latitude</span>
+            </label>
+            <input type="number" id="birdnetLatitude" name="birdnet.latitude" value="{{.Settings.BirdNET.Latitude}}" step="0.000001" class="input input-bordered w-full">
+        </div>
+
+
+        <div class="form-control">
+            <label class="label" for="birdnetRangeFilterModel">
+                <span class="label-text">Range Filter Model</span>
+            </label>
+            <input type="text" id="birdnetRangeFilterModel" name="birdnet.rangefilter.model" value="{{.Settings.BirdNET.RangeFilter.Model}}" class="input input-bordered w-full">
+        </div>
+
+        <div class="form-control">
+            <label class="label" for="birdnetRangeFilterThreshold">
+                <span class="label-text">Range Filter Threshold</span>
+            </label>
+            <input type="number" id="birdnetRangeFilterThreshold" name="birdnet.rangefilter.threshold" value="{{.Settings.BirdNET.RangeFilter.Threshold}}" step="0.01" min="0" max="1" class="input input-bordered w-full">
+        </div>
+    </div>
+</div>
+
 {{end}}

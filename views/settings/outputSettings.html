@@ -1,75 +1,106 @@
 {{define "outputSettings"}}
 <div x-data="{ 
     outputType: '{{if .Settings.Output.SQLite.Enabled}}sqlite{{else}}mysql{{end}}',
-    showModal: false
+    showNotification: false,
+    notificationMessage: '',
+    saveSettings: function() {
+        const form = document.getElementById('settingsForm');
+        const formData = new FormData(form);
+
+        fetch('/settings/save', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            this.notificationMessage = data.message;
+            this.showNotification = true;
+            setTimeout(() => this.showNotification = false, 3000);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            this.notificationMessage = 'An error occurred while saving settings.';
+            this.showNotification = true;
+            setTimeout(() => this.showNotification = false, 3000);
+        });
+    }
 }" class="col-span-12">
-    
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div class="form-control">
-            <label class="label" for="outputType">
-                <span class="label-text">Select Output Type</span>
-            </label>
-            <select id="outputType" x-model="outputType" class="select select-bordered w-full">
-                <option value="sqlite">SQLite</option>
-                <option value="mysql">MySQL</option>
-            </select>
-        </div>
-    </div>
+<div class="card bg-base-100 shadow-sm col-span-2">
+    <div class="card-body p-6">
+        <h2 class="card-title">Database Settings</h2>
+        
+        <form id="settingsForm" @submit.prevent="saveSettings">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
 
-    <!-- SQLite Output Settings -->
-    <div x-show="outputType === 'sqlite'" class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="form-control col-span-full">
-            <label class="label" for="sqliteOutputPath">
-                <span class="label-text">SQLite Database Path</span>
-            </label>
-            <div class="flex">
-                <input type="text" id="sqliteOutputPath" name="output.sqlite.path" value="{{.Settings.Output.SQLite.Path}}" class="input input-bordered flex-grow" placeholder="Enter SQLite database path">
+                <div class="form-control">
+                    <label class="label" for="outputType">
+                        <span class="label-text">Select Output Type</span>
+                    </label>
+                    <select id="outputType" x-model="outputType" name="output.type" class="select select-bordered w-full">
+                        <option value="sqlite">SQLite</option>
+                        <option value="mysql">MySQL</option>
+                    </select>
+                </div>
+
             </div>
+
+            <!-- SQLite Output Settings -->
+            <div x-show="outputType === 'sqlite'" class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="form-control col-span-full">
+                    <label class="label" for="sqliteOutputPath">
+                        <span class="label-text">SQLite Database Path</span>
+                    </label>
+                    <div class="flex">
+                        <input type="text" id="sqliteOutputPath" name="output.sqlite.path" value="{{.Settings.Output.SQLite.Path}}" class="input input-bordered flex-grow" placeholder="Enter SQLite database path">
+                    </div>
+                </div>
+            </div>
+
+            <!-- MySQL Output Settings -->             
+            <div x-show="outputType === 'mysql'" class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+
+                <div class="form-control">
+                    <label class="label" for="mysqlOutputHost">
+                        <span class="label-text">MySQL Host</span>
+                    </label>
+                    <input type="text" id="mysqlOutputHost" name="output.mysql.host" value="{{.Settings.Output.MySQL.Host}}" class="input input-bordered" placeholder="Enter MySQL host">
+                </div>
+
+                <div class="form-control">
+                    <label class="label" for="mysqlOutputPort">
+                        <span class="label-text">MySQL Port</span>
+                    </label>
+                    <input type="text" id="mysqlOutputPort" name="output.mysql.port" value="{{.Settings.Output.MySQL.Port}}" class="input input-bordered" placeholder="Enter MySQL port">
+                </div>
+            
+
+                <div class="form-control">
+                    <label class="label" for="mysqlOutputUsername">
+                        <span class="label-text">MySQL Username</span>
+                    </label>
+                    <input type="text" id="mysqlOutputUsername" name="output.mysql.username" value="{{.Settings.Output.MySQL.Username}}" class="input input-bordered" placeholder="Enter MySQL username">
+                </div>
+
+                <div class="form-control">
+                    <label class="label" for="mysqlOutputPassword">
+                        <span class="label-text">MySQL Password</span>
+                    </label>
+                    <input type="password" id="mysqlOutputPassword" name="output.mysql.password" value="{{.Settings.Output.MySQL.Password}}" class="input input-bordered" placeholder="Enter MySQL password">
+                </div>
+
+                <div class="md:col-span-2 flex justify-start">
+                    <div class="form-control w-full md:w-[calc(50%-0.75rem)]">
+                        <label class="label" for="mysqlOutputDatabase">
+                            <span class="label-text">MySQL Database</span>
+                        </label>
+                        <input type="text" id="mysqlOutputDatabase" name="output.mysql.database" value="{{.Settings.Output.MySQL.Database}}" class="input input-bordered w-full" placeholder="Enter MySQL database name">
+                    </div>
+                </div>
+            
+            </div>
+            
         </div>
     </div>
-
-    <!-- MySQL Output Settings -->
-    <div x-show="outputType === 'mysql'" class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div class="form-control">
-            <label class="label" for="mysqlOutputUsername">
-                <span class="label-text">MySQL Username</span>
-            </label>
-            <input type="text" id="mysqlOutputUsername" name="output.mysql.username" value="{{.Settings.Output.MySQL.Username}}" class="input input-bordered" placeholder="Enter MySQL username">
-        </div>
-
-        <div class="form-control">
-            <label class="label" for="mysqlOutputPassword">
-                <span class="label-text">MySQL Password</span>
-            </label>
-            <input type="password" id="mysqlOutputPassword" name="output.mysql.password" value="{{.Settings.Output.MySQL.Password}}" class="input input-bordered" placeholder="Enter MySQL password">
-        </div>
-
-        <div class="form-control">
-            <label class="label" for="mysqlOutputDatabase">
-                <span class="label-text">MySQL Database</span>
-            </label>
-            <input type="text" id="mysqlOutputDatabase" name="output.mysql.database" value="{{.Settings.Output.MySQL.Database}}" class="input input-bordered" placeholder="Enter MySQL database name">
-        </div>
-
-        <div class="form-control">
-            <label class="label" for="mysqlOutputHost">
-                <span class="label-text">MySQL Host</span>
-            </label>
-            <input type="text" id="mysqlOutputHost" name="output.mysql.host" value="{{.Settings.Output.MySQL.Host}}" class="input input-bordered" placeholder="Enter MySQL host">
-        </div>
-
-        <div class="form-control">
-            <label class="label" for="mysqlOutputPort">
-                <span class="label-text">MySQL Port</span>
-            </label>
-            <input type="text" id="mysqlOutputPort" name="output.mysql.port" value="{{.Settings.Output.MySQL.Port}}" class="input input-bordered" placeholder="Enter MySQL port">
-        </div>
-    </div>
-
-    <div class="mt-6">
-        <button type="submit" class="btn btn-primary">Save Changes</button>
-    </div>
-
 </div>
 
 {{end}}

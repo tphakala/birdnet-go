@@ -1,0 +1,77 @@
+{{define "settingsBase"}}
+<div x-data="{ 
+    showNotification: false,
+    notificationMessage: '',
+    notificationType: 'success',
+    saveSettings: function() {
+        const form = document.getElementById('settingsForm');
+        const formData = new FormData(form);
+
+        fetch('/settings/save', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            this.notificationMessage = data.message;
+            this.notificationType = 'success';
+            this.showNotification = true;
+            setTimeout(() => this.showNotification = false, 3000);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            this.notificationMessage = 'An error occurred while saving settings.';
+            this.notificationType = 'error';
+            this.showNotification = true;
+            setTimeout(() => this.showNotification = false, 3000);
+        });
+    }
+}" class="col-span-12">
+    
+    <form id="settingsForm" @submit.prevent="saveSettings">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {{renderSettingsContent .C}}
+        </div>
+
+        <div class="mt-6">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+    </form>
+
+    <!-- Notification -->
+    <div x-show="showNotification" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 transform scale-90"
+         x-transition:enter-end="opacity-100 transform scale-100"
+         x-transition:leave="transition ease-in duration-300"
+         x-transition:leave-start="opacity-100 transform scale-100"
+         x-transition:leave-end="opacity-0 transform scale-90"
+         class="fixed bottom-5 right-5 z-50">
+        <div role="alert" class="alert" :class="{ 'alert-success': notificationType === 'success', 'alert-error': notificationType === 'error' }">
+            <svg x-show="notificationType === 'success'"
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-6 w-6 shrink-0 stroke-current"
+                fill="none"
+                viewBox="0 0 24 24">
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <svg x-show="notificationType === 'error'"
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-6 w-6 shrink-0 stroke-current"
+                fill="none"
+                viewBox="0 0 24 24">
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span x-text="notificationMessage"></span>
+        </div>
+    </div>
+</div>
+{{end}}
