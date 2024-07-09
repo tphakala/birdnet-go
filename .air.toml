@@ -1,32 +1,35 @@
+# Root directory
 root = "."
-testdata_dir = "testdata"
 tmp_dir = "tmp"
 
+# Build configuration
 [build]
-  args_bin = []
+  cmd = """
+    export CGO_ENABLED=1
+    export CGO_CFLAGS="-I${HOME}/src/tensorflow"
+    export CGO_LDFLAGS="-L/usr/lib -ltensorflowlite_c"
+    go build -v -x -ldflags "-s -w -X main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o ./tmp/main .
+  """
   bin = "./tmp/main"
-  cmd = "go build -o ./tmp/main ."
   delay = 1000
-  exclude_dir = ["assets", "tmp", "vendor", "testdata"]
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", "bin"]
   exclude_file = []
   exclude_regex = ["_test.go"]
   exclude_unchanged = false
   follow_symlink = false
   full_bin = ""
   include_dir = []
-  include_ext = ["go", "tpl", "tmpl", "html"]
-  include_file = []
+  include_ext = ["go", "tpl", "tmpl", "html", "css"]
   kill_delay = "0s"
   log = "build-errors.log"
-  poll = false
-  poll_interval = 0
-  post_cmd = []
-  pre_cmd = []
-  rerun = false
-  rerun_delay = 500
   send_interrupt = false
-  stop_on_error = false
+  stop_on_error = true
 
+  # Tailwind CSS rebuild
+  [build.tailwind]
+    cmd = "tailwindcss -i input.css -o assets/tailwind.css"
+    path = "input.css"
+    
 [color]
   app = ""
   build = "yellow"
@@ -35,7 +38,6 @@ tmp_dir = "tmp"
   watcher = "cyan"
 
 [log]
-  main_only = false
   time = false
 
 [misc]
