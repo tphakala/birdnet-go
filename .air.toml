@@ -1,48 +1,57 @@
-# Root directory
-root = "."
-tmp_dir = "tmp"
+# Root directory configuration
+root = "."  # Set the root directory to the current directory
+tmp_dir = "tmp"  # Temporary directory for build artifacts
 
 # Build configuration
 [build]
+  # Pre-build command: Compile Tailwind CSS
+  pre_cmd = ["tailwindcss -i input.css -o assets/tailwind.css"]
+  
+  # Main build command
   cmd = """
+    # Enable CGO for TensorFlow Lite integration
     export CGO_ENABLED=1
     export CGO_CFLAGS="-I${HOME}/src/tensorflow"
     export CGO_LDFLAGS="-L/usr/lib -ltensorflowlite_c"
+    
+    # Build the Go application
     go build -v -x -ldflags "-s -w -X main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o ./tmp/main .
   """
-  bin = "./tmp/main"
-  delay = 1000
+  
+  bin = "./tmp/main"  # Path to the compiled binary
+  delay = 1000  # Delay (in milliseconds) before restarting the app after a change
+  
+  # Directories to exclude from watching
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "bin"]
-  exclude_file = []
-  exclude_regex = ["_test.go"]
-  exclude_unchanged = false
-  follow_symlink = false
-  full_bin = ""
-  include_dir = []
-  include_ext = ["go", "tpl", "tmpl", "html", "css"]
-  kill_delay = "0s"
-  log = "build-errors.log"
-  send_interrupt = false
-  stop_on_error = true
+  exclude_file = []  # Files to exclude from watching (none specified)
+  exclude_regex = ["_test.go"]  # Exclude test files
+  exclude_unchanged = false  # Watch even files that haven't changed
+  follow_symlink = false  # Don't follow symlinks
+  full_bin = ""  # Additional arguments when running the built binary
+  include_dir = []  # Directories to include (watches all if empty)
+  include_ext = ["go", "tpl", "tmpl", "html", "css"]  # File extensions to watch
+  kill_delay = "0s"  # Delay before killing the app on a rebuild
+  log = "build-errors.log"  # File to log build errors
+  send_interrupt = false  # Send interrupt signal before killing the app
+  stop_on_error = true  # Stop restarting if build errors occur
 
-  # Tailwind CSS rebuild
-  [build.tailwind]
-    cmd = "tailwindcss -i input.css -o assets/tailwind.css"
-    path = "input.css"
-    
+# Color configuration for console output
 [color]
-  app = ""
+  app = ""  # Default terminal color for app output
   build = "yellow"
   main = "magenta"
   runner = "green"
   watcher = "cyan"
 
+# Logging configuration
 [log]
-  time = false
+  time = false  # Don't include timestamps in logs
 
+# Miscellaneous settings
 [misc]
-  clean_on_exit = false
+  clean_on_exit = false  # Don't clean temporary directory on exit
 
+# Screen settings
 [screen]
-  clear_on_rebuild = false
-  keep_scroll = true
+  clear_on_rebuild = false  # Don't clear the screen on rebuild
+  keep_scroll = true  # Keep scroll position when output screen is full
