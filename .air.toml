@@ -5,7 +5,18 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
 # Build configuration
 [build]
   # Pre-build command: Compile Tailwind CSS
-  pre_cmd = ["tailwindcss -i input.css -o assets/tailwind.css"]
+  pre_cmd = [
+    """
+    if command -v tailwindcss >/dev/null 2>&1; then
+      tailwindcss -i input.css -o assets/tailwind.css
+    elif command -v npx >/dev/null 2>&1; then
+      npx tailwindcss -i input.css -o assets/tailwind.css
+    else
+      echo "Error: Neither 'tailwindcss' binary nor 'npx' found. Please install Tailwind CSS."
+      exit 1
+    fi
+    """
+  ]
   
   # Main build command
   cmd = """
