@@ -87,8 +87,8 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 
 	// Initialize ring buffers for each audio source
 	var sources []string
-	if len(settings.Realtime.RTSP.Urls) > 0 {
-		sources = settings.Realtime.RTSP.Urls
+	if len(settings.Realtime.RTSP.URLs) > 0 {
+		sources = settings.Realtime.RTSP.URLs
 		// DEBUG
 		//log.Println("RTSP sources configured, using RTSP for audio capture")
 	} else {
