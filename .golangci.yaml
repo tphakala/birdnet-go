@@ -35,6 +35,8 @@ linters:
     - unconvert
     #- unused
     - wastedassign
+  disable:
+    - unused
 
 linters-settings:
   gocognit:
