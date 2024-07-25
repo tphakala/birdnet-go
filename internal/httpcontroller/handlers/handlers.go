@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -71,7 +72,8 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 
 // defaultErrorHandler is the default implementation of error handling.
 func defaultErrorHandler(err error) *HandlerError {
-	if he, ok := err.(*HandlerError); ok {
+	var he *HandlerError
+	if errors.As(err, &he) {
 		return he
 	}
 	return &HandlerError{

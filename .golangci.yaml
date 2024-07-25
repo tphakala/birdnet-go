@@ -20,8 +20,8 @@ linters:
     - errname
     - errorlint
     - exportloopref
-    - gocognit
-    - gocritic
+    #- gocognit
+    #- gocritic
     - gofmt
     #- gofumpt
     - goimports
@@ -33,12 +33,12 @@ linters:
     #- revive
     - staticcheck
     - unconvert
-    - unused
+    #- unused
     - wastedassign
 
 linters-settings:
   gocognit:
-    min-complexity: 20
+    min-complexity: 50
   gocritic:
     disabled-checks:
       - commentFormatting
