@@ -1,9 +1,51 @@
 {{define "settingsBase"}}
-<div x-data="{ 
-    showNotification: false,
-    notificationMessage: '',
-    notificationType: 'success',
-    saveSettings: function() {
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.store('pageLoaded', {
+            loaded: false
+        });
+
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                Alpine.store('pageLoaded').loaded = true;
+            }, 50); // Small delay to ensure Alpine has finished rendering
+        });
+    });
+</script>
+
+<style>
+    [x-cloak] { display: none !important; }
+    
+    .badge.badge-primary.badge-sm.changed-badge {
+        opacity: 1;
+        transition: opacity 0.3s ease-out;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 0.125rem; /* mt-0.5 */
+        height: 1rem; /* h-4 */
+    }
+</style>
+
+<div class="col-span-12" x-data="{ 
+    notifications: [],
+    hasChanges: false,
+    initSSE() {
+        const eventSource = new EventSource('/sse');
+        eventSource.onmessage = (event) => {
+            const notification = JSON.parse(event.data);
+            this.addNotification(notification.message, notification.type);
+        };
+    },
+    addNotification(message, type) {
+        const id = Date.now();
+        this.notifications.push({ id, message, type });
+        setTimeout(() => {
+            this.notifications = this.notifications.filter(n => n.id !== id);
+        }, 5000);
+    },
+    saveSettings() {
         const form = document.getElementById('settingsForm');
         const formData = new FormData(form);
 
@@ -11,67 +53,60 @@
             method: 'POST',
             body: formData
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+        })
         .then(data => {
-            this.notificationMessage = data.message;
-            this.notificationType = 'success';
-            this.showNotification = true;
-            setTimeout(() => this.showNotification = false, 3000);
+            this.resetComponentChanges();
         })
         .catch(error => {
             console.error('Error:', error);
-            this.notificationMessage = 'An error occurred while saving settings.';
-            this.notificationType = 'error';
-            this.showNotification = true;
-            setTimeout(() => this.showNotification = false, 3000);
+            this.addNotification('An error occurred while saving settings. Please try again.', 'error');
+        });
+    },
+    resetComponentChanges() {
+        console.log('Resetting component changes');
+        this.$root.querySelectorAll('[x-data]').forEach(el => {
+            if (el._x_resetChanges && typeof el._x_resetChanges === 'function') {
+                console.log('Calling resetChanges on component');
+                el._x_resetChanges();
+            }
         });
     }
-}" class="col-span-12">
-    
+}" x-init="initSSE()"
+   x-bind:class="$store.pageLoaded.loaded ? 'page-loaded' : ''">
+
     <form id="settingsForm" @submit.prevent="saveSettings">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            <!-- Settings content rendered here -->
             {{renderSettingsContent .C}}
         </div>
 
-        <div class="mt-6">
-            <button type="submit" class="btn btn-primary">Save Changes</button>
-        </div>
+        <button @click.prevent="saveSettings()" class="btn btn-primary mt-6">
+            Save Changes
+        </button>
     </form>
 
-    <!-- Notification -->
-    <div x-show="showNotification" 
-         x-transition:enter="transition ease-out duration-300"
-         x-transition:enter-start="opacity-0 transform scale-90"
-         x-transition:enter-end="opacity-100 transform scale-100"
-         x-transition:leave="transition ease-in duration-300"
-         x-transition:leave-start="opacity-100 transform scale-100"
-         x-transition:leave-end="opacity-0 transform scale-90"
-         class="fixed bottom-5 right-5 z-50">
-        <div role="alert" class="alert" :class="{ 'alert-success': notificationType === 'success', 'alert-error': notificationType === 'error' }">
-            <svg x-show="notificationType === 'success'"
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-6 w-6 shrink-0 stroke-current"
-                fill="none"
-                viewBox="0 0 24 24">
-                <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <svg x-show="notificationType === 'error'"
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-6 w-6 shrink-0 stroke-current"
-                fill="none"
-                viewBox="0 0 24 24">
-                <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span x-text="notificationMessage"></span>
-        </div>
+    <div class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2">
+        <template x-for="notification in notifications" :key="notification.id">
+            <div x-show="!notification.removing"
+                 :class="{
+                    'alert-success': notification.type === 'success',
+                    'alert-error': notification.type === 'error',
+                    'alert-info': notification.type === 'info'
+                 }"
+                 class="alert">
+                <div class="flex items-start">
+                    <svg x-show="notification.type === 'success'" xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <svg x-show="notification.type === 'error'" xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <svg x-show="notification.type === 'info'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current flex-shrink-0 w-6 h-6 mr-2"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span x-text="notification.message"></span>
+                </div>
+            </div>
+        </template>
     </div>
 </div>
+
 {{end}}
