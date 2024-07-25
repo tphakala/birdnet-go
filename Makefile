@@ -75,12 +75,12 @@ $(LABELS_ZIP): $(LABELS_FILES)
 
 # Build for Linux amd64
 linux_amd64: TFLITE_LIB_ARCH=linux_amd64.tar.gz
-linux_amd64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite 
+linux_amd64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite
 	GOOS=linux GOARCH=amd64 $(CGO_FLAGS) go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
 # Build for Linux arm64, with cross-compilation setup if on amd64
 linux_arm64: TFLITE_LIB_ARCH=linux_arm64.tar.gz
-linux_arm64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite 
+linux_arm64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite
 ifeq ($(UNAME_M),x86_64)
 	@# Cross-compilation setup for amd64 to arm64
 	CC=aarch64-linux-gnu-gcc $(CGO_FLAGS) GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
@@ -106,7 +106,7 @@ darwin_arm64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite
 	$(CGO_FLAGS) go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
 dev_server: REALTIME_ARGS=""
-dev_server: 
+dev_server:
 	$(CGO_FLAGS) air realtime $(REALTIME_ARGS)
 
 clean:
