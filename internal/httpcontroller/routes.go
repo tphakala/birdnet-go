@@ -3,6 +3,7 @@ package httpcontroller
 
 import (
 	"embed"
+	"encoding/json"
 	"html/template"
 	"io/fs"
 
@@ -36,16 +37,24 @@ func (s *Server) initRoutes() {
 	// Initialize handlers
 	h := s.Handlers
 
-	// Define full page routes
+	// Full page routes
 	s.pageRoutes = map[string]PageRouteConfig{
 		"/":          {Path: "/", TemplateName: "dashboard", Title: "Dashboard"},
 		"/dashboard": {Path: "/dashboard", TemplateName: "dashboard", Title: "Dashboard"},
 		"/logs":      {Path: "/logs", TemplateName: "logs", Title: "Logs"},
 		"/stats":     {Path: "/stats", TemplateName: "stats", Title: "Statistics"},
-		"/settings":  {Path: "/settings", TemplateName: "settingsMain", Title: "General Settings"},
+		// Settings Routes are managed by settingsBase template
+		"/settings/main":         {Path: "/settings/main", TemplateName: "settingsBase", Title: "Main Settings"},
+		"/settings/audio":        {Path: "/settings/audio", TemplateName: "settingsBase", Title: "Audio Settings"},
+		"/settings/integrations": {Path: "/settings/integrations", TemplateName: "settingsBase", Title: "Integration Settings"},
 	}
 
-	// Define partial routes (HTMX responses)
+	// Set up full page routes
+	for _, route := range s.pageRoutes {
+		s.Echo.GET(route.Path, h.WithErrorHandling(s.handlePageRequest))
+	}
+
+	// Partial routes (HTMX responses)
 	partialRoutes := []PartialRouteConfig{
 		{Path: "/detections/hourly", TemplateName: "hourlyDetections", Title: "Hourly Detections", Handler: h.WithErrorHandling(h.HourlyDetections)},
 		{Path: "/detections/recent", TemplateName: "recentDetections", Title: "Recent Detections", Handler: h.WithErrorHandling(h.RecentDetections)},
@@ -55,31 +64,6 @@ func (s *Server) initRoutes() {
 		{Path: "/top-birds", TemplateName: "birdsTableHTML", Title: "Top Birds", Handler: h.WithErrorHandling(h.TopBirds)},
 		{Path: "/notes", TemplateName: "notes", Title: "All Notes", Handler: h.WithErrorHandling(h.GetAllNotes)},
 		{Path: "/media/spectrogram", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.ServeSpectrogram)},
-		{Path: "/api/stats/daily", TemplateName: "dailyStats", Title: "Daily Statistics", Handler: h.WithErrorHandling(h.GetDailyStats)},
-		{Path: "/api/stats/weekly", TemplateName: "weeklyStats", Title: "Weekly Statistics", Handler: h.WithErrorHandling(h.GetWeeklyStats)},
-		{Path: "/api/stats/monthly", TemplateName: "monthlyStats", Title: "Monthly Statistics", Handler: h.WithErrorHandling(h.GetMonthlyStats)},
-		{Path: "/api/stats/species", TemplateName: "speciesStats", Title: "Species Statistics", Handler: h.WithErrorHandling(h.GetSpeciesStats)},
-	}
-
-	// Add new routes for settings pages
-	s.pageRoutes["/settings/main"] = PageRouteConfig{Path: "/settings/main", TemplateName: "mainSettings", Title: "Main Settings"}
-	s.pageRoutes["/settings/birdnet"] = PageRouteConfig{Path: "/settings/birdnet", TemplateName: "birdnetSettings", Title: "BirdNET Settings"}
-	s.pageRoutes["/settings/input"] = PageRouteConfig{Path: "/settings/input", TemplateName: "inputSettings", Title: "Input Settings"}
-	s.pageRoutes["/settings/realtime"] = PageRouteConfig{Path: "/settings/realtime", TemplateName: "realtimeSettings", Title: "Realtime Settings"}
-	s.pageRoutes["/settings/webserver"] = PageRouteConfig{Path: "/settings/webserver", TemplateName: "webServerSettings", Title: "Web Server Settings"}
-	s.pageRoutes["/settings/output"] = PageRouteConfig{Path: "/settings/output", TemplateName: "outputSettings", Title: "Output Settings"}
-
-	// Add handlers for settings pages
-	s.Echo.GET("/settings/main", h.WithErrorHandling(h.HandleMainSettings))
-	s.Echo.GET("/settings/birdnet", h.WithErrorHandling(h.HandleBirdNETSettings))
-	s.Echo.GET("/settings/input", h.WithErrorHandling(h.HandleInputSettings))
-	s.Echo.GET("/settings/realtime", h.WithErrorHandling(h.HandleRealtimeSettings))
-	s.Echo.GET("/settings/webserver", h.WithErrorHandling(h.HandleWebServerSettings))
-	s.Echo.GET("/settings/output", h.WithErrorHandling(h.HandleOutputSettings))
-
-	// Set up full page routes
-	for _, route := range s.pageRoutes {
-		s.Echo.GET(route.Path, h.WithErrorHandling(s.handlePageRequest))
 	}
 
 	// Set up partial routes
@@ -88,8 +72,9 @@ func (s *Server) initRoutes() {
 	}
 
 	// Special routes
+	s.Echo.GET("/sse", s.Handlers.SSE.ServeSSE)
 	s.Echo.DELETE("/note", h.WithErrorHandling(h.DeleteNote))
-	s.Echo.POST("/update-settings", h.WithErrorHandling(h.UpdateSettings))
+	s.Echo.POST("/settings/save", h.WithErrorHandling(h.SaveSettings))
 
 	// Set up template renderer
 	s.setupTemplateRenderer()
@@ -101,17 +86,25 @@ func (s *Server) initRoutes() {
 // setupTemplateRenderer configures the template renderer for the server.
 func (s *Server) setupTemplateRenderer() {
 	funcMap := template.FuncMap{
-		"even":                 handlers.Even,
-		"calcWidth":            handlers.CalcWidth,
-		"heatmapColor":         handlers.HeatmapColor,
-		"title":                cases.Title(language.English).String,
-		"confidence":           handlers.Confidence,
-		"confidenceColor":      handlers.ConfidenceColor,
-		"thumbnail":            s.Handlers.Thumbnail,
-		"thumbnailAttribution": s.Handlers.ThumbnailAttribution,
-		"RenderContent":        s.RenderContent,
-		"sub":                  func(a, b int) int { return a - b },
-		"add":                  func(a, b int) int { return a + b },
+		"even":                  handlers.Even,
+		"calcWidth":             handlers.CalcWidth,
+		"heatmapColor":          handlers.HeatmapColor,
+		"title":                 cases.Title(language.English).String,
+		"confidence":            handlers.Confidence,
+		"confidenceColor":       handlers.ConfidenceColor,
+		"thumbnail":             s.Handlers.Thumbnail,
+		"thumbnailAttribution":  s.Handlers.ThumbnailAttribution,
+		"RenderContent":         s.RenderContent,
+		"renderSettingsContent": s.renderSettingsContent,
+		"sub":                   func(a, b int) int { return a - b },
+		"add":                   func(a, b int) int { return a + b },
+		"toJSON": func(v interface{}) string {
+			b, err := json.Marshal(v)
+			if err != nil {
+				return "[]"
+			}
+			return string(b)
+		},
 	}
 
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(ViewsFs, "views/*.html", "views/**/*.html")

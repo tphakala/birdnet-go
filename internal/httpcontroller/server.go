@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -145,10 +146,30 @@ func (s *Server) initLogger() {
 		log.Fatal(err) // Use standard log here as logger isn't initialized yet
 	}
 
+	// Convert conf.RotationType to logger.RotationType
+	var loggerRotationType logger.RotationType
+	switch s.Settings.WebServer.Log.Rotation {
+	case conf.RotationDaily:
+		loggerRotationType = logger.RotationDaily
+	case conf.RotationWeekly:
+		loggerRotationType = logger.RotationWeekly
+	case conf.RotationSize:
+		loggerRotationType = logger.RotationSize
+	default:
+		log.Fatal("Invalid rotation type")
+	}
+
+	// Create rotation settings
+	rotationSettings := logger.Settings{
+		RotationType: loggerRotationType,
+		MaxSize:      s.Settings.WebServer.Log.MaxSize,
+		RotationDay:  s.Settings.WebServer.Log.RotationDay,
+	}
+
 	s.Logger = logger.NewLogger(map[string]logger.LogOutput{
 		"web":    logger.FileOutput{Handler: fileHandler},
 		"stdout": logger.StdoutOutput{},
-	}, true)
+	}, true, rotationSettings)
 
 	// Set Echo's Logger to use the custom logger
 	s.Echo.Logger.SetOutput(s.Logger)
@@ -172,12 +193,13 @@ func (s *Server) initLogger() {
 // RenderContent modification
 func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 	d, ok := data.(struct {
-		C        echo.Context
-		Page     string
-		Title    string
-		Settings *conf.Settings
-		Locales  []LocaleData
-		Charts   template.HTML
+		C               echo.Context
+		Page            string
+		Title           string
+		Settings        *conf.Settings
+		Locales         []LocaleData
+		Charts          template.HTML
+		ContentTemplate string
 	})
 	if !ok {
 		return "", fmt.Errorf("invalid data type")
@@ -207,29 +229,18 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 	}
 
 	data := struct {
-		C        echo.Context
-		Page     string
-		Title    string
-		Settings *conf.Settings
-		Locales  []LocaleData
-		Charts   template.HTML
+		C               echo.Context
+		Page            string
+		Title           string
+		Settings        *conf.Settings
+		Locales         []LocaleData
+		Charts          template.HTML
+		ContentTemplate string
 	}{
 		C:        c,
 		Page:     route.TemplateName,
 		Title:    route.Title,
 		Settings: s.Settings,
-	}
-
-	// Include settings and locales data only for the settings page
-	if route.TemplateName == "settingsMain" {
-		data.Locales = s.getLocalesData()
-	}
-
-	if route.TemplateName == "stats" {
-		// Render charts to HTML
-		birdVocalizationChartHTML := s.Handlers.BirdStats()
-		// Prepare data for the template
-		data.Charts = template.HTML(birdVocalizationChartHTML)
 	}
 
 	return c.Render(http.StatusOK, "index", data)
@@ -245,4 +256,24 @@ func (s *Server) getLocalesData() []LocaleData {
 		return locales[i].Name < locales[j].Name
 	})
 	return locales
+}
+
+// getSettingsContentTemplate returns the appropriate content template name for a given settings page
+func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
+	path := c.Path()
+	settingsType := strings.TrimPrefix(path, "/settings/")
+	templateName := fmt.Sprintf("%sSettings", settingsType)
+
+	var buf bytes.Buffer
+	err := s.Echo.Renderer.Render(&buf, templateName, map[string]interface{}{
+		// apply settings data into settings template
+		"Settings": conf.GetSettings(),
+		// apply locales data into settings template
+		"Locales": s.getLocalesData(),
+	}, c)
+	if err != nil {
+		log.Printf("Error rendering settings content: %v", err)
+		return "", err
+	}
+	return template.HTML(buf.String()), nil
 }

@@ -52,9 +52,9 @@ type Handlers struct {
 	Settings          *conf.Settings
 	DashboardSettings *conf.Dashboard
 	BirdImageCache    *imageprovider.BirdImageCache
+	SSE               *SSEHandler // Server Side Events handler
 }
 
-// New creates a new Handlers instance with all necessary dependencies.
 func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger) *Handlers {
 	return &Handlers{
 		baseHandler: baseHandler{
@@ -65,6 +65,7 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		Settings:          settings,
 		DashboardSettings: dashboardSettings,
 		BirdImageCache:    birdImageCache,
+		SSE:               NewSSEHandler(), // Server Side Events handler
 	}
 }
 
