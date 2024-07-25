@@ -16,11 +16,11 @@ output:
 
 linters:
   enable:
-    #- depguard
     - durationcheck
     - errname
     - errorlint
     - exportloopref
+    #- gocognit
     #- gocritic
     - gofmt
     #- gofumpt
@@ -33,11 +33,25 @@ linters:
     #- revive
     - staticcheck
     - unconvert
-    - unused
+    #- unused
     - wastedassign
+  disable:
+    - unused
+
+linters-settings:
+  gocognit:
+    min-complexity: 50
+  gocritic:
+    disabled-checks:
+      - commentFormatting
+    enabled-tags:
+      - style 
+      - diagnostic
+      - performance
 
 issues:
   max-same-issues: 0
+  new: false
   exclude-rules:
     - path: _test.go
       linters:

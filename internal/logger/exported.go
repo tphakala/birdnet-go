@@ -8,47 +8,31 @@ import (
 
 var defaultLogger *Logger
 
-// SetupDefaultLogger initializes the default logger with given outputs and prefix setting.
-func SetupDefaultLogger(outputs map[string]LogOutput, prefix bool) {
-	defaultLogger = NewLogger(outputs, prefix)
+func SetupDefaultLogger(outputs map[string]LogOutput, prefix bool, rotationSettings Settings) {
+	defaultLogger = NewLogger(outputs, prefix, rotationSettings)
 }
 
-// Info logs an informational message using the default logger.
 func Info(channel, format string, a ...interface{}) {
-	if defaultLogger != nil {
-		defaultLogger.Info(channel, format, a...)
-	} else {
-		// Handle the case where the default logger is not initialized
-		fmt.Fprintf(os.Stderr, "Default logger not initialized. Unable to log INFO message: %s\n", fmt.Sprintf(format, a...))
-	}
+	logWithLevel(INFO, channel, format, a...)
 }
 
-// Warn logs a warning message using the default logger.
 func Warn(channel, format string, a ...interface{}) {
-	if defaultLogger != nil {
-		defaultLogger.Warning(channel, format, a...)
-	} else {
-		// Handle the case where the default logger is not initialized
-		fmt.Fprintf(os.Stderr, "Default logger not initialized. Unable to log WARNING message: %s\n", fmt.Sprintf(format, a...))
-	}
+	logWithLevel(WARNING, channel, format, a...)
 }
 
-// Error logs an error message using the default logger.
 func Error(channel, format string, a ...interface{}) {
-	if defaultLogger != nil {
-		defaultLogger.Error(channel, format, a...)
-	} else {
-		// Handle the case where the default logger is not initialized
-		fmt.Fprintf(os.Stderr, "Default logger not initialized. Unable to log ERROR message: %s\n", fmt.Sprintf(format, a...))
-	}
+	logWithLevel(ERROR, channel, format, a...)
 }
 
-// Debug logs a debug message using the default logger.
 func Debug(channel, format string, a ...interface{}) {
+	logWithLevel(DEBUG, channel, format, a...)
+}
+
+func logWithLevel(level int, channel, format string, a ...interface{}) {
 	if defaultLogger != nil {
-		defaultLogger.Debug(channel, format, a...)
+		defaultLogger.Log(channel, fmt.Sprintf(format, a...), level)
 	} else {
-		// Handle the case where the default logger is not initialized
-		fmt.Fprintf(os.Stderr, "Default logger not initialized. Unable to log DEBUG message: %s\n", fmt.Sprintf(format, a...))
+		levelStr := [...]string{"INFO", "WARNING", "ERROR", "DEBUG"}[level]
+		fmt.Fprintf(os.Stderr, "Default logger not initialized. Unable to log %s message: %s\n", levelStr, fmt.Sprintf(format, a...))
 	}
 }

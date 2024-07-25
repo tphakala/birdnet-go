@@ -36,7 +36,7 @@ func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
 	cmd.Flags().StringVar(&settings.Realtime.Audio.Source, "source", viper.GetString("realtime.audio.source"), "Audio capture source (\"sysdefault\", \"USB Audio\", \":0,0\", etc.)")
 	cmd.Flags().StringVar(&settings.Realtime.Log.Path, "logpath", viper.GetString("realtime.log.path"), "Path to save log files")
 	cmd.Flags().BoolVar(&settings.Realtime.ProcessingTime, "processingtime", viper.GetBool("realtime.processingtime"), "Report processing time for each detection")
-	cmd.Flags().StringSliceVar(&settings.Realtime.RTSP.Urls, "rtsp", viper.GetStringSlice("realtime.rtsp.urls"), "URL of RTSP audio stream to capture")
+	cmd.Flags().StringSliceVar(&settings.Realtime.RTSP.URLs, "rtsp", viper.GetStringSlice("realtime.rtsp.urls"), "URL of RTSP audio stream to capture")
 	cmd.Flags().StringVar(&settings.Realtime.RTSP.Transport, "rtsptransport", viper.GetString("realtime.rtsp.transport"), "RTSP transport (tcp/udp)")
 	cmd.Flags().BoolVar(&settings.Realtime.Telemetry.Enabled, "telemetry", viper.GetBool("realtime.telemetry.enabled"), "Enable Prometheus telemetry endpoint")
 	cmd.Flags().StringVar(&settings.Realtime.Telemetry.Listen, "listen", viper.GetString("realtime.telemetry.listen"), "Listen address and port of telemetry endpoint")

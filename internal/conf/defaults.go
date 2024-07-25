@@ -18,7 +18,7 @@ func setDefaultConfig() {
 	viper.SetDefault("main.log.path", "birdnet.log")
 	viper.SetDefault("main.log.rotation", RotationDaily)
 	viper.SetDefault("main.log.maxsize", 1048576)
-	viper.SetDefault("main.log.rotationday", time.Sunday)
+	viper.SetDefault("main.log.rotationday", "Sunday")
 
 	// BirdNET configuration
 	viper.SetDefault("birdnet.sensitivity", 1.0)

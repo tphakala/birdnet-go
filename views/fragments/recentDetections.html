@@ -25,7 +25,7 @@
       <!-- Bird species -->
       <td class="py-1 px-6 font-normal">
         <a href="#"
-        hx-get="/note?id={{.ID}}"
+        hx-get="/detections/details?id={{.ID}}"
         hx-target="#mainContent"
         hx-swap="innerHTML"
         hx-trigger="click"
@@ -54,7 +54,7 @@
       <td class="py-1 px-6 flex justify-center">
         <div class="w-full">
           <!-- Spectrogram Image  -->
-          <img loading="lazy" width="400" src="/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
+          <img loading="lazy" width="400" src="/media/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
 
           <!-- Audio player -->
           <audio controls class="audio-control" preload="metadata">
@@ -79,7 +79,7 @@
       
       <!-- Bird species -->
       <a href="#"
-        hx-get="/note?id={{.ID}}"
+        hx-get="/detections/details?id={{.ID}}"
         hx-target="#mainContent"
         hx-swap="innerHTML"
         hx-trigger="click"
@@ -103,7 +103,7 @@
 
     <!-- Second row: Spectrogram -->
     <div class="mb-3">
-      <img loading="lazy" src="/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram" class="w-full h-auto rounded-md shadow-sm">
+      <img loading="lazy" src="/media/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram" class="w-full h-auto rounded-md shadow-sm">
     </div>
    
     <!-- Audio player -->

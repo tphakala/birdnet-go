@@ -1,7 +1,10 @@
+// filehandler.go
 package logger
 
 import (
+	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -12,50 +15,70 @@ type FileHandler interface {
 	Close() error
 }
 
-// DefaultFileHandler implements FileHandler with support for log rotation.
-type DefaultFileHandler struct {
-	file        *os.File  // Reference to the open file
-	filename    string    // Name of the log file
-	currentSize int64     // Current size of the file in bytes
-	settings    Settings  // Log rotation settings
-	lastModTime time.Time // Last modification time of the file
-}
-
 // Settings contains configuration parameters for log rotation.
 type Settings struct {
 	RotationType RotationType // Type of rotation (daily, weekly, size-based)
 	MaxSize      int64        // Maximum file size in bytes for size-based rotation
-	RotationDay  time.Weekday // Day of the week for weekly rotation
+	RotationDay  string       // Day of the week for weekly rotation (as a string: "Sunday", "Monday", etc.)
 }
 
 // RotationType enumerates different strategies for log rotation.
 type RotationType int
 
 const (
-	RotationDaily  RotationType = iota // Rotate logs daily
-	RotationWeekly                     // Rotate logs weekly
-	RotationSize                       // Rotate logs based on size
+	RotationDaily RotationType = iota
+	RotationWeekly
+	RotationSize
 )
+
+// DefaultFileHandler implements FileHandler with support for log rotation.
+type DefaultFileHandler struct {
+	file        *os.File
+	filename    string
+	currentSize int64
+	settings    Settings
+	lastModTime time.Time
+}
+
+// ParseWeekday converts a string to time.Weekday
+func ParseWeekday(day string) (time.Weekday, error) {
+	switch strings.ToLower(day) {
+	case "sunday":
+		return time.Sunday, nil
+	case "monday":
+		return time.Monday, nil
+	case "tuesday":
+		return time.Tuesday, nil
+	case "wednesday":
+		return time.Wednesday, nil
+	case "thursday":
+		return time.Thursday, nil
+	case "friday":
+		return time.Friday, nil
+	case "saturday":
+		return time.Saturday, nil
+	default:
+		return time.Sunday, fmt.Errorf("invalid weekday: %s", day)
+	}
+}
 
 // Open initializes the log file for writing and handles log rotation if necessary.
 func (f *DefaultFileHandler) Open(filename string) error {
 	f.filename = filename
 	f.currentSize = 0
 
-	// Check file information to set the initial last modification time
 	fileInfo, err := os.Stat(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// If file does not exist, set lastModTime to the start of the day
 			f.lastModTime = time.Now().Truncate(24 * time.Hour)
 		} else {
 			return err
 		}
 	} else {
 		f.lastModTime = fileInfo.ModTime()
+		f.currentSize = fileInfo.Size()
 	}
 
-	// Rotate the file if needed, otherwise open the existing file
 	if f.needsRotation(0) {
 		return f.rotateFile()
 	}
@@ -87,14 +110,15 @@ func (f *DefaultFileHandler) Close() error {
 func (f *DefaultFileHandler) needsRotation(size int) bool {
 	switch f.settings.RotationType {
 	case RotationDaily:
-		// Rotate if the current date is different from the last modification date
 		return time.Now().Format("20060102") != f.lastModTime.Format("20060102")
 	case RotationWeekly:
-		// Rotate on the specified day if the week number has changed
-		return time.Now().Weekday() == f.settings.RotationDay &&
+		rotationDay, err := ParseWeekday(f.settings.RotationDay)
+		if err != nil {
+			return false
+		}
+		return time.Now().Weekday() == rotationDay &&
 			time.Now().Format("2006W01") != f.lastModTime.Format("2006W01")
 	case RotationSize:
-		// Rotate if the new size exceeds the maximum size
 		return f.currentSize+int64(size) > f.settings.MaxSize
 	default:
 		return false
@@ -103,14 +127,12 @@ func (f *DefaultFileHandler) needsRotation(size int) bool {
 
 // rotateFile handles the log file rotation process.
 func (f *DefaultFileHandler) rotateFile() error {
-	// Close the current file if open
 	if f.file != nil {
 		if err := f.file.Close(); err != nil {
 			return err
 		}
 	}
 
-	// Rename the existing file with a timestamp before creating a new one
 	if _, err := os.Stat(f.filename); err == nil {
 		newPath := f.filename + "." + time.Now().Format("20060102")
 		if err := os.Rename(f.filename, newPath); err != nil {
@@ -118,14 +140,12 @@ func (f *DefaultFileHandler) rotateFile() error {
 		}
 	}
 
-	// Create or open the file for appending
 	var err error
 	f.file, err = os.OpenFile(f.filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		return err
 	}
 
-	// Reset the current size and update the last modification time to the start of the current day
 	f.currentSize = 0
 	f.lastModTime = time.Now().Truncate(24 * time.Hour)
 	return nil

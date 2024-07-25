@@ -12,8 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-
-	"github.com/mitchellh/mapstructure"
+	"time"
 )
 
 // getDefaultConfigPaths returns a list of default configuration paths for the current operating system.
@@ -51,6 +50,23 @@ func GetDefaultConfigPaths() ([]string, error) {
 	}
 
 	return configPaths, nil
+}
+
+// findConfigFile locates the configuration file.
+func FindConfigFile() (string, error) {
+	configPaths, err := GetDefaultConfigPaths()
+	if err != nil {
+		return "", fmt.Errorf("error getting default config paths: %w", err)
+	}
+
+	for _, path := range configPaths {
+		configFilePath := filepath.Join(path, "config.yaml")
+		if _, err := os.Stat(configFilePath); err == nil {
+			return configFilePath, nil
+		}
+	}
+
+	return "", fmt.Errorf("config file not found")
 }
 
 // GetBasePath expands environment variables in the given path and ensures the resulting path exists.
@@ -170,16 +186,6 @@ func GetBoardModel() string {
 	return model
 }
 
-// structToMap converts a struct to a map using mapstructure
-func structToMap(settings *Settings) (map[string]interface{}, error) {
-	var result map[string]interface{}
-	err := mapstructure.Decode(settings, &result)
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
 // ParsePercentage converts a percentage string (e.g., "80%") to a float64
 func ParsePercentage(percentage string) (float64, error) {
 	if strings.HasSuffix(percentage, "%") {
@@ -230,4 +236,31 @@ func ParseRetentionPeriod(retention string) (int, error) {
 	default:
 		return 0, fmt.Errorf("invalid suffix for retention period: %c", lastChar)
 	}
+}
+
+// ParseWeekday converts a string to time.Weekday
+func ParseWeekday(day string) (time.Weekday, error) {
+	switch strings.ToLower(day) {
+	case "sunday":
+		return time.Sunday, nil
+	case "monday":
+		return time.Monday, nil
+	case "tuesday":
+		return time.Tuesday, nil
+	case "wednesday":
+		return time.Wednesday, nil
+	case "thursday":
+		return time.Thursday, nil
+	case "friday":
+		return time.Friday, nil
+	case "saturday":
+		return time.Saturday, nil
+	default:
+		return time.Sunday, fmt.Errorf("invalid weekday: %s", day)
+	}
+}
+
+// GetRotationDay returns the time.Weekday representation of RotationDay
+func (lc *LogConfig) GetRotationDay() (time.Weekday, error) {
+	return ParseWeekday(lc.RotationDay)
 }

@@ -87,8 +87,8 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 
 	// Initialize ring buffers for each audio source
 	var sources []string
-	if len(settings.Realtime.RTSP.Urls) > 0 {
-		sources = settings.Realtime.RTSP.Urls
+	if len(settings.Realtime.RTSP.URLs) > 0 {
+		sources = settings.Realtime.RTSP.URLs
 		// DEBUG
 		//log.Println("RTSP sources configured, using RTSP for audio capture")
 	} else {
@@ -121,8 +121,9 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// Start worker pool for processing detections
 	processor.New(settings, dataStore, bn, metrics, birdImageCache)
 
-	// Start http server
-	httpcontroller.New(settings, dataStore, birdImageCache)
+	// Initialize and start the HTTP server
+	httpServer := httpcontroller.New(settings, dataStore, birdImageCache)
+	httpServer.Start()
 
 	// Initialize the wait group to wait for all goroutines to finish
 	var wg sync.WaitGroup

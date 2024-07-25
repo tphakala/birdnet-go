@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/spf13/viper"
 )
@@ -91,7 +90,7 @@ type DogBarkFilterSettings struct {
 // RTSPSettings contains settings for RTSP streaming.
 type RTSPSettings struct {
 	Transport string   // RTSP Transport Protocol
-	Urls      []string // RTSP stream URL
+	URLs      []string // RTSP stream URL
 }
 
 // MQTTSettings contains settings for MQTT integration.
@@ -196,7 +195,7 @@ type LogConfig struct {
 	Path        string       // Path to the log file
 	Rotation    RotationType // Type of log rotation
 	MaxSize     int64        // Max size in bytes for RotationSize
-	RotationDay time.Weekday // Day of the week for RotationWeekly
+	RotationDay string       // Day of the week for RotationWeekly (as a string: "Sunday", "Monday", etc.)
 }
 
 // RotationType defines different types of log rotations.
@@ -228,19 +227,19 @@ func Load() (*Settings, error) {
 		return nil, fmt.Errorf("error initializing viper: %w", err)
 	}
 
-	// Unmarshal config into struct
+	// Unmarshal the config into settings
 	if err := viper.Unmarshal(settings); err != nil {
 		return nil, fmt.Errorf("error unmarshaling config into struct: %w", err)
 	}
 
 	// Validate settings
-	if err := validateSettings(settings); err != nil {
+	if err := ValidateSettings(settings); err != nil {
 		return nil, fmt.Errorf("error validating settings: %w", err)
 	}
 
 	// Save settings instance
 	settingsInstance = settings
-	return settings, nil
+	return settingsInstance, nil
 }
 
 // initViper initializes viper with default values and reads the configuration file.
@@ -287,12 +286,12 @@ func createDefaultConfig() error {
 	defaultConfig := getDefaultConfig()
 
 	// Create directories for config file
-	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		return fmt.Errorf("error creating directories for config file: %w", err)
 	}
 
 	// Write default config file
-	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(defaultConfig), 0o644); err != nil {
 		return fmt.Errorf("error writing default config file: %w", err)
 	}
 
@@ -316,53 +315,32 @@ func GetSettings() *Settings {
 	return settingsInstance
 }
 
-// SaveSettings saves the current settings to the YAML file
+// SaveSettings saves the current settings to the configuration file.
+// It uses UpdateYAMLConfig to handle the atomic write process.
 func SaveSettings() error {
+	log.Println("conf.SaveSettings: Starting save process")
+
+	// Create a copy of the current settings
 	settingsMutex.RLock()
-	defer settingsMutex.RUnlock()
+	settingsCopy := *settingsInstance
+	settingsMutex.RUnlock()
 
-	// Convert settingsInstance to a map
-	settingsMap, err := structToMap(settingsInstance)
+	// Find the path of the current config file
+	configPath, err := FindConfigFile()
 	if err != nil {
-		return fmt.Errorf("error converting settings to map: %w", err)
+		return fmt.Errorf("error finding config file: %w", err)
+	}
+	log.Printf("conf.SaveSettings: Config file path: %s", configPath)
+
+	// Use UpdateYAMLConfig to write the new settings
+	log.Printf("conf.SaveSettings: Calling UpdateYAMLConfig")
+	if err := UpdateYAMLConfig(configPath, &settingsCopy); err != nil {
+		log.Printf("SaveSettings: Error in UpdateYAMLConfig: %v", err)
+		return fmt.Errorf("error updating config: %w", err)
 	}
 
-	// Merge the settings map with viper
-	err = viper.MergeConfigMap(settingsMap)
-	if err != nil {
-		return fmt.Errorf("error merging settings with viper: %w", err)
-	}
-
-	// Write the updated settings to the config file
-	return viper.WriteConfig()
-}
-
-// UpdateSettings updates the settings in memory and persists them to the YAML file
-func UpdateSettings(newSettings *Settings) error {
-	settingsMutex.Lock()
-	defer settingsMutex.Unlock()
-
-	// Validate new settings
-	if err := validateSettings(newSettings); err != nil {
-		return fmt.Errorf("invalid settings: %w", err)
-	}
-
-	settingsInstance = newSettings
-
-	// Convert newSettings to a map
-	settingsMap, err := structToMap(newSettings)
-	if err != nil {
-		return fmt.Errorf("error converting settings to map: %w", err)
-	}
-
-	// Merge the settings map with viper
-	err = viper.MergeConfigMap(settingsMap)
-	if err != nil {
-		return fmt.Errorf("error merging settings with viper: %w", err)
-	}
-
-	// Write the updated settings to the config file
-	return viper.WriteConfig()
+	log.Println("conf.SaveSettings: Settings saved successfully")
+	return nil
 }
 
 // Settings returns the current settings instance, initializing it if necessary
