@@ -1,0 +1,64 @@
+{{define "realtimeSettings"}}
+<div class="card bg-base-100 shadow-sm col-span-3">
+    <div class="card-body p-6">
+        <h2 class="card-title mt-0">Realtime Settings</h2>
+
+        <div class="form-control">
+            <label class="label" for="interval">
+                <span class="label-text">Interval (seconds)</span>
+            </label>
+            <input type="number" id="interval" name="realtime.interval" value="{{.Settings.Realtime.Interval}}" min="1" class="input input-bordered lg:w-1/2" placeholder="Enter interval">
+        </div>
+
+        <div class="form-control">
+            <label class="label cursor-pointer justify-start" for="processingTime">
+                <input type="checkbox" id="processingTime" name="realtime.processingTime" class="checkbox checkbox-xs mr-2" {{if .Settings.Realtime.ProcessingTime}}checked{{end}}>
+                <span class="label-text">Report Processing Time</span>
+            </label>
+        </div>
+    </div>
+</div>
+
+<!-- Audio Settings -->
+<div class="card bg-base-100 shadow-sm col-span-3">
+    <div class="card-body p-6">
+        <h2 class="card-title mt-0">Audio Settings</h2> 
+
+        <div class="form-control">
+            <label class="label" for="audioSource">
+                <span class="label-text">Audio Source</span>
+            </label>
+            <input type="text" id="audioSource" name="realtime.audio.source" value="{{.Settings.Realtime.Audio.Source}}" class="input input-bordered lg:w-1/2" placeholder="Enter audio source">
+        </div>
+
+        <div class="form-control">
+            <label class="label cursor-pointer justify-start" for="audioExportEnabled">
+                <input type="checkbox" id="audioExportEnabled" name="realtime.audio.export.enabled" class="checkbox checkbox-xs mr-2" {{if .Settings.Realtime.Audio.Export.Enabled}}checked{{end}}>
+                <span class="label-text font">Enable Audio Export</span>
+            </label>
+        </div>
+    </div>
+</div>
+
+    <!-- Dashboard Settings -->
+<div class="card bg-base-100 shadow-sm col-span-3">
+    <div class="card-body p-6">
+        <h2 class="card-title">Dashboard Settings</h2> 
+
+        <div class="form-control">
+            <label class="label cursor-pointer justify-start" for="dashboardThumbnailsSummary">
+                <input type="checkbox" id="dashboardThumbnailsSummary" name="realtime.dashboard.thumbnails.summary" class="checkbox checkbox-xs mr-2" {{if .Settings.Realtime.Dashboard.Thumbnails.Summary}}checked{{end}}>
+                <span class="label-text">Show Thumbnails on Summary Table</span>
+            </label>
+        </div>
+
+        <div class="form-control">
+            <label class="label cursor-pointer justify-start" for="dashboardThumbnailsRecent">
+                <input type="checkbox" id="dashboardThumbnailsRecent" name="realtime.dashboard.thumbnails.recent" class="checkbox checkbox-xs mr-2" {{if .Settings.Realtime.Dashboard.Thumbnails.Recent}}checked{{end}}>
+                <span class="label-text">Show Thumbnails on Recent Table</span>
+            </label>
+        </div>
+    </div>
+</div>
+
+{{end}}

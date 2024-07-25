@@ -1,10 +1,8 @@
 // utils.go: This file contains utility functions for the HTTP controller package.
-package httpcontroller
+package handlers
 
 import (
 	"fmt"
-	"html"
-	"html/template"
 	"log"
 	"os"
 	"os/exec"
@@ -32,7 +30,7 @@ func getCurrentDate() string {
 
 // calcWidth calculates the width of a bar in a bar chart as a percentage.
 // It normalizes the totalDetections based on a predefined maximum.
-func calcWidth(totalDetections int) int {
+func CalcWidth(totalDetections int) int {
 	const maxDetections = 200 // Maximum number of detections expected
 	widthPercentage := (totalDetections * 100) / maxDetections
 	if widthPercentage > 100 {
@@ -42,12 +40,12 @@ func calcWidth(totalDetections int) int {
 }
 
 // even checks if an integer is even. Useful for alternating styles in loops.
-func even(index int) bool {
+func Even(index int) bool {
 	return index%2 == 0
 }
 
 // heatmapColor assigns a color based on a provided value using predefined thresholds.
-func heatmapColor(value int) string {
+func HeatmapColor(value int) string {
 	thresholds := []int{10, 20, 30, 40, 50, 60, 70, 80, 90}
 	colors := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}
 
@@ -60,12 +58,12 @@ func heatmapColor(value int) string {
 }
 
 // confidence converts a confidence value (0.0 - 1.0) to a percentage string.
-func confidence(confidence float64) string {
+func Confidence(confidence float64) string {
 	return fmt.Sprintf("%.0f%%", confidence*100)
 }
 
 // confidenceColor assigns a color based on the confidence value.
-func confidenceColor(confidence float64) string {
+func ConfidenceColor(confidence float64) string {
 	switch {
 	case confidence >= 0.8:
 		return "bg-green-500" // High confidence
@@ -114,7 +112,7 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 }
 
 // GetSpectrogramPath returns the web-friendly path to the spectrogram image for a WAV file, stored in the same directory.
-func (s *Server) getSpectrogramPath(wavFileName string, width int) (string, error) {
+func (h *Handlers) getSpectrogramPath(wavFileName string, width int) (string, error) {
 	baseName := filepath.Base(wavFileName)
 	dir := filepath.Dir(wavFileName)
 	ext := filepath.Ext(baseName)
@@ -183,58 +181,4 @@ func parseOffset(offsetStr string, defaultOffset int) int {
 		return defaultOffset
 	}
 	return offset
-}
-
-// Thumbnail returns the URL of a given bird's thumbnail image.
-// It takes the bird's scientific name as input and returns the image URL as a string.
-// If the image is not found or an error occurs, it returns an empty string.
-func (s *Server) thumbnail(scientificName string) string {
-	if s.BirdImageCache == nil {
-		// Return empty string if the cache is not initialized
-		return ""
-	}
-
-	birdImage, err := s.BirdImageCache.Get(scientificName)
-	if err != nil {
-		// Return empty string if an error occurs
-		return ""
-	}
-
-	return birdImage.URL
-}
-
-// ThumbnailAttribution returns the HTML-formatted attribution for a bird's thumbnail image.
-// It takes the bird's scientific name as input and returns a template.HTML string.
-// If the attribution information is incomplete or an error occurs, it returns an empty template.HTML.
-func (s *Server) thumbnailAttribution(scientificName string) template.HTML {
-	if s.BirdImageCache == nil {
-		// Return empty string if the cache is not initialized
-		return template.HTML("")
-	}
-
-	birdImage, err := s.BirdImageCache.Get(scientificName)
-	if err != nil {
-		log.Printf("Error getting thumbnail info for %s: %v", scientificName, err)
-		return template.HTML("")
-	}
-
-	if birdImage.AuthorName == "" || birdImage.LicenseName == "" {
-		return template.HTML("")
-	}
-
-	var attribution string
-	if birdImage.AuthorURL == "" {
-		attribution = fmt.Sprintf("© %s / <a href=\"%s\">%s</a>",
-			html.EscapeString(birdImage.AuthorName),
-			html.EscapeString(birdImage.LicenseURL),
-			html.EscapeString(birdImage.LicenseName))
-	} else {
-		attribution = fmt.Sprintf("© <a href=\"%s\">%s</a> / <a href=\"%s\">%s</a>",
-			html.EscapeString(birdImage.AuthorURL),
-			html.EscapeString(birdImage.AuthorName),
-			html.EscapeString(birdImage.LicenseURL),
-			html.EscapeString(birdImage.LicenseName))
-	}
-
-	return template.HTML(attribution)
 }

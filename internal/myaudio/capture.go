@@ -24,9 +24,9 @@ type captureSource struct {
 }
 
 func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}) {
-	if len(settings.Realtime.RTSP.Urls) > 0 {
+	if len(settings.Realtime.RTSP.URLs) > 0 {
 		// RTSP audio capture for each URL
-		for _, url := range settings.Realtime.RTSP.Urls {
+		for _, url := range settings.Realtime.RTSP.URLs {
 			wg.Add(1)
 			go captureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan)
 		}

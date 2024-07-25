@@ -1,30 +1,30 @@
 # BirdNET-Go configuration
 
-debug: false            # print debug messages, can help with problem solving
+debug: false              # print debug messages, can help with problem solving
 
 # Node specific settings
 main:
-  name: BirdNET-Go      # name of node, can be used to identify source of notes
-  timeas24h: true       # true for 24-hour time format, false for 12-hour time format
+  name: BirdNET-Go        # name of node, can be used to identify source of notes
+  timeas24h: true         # true for 24-hour time format, false for 12-hour time format
   log:
-    enabled: true       # true to enable log file
-    path: birdnet.log   # path to log file
-    rotation: daily     # daily, weekly or size
-    maxsize: 1048576    # max size in bytes for size rotation
-    rotationday: 0      # day of the week for weekly rotation, 0 = Sunday
+    enabled: true         # true to enable log file
+    path: birdnet.log     # path to log file
+    rotation: daily       # daily, weekly or size
+    maxsize: 1048576      # max size in bytes for size rotation
+    rotationday: "Sunday" # day of the week for weekly rotation, 0 = Sunday
 
 # BirdNET model specific settings
 birdnet:
-  sensitivity: 1.0      # sigmoid sensitivity, 0.1 to 1.5
-  threshold: 0.8        # threshold for prediction confidence to report, 0.0 to 1.0
-  overlap: 1.5          # overlap between chunks, 0.0 to 2.9
-  threads: 0            # 0 to use all available CPU threads
-  locale: en            # language to use for labels
-  latitude: 00.000      # latitude of recording location for prediction filtering
-  longitude: 00.000     # longitude of recording location for prediction filtering
+  sensitivity: 1.0        # sigmoid sensitivity, 0.1 to 1.5
+  threshold: 0.8          # threshold for prediction confidence to report, 0.0 to 1.0
+  overlap: 1.5            # overlap between chunks, 0.0 to 2.9
+  threads: 0              # 0 to use all available CPU threads
+  locale: en              # language to use for labels
+  latitude: 00.000        # latitude of recording location for prediction filtering
+  longitude: 00.000       # longitude of recording location for prediction filtering
   rangefilter:
-      model: latest     # model to use for range filter: "latest" or "legacy" for previous model
-      threshold: 0.01   # rangefilter species occurrence threshold
+      model: latest       # model to use for range filter: "latest" or "legacy" for previous model
+      threshold: 0.01     # rangefilter species occurrence threshold
 
 # Realtime processing settings
 realtime:

@@ -1,0 +1,437 @@
+{{define "integrationsSettings"}}
+
+<!-- BirdWeather Settings start -->
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3"
+x-data="{ 
+    birdweather: {
+        enabled: {{.Settings.Realtime.Birdweather.Enabled}},
+        debug: {{.Settings.Realtime.Birdweather.Debug}},
+        id: '{{.Settings.Realtime.Birdweather.ID}}',
+        threshold: {{.Settings.Realtime.Birdweather.Threshold}},
+        locationAccuracy: {{.Settings.Realtime.Birdweather.LocationAccuracy}}
+    },
+    birdweatherSettingsOpen: false,
+    showTooltip: null,
+    hasChanges: false,
+    resetChanges() {
+        console.log('BirdWeather resetChanges called');
+        this.hasChanges = false;
+        hasChanges = false;
+    }
+}" 
+x-init="
+    $watch('birdweather', () => { hasChanges = true; }, { deep: true });  
+    $el._x_resetChanges = $data.resetChanges;
+">
+
+    <!-- control collapse element open state and label visibility -->
+    <input type="checkbox" id="birdweatherSettingsOpen" x-on:change="birdweatherSettingsOpen = !birdweatherSettingsOpen" />
+
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex items-center">
+            <label for="mainSettingsOpen" class="cursor-pointer">BirdWeather</label>
+            <div x-show="hasChanges" x-cloak class="ml-2">
+                <span class="badge badge-primary badge-sm changed-badge">
+                    <span class="text-xs mb-0.5">changed</span>
+                </span>
+            </div>
+        </div>
+        <!-- short descripton of this section -->
+        <p class="text-sm text-gray-500">Upload detections to BirdWeather</p>
+    </div>
+
+    <!-- disabled for now
+    <div class="p-4 pt-0" x-show="!birdweatherSettingsOpen">
+        <label class="cursor-pointer" for="birdweatherSettingsOpen">
+            <span>Configure BirdWeather integration</span>
+        </label>
+    </div>-->
+
+    <div class="collapse-content">
+        <div class="form-control relative">
+            <label class="label cursor-pointer justify-start" for="birdweatherEnabled">
+                <input type="checkbox" id="birdweatherEnabled" name="realtime.birdweather.enabled" x-model="birdweather.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
+                <input type="hidden" name="realtime.birdweather.enabled" value="false">
+                <span class="label-text">Enable BirdWeather Uploads</span>
+                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'birdweatherEnabled'" @mouseleave="showTooltip = null">ⓘ</span>
+            </label>
+            <div x-show="showTooltip === 'birdweatherEnabled'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                Enable or disable uploads to BirdWeather service.
+            </div>
+        </div>
+
+        <div x-show="birdweather.enabled">
+
+            <div class="form-control relative">
+                <label class="label cursor-pointer justify-start" for="birdweatherDebug">
+                    <input type="checkbox" id="birdweatherDebug" name="realtime.birdweather.debug" x-model="birdweather.debug" class="checkbox checkbox-primary checkbox-xs mr-2">
+                    <input type="hidden" name="realtime.birdweather.debug" value="false">
+                    <span class="label-text">Debug Mode</span>
+                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'birdweatherDebug'" @mouseleave="showTooltip = null">ⓘ</span>
+                </label>
+                <div x-show="showTooltip === 'birdweatherDebug'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    Enable debug mode for additional logging information.
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="birdweatherId">
+                        <span class="label-text">BirdWeather token</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'birdweatherId'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <input type="text" id="birdweatherId" name="realtime.birdweather.id" x-model="birdweather.id" class="input input-bordered input-sm w-full">
+                    <div x-show="showTooltip === 'birdweatherId'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        Your unique BirdWeather token.
+                    </div>
+                </div>
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="birdweatherThreshold">
+                        <span class="label-text">Upload Threshold</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'birdweatherThreshold'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <input type="number" id="birdweatherThreshold" name="realtime.birdweather.threshold" x-model="birdweather.threshold" step="0.01" min="0" max="1" class="input input-bordered input-sm w-full">
+                    <div x-show="showTooltip === 'birdweatherThreshold'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        Minimum confidence threshold for uploading predictions to BirdWeather.
+                    </div>
+                </div>
+  
+            </div>
+        </div>
+    </div>
+</div>
+<!-- BirdWeather Settings end -->
+
+<!-- OpenWeather Settings start -->
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3"
+x-data="{ 
+    openWeather: {
+        enabled: {{.Settings.Realtime.OpenWeather.Enabled}},
+        debug: {{.Settings.Realtime.OpenWeather.Debug}},
+        apiKey: '{{.Settings.Realtime.OpenWeather.APIKey}}',
+        endpoint: '{{.Settings.Realtime.OpenWeather.Endpoint}}',
+        interval: {{.Settings.Realtime.OpenWeather.Interval}},
+        units: '{{.Settings.Realtime.OpenWeather.Units}}',
+        language: '{{.Settings.Realtime.OpenWeather.Language}}'
+    },
+    openWeatherSettingsOpen: false,
+    showTooltip: null,
+    hasChanges: false,
+    resetChanges() {
+        this.hasChanges = false;
+    }
+}"
+x-init="
+    $watch('openWeather', (value) => { hasChanges = true }, { deep: true });
+">
+
+    <!-- control collapse element open state and label visibility -->
+    <input type="checkbox" id="openWeatherSettingsOpen" x-on:change="openWeatherSettingsOpen = !openWeatherSettingsOpen" />
+
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex items-center">
+            <label for="birdnetSettingsOpen" class="cursor-pointer">OpenWeather</label>
+            <div x-show="hasChanges" x-cloak class="ml-2">
+                <span class="badge badge-primary badge-sm changed-badge">
+                    <span class="text-xs mb-0.5">changed</span>
+                </span>
+            </div>
+        </div>
+        <!-- short descripton of this section -->
+        <p class="text-sm text-gray-500">Get weather data from OpenWeatherMap</p>
+    </div>
+
+    <!-- disabled for now
+    <div class="p-4 pt-0" x-show="!openWeatherSettingsOpen">
+        <label class="cursor-pointer" for="openWeatherSettingsOpen">
+            <span>Configure OpenWeather integration</span>
+        </label>
+    </div>-->
+
+    <div class="collapse-content">
+        <div class="form-control relative">
+            <label class="label cursor-pointer justify-start" for="openWeatherEnabled">
+                <input type="checkbox" id="openWeatherEnabled" name="realtime.openweather.enabled" x-model="openWeather.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
+                <input type="hidden" name="realtime.openweather.enabled" value="false">
+                <span class="label-text">Enable OpenWeather Integration</span>
+                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherEnabled'" @mouseleave="showTooltip = null">ⓘ</span>
+            </label>
+            <div x-show="showTooltip === 'openWeatherEnabled'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                Enable or disable integration with OpenWeather service.
+            </div>
+        </div>
+
+        <div x-show="openWeather.enabled">
+
+            <div class="form-control relative">
+                <label class="label cursor-pointer justify-start" for="openWeatherDebug">
+                    <input type="checkbox" id="openWeatherDebug" name="realtime.openweather.debug" x-model="openWeather.debug" class="checkbox checkbox-primary checkbox-xs mr-2">
+                    <input type="hidden" name="realtime.openweather.debug" value="false">
+                    <span class="label-text">Debug Mode</span>
+                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherDebug'" @mouseleave="showTooltip = null">ⓘ</span>
+                </label>
+                <div x-show="showTooltip === 'openWeatherDebug'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    Enable debug mode for additional logging information.
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="openWeatherApiKey">
+                        <span class="label-text">API Key</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherApiKey'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <input type="text" id="openWeatherApiKey" name="realtime.openweather.apikey" x-model="openWeather.apiKey" class="input input-bordered input-sm w-full">
+                    <div x-show="showTooltip === 'openWeatherApiKey'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        Your OpenWeather API key. Keep this secret!
+                    </div>
+                </div>
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="openWeatherEndpoint">
+                        <span class="label-text">API Endpoint</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherEndpoint'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <input type="text" id="openWeatherEndpoint" name="realtime.openweather.endpoint" x-model="openWeather.endpoint" class="input input-bordered input-sm w-full">
+                    <div x-show="showTooltip === 'openWeatherEndpoint'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        The OpenWeather API endpoint URL.
+                    </div>
+                </div>
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="openWeatherInterval">
+                        <span class="label-text">Fetch Interval (minutes)</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherInterval'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <input type="number" id="openWeatherInterval" name="realtime.openweather.interval" x-model="openWeather.interval" min="1" class="input input-bordered input-sm w-full">
+                    <div x-show="showTooltip === 'openWeatherInterval'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        How often to fetch new weather data, in minutes.
+                    </div>
+                </div>
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="openWeatherUnits">
+                        <span class="label-text">Units of Measurement</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherUnits'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <select id="openWeatherUnits" name="realtime.openweather.units" x-model="openWeather.units" class="select select-bordered select-sm w-full">
+                        <option value="standard">Standard</option>
+                        <option value="metric">Metric</option>
+                        <option value="imperial">Imperial</option>
+                    </select>
+                    <div x-show="showTooltip === 'openWeatherUnits'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        Choose the units system for weather data.
+                    </div>
+                </div>
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="openWeatherLanguage">
+                        <span class="label-text">Language</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherLanguage'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <input type="text" id="openWeatherLanguage" name="realtime.openweather.language" x-model="openWeather.language" class="input input-bordered input-sm w-full">
+                    <div x-show="showTooltip === 'openWeatherLanguage'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        Language code for the API response (e.g., 'en' for English).
+                    </div>
+                </div>
+
+            </div>
+        
+        </div>
+    </div>
+</div>
+<!-- OpenWeather Settings end -->
+
+<!-- MQTT Settings start -->
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3"
+x-data="{ 
+    mqtt: {
+        enabled: {{.Settings.Realtime.MQTT.Enabled}},
+        broker: '{{.Settings.Realtime.MQTT.Broker}}',
+        topic: '{{.Settings.Realtime.MQTT.Topic}}',
+        username: '{{.Settings.Realtime.MQTT.Username}}',
+        password: '{{.Settings.Realtime.MQTT.Password}}'
+    },
+    mqttSettingsOpen: false,
+    showTooltip: null,
+    hasChanges: false,
+    resetChanges() {
+        this.hasChanges = false;
+    }
+}"
+x-init="
+    $watch('mqtt', (value) => { hasChanges = true }, { deep: true });
+">
+
+    <!-- control collapse element open state and label visibility -->
+    <input type="checkbox" id="mqttSettingsOpen" x-on:change="mqttSettingsOpen = !mqttSettingsOpen" />
+
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex items-center">
+            <label for="mqttSettingsOpen" class="cursor-pointer">MQTT</label>
+            <div x-show="hasChanges" x-cloak class="ml-2">
+                <span class="badge badge-primary badge-sm changed-badge">
+                    <span class="text-xs mb-0.5">changed</span>
+                </span>
+            </div>
+        </div>
+        <!-- short descripton of this section -->
+        <p class="text-sm text-gray-500">Push detections to a MQTT broker</p>
+    </div>
+
+    <!-- disabled for now
+    <div class="p-4 pt-0" x-show="!mqttSettingsOpen">
+        <label class="cursor-pointer" for="mqttSettingsOpen">
+            <span>Configure MQTT integration</span>
+        </label>
+    </div>-->
+
+    <div class="collapse-content">
+        <div class="form-control relative">
+            <label class="label cursor-pointer justify-start" for="mqttEnabled">
+                <input type="checkbox" id="mqttEnabled" name="realtime.mqtt.enabled" x-model="mqtt.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
+                <input type="hidden" name="realtime.mqtt.enabled" value="false">
+                <span class="label-text">Enable MQTT Integration</span>
+                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mqttEnabled'" @mouseleave="showTooltip = null">ⓘ</span>
+            </label>
+            <div x-show="showTooltip === 'mqttEnabled'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                Enable or disable integration with MQTT service.
+            </div>
+        </div>
+
+        <div x-show="mqtt.enabled">
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="mqttBroker">
+                        <span class="label-text">Broker</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mqttBroker'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <input type="text" id="mqttBroker" name="realtime.mqtt.broker" x-model="mqtt.broker" class="input input-bordered input-sm w-full">
+                    <div x-show="showTooltip === 'mqttBroker'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        The MQTT broker URL (e.g., tcp://localhost:1883).
+                    </div>
+                </div>
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="mqttTopic">
+                        <span class="label-text">Topic</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mqttTopic'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <input type="text" id="mqttTopic" name="realtime.mqtt.topic" x-model="mqtt.topic" class="input input-bordered input-sm w-full">
+                    <div x-show="showTooltip === 'mqttTopic'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        The MQTT topic to publish messages to.
+                    </div>
+                </div>
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="mqttUsername">
+                        <span class="label-text">Username</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mqttUsername'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <input type="text" id="mqttUsername" name="realtime.mqtt.username" x-model="mqtt.username" class="input input-bordered input-sm w-full">
+                    <div x-show="showTooltip === 'mqttUsername'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        The MQTT username.
+                    </div>
+                </div>
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="mqttPassword">
+                        <span class="label-text">Password</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mqttPassword'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <input type="password" id="mqttPassword" name="realtime.mqtt.password" x-model="mqtt.password" class="input input-bordered input-sm w-full">
+                    <div x-show="showTooltip === 'mqttPassword'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        The MQTT password.
+                    </div>
+                </div>
+
+            </div>
+        
+        </div>
+    </div>
+</div>
+<!-- MQTT Settings end -->
+
+<!-- Telemetry Settings start -->
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3"
+x-data="{ 
+    telemetry: {
+        enabled: {{.Settings.Realtime.Telemetry.Enabled}},
+        listen: '{{.Settings.Realtime.Telemetry.Listen}}'
+    },
+    telemetrySettingsOpen: false,
+    showTooltip: null,
+    hasChanges: false,
+    resetChanges() {
+        this.hasChanges = false;
+    }
+}"
+x-init="
+    $watch('telemetry', (value) => { hasChanges = true }, { deep: true });
+">
+
+    <!-- control collapse element open state and label visibility -->
+    <input type="checkbox" id="telemetrySettingsOpen" x-on:change="telemetrySettingsOpen = !telemetrySettingsOpen" />
+
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex items-center">
+            <label for="telemetrySettingsOpen" class="cursor-pointer">Telemetry</label>
+            <div x-show="hasChanges" x-cloak class="ml-2">
+                <span class="badge badge-primary badge-sm changed-badge">
+                    <span class="text-xs mb-0.5">changed</span>
+                </span>
+            </div>
+        </div>
+        <!-- short descripton of this section -->
+        <p class="text-sm text-gray-500">Monitor BirdNET-Go's performance and bird detection metrics through Prometheus-compatible endpoint</p>
+    </div>
+
+    <!-- disabled for now
+    <div class="p-4 pt-0" x-show="!telemetrySettingsOpen">
+        <label class="cursor-pointer" for="telemetrySettingsOpen">
+            <span>Configure Telemetry integration</span>
+        </label>
+    </div>-->
+
+    <div class="collapse-content">
+        <div class="form-control relative">
+            <label class="label cursor-pointer justify-start" for="telemetryEnabled">
+                <input type="checkbox" id="telemetryEnabled" name="realtime.telemetry.enabled" x-model="telemetry.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
+                <input type="hidden" name="realtime.telemetry.enabled" value="false">
+                <span class="label-text">Enable Telemetry Integration</span>
+                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'telemetryEnabled'" @mouseleave="showTooltip = null">ⓘ</span>
+            </label>
+            <div x-show="showTooltip === 'telemetryEnabled'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                Enable or disable integration with Telemetry service.
+            </div>
+        </div>
+
+        <div x-show="telemetry.enabled">
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="telemetryListen">
+                        <span class="label-text">Listen Address</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'telemetryListen'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <input type="text" id="telemetryListen" name="realtime.telemetry.listen" x-model="telemetry.listen" class="input input-bordered input-sm w-full">
+                    <div x-show="showTooltip === 'telemetryListen'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        The IP address and port to listen on (e.g., 0.0.0.0:8090).
+                    </div>
+                </div>
+
+            </div>
+        
+        </div>
+    </div>
+</div>
+<!-- Telemetry Settings end -->
+
+
+{{end}}

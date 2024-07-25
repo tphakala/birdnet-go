@@ -12,7 +12,7 @@
       {{range .Hours}}
       <th scope="col" class="text-center py-2 px-0">
         <a href="#"
-           hx-get="/hourly-detections?date={{urlquery $.SelectedDate}}&hour={{printf "%02d" .}}"
+           hx-get="/detections/hourly?date={{urlquery $.SelectedDate}}&hour={{printf "%02d" .}}"
            hx-target="#mainContent"
            hx-trigger="click"
            hx-push-url="true">
@@ -30,7 +30,7 @@
       <!-- Species row -->
       <th scope="row" class="py-1 px-6 font-medium">
         <a href="#"
-          hx-get="/species-detections?species={{urlquery .Note.CommonName}}&date={{urlquery $.SelectedDate}}"
+          hx-get="/detections/species?species={{urlquery .Note.CommonName}}&date={{urlquery $.SelectedDate}}"
           hx-target="#mainContent"
           hx-trigger="click"
           hx-push-url="true">{{title .Note.CommonName}}
@@ -61,7 +61,7 @@
       {{if gt $count 0}}
         <td class="text-center py-0 px-0 heatmap-color-{{heatmapColor $count}}">
           <a href="#"
-            hx-get="/species-detections?species={{urlquery $element.Note.CommonName}}&date={{urlquery $.SelectedDate}}&hour={{$hourIndex}}"
+            hx-get="/detections/species?species={{urlquery $element.Note.CommonName}}&date={{urlquery $.SelectedDate}}&hour={{$hourIndex}}"
             hx-target="#mainContent"
             hx-trigger="click"
             hx-push-url="true">
