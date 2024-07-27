@@ -318,8 +318,6 @@ func GetSettings() *Settings {
 // SaveSettings saves the current settings to the configuration file.
 // It uses UpdateYAMLConfig to handle the atomic write process.
 func SaveSettings() error {
-	log.Println("conf.SaveSettings: Starting save process")
-
 	// Create a copy of the current settings
 	settingsMutex.RLock()
 	settingsCopy := *settingsInstance
@@ -330,16 +328,13 @@ func SaveSettings() error {
 	if err != nil {
 		return fmt.Errorf("error finding config file: %w", err)
 	}
-	log.Printf("conf.SaveSettings: Config file path: %s", configPath)
 
 	// Use UpdateYAMLConfig to write the new settings
-	log.Printf("conf.SaveSettings: Calling UpdateYAMLConfig")
 	if err := UpdateYAMLConfig(configPath, &settingsCopy); err != nil {
-		log.Printf("SaveSettings: Error in UpdateYAMLConfig: %v", err)
 		return fmt.Errorf("error updating config: %w", err)
 	}
 
-	log.Println("conf.SaveSettings: Settings saved successfully")
+	log.Printf("Settings saved successfully to %s", configPath)
 	return nil
 }
 
