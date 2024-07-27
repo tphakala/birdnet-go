@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -15,27 +14,25 @@ import (
 
 // SaveSettings handles the request to save settings
 func (h *Handlers) SaveSettings(c echo.Context) error {
-	log.Println("handler.SaveSettings: Starting save process")
-
 	settings := conf.GetSettings()
 	if settings == nil {
-		log.Println("SaveSettings: Error - settings is nil")
+		// Return an error if settings are nil
 		return fmt.Errorf("settings is nil")
 	}
 
 	formParams, err := c.FormParams()
 	if err != nil {
-		log.Printf("handler.SaveSettings: Failed to parse form: %v", err)
+		// Return an error if form parameters cannot be parsed
 		return fmt.Errorf("failed to parse form: %w", err)
 	}
 
 	if err := updateSettingsFromForm(settings, formParams); err != nil {
-		log.Printf("handler.SaveSettings: Error updating settings: %v", err)
+		// Return an error if updating settings from form parameters fails
 		return fmt.Errorf("error updating settings: %w", err)
 	}
 
 	if err := conf.SaveSettings(); err != nil {
-		log.Printf("handler.SaveSettings: Error saving settings: %v", err)
+		// Send error notification if saving settings fails
 		h.SSE.SendNotification(Notification{
 			Message: fmt.Sprintf("Error saving settings: %v", err),
 			Type:    "error",
@@ -43,16 +40,18 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	// Send success notification for saving settings
 	h.SSE.SendNotification(Notification{
 		Message: "Settings saved successfully",
 		Type:    "success",
 	})
 
-	log.Println("handler.SaveSettings: Settings saved successfully, now reloading")
 	if err := h.reloadSettings(); err != nil {
+		// Return an error if reloading settings fails
 		return fmt.Errorf("error reloading settings: %w", err)
 	}
 
+	// Send success notification for reloading settings
 	h.SSE.SendNotification(Notification{
 		Message: "Settings reloaded successfully",
 		Type:    "success",
@@ -63,29 +62,27 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 
 // reloadSettings reloads the settings from the configuration file
 func (h *Handlers) reloadSettings() error {
-	log.Println("reloadSettings: Starting reload process")
-
+	// Load new settings from configuration
 	newSettings, err := conf.Load()
 	if err != nil {
-		log.Printf("reloadSettings: Error reloading settings: %v", err)
+		// Return an error if reloading settings fails
 		return err
 	}
 
 	// Update the handlers settings
 	h.Settings = newSettings
 
-	log.Println("reloadSettings: Settings reloaded successfully")
 	return nil
 }
 
+// updateSettingsFromForm updates the settings based on form values
 func updateSettingsFromForm(settings *conf.Settings, formValues map[string][]string) error {
-	log.Printf("updateSettingsFromForm: Starting update process")
+	// Delegate the update process to updateStructFromForm
 	return updateStructFromForm(reflect.ValueOf(settings).Elem(), formValues, "")
 }
 
+// updateStructFromForm recursively updates a struct's fields from form values
 func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefix string) error {
-	//log.Printf("updateStructFromForm: Starting update process for prefix: %s", prefix)
-	//log.Printf("updateStructFromForm: Form values received: %+v", formValues)
 	t := v.Type()
 
 	for i := 0; i < v.NumField(); i++ {
@@ -94,7 +91,7 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 		fieldName := fieldType.Name
 
 		if !field.CanSet() {
-			log.Printf("updateStructFromForm: Field %s cannot be set, skipping", fieldName)
+			// Skip fields that cannot be set
 			continue
 		}
 
@@ -103,6 +100,7 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 
 		if !exists {
 			if field.Kind() == reflect.Struct {
+				// Recursively update nested structs
 				if err := updateStructFromForm(field, formValues, fullName+"."); err != nil {
 					return err
 				}
@@ -110,8 +108,7 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 			continue
 		}
 
-		//log.Printf("updateStructFromForm: Updating field: %s, Current value: %v, New value: %v", fullName, field.Interface(), formValue)
-
+		// Update the field based on its type
 		switch field.Kind() {
 		case reflect.String:
 			if len(formValue) > 0 {
@@ -154,15 +151,13 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 		default:
 			return fmt.Errorf("unsupported field type for %s", fullName)
 		}
-
-		//log.Printf("updateStructFromForm: Updated field: %s, New value: %v", fullName, field.Interface())
 	}
 
 	return nil
 }
 
+// updateSliceFromForm updates a slice field from form values
 func updateSliceFromForm(field reflect.Value, formValue []string) error {
-	log.Printf("updateSliceFromForm: Updating slice with values: %v", formValue)
 	sliceType := field.Type().Elem()
 	newSlice := reflect.MakeSlice(field.Type(), 0, len(formValue))
 
@@ -172,18 +167,17 @@ func updateSliceFromForm(field reflect.Value, formValue []string) error {
 		}
 		switch sliceType.Kind() {
 		case reflect.String:
-			// Check if the value is a JSON-encoded array
 			var urls []string
 			err := json.Unmarshal([]byte(val), &urls)
 			if err == nil {
-				// If it's a valid JSON array, add each URL separately
+				// Add each URL separately if it's a valid JSON array
 				for _, url := range urls {
 					if url != "" {
 						newSlice = reflect.Append(newSlice, reflect.ValueOf(url))
 					}
 				}
 			} else {
-				// If it's not a JSON array, add it as a single string
+				// Add as a single string if not a JSON array
 				newSlice = reflect.Append(newSlice, reflect.ValueOf(val))
 			}
 		case reflect.Int, reflect.Int64:
@@ -203,7 +197,7 @@ func updateSliceFromForm(field reflect.Value, formValue []string) error {
 		}
 	}
 
+	// Set the updated slice back to the field
 	field.Set(newSlice)
-	log.Printf("updateSliceFromForm: Updated slice to: %v", newSlice.Interface())
 	return nil
 }
