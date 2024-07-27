@@ -31,6 +31,12 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		return fmt.Errorf("error updating settings: %w", err)
 	}
 
+	// Send success notification for reloading settings
+	h.SSE.SendNotification(Notification{
+		Message: "Settings applied successfully",
+		Type:    "success",
+	})
+
 	if err := conf.SaveSettings(); err != nil {
 		// Send error notification if saving settings fails
 		h.SSE.SendNotification(Notification{
@@ -46,33 +52,7 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		Type:    "success",
 	})
 
-	if err := h.reloadSettings(); err != nil {
-		// Return an error if reloading settings fails
-		return fmt.Errorf("error reloading settings: %w", err)
-	}
-
-	// Send success notification for reloading settings
-	h.SSE.SendNotification(Notification{
-		Message: "Settings reloaded successfully",
-		Type:    "success",
-	})
-
 	return c.NoContent(http.StatusOK)
-}
-
-// reloadSettings reloads the settings from the configuration file
-func (h *Handlers) reloadSettings() error {
-	// Load new settings from configuration
-	newSettings, err := conf.Load()
-	if err != nil {
-		// Return an error if reloading settings fails
-		return err
-	}
-
-	// Update the handlers settings
-	h.Settings = newSettings
-
-	return nil
 }
 
 // updateSettingsFromForm updates the settings based on form values
