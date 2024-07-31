@@ -17,6 +17,7 @@ import (
 
 // getDefaultConfigPaths returns a list of default configuration paths for the current operating system.
 // It determines paths based on standard conventions for storing application configuration files.
+// If a config.yaml file is found in any of the paths, it returns that path as the default.
 func GetDefaultConfigPaths() ([]string, error) {
 	var configPaths []string
 
@@ -49,6 +50,16 @@ func GetDefaultConfigPaths() ([]string, error) {
 		}
 	}
 
+	// Check if config.yaml exists in any of the paths
+	for _, path := range configPaths {
+		configFile := filepath.Join(path, "config.yaml")
+		if _, err := os.Stat(configFile); err == nil {
+			// Config file found, return this path as the only default path
+			return []string{path}, nil
+		}
+	}
+
+	// If no config.yaml is found, return all paths
 	return configPaths, nil
 }
 
