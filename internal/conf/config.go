@@ -3,12 +3,14 @@ package conf
 
 import (
 	"embed"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/spf13/viper"
@@ -81,10 +83,11 @@ type PrivacyFilterSettings struct {
 
 // DogBarkFilterSettings contains settings for the dog bark filter.
 type DogBarkFilterSettings struct {
-	Debug      bool    // true to enable debug mode
-	Enabled    bool    // true to enable dog bark filter
-	Confidence float32 // confidence threshold for dog bark detection
-	Remember   int     // how long we should remember bark for filtering?
+	Debug      bool     // true to enable debug mode
+	Enabled    bool     // true to enable dog bark filter
+	Confidence float32  // confidence threshold for dog bark detection
+	Remember   int      // how long we should remember bark for filtering?
+	Species    []string // species list for filtering
 }
 
 // RTSPSettings contains settings for RTSP streaming.
@@ -334,6 +337,10 @@ func SaveSettings() error {
 		return fmt.Errorf("error updating config: %w", err)
 	}
 
+	if err := settingsCopy.SaveDogBarkFilter(); err != nil {
+		return fmt.Errorf("error saving dog bark filter: %w", err)
+	}
+
 	log.Printf("Settings saved successfully to %s", configPath)
 	return nil
 }
@@ -349,4 +356,94 @@ func Setting() *Settings {
 		}
 	})
 	return GetSettings()
+}
+
+// SaveCSVList saves a list of strings to a CSV file
+func SaveCSVList(fileName string, list []string) error {
+	// Retrieve the default config paths
+	configPaths, err := GetDefaultConfigPaths()
+	if err != nil {
+		return err
+	}
+
+	// Use the first config path to save the file
+	fullPath := filepath.Join(configPaths[0], fileName)
+
+	// Create the file
+	file, err := os.Create(fullPath)
+	if err != nil {
+		return fmt.Errorf("error creating file: %w", err)
+	}
+	defer file.Close()
+
+	// Create a CSV writer
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	// Write each item in the list as a separate row
+	for _, item := range list {
+		if err := writer.Write([]string{item}); err != nil {
+			return fmt.Errorf("error writing to CSV: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// LoadDogBarkFilterConfig reads the dog bark filter configuration from a CSV file.
+func (s *Settings) LoadDogBarkFilter(fileName string) error {
+	var Species []string
+
+	// Init the species list
+	s.Realtime.DogBarkFilter.Species = []string{}
+
+	// Retrieve the default config paths from your application settings.
+	configPaths, err := GetDefaultConfigPaths()
+	if err != nil {
+		return err
+	}
+
+	var file *os.File
+	// Attempt to open the file from one of the default config paths.
+	for _, path := range configPaths {
+		fullPath := filepath.Join(path, fileName)
+		file, err = os.Open(fullPath)
+		if err == nil {
+			break
+		}
+	}
+
+	if file == nil {
+		// if file is not found just return empty config and error
+		return fmt.Errorf("file '%s' not found in default config paths", fileName)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	// Assuming no header and one species per line.
+	records, err := reader.ReadAll()
+	if err != nil {
+		return err
+	}
+
+	// Iterate over the records and add them to the species list.
+	for _, record := range records {
+		if len(record) == 0 {
+			continue // Skip empty lines
+		}
+		// Assuming the species name is the only entry in each record.
+		species := strings.ToLower(strings.TrimSpace(record[0]))
+		log.Printf("Adding species '%s' to dog bark filter", species)
+		Species = append(Species, species)
+	}
+	log.Println("Dog bark filter config loaded")
+
+	s.Realtime.DogBarkFilter.Species = Species
+
+	return nil
+}
+
+// SaveDogBarkFilter saves the dog bark filter species list to a CSV file
+func (s *Settings) SaveDogBarkFilter() error {
+	return SaveCSVList(DogBarkFilterCSV, s.Realtime.DogBarkFilter.Species)
 }
