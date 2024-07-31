@@ -118,13 +118,12 @@ func (p *Processor) getDefaultActions(detection Detections) []Action {
 
 	// Check if UpdateRangeFilterAction needs to be executed for the day
 	today := time.Now().Truncate(24 * time.Hour) // Current date with time set to midnight
-	if p.SpeciesListUpdated.Before(today) {
+	if p.Settings.BirdNET.RangeFilter.LastUpdated.Before(today) {
 		fmt.Println("Updating species range filter")
 		// Add UpdateRangeFilterAction if it hasn't been executed today
 		actions = append(actions, UpdateRangeFilterAction{
-			Bn:                 p.Bn,
-			IncludedSpecies:    p.IncludedSpecies,
-			SpeciesListUpdated: &p.SpeciesListUpdated, // Pass pointer to update the timestamp
+			Bn:       p.Bn,
+			Settings: p.Settings,
 		})
 	}
 

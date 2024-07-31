@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -131,6 +132,15 @@ type RealtimeSettings struct {
 	Telemetry     TelemetrySettings     // Telemetry settings
 }
 
+// RangeFilterSettings contains settings for the range filter
+type RangeFilterSettings struct {
+	Model            string    // range filter model model
+	Threshold        float32   // rangefilter species occurrence threshold
+	Species          []string  // included species list
+	LastUpdated      time.Time // last time the species list was updated
+	speciesListMutex sync.RWMutex
+}
+
 // Settings contains all configuration options for the BirdNET-Go application.
 type Settings struct {
 	Debug bool // true to enable debug mode
@@ -149,10 +159,7 @@ type Settings struct {
 		Latitude    float64 // latitude of recording location for prediction filtering
 		Threads     int     // number of CPU threads to use for analysis
 		Locale      string  // language to use for labels
-		RangeFilter struct {
-			Model     string  // range filter model model
-			Threshold float32 // rangefilter species occurrence threshold
-		}
+		RangeFilter RangeFilterSettings
 	}
 
 	Input struct {

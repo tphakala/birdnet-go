@@ -64,9 +64,8 @@ type MqttAction struct {
 }
 
 type UpdateRangeFilterAction struct {
-	Bn                 *birdnet.BirdNET
-	IncludedSpecies    *[]string
-	SpeciesListUpdated *time.Time
+	Bn       *birdnet.BirdNET
+	Settings *conf.Settings
 }
 
 // Execute logs the note to the chag log file
@@ -203,7 +202,7 @@ func (a MqttAction) Execute(data interface{}) error {
 // Execute updates the range filter species list, this is run every day
 func (a UpdateRangeFilterAction) Execute(data interface{}) error {
 	today := time.Now().Truncate(24 * time.Hour)
-	if today.After(*a.SpeciesListUpdated) {
+	if today.After(a.Settings.BirdNET.RangeFilter.LastUpdated) {
 		// Update location based species list
 		speciesScores, err := a.Bn.GetProbableSpecies(today, 0.0)
 		if err != nil {
@@ -216,8 +215,7 @@ func (a UpdateRangeFilterAction) Execute(data interface{}) error {
 			includedSpecies = append(includedSpecies, speciesScore.Label)
 		}
 
-		*a.IncludedSpecies = includedSpecies
-		*a.SpeciesListUpdated = today // Update the timestamp
+		a.Settings.UpdateIncludedSpecies(includedSpecies)
 	}
 	return nil
 }

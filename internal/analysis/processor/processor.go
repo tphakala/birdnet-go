@@ -29,8 +29,6 @@ type Processor struct {
 	BirdImageCache     *imageprovider.BirdImageCache
 	EventTracker       *EventTracker
 	SpeciesConfig      SpeciesConfig
-	IncludedSpecies    *[]string
-	SpeciesListUpdated time.Time
 	LastDogDetection   map[string]time.Time // keep track of dog barks per audio source
 	LastHumanDetection map[string]time.Time // keep track of human vocal per audio source
 	Metrics            *telemetry.Metrics
@@ -80,7 +78,6 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		Bn:                 bn,
 		BirdImageCache:     birdImageCache,
 		EventTracker:       NewEventTracker(),
-		IncludedSpecies:    new([]string),
 		Metrics:            metrics,
 		LastDogDetection:   make(map[string]time.Time),
 		LastHumanDetection: make(map[string]time.Time),
@@ -124,36 +121,9 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		}
 	}
 
-	// Initialize included species list
-	today := time.Now().Truncate(24 * time.Hour)
-
-	// Update location based species list
-	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
-	if err != nil {
-		log.Printf("Failed to get probable species: %s", err)
-	}
-
-	// Convert the speciesScores slice to a slice of species labels
-	var includedSpecies []string
-	for _, speciesScore := range speciesScores {
-		includedSpecies = append(includedSpecies, speciesScore.Label)
-	}
-
-	*p.IncludedSpecies = includedSpecies
-	p.SpeciesListUpdated = today
-
-	if p.Settings.Realtime.DynamicThreshold.Enabled {
-		// Initialize dynamic thresholds for included species
-		for _, species := range includedSpecies {
-			speciesLowercase := strings.ToLower(species)
-			p.DynamicThresholds[speciesLowercase] = &DynamicThreshold{
-				Level:         0,
-				CurrentValue:  float64(p.Settings.BirdNET.Threshold),
-				Timer:         time.Now(),
-				HighConfCount: 0,
-				ValidHours:    p.Settings.Realtime.DynamicThreshold.ValidHours, // Default to 1 hour, can be configured
-			}
-		}
+	// Initialize included species list if it's empty
+	if len(p.Settings.BirdNET.RangeFilter.Species) == 0 {
+		p.updateIncludedSpecies(time.Now().Truncate(24 * time.Hour))
 	}
 
 	return p
@@ -258,7 +228,7 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 		}
 
 		// Match against location-based filter
-		if !isSpeciesIncluded(result.Species, *p.IncludedSpecies) {
+		if !p.Settings.IsSpeciesIncluded(result.Species) {
 			if p.Settings.Debug {
 				log.Printf("Species not on included list: %s\n", commonName)
 			}
