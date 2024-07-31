@@ -28,7 +28,6 @@ type Processor struct {
 	MqttClient         mqtt.Client
 	BirdImageCache     *imageprovider.BirdImageCache
 	EventTracker       *EventTracker
-	DogBarkFilter      DogBarkFilter
 	SpeciesConfig      SpeciesConfig
 	IncludedSpecies    *[]string
 	SpeciesListUpdated time.Time
@@ -100,8 +99,10 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	// Load Species configs
 	p.SpeciesConfig, _ = LoadSpeciesConfig(conf.SpeciesConfigCSV)
 
-	// Load dog bark filter config
-	p.DogBarkFilter, _ = LoadDogBarkFilterConfig(conf.DogBarkFilterCSV)
+	// Load configurations
+	if err := p.Settings.LoadDogBarkFilter(conf.DogBarkFilterCSV); err != nil {
+		log.Printf("Error loading dog bark filter: %v", err)
+	}
 
 	// Initialize BirdWeather client if enabled in settings.
 	if settings.Realtime.Birdweather.Enabled {
@@ -390,13 +391,13 @@ func (p *Processor) pendingDetectionsFlusher() {
 							log.Printf("Last dog detection: %s\n", p.LastDogDetection)
 						}
 						// Check against common name
-						if p.DogBarkFilter.Check(item.Detection.Note.CommonName, p.LastDogDetection[item.Source]) {
+						if p.CheckDogBarkFilter(item.Detection.Note.CommonName, p.LastDogDetection[item.Source]) {
 							log.Printf("Discarding detection of %s from source %s due to recent dog bark\n", item.Detection.Note.CommonName, item.Source)
 							delete(PendingDetections, species)
 							continue
 						}
 						// Check against scientific name
-						if p.DogBarkFilter.Check(item.Detection.Note.ScientificName, p.LastDogDetection[item.Source]) {
+						if p.CheckDogBarkFilter(item.Detection.Note.ScientificName, p.LastDogDetection[item.Source]) {
 							log.Printf("Discarding detection of %s from source %s due to recent dog bark\n", item.Detection.Note.CommonName, item.Source)
 							delete(PendingDetections, species)
 							continue
