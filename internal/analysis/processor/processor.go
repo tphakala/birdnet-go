@@ -21,14 +21,14 @@ import (
 )
 
 type Processor struct {
-	Settings           *conf.Settings
-	Ds                 datastore.Interface
-	Bn                 *birdnet.BirdNET
-	BwClient           *birdweather.BwClient
-	MqttClient         mqtt.Client
-	BirdImageCache     *imageprovider.BirdImageCache
-	EventTracker       *EventTracker
-	SpeciesConfig      SpeciesConfig
+	Settings       *conf.Settings
+	Ds             datastore.Interface
+	Bn             *birdnet.BirdNET
+	BwClient       *birdweather.BwClient
+	MqttClient     mqtt.Client
+	BirdImageCache *imageprovider.BirdImageCache
+	EventTracker   *EventTracker
+	//SpeciesConfig      SpeciesConfig
 	LastDogDetection   map[string]time.Time // keep track of dog barks per audio source
 	LastHumanDetection map[string]time.Time // keep track of human vocal per audio source
 	Metrics            *telemetry.Metrics
@@ -94,7 +94,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	p.pendingDetectionsFlusher()
 
 	// Load Species configs
-	p.SpeciesConfig, _ = LoadSpeciesConfig(conf.SpeciesConfigCSV)
+	p.Settings.Realtime.Species, _ = LoadSpeciesConfig(conf.SpeciesConfigCSV)
 
 	// Load configurations
 	if err := p.Settings.LoadDogBarkFilter(conf.DogBarkFilterCSV); err != nil {
@@ -275,7 +275,7 @@ func (p *Processor) handleHumanDetection(item *queue.Results, speciesLowercase s
 
 // getBaseConfidenceThreshold retrieves the confidence threshold for a species, using custom or global thresholds.
 func (p *Processor) getBaseConfidenceThreshold(speciesLowercase string) float32 {
-	confidenceThreshold, exists := p.SpeciesConfig.Threshold[speciesLowercase]
+	confidenceThreshold, exists := p.Settings.Realtime.Species.Threshold[speciesLowercase]
 	if !exists {
 		confidenceThreshold = float32(p.Settings.BirdNET.Threshold)
 	} else if p.Settings.Debug {
