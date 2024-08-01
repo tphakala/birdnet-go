@@ -134,11 +134,10 @@ type RealtimeSettings struct {
 
 // RangeFilterSettings contains settings for the range filter
 type RangeFilterSettings struct {
-	Model            string    // range filter model model
-	Threshold        float32   // rangefilter species occurrence threshold
-	Species          []string  // included species list
-	LastUpdated      time.Time // last time the species list was updated
-	speciesListMutex sync.RWMutex
+	Model       string    // range filter model model
+	Threshold   float32   // rangefilter species occurrence threshold
+	Species     []string  // included species list
+	LastUpdated time.Time // last time the species list was updated
 }
 
 // Settings contains all configuration options for the BirdNET-Go application.
@@ -328,10 +327,17 @@ func GetSettings() *Settings {
 // SaveSettings saves the current settings to the configuration file.
 // It uses UpdateYAMLConfig to handle the atomic write process.
 func SaveSettings() error {
-	// Create a copy of the current settings
 	settingsMutex.RLock()
+	defer settingsMutex.RUnlock()
+
+	// Create a deep copy of the settings
 	settingsCopy := *settingsInstance
-	settingsMutex.RUnlock()
+
+	// Create a separate copy of the species list
+	speciesListMutex.RLock()
+	settingsCopy.BirdNET.RangeFilter.Species = make([]string, len(settingsInstance.BirdNET.RangeFilter.Species))
+	copy(settingsCopy.BirdNET.RangeFilter.Species, settingsInstance.BirdNET.RangeFilter.Species)
+	speciesListMutex.RUnlock()
 
 	// Find the path of the current config file
 	configPath, err := FindConfigFile()
@@ -344,6 +350,7 @@ func SaveSettings() error {
 		return fmt.Errorf("error updating config: %w", err)
 	}
 
+	// Save the dog bark filter species list to a CSV file
 	if err := settingsCopy.SaveDogBarkFilter(); err != nil {
 		return fmt.Errorf("error saving dog bark filter: %w", err)
 	}
