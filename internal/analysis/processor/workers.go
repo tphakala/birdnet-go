@@ -53,7 +53,7 @@ func (p *Processor) actionWorker() {
 func (p *Processor) getActionsForItem(detection Detections) []Action {
 	// match lower case
 	speciesName := strings.ToLower(detection.Note.CommonName)
-	speciesConfig, exists := p.SpeciesConfig.Actions[speciesName]
+	speciesConfig, exists := p.Settings.Realtime.Species.Actions[speciesName]
 
 	var actions []Action
 	if exists {

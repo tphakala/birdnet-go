@@ -130,6 +130,7 @@ type RealtimeSettings struct {
 	RTSP          RTSPSettings          // RTSP settings
 	MQTT          MQTTSettings          // MQTT settings
 	Telemetry     TelemetrySettings     // Telemetry settings
+	Species       SpeciesSettings       // Custom thresholds and actions for species
 }
 
 // RangeFilterSettings contains settings for the range filter
@@ -138,6 +139,26 @@ type RangeFilterSettings struct {
 	Threshold   float32   // rangefilter species occurrence threshold
 	Species     []string  // included species list
 	LastUpdated time.Time // last time the species list was updated
+}
+
+// SpeciesSettings holds custom thresholds and action configurations for species.
+type SpeciesSettings struct {
+	Threshold map[string]float32             // Custom confidence thresholds for species
+	Actions   map[string]SpeciesActionConfig // Actions configurations for species
+}
+
+// SpeciesActionConfig represents the configuration for actions specific to a species.
+type SpeciesActionConfig struct {
+	SpeciesName string         // Name of the species
+	Actions     []ActionConfig // Configurations for actions associated with this species
+	Exclude     []string       // List of actions to exclude
+	OnlyActions bool           // Flag to indicate if only these actions should be executed
+}
+
+// ActionConfig holds configuration details for a specific action.
+type ActionConfig struct {
+	Name       string   // Name of the action
+	Parameters []string // List of parameters for the action
 }
 
 // Settings contains all configuration options for the BirdNET-Go application.
@@ -151,14 +172,14 @@ type Settings struct {
 	}
 
 	BirdNET struct {
-		Sensitivity float64 // birdnet analysis sigmoid sensitivity
-		Threshold   float64 // threshold for prediction confidence to report
-		Overlap     float64 // birdnet analysis overlap between chunks
-		Longitude   float64 // longitude of recording location for prediction filtering
-		Latitude    float64 // latitude of recording location for prediction filtering
-		Threads     int     // number of CPU threads to use for analysis
-		Locale      string  // language to use for labels
-		RangeFilter RangeFilterSettings
+		Sensitivity float64             // birdnet analysis sigmoid sensitivity
+		Threshold   float64             // threshold for prediction confidence to report
+		Overlap     float64             // birdnet analysis overlap between chunks
+		Longitude   float64             // longitude of recording location for prediction filtering
+		Latitude    float64             // latitude of recording location for prediction filtering
+		Threads     int                 // number of CPU threads to use for analysis
+		Locale      string              // language to use for labels
+		RangeFilter RangeFilterSettings // range filter settings
 	}
 
 	Input struct {
