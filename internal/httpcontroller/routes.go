@@ -44,9 +44,11 @@ func (s *Server) initRoutes() {
 		"/logs":      {Path: "/logs", TemplateName: "logs", Title: "Logs"},
 		"/stats":     {Path: "/stats", TemplateName: "stats", Title: "Statistics"},
 		// Settings Routes are managed by settingsBase template
-		"/settings/main":         {Path: "/settings/main", TemplateName: "settingsBase", Title: "Main Settings"},
-		"/settings/audio":        {Path: "/settings/audio", TemplateName: "settingsBase", Title: "Audio Settings"},
-		"/settings/integrations": {Path: "/settings/integrations", TemplateName: "settingsBase", Title: "Integration Settings"},
+		"/settings/main":             {Path: "/settings/main", TemplateName: "settingsBase", Title: "Main Settings"},
+		"/settings/audio":            {Path: "/settings/audio", TemplateName: "settingsBase", Title: "Audio Settings"},
+		"/settings/detectionfilters": {Path: "/settings/detectionfilters", TemplateName: "settingsBase", Title: "Detection Filters"},
+		"/settings/integrations":     {Path: "/settings/integrations", TemplateName: "settingsBase", Title: "Integration Settings"},
+		"/settings/species":          {Path: "/settings/species", TemplateName: "settingsBase", Title: "Editor"},
 	}
 
 	// Set up full page routes

@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sort"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -246,31 +245,33 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 	return c.Render(http.StatusOK, "index", data)
 }
 
-// getLocalesData returns sorted locale data
-func (s *Server) getLocalesData() []LocaleData {
-	var locales []LocaleData
-	for code, name := range conf.LocaleCodes {
-		locales = append(locales, LocaleData{Code: code, Name: name})
-	}
-	sort.Slice(locales, func(i, j int) bool {
-		return locales[i].Name < locales[j].Name
-	})
-	return locales
-}
-
 // getSettingsContentTemplate returns the appropriate content template name for a given settings page
 func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 	path := c.Path()
 	settingsType := strings.TrimPrefix(path, "/settings/")
 	templateName := fmt.Sprintf("%sSettings", settingsType)
 
+	data := map[string]interface{}{
+		"Settings":        s.Settings,
+		"Locales":         s.prepareLocalesData(),
+		"PreparedSpecies": "",
+	}
+
+	if templateName == "filtersSettings" {
+		data["PreparedSpecies"] = s.prepareSpeciesData()
+	}
+
 	var buf bytes.Buffer
-	err := s.Echo.Renderer.Render(&buf, templateName, map[string]interface{}{
-		// apply settings data into settings template
-		"Settings": conf.GetSettings(),
-		// apply locales data into settings template
-		"Locales": s.getLocalesData(),
-	}, c)
+	err := s.Echo.Renderer.Render(&buf, templateName, data, c)
+
+	/*
+		err := s.Echo.Renderer.Render(&buf, templateName, map[string]interface{}{
+			// apply settings data into settings template
+			"Settings": s.Settings,
+			// apply locales data into settings template
+			"Locales": s.getLocalesData(),
+		}, c)*/
+
 	if err != nil {
 		log.Printf("Error rendering settings content: %v", err)
 		return "", err

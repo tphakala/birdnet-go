@@ -1,0 +1,255 @@
+{{define "detectionfiltersSettings"}}
+
+<!-- Privacy Filter start -->
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3"
+x-data="{ 
+    privacyFilter: {
+        debug: {{.Settings.Realtime.PrivacyFilter.Debug}},
+        enabled: {{.Settings.Realtime.PrivacyFilter.Enabled}},
+        confidence: {{.Settings.Realtime.PrivacyFilter.Confidence}}
+    },
+    filteringSettingsOpen: false,
+    showTooltip: null,
+    hasChanges: false
+}"
+x-init="
+    $watch('privacyFilter', () => { hasChanges = true }, { deep: true });
+">
+
+    <!-- control collapse element open state and label visibility -->
+    <input type="checkbox" id="filteringSettingsOpen" x-on:change="filteringSettingsOpen = !filteringSettingsOpen" />
+
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex items-center">
+            <label for="birdnetSettingsOpen" class="cursor-pointer">Privacy Filtering</label>
+            <div x-show="hasChanges" x-cloak class="ml-2">
+                <span class="badge badge-primary badge-sm changed-badge">
+                    <span class="text-xs mb-0.5">changed</span>
+                </span>
+            </div>
+        </div>
+        <!-- short descripton of this section -->
+        <p class="text-sm text-gray-500">Privacy filtering avoids saving audio clips when human vocals are detected</p>
+    </div>
+
+    <div class="collapse-content">
+
+        <!-- Privacy Filter Settings -->
+        <div class="text-lg font-medium pb-2">Privacy</div>
+
+        <div class="form-control relative">
+            <label class="label justify-start" for="privacyFilterEnabled">
+                <input type="checkbox" id="privacyFilterEnabled" name="realtime.privacyfilter.enabled" x-model="privacyFilter.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
+                <input type="hidden" name="realtime.privacyfilter.enabled" value="false">
+                <span class="label-text">Enable Privacy Filtering</span>
+                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'privacyFilter'" @mouseleave="showTooltip = null">ⓘ</span>
+            </label>
+            <div x-show="showTooltip === 'privacyFilter'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                Enables detection of human voices, if detected discards bird detection to protect privacy
+            </div>
+        </div>
+
+        <div x-show="privacyFilter.enabled" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="form-control relative">
+                <label class="label justify-start" for="privacyFilterConfidence">
+                    <span class="label-text">Confidence Threshold for Human Detection</span>
+                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'privacyConfidence'" @mouseleave="showTooltip = null">ⓘ</span>
+                </label>
+                <input type="number" id="privacyFilterConfidence" name="realtime.privacyFilter.confidence" x-model="privacyFilter.confidence" step="0.01" min="0" max="1" class="input input-bordered input-sm w-full mb-4">
+                <div x-show="showTooltip === 'privacyConfidence'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    Set the confidence level for human voice detection, lower value makes filter more sensitive
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+<!-- Privacy Filter end -->
+
+<!-- Dog Bark Filter start -->
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
+    dogBarkFilter: {
+        debug: {{.Settings.Realtime.DogBarkFilter.Debug}},
+        enabled: {{.Settings.Realtime.DogBarkFilter.Enabled}},
+        confidence: {{.Settings.Realtime.DogBarkFilter.Confidence}},
+        remember: {{.Settings.Realtime.DogBarkFilter.Remember}},
+        species: {{.Settings.Realtime.DogBarkFilter.Species | toJSON}}
+    },
+    newSpecies: '',
+    editIndex: null,
+    editSpecies: '',
+    filteringSettingsOpen: false,
+    showTooltip: null,
+    hasChanges: false,
+    predictions: [],
+    allowedSpecies: {{.PreparedSpecies | toJSON}},
+    resetChanges() {
+        this.hasChanges = false;
+    },
+    addSpecies() {
+        if (this.newSpecies.trim()) {
+            this.dogBarkFilter.species.push(this.newSpecies.trim());
+            this.newSpecies = '';
+            this.hasChanges = true;
+            this.predictions = [];
+        }
+    },
+    removeSpecies(index) {
+        this.dogBarkFilter.species.splice(index, 1);
+        this.hasChanges = true;
+    },
+    startEdit(index) {
+        this.editIndex = index;
+        this.editSpecies = this.dogBarkFilter.species[index];
+    },
+    saveEdit() {
+        if (this.editSpecies.trim()) {
+            this.dogBarkFilter.species[this.editIndex] = this.editSpecies.trim();
+            this.editIndex = null;
+            this.editSpecies = '';
+            this.hasChanges = true;
+        }
+    },
+    cancelEdit() {
+        this.editIndex = null;
+        this.editSpecies = '';
+    },
+    updatePredictions() {
+        if (!this.allowedSpecies || this.allowedSpecies.length === 0) {
+            this.predictions = [];
+            return;
+        }
+
+        const input = this.newSpecies.toLowerCase();
+        this.predictions = this.allowedSpecies
+            .filter(species => species.toLowerCase().includes(input))
+            .slice(0, 5); // limit to 5 suggestions
+    }
+}" x-init="
+    $watch('dogBarkFilter', () => { hasChanges = true }, { deep: true });
+">
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex items-center">
+            False Positive Prevention
+            <div class="ml-2" x-show="hasChanges" x-cloak>
+                <span class="badge badge-primary badge-sm changed-badge">
+                    <span class="text-xs mb-0.5">changed</span>
+                </span>
+            </div>
+        </div>
+        <!-- short descripton of this section -->
+        <p class="text-sm text-gray-500">Configure false detection filters</p>
+    </div>
+
+    <div class="collapse-content">
+        
+        <div class="form-control relative">
+            <label class="label justify-start" for="dogBarkFilterEnabled">
+                <input type="checkbox" id="dogBarkFilterEnabled" name="realtime.dogbarkfilter.enabled" x-model="dogBarkFilter.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
+                <input type="hidden" name="realtime.dogbarkfilter.enabled" value="false">
+                <span class="label-text">Enable Dog Bark Filter</span>
+                <span class="ml-2 text-sm text-gray-500 cursor-help"
+                      @mouseenter="showTooltip = 'dogBarkFilter'"
+                      @mouseleave="showTooltip = null">ⓘ</span>
+            </label>
+            <div class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50"
+                 x-show="showTooltip === 'dogBarkFilter'" x-cloak>
+                Filters out dog barks to reduce false positives in bird detection.
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6" x-show="dogBarkFilter.enabled">
+            <div class="form-control relative">
+                <label class="label-text">
+                    Confidence Threshold
+                    <span class="ml-2 text-sm text-gray-500 cursor-help"
+                          @mouseenter="showTooltip = 'dogBarkConfidence'"
+                          @mouseleave="showTooltip = null">ⓘ</span>
+                </label>
+                <input type="number" id="dogBarkFilterConfidence" name="realtime.dogbarkfilter.confidence"
+                       x-model="dogBarkFilter.confidence" step="0.01" min="0" max="1" class="input input-bordered input-sm w-full">
+                <div class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50"
+                     x-show="showTooltip === 'dogBarkConfidence'" x-cloak>
+                    Set the confidence level for dog bark detection, lower value makes filter more sensitive
+                </div>
+            </div>
+
+            <div class="form-control relative">
+                <label class="label-text">
+                    Dog Bark Expire Time (Minutes)
+                    <span class="ml-2 text-sm text-gray-500 cursor-help"
+                          @mouseenter="showTooltip = 'dogBarkExpire'"
+                          @mouseleave="showTooltip = null">ⓘ</span>
+                </label>
+                <input type="number" x-model="dogBarkFilter.remember" min="0" class="input input-bordered input-sm w-full" />
+                <div class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50"
+                     x-show="showTooltip === 'dogBarkExpire'" x-cloak>
+                    Set how long to remember a detected dog bark
+                </div>
+            </div>
+        </div>
+
+        <div class="form-control relative mt-4" x-show="dogBarkFilter.enabled">
+            <label class="label-text">
+                Dog Bark Species List
+                <span class="ml-2 text-sm text-gray-500 cursor-help"
+                      @mouseenter="showTooltip = 'dogBarkSpecies'"
+                      @mouseleave="showTooltip = null">ⓘ</span>
+            </label>
+            <div class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50"
+                 x-show="showTooltip === 'dogBarkSpecies'" x-cloak>
+                List of species to filter out as potential dog barks
+            </div>
+
+            <div class="space-y-2">
+                <template x-for="(species, index) in dogBarkFilter.species" :key="index">
+                    <div class="flex items-center bg-gray-50 space-x-2 p-2 rounded-md">
+                        <div class="flex-grow">
+                            <span x-show="editIndex !== index" 
+                                  @click="startEdit(index)" 
+                                  x-text="species"
+                                  class="text-sm cursor-pointer hover:underline"></span>
+                            <input x-show="editIndex === index" 
+                                   x-model="editSpecies" 
+                                   @keyup.enter="saveEdit"
+                                   @keyup.escape="cancelEdit"
+                                   class="input input-sm input-bordered w-full" />
+                        </div>
+                        <div class="flex-shrink-0">
+                            <div class="btn-group">
+                                <button type="button" @click="saveEdit" 
+                                        x-show="editIndex === index" 
+                                        class="btn btn-xs">Save</button>
+                                <button type="button" @click="cancelEdit" 
+                                        x-show="editIndex === index" 
+                                        class="btn btn-xs">Cancel</button>
+                                <button type="button" @click="removeSpecies(index)" 
+                                        class="btn btn-xs">Remove</button>
+                              </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div class="flex items-center mt-2">
+                <input type="text" 
+                       x-model="newSpecies" 
+                       @input="updatePredictions()" 
+                       list="species-suggestions"
+                       placeholder="Add new species" 
+                       class="input input-bordered input-sm w-full" />
+                <datalist id="species-suggestions">
+                    <template x-for="suggestion in predictions" :key="suggestion">
+                        <option :value="suggestion"></option>
+                    </template>
+                </datalist>
+                <button type="button" @click="addSpecies()" class="btn btn-sm btn-primary ml-2 mr-2 w-20">Add</button>
+            </div>
+            <input type="hidden" name="realtime.dogbarkfilter.species" :value="JSON.stringify(dogBarkFilter.species)" />
+        </div>
+    </div>
+</div>
+<!-- Dog Bark Filter end -->
+
+
+{{end}}
