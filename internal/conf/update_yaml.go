@@ -24,6 +24,10 @@ type yamlContext struct {
 func UpdateYAMLConfig(configPath string, newSettings *Settings) error {
 	settingsMap := createSettingsMap(newSettings)
 
+	// Remove Species and LastUpdated from the flat map
+	delete(settingsMap, "BirdNET.RangeFilter.Species")
+	delete(settingsMap, "BirdNET.RangeFilter.LastUpdated")
+
 	tempFile, err := createTempFile(configPath)
 	if err != nil {
 		return fmt.Errorf("error creating temporary file: %w", err)
@@ -50,6 +54,12 @@ func createFlatMap(v reflect.Value, prefix string, result map[string]interface{}
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Field(i)
 		fieldType := t.Field(i)
+
+		// Skip unexported fields
+		if fieldType.PkgPath != "" {
+			continue
+		}
+
 		key := fieldType.Name
 		if prefix != "" {
 			key = prefix + "." + key
@@ -66,7 +76,10 @@ func createFlatMap(v reflect.Value, prefix string, result map[string]interface{}
 				result[key] = field.Interface()
 			}
 		default:
-			result[key] = field.Interface()
+			// Only include fields that can be interfaced with, otherwise we might panic
+			if field.CanInterface() {
+				result[key] = field.Interface()
+			}
 		}
 	}
 }
