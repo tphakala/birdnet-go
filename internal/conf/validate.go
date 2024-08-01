@@ -5,7 +5,6 @@ package conf
 import (
 	"errors"
 	"fmt"
-	"time"
 )
 
 // ValidationError represents a collection of validation errors
@@ -92,30 +91,8 @@ func validateBirdNETSettings(settings *struct {
 		errs = append(errs, "RangeFilter threshold must be between 0 and 1")
 	}
 
-	if settings.RangeFilter.LastUpdated.After(time.Now()) {
-		errs = append(errs, "RangeFilter LastUpdated time cannot be in the future")
-	}
-
 	if len(errs) > 0 {
 		return fmt.Errorf("BirdNET settings errors: %v", errs)
-	}
-
-	return nil
-}
-
-func validateRangeFilterSettings(settings *RangeFilterSettings) error {
-	var errs []string
-
-	if settings.Model == "" {
-		errs = append(errs, "Model must not be empty")
-	}
-
-	if settings.Threshold < 0 || settings.Threshold > 1 {
-		errs = append(errs, "Threshold must be between 0 and 1")
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("RangeFilter settings errors: %v", errs)
 	}
 
 	return nil
