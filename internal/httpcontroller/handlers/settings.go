@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -11,6 +12,11 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
+
+var fieldsToSkip = map[string]bool{
+	"birdnet.rangefilter.species":     true,
+	"birdnet.rangefilter.lastupdated": true,
+}
 
 // SaveSettings handles the request to save settings
 func (h *Handlers) SaveSettings(c echo.Context) error {
@@ -76,7 +82,16 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 		}
 
 		fullName := strings.ToLower(prefix + fieldName)
+
+		// Skip fields that should not be updated from the form
+		if fieldsToSkip[fullName] {
+			continue
+		}
+
 		formValue, exists := formValues[fullName]
+
+		// DEBUG: Log the field name and form value
+		log.Printf("%s: %v", fullName, formValue)
 
 		if !exists {
 			if field.Kind() == reflect.Struct {
@@ -121,8 +136,21 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 				}
 			}
 		case reflect.Slice:
-			if err := updateSliceFromForm(field, formValue); err != nil {
-				return fmt.Errorf("error updating slice for %s: %w", fullName, err)
+			if fieldType.Type.Elem().Kind() == reflect.String {
+				// Handle string slice (e.g., species lists)
+				if len(formValue) > 0 {
+					var stringSlice []string
+					err := json.Unmarshal([]byte(formValue[0]), &stringSlice)
+					if err != nil {
+						return fmt.Errorf("error unmarshaling JSON for %s: %w", fullName, err)
+					}
+					field.Set(reflect.ValueOf(stringSlice))
+				}
+			} else {
+				// Handle other slice types as before
+				if err := updateSliceFromForm(field, formValue); err != nil {
+					return fmt.Errorf("error updating slice for %s: %w", fullName, err)
+				}
 			}
 		case reflect.Struct:
 			if err := updateStructFromForm(field, formValues, fullName+"."); err != nil {

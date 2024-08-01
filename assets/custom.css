@@ -19,6 +19,12 @@
     box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
 }
 
+.select:focus-visible {
+  outline: 1px solid transparent;
+  outline-offset: 0px;
+  box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
+}
+
 .thumbnail-container {
   position: relative;
   display: inline-block;
