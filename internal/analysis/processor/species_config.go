@@ -12,31 +12,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-/*
-// ActionConfig holds configuration details for a specific action.
-
-	type ActionConfig struct {
-		Name       string   // Name of the action
-		Parameters []string // List of parameters for the action
-	}
-
-// SpeciesActionConfig represents the configuration for actions specific to a species.
-
-	type SpeciesActionConfig struct {
-		SpeciesName string         // Name of the species
-		Actions     []ActionConfig // Configurations for actions associated with this species
-		Exclude     []string       // List of actions to exclude
-		OnlyActions bool           // Flag to indicate if only these actions should be executed
-	}
-
-// SpeciesConfig holds custom thresholds and action configurations for species.
-
-	type SpeciesConfig struct {
-		Threshold map[string]float32             // Custom confidence thresholds for species
-		Actions   map[string]SpeciesActionConfig // Actions configurations for species
-	}
-*/
-
 func LoadSpeciesConfig(fileName string) (conf.SpeciesSettings, error) {
 	var speciesConfig conf.SpeciesSettings
 	speciesConfig.Threshold = make(map[string]float32)
@@ -122,7 +97,7 @@ func parseActions(actionStr string) (actions []conf.ActionConfig, exclude []stri
 
 	for _, action := range actionList {
 		actionDetails := strings.Split(action, ":")
-		actionName := strings.TrimPrefix(actionDetails[0], "+")
+		actionType := strings.TrimPrefix(actionDetails[0], "+")
 
 		// Check for exclusion
 		if strings.HasPrefix(actionDetails[0], "-") {
@@ -132,8 +107,8 @@ func parseActions(actionStr string) (actions []conf.ActionConfig, exclude []stri
 
 		// Handle inclusion and parameters
 		actions = append(actions, conf.ActionConfig{
-			Name:       actionName,
-			Parameters: actionDetails[1:], // Parameters follow the action name
+			Type:       actionType,
+			Parameters: actionDetails[1:], // Parameters follow the action type
 		})
 
 		if strings.HasPrefix(actionDetails[0], "+") {
@@ -150,12 +125,12 @@ func (p *Processor) createActionsFromConfig(speciesConfig conf.SpeciesActionConf
 
 	for _, actionConfig := range speciesConfig.Actions {
 		// Skip excluded actions
-		if contains(speciesConfig.Exclude, actionConfig.Name) {
+		if contains(speciesConfig.Exclude, actionConfig.Type) {
 			continue
 		}
 
 		// Handle different action types
-		switch actionConfig.Name {
+		switch actionConfig.Type {
 		case "ExecuteScript":
 			if len(actionConfig.Parameters) >= 1 {
 				scriptPath := actionConfig.Parameters[0]

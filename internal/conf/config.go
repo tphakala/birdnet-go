@@ -157,7 +157,7 @@ type SpeciesActionConfig struct {
 
 // ActionConfig holds configuration details for a specific action.
 type ActionConfig struct {
-	Name       string   // Name of the action
+	Type       string   // Type of the action (e.g. ExecuteScript which is only type for now)
 	Parameters []string // List of parameters for the action
 }
 
