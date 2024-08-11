@@ -224,7 +224,12 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 	path := c.Path()
 	route, exists := s.pageRoutes[path]
 	if !exists {
-		return s.Handlers.NewHandlerError(fmt.Errorf("no route found for path: %s", path), "Page not found", http.StatusNotFound)
+		log.Printf("No route found for path: %s", path)
+		return s.Handlers.NewHandlerError(
+			fmt.Errorf("no route found for path: %s", path),
+			"Page not found",
+			http.StatusNotFound,
+		)
 	}
 
 	data := struct {
@@ -252,25 +257,19 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 	templateName := fmt.Sprintf("%sSettings", settingsType)
 
 	data := map[string]interface{}{
-		"Settings":        s.Settings,
-		"Locales":         s.prepareLocalesData(),
-		"PreparedSpecies": "",
+		"Settings": s.Settings,
+		"Locales":  s.prepareLocalesData(),
 	}
 
-	if templateName == "filtersSettings" {
+	if templateName == "detectionfiltersSettings" ||
+		templateName == "speciesSettings" {
 		data["PreparedSpecies"] = s.prepareSpeciesData()
 	}
 
+	log.Printf("Species Settings: %+v", s.Settings.Realtime.Species)
+
 	var buf bytes.Buffer
 	err := s.Echo.Renderer.Render(&buf, templateName, data, c)
-
-	/*
-		err := s.Echo.Renderer.Render(&buf, templateName, map[string]interface{}{
-			// apply settings data into settings template
-			"Settings": s.Settings,
-			// apply locales data into settings template
-			"Locales": s.getLocalesData(),
-		}, c)*/
 
 	if err != nil {
 		log.Printf("Error rendering settings content: %v", err)

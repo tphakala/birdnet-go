@@ -56,6 +56,11 @@ func (s *Server) initRoutes() {
 		s.Echo.GET(route.Path, h.WithErrorHandling(s.handlePageRequest))
 	}
 
+	// Error handler
+	s.Echo.HTTPErrorHandler = func(err error, c echo.Context) {
+		s.Handlers.HandleError(err, c)
+	}
+
 	// Partial routes (HTMX responses)
 	partialRoutes := []PartialRouteConfig{
 		{Path: "/detections/hourly", TemplateName: "hourlyDetections", Title: "Hourly Detections", Handler: h.WithErrorHandling(h.HourlyDetections)},

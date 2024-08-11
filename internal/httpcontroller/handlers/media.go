@@ -69,14 +69,14 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	// Extract clip name from the query parameters
 	clipName := c.QueryParam("clip")
 	if clipName == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "Clip name is required.")
+		return h.NewHandlerError(fmt.Errorf("empty clip name"), "Clip name is required", http.StatusBadRequest)
 	}
 
 	// Construct the path to the spectrogram image
 	spectrogramPath, err := h.getSpectrogramPath(clipName, 400) // Assuming 400px width
 	if err != nil {
 		log.Printf("Failed to get or generate spectrogram for clip %s: %v", clipName, err)
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate spectrogram")
+		return h.NewHandlerError(err, fmt.Sprintf("Failed to get or generate spectrogram for clip %s", clipName), http.StatusInternalServerError)
 	}
 
 	// Serve the spectrogram image file

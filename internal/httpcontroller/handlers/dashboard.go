@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -40,13 +41,13 @@ func (h *Handlers) TopBirds(c echo.Context) error {
 	// Get top birds data from the database
 	notes, err := h.DS.GetTopBirdsData(selectedDate, minConfidenceNormalized)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		return h.NewHandlerError(err, "Failed to get top birds data", http.StatusInternalServerError)
 	}
 
 	// Process notes with additional data such as hourly occurrences and total detections
 	notesWithIndex, err := h.ProcessNotes(notes, selectedDate, minConfidenceNormalized)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		return h.NewHandlerError(err, "Failed to process notes", http.StatusInternalServerError)
 	}
 
 	// Sorting the notes by total detections in descending order
@@ -109,7 +110,7 @@ func (h *Handlers) ProcessNotes(notes []datastore.Note, selectedDate string, min
 func (h *Handlers) GetAllNotes(c echo.Context) error {
 	notes, err := h.DS.GetAllNotes()
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err)
+		return h.NewHandlerError(err, "Failed to get all notes", http.StatusInternalServerError)
 	}
 
 	return c.JSON(http.StatusOK, notes)
@@ -119,29 +120,28 @@ func (h *Handlers) GetAllNotes(c echo.Context) error {
 func (h *Handlers) DeleteNote(c echo.Context) error {
 	noteID := c.QueryParam("id")
 	if noteID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "Note ID is required.")
+		return h.NewHandlerError(fmt.Errorf("empty note ID"), "Note ID is required", http.StatusBadRequest)
 	}
 
 	// Retrieve the path to the audio file before deleting the note
 	clipPath, err := h.DS.GetNoteClipPath(noteID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to retrieve audio clip path: "+err.Error())
+		return h.NewHandlerError(err, "Failed to retrieve audio clip path", http.StatusInternalServerError)
 	}
 
 	// Delete the note from the database
 	err = h.DS.Delete(noteID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to delete note: "+err.Error())
+		return h.NewHandlerError(err, "Failed to delete note", http.StatusInternalServerError)
 	}
 
 	// If there's an associated clip, delete the file
 	if clipPath != "" {
 		err = os.Remove(clipPath)
 		if err != nil {
-			log.Println("Failed to delete audio clip: ", err)
-			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to delete audio clip: "+err.Error())
+			h.logError(&HandlerError{Err: err, Message: "Failed to delete audio clip", Code: http.StatusInternalServerError})
 		} else {
-			log.Println("Deleted audio clip: ", clipPath)
+			h.logInfo(fmt.Sprintf("Deleted audio clip: %s", clipPath))
 		}
 	}
 
