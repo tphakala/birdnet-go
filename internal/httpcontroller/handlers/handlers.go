@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"runtime/debug"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -34,16 +36,21 @@ type baseHandler struct {
 func (bh *baseHandler) NewHandlerError(err error, message string, code int) *HandlerError {
 	handlerErr := &HandlerError{
 		Err:     err,
-		Message: message,
+		Message: fmt.Sprintf("%s: %v", message, err),
 		Code:    code,
 	}
 	bh.logError(handlerErr)
 	return handlerErr
 }
 
-// logError logs the HandlerError.
+// logError logs an error message.
 func (bh *baseHandler) logError(err *HandlerError) {
 	bh.logger.Printf("Error: %s (Code: %d, Underlying error: %v)", err.Message, err.Code, err.Err)
+}
+
+// logInfo logs an info message.
+func (bh *baseHandler) logInfo(message string) {
+	bh.logger.Printf("Info: %s", message)
 }
 
 // Handlers embeds baseHandler and includes all the dependencies needed for the application handlers.
@@ -56,7 +63,11 @@ type Handlers struct {
 	SSE               *SSEHandler // Server Side Events handler
 }
 
+// New creates a new Handlers instance with the given dependencies.
 func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger) *Handlers {
+	if logger == nil {
+		logger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+	}
 	return &Handlers{
 		baseHandler: baseHandler{
 			errorHandler: defaultErrorHandler,
@@ -66,7 +77,7 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		Settings:          settings,
 		DashboardSettings: dashboardSettings,
 		BirdImageCache:    birdImageCache,
-		SSE:               NewSSEHandler(), // Server Side Events handler
+		SSE:               NewSSEHandler(),
 	}
 }
 
@@ -85,8 +96,69 @@ func defaultErrorHandler(err error) *HandlerError {
 
 // HandleError is a utility method to handle errors in Echo handlers.
 func (h *Handlers) HandleError(err error, c echo.Context) error {
-	he := h.errorHandler(err)
-	return c.JSON(he.Code, map[string]string{"error": he.Message})
+	var he *HandlerError
+	var echoHTTPError *echo.HTTPError
+
+	// Check if it's an Echo HTTP error
+	if errors.As(err, &echoHTTPError) {
+		he = &HandlerError{
+			Err:     echoHTTPError,
+			Message: fmt.Sprintf("%v", echoHTTPError.Message),
+			Code:    echoHTTPError.Code,
+		}
+	} else if errors.As(err, &he) {
+		// It's already a HandlerError, use it as is
+	} else {
+		// For any other error, treat it as an internal server error
+		he = &HandlerError{
+			Err:     err,
+			Message: "An unexpected error occurred",
+			Code:    http.StatusInternalServerError,
+		}
+	}
+
+	// Check if headers have already been sent
+	if c.Response().Committed {
+		return nil
+	}
+
+	errorData := struct {
+		Title        string
+		Message      string
+		Debug        bool
+		ErrorDetails string
+		StackTrace   string
+	}{
+		Title:   fmt.Sprintf("%d Error", he.Code),
+		Message: he.Message,
+		Debug:   h.Settings.Debug,
+	}
+
+	// Include error details and stack trace
+	// TODO: this should be hidden for clients outside of server subnet
+	errorData.ErrorDetails = fmt.Sprintf("%v", he.Err)
+	errorData.StackTrace = string(debug.Stack())
+
+	// Choose the appropriate template based on the error code
+	template := h.getErrorTemplate(he.Code)
+
+	// Set the response status code to the error code
+	c.Response().Status = he.Code
+
+	// Render the template with the correct status code
+	return c.Render(he.Code, template, errorData)
+}
+
+// getErrorTemplate returns the appropriate error template name based on the error code
+func (h *Handlers) getErrorTemplate(code int) string {
+	switch code {
+	case http.StatusNotFound:
+		return "error-404"
+	case http.StatusInternalServerError:
+		return "error-500"
+	default:
+		return "error" // fallback to the generic error template
+	}
 }
 
 // WithErrorHandling wraps an Echo handler function with error handling.
