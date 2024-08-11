@@ -22,19 +22,19 @@ var fieldsToSkip = map[string]bool{
 func (h *Handlers) SaveSettings(c echo.Context) error {
 	settings := conf.GetSettings()
 	if settings == nil {
-		// Return an error if settings are nil
-		return fmt.Errorf("settings is nil")
+		// Return an error if settings are not initialized
+		return h.NewHandlerError(fmt.Errorf("settings is nil"), "Settings not initialized", http.StatusInternalServerError)
 	}
 
 	formParams, err := c.FormParams()
 	if err != nil {
 		// Return an error if form parameters cannot be parsed
-		return fmt.Errorf("failed to parse form: %w", err)
+		return h.NewHandlerError(err, "Failed to parse form", http.StatusBadRequest)
 	}
 
 	if err := updateSettingsFromForm(settings, formParams); err != nil {
 		// Return an error if updating settings from form parameters fails
-		return fmt.Errorf("error updating settings: %w", err)
+		return h.NewHandlerError(err, "Error updating settings", http.StatusInternalServerError)
 	}
 
 	// Send success notification for reloading settings
@@ -49,7 +49,7 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 			Message: fmt.Sprintf("Error saving settings: %v", err),
 			Type:    "error",
 		})
-		return c.NoContent(http.StatusInternalServerError)
+		return h.NewHandlerError(err, "Failed to save settings", http.StatusInternalServerError)
 	}
 
 	// Send success notification for saving settings

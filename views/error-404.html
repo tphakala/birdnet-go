@@ -1,0 +1,23 @@
+{{define "error-404"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Page Not Found</title>
+    <link rel="icon" href="data:,"> <!-- Blank favicon to prevent 404 errors -->
+    <link href="/assets/tailwind.css" rel="stylesheet" />
+</head>
+<body class="bg-base-200 h-screen flex items-center justify-center">
+    <div class="text-center">
+        <h1 class="text-6xl font-bold text-gray-800 mb-4">404</h1>
+        <h2 class="text-3xl font-semibold text-gray-600 mb-8">Page Not Found</h2>
+
+         <!-- Link Buttons -->
+        <a href="/" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition duration-300">
+            Go to Dashboard
+        </a>
+    </div>
+</body>
+</html>
+{{end}}

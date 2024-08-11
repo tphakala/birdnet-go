@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"log"
+	"fmt"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -16,7 +16,7 @@ func (h *Handlers) SpeciesDetections(c echo.Context) error {
 
 	// Check if the required parameters are provided
 	if species == "" || date == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "Species and date parameters are required.")
+		return h.NewHandlerError(fmt.Errorf("missing parameters"), "Species and date parameters are required", http.StatusBadRequest)
 	}
 
 	// Number of results to return
@@ -27,7 +27,7 @@ func (h *Handlers) SpeciesDetections(c echo.Context) error {
 
 	notes, err := h.DS.SpeciesDetections(species, date, hour, false, numResults, offset)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		return h.NewHandlerError(err, "Failed to get species detections", http.StatusInternalServerError)
 	}
 
 	// Prepare data for rendering in the template
@@ -57,13 +57,13 @@ func (h *Handlers) HourlyDetections(c echo.Context) error {
 	hour := c.QueryParam("hour")
 
 	if date == "" || hour == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "Date and hour are required.")
+		return h.NewHandlerError(fmt.Errorf("missing parameters"), "Date and hour are required", http.StatusBadRequest)
 	}
 
 	// Fetch all detections for the specified date and hour
 	detections, err := h.DS.GetHourlyDetections(date, hour)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		return h.NewHandlerError(err, "Failed to get hourly detections", http.StatusInternalServerError)
 	}
 
 	// Prepare data for rendering in the template
@@ -87,13 +87,13 @@ func (h *Handlers) HourlyDetections(c echo.Context) error {
 func (h *Handlers) DetectionDetails(c echo.Context) error {
 	noteID := c.QueryParam("id")
 	if noteID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "Note ID is required.")
+		return h.NewHandlerError(fmt.Errorf("empty note ID"), "Note ID is required", http.StatusBadRequest)
 	}
 
 	// Retrieve the note from the database
 	note, err := h.DS.Get(noteID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to retrieve note: "+err.Error())
+		return h.NewHandlerError(err, "Failed to retrieve note", http.StatusInternalServerError)
 	}
 
 	// set spectrogram width, height will be /2
@@ -102,7 +102,7 @@ func (h *Handlers) DetectionDetails(c echo.Context) error {
 	// Generate the spectrogram path for the note
 	spectrogramPath, err := h.getSpectrogramPath(note.ClipName, width)
 	if err != nil {
-		log.Printf("Error generating spectrogram for %s: %v", note.ClipName, err)
+		h.logError(&HandlerError{Err: err, Message: fmt.Sprintf("Error generating spectrogram for %s", note.ClipName), Code: http.StatusInternalServerError})
 		spectrogramPath = "" // Set to empty string to avoid breaking the template
 	}
 
@@ -127,7 +127,7 @@ func (h *Handlers) RecentDetections(c echo.Context) error {
 	// Retrieve the last detections from the database
 	notes, err := h.DS.GetLastDetections(numDetections)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error fetching detections"})
+		return h.NewHandlerError(err, "Failed to fetch recent detections", http.StatusInternalServerError)
 	}
 
 	// Preparing data for rendering in the template
