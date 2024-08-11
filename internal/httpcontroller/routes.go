@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"io/fs"
+	"net/http"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
@@ -56,11 +57,6 @@ func (s *Server) initRoutes() {
 		s.Echo.GET(route.Path, h.WithErrorHandling(s.handlePageRequest))
 	}
 
-	// Error handler
-	s.Echo.HTTPErrorHandler = func(err error, c echo.Context) {
-		s.Handlers.HandleError(err, c)
-	}
-
 	// Partial routes (HTMX responses)
 	partialRoutes := []PartialRouteConfig{
 		{Path: "/detections/hourly", TemplateName: "hourlyDetections", Title: "Hourly Detections", Handler: h.WithErrorHandling(h.HourlyDetections)},
@@ -82,6 +78,23 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/sse", s.Handlers.SSE.ServeSSE)
 	s.Echo.DELETE("/note", h.WithErrorHandling(h.DeleteNote))
 	s.Echo.POST("/settings/save", h.WithErrorHandling(h.SaveSettings))
+
+	// Setup Error handler
+	s.Echo.HTTPErrorHandler = func(err error, c echo.Context) {
+		if handleErr := s.Handlers.HandleError(err, c); handleErr != nil {
+			// If HandleError itself returns an error, create a new HandlerError and render it
+			newErr := s.Handlers.NewHandlerError(
+				handleErr,
+				"Error occurred while handling another error",
+				http.StatusInternalServerError,
+			)
+			if !c.Response().Committed {
+				if renderErr := c.Render(newErr.Code, "error", newErr); renderErr != nil {
+					c.Logger().Error(renderErr)
+				}
+			}
+		}
+	}
 
 	// Set up template renderer
 	s.setupTemplateRenderer()
