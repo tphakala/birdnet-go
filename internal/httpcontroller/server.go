@@ -224,7 +224,6 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 	path := c.Path()
 	route, exists := s.pageRoutes[path]
 	if !exists {
-		log.Printf("No route found for path: %s", path)
 		return s.Handlers.NewHandlerError(
 			fmt.Errorf("no route found for path: %s", path),
 			"Page not found",
