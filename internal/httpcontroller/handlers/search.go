@@ -42,7 +42,7 @@ func (h *Handlers) SearchDetections(c echo.Context) error {
 	}
 
 	// Render the searchResults template with the data
-	if err := c.Render(http.StatusOK, "searchResults", data); err != nil {
+	if err := c.Render(http.StatusOK, "searchDetections", data); err != nil {
 		return h.NewHandlerError(err, "Failed to render search results", http.StatusInternalServerError)
 	}
 
