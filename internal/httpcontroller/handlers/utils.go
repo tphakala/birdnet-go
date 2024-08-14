@@ -3,13 +3,7 @@ package handlers
 
 import (
 	"fmt"
-	"log"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -72,73 +66,6 @@ func ConfidenceColor(confidence float64) string {
 	default:
 		return "bg-red-500" // Low confidence
 	}
-}
-
-// createSpectrogramWithSoX generates a spectrogram for a WAV file using SoX.
-func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) error {
-	// Verify SoX installation
-	if _, err := exec.LookPath("sox"); err != nil {
-		return fmt.Errorf("SoX binary not found: %w", err)
-	}
-
-	// Set height based on width
-	heightStr := strconv.Itoa(width / 2)
-	widthStr := strconv.Itoa(width)
-
-	// Build SoX command arguments
-	args := []string{audioClipPath, "-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-o", spectrogramPath}
-	if width < 800 {
-		args = append(args, "-r")
-	}
-
-	// Determine the command based on the OS
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		// Directly use SoX command on Windows
-		cmd = exec.Command("sox", args...)
-	} else {
-		// Prepend 'nice' to the command on Unix-like systems
-		args = append([]string{"-n", "10", "sox"}, args...) // '19' is a nice value for low priority
-		cmd = exec.Command("nice", args...)
-	}
-
-	// Execute the command
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("SoX command failed: %w", err)
-	}
-
-	log.Printf("Spectrogram generated at '%s'", spectrogramPath)
-	return nil
-}
-
-// GetSpectrogramPath returns the web-friendly path to the spectrogram image for a WAV file, stored in the same directory.
-func (h *Handlers) getSpectrogramPath(wavFileName string, width int) (string, error) {
-	baseName := filepath.Base(wavFileName)
-	dir := filepath.Dir(wavFileName)
-	ext := filepath.Ext(baseName)
-	baseNameWithoutExt := baseName[:len(baseName)-len(ext)]
-
-	// Include width in the filename
-	spectrogramFileName := fmt.Sprintf("%s_%dpx.png", baseNameWithoutExt, width)
-
-	// Construct the file system path using filepath.Join to ensure it's valid on the current OS.
-	spectrogramPath := filepath.Join(dir, spectrogramFileName)
-
-	// Convert the file system path to a web-friendly path by replacing backslashes with forward slashes.
-	webFriendlyPath := strings.Replace(spectrogramPath, "\\", "/", -1)
-
-	// Check if spectrogram already exists
-	if _, err := os.Stat(spectrogramPath); os.IsNotExist(err) {
-		// Create the spectrogram if it doesn't exist
-		if err := createSpectrogramWithSoX(wavFileName, spectrogramPath, width); err != nil {
-			return "", fmt.Errorf("error creating spectrogram with SoX: %w", err)
-		}
-	} else if err != nil {
-		return "", fmt.Errorf("error checking spectrogram file: %w", err)
-	}
-
-	// Return the web-friendly path
-	return webFriendlyPath, nil
 }
 
 // sumHourlyCounts calculates the total counts from hourly counts.
