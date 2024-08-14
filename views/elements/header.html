@@ -14,13 +14,16 @@
         {{if eq .Title "Dashboard"}}
         <!-- Search input -->
         <div class="relative w-full md:w-3/4 lg:w-4/5 xl:w-5/6 max-w-4xl mx-auto">
-            <input type="text" placeholder="Search" name="query"
-            hx-get="/detections/search"
-            hx-params="query"
-            hx-target="#mainContent"
-            hx-swap="innerHTML"
-            hx-trigger="keyup[key!='ArrowLeft'][key!='ArrowRight'] change delay:100ms"                
-            class="input input-sm sm:input-md rounded-full focus:outline-none w-full pl-3 sm:pl-4 pr-10 sm:pr-12 text-gray-600 dark:text-gray-300" />
+            <input type="text" 
+                name="search"
+                placeholder="Search detections"
+                hx-get="/detections?queryType=search"
+                hx-params="search"
+                hx-trigger="keyup[key!='ArrowLeft'][key!='ArrowRight'] changed delay:100ms, search"
+                hx-target="#mainContent"
+                hx-swap="innerHTML"
+                hx-push-url="true"
+                class="input input-sm sm:input-md rounded-full focus:outline-none w-full pl-3 sm:pl-4 pr-10 sm:pr-12 text-gray-600 dark:text-gray-300" />
             <div class="absolute inset-y-0 right-0 flex items-center pr-2 sm:pr-3 pointer-events-none">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 sm:w-6 sm:h-6">
                     <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />

@@ -1,8 +1,19 @@
-{{define "hourlyDetections"}}
+{{define "listDetections"}}
 <section class="card col-span-12 overflow-hidden bg-base-100 shadow-sm xl:col-span-12">
     <div class="card-body grow-0 p-4 ml-2">
         <div class="flex justify-between">
-            <span class="card-title grow"><a class="link-hover link">Hourly Results for {{.Hour}}:00 on {{.Date}}</a></span>
+            <!-- Title -->
+            <span class="card-title grow link-hover link">
+                {{if eq .QueryType "hourly"}}
+                    Hourly Results for {{.Hour}}:00 on {{.Date}}
+                {{else if eq .QueryType "species"}}
+                    Results for {{.Species}} on {{.Date}}
+                {{else if eq .QueryType "search"}}
+                    Search Results for "{{.Search}}"
+                {{else}}
+                    All Detections for {{.Date}}
+                {{end}}
+            </span>
         </div>
     </div>
 
@@ -31,7 +42,7 @@
             </tr>
         </thead>
         <tbody>
-            {{range .Detections}}
+            {{range .Notes}}
             <tr class="">
                 <!-- Date Column -->
                 <td class="py-1 px-6">{{.Date}}</td>
@@ -72,7 +83,7 @@
                     <div class="w-full">
                         <!-- Spectrogram Image  -->
                         <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
-                            <img loading="lazy" width="400" src="/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
+                            <img loading="lazy" width="400" src="/media/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
                         </a>
 
                         <!-- Audio player -->
@@ -80,11 +91,50 @@
                             <source src="{{.ClipName}}" type="audio/wav">
                             Your browser does not support the audio element.
                         </audio>
+
                     </div>
                 </td>
             </tr>
             {{end}}
+
+            {{if gt .TotalResults .ItemsPerPage}}
+            <tr>
+                <td colspan="6">
+                    <div class="flex justify-between items-center p-4">
+                    <div class="text-sm text-gray-600">
+                        Showing {{.ShowingFrom}} to {{.ShowingTo}} of {{.TotalResults}} results
+                    </div>
+                    <div class="flex space-x-2">
+                        {{if gt .CurrentPage 1}}
+                            <button hx-get="?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
+                                hx-target="#mainContent"
+                                class="btn btn-sm btn-primary">
+                                Previous
+                            </button>
+                        {{else}}
+                            <button class="btn btn-sm btn-disabled">
+                                Previous
+                            </button>            
+                        {{end}}
+                        {{if lt .CurrentPage .TotalPages}}
+                            <button hx-get="?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
+                                hx-target="#mainContent"
+                                class="btn btn-sm btn-primary">
+                                Next
+                            </button>
+                        {{else}}
+                            <button class="btn btn-sm btn-disabled">
+                                Next
+                            </button>       
+                        {{end}}
+                    </div>
+                    </div>
+                </td>
+            </tr>
+            {{end}}
+            
         </tbody>
     </table>
+
 </section>
 {{end}}
