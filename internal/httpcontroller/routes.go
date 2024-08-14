@@ -59,11 +59,9 @@ func (s *Server) initRoutes() {
 
 	// Partial routes (HTMX responses)
 	partialRoutes := []PartialRouteConfig{
-		{Path: "/detections/hourly", TemplateName: "hourlyDetections", Title: "Hourly Detections", Handler: h.WithErrorHandling(h.HourlyDetections)},
+		{Path: "/detections", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.Detections)},
 		{Path: "/detections/recent", TemplateName: "recentDetections", Title: "Recent Detections", Handler: h.WithErrorHandling(h.RecentDetections)},
-		{Path: "/detections/species", TemplateName: "speciesDetections", Title: "Species Detections", Handler: h.WithErrorHandling(h.SpeciesDetections)},
 		{Path: "/detections/details", TemplateName: "detectionDetails", Title: "Detection Details", Handler: h.WithErrorHandling(h.DetectionDetails)},
-		{Path: "/detections/search", TemplateName: "searchDetections", Title: "Search Detections", Handler: h.WithErrorHandling(h.SearchDetections)},
 		{Path: "/top-birds", TemplateName: "birdsTableHTML", Title: "Top Birds", Handler: h.WithErrorHandling(h.TopBirds)},
 		{Path: "/notes", TemplateName: "notes", Title: "All Notes", Handler: h.WithErrorHandling(h.GetAllNotes)},
 		{Path: "/media/spectrogram", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.ServeSpectrogram)},

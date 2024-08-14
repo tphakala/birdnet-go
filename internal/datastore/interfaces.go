@@ -38,6 +38,8 @@ type Interface interface {
 	GetHourlyWeather(date string) ([]HourlyWeather, error)
 	LatestHourlyWeather() (*HourlyWeather, error)
 	GetHourlyDetections(date, hour string) ([]Note, error)
+	CountSpeciesDetections(species, date, hour string) (int64, error)
+	CountSearchResults(query string) (int64, error)
 }
 
 // DataStore implements StoreInterface using a GORM database.
@@ -456,4 +458,40 @@ func (ds *DataStore) GetHourlyDetections(date, hour string) ([]Note, error) {
 		Find(&detections).Error
 
 	return detections, err
+}
+
+// CountSpeciesDetections counts the number of detections for a specific species, date, and hour.
+func (ds *DataStore) CountSpeciesDetections(species, date, hour string) (int64, error) {
+	var count int64
+	query := ds.DB.Model(&Note{}).Where("common_name = ? AND date = ?", species, date)
+
+	if hour != "" {
+		if len(hour) < 2 {
+			hour = "0" + hour
+		}
+		startTime := hour + ":00"
+		endTime := hour + ":59"
+		query = query.Where("time >= ? AND time <= ?", startTime, endTime)
+	}
+
+	err := query.Count(&count).Error
+	if err != nil {
+		return 0, fmt.Errorf("error counting species detections: %w", err)
+	}
+
+	return count, nil
+}
+
+// CountSearchResults counts the number of search results for a given query.
+func (ds *DataStore) CountSearchResults(query string) (int64, error) {
+	var count int64
+	err := ds.DB.Model(&Note{}).
+		Where("common_name LIKE ? OR scientific_name LIKE ?", "%"+query+"%", "%"+query+"%").
+		Count(&count).Error
+
+	if err != nil {
+		return 0, fmt.Errorf("error counting search results: %w", err)
+	}
+
+	return count, nil
 }
