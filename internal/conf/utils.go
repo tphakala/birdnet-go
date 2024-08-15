@@ -275,3 +275,17 @@ func ParseWeekday(day string) (time.Weekday, error) {
 func (lc *LogConfig) GetRotationDay() (time.Weekday, error) {
 	return ParseWeekday(lc.RotationDay)
 }
+
+// GetLocalTimezone returns the local time zone of the system.
+func GetLocalTimezone() (*time.Location, error) {
+	return time.Local, nil
+}
+
+// ConvertUTCToLocal converts a UTC time to the local time zone.
+func ConvertUTCToLocal(utcTime time.Time) (time.Time, error) {
+	localLoc, err := GetLocalTimezone()
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to get local timezone: %w", err)
+	}
+	return utcTime.In(localLoc), nil
+}
