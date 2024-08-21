@@ -15,6 +15,7 @@ require (
 	github.com/prometheus/client_golang v1.19.1
 	github.com/prometheus/client_model v0.6.1
 	github.com/shirou/gopsutil/v3 v3.24.5
+	github.com/sj14/astral v0.2.1
 	github.com/smallnest/ringbuffer v0.0.0-20230728150354-35801fa39d0e
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.19.0
@@ -22,6 +23,7 @@ require (
 	golang.org/x/crypto v0.26.0
 	golang.org/x/net v0.24.0
 	golang.org/x/text v0.17.0
+	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.5.6
 	gorm.io/driver/sqlite v1.5.5
 	gorm.io/gorm v1.25.10
@@ -74,5 +76,4 @@ require (
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
