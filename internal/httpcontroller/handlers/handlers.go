@@ -12,7 +12,19 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
+
+// Handlers embeds baseHandler and includes all the dependencies needed for the application handlers.
+type Handlers struct {
+	baseHandler
+	DS                datastore.Interface
+	Settings          *conf.Settings
+	DashboardSettings *conf.Dashboard
+	BirdImageCache    *imageprovider.BirdImageCache
+	SSE               *SSEHandler      // Server Side Events handler
+	SunCalc           *suncalc.SunCalc // SunCalc instance for calculating sun event times
+}
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.
 type HandlerError struct {
@@ -53,18 +65,8 @@ func (bh *baseHandler) logInfo(message string) {
 	bh.logger.Printf("Info: %s", message)
 }
 
-// Handlers embeds baseHandler and includes all the dependencies needed for the application handlers.
-type Handlers struct {
-	baseHandler
-	DS                datastore.Interface
-	Settings          *conf.Settings
-	DashboardSettings *conf.Dashboard
-	BirdImageCache    *imageprovider.BirdImageCache
-	SSE               *SSEHandler // Server Side Events handler
-}
-
 // New creates a new Handlers instance with the given dependencies.
-func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger) *Handlers {
+func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc) *Handlers {
 	if logger == nil {
 		logger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
@@ -78,6 +80,7 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		DashboardSettings: dashboardSettings,
 		BirdImageCache:    birdImageCache,
 		SSE:               NewSSEHandler(),
+		SunCalc:           sunCalc,
 	}
 }
 

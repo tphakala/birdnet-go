@@ -1,17 +1,15 @@
-// File: internal/httpcontroller/routes.go
+// internal/httpcontroller/routes.go
 package httpcontroller
 
 import (
 	"embed"
-	"encoding/json"
+	"fmt"
 	"html/template"
 	"io/fs"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
-	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // Embed the assets and views directories.
@@ -101,35 +99,34 @@ func (s *Server) initRoutes() {
 	s.setupStaticFileServing()
 }
 
-// setupTemplateRenderer configures the template renderer for the server.
-func (s *Server) setupTemplateRenderer() {
-	funcMap := template.FuncMap{
-		"even":                  handlers.Even,
-		"calcWidth":             handlers.CalcWidth,
-		"heatmapColor":          handlers.HeatmapColor,
-		"title":                 cases.Title(language.English).String,
-		"confidence":            handlers.Confidence,
-		"confidenceColor":       handlers.ConfidenceColor,
-		"thumbnail":             s.Handlers.Thumbnail,
-		"thumbnailAttribution":  s.Handlers.ThumbnailAttribution,
-		"RenderContent":         s.RenderContent,
-		"renderSettingsContent": s.renderSettingsContent,
-		"sub":                   func(a, b int) int { return a - b },
-		"add":                   func(a, b int) int { return a + b },
-		"toJSON": func(v interface{}) string {
-			b, err := json.Marshal(v)
-			if err != nil {
-				return "[]"
-			}
-			return string(b)
-		},
+// handlePageRequest handles requests for full page routes
+func (s *Server) handlePageRequest(c echo.Context) error {
+	path := c.Path()
+	route, exists := s.pageRoutes[path]
+	if !exists {
+		return s.Handlers.NewHandlerError(
+			fmt.Errorf("no route found for path: %s", path),
+			"Page not found",
+			http.StatusNotFound,
+		)
 	}
 
-	tmpl, err := template.New("").Funcs(funcMap).ParseFS(ViewsFs, "views/*.html", "views/**/*.html")
-	if err != nil {
-		s.Echo.Logger.Fatal(err)
+	data := struct {
+		C               echo.Context
+		Page            string
+		Title           string
+		Settings        *conf.Settings
+		Locales         []LocaleData
+		Charts          template.HTML
+		ContentTemplate string
+	}{
+		C:        c,
+		Page:     route.TemplateName,
+		Title:    route.Title,
+		Settings: s.Settings,
 	}
-	s.Echo.Renderer = &TemplateRenderer{templates: tmpl}
+
+	return c.Render(http.StatusOK, "index", data)
 }
 
 // setupStaticFileServing configures static file serving for the server.

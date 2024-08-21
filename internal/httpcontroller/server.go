@@ -1,14 +1,9 @@
-// File: internal/httpcontroller/server.go
+// internal/httpcontroller/server.go
 package httpcontroller
 
 import (
-	"bytes"
 	"fmt"
-	"html/template"
-	"io"
 	"log"
-	"net/http"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -17,13 +12,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"golang.org/x/crypto/acme/autocert"
 )
-
-// TemplateRenderer is a custom HTML template renderer for Echo framework.
-type TemplateRenderer struct {
-	templates *template.Template
-}
 
 // Server encapsulates Echo server and related configurations.
 type Server struct {
@@ -35,27 +26,7 @@ type Server struct {
 	BirdImageCache    *imageprovider.BirdImageCache
 	Handlers          *handlers.Handlers
 	pageRoutes        map[string]PageRouteConfig
-}
-
-// LocaleData represents a locale with its code and full name.
-type LocaleData struct {
-	Code string
-	Name string
-}
-
-// PageData represents data for rendering a page.
-type PageData struct {
-	C        echo.Context
-	Page     string
-	Title    string
-	Settings *conf.Settings
-	Locales  []LocaleData
-	Charts   template.HTML
-}
-
-// Render renders a template with the given data.
-func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
-	return t.templates.ExecuteTemplate(w, name, data)
+	SunCalc           *suncalc.SunCalc // SunCalc instance for calculating sun event times
 }
 
 // New initializes a new HTTP server with given context and datastore.
@@ -71,7 +42,12 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 	}
 
 	s.initLogger()
-	s.Handlers = handlers.New(s.DS, s.Settings, s.DashboardSettings, s.BirdImageCache, nil)
+
+	// Initialize SunCalc for calculating sun event times
+	s.SunCalc = suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
+
+	// Initialize handlers
+	s.Handlers = handlers.New(s.DS, s.Settings, s.DashboardSettings, s.BirdImageCache, nil, s.SunCalc)
 
 	s.initializeServer()
 	return s
@@ -187,92 +163,4 @@ func (s *Server) initLogger() {
 			return nil
 		},
 	}))
-}
-
-// RenderContent modification
-func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
-	d, ok := data.(struct {
-		C               echo.Context
-		Page            string
-		Title           string
-		Settings        *conf.Settings
-		Locales         []LocaleData
-		Charts          template.HTML
-		ContentTemplate string
-	})
-	if !ok {
-		return "", fmt.Errorf("invalid data type")
-	}
-
-	c := d.C // Extracted context
-	path := c.Path()
-	route, exists := s.pageRoutes[path]
-	if !exists {
-		return "", fmt.Errorf("no route found for path: %s", path)
-	}
-
-	buf := new(bytes.Buffer)
-	err := s.Echo.Renderer.Render(buf, route.TemplateName, d, c)
-	if err != nil {
-		return "", err
-	}
-	return template.HTML(buf.String()), nil
-}
-
-// handlePageRequest modification
-func (s *Server) handlePageRequest(c echo.Context) error {
-	path := c.Path()
-	route, exists := s.pageRoutes[path]
-	if !exists {
-		return s.Handlers.NewHandlerError(
-			fmt.Errorf("no route found for path: %s", path),
-			"Page not found",
-			http.StatusNotFound,
-		)
-	}
-
-	data := struct {
-		C               echo.Context
-		Page            string
-		Title           string
-		Settings        *conf.Settings
-		Locales         []LocaleData
-		Charts          template.HTML
-		ContentTemplate string
-	}{
-		C:        c,
-		Page:     route.TemplateName,
-		Title:    route.Title,
-		Settings: s.Settings,
-	}
-
-	return c.Render(http.StatusOK, "index", data)
-}
-
-// getSettingsContentTemplate returns the appropriate content template name for a given settings page
-func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
-	path := c.Path()
-	settingsType := strings.TrimPrefix(path, "/settings/")
-	templateName := fmt.Sprintf("%sSettings", settingsType)
-
-	data := map[string]interface{}{
-		"Settings": s.Settings,
-		"Locales":  s.prepareLocalesData(),
-	}
-
-	if templateName == "detectionfiltersSettings" ||
-		templateName == "speciesSettings" {
-		data["PreparedSpecies"] = s.prepareSpeciesData()
-	}
-
-	log.Printf("Species Settings: %+v", s.Settings.Realtime.Species)
-
-	var buf bytes.Buffer
-	err := s.Echo.Renderer.Render(&buf, templateName, data, c)
-
-	if err != nil {
-		log.Printf("Error rendering settings content: %v", err)
-		return "", err
-	}
-	return template.HTML(buf.String()), nil
 }

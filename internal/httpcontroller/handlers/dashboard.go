@@ -31,6 +31,12 @@ func (h *Handlers) TopBirds(c echo.Context) error {
 		selectedDate = getCurrentDate()
 	}
 
+	// Parse the selected date
+	parsedDate, err := time.Parse("2006-01-02", selectedDate)
+	if err != nil {
+		return h.NewHandlerError(err, "Invalid date format", http.StatusBadRequest)
+	}
+
 	minConfidenceStr := c.QueryParam("minConfidence")
 	minConfidence, err := strconv.ParseFloat(minConfidenceStr, 64)
 	if err != nil {
@@ -58,21 +64,51 @@ func (h *Handlers) TopBirds(c echo.Context) error {
 	// Creating a slice with hours from 0 to 23
 	hours := makeHoursSlice()
 
+	// Get sunrise time
+	sunrise, err := h.SunCalc.GetSunriseTime(parsedDate)
+	if err != nil {
+		return h.NewHandlerError(err, "Failed to get sunrise time", http.StatusInternalServerError)
+	}
+
+	// Get sunset time
+	sunset, err := h.SunCalc.GetSunsetTime(parsedDate)
+	if err != nil {
+		return h.NewHandlerError(err, "Failed to get sunset time", http.StatusInternalServerError)
+	}
+
+	sunriseHour := closestHour(sunrise)
+	sunsetHour := closestHour(sunset)
+
 	// Preparing data for rendering in the template
 	data := struct {
 		NotesWithIndex    []NoteWithIndex
 		Hours             []int
 		SelectedDate      string
 		DashboardSettings *conf.Dashboard
+		Sunrise           int
+		Sunset            int
 	}{
 		NotesWithIndex:    notesWithIndex,
 		Hours:             hours,
 		SelectedDate:      selectedDate,
 		DashboardSettings: h.DashboardSettings,
+		Sunrise:           sunriseHour,
+		Sunset:            sunsetHour,
 	}
 
 	// Render the birdsTableHTML template with the data
 	return c.Render(http.StatusOK, "birdsTableHTML", data)
+}
+
+func closestHour(t time.Time) int {
+	hour := t.Hour()
+	minute := t.Minute()
+
+	if minute >= 30 {
+		hour++
+	}
+
+	return hour % 24
 }
 
 // Additional helper functions (processNotes, makeHoursSlice, updateClipNames, etc.) go here...

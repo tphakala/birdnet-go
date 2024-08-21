@@ -2,7 +2,6 @@
 package handlers
 
 import (
-	"fmt"
 	"strconv"
 	"time"
 
@@ -20,52 +19,6 @@ type NoteWithIndex struct {
 // getCurrentDate returns the current date in YYYY-MM-DD format.
 func getCurrentDate() string {
 	return time.Now().Format("2006-01-02")
-}
-
-// calcWidth calculates the width of a bar in a bar chart as a percentage.
-// It normalizes the totalDetections based on a predefined maximum.
-func CalcWidth(totalDetections int) int {
-	const maxDetections = 200 // Maximum number of detections expected
-	widthPercentage := (totalDetections * 100) / maxDetections
-	if widthPercentage > 100 {
-		widthPercentage = 100 // Limit width to 100% if exceeded
-	}
-	return widthPercentage
-}
-
-// even checks if an integer is even. Useful for alternating styles in loops.
-func Even(index int) bool {
-	return index%2 == 0
-}
-
-// heatmapColor assigns a color based on a provided value using predefined thresholds.
-func HeatmapColor(value int) string {
-	thresholds := []int{10, 20, 30, 40, 50, 60, 70, 80, 90}
-	colors := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}
-
-	for i, threshold := range thresholds {
-		if value <= threshold {
-			return colors[i]
-		}
-	}
-	return colors[len(colors)-1] // Default to the highest color for values above all thresholds
-}
-
-// confidence converts a confidence value (0.0 - 1.0) to a percentage string.
-func Confidence(confidence float64) string {
-	return fmt.Sprintf("%.0f%%", confidence*100)
-}
-
-// confidenceColor assigns a color based on the confidence value.
-func ConfidenceColor(confidence float64) string {
-	switch {
-	case confidence >= 0.8:
-		return "bg-green-500" // High confidence
-	case confidence >= 0.4:
-		return "bg-orange-400" // Moderate confidence
-	default:
-		return "bg-red-500" // Low confidence
-	}
 }
 
 // sumHourlyCounts calculates the total counts from hourly counts.

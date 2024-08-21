@@ -3596,6 +3596,10 @@ html:has(.drawer-toggle:checked) {
   bottom: 0px;
 }
 
+.-top-4 {
+  top: -1rem;
+}
+
 .bottom-5 {
   bottom: 1.25rem;
 }
@@ -3729,6 +3733,10 @@ html:has(.drawer-toggle:checked) {
 
 .mt-8 {
   margin-top: 2rem;
+}
+
+.inline-block {
+  display: inline-block;
 }
 
 .flex {
@@ -4114,6 +4122,11 @@ html:has(.drawer-toggle:checked) {
 .py-2 {
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
+}
+
+.py-4 {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
 }
 
 .pb-2 {
