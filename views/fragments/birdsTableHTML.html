@@ -2,27 +2,43 @@
 
 <table class="table table-zebra">
   
+  <!-- Table header -->
   <thead class="text-xs">
-    <tr>
-      <th scope="col" class="py-2 px-6 w-0">Species</th>
+      <!-- Species header -->
+      <th scope="col" class="py-4 px-6 w-0">Species</th>
       {{if .DashboardSettings.Thumbnails.Summary}}
-      <th scope="col" class="py-2 px-6 w-0">Thumbnail</th>
+      <!-- Thumbnail header -->
+      <th scope="col" class="py-4 px-6 w-0">Thumbnail</th>
       {{end}}
-      <th scope="col" class="py-2 px-4 w-100 hidden md:table-cell">Detections</th>
+      <!-- Total detections header -->
+      <th scope="col" class="py-4 px-4 w-100 hidden md:table-cell">Detections</th>
       {{range .Hours}}
-      <th scope="col" class="text-center py-2 px-0">
+      <!-- Hourly headers -->
+      <th scope="col" class="text-center py-4 px-0">
         <a href="#"
           hx-get="/detections?date={{urlquery $.SelectedDate}}&hour={{printf "%02d" .}}&queryType=hourly"
           hx-target="#mainContent"
           hx-trigger="click"
-          hx-push-url="true">
+          hx-push-url="true"
+          class="relative inline-block">
           {{printf "%02d" .}}
+          {{if eq . $.Sunrise}}
+            <span class="absolute -top-4 left-1/2 transform -translate-x-1/2">
+              {{sunPositionIcon (timeOfDayToInt "dawn")}}
+            </span>
+          {{end}}
+          {{if eq . $.Sunset}}
+            <span class="absolute -top-4 left-1/2 transform -translate-x-1/2">
+              {{sunPositionIcon (timeOfDayToInt "dusk")}}
+            </span>
+          {{end}}
         </a>
-      </th>      
+      </th>        
       {{end}}
       <th scope="col" class="py-2 px-0"></th>
     </tr>
   </thead>
+  <!-- Table body -->
   <tbody>
     {{range $index, $element := .NotesWithIndex}}
 

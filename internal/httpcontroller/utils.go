@@ -1,3 +1,4 @@
+// internal/httpcontroller/utils.go - Utility functions for the HTTP controller package
 package httpcontroller
 
 import (
