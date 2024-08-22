@@ -139,7 +139,7 @@ func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error)
 	// Filter and label the results
 	var results []Filter
 	for i, score := range filter {
-		if score >= 0.03 {
+		if score >= bn.Settings.BirdNET.RangeFilter.Threshold {
 			results = append(results, Filter{Score: score, Label: bn.Labels[i]})
 		}
 	}
