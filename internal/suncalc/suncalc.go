@@ -28,8 +28,8 @@ type cacheEntry struct {
 // SunCalc handles caching and calculation of sun event times
 type SunCalc struct {
 	cache    map[string]cacheEntry // Cache of sun event times for dates
-	lock     sync.RWMutex         // Lock for cache access
-	observer astral.Observer      // Observer for sun event calculations
+	lock     sync.RWMutex          // Lock for cache access
+	observer astral.Observer       // Observer for sun event calculations
 }
 
 // NewSunCalc creates a new SunCalc instance
