@@ -170,9 +170,12 @@ func (p *Processor) processDetections(item *queue.Results) {
 			}
 
 			// Update the detection in the map.
+			isHuman := strings.Contains(strings.ToLower(commonName), "human")
 			PendingDetections[commonName] = PendingDetection{
 				Detection:     detection,
 				Confidence:    confidence,
+				Source:        item.Source,
+				HumanDetected: isHuman,
 				FirstDetected: firstDetected,
 				FlushDeadline: flushDeadline,
 				LastUpdated:   time.Now(),
@@ -259,17 +262,19 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 
 // handleDogDetection handles the detection of dog barks and updates the last detection timestamp.
 func (p *Processor) handleDogDetection(item *queue.Results, speciesLowercase string, result datastore.Results) {
-	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, "dog") && result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
-		log.Printf("Dog detected, updating last detection timestamp for potential owl false positives")
-		p.LastDogDetection[item.Source] = time.Now()
+	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, "dog") &&
+		result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
+		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, item.Source)
+		p.LastDogDetection[item.Source] = item.StartTime
 	}
 }
 
 // handleHumanDetection handles the detection of human vocalizations and updates the last detection timestamp.
 func (p *Processor) handleHumanDetection(item *queue.Results, speciesLowercase string, result datastore.Results) {
-	if p.Settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human") && result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
-		log.Printf("Human detected, confidence %.6f", result.Confidence)
-		p.LastHumanDetection[item.Source] = time.Now().Add(-4 * time.Second)
+	if p.Settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human vocal") &&
+		result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
+		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, item.Source)
+		p.LastHumanDetection[item.Source] = item.StartTime
 	}
 }
 
@@ -347,11 +352,13 @@ func (p *Processor) pendingDetectionsFlusher() {
 				if now.After(item.FlushDeadline) {
 					// Check if human was detected after the first detection and discard if so
 					if p.Settings.Realtime.PrivacyFilter.Enabled {
-						if !strings.Contains(item.Detection.Note.CommonName, "Human") &&
-							p.LastHumanDetection[item.Source].After(item.FirstDetected) {
-							log.Printf("Discarding detection of %s from source %s due to privacy filter\n", species, item.Source)
-							delete(PendingDetections, species)
-							continue
+						if !item.HumanDetected {
+							lastHumanDetection, exists := p.LastHumanDetection[item.Source]
+							if exists && lastHumanDetection.After(item.FirstDetected) {
+								log.Printf("Discarding detection of %s from source %s due to privacy filter\n", species, item.Source)
+								delete(PendingDetections, species)
+								continue
+							}
 						}
 					}
 
