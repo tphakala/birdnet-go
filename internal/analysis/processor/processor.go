@@ -101,23 +101,34 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		log.Printf("Error loading dog bark filter: %v", err)
 	}
 
-	// Initialize BirdWeather client if enabled in settings.
+	// Initialize BirdWeather client if enabled in settings
 	if settings.Realtime.Birdweather.Enabled {
-		p.BwClient = birdweather.New(settings)
+		var err error
+		p.BwClient, err = birdweather.New(settings)
+		if err != nil {
+			log.Printf("failed to create Birdweather client: %s", err)
+		}
 	}
 
-	var err error
 	// Initialize MQTT client if enabled in settings.
 	if settings.Realtime.MQTT.Enabled {
+		var err error
+		// Create a new MQTT client using the settings and metrics
 		p.MqttClient, err = mqtt.NewClient(settings, p.Metrics)
 		if err != nil {
+			// Log an error if client creation fails
 			log.Printf("failed to create MQTT client: %s", err)
 		} else {
+			// Create a context with a 30-second timeout for the connection attempt
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
+			defer cancel() // Ensure the cancel function is called to release resources
+
+			// Attempt to connect to the MQTT broker
 			if err := p.MqttClient.Connect(ctx); err != nil {
+				// Log an error if the connection attempt fails
 				log.Printf("failed to connect to MQTT broker: %s", err)
 			}
+			// Note: Successful connection is implied if no error is logged
 		}
 	}
 

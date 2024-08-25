@@ -4,10 +4,16 @@ package birdweather
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 )
 
 // encodePCMtoWAV creates WAV data from PCM and returns it in a bytes.Buffer.
 func encodePCMtoWAV(pcmData []byte) (*bytes.Buffer, error) {
+	// Add check for empty pcmData
+	if len(pcmData) == 0 {
+		return nil, fmt.Errorf("pcmData is empty")
+	}
+
 	const sampleRate = 48000 // Correct sample rate is 48kHz
 	const bitDepth = 16      // Bits per sample
 	const numChannels = 1    // Mono audio
@@ -33,13 +39,13 @@ func encodePCMtoWAV(pcmData []byte) (*bytes.Buffer, error) {
 	for _, elem := range elements {
 		if b, ok := elem.([]byte); ok {
 			// Ensure all byte slices are properly converted before writing
-			if err := binary.Write(buffer, binary.LittleEndian, b); err != nil {
-				return nil, err
+			if _, err := buffer.Write(b); err != nil {
+				return nil, fmt.Errorf("failed to write byte slice to buffer: %w", err)
 			}
 		} else {
 			// Handle all other data types
 			if err := binary.Write(buffer, binary.LittleEndian, elem); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to write element to buffer: %w", err)
 			}
 		}
 	}
