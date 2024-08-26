@@ -2,10 +2,16 @@
 package myaudio
 
 import (
+	"fmt"
 	"log"
+	"os/exec"
+	"runtime"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
 	"github.com/smallnest/ringbuffer"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -15,12 +21,6 @@ const (
 	chunkSize    = 288000 // 3 seconds of 16-bit PCM data at 48 kHz
 	pollInterval = time.Millisecond * 10
 )
-
-// A variable to set the overlap. Can range from 0 to 2 seconds, represented in bytes.
-// For example, for 1.5-second overlap: overlapSize = 144000
-/*
-var overlapSize int = 144000 // Set as required
-var readSize int = chunkSize - overlapSize*/
 
 var (
 	overlapSize int                               // overlapSize is the number of bytes to overlap between chunks
@@ -71,7 +71,9 @@ func WriteToAnalysisBuffer(stream string, data []byte) {
 	// Write data to the ring buffer
 	_, err := rb.Write(data)
 	if err != nil {
-		log.Printf("Error writing to ring buffer for stream %s: %v", stream, err)
+		// Capture system resource utilization
+		debugInfo := captureSystemInfo()
+		log.Printf("Error writing to ring buffer for stream %s: %v\n%s", stream, err, debugInfo)
 	}
 }
 
@@ -146,6 +148,59 @@ func BufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct
 			}
 		}
 	}
+}
+
+// captureSystemInfo captures system information and returns it as a string
+func captureSystemInfo() string {
+	var info strings.Builder
+
+	// Add a clear separator at the beginning
+	separator := "======== DEBUG INFO START ========"
+	info.WriteString(fmt.Sprintf("%s\n", separator))
+
+	// CPU Utilization
+	cpuPercent, err := cpu.Percent(time.Second, false)
+	if err == nil {
+		info.WriteString(fmt.Sprintf("CPU Utilization: %.2f%%\n", cpuPercent[0]))
+	}
+
+	// RAM Usage
+	vmStat, err := mem.VirtualMemory()
+	if err == nil {
+		info.WriteString(fmt.Sprintf("RAM Usage: %.2f%%\n", vmStat.UsedPercent))
+	}
+
+	// Page File Usage (Swap)
+	swapStat, err := mem.SwapMemory()
+	if err == nil {
+		info.WriteString(fmt.Sprintf("Page File Usage: %.2f%%\n", swapStat.UsedPercent))
+	}
+
+	// Run 'ps axuw' command
+	cmd := exec.Command("ps", "axuww")
+	output, err := cmd.Output()
+	if err != nil {
+		log.Printf("Error running 'ps axuw': %v", err)
+	} else {
+		info.WriteString("\nProcess List (ps axuw):\n")
+		info.Write(output)
+	}
+
+	// Go runtime statistics
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	info.WriteString(fmt.Sprintf("Go Runtime: Alloc = %v MiB, TotalAlloc = %v MiB, Sys = %v MiB, NumGC = %v\n",
+		bToMb(m.Alloc), bToMb(m.TotalAlloc), bToMb(m.Sys), m.NumGC))
+
+	// Add a clear separator at the end
+	info.WriteString(fmt.Sprintf("%s\n", strings.ReplaceAll(separator, "START", "END")))
+
+	return info.String()
+}
+
+// bToMb converts bytes to megabytes
+func bToMb(b uint64) uint64 {
+	return b / 1024 / 1024
 }
 
 /*func validatePCMData(data []byte) error {
