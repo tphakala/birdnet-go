@@ -28,7 +28,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan str
 		// RTSP audio capture for each URL
 		for _, url := range settings.Realtime.RTSP.URLs {
 			wg.Add(1)
-			go captureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan)
+			go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan)
 		}
 	} else {
 		// Default audio capture
