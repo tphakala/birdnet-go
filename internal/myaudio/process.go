@@ -40,6 +40,20 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 	// get elapsed time and log if enabled
 	elapsedTime := logProcessingTime(predictStart)
 
+	// Get the current settings
+	settings := conf.Setting()
+
+	// Calculate the effective buffer duration
+	bufferDuration := 3 * time.Second // base duration
+	overlapDuration := time.Duration(settings.BirdNET.Overlap * float64(time.Second))
+	effectiveBufferDuration := bufferDuration - overlapDuration
+
+	// Check if processing time exceeds effective buffer duration
+	if elapsedTime > effectiveBufferDuration {
+		log.Printf("WARNING: BirdNET processing time (%v) exceeded buffer capacity (%v) for source %s",
+			elapsedTime, effectiveBufferDuration, source)
+	}
+
 	// Create a Results message to be sent through queue to processor
 	resultsMessage := queue.Results{
 		StartTime:   startTime,   // Timestamp when the audio data was received
