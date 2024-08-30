@@ -5,7 +5,6 @@ import (
 	"html"
 	"html/template"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,18 +74,64 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	// Extract clip name from the query parameters
 	clipName := c.QueryParam("clip")
 	if clipName == "" {
-		return h.NewHandlerError(fmt.Errorf("empty clip name"), "Clip name is required", http.StatusBadRequest)
+		// Return a placeholder image if the clip name is empty
+		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 
 	// Construct the path to the spectrogram image
 	spectrogramPath, err := h.getSpectrogramPath(clipName, 400) // Assuming 400px width
 	if err != nil {
-		log.Printf("Failed to get or generate spectrogram for clip %s: %v", clipName, err)
-		return h.NewHandlerError(err, fmt.Sprintf("Failed to get or generate spectrogram for clip %s", clipName), http.StatusInternalServerError)
+		// Return a placeholder image if spectrogram generation fails
+		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 
 	// Serve the spectrogram image file
 	return c.File(spectrogramPath)
+}
+
+// getSpectrogramPath generates the path to the spectrogram image file for a given WAV file
+func (h *Handlers) getSpectrogramPath(wavFileName string, width int) (string, error) {
+	// Generate file paths
+	dir := filepath.Dir(wavFileName)
+	baseNameWithoutExt := strings.TrimSuffix(filepath.Base(wavFileName), filepath.Ext(wavFileName))
+	spectrogramFileName := fmt.Sprintf("%s_%dpx.png", baseNameWithoutExt, width)
+	spectrogramPath := filepath.Join(dir, spectrogramFileName)
+
+	// Convert to web-friendly path
+	webFriendlyPath := strings.Replace(spectrogramPath, string(os.PathSeparator), "/", -1)
+
+	// Check if the spectrogram already exists
+	if spectrogramExists, err := fileExists(spectrogramPath); err != nil {
+		return "", fmt.Errorf("error checking spectrogram file: %w", err)
+	} else if spectrogramExists {
+		return webFriendlyPath, nil
+	}
+
+	// Check if the original audio file exists
+	if audioExists, err := fileExists(wavFileName); err != nil {
+		return "", fmt.Errorf("error checking audio file: %w", err)
+	} else if !audioExists {
+		return "", fmt.Errorf("audio file does not exist: %s", wavFileName)
+	}
+
+	// Create the spectrogram
+	if err := createSpectrogramWithSoX(wavFileName, spectrogramPath, width); err != nil {
+		return "", fmt.Errorf("error creating spectrogram with SoX: %w", err)
+	}
+
+	return webFriendlyPath, nil
+}
+
+// fileExists checks if a file exists and is not a directory
+func fileExists(filename string) (bool, error) {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return !info.IsDir(), nil
 }
 
 // createSpectrogramWithSoX generates a spectrogram for a WAV file using SoX.
@@ -123,34 +168,4 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 	}
 
 	return nil
-}
-
-// GetSpectrogramPath returns the web-friendly path to the spectrogram image for a WAV file, stored in the same directory.
-func (h *Handlers) getSpectrogramPath(wavFileName string, width int) (string, error) {
-	baseName := filepath.Base(wavFileName)
-	dir := filepath.Dir(wavFileName)
-	ext := filepath.Ext(baseName)
-	baseNameWithoutExt := baseName[:len(baseName)-len(ext)]
-
-	// Include width in the filename
-	spectrogramFileName := fmt.Sprintf("%s_%dpx.png", baseNameWithoutExt, width)
-
-	// Construct the file system path using filepath.Join to ensure it's valid on the current OS.
-	spectrogramPath := filepath.Join(dir, spectrogramFileName)
-
-	// Convert the file system path to a web-friendly path by replacing backslashes with forward slashes.
-	webFriendlyPath := strings.Replace(spectrogramPath, "\\", "/", -1)
-
-	// Check if spectrogram already exists
-	if _, err := os.Stat(spectrogramPath); os.IsNotExist(err) {
-		// Create the spectrogram if it doesn't exist
-		if err := createSpectrogramWithSoX(wavFileName, spectrogramPath, width); err != nil {
-			return "", fmt.Errorf("error creating spectrogram with SoX: %w", err)
-		}
-	} else if err != nil {
-		return "", fmt.Errorf("error checking spectrogram file: %w", err)
-	}
-
-	// Return the web-friendly path
-	return webFriendlyPath, nil
 }
