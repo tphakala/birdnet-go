@@ -214,62 +214,61 @@ func (h *Handlers) RecentDetections(c echo.Context) error {
 
 // addWeatherAndTimeOfDay adds weather and time of day information to each note
 func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWeather, error) {
+	// Initialize slice to store notes with weather information
 	notesWithWeather := make([]NoteWithWeather, len(notes))
+
+	// Check if weather data is enabled in the settings
 	weatherEnabled := h.Settings.Realtime.OpenWeather.Enabled
 
-	// Get the local time zone once
+	// Get the local time zone once to avoid repeated calls
 	localLoc, err := conf.GetLocalTimezone()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get local timezone: %w", err)
 	}
 
-	// Group notes by date to reduce redundant calculations and database queries
-	notesByDate := groupNotesByDate(notes)
+	// Create a map to cache weather data for each date
+	weatherCache := make(map[string][]datastore.HourlyWeather)
 
-	noteIndex := 0 // Keep track of the overall index in notesWithWeather
-
-	// Iterate over each date and its associated notes
-	for date, dateNotes := range notesByDate {
-		// Calculate sun events once per date
-		sunEvents, err := h.getSunEvents(date, localLoc)
+	// Process notes in their original order
+	for i, note := range notes {
+		// Parse the note's date and time into a time.Time object
+		noteTime, err := time.ParseInLocation("2006-01-02 15:04:05", note.Date+" "+note.Time, localLoc)
 		if err != nil {
-			log.Printf("Failed to get sun events for date %s: %v", date, err)
+			return nil, fmt.Errorf("failed to parse note time: %w", err)
 		}
 
-		var hourlyWeather []datastore.HourlyWeather
+		// Get sun events for the note's date (SunCalc will use its internal cache)
+		sunEvents, err := h.SunCalc.GetSunEventTimes(noteTime)
+		if err != nil {
+			log.Printf("Failed to get sun events for date %s: %v", note.Date, err)
+		}
+
+		// Create a NoteWithWeather object
+		noteWithWeather := NoteWithWeather{
+			Note:      note,
+			TimeOfDay: h.CalculateTimeOfDay(noteTime, sunEvents),
+			Weather:   nil, // Initialize Weather as nil
+		}
+
+		// Check if we need to fetch weather data for this date
 		if weatherEnabled {
-			// Fetch hourly weather data once per date
-			hourlyWeather, err = h.DS.GetHourlyWeather(date)
-			if err != nil {
-				log.Printf("Failed to fetch hourly weather for date %s: %v", date, err)
+			// If weather data for this date is not in cache, fetch it
+			if _, exists := weatherCache[note.Date]; !exists {
+				hourlyWeather, err := h.DS.GetHourlyWeather(note.Date)
+				if err != nil {
+					log.Printf("Failed to fetch hourly weather for date %s: %v", note.Date, err)
+				}
+				weatherCache[note.Date] = hourlyWeather
+			}
+
+			// If we have weather data for this date, find the closest weather data point
+			if len(weatherCache[note.Date]) > 0 {
+				noteWithWeather.Weather = findClosestWeather(noteTime, weatherCache[note.Date])
 			}
 		}
 
-		// Add weather and time of day information to each note
-		for _, note := range dateNotes {
-			noteTime, err := time.ParseInLocation("2006-01-02 15:04:05", note.Date+" "+note.Time, localLoc)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse note time: %w", err)
-			}
-
-			noteWithWeather := NoteWithWeather{
-				Note:      note,
-				TimeOfDay: h.CalculateTimeOfDay(noteTime, sunEvents),
-				Weather:   nil, // Initialize Weather as nil
-			}
-
-			if weatherEnabled && len(hourlyWeather) > 0 {
-				noteWithWeather.Weather = findClosestWeather(noteTime, hourlyWeather)
-			}
-
-			// Use the overall index to populate notesWithWeather
-			if noteIndex < len(notesWithWeather) {
-				notesWithWeather[noteIndex] = noteWithWeather
-				noteIndex++
-			} else {
-				log.Printf("Warning: Attempting to access out-of-range index %d in notesWithWeather slice", noteIndex)
-			}
-		}
+		// Add the processed note to the result slice
+		notesWithWeather[i] = noteWithWeather
 	}
 
 	return notesWithWeather, nil
@@ -298,22 +297,6 @@ func (h *Handlers) getSunEvents(date string, loc *time.Location) (suncalc.SunEve
 
 	// Return the calculated sun events
 	return sunEvents, nil
-}
-
-// groupNotesByDate groups notes by their date
-func groupNotesByDate(notes []datastore.Note) map[string][]datastore.Note {
-	// Initialize a map to store grouped notes
-	grouped := make(map[string][]datastore.Note)
-
-	// Iterate through each note in the input slice
-	for _, note := range notes {
-		// Append the note to the slice corresponding to its date
-		// If the date doesn't exist as a key, it will be created automatically
-		grouped[note.Date] = append(grouped[note.Date], note)
-	}
-
-	// Return the map of grouped notes
-	return grouped
 }
 
 // findClosestWeather finds the closest hourly weather data to the given time
