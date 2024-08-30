@@ -28,7 +28,7 @@
                 
                 <!-- Weather Column, selectively enabled -->
                 {{if .WeatherEnabled}}
-                    <th scope="col" class="py-2 px-2" style="width: auto">Weather</th>
+                <th scope="col" class="py-2 px-2" style="width: auto">Weather</th>
                 {{end}}
 
                 <!-- Common Name Column -->
@@ -61,12 +61,17 @@
                 </td>
 
                 <!-- Weather Column -->
+ 
                 {{if $.WeatherEnabled}}
                     <td class="py-1 px-2">
+                    {{if .Weather}}
                         <div class="flex items-center gap-2">
-                            <span class="flex-shrink-0">{{weatherIcon .Weather.WeatherMain .TimeOfDay}}</span>
-                            <span>{{.Weather.WeatherMain}}</span>
+                            {{weatherIcon .Weather.WeatherMain .TimeOfDay}}
+                            {{.Weather.WeatherMain}}
                         </div>
+                    {{else}}
+                        <div>No weather data</div>
+                    {{end}}
                     </td>
                 {{end}}
                 
