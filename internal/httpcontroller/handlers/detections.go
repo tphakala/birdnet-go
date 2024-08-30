@@ -50,6 +50,7 @@ func (h *Handlers) Detections(c echo.Context) error {
 	var totalResults int64
 	var err error
 
+	// Determine the type of query to execute based on the QueryType parameter
 	switch req.QueryType {
 	case "hourly":
 		if req.Date == "" || req.Hour == "" {
@@ -77,14 +78,14 @@ func (h *Handlers) Detections(c echo.Context) error {
 		return h.NewHandlerError(err, "Failed to get detections", http.StatusInternalServerError)
 	}
 
+	// Check if OpenWeather is enabled, used to show weather data in the UI if enabled
+	weatherEnabled := h.Settings.Realtime.OpenWeather.Enabled
+
 	// Add weather and time of day information to the notes
 	notesWithWeather, err := h.addWeatherAndTimeOfDay(notes)
 	if err != nil {
 		return h.NewHandlerError(err, "Failed to add weather and time of day data", http.StatusInternalServerError)
 	}
-
-	// Check if OpenWeather is enabled, used to show weather data in the UI if enabled
-	weatherEnabled := h.Settings.Realtime.OpenWeather.Enabled
 
 	// Calculate pagination info
 	currentPage := (req.Offset / req.NumResults) + 1
@@ -133,7 +134,12 @@ func (h *Handlers) Detections(c echo.Context) error {
 	}
 
 	// Render the list detections template with the data
-	return c.Render(http.StatusOK, "listDetections", data)
+	err = c.Render(http.StatusOK, "listDetections", data)
+	if err != nil {
+		log.Printf("Failed to render listDetections template: %v", err)
+		return h.NewHandlerError(err, "Failed to render template", http.StatusInternalServerError)
+	}
+	return nil
 }
 
 // getNoteHandler retrieves a single note from the database and renders it.
@@ -169,7 +175,12 @@ func (h *Handlers) DetectionDetails(c echo.Context) error {
 	}
 
 	// render the detectionDetails template with the data
-	return c.Render(http.StatusOK, "detectionDetails", data)
+	err = c.Render(http.StatusOK, "detectionDetails", data)
+	if err != nil {
+		log.Printf("Failed to render detectionDetails template: %v", err)
+		return h.NewHandlerError(err, "Failed to render template", http.StatusInternalServerError)
+	}
+	return nil
 }
 
 // GetLastDetections handles requests for the latest detections.
@@ -193,9 +204,15 @@ func (h *Handlers) RecentDetections(c echo.Context) error {
 	}
 
 	// render the recentDetections template with the data
-	return c.Render(http.StatusOK, "recentDetections", data)
+	err = c.Render(http.StatusOK, "recentDetections", data)
+	if err != nil {
+		log.Printf("Failed to render recentDetections template: %v", err)
+		return h.NewHandlerError(err, "Failed to render template", http.StatusInternalServerError)
+	}
+	return nil
 }
 
+// addWeatherAndTimeOfDay adds weather and time of day information to each note
 func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWeather, error) {
 	notesWithWeather := make([]NoteWithWeather, len(notes))
 	weatherEnabled := h.Settings.Realtime.OpenWeather.Enabled
@@ -209,6 +226,9 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 	// Group notes by date to reduce redundant calculations and database queries
 	notesByDate := groupNotesByDate(notes)
 
+	noteIndex := 0 // Keep track of the overall index in notesWithWeather
+
+	// Iterate over each date and its associated notes
 	for date, dateNotes := range notesByDate {
 		// Calculate sun events once per date
 		sunEvents, err := h.getSunEvents(date, localLoc)
@@ -225,7 +245,8 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 			}
 		}
 
-		for i, note := range dateNotes {
+		// Add weather and time of day information to each note
+		for _, note := range dateNotes {
 			noteTime, err := time.ParseInLocation("2006-01-02 15:04:05", note.Date+" "+note.Time, localLoc)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse note time: %w", err)
@@ -234,17 +255,19 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 			noteWithWeather := NoteWithWeather{
 				Note:      note,
 				TimeOfDay: h.CalculateTimeOfDay(noteTime, sunEvents),
+				Weather:   nil, // Initialize Weather as nil
 			}
 
 			if weatherEnabled && len(hourlyWeather) > 0 {
 				noteWithWeather.Weather = findClosestWeather(noteTime, hourlyWeather)
 			}
 
-			// Ensure we're not accessing an out-of-range index
-			if i < len(notesWithWeather) {
-				notesWithWeather[i] = noteWithWeather
+			// Use the overall index to populate notesWithWeather
+			if noteIndex < len(notesWithWeather) {
+				notesWithWeather[noteIndex] = noteWithWeather
+				noteIndex++
 			} else {
-				log.Printf("Warning: Attempting to access out-of-range index %d in notesWithWeather slice", i)
+				log.Printf("Warning: Attempting to access out-of-range index %d in notesWithWeather slice", noteIndex)
 			}
 		}
 	}
@@ -254,50 +277,68 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 
 // getSunEvents calculates sun events for a given date
 func (h *Handlers) getSunEvents(date string, loc *time.Location) (suncalc.SunEventTimes, error) {
+	// Parse the input date string into a time.Time object using the provided location
 	dateTime, err := time.ParseInLocation("2006-01-02", date, loc)
 	if err != nil {
+		// If parsing fails, return an empty SunEventTimes and the error
 		return suncalc.SunEventTimes{}, err
 	}
 
+	// Attempt to get sun event times using the SunCalc
 	sunEvents, err := h.SunCalc.GetSunEventTimes(dateTime)
 	if err != nil {
-		// Use default values if sun events are not available
+		// If sun events are not available, use default values
 		return suncalc.SunEventTimes{
-			CivilDawn: dateTime.Add(5 * time.Hour),
-			Sunrise:   dateTime.Add(6 * time.Hour),
-			Sunset:    dateTime.Add(18 * time.Hour),
-			CivilDusk: dateTime.Add(19 * time.Hour),
+			CivilDawn: dateTime.Add(5 * time.Hour),  // Set civil dawn to 5:00 AM
+			Sunrise:   dateTime.Add(6 * time.Hour),  // Set sunrise to 6:00 AM
+			Sunset:    dateTime.Add(18 * time.Hour), // Set sunset to 6:00 PM
+			CivilDusk: dateTime.Add(19 * time.Hour), // Set civil dusk to 7:00 PM
 		}, nil
 	}
 
+	// Return the calculated sun events
 	return sunEvents, nil
 }
 
 // groupNotesByDate groups notes by their date
 func groupNotesByDate(notes []datastore.Note) map[string][]datastore.Note {
+	// Initialize a map to store grouped notes
 	grouped := make(map[string][]datastore.Note)
+
+	// Iterate through each note in the input slice
 	for _, note := range notes {
+		// Append the note to the slice corresponding to its date
+		// If the date doesn't exist as a key, it will be created automatically
 		grouped[note.Date] = append(grouped[note.Date], note)
 	}
+
+	// Return the map of grouped notes
 	return grouped
 }
 
 // findClosestWeather finds the closest hourly weather data to the given time
 func findClosestWeather(noteTime time.Time, hourlyWeather []datastore.HourlyWeather) *datastore.HourlyWeather {
+	// If there's no weather data, return nil
 	if len(hourlyWeather) == 0 {
 		return nil
 	}
 
+	// Initialize variables to track the closest weather data
 	var closestWeather *datastore.HourlyWeather
 	minDiff := time.Duration(math.MaxInt64)
 
+	// Iterate through all hourly weather data
 	for i := range hourlyWeather {
+		// Calculate the absolute time difference between the note time and weather time
 		diff := noteTime.Sub(hourlyWeather[i].Time).Abs()
+
+		// If this difference is smaller than the current minimum, update the closest weather
 		if diff < minDiff {
 			minDiff = diff
 			closestWeather = &hourlyWeather[i]
 		}
 	}
 
+	// Return the weather data closest to the note time
 	return closestWeather
 }
