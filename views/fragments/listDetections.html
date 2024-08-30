@@ -17,7 +17,7 @@
         </div>
     </div>
 
-    <table class="table w-full text-sm text-left text-gray-600 dark:text-gray-300">
+    <table class="table w-full text-sm text-left">
         <thead class="text-xs">
             <tr>
                 <!-- Date Column -->
@@ -50,10 +50,10 @@
             {{range .Notes}}
             <tr class="">
                 <!-- Date Column -->
-                <td class="py-1 px-6">{{.Date}}</td>
+                <td class="py-1 px-6 font-normal">{{.Date}}</td>
                 
                 <!-- Time Column -->
-                <td class="py-1 px-2">
+                <td class="py-1 px-2 font-normal">
                     <div class="flex items-start gap-2">                        
                         <span class="flex-shrink-0">{{sunPositionIcon .TimeOfDay}}</span>
                         <span>{{.Time}}</span>
@@ -63,7 +63,7 @@
                 <!-- Weather Column -->
  
                 {{if $.WeatherEnabled}}
-                    <td class="py-1 px-2">
+                    <td class="py-1 px-2 font-normal">
                     {{if .Weather}}
                         <div class="flex items-center gap-2">
                             {{weatherIcon .Weather.WeatherMain .TimeOfDay}}
@@ -76,7 +76,7 @@
                 {{end}}
                 
                 <!-- Common Name Column -->
-                <td class="py-1 px-4">
+                <td class="py-1 px-4 font-normal">
                     <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
                         {{.CommonName}}
                     </a>
@@ -84,7 +84,7 @@
                 
                 <!-- Thumbnail Column -->
                 {{if $.DashboardSettings.Thumbnails.Summary}}
-                <td class="py-1 px-4">
+                <td class="py-1 px-4 font-normal">
                     <div class="thumbnail-container">
                         <img loading="lazy" width="150" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
                         <div class="thumbnail-tooltip hidden">
@@ -95,7 +95,7 @@
                 {{end}}
                 
                 <!-- Confidence Column -->
-                <td class="py-1 px-4">
+                <td class="py-1 px-4 font-normal">
                     <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
                         <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
                             {{confidence .Confidence}}
@@ -103,19 +103,19 @@
                     </div>
                 </td>
                 
-                <!-- Recording Column -->
-                <td class="py-1 px-6 flex justify-center">
-                    <div class="w-full">
-                        <!-- Spectrogram Image  -->
-                        <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
-                            <img loading="lazy" width="400" src="/media/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
-                        </a>
+               <!-- Recording Column -->
+               <td class="py-1 px-6 flex justify-center font-normal">
+                <div class="w-full">
+                    <!-- Spectrogram Image  -->
+                    <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
+                        <img loading="lazy" width="400" src="/media/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
+                    </a>
 
-                        <!-- Audio player -->
-                        <audio controls class="audio-control" preload="metadata">
-                            <source src="{{.ClipName}}" type="audio/wav">
-                            Your browser does not support the audio element.
-                        </audio>
+                    <!-- Audio player -->
+                    <audio controls class="audio-control" preload="metadata">
+                        <source src="{{.ClipName}}" type="audio/wav">
+                        Your browser does not support the audio element.
+                    </audio>
 
                     </div>
                 </td>
