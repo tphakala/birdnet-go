@@ -74,6 +74,7 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/sse", s.Handlers.SSE.ServeSSE)
 	s.Echo.DELETE("/note", h.WithErrorHandling(h.DeleteNote))
 	s.Echo.POST("/settings/save", h.WithErrorHandling(h.SaveSettings))
+	s.Echo.GET("/settings/audio/get", h.WithErrorHandling(h.GetAudioDevices))
 
 	// Setup Error handler
 	s.Echo.HTTPErrorHandler = func(err error, c echo.Context) {
