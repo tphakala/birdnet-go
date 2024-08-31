@@ -1,4 +1,3 @@
-// capture.go this file contains code for capturing audio
 package myaudio
 
 import (
@@ -21,6 +20,106 @@ type captureSource struct {
 	Name    string
 	ID      string
 	Pointer unsafe.Pointer
+}
+
+// AudioDeviceInfo holds information about an audio device.
+type AudioDeviceInfo struct {
+	Index int
+	Name  string
+	ID    string
+}
+
+// ListAudioSources returns a list of available audio capture devices.
+func ListAudioSources() ([]AudioDeviceInfo, error) {
+	fmt.Println("Listing audio sources")
+	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize context: %v", err)
+	}
+	defer ctx.Uninit()
+
+	infos, err := ctx.Devices(malgo.Capture)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get devices: %v", err)
+	}
+
+	var devices []AudioDeviceInfo
+	for i, info := range infos {
+		decodedID, err := hexToASCII(info.ID.String())
+		if err != nil {
+			fmt.Printf("Error decoding ID for device %d: %v\n", i, err)
+			continue
+		}
+
+		fmt.Printf("Device %d: %s, ID: %s\n", i, info.Name(), decodedID)
+
+		devices = append(devices, AudioDeviceInfo{
+			Index: i,
+			Name:  info.Name(),
+			ID:    decodedID,
+		})
+	}
+
+	fmt.Println("Available devices:", devices)
+
+	return devices, nil
+}
+
+// SetAudioDevice sets the audio device based on the provided index.
+func SetAudioDevice(deviceName string) (string, error) {
+	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to initialize context: %v", err)
+	}
+
+	infos, err := ctx.Devices(malgo.Capture)
+	if err != nil {
+		ctx.Uninit()
+		return "", fmt.Errorf("failed to get devices: %v", err)
+	}
+
+	var index int
+	for i, info := range infos {
+		// Decode the device ID from hex to ASCII
+		decodedID, err := hexToASCII(info.ID.String())
+		if err != nil {
+			log.Printf("Error decoding ID for device %d: %v\n", i, err)
+			continue
+		}
+
+		// Prepare the output string for listing available devices
+		output := fmt.Sprintf("  %d: %s", i, info.Name())
+		if runtime.GOOS == "linux" {
+			output = fmt.Sprintf("%s, %s", output, decodedID) // Include decoded ID in the output for Linux
+		}
+
+		// Determine if the current device matches the specified settings
+		if matchesDeviceSettings(decodedID, info, deviceName) {
+			index = i
+			break
+		}
+	}
+
+	if index < 0 || index >= len(infos) {
+		ctx.Uninit()
+		return "", fmt.Errorf("invalid device index")
+	}
+
+	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
+	deviceConfig.Capture.Format = malgo.FormatS16
+	deviceConfig.Capture.Channels = conf.NumChannels
+	deviceConfig.SampleRate = conf.SampleRate
+	deviceConfig.Alsa.NoMMap = 1
+	deviceConfig.Capture.DeviceID = infos[index].ID.Pointer()
+
+	// Initialize the device
+	_, err = malgo.InitDevice(ctx.Context, deviceConfig, malgo.DeviceCallbacks{})
+	if err != nil {
+		ctx.Uninit()
+		return "", fmt.Errorf("failed to initialize device: %v", err)
+	}
+
+	return infos[index].Name(), nil
 }
 
 func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}) {

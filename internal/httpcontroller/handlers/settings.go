@@ -11,11 +11,26 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
 var fieldsToSkip = map[string]bool{
 	"birdnet.rangefilter.species":     true,
 	"birdnet.rangefilter.lastupdated": true,
+}
+
+// GetAudioDevices handles the request to list available audio devices
+func (h *Handlers) GetAudioDevices(c echo.Context) error {
+	devices, err := myaudio.ListAudioSources()
+
+	fmt.Println("Devices:", devices)
+
+	if err != nil {
+		log.Println("Error listing audio devices:", err)
+		return h.NewHandlerError(err, "Failed to list audio devices", http.StatusInternalServerError)
+	}
+
+	return c.JSON(http.StatusOK, devices)
 }
 
 // SaveSettings handles the request to save settings

@@ -10,6 +10,8 @@ x-data="{
             urls: {{if .Settings.Realtime.RTSP.URLs}}{{.Settings.Realtime.RTSP.URLs | toJSON}}{{else}}[]{{end}}
         }
     },
+    audioDevices: [],
+    selectedDeviceIndex: -1,
     audioCaptureSettingsOpen: false,
     showTooltip: null,
     hasChanges: false,
@@ -29,10 +31,19 @@ x-data="{
     removeUrl(index) {
         this.audioCapture.rtsp.urls.splice(index, 1);
         this.hasChanges = true;
+    },
+    fetchAudioDevices() {
+        fetch('/settings/audio/get')
+            .then(response => response.json())
+            .then(data => {
+                this.audioDevices = data;
+            })
+            .catch(error => console.error('Error fetching audio devices:', error));
     }
 }"
 x-init="
     $watch('audioCapture', (value) => { hasChanges = true }, { deep: true });
+    fetchAudioDevices();
 ">
 
     <!-- control collapse element open state and label visibility -->
@@ -60,7 +71,16 @@ x-init="
                 <span class="label-text">Audio Source</span>
                 <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'audioSource'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <input type="text" id="audioSource" name="realtime.audio.source" x-model="audioCapture.source" class="input input-bordered input-sm w-full" :disabled="audioCapture.rtsp.urls.length > 0">
+            <!--<input type="text" id="audioSource" name="realtime.audio.source" x-model="audioCapture.source" class="input input-bordered input-sm w-full" :disabled="audioCapture.rtsp.urls.length > 0">-->
+            <select x-model="audioCapture.source"
+                    name="realtime.audio.source"
+                    class="select select-bordered select-sm w-full"
+                    :disabled="audioCapture.rtsp.urls.length > 0">
+                <option value="">Select an audio source</option>
+                <template x-for="device in audioDevices" :key="device.Index">
+                    <option :value="device.Name" x-text="device.Name"></option>
+                </template>
+            </select>
             <div x-show="showTooltip === 'audioSource'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
                 Audio source to use for analysis (e.g., 'sysdefault'). This setting is disabled if RTSP URLs are configured.
             </div>
