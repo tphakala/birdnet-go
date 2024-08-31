@@ -39,28 +39,38 @@ type AudioLevelData struct {
 
 // ListAudioSources returns a list of available audio capture devices.
 func ListAudioSources() ([]AudioDeviceInfo, error) {
-	fmt.Println("Listing audio sources")
+	// Initialize the audio context
 	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize context: %v", err)
+		return nil, fmt.Errorf("failed to initialize context: %w", err)
 	}
-	defer ctx.Uninit()
 
+	// Ensure the context is uninitialized when the function returns
+	defer func() {
+		if err := ctx.Uninit(); err != nil {
+			log.Printf("failed to uninitialize context: %v", err)
+		}
+	}()
+
+	// Get a list of capture devices
 	infos, err := ctx.Devices(malgo.Capture)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get devices: %v", err)
+		return nil, fmt.Errorf("failed to get devices: %w", err)
 	}
 
+	// Create a slice to store audio device information
 	var devices []AudioDeviceInfo
+
+	// Iterate through the list of devices
 	for i, info := range infos {
+		// Decode the device ID from hexadecimal to ASCII
 		decodedID, err := hexToASCII(info.ID.String())
 		if err != nil {
-			fmt.Printf("Error decoding ID for device %d: %v\n", i, err)
+			log.Printf("Error decoding ID for device %d: %v\n", i, err)
 			continue
 		}
 
-		fmt.Printf("Device %d: %s, ID: %s\n", i, info.Name(), decodedID)
-
+		// Add the device information to the devices slice
 		devices = append(devices, AudioDeviceInfo{
 			Index: i,
 			Name:  info.Name(),
@@ -68,24 +78,32 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 		})
 	}
 
-	fmt.Println("Available devices:", devices)
-
+	// Return the list of devices and nil error
 	return devices, nil
 }
 
-// SetAudioDevice sets the audio device based on the provided index.
+// SetAudioDevice sets the audio device based on the provided device name.
 func SetAudioDevice(deviceName string) (string, error) {
+	// Initialize the audio context
 	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to initialize context: %v", err)
+		return "", fmt.Errorf("failed to initialize context: %w", err)
 	}
 
+	// Ensure the context is uninitialized when the function returns
+	defer func() {
+		if err := ctx.Uninit(); err != nil {
+			log.Printf("failed to uninitialize context: %v", err)
+		}
+	}()
+
+	// Get a list of capture devices
 	infos, err := ctx.Devices(malgo.Capture)
 	if err != nil {
-		ctx.Uninit()
-		return "", fmt.Errorf("failed to get devices: %v", err)
+		return "", fmt.Errorf("failed to get devices: %w", err)
 	}
 
+	// Find the index of the device that matches the provided device name
 	var index int
 	for i, info := range infos {
 		// Decode the device ID from hex to ASCII
@@ -95,24 +113,19 @@ func SetAudioDevice(deviceName string) (string, error) {
 			continue
 		}
 
-		// Prepare the output string for listing available devices
-		output := fmt.Sprintf("  %d: %s", i, info.Name())
-		if runtime.GOOS == "linux" {
-			output = fmt.Sprintf("%s, %s", output, decodedID) // Include decoded ID in the output for Linux
-		}
-
-		// Determine if the current device matches the specified settings
+		// Check if the current device matches the specified settings
 		if matchesDeviceSettings(decodedID, info, deviceName) {
 			index = i
 			break
 		}
 	}
 
+	// Check if a valid device was found
 	if index < 0 || index >= len(infos) {
-		ctx.Uninit()
 		return "", fmt.Errorf("invalid device index")
 	}
 
+	// Configure the device
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	deviceConfig.Capture.Format = malgo.FormatS16
 	deviceConfig.Capture.Channels = conf.NumChannels
@@ -123,10 +136,10 @@ func SetAudioDevice(deviceName string) (string, error) {
 	// Initialize the device
 	_, err = malgo.InitDevice(ctx.Context, deviceConfig, malgo.DeviceCallbacks{})
 	if err != nil {
-		ctx.Uninit()
-		return "", fmt.Errorf("failed to initialize device: %v", err)
+		return "", fmt.Errorf("failed to initialize device: %w", err)
 	}
 
+	// Return the name of the selected device
 	return infos[index].Name(), nil
 }
 
@@ -362,8 +375,15 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 // calculateAudioLevel calculates the RMS (Root Mean Square) of the audio samples
 // and returns an AudioLevelData struct with the level and clipping status
 func calculateAudioLevel(samples []byte) AudioLevelData {
+	// If there are no samples, return zero level and no clipping
 	if len(samples) == 0 {
 		return AudioLevelData{Level: 0, Clipping: false}
+	}
+
+	// Ensure we have an even number of bytes (16-bit samples)
+	if len(samples)%2 != 0 {
+		// Truncate to even number of bytes
+		samples = samples[:len(samples)-1]
 	}
 
 	var sum float64
@@ -371,25 +391,39 @@ func calculateAudioLevel(samples []byte) AudioLevelData {
 	isClipping := false
 	maxSample := float64(0)
 
+	// Iterate through samples, calculating sum of squares and checking for clipping
 	for i := 0; i < len(samples); i += 2 {
+		if i+1 >= len(samples) {
+			break
+		}
+
+		// Convert two bytes to a 16-bit sample
 		sample := int16(binary.LittleEndian.Uint16(samples[i : i+2]))
 		sampleAbs := math.Abs(float64(sample))
 		sum += sampleAbs * sampleAbs
 
+		// Keep track of the maximum sample value
 		if sampleAbs > maxSample {
 			maxSample = sampleAbs
 		}
 
-		// Check for clipping
+		// Check for clipping (maximum positive or negative 16-bit value)
 		if sample == 32767 || sample == -32768 {
 			isClipping = true
 		}
 	}
 
+	// If we ended up with no samples, return zero level and no clipping
+	if sampleCount == 0 {
+		return AudioLevelData{Level: 0, Clipping: false}
+	}
+
+	// Calculate Root Mean Square (RMS)
 	rms := math.Sqrt(sum / float64(sampleCount))
 
 	// Convert RMS to decibels
-	db := 20 * math.Log10(rms/32768.0) // 32768 is max value for 16-bit audio
+	// 32768 is max value for 16-bit audio
+	db := 20 * math.Log10(rms/32768.0)
 
 	// Scale decibels to 0-100 range
 	// Adjust the range to make it more sensitive
@@ -407,6 +441,7 @@ func calculateAudioLevel(samples []byte) AudioLevelData {
 		scaledLevel = 100
 	}
 
+	// Return the calculated audio level data
 	return AudioLevelData{
 		Level:    int(scaledLevel),
 		Clipping: isClipping,
