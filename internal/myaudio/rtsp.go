@@ -169,7 +169,7 @@ func (p *FFmpegProcess) Cleanup(url string) {
 }
 
 // processAudio reads audio data from FFmpeg's stdout and writes it to buffers
-func (p *FFmpegProcess) processAudio(ctx context.Context, url string) error {
+func (p *FFmpegProcess) processAudio(ctx context.Context, url string, audioLevelChan chan<- AudioLevelData) error {
 	// Create a buffer to store audio data
 	buf := make([]byte, 65535)
 
@@ -192,6 +192,18 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string) error {
 			WriteToAnalysisBuffer(url, buf[:n])
 			// Write the audio data to the capture buffer
 			WriteToCaptureBuffer(url, buf[:n])
+
+			// Calculate audio level
+			audioLevelData := calculateAudioLevel(buf[:n])
+
+			// Send level to channel (non-blocking)
+			select {
+			case audioLevelChan <- audioLevelData:
+				// Data sent successfully
+			default:
+				// Channel is full, discard the current data
+				// This prevents blocking if the receiver is not ready
+			}
 		}
 	}
 }
@@ -275,7 +287,7 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 	}, nil
 }
 
-func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan <-chan struct{}) error {
+func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan <-chan struct{}, audioLevelChan chan<- AudioLevelData) error {
 	// Create a new backoff strategy with 5 attempts, 5 seconds initial delay, and 2 minutes maximum delay
 	backoff := newBackoffStrategy(5, 5*time.Second, 2*time.Minute)
 
@@ -316,7 +328,7 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 		// Start processing audio and wait for it to finish or for a restart signal
 		processDone := make(chan error, 1)
 		go func() {
-			processDone <- process.processAudio(ctx, config.URL)
+			processDone <- process.processAudio(ctx, config.URL, audioLevelChan)
 		}()
 
 		select {
@@ -372,7 +384,7 @@ func getExitCode(err error) int {
 }
 
 // CaptureAudioRTSP is the main function for capturing audio from an RTSP stream
-func CaptureAudioRTSP(url string, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan <-chan struct{}) {
+func CaptureAudioRTSP(url string, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan <-chan struct{}, audioLevelChan chan<- AudioLevelData) {
 	// Ensure the WaitGroup is decremented when the function exits
 	defer wg.Done()
 
@@ -404,7 +416,7 @@ func CaptureAudioRTSP(url string, transport string, wg *sync.WaitGroup, quitChan
 	}()
 
 	// Manage the FFmpeg lifecycle
-	err := manageFfmpegLifecycle(ctx, config, restartChan)
+	err := manageFfmpegLifecycle(ctx, config, restartChan, audioLevelChan)
 	// If an error occurred and it's not due to context cancellation, log it and report to user
 	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Printf("FFmpeg lifecycle manager for RTSP source %s exited with error: %v", url, err)

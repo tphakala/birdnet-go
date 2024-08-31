@@ -31,9 +31,10 @@ type AudioDeviceInfo struct {
 	ID    string
 }
 
+// AudioLevelData holds audio level data
 type AudioLevelData struct {
-	Level    int
-	Clipping bool
+	Level    int  // 0-100
+	Clipping bool // true if clipping is detected
 }
 
 // ListAudioSources returns a list of available audio capture devices.
@@ -134,7 +135,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan str
 		// RTSP audio capture for each URL
 		for _, url := range settings.Realtime.RTSP.URLs {
 			wg.Add(1)
-			go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan)
+			go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, audioLevelChan)
 		}
 	} else {
 		// Default audio capture
@@ -271,8 +272,6 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 			// Data sent successfully
 		default:
 			// Channel is full, clear the channel
-			log.Println("Warning: audioLevelChan is full, clearing and sending new update")
-			// Clear the channel
 			for len(audioLevelChan) > 0 {
 				<-audioLevelChan
 			}
