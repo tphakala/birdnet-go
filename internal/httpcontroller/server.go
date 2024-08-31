@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -26,11 +27,12 @@ type Server struct {
 	BirdImageCache    *imageprovider.BirdImageCache
 	Handlers          *handlers.Handlers
 	pageRoutes        map[string]PageRouteConfig
-	SunCalc           *suncalc.SunCalc // SunCalc instance for calculating sun event times
+	SunCalc           *suncalc.SunCalc            // SunCalc instance for calculating sun event times
+	AudioLevelChan    chan myaudio.AudioLevelData // Channel for audio level updates
 }
 
 // New initializes a new HTTP server with given context and datastore.
-func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache *imageprovider.BirdImageCache) *Server {
+func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache *imageprovider.BirdImageCache, audioLevelChan chan myaudio.AudioLevelData) *Server {
 	configureDefaultSettings(settings)
 
 	s := &Server{
@@ -38,6 +40,7 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 		DS:                dataStore,
 		Settings:          settings,
 		BirdImageCache:    birdImageCache,
+		AudioLevelChan:    audioLevelChan,
 		DashboardSettings: &settings.Realtime.Dashboard,
 	}
 
@@ -47,7 +50,7 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 	s.SunCalc = suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
 
 	// Initialize handlers
-	s.Handlers = handlers.New(s.DS, s.Settings, s.DashboardSettings, s.BirdImageCache, nil, s.SunCalc)
+	s.Handlers = handlers.New(s.DS, s.Settings, s.DashboardSettings, s.BirdImageCache, nil, s.SunCalc, s.AudioLevelChan)
 
 	s.initializeServer()
 	return s

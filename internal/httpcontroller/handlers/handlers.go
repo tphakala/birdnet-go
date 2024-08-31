@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -22,8 +24,9 @@ type Handlers struct {
 	Settings          *conf.Settings
 	DashboardSettings *conf.Dashboard
 	BirdImageCache    *imageprovider.BirdImageCache
-	SSE               *SSEHandler      // Server Side Events handler
-	SunCalc           *suncalc.SunCalc // SunCalc instance for calculating sun event times
+	SSE               *SSEHandler                 // Server Side Events handler
+	SunCalc           *suncalc.SunCalc            // SunCalc instance for calculating sun event times
+	AudioLevelChan    chan myaudio.AudioLevelData // Channel for audio level updates
 }
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.
@@ -66,7 +69,7 @@ func (bh *baseHandler) logInfo(message string) {
 }
 
 // New creates a new Handlers instance with the given dependencies.
-func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc) *Handlers {
+func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData) *Handlers {
 	if logger == nil {
 		logger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
@@ -81,6 +84,7 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		BirdImageCache:    birdImageCache,
 		SSE:               NewSSEHandler(),
 		SunCalc:           sunCalc,
+		AudioLevelChan:    audioLevelChan,
 	}
 }
 
@@ -172,5 +176,45 @@ func (h *Handlers) WithErrorHandling(fn func(echo.Context) error) echo.HandlerFu
 			return h.HandleError(err, c)
 		}
 		return nil
+	}
+}
+
+// AudioLevelSSE handles Server-Sent Events for real-time audio level updates
+func (h *Handlers) AudioLevelSSE(c echo.Context) error {
+	// Set headers for SSE
+	c.Response().Header().Set(echo.HeaderContentType, "text/event-stream")
+	c.Response().Header().Set(echo.HeaderCacheControl, "no-cache")
+	c.Response().Header().Set(echo.HeaderConnection, "keep-alive")
+	c.Response().WriteHeader(http.StatusOK)
+
+	for {
+		select {
+		case <-c.Request().Context().Done():
+			// Client disconnected
+			return nil
+		case audioData := <-h.AudioLevelChan:
+			// Prepare data structure for JSON encoding
+			data := struct {
+				Level    int  `json:"level"`
+				Clipping bool `json:"clipping"`
+			}{
+				Level:    audioData.Level,
+				Clipping: audioData.Clipping,
+			}
+
+			// Marshal data to JSON
+			jsonData, err := json.Marshal(data)
+			if err != nil {
+				return err
+			}
+
+			// Write SSE formatted data
+			if _, err := c.Response().Write([]byte(fmt.Sprintf("data: %s\n\n", jsonData))); err != nil {
+				return err
+			}
+
+			// Flush the response writer buffer
+			c.Response().Flush()
+		}
 	}
 }

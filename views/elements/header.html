@@ -34,6 +34,28 @@
     </div>
    
 	<div class="flex items-center gap-2">
+        <!-- Microphone input level indicator -->
+        <div x-data="{ volume: 0, isClipping: false }" 
+            x-init="
+            const eventSource = new EventSource('/audio-level');
+            eventSource.onmessage = (event) => {
+                let data = JSON.parse(event.data);
+                volume = data.level;
+                isClipping = data.clipping;
+            }
+            "
+            class="hidden md:flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+            <div class="w-16 bg-gray-200 rounded-full h-2">
+                <div class="h-2 rounded-full transition-all duration-200 ease-in-out"
+                        :class="{ 'bg-green-600': !isClipping, 'bg-red-600': isClipping }"
+                        :style="{ width: `${volume}%` }">
+                </div>
+            </div>
+        </div>
+
 		<!-- GitHub repository link -->
 		<div class="relative group hidden md:block">
 			<a href="https://github.com/tphakala/birdnet-go" target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-sm p-1 flex items-center">
