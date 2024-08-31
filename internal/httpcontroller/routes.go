@@ -72,6 +72,7 @@ func (s *Server) initRoutes() {
 
 	// Special routes
 	s.Echo.GET("/sse", s.Handlers.SSE.ServeSSE)
+	s.Echo.GET("/audio-level", s.Handlers.WithErrorHandling(s.Handlers.AudioLevelSSE))
 	s.Echo.DELETE("/note", h.WithErrorHandling(h.DeleteNote))
 	s.Echo.POST("/settings/save", h.WithErrorHandling(h.SaveSettings))
 	s.Echo.GET("/settings/audio/get", h.WithErrorHandling(h.GetAudioDevices))

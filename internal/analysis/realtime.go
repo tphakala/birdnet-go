@@ -29,6 +29,9 @@ const (
 	bufferSize     = (conf.SampleRate * conf.NumChannels * conf.CaptureLength) * bytesPerSample
 )
 
+// audioLevelChan is a channel to send audio level updates
+var audioLevelChan = make(chan myaudio.AudioLevelData, 100)
+
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 func RealtimeAnalysis(settings *conf.Settings) error {
 	// Initialize the BirdNET interpreter.
@@ -85,6 +88,9 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// quitChannel is used to signal the goroutines to stop.
 	quitChan := make(chan struct{})
 
+	// Initialize audioLevelChan, used to visualize audio levels on web ui
+	audioLevelChan = make(chan myaudio.AudioLevelData, 100)
+
 	// Initialize ring buffers for each audio source
 	var sources []string
 	if len(settings.Realtime.RTSP.URLs) > 0 {
@@ -122,7 +128,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	processor.New(settings, dataStore, bn, metrics, birdImageCache)
 
 	// Initialize and start the HTTP server
-	httpServer := httpcontroller.New(settings, dataStore, birdImageCache)
+	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan)
 	httpServer.Start()
 
 	// Initialize the wait group to wait for all goroutines to finish
@@ -135,7 +141,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	}
 
 	// start audio capture
-	startAudioCapture(&wg, settings, quitChan, restartChan)
+	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan)
 
 	// start cleanup of clips
 	if conf.Setting().Realtime.Audio.Export.Retention.Policy != "none" {
@@ -169,16 +175,16 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		case <-restartChan:
 			// Handle the restart signal.
 			fmt.Println("Restarting audio capture")
-			startAudioCapture(&wg, settings, quitChan, restartChan)
+			startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan)
 		}
 	}
 
 }
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
-func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan chan struct{}, restartChan chan struct{}) {
+func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan chan struct{}, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData) {
 	// waitgroup is managed within CaptureAudio
-	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan)
+	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, audioLevelChan)
 }
 
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.

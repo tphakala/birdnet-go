@@ -1,9 +1,11 @@
 package myaudio
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"runtime"
 	"strings"
@@ -27,6 +29,11 @@ type AudioDeviceInfo struct {
 	Index int
 	Name  string
 	ID    string
+}
+
+type AudioLevelData struct {
+	Level    int
+	Clipping bool
 }
 
 // ListAudioSources returns a list of available audio capture devices.
@@ -122,7 +129,7 @@ func SetAudioDevice(deviceName string) (string, error) {
 	return infos[index].Name(), nil
 }
 
-func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}) {
+func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
 	if len(settings.Realtime.RTSP.URLs) > 0 {
 		// RTSP audio capture for each URL
 		for _, url := range settings.Realtime.RTSP.URLs {
@@ -132,7 +139,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan str
 	} else {
 		// Default audio capture
 		wg.Add(1)
-		captureAudioMalgo(settings, wg, quitChan, restartChan)
+		captureAudioMalgo(settings, wg, quitChan, restartChan, audioLevelChan)
 	}
 }
 
@@ -198,7 +205,7 @@ func hexToASCII(hexStr string) (string, error) {
 	return string(bytes), nil
 }
 
-func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}) {
+func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
 	defer wg.Done() // Ensure this is called when the goroutine exits
 	var device *malgo.Device
 
@@ -254,6 +261,24 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 	onReceiveFrames := func(pSample2, pSamples []byte, framecount uint32) {
 		WriteToAnalysisBuffer("malgo", pSamples)
 		WriteToCaptureBuffer("malgo", pSamples)
+
+		// Calculate audio level
+		audioLevelData := calculateAudioLevel(pSamples)
+
+		// Send level to channel (non-blocking)
+		select {
+		case audioLevelChan <- audioLevelData:
+			// Data sent successfully
+		default:
+			// Channel is full, clear the channel
+			log.Println("Warning: audioLevelChan is full, clearing and sending new update")
+			// Clear the channel
+			for len(audioLevelChan) > 0 {
+				<-audioLevelChan
+			}
+			// Try to send the new data
+			audioLevelChan <- audioLevelData
+		}
 	}
 
 	// onStopDevice is called when the device stops, either normally or unexpectedly
@@ -333,4 +358,66 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
+}
+
+// calculateAudioLevel calculates the RMS (Root Mean Square) of the audio samples
+// and returns an AudioLevelData struct with the level and clipping status
+func calculateAudioLevel(samples []byte) AudioLevelData {
+	if len(samples) == 0 {
+		return AudioLevelData{Level: 0, Clipping: false}
+	}
+
+	var sum float64
+	sampleCount := len(samples) / 2 // 2 bytes per sample for 16-bit audio
+	isClipping := false
+	maxSample := float64(0)
+
+	for i := 0; i < len(samples); i += 2 {
+		sample := int16(binary.LittleEndian.Uint16(samples[i : i+2]))
+		sampleAbs := math.Abs(float64(sample))
+		sum += sampleAbs * sampleAbs
+
+		if sampleAbs > maxSample {
+			maxSample = sampleAbs
+		}
+
+		// Check for clipping
+		if sample == 32767 || sample == -32768 {
+			isClipping = true
+		}
+	}
+
+	rms := math.Sqrt(sum / float64(sampleCount))
+
+	// Convert RMS to decibels
+	db := 20 * math.Log10(rms/32768.0) // 32768 is max value for 16-bit audio
+
+	// Scale decibels to 0-100 range
+	// Adjust the range to make it more sensitive
+	scaledLevel := (db + 60) * (100.0 / 50.0)
+
+	// If the audio is clipping, ensure the level is at or near 100
+	if isClipping {
+		scaledLevel = math.Max(scaledLevel, 95)
+	}
+
+	// Clamp the value between 0 and 100
+	if scaledLevel < 0 {
+		scaledLevel = 0
+	} else if scaledLevel > 100 {
+		scaledLevel = 100
+	}
+
+	return AudioLevelData{
+		Level:    int(scaledLevel),
+		Clipping: isClipping,
+	}
+}
+
+// abs returns the absolute value of a 16-bit integer
+func abs(x int16) int16 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
