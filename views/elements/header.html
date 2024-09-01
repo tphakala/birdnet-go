@@ -34,6 +34,7 @@
     </div>
    
 	<div class="flex items-center gap-2">
+
         <!-- Microphone input level indicator -->
         <div x-data="{ volume: 0, isClipping: false }" 
             x-init="
@@ -44,15 +45,29 @@
                 isClipping = data.clipping;
             }
             "
-            class="hidden md:flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            class="relative w-10 h-10">
+            <svg class="w-full h-full" viewBox="0 0 36 36">
+                <!-- Background circle path -->
+                <path d="M18 2.0845
+                        a 15.9155 15.9155 0 0 1 0 31.831
+                        a 15.9155 15.9155 0 0 1 0 -31.831"
+                    fill="none"
+                    stroke="#E5E7EB"
+                    stroke-width="3"
+                    stroke-dasharray="100, 100" />
+                <!-- Foreground circle path that changes color and stroke-dasharray based on volume and clipping status -->
+                <path d="M18 34.9155
+                        a 15.9155 15.9155 0 0 1 0 -31.831
+                        a 15.9155 15.9155 0 0 1 0 31.831"
+                    fill="none"
+                    :stroke="isClipping ? '#EF4444' : '#10B981'"
+                    stroke-width="3"
+                    :stroke-dasharray="`${volume}, 100`" />
             </svg>
-            <div class="w-16 bg-gray-200 rounded-full h-2">
-                <div class="h-2 rounded-full transition-all duration-200 ease-in-out"
-                        :class="{ 'bg-green-600': !isClipping, 'bg-red-600': isClipping }"
-                        :style="{ width: `${volume}%` }">
-                </div>
+            <div class="absolute inset-0 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clip-rule="evenodd" />
+                </svg>
             </div>
         </div>
 
