@@ -22,8 +22,9 @@ else
     $(error Unsupported operating system)
 endif
 
-LABELS_FILES := $(wildcard internal/birdnet/labels/*)
-LABELS_ZIP := internal/birdnet/labels.zip
+LABELS_FILES := $(wildcard internal/birdnet/data/labels/*)
+LABELS_DIR := internal/birdnet/data/labels
+LABELS_ZIP := internal/birdnet/data/labels.zip
 
 # Default action
 all: $(LABELS_ZIP) $(NATIVE_TARGET)
@@ -70,8 +71,8 @@ download-tflite:
 
 # labels.zip depends on all files in the labels directory
 $(LABELS_ZIP): $(LABELS_FILES)
-	@echo "Creating or updating labels.zip from contents of internal/birdnet/labels/*"
-	@cd internal/birdnet/labels && zip -j $(CURDIR)/$(LABELS_ZIP) *
+	@echo "Creating or updating labels.zip from contents of $(LABELS_DIR)/*"
+	@cd $(LABELS_DIR) && zip -j $(CURDIR)/$(LABELS_ZIP) *
 
 # Build for Linux amd64
 linux_amd64: TFLITE_LIB_ARCH=linux_amd64.tar.gz
