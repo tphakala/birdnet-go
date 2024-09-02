@@ -19,22 +19,22 @@ import (
 
 // Embedded TensorFlow Lite model data.
 //
-//go:embed BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite
+//go:embed data/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite
 var modelData []byte
 
 // Embedded TensorFlow Lite range filter model data.
 //
-//go:embed BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite
+//go:embed data/BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite
 var metaModelDataV1 []byte
 
-//go:embed BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite
+//go:embed data/BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite
 var metaModelDataV2 []byte
 
 const modelVersion = "BirdNET GLOBAL 6K V2.4 FP32"
 
 // Embedded labels in zip format.
 //
-//go:embed labels.zip
+//go:embed data/labels.zip
 var labelsZip []byte
 
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
