@@ -21,18 +21,19 @@ import (
 )
 
 type Processor struct {
-	Settings       *conf.Settings
-	Ds             datastore.Interface
-	Bn             *birdnet.BirdNET
-	BwClient       *birdweather.BwClient
-	MqttClient     mqtt.Client
-	BirdImageCache *imageprovider.BirdImageCache
-	EventTracker   *EventTracker
-	//SpeciesConfig      SpeciesConfig
-	LastDogDetection   map[string]time.Time // keep track of dog barks per audio source
-	LastHumanDetection map[string]time.Time // keep track of human vocal per audio source
-	Metrics            *telemetry.Metrics
-	DynamicThresholds  map[string]*DynamicThreshold
+	Settings            *conf.Settings
+	Ds                  datastore.Interface
+	Bn                  *birdnet.BirdNET
+	BwClient            *birdweather.BwClient
+	MqttClient          mqtt.Client
+	BirdImageCache      *imageprovider.BirdImageCache
+	EventTracker        *EventTracker
+	LastDogDetection    map[string]time.Time // keep track of dog barks per audio source
+	LastHumanDetection  map[string]time.Time // keep track of human vocal per audio source
+	Metrics             *telemetry.Metrics
+	DynamicThresholds   map[string]*DynamicThreshold
+	lastDogDetectionLog map[string]time.Time
+	dogDetectionMutex   sync.Mutex
 }
 
 // DynamicThreshold represents the dynamic threshold configuration for a species.
@@ -60,6 +61,7 @@ type PendingDetection struct {
 	FirstDetected time.Time  // Time the detection was first detected
 	LastUpdated   time.Time  // Last time this detection was updated
 	FlushDeadline time.Time  // Deadline by which the detection must be processed
+	Count         int        // Number of times this detection has been updated
 }
 
 // PendingDetections is a map used to store detections temporarily.
@@ -73,15 +75,16 @@ var mutex sync.Mutex
 // func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *telemetry.Metrics) *Processor {
 func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics, birdImageCache *imageprovider.BirdImageCache) *Processor {
 	p := &Processor{
-		Settings:           settings,
-		Ds:                 ds,
-		Bn:                 bn,
-		BirdImageCache:     birdImageCache,
-		EventTracker:       NewEventTracker(),
-		Metrics:            metrics,
-		LastDogDetection:   make(map[string]time.Time),
-		LastHumanDetection: make(map[string]time.Time),
-		DynamicThresholds:  make(map[string]*DynamicThreshold),
+		Settings:            settings,
+		Ds:                  ds,
+		Bn:                  bn,
+		BirdImageCache:      birdImageCache,
+		EventTracker:        NewEventTracker(),
+		Metrics:             metrics,
+		LastDogDetection:    make(map[string]time.Time),
+		LastHumanDetection:  make(map[string]time.Time),
+		DynamicThresholds:   make(map[string]*DynamicThreshold),
+		lastDogDetectionLog: make(map[string]time.Time),
 	}
 
 	// Start the detection processor
@@ -152,36 +155,44 @@ func (p *Processor) startDetectionProcessor() {
 
 // processDetections examines each detection from the queue, updating held detections
 // with new or higher-confidence instances and setting an appropriate flush deadline.
-func (p *Processor) processDetections(item *queue.Results) {
-	const delay = 12 * time.Second // Delay before a detection is considered final and is flushed.
+func (p *Processor) processDetections(item queue.Results) {
+	// TODO: Make this configurable via settings in the future
+	const delay = 15 * time.Second // Delay before a detection is considered final and is flushed.
 
 	for _, detection := range p.processResults(item) {
 		commonName := strings.ToLower(detection.Note.CommonName)
 		confidence := detection.Note.Confidence
 
+		var firstDetected time.Time
+		var flushDeadline time.Time
+
 		mutex.Lock() // Lock the mutex to ensure thread safety when accessing the PendingDetections map.
 		// Check if this is a new detection or one with higher confidence.
 		if pendingDetection, exists := PendingDetections[commonName]; !exists || confidence > pendingDetection.Confidence {
 			if !exists {
+				// Initialize count for new detection
+				pendingDetection.Count = 1
+				// Set the flush deadline for new detections or if the current detection's deadline has passed.
+				firstDetected = item.StartTime // Set the begin time to the time it was first detected
+				flushDeadline = firstDetected.Add(delay)
 				log.Printf("New detection: %s with confidence: %.2f, source: %v\n", detection.Note.CommonName, confidence, item.Source)
-			}
-
-			// Set the flush deadline for new detections or if the current detection's deadline has passed.
-			firstDetected := item.StartTime // Set the begin time to the time it was first detected
-			flushDeadline := firstDetected.Add(delay)
-
-			if exists {
-				log.Printf("Updating detection: %s with confidence: %.2f, source: %v\n", detection.Note.CommonName, confidence, item.Source)
+			} else {
+				// Increase counter for existing detection
+				pendingDetection.Count++
 				// If updating an existing detection, keep the original firstDetected timestamp.
 				firstDetected = pendingDetection.FirstDetected
 				if !time.Now().After(pendingDetection.FlushDeadline) {
 					// If within the original deadline, do not update the flush deadline.
 					flushDeadline = pendingDetection.FlushDeadline
 				}
+
+				log.Printf("Updating detection: %s with confidence: %.2f, source: %v, count: %d\n", detection.Note.CommonName, confidence, item.Source, pendingDetection.Count)
 			}
 
-			// Update the detection in the map.
+			// Set human detected flag
 			isHuman := strings.Contains(strings.ToLower(commonName), "human")
+
+			// Update the detection in the map.
 			PendingDetections[commonName] = PendingDetection{
 				Detection:     detection,
 				Confidence:    confidence,
@@ -190,10 +201,10 @@ func (p *Processor) processDetections(item *queue.Results) {
 				FirstDetected: firstDetected,
 				FlushDeadline: flushDeadline,
 				LastUpdated:   time.Now(),
+				Count:         pendingDetection.Count,
 			}
 
 			if p.Settings.Realtime.DynamicThreshold.Enabled {
-				// Reset dynamic threshold timer if high confidence detection
 				dt, exists := p.DynamicThresholds[commonName]
 				if exists && confidence > float64(p.getBaseConfidenceThreshold(commonName)) {
 					dt.Timer = time.Now().Add(time.Duration(dt.ValidHours) * time.Hour)
@@ -205,7 +216,7 @@ func (p *Processor) processDetections(item *queue.Results) {
 }
 
 // processResults processes the results from the BirdNET prediction and returns a list of detections.
-func (p *Processor) processResults(item *queue.Results) []Detections {
+func (p *Processor) processResults(item queue.Results) []Detections {
 	var detections []Detections
 
 	// Collect processing time metric
@@ -255,10 +266,10 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 		}
 
 		// Create file name for audio clip
-		item.ClipName = p.generateClipName(scientificName, result.Confidence)
+		clipName := p.generateClipName(scientificName, result.Confidence)
 
 		beginTime, endTime := 0.0, 0.0
-		note := observation.New(p.Settings, beginTime, endTime, result.Species, float64(result.Confidence), item.Source, item.ClipName, item.ElapsedTime)
+		note := observation.New(p.Settings, beginTime, endTime, result.Species, float64(result.Confidence), item.Source, clipName, item.ElapsedTime)
 
 		// Detection passed all filters, process it
 		detections = append(detections, Detections{
@@ -272,7 +283,7 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 }
 
 // handleDogDetection handles the detection of dog barks and updates the last detection timestamp.
-func (p *Processor) handleDogDetection(item *queue.Results, speciesLowercase string, result datastore.Results) {
+func (p *Processor) handleDogDetection(item queue.Results, speciesLowercase string, result datastore.Results) {
 	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, "dog") &&
 		result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
 		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, item.Source)
@@ -281,7 +292,7 @@ func (p *Processor) handleDogDetection(item *queue.Results, speciesLowercase str
 }
 
 // handleHumanDetection handles the detection of human vocalizations and updates the last detection timestamp.
-func (p *Processor) handleHumanDetection(item *queue.Results, speciesLowercase string, result datastore.Results) {
+func (p *Processor) handleHumanDetection(item queue.Results, speciesLowercase string, result datastore.Results) {
 	if p.Settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human vocal") &&
 		result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
 		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, item.Source)
@@ -348,6 +359,10 @@ func isSpeciesIncluded(species string, includedList []string) bool {
 // pendingDetectionsFlusher runs a goroutine that periodically checks the pending detections
 // and flushes them to the worker queue if their deadline has passed.
 func (p *Processor) pendingDetectionsFlusher() {
+	// Minimum number of detections to hold before processing
+	// TODO: Make this configurable via settings in the future
+	const minDetections = 1
+
 	go func() {
 		// Create a ticker that ticks every second to frequently check for flush deadlines.
 		ticker := time.NewTicker(1 * time.Second)
@@ -361,6 +376,13 @@ func (p *Processor) pendingDetectionsFlusher() {
 			for species, item := range PendingDetections {
 				// If the current time is past the flush deadline, process the detection.
 				if now.After(item.FlushDeadline) {
+					// check if count is less than minDetections, if so discard the detection
+					if item.Count < minDetections {
+						log.Printf("Discarding detection of %s from source %s due to low number of detections\n", species, item.Source)
+						delete(PendingDetections, species)
+						continue
+					}
+
 					// Check if human was detected after the first detection and discard if so
 					if p.Settings.Realtime.PrivacyFilter.Enabled {
 						if !item.HumanDetected {

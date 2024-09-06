@@ -6,6 +6,7 @@ require (
 	cgt.name/pkg/go-mwclient v1.3.0
 	github.com/antonholmquist/jason v1.0.0
 	github.com/eclipse/paho.mqtt.golang v1.5.0
+	github.com/fatih/color v1.14.1
 	github.com/gen2brain/malgo v0.11.22
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0

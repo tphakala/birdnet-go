@@ -30,15 +30,21 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 		return fmt.Errorf("error predicting species: %w", err)
 	}
 
-	// DEBUG print species of all results
-	/*for i := 0; i < len(results); i++ {
-		if results[i].Confidence > 0.01 {
-			fmt.Println("	", results[i].Confidence, results[i].Species)
+	// get elapsed time
+	elapsedTime := time.Since(predictStart)
+
+	// Sort results by confidence (descending order)
+	/*sort.Slice(results, func(i, j int) bool {
+		return results[i].Confidence > results[j].Confidence
+	})
+
+	// DEBUG print species of results with confidence > 0.20 in green
+	green := color.New(color.FgGreen).SprintfFunc()
+	for _, result := range results {
+		if result.Confidence > 0.20 {
+			fmt.Println(green("%.2f %s", result.Confidence, result.Species))
 		}
 	}*/
-
-	// get elapsed time and log if enabled
-	elapsedTime := logProcessingTime(predictStart)
 
 	// Get the current settings
 	settings := conf.Setting()
@@ -50,22 +56,25 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 
 	// Check if processing time exceeds effective buffer duration
 	if elapsedTime > effectiveBufferDuration {
-		log.Printf("WARNING: BirdNET processing time (%v) exceeded buffer capacity (%v) for source %s",
+		log.Printf("WARNING: BirdNET processing time (%v) exceeded buffer length (%v) for source %s",
 			elapsedTime, effectiveBufferDuration, source)
 	}
 
 	// Create a Results message to be sent through queue to processor
 	resultsMessage := queue.Results{
-		StartTime:   startTime,   // Timestamp when the audio data was received
-		ElapsedTime: elapsedTime, // Time taken to process the audio data
-		PCMdata:     data,        // BirdNET analyzed audio data
-		Results:     results,     // Detected species and their confidence levels
-		Source:      source,      // Source of the audio data, RSTP URL or audio card name
+		StartTime:   startTime,
+		ElapsedTime: elapsedTime,
+		PCMdata:     data,
+		Results:     results,
+		Source:      source,
 	}
+
+	// Create a deep copy of the Results struct
+	copyToSend := resultsMessage.Copy()
 
 	// Send the results to the queue
 	select {
-	case queue.ResultsQueue <- &resultsMessage:
+	case queue.ResultsQueue <- copyToSend:
 		// Results enqueued successfully
 	default:
 		log.Println("Queue is full!")
