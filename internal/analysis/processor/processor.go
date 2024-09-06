@@ -359,9 +359,15 @@ func isSpeciesIncluded(species string, includedList []string) bool {
 // pendingDetectionsFlusher runs a goroutine that periodically checks the pending detections
 // and flushes them to the worker queue if their deadline has passed.
 func (p *Processor) pendingDetectionsFlusher() {
-	// Minimum number of detections to hold before processing
-	// TODO: Make this configurable via settings in the future
-	const minDetections = 1
+	// Determine minDetections based on Settings.BirdNET.Overlap
+	var minDetections int
+	if p.Settings.BirdNET.Overlap >= 2.7 {
+		// Use deep detection to avoid false positives
+		minDetections = 2
+	} else {
+		// Use single detection
+		minDetections = 1
+	}
 
 	go func() {
 		// Create a ticker that ticks every second to frequently check for flush deadlines.
