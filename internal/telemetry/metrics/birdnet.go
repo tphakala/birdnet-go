@@ -3,7 +3,6 @@ package metrics
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -52,7 +51,6 @@ func (m *BirdNETMetrics) initMetrics() error {
 // It should be called each time BirdNET detects a species.
 func (m *BirdNETMetrics) IncrementDetectionCounter(speciesName string) {
 	m.DetectionCounter.WithLabelValues(speciesName).Inc()
-	log.Printf("Incremented detection counter for species: %s", speciesName)
 }
 
 // SetProcessTime sets the most recent processing time for a BirdNET detection request.
