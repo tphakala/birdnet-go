@@ -35,6 +35,16 @@ type Results struct {
 	Confidence float32
 }
 
+// Copy creates a deep copy of the Results struct
+func (r Results) Copy() Results {
+	return Results{
+		ID:         r.ID,
+		NoteID:     r.NoteID,
+		Species:    r.Species,
+		Confidence: r.Confidence,
+	}
+}
+
 // DailyEvents represents the daily weather data that doesn't change throughout the day
 type DailyEvents struct {
 	ID       uint   `gorm:"primaryKey"`
