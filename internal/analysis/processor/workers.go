@@ -57,7 +57,9 @@ func (p *Processor) getActionsForItem(detection Detections) []Action {
 
 	var actions []Action
 	if exists {
-		log.Println("Species config exists for custom actions")
+		if p.Settings.Debug {
+			log.Println("Species config exists for custom actions")
+		}
 		customActions := p.createActionsFromConfig(speciesConfig, detection)
 
 		// Determine whether to use only custom actions or combine with default actions
@@ -70,7 +72,9 @@ func (p *Processor) getActionsForItem(detection Detections) []Action {
 			actions = append(defaultActions, customActions...)
 		}
 	} else {
-		log.Println("No species config found, using default actions for", speciesName)
+		if p.Settings.Debug {
+			log.Println("No species config found, using default actions for", speciesName)
+		}
 		actions = p.getDefaultActions(detection)
 	}
 
