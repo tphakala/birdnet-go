@@ -158,7 +158,7 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 		cmd = exec.Command("sox", args...)
 	} else {
 		// Prepend 'nice' to the command on Unix-like systems
-		args = append([]string{"-n", "10", "sox"}, args...) // '19' is a nice value for low priority
+		args = append([]string{"-n", "19", "sox"}, args...) // '19' is a nice value for low priority
 		cmd = exec.Command("nice", args...)
 	}
 
