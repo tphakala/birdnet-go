@@ -94,17 +94,17 @@ endif
 windows_amd64: TFLITE_LIB_DIR="/usr/x86_64-w64-mingw32/lib"
 windows_amd64: TFLITE_LIB_ARCH=windows_amd64.zip
 windows_amd64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite
-	$(CGO_FLAGS) CC=x86_64-w64-mingw32-gcc go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME).exe
+	$(CGO_FLAGS) GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME).exe
 
 # macOS Intel build
 darwin_amd64: TFLITE_LIB_ARCH=darwin_amd64.tar.gz
 darwin_amd64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite
-	$(CGO_FLAGS) go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
+	$(CGO_FLAGS) GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
 # macOS ARM build
 darwin_arm64: TFLITE_LIB_ARCH=darwin_arm64.tar.gz
 darwin_arm64: $(LABELS_ZIP) check-tools check-tensorflow download-tflite
-	$(CGO_FLAGS) go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
+	$(CGO_FLAGS) GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
 dev_server: REALTIME_ARGS=""
 dev_server:
