@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"fmt"
 	"html"
 	"html/template"
@@ -89,11 +90,11 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	return c.File(spectrogramPath)
 }
 
-// getSpectrogramPath generates the path to the spectrogram image file for a given WAV file
-func (h *Handlers) getSpectrogramPath(wavFileName string, width int) (string, error) {
+// getSpectrogramPath generates the path to the spectrogram image file for a given audio file
+func (h *Handlers) getSpectrogramPath(audioFileName string, width int) (string, error) {
 	// Generate file paths
-	dir := filepath.Dir(wavFileName)
-	baseNameWithoutExt := strings.TrimSuffix(filepath.Base(wavFileName), filepath.Ext(wavFileName))
+	dir := filepath.Dir(audioFileName)
+	baseNameWithoutExt := strings.TrimSuffix(filepath.Base(audioFileName), filepath.Ext(audioFileName))
 	spectrogramFileName := fmt.Sprintf("%s_%dpx.png", baseNameWithoutExt, width)
 	spectrogramPath := filepath.Join(dir, spectrogramFileName)
 
@@ -108,14 +109,17 @@ func (h *Handlers) getSpectrogramPath(wavFileName string, width int) (string, er
 	}
 
 	// Check if the original audio file exists
-	if audioExists, err := fileExists(wavFileName); err != nil {
+	if audioExists, err := fileExists(audioFileName); err != nil {
+		log.Printf("error checking audio file: %s", err)
 		return "", fmt.Errorf("error checking audio file: %w", err)
 	} else if !audioExists {
-		return "", fmt.Errorf("audio file does not exist: %s", wavFileName)
+		log.Printf("audio file does not exist: %s", audioFileName)
+		return "", fmt.Errorf("audio file does not exist: %s", audioFileName)
 	}
 
 	// Create the spectrogram
-	if err := createSpectrogramWithSoX(wavFileName, spectrogramPath, width); err != nil {
+	if err := createSpectrogramWithSoX(audioFileName, spectrogramPath, width); err != nil {
+		log.Printf("error creating spectrogram with SoX: %s", err)
 		return "", fmt.Errorf("error creating spectrogram with SoX: %w", err)
 	}
 
@@ -134,8 +138,14 @@ func fileExists(filename string) (bool, error) {
 	return !info.IsDir(), nil
 }
 
-// createSpectrogramWithSoX generates a spectrogram for a WAV file using SoX.
+// createSpectrogramWithSoX generates a spectrogram for an audio file using ffmpeg and SoX.
+// It supports various audio formats by using ffmpeg to pipe the audio to SoX.
 func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) error {
+	// Verify ffmpeg installation
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		return fmt.Errorf("ffmpeg binary not found: %w", err)
+	}
+
 	// Verify SoX installation
 	if _, err := exec.LookPath("sox"); err != nil {
 		return fmt.Errorf("SoX binary not found: %w", err)
@@ -145,26 +155,52 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 	heightStr := strconv.Itoa(width / 2)
 	widthStr := strconv.Itoa(width)
 
+	// Build ffmpeg command arguments
+	ffmpegArgs := []string{"-hide_banner", "-i", audioClipPath, "-f", "sox", "-"}
+
 	// Build SoX command arguments
-	args := []string{audioClipPath, "-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-o", spectrogramPath}
+	soxArgs := []string{"-t", "sox", "-", "-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-o", spectrogramPath}
 	if width < 800 {
-		args = append(args, "-r")
+		soxArgs = append(soxArgs, "-r")
 	}
 
-	// Determine the command based on the OS
-	var cmd *exec.Cmd
+	// Determine the commands based on the OS
+	var ffmpegCmd, soxCmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		// Directly use SoX command on Windows
-		cmd = exec.Command("sox", args...)
+		// Directly use ffmpeg and SoX commands on Windows
+		ffmpegCmd = exec.Command("ffmpeg", ffmpegArgs...)
+		soxCmd = exec.Command("sox", soxArgs...)
 	} else {
-		// Prepend 'nice' to the command on Unix-like systems
-		args = append([]string{"-n", "19", "sox"}, args...) // '19' is a nice value for low priority
-		cmd = exec.Command("nice", args...)
+		// Prepend 'nice' to the commands on Unix-like systems
+		ffmpegCmd = exec.Command("nice", append([]string{"-n", "19", "ffmpeg"}, ffmpegArgs...)...)
+		soxCmd = exec.Command("nice", append([]string{"-n", "19", "sox"}, soxArgs...)...)
 	}
 
-	// Execute the command
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("SoX command failed: %w", err)
+	// Set up pipe between ffmpeg and sox
+	var err error
+	soxCmd.Stdin, err = ffmpegCmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("error creating pipe: %w", err)
+	}
+
+	// Capture combined output
+	var combinedOutput bytes.Buffer
+	soxCmd.Stderr = &combinedOutput
+	ffmpegCmd.Stderr = &combinedOutput
+
+	// Start sox command
+	if err := soxCmd.Start(); err != nil {
+		return fmt.Errorf("error starting SoX command: %w", err)
+	}
+
+	// Run ffmpeg command
+	if err := ffmpegCmd.Run(); err != nil {
+		return fmt.Errorf("ffmpeg command failed: %w\nOutput: %s", err, combinedOutput.String())
+	}
+
+	// Wait for sox command to finish
+	if err := soxCmd.Wait(); err != nil {
+		return fmt.Errorf("SoX command failed: %w\nOutput: %s", err, combinedOutput.String())
 	}
 
 	return nil

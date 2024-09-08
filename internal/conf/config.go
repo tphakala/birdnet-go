@@ -36,6 +36,7 @@ type AudioSettings struct {
 		Enabled   bool   // export audio clips containing indentified bird calls
 		Path      string // path to audio clip export directory
 		Type      string // audio file type, wav, mp3 or flac
+		Bitrate   string // bitrate for audio export
 		Retention struct {
 			Debug    bool   // true to enable retention debug
 			Policy   string // retention policy, "none", "age" or "usage"

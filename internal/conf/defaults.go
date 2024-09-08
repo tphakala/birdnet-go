@@ -43,6 +43,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.export.enabled", true)
 	viper.SetDefault("realtime.audio.export.path", "clips/")
 	viper.SetDefault("realtime.audio.export.type", "wav")
+	viper.SetDefault("realtime.audio.export.bitrate", "128k")
 
 	// Dashboard thumbnails configuration
 	viper.SetDefault("realtime.dashboard.thumbnails.summary", false)
