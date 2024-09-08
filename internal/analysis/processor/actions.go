@@ -101,17 +101,25 @@ func (a DatabaseAction) Execute(data interface{}) error {
 		// Save audio clip to file if enabled
 		if a.Settings.Realtime.Audio.Export.Enabled {
 			// export audio clip from capture buffer
-			//pcmData, err := a.AudioBuffer.ReadSegment(a.Note.BeginTime, 15)
 			pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source, a.Note.BeginTime, 15)
 			if err != nil {
 				log.Printf("Failed to read audio segment from buffer: %v", err)
 				return err
 			}
 
-			if err := myaudio.SavePCMDataToWAV(a.Note.ClipName, pcmData); err != nil {
-				log.Printf("error saving audio clip to %s: %s\n", a.Settings.Realtime.Audio.Export.Type, err)
+			// Create a SaveAudioAction and execute it
+			saveAudioAction := SaveAudioAction{
+				Settings: a.Settings,
+				ClipName: a.Note.ClipName,
+				pcmData:  pcmData,
+			}
+
+			if err := saveAudioAction.Execute(nil); err != nil {
+				log.Printf("Failed to save audio clip: %v", err)
 				return err
-			} else if a.Settings.Debug {
+			}
+
+			if a.Settings.Debug {
 				log.Printf("Saved audio clip to %s\n", a.Note.ClipName)
 				log.Printf("detection time %v, begin time %v, end time %v\n", a.Note.Time, a.Note.BeginTime, time.Now())
 			}
@@ -126,6 +134,29 @@ func (a DatabaseAction) Execute(data interface{}) error {
 
 // Execute saves the audio clip to a file
 func (a SaveAudioAction) Execute(data interface{}) error {
+	outputPath := a.ClipName
+
+	if a.Settings.Realtime.Audio.Export.Type == "wav" {
+		if err := myaudio.SavePCMDataToWAV(outputPath, a.pcmData); err != nil {
+			log.Printf("error saving audio clip to WAV: %s\n", err)
+			return err
+		}
+	} else {
+		if err := myaudio.ExportAudioWithFFmpeg(a.pcmData, outputPath, &a.Settings.Realtime.Audio); err != nil {
+			log.Printf("error exporting audio clip with FFmpeg: %s\n", err)
+			return err
+		}
+	}
+
+	log.Printf("Saved audio clip to %s\n", outputPath)
+
+	if a.Settings.Debug {
+		log.Printf("Saved audio clip to %s\n", outputPath)
+	}
+	return nil
+}
+
+/*func (a SaveAudioAction) Execute(data interface{}) error {
 	if err := myaudio.SavePCMDataToWAV(a.ClipName, a.pcmData); err != nil {
 		log.Printf("error saving audio clip to %s: %s\n", a.Settings.Realtime.Audio.Export.Type, err)
 		return err
@@ -133,7 +164,7 @@ func (a SaveAudioAction) Execute(data interface{}) error {
 		log.Printf("Saved audio clip to %s\n", a.ClipName)
 	}
 	return nil // return an error if the action fails
-}
+}*/
 
 // Execute sends the note to the BirdWeather API
 func (a BirdWeatherAction) Execute(data interface{}) error {

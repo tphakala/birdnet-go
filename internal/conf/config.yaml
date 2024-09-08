@@ -37,7 +37,8 @@ realtime:
       enabled: true       # true to export audio clips containing indentified bird calls
       debug: false        # true to enable audio export debug messages
       path: clips/        # path to audio clip export directory
-      type: wav           # only wav supported for now
+      type: wav           # wav, flac, aac, opus
+      bitrate: 96k        # bitrate for aac and opus exports
       retention:        
         policy: usage     # retention policy: none, age or usage
         maxage: 30d       # age policy: maximum age of clips to keep before starting evictions
