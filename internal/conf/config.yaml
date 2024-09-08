@@ -37,7 +37,7 @@ realtime:
       enabled: true       # true to export audio clips containing indentified bird calls
       debug: false        # true to enable audio export debug messages
       path: clips/        # path to audio clip export directory
-      type: wav           # wav, flac, aac, opus
+      type: wav           # wav, flac, aac, opus, mp3. Formats other than wav require ffmpeg.
       bitrate: 96k        # bitrate for aac and opus exports
       retention:        
         policy: usage     # retention policy: none, age or usage
