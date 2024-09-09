@@ -6,14 +6,13 @@ require (
 	cgt.name/pkg/go-mwclient v1.3.0
 	github.com/antonholmquist/jason v1.0.0
 	github.com/eclipse/paho.mqtt.golang v1.5.0
-	github.com/fatih/color v1.14.1
 	github.com/gen2brain/malgo v0.11.22
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0
 	github.com/go-echarts/go-echarts/v2 v2.4.0
 	github.com/k3a/html2text v1.2.1
 	github.com/labstack/echo/v4 v4.12.0
-	github.com/prometheus/client_golang v1.20.2
+	github.com/prometheus/client_golang v1.20.3
 	github.com/prometheus/client_model v0.6.1
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/shirou/gopsutil/v3 v3.24.5
