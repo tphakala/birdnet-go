@@ -97,7 +97,7 @@
                 <!-- Confidence Column -->
                 <td class="py-1 px-4 font-normal">
                     <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
-                        <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
+                        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
                             {{confidence .Confidence}}
                         </a>
                     </div>
@@ -113,7 +113,7 @@
 
                     <!-- Audio player -->
                     <audio controls class="audio-control" preload="metadata">
-                        <source src="{{.ClipName}}">
+                        <source src="{{.ClipName}}" type="{{getAudioMimeType .ClipName}}">
                         Your browser does not support the audio element.
                     </audio>
 
