@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"path/filepath"
+	"strings"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -29,6 +31,7 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"sunPositionIcon":       s.Handlers.GetSunPositionIconFunc(),
 		"weatherIcon":           s.Handlers.GetWeatherIconFunc(),
 		"timeOfDayToInt":        s.Handlers.TimeOfDayToInt,
+		"getAudioMimeType":      getAudioMimeType,
 	}
 }
 
@@ -88,5 +91,24 @@ func confidenceColor(confidence float64) string {
 		return "bg-orange-400" // Moderate confidence
 	default:
 		return "bg-red-500" // Low confidence
+	}
+}
+
+// getAudioMimeType returns the MIME type of an audio file based on its extension.
+func getAudioMimeType(filename string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".mp3":
+		return "audio/mpeg"
+	case ".ogg", ".opus":
+		return "audio/ogg"
+	case ".wav":
+		return "audio/wav"
+	case ".flac":
+		return "audio/flac"
+	case ".aac", ".m4a":
+		return "audio/aac"
+	default:
+		return "audio/mpeg" // Default to MP3 if unknown
 	}
 }
