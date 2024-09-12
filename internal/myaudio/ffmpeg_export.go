@@ -2,11 +2,9 @@ package myaudio
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -31,10 +29,6 @@ func ExportAudioWithFFmpeg(pcmData []byte, outputPath string, settings *conf.Aud
 		return fmt.Errorf("failed to create temporary file: %w", err)
 	}
 	tempFilePath := tempFile.Name()
-	defer func() {
-		tempFile.Close()
-		os.Remove(tempFilePath) // Clean up the temp file in case of failure
-	}()
 
 	// Prepare FFmpeg command
 	args := []string{
@@ -76,20 +70,14 @@ func ExportAudioWithFFmpeg(pcmData []byte, outputPath string, settings *conf.Aud
 		return fmt.Errorf("FFmpeg failed: %w", err)
 	}
 
-	// Attempt to rename the temporary file to the final output file with retries
-	maxRetries := 5
-	retryDelay := 100 * time.Millisecond
-	for i := 0; i < maxRetries; i++ {
-		err := os.Rename(tempFilePath, outputPath)
-		if err == nil {
-			break
-		}
-		if i == maxRetries-1 {
-			return fmt.Errorf("failed to rename temporary file to final output after %d attempts: %w", maxRetries, err)
-		}
-		log.Printf("Failed to rename file, retrying in %v: %v", retryDelay, err)
-		time.Sleep(retryDelay)
-		retryDelay *= 2 // Exponential backoff
+	// Close the temporary file before renaming
+	if err := tempFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temporary file: %w", err)
+	}
+
+	// Rename the temporary file to the final output file
+	if err := os.Rename(tempFilePath, outputPath); err != nil {
+		return fmt.Errorf("failed to rename temporary file to final output: %w", err)
 	}
 
 	return nil
