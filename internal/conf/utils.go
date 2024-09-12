@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"runtime"
@@ -288,4 +289,32 @@ func ConvertUTCToLocal(utcTime time.Time) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("failed to get local timezone: %w", err)
 	}
 	return utcTime.In(localLoc), nil
+}
+
+// GetFfmpegBinaryName returns the binary name for ffmpeg based on the current OS.
+func GetFfmpegBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return "ffmpeg.exe"
+	}
+	return "ffmpeg"
+}
+
+// GetSoxBinaryName returns the binary name for sox based on the current OS.
+func GetSoxBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return "sox.exe"
+	}
+	return "sox"
+}
+
+// IsFfmpegAvailable checks if ffmpeg is available in the system PATH.
+func IsFfmpegAvailable() bool {
+	_, err := exec.LookPath(GetFfmpegBinaryName())
+	return err == nil
+}
+
+// IsSoxAvailable checks if sox is available in the system PATH.
+func IsSoxAvailable() bool {
+	_, err := exec.LookPath(GetSoxBinaryName())
+	return err == nil
 }
