@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"net/url"
 	"path/filepath"
 	"strings"
 
@@ -32,6 +33,7 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"weatherIcon":           s.Handlers.GetWeatherIconFunc(),
 		"timeOfDayToInt":        s.Handlers.TimeOfDayToInt,
 		"getAudioMimeType":      getAudioMimeType,
+		"urlsafe":               urlSafe,
 	}
 }
 
@@ -111,4 +113,9 @@ func getAudioMimeType(filename string) string {
 	default:
 		return "audio/mpeg" // Default to MP3 if unknown
 	}
+}
+
+// urlSafe converts a path to a slash format and encodes it for URL query
+func urlSafe(path string) string {
+	return url.QueryEscape(filepath.ToSlash(path))
 }
