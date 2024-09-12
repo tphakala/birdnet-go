@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -34,6 +35,7 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"timeOfDayToInt":        s.Handlers.TimeOfDayToInt,
 		"getAudioMimeType":      getAudioMimeType,
 		"urlsafe":               urlSafe,
+		"ffmpegAvailable":       conf.IsFfmpegAvailable,
 	}
 }
 
