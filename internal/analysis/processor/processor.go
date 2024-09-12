@@ -69,10 +69,6 @@ type PendingDetection struct {
 	Count         int        // Number of times this detection has been updated
 }
 
-// PendingDetections is a map used to store detections temporarily.
-// The map's keys are species' common names, and its values are PendingDetection structs.
-var PendingDetections map[string]PendingDetection = make(map[string]PendingDetection)
-
 // mutex is used to synchronize access to the PendingDetections map,
 // ensuring thread safety when the map is accessed or modified by concurrent goroutines.
 var mutex sync.Mutex
@@ -186,6 +182,7 @@ func (p *Processor) processDetections(item queue.Results) {
 
 		// Always update the count
 		pendingDetection.Count++
+		log.Printf("increasing count for %s to %d\n", commonName, pendingDetection.Count)
 
 		// Update the detection in the map with the modified or new pending detection
 		p.pendingDetections[commonName] = pendingDetection
@@ -409,7 +406,7 @@ func (p *Processor) pendingDetectionsFlusher() {
 					// check if count is less than minDetections, if so discard the detection
 					if item.Count < minDetections {
 						log.Printf("Discarding detection of %s from source %s due to low number of detections\n", species, item.Source)
-						delete(PendingDetections, species)
+						delete(p.pendingDetections, species)
 						continue
 					}
 
@@ -419,7 +416,7 @@ func (p *Processor) pendingDetectionsFlusher() {
 							lastHumanDetection, exists := p.LastHumanDetection[item.Source]
 							if exists && lastHumanDetection.After(item.FirstDetected) {
 								log.Printf("Discarding detection of %s from source %s due to privacy filter\n", species, item.Source)
-								delete(PendingDetections, species)
+								delete(p.pendingDetections, species)
 								continue
 							}
 						}
@@ -433,13 +430,13 @@ func (p *Processor) pendingDetectionsFlusher() {
 						// Check against common name
 						if p.CheckDogBarkFilter(item.Detection.Note.CommonName, p.LastDogDetection[item.Source]) {
 							log.Printf("Discarding detection of %s from source %s due to recent dog bark\n", item.Detection.Note.CommonName, item.Source)
-							delete(PendingDetections, species)
+							delete(p.pendingDetections, species)
 							continue
 						}
 						// Check against scientific name
 						if p.CheckDogBarkFilter(item.Detection.Note.ScientificName, p.LastDogDetection[item.Source]) {
 							log.Printf("Discarding detection of %s from source %s due to recent dog bark\n", item.Detection.Note.CommonName, item.Source)
-							delete(PendingDetections, species)
+							delete(p.pendingDetections, species)
 							continue
 						}
 					}
