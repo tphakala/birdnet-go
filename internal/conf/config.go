@@ -26,6 +26,7 @@ type Dashboard struct {
 		Summary bool // show thumbnails on summary table
 		Recent  bool // show thumbnails on recent table
 	}
+	SummaryLimit int // limit for the number of species shown in the summary table
 }
 
 // AudioSettings contains settings for audio processing and export.
