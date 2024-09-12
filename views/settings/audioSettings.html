@@ -138,8 +138,10 @@ x-init="
              enabled: {{.Settings.Realtime.Audio.Export.Enabled}},
              debug: {{.Settings.Realtime.Audio.Export.Debug}},
              path: '{{.Settings.Realtime.Audio.Export.Path}}',
-             type: '{{.Settings.Realtime.Audio.Export.Type}}'
+             type: '{{.Settings.Realtime.Audio.Export.Type}}',
+             bitrate: '{{.Settings.Realtime.Audio.Export.Bitrate}}'
          },
+         ffmpegAvailable: {{if ffmpegAvailable}}true{{else}}false{{end}},
          audioExportSettingsOpen: false,
          showTooltip: null,
          hasChanges: false,
@@ -149,6 +151,9 @@ x-init="
      }"
      x-init="
          $watch('audioExport', (value) => { hasChanges = true }, { deep: true });
+         if (!ffmpegAvailable && audioExport.type !== 'wav') {
+            audioExport.type = 'wav';
+         }
      ">
     <input type="checkbox" id="audioExportSettingsOpen" x-on:change="audioExportSettingsOpen = !audioExportSettingsOpen" />
     <div class="collapse-title text-xl font-medium">
@@ -190,7 +195,7 @@ x-init="
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div class="form-control relative">
                     <label class="label justify-start" for="audioExportPath">
                         <span class="label-text">Export Path</span>
@@ -206,14 +211,39 @@ x-init="
                     <label class="label justify-start" for="audioExportType">
                         <span class="label-text">Export Type</span>
                         <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'audioExportType'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <select id="audioExportType" name="realtime.audio.export.type" x-model="audioExport.type" class="select select-bordered select-sm w-full">
-                        <option value="wav">WAV</option>
+                    </label>                  
+                    <select id="audioExportType" name="realtime.audio.export.type" 
+                            x-model="audioExport.type" 
+                            class="select select-bordered select-sm w-full"
+                            :disabled="!ffmpegAvailable">
+                        <option value="wav">wav</option>
+                        <option value="flac" x-show="ffmpegAvailable">flac</option>
+                        <option value="aac" x-show="ffmpegAvailable">aac</option>
+                        <option value="opus" x-show="ffmpegAvailable">opus</option>
+                        <option value="mp3" x-show="ffmpegAvailable">mp3</option>
                     </select>
                     <div x-show="showTooltip === 'audioExportType'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                        Type of audio file to export (only 'WAV' supported for now).
+                        Type of audio file to export. AAC is recommended for general use, it has good compression and is widely supported. MP3 only for legacy reasons. FFmpeg is required for formats other than WAV.
                     </div>
                 </div>
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="audioExportBitrate">
+                        <span class="label-text">Bitrate</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'audioExportBitrate'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <input type="text" id="audioExportBitrate" name="realtime.audio.export.bitrate" 
+                           x-model="audioExport.bitrate.endsWith('k') ? audioExport.bitrate : audioExport.bitrate + 'k'" 
+                           class="input input-bordered input-sm w-full" 
+                           placeholder="Bitrate (e.g. 128k)"
+                           :disabled="!ffmpegAvailable || !['aac', 'opus', 'mp3'].includes(audioExport.type)"
+                           :class="{'opacity-50 cursor-not-allowed': !ffmpegAvailable || !['aac', 'opus', 'mp3'].includes(audioExport.type)}"
+                           @input="if (!$event.target.value.endsWith('k')) $event.target.value += 'k'">
+                    <div x-show="showTooltip === 'audioExportBitrate'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        Bitrate for compressed audio export in kbps. Only applicable for AAC, Opus, and MP3 formats when FFmpeg is available.
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
