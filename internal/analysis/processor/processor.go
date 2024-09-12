@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
+// Processor represents the main processing unit for audio analysis.
 type Processor struct {
 	Settings            *conf.Settings
 	Ds                  datastore.Interface
@@ -32,6 +34,9 @@ type Processor struct {
 	LastHumanDetection  map[string]time.Time // keep track of human vocal per audio source
 	Metrics             *telemetry.Metrics
 	DynamicThresholds   map[string]*DynamicThreshold
+	thresholdsMutex     sync.RWMutex // Mutex to protect access to DynamicThresholds
+	pendingDetections   map[string]PendingDetection
+	pendingMutex        sync.Mutex // Mutex to protect access to pendingDetections
 	lastDogDetectionLog map[string]time.Time
 	dogDetectionMutex   sync.Mutex
 }
@@ -84,6 +89,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		LastDogDetection:    make(map[string]time.Time),
 		LastHumanDetection:  make(map[string]time.Time),
 		DynamicThresholds:   make(map[string]*DynamicThreshold),
+		pendingDetections:   make(map[string]PendingDetection),
 		lastDogDetectionLog: make(map[string]time.Time),
 	}
 
@@ -156,62 +162,75 @@ func (p *Processor) startDetectionProcessor() {
 // processDetections examines each detection from the queue, updating held detections
 // with new or higher-confidence instances and setting an appropriate flush deadline.
 func (p *Processor) processDetections(item queue.Results) {
-	// TODO: Make this configurable via settings in the future
-	const delay = 15 * time.Second // Delay before a detection is considered final and is flushed.
+	// Delay before a detection is considered final and is flushed.
+	const delay = 15 * time.Second
 
+	// Iterate through each detection result from the processed item
 	for _, detection := range p.processResults(item) {
 		commonName := strings.ToLower(detection.Note.CommonName)
 		confidence := detection.Note.Confidence
 
-		var firstDetected time.Time
-		var flushDeadline time.Time
+		// Lock the mutex to ensure thread-safe access to shared resources
+		p.pendingMutex.Lock()
 
-		mutex.Lock() // Lock the mutex to ensure thread safety when accessing the PendingDetections map.
-		// Check if this is a new detection or one with higher confidence.
-		if pendingDetection, exists := PendingDetections[commonName]; !exists || confidence > pendingDetection.Confidence {
-			if !exists {
-				// Initialize count for new detection
-				pendingDetection.Count = 1
-				// Set the flush deadline for new detections or if the current detection's deadline has passed.
-				firstDetected = item.StartTime // Set the begin time to the time it was first detected
-				flushDeadline = firstDetected.Add(delay)
-				log.Printf("New detection: %s with confidence: %.2f, source: %v\n", detection.Note.CommonName, confidence, item.Source)
-			} else {
-				// Increase counter for existing detection
-				pendingDetection.Count++
-				// If updating an existing detection, keep the original firstDetected timestamp.
-				firstDetected = pendingDetection.FirstDetected
-				if !time.Now().After(pendingDetection.FlushDeadline) {
-					// If within the original deadline, do not update the flush deadline.
-					flushDeadline = pendingDetection.FlushDeadline
-				}
+		// Check if this species is already in the pending detections
+		pendingDetection, exists := p.pendingDetections[commonName]
 
-				log.Printf("Updating detection: %s with confidence: %.2f, source: %v, count: %d\n", detection.Note.CommonName, confidence, item.Source, pendingDetection.Count)
-			}
-
-			// Set human detected flag
-			isHuman := strings.Contains(strings.ToLower(commonName), "human")
-
-			// Update the detection in the map.
-			PendingDetections[commonName] = PendingDetection{
-				Detection:     detection,
-				Confidence:    confidence,
-				Source:        item.Source,
-				HumanDetected: isHuman,
-				FirstDetected: firstDetected,
-				FlushDeadline: flushDeadline,
-				LastUpdated:   time.Now(),
-				Count:         pendingDetection.Count,
-			}
-
-			if p.Settings.Realtime.DynamicThreshold.Enabled {
-				dt, exists := p.DynamicThresholds[commonName]
-				if exists && confidence > float64(p.getBaseConfidenceThreshold(commonName)) {
-					dt.Timer = time.Now().Add(time.Duration(dt.ValidHours) * time.Hour)
-				}
-			}
+		if exists {
+			// Update the existing detection if it's already pending
+			p.updateExistingDetection(&pendingDetection, detection, item, confidence)
+		} else {
+			// Create a new pending detection if it doesn't exist
+			p.createNewDetection(&pendingDetection, detection, item, confidence, delay)
 		}
-		mutex.Unlock() // Unlock the mutex after updating the map
+
+		// Always update the count
+		pendingDetection.Count++
+
+		// Update the detection in the map with the modified or new pending detection
+		p.pendingDetections[commonName] = pendingDetection
+
+		// Update the dynamic threshold for this species if enabled
+		p.updateDynamicThreshold(commonName, confidence)
+
+		// Unlock the mutex to allow other goroutines to access shared resources
+		p.pendingMutex.Unlock()
+	}
+}
+
+// updateExistingDetection updates an existing detection if the new confidence is higher
+// and adjusts the FlushDeadline if necessary.
+func (p *Processor) updateExistingDetection(pendingDetection *PendingDetection, detection Detections, item queue.Results, confidence float64) {
+	// Only update detection details if new confidence is higher
+	if confidence > pendingDetection.Confidence {
+		log.Printf("Updating detection: %s with confidence: %.2f, source: %v, count: %d\n", detection.Note.CommonName, confidence, item.Source, pendingDetection.Count+1)
+		pendingDetection.Detection = detection
+		pendingDetection.Confidence = confidence
+		pendingDetection.Source = item.Source
+		pendingDetection.LastUpdated = time.Now()
+	}
+
+	// Keep the original FirstDetected
+	// Update FlushDeadline only if it has passed
+	/*if time.Now().After(pendingDetection.FlushDeadline) {
+		log.Printf("Updating FlushDeadline for %s to %v\n", detection.Note.CommonName, time.Now().Add(15*time.Second))
+		pendingDetection.FlushDeadline = time.Now().Add(15 * time.Second)
+	}*/
+}
+
+// createNewDetection initializes a new PendingDetection struct with the given detection information.
+func (p *Processor) createNewDetection(pendingDetection *PendingDetection, detection Detections, item queue.Results, confidence float64, delay time.Duration) {
+	log.Printf("New detection: %s with confidence: %.2f, source: %v\n", detection.Note.CommonName, confidence, item.Source)
+
+	firstDetected := item.StartTime
+	*pendingDetection = PendingDetection{
+		Detection:     detection,
+		Confidence:    confidence,
+		Source:        item.Source,
+		HumanDetected: strings.Contains(strings.ToLower(detection.Note.CommonName), "human"),
+		FirstDetected: firstDetected,
+		FlushDeadline: firstDetected.Add(delay),
+		Count:         0, // Will be incremented to 1 in the main function
 	}
 }
 
@@ -311,9 +330,10 @@ func (p *Processor) getBaseConfidenceThreshold(speciesLowercase string) float32 
 	return confidenceThreshold
 }
 
+// generateClipName generates a clip name for the given scientific name and confidence.
 func (p *Processor) generateClipName(scientificName string, confidence float32) string {
 	// Get the base path from the configuration
-	basePath := conf.GetBasePath(p.Settings.Realtime.Audio.Export.Path)
+	basePath := p.Settings.Realtime.Audio.Export.Path
 
 	// Replace whitespaces with underscores and convert to lowercase
 	formattedName := strings.ToLower(strings.ReplaceAll(scientificName, " ", "_"))
@@ -332,11 +352,12 @@ func (p *Processor) generateClipName(scientificName string, confidence float32) 
 	year := currentTime.Format("2006")
 	month := currentTime.Format("01")
 
-	// Set the file extension
-	fileType := "wav"
+	// Get the file extension from the export settings
+	fileType := p.Settings.Realtime.Audio.Export.Type
 
 	// Construct the clip name with the new pattern, including year and month subdirectories
-	clipName := fmt.Sprintf("%s/%s/%s/%s_%s_%s.%s", basePath, year, month, formattedName, formattedConfidence, timestamp, fileType)
+	// Use filepath.ToSlash to convert the path to a forward slash on Windows to avoid issues with URL encoding
+	clipName := filepath.ToSlash(filepath.Join(basePath, year, month, fmt.Sprintf("%s_%s_%s.%s", formattedName, formattedConfidence, timestamp, fileType)))
 
 	return clipName
 }
@@ -378,8 +399,11 @@ func (p *Processor) pendingDetectionsFlusher() {
 			<-ticker.C // Wait for the ticker to tick.
 			now := time.Now()
 
-			mutex.Lock() // Lock the mutex to ensure thread safety when accessing the PendingDetections map.
-			for species, item := range PendingDetections {
+			// Lock the mutex to ensure thread-safe access to the PendingDetections map.
+			p.pendingMutex.Lock()
+
+			// Iterate through the pending detections map
+			for species, item := range p.pendingDetections {
 				// If the current time is past the flush deadline, process the detection.
 				if now.After(item.FlushDeadline) {
 					// check if count is less than minDetections, if so discard the detection
@@ -429,7 +453,7 @@ func (p *Processor) pendingDetectionsFlusher() {
 						workerQueue <- Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
 					}
 					// Detection is now processed, remove it from pending detections map.
-					delete(PendingDetections, species)
+					delete(p.pendingDetections, species)
 
 					// Update BirdNET metrics detection counter
 					if p.Settings.Realtime.Telemetry.Enabled && p.Metrics != nil && p.Metrics.BirdNET != nil {
@@ -437,7 +461,7 @@ func (p *Processor) pendingDetectionsFlusher() {
 					}
 				}
 			}
-			mutex.Unlock() // Unlock the mutex after updating the map.
+			p.pendingMutex.Unlock()
 
 			// Perform cleanup of stale dynamic thresholds
 			p.cleanUpDynamicThresholds()
