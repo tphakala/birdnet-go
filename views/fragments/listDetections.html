@@ -107,13 +107,18 @@
                <td class="py-1 px-6 flex justify-center font-normal">
                 <div class="w-full">
                     <!-- Spectrogram Image  -->
-                    <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
-                        <img loading="lazy" width="400" src="/media/spectrogram?clip={{urlquery .ClipName}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
+                    <a href="#"
+                        hx-get="/detections/details?id={{.ID}}"
+                        hx-target="#mainContent"
+                        hx-swap="innerHTML"
+                        hx-trigger="click"
+                        hx-push-url="true">
+                        <img loading="lazy" width="400" src="/media/spectrogram?clip={{urlsafe .ClipName}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
                     </a>
 
                     <!-- Audio player -->
                     <audio controls class="audio-control" preload="metadata">
-                        <source src="{{urlquery .ClipName}}" type="{{getAudioMimeType .ClipName}}">
+                        <source src="{{urlsafe .ClipName}}" type="{{getAudioMimeType .ClipName}}">
                         Your browser does not support the audio element.
                     </audio>
 
