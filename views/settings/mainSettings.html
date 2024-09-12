@@ -247,6 +247,7 @@ x-init="
         <!-- Dynamic Threshold Settings -->
         <div class="text-lg font-medium pt-4 pb-2">Dynamic Threshold</div>
 
+        <!-- Dynamic Threshold Enabled -->
         <div class="form-control relative">
             <label class="label justify-start" for="dynamicThresholdEnabled">
                 <input type="checkbox" id="dynamicThresholdEnabled" name="realtime.dynamicThreshold.enabled" x-model="dynamicThreshold.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
@@ -261,6 +262,7 @@ x-init="
 
         <div x-show="dynamicThreshold.enabled" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
+            <!-- Trigger Threshold -->
             <div class="form-control relative">
                 <label class="label justify-start" for="dynamicThresholdTrigger">
                     <span class="label-text">Trigger Threshold</span>
@@ -272,6 +274,7 @@ x-init="
                 </div>
             </div>
 
+            <!-- Minimum Dynamic Threshold -->
             <div class="form-control relative">
                 <label class="label justify-start" for="dynamicThresholdMin">
                     <span class="label-text">Minimum Dynamic Threshold</span>
@@ -283,6 +286,7 @@ x-init="
                 </div>
             </div>
 
+            <!-- Dynamic Threshold Expire Time -->
             <div class="form-control relative">
                 <label class="label justify-start" for="dynamicThresholdValidHours">
                     <span class="label-text">Dynamic Threshold Expire Time (Hours)</span>
@@ -313,7 +317,10 @@ x-init="
                 <div id="locationMap" style="height: 300px;"></div>
             </div> 
 
+            <!-- Range Filter Settings -->
             <div class="col-span-1 flex flex-col justify-start">
+
+                <!-- Latitude -->
                 <div class="form-control relative">
                     <label class="label justify-start" for="birdnetLatitude">
                         <span class="label-text">Latitude</span>
@@ -325,6 +332,7 @@ x-init="
                     </div>
                 </div>
                 
+                <!-- Longitude -->
                 <div class="form-control relative">
                     <label class="label justify-start" for="birdnetLongitude">
                         <span class="label-text">Longitude</span>
@@ -336,6 +344,7 @@ x-init="
                     </div>
                 </div>
             
+                <!-- Range Filter Model -->
                 <div class="form-control relative">
                     <label class="label justify-start" for="birdnetRangeFilterModel">
                         <span class="label-text">Range Filter Model</span>
@@ -350,6 +359,7 @@ x-init="
                     </div>
                 </div>
 
+                <!-- Range Filter Threshold -->
                 <div class="form-control relative">
                     <label class="label justify-start" for="birdnetRangeFilterThreshold">
                         <span class="label-text">Threshold</span>
@@ -461,6 +471,7 @@ x-init="
 
     <div class="collapse-content">
 
+        <!-- Database Type -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="form-control relative">
                 <label class="label justify-start" for="databaseType">
@@ -495,6 +506,8 @@ x-init="
 
         <!-- MySQL Output Settings -->             
         <div x-show="outputType === 'mysql'" class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+
+            <!-- MySQL Host -->
             <div class="form-control relative">
                 <label class="label justify-start" for="mysqlHost">
                     <span class="label-text">MySQL Host</span>
@@ -506,6 +519,7 @@ x-init="
                 </div>
             </div>
 
+            <!-- MySQL Port -->
             <div class="form-control relative">
                 <label class="label justify-start" for="mysqlPort">
                     <span class="label-text">MySQL Port</span>
@@ -517,6 +531,7 @@ x-init="
                 </div>
             </div>
         
+            <!-- MySQL Username -->
             <div class="form-control relative">
                 <label class="label justify-start" for="mysqlUsername">
                     <span class="label-text">MySQL Username</span>
@@ -528,6 +543,7 @@ x-init="
                 </div>
             </div>
 
+            <!-- MySQL Password -->
             <div class="form-control relative">
                 <label class="label justify-start" for="mysqlPassword">
                     <span class="label-text">MySQL Password</span>
@@ -551,6 +567,7 @@ x-init="
                 </div>
             </div>
 
+            <!-- MySQL Database -->
             <div class="md:col-span-2 flex justify-start">
                 <div class="form-control relative w-full md:w-[calc(50%-0.75rem)]">
                     <label class="label justify-start" for="mysqlDatabase">
@@ -563,6 +580,7 @@ x-init="
                     </div>
                 </div>
             </div>            
+
         </div>
     </div>
 </div>
@@ -574,7 +592,8 @@ x-data="{
         thumbnails: {
             summary: {{.Settings.Realtime.Dashboard.Thumbnails.Summary}},
             recent: {{.Settings.Realtime.Dashboard.Thumbnails.Recent}}
-        }
+        },
+        summarylimit: {{.Settings.Realtime.Dashboard.SummaryLimit}}
     },
     timeFormat: '{{.Settings.Main.TimeAs24h}}',
     uiSettingsOpen: false,
@@ -605,7 +624,24 @@ x-init="
     <div class="collapse-content">
         <!-- Dashboard Settings -->
         <div class="text-lg font-medium pb-2">Dashboard</div>
-        
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+            <!-- Daily Summary Species Limit -->
+            <div class="form-control relative">
+                <label class="label justify-start" for="dashboardSummaryLimit">
+                    <span class="label-text">Max Number of Species on Daily Summary Table</span>
+                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'dashboardSummaryLimit'" @mouseleave="showTooltip = null">ⓘ</span>
+                </label>
+                <input type="number" id="dashboardSummaryLimit" name="realtime.dashboard.summarylimit" x-model="dashboard.summarylimit" class="input input-sm input-bordered mb-2 w-full" placeholder="Enter limit" min="10" max="1000">
+                <div x-show="showTooltip === 'dashboardSummaryLimit'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    Max number of species shown in the daily summary table (Value between 10 and 1000)
+                </div>
+            </div>
+            
+        </div>
+
+        <!-- Daily Summary Thumbnails -->
         <div class="form-control relative">
             <label class="label cursor-pointer justify-start" for="dashboardThumbnailsSummary">
                 <input type="checkbox" id="dashboardThumbnailsSummary" name="realtime.dashboard.thumbnails.summary" x-model="dashboard.thumbnails.summary" class="checkbox checkbox-primary checkbox-xs mr-2">
@@ -618,6 +654,7 @@ x-init="
             </div>
         </div>
 
+        <!-- Recent Detections Thumbnails -->
         <div class="form-control relative">
             <label class="label cursor-pointer justify-start" for="dashboardThumbnailsRecent">
                 <input type="checkbox" id="dashboardThumbnailsRecent" name="realtime.dashboard.thumbnails.recent" x-model="dashboard.thumbnails.recent" class="checkbox checkbox-primary checkbox-xs mr-2">

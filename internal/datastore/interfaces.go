@@ -187,13 +187,14 @@ func (ds *DataStore) GetAllNotes() ([]Note, error) {
 // GetTopBirdsData retrieves the top bird sightings based on a selected date and minimum confidence threshold.
 func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]Note, error) {
 	var results []Note
-	const reportCount = 30 // Consider making this a configurable parameter
+
+	// Get the number of species to report from the dashboard settings
+	reportCount := conf.Setting().Realtime.Dashboard.SummaryLimit
 
 	err := ds.DB.Table("notes").
 		Select("common_name", "scientific_name", "COUNT(*) as count").
 		Where("date = ? AND confidence >= ?", selectedDate, minConfidenceNormalized).
 		Group("common_name").
-		//Having("COUNT(*) > ?", 1).
 		Order("count DESC").
 		Limit(reportCount).
 		Scan(&results).Error

@@ -56,6 +56,11 @@ func ValidateSettings(settings *Settings) error {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
+	// Validate Dashboard settings
+	if err := validateDashboardSettings(&settings.Realtime.Dashboard); err != nil {
+		ve.Errors = append(ve.Errors, err.Error())
+	}
+
 	// If there are any errors, return the ValidationError
 	if len(ve.Errors) > 0 {
 		return ve
@@ -224,7 +229,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 	if settings.Export.Enabled {
 		if settings.Ffmpeg == "" {
 			settings.Export.Type = "wav"
-			log.Printf("FFmpeg not available, changing audio export type to wav")
+			log.Printf("FFmpeg not available, using WAV format for audio export")
 		} else {
 			// Validate audio type and bitrate
 			switch settings.Export.Type {
@@ -260,5 +265,15 @@ func checkFFmpegAvailability() error {
 		}
 		return fmt.Errorf("error checking FFmpeg availability: %w", err)
 	}
+	return nil
+}
+
+// Add this new function
+func validateDashboardSettings(settings *Dashboard) error {
+	// Validate SummaryLimit
+	if settings.SummaryLimit < 10 || settings.SummaryLimit > 1000 {
+		return fmt.Errorf("Dashboard SummaryLimit must be between 10 and 1000")
+	}
+
 	return nil
 }
