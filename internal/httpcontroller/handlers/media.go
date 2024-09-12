@@ -2,19 +2,68 @@ package handlers
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html"
 	"html/template"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
+
+// MaxClipNameLength is the maximum allowed length for a clip name
+const MaxClipNameLength = 255
+
+// AllowedCharacters is a regex pattern for allowed characters in clip names
+const AllowedCharacters = `^[a-zA-Z0-9_/.-]+$`
+
+var (
+	ErrEmptyClipName     = errors.New("empty clip name")
+	ErrClipNameTooLong   = errors.New("clip name too long")
+	ErrInvalidCharacters = errors.New("invalid characters in clip name")
+	ErrPathTraversal     = errors.New("path traversal attempt detected")
+)
+
+// sanitizeClipName performs sanity checks on the clip name
+func sanitizeClipName(clipName string) (string, error) {
+	// Check if the clip name is empty
+	if clipName == "" {
+		return "", ErrEmptyClipName
+	}
+
+	// Decode the clip name
+	decodedClipName, err := url.QueryUnescape(clipName)
+	if err != nil {
+		return "", fmt.Errorf("error decoding clip name: %w", err)
+	}
+
+	// Check the length of the decoded clip name
+	if len(decodedClipName) > MaxClipNameLength {
+		return "", ErrClipNameTooLong
+	}
+
+	// Check for allowed characters
+	if !regexp.MustCompile(AllowedCharacters).MatchString(decodedClipName) {
+		return "", ErrInvalidCharacters
+	}
+
+	// Check for potential path traversal attempts
+	cleanPath := filepath.Clean(decodedClipName)
+	if strings.Contains(cleanPath, "..") {
+		return "", ErrPathTraversal
+	}
+
+	return cleanPath, nil
+}
 
 // Thumbnail returns the URL of a given bird's thumbnail image.
 // It takes the bird's scientific name as input and returns the image URL as a string.
@@ -70,19 +119,22 @@ func (h *Handlers) ThumbnailAttribution(scientificName string) template.HTML {
 	return template.HTML(attribution)
 }
 
-// serveSpectrogramHandler serves or generates a spectrogram for a given clip.
+// ServeSpectrogram serves or generates a spectrogram for a given clip.
 func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	// Extract clip name from the query parameters
 	clipName := c.QueryParam("clip")
-	if clipName == "" {
-		// Return a placeholder image if the clip name is empty
+
+	// Sanitize the clip name
+	sanitizedClipName, err := sanitizeClipName(clipName)
+	if err != nil {
+		log.Printf("Error sanitizing clip name: %v", err)
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 
 	// Construct the path to the spectrogram image
-	spectrogramPath, err := h.getSpectrogramPath(clipName, 400) // Assuming 400px width
+	spectrogramPath, err := h.getSpectrogramPath(sanitizedClipName, 400) // Assuming 400px width
 	if err != nil {
-		// Return a placeholder image if spectrogram generation fails
+		log.Printf("Error getting spectrogram path: %v", err)
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 
@@ -141,14 +193,16 @@ func fileExists(filename string) (bool, error) {
 // createSpectrogramWithSoX generates a spectrogram for an audio file using ffmpeg and SoX.
 // It supports various audio formats by using ffmpeg to pipe the audio to SoX.
 func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) error {
-	// Verify ffmpeg installation
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		return fmt.Errorf("ffmpeg binary not found: %w", err)
-	}
+	// Get ffmpeg and sox paths from settings
+	ffmpegBinary := conf.Setting().Realtime.Audio.Ffmpeg
+	soxBinary := conf.Setting().Realtime.Audio.Sox
 
-	// Verify SoX installation
-	if _, err := exec.LookPath("sox"); err != nil {
-		return fmt.Errorf("SoX binary not found: %w", err)
+	// Verify ffmpeg and SoX paths
+	if ffmpegBinary == "" {
+		return fmt.Errorf("ffmpeg path not set in settings")
+	}
+	if soxBinary == "" {
+		return fmt.Errorf("SoX path not set in settings")
 	}
 
 	// Set height based on width
@@ -168,12 +222,12 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 	var ffmpegCmd, soxCmd *exec.Cmd
 	if runtime.GOOS == "windows" {
 		// Directly use ffmpeg and SoX commands on Windows
-		ffmpegCmd = exec.Command("ffmpeg", ffmpegArgs...)
-		soxCmd = exec.Command("sox", soxArgs...)
+		ffmpegCmd = exec.Command(ffmpegBinary, ffmpegArgs...)
+		soxCmd = exec.Command(soxBinary, soxArgs...)
 	} else {
 		// Prepend 'nice' to the commands on Unix-like systems
-		ffmpegCmd = exec.Command("nice", append([]string{"-n", "19", "ffmpeg"}, ffmpegArgs...)...)
-		soxCmd = exec.Command("nice", append([]string{"-n", "19", "sox"}, soxArgs...)...)
+		ffmpegCmd = exec.Command("nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
+		soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
 	}
 
 	// Set up pipe between ffmpeg and sox

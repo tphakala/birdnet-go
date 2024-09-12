@@ -31,6 +31,8 @@ type Dashboard struct {
 // AudioSettings contains settings for audio processing and export.
 type AudioSettings struct {
 	Source string // audio source to use for analysis
+	Ffmpeg string // path to ffmpeg, runtime value
+	Sox    string // path to sox, runtime value
 	Export struct {
 		Debug     bool   // true to enable audio export debug
 		Enabled   bool   // export audio clips containing indentified bird calls

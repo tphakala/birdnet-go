@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"sync"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // ffmpegProcesses keeps track of running FFmpeg processes for each URL
@@ -215,26 +217,16 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, audioLevel
 	}
 }
 
-// checkFFmpegAvailability checks if FFmpeg is installed and available
-func checkFFmpegAvailability() error {
-	cmd := exec.Command("ffmpeg", "-version")
-	err := cmd.Run()
-	if err != nil {
-		if errors.Is(err, exec.ErrNotFound) {
-			return fmt.Errorf("FFmpeg is not installed or not in the system PATH")
-		}
-		return fmt.Errorf("error checking FFmpeg availability: %w", err)
-	}
-	return nil
-}
-
 // startFFmpeg starts an FFmpeg process with the given configuration
 func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, error) {
+	// Get the FFmpeg binary name from the settings
+	ffmpegBinary := conf.GetFfmpegBinaryName()
+
 	// Create a new context with cancellation
 	ctx, cancel := context.WithCancel(ctx)
 
 	// Prepare the FFmpeg command with appropriate arguments
-	cmd := exec.CommandContext(ctx, "ffmpeg",
+	cmd := exec.CommandContext(ctx, ffmpegBinary,
 		"-rtsp_transport", config.Transport, // Set RTSP transport protocol
 		"-i", config.URL, // Input URL
 		"-loglevel", "error", // Set log level to error
@@ -395,9 +387,9 @@ func CaptureAudioRTSP(url string, transport string, wg *sync.WaitGroup, quitChan
 	// Ensure the WaitGroup is decremented when the function exits
 	defer wg.Done()
 
-	// Check FFmpeg availability before starting the capture process
-	if err := checkFFmpegAvailability(); err != nil {
-		log.Printf("Error: %v. Unable to start audio capture for RTSP source %s.", err, url)
+	// Return with error if FFmpeg path is not set
+	if conf.GetFfmpegBinaryName() == "" {
+		log.Printf("FFmpeg is not available, cannot capture audio from RTSP source %s.", url)
 		return
 	}
 
