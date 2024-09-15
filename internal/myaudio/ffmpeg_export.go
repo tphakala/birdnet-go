@@ -12,7 +12,7 @@ import (
 // ExportAudioWithFFmpeg exports PCM data to the specified format using FFmpeg
 func ExportAudioWithFFmpeg(pcmData []byte, outputPath string, settings *conf.AudioSettings) error {
 	// Use the FFmpeg path from the settings
-	ffmpegBinary := settings.Ffmpeg
+	ffmpegBinary := settings.FfmpegPath
 	if ffmpegBinary == "" {
 		return fmt.Errorf("FFmpeg is not available")
 	}

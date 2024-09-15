@@ -208,26 +208,27 @@ func validateBirdweatherSettings(settings *BirdweatherSettings) error {
 
 // validateAudioSettings validates the audio settings and sets ffmpeg and sox paths
 func validateAudioSettings(settings *AudioSettings) error {
-
 	// Check if ffmpeg is available
 	if IsFfmpegAvailable() {
-		settings.Ffmpeg = GetFfmpegBinaryName()
+		settings.FfmpegPath = GetFfmpegBinaryName()
 	} else {
-		settings.Ffmpeg = ""
+		settings.FfmpegPath = ""
 		log.Println("FFmpeg not found in system PATH")
 	}
 
 	// Check if sox is available
-	if IsSoxAvailable() {
-		settings.Sox = GetSoxBinaryName()
+	soxAvailable, soxFormats := IsSoxAvailable()
+	if soxAvailable {
+		settings.SoxPath = GetSoxBinaryName()
+		settings.SoxAudioTypes = soxFormats
 	} else {
-		settings.Sox = ""
+		settings.SoxPath = ""
 		log.Println("sox not found in system PATH")
 	}
 
 	// Validate audio export settings
 	if settings.Export.Enabled {
-		if settings.Ffmpeg == "" {
+		if settings.FfmpegPath == "" {
 			settings.Export.Type = "wav"
 			log.Printf("FFmpeg not available, using WAV format for audio export")
 		} else {

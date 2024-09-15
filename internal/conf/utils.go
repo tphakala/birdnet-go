@@ -313,8 +313,37 @@ func IsFfmpegAvailable() bool {
 	return err == nil
 }
 
-// IsSoxAvailable checks if sox is available in the system PATH.
-func IsSoxAvailable() bool {
-	_, err := exec.LookPath(GetSoxBinaryName())
-	return err == nil
+// IsSoxAvailable checks if SoX is available in the system PATH and returns its supported audio formats.
+// It returns a boolean indicating if SoX is available and a slice of supported audio format strings.
+func IsSoxAvailable() (bool, []string) {
+	// Look for the SoX binary in the system PATH
+	soxPath, err := exec.LookPath(GetSoxBinaryName())
+	if err != nil {
+		return false, nil // SoX is not available
+	}
+
+	// Execute SoX with the help flag to get its output
+	cmd := exec.Command(soxPath, "-h")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return false, nil // Failed to execute SoX
+	}
+
+	// Convert the output to a string and split it into lines
+	outputStr := string(output)
+	lines := strings.Split(outputStr, "\n")
+
+	var audioFormats []string
+	// Iterate through the lines to find the supported audio formats
+	for _, line := range lines {
+		if strings.HasPrefix(line, "AUDIO FILE FORMATS:") {
+			// Extract and process the list of audio formats
+			formats := strings.TrimPrefix(line, "AUDIO FILE FORMATS:")
+			formats = strings.TrimSpace(formats)
+			audioFormats = strings.Fields(formats)
+			break
+		}
+	}
+
+	return true, audioFormats // SoX is available, return the list of supported formats
 }

@@ -171,8 +171,8 @@ func (h *Handlers) getSpectrogramPath(audioFileName string, width int) (string, 
 
 	// Create the spectrogram
 	if err := createSpectrogramWithSoX(audioFileName, spectrogramPath, width); err != nil {
-		log.Printf("error creating spectrogram with SoX: %s", err)
-		return "", fmt.Errorf("error creating spectrogram with SoX: %w", err)
+		log.Printf("error creating spectrogram: %s", err)
+		return "", fmt.Errorf("error creating spectrogram: %w", err)
 	}
 
 	return webFriendlyPath, nil
@@ -191,11 +191,11 @@ func fileExists(filename string) (bool, error) {
 }
 
 // createSpectrogramWithSoX generates a spectrogram for an audio file using ffmpeg and SoX.
-// It supports various audio formats by using ffmpeg to pipe the audio to SoX.
+// It supports various audio formats by using ffmpeg to pipe the audio to SoX when necessary.
 func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) error {
 	// Get ffmpeg and sox paths from settings
-	ffmpegBinary := conf.Setting().Realtime.Audio.Ffmpeg
-	soxBinary := conf.Setting().Realtime.Audio.Sox
+	ffmpegBinary := conf.Setting().Realtime.Audio.FfmpegPath
+	soxBinary := conf.Setting().Realtime.Audio.SoxPath
 
 	// Verify ffmpeg and SoX paths
 	if ffmpegBinary == "" {
@@ -209,52 +209,150 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 	heightStr := strconv.Itoa(width / 2)
 	widthStr := strconv.Itoa(width)
 
-	// Build ffmpeg command arguments
-	ffmpegArgs := []string{"-hide_banner", "-i", audioClipPath, "-f", "sox", "-"}
-
-	// Build SoX command arguments
-	soxArgs := []string{"-t", "sox", "-", "-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-o", spectrogramPath}
-	if width < 800 {
-		soxArgs = append(soxArgs, "-r")
+	// Determine if we need to use ffmpeg based on file extension
+	ext := strings.ToLower(filepath.Ext(audioClipPath))
+	// remove prefix dot
+	ext = strings.TrimPrefix(ext, ".")
+	useFFmpeg := true
+	for _, soxType := range conf.Setting().Realtime.Audio.SoxAudioTypes {
+		if ext == strings.ToLower(soxType) {
+			useFFmpeg = false
+			break
+		}
 	}
 
-	// Determine the commands based on the OS
-	var ffmpegCmd, soxCmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		// Directly use ffmpeg and SoX commands on Windows
-		ffmpegCmd = exec.Command(ffmpegBinary, ffmpegArgs...)
-		soxCmd = exec.Command(soxBinary, soxArgs...)
+	var cmd *exec.Cmd
+	var soxCmd *exec.Cmd
+
+	// Decode audio using ffmpeg and pipe to sox for spectrogram creation
+	if useFFmpeg {
+		// Build ffmpeg command arguments
+		ffmpegArgs := []string{"-hide_banner", "-i", audioClipPath, "-f", "sox", "-"}
+
+		// Build SoX command arguments
+		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath)...)
+
+		// Set up commands
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command(ffmpegBinary, ffmpegArgs...)
+			soxCmd = exec.Command(soxBinary, soxArgs...)
+		} else {
+			cmd = exec.Command("nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
+			soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
+		}
+
+		// Set up pipe between ffmpeg and sox
+		var err error
+		soxCmd.Stdin, err = cmd.StdoutPipe()
+		if err != nil {
+			return fmt.Errorf("error creating pipe: %w", err)
+		}
+
+		// Capture combined output
+		var ffmpegOutput, soxOutput bytes.Buffer
+		cmd.Stderr = &ffmpegOutput
+		soxCmd.Stderr = &soxOutput
+
+		// Start sox command
+		if err := soxCmd.Start(); err != nil {
+			log.Printf("SoX cmd: %s", soxCmd.String())
+			return fmt.Errorf("error starting SoX command: %w", err)
+		}
+
+		// Run ffmpeg command
+		if err := cmd.Run(); err != nil {
+			soxCmd.Wait() // Ensure sox finishes
+			return fmt.Errorf("ffmpeg command failed: %w\nffmpeg output: %s\nsox output: %s", err, ffmpegOutput.String(), soxOutput.String())
+		}
+
+		// Wait for sox command to finish
+		if err := soxCmd.Wait(); err != nil {
+			return fmt.Errorf("SoX command failed: %w\nffmpeg output: %s\nsox output: %s", err, ffmpegOutput.String(), soxOutput.String())
+		}
 	} else {
-		// Prepend 'nice' to the commands on Unix-like systems
-		ffmpegCmd = exec.Command("nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
-		soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
+		// Use SoX directly for supported formats
+		soxArgs := append([]string{audioClipPath}, getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath)...)
+
+		if runtime.GOOS == "windows" {
+			soxCmd = exec.Command(soxBinary, soxArgs...)
+		} else {
+			soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
+		}
+
+		// Capture output
+		var soxOutput bytes.Buffer
+		soxCmd.Stderr = &soxOutput
+		soxCmd.Stdout = &soxOutput
+
+		// Run SoX command
+		if err := soxCmd.Run(); err != nil {
+			return fmt.Errorf("SoX command failed: %w\nOutput: %s", err, soxOutput.String())
+		}
 	}
 
-	// Set up pipe between ffmpeg and sox
-	var err error
-	soxCmd.Stdin, err = ffmpegCmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("error creating pipe: %w", err)
+	return nil
+}
+
+// getSoxSpectrogramArgs returns the common SoX arguments for generating a spectrogram
+func getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath string) []string {
+	// TODO: make these dynamic based on audio length and gain
+	const audioLength = "15"
+	const dynamicRange = "100"
+
+	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-d", audioLength, "-z", dynamicRange, "-o", spectrogramPath}
+	width, _ := strconv.Atoi(widthStr)
+	if width < 800 {
+		args = append(args, "-r")
 	}
+	return args
+}
+
+// createSpectrogramWithFFmpeg generates a spectrogram for an audio file using only ffmpeg.
+// It supports various audio formats and applies the same practices as createSpectrogramWithSoX.
+func createSpectrogramWithFFmpeg(audioClipPath, spectrogramPath string, width int) error {
+	// Get ffmpeg path from settings
+	ffmpegBinary := conf.Setting().Realtime.Audio.FfmpegPath
+
+	// Verify ffmpeg path
+	if ffmpegBinary == "" {
+		return fmt.Errorf("ffmpeg path not set in settings")
+	}
+
+	// Set height based on width
+	height := width / 2
+	heightStr := strconv.Itoa(height)
+	widthStr := strconv.Itoa(width)
+
+	// Build ffmpeg command arguments
+	ffmpegArgs := []string{
+		"-hide_banner",
+		"-y", // answer yes to overwriting the output file if it already exists
+		"-i", audioClipPath,
+		"-lavfi", fmt.Sprintf("showspectrumpic=s=%sx%s:legend=0:gain=3:drange=100", widthStr, heightStr),
+		"-frames:v", "1", // Generate only one frame instead of animation
+		spectrogramPath,
+	}
+
+	// Determine the command based on the OS
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		// Directly use ffmpeg command on Windows
+		cmd = exec.Command(ffmpegBinary, ffmpegArgs...)
+	} else {
+		// Prepend 'nice' to the command on Unix-like systems
+		cmd = exec.Command("nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
+	}
+
+	log.Printf("ffmpeg command: %s", cmd.String())
 
 	// Capture combined output
-	var combinedOutput bytes.Buffer
-	soxCmd.Stderr = &combinedOutput
-	ffmpegCmd.Stderr = &combinedOutput
-
-	// Start sox command
-	if err := soxCmd.Start(); err != nil {
-		return fmt.Errorf("error starting SoX command: %w", err)
-	}
+	var output bytes.Buffer
+	cmd.Stderr = &output
+	cmd.Stdout = &output
 
 	// Run ffmpeg command
-	if err := ffmpegCmd.Run(); err != nil {
-		return fmt.Errorf("ffmpeg command failed: %w\nOutput: %s", err, combinedOutput.String())
-	}
-
-	// Wait for sox command to finish
-	if err := soxCmd.Wait(); err != nil {
-		return fmt.Errorf("SoX command failed: %w\nOutput: %s", err, combinedOutput.String())
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ffmpeg command failed: %w\nOutput: %s", err, output.String())
 	}
 
 	return nil
