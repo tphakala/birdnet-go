@@ -261,8 +261,24 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 
 		// Run ffmpeg command
 		if err := cmd.Run(); err != nil {
-			soxCmd.Wait() // Ensure sox finishes
-			return fmt.Errorf("ffmpeg command failed: %w\nffmpeg output: %s\nsox output: %s", err, ffmpegOutput.String(), soxOutput.String())
+			// Stop the SoX command to clean up resources
+			if killErr := soxCmd.Process.Kill(); killErr != nil {
+				log.Printf("Failed to kill SoX process: %v", killErr)
+			}
+
+			// Wait for SoX to finish and collect its error, if any
+			waitErr := soxCmd.Wait()
+
+			// Prepare error message with both ffmpeg and SoX outputs
+			errMsg := fmt.Sprintf("ffmpeg command failed: %v\nffmpeg output: %s\nsox output: %s",
+				err, ffmpegOutput.String(), soxOutput.String())
+
+			// If SoX also encountered an error, include it in the message
+			if waitErr != nil && !errors.Is(waitErr, os.ErrProcessDone) {
+				errMsg += fmt.Sprintf("\nsox wait error: %v", waitErr)
+			}
+
+			return fmt.Errorf(errMsg)
 		}
 
 		// Wait for sox command to finish
