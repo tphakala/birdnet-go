@@ -219,21 +219,26 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, audioLevel
 
 // startFFmpeg starts an FFmpeg process with the given configuration
 func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, error) {
-	// Get the FFmpeg binary name from the settings
-	ffmpegBinary := conf.GetFfmpegBinaryName()
+	settings := conf.Setting().Realtime.Audio
+	if err := validateFFmpegPath(settings.FfmpegPath); err != nil {
+		return nil, err
+	}
 
 	// Create a new context with cancellation
 	ctx, cancel := context.WithCancel(ctx)
 
+	// Get the FFmpeg-compatible values for sample rate, channels, and bit depth
+	ffmpegSampleRate, ffmpegNumChannels, ffmpegFormat := getFFmpegFormat(conf.SampleRate, conf.NumChannels, conf.BitDepth)
+
 	// Prepare the FFmpeg command with appropriate arguments
-	cmd := exec.CommandContext(ctx, ffmpegBinary,
+	cmd := exec.CommandContext(ctx, settings.FfmpegPath,
 		"-rtsp_transport", config.Transport, // Set RTSP transport protocol
 		"-i", config.URL, // Input URL
 		"-loglevel", "error", // Set log level to error
-		"-vn",         // Disable video
-		"-f", "s16le", // Set output format to signed 16-bit little-endian
-		"-ar", "48000", // Set audio sample rate to 48kHz
-		"-ac", "1", // Set number of audio channels to 1 (mono)
+		"-vn",              // Disable video
+		"-f", ffmpegFormat, // Set output format to signed 16-bit little-endian
+		"-ar", ffmpegSampleRate, // Set audio sample rate to 48kHz
+		"-ac", ffmpegNumChannels, // Set number of audio channels to 1 (mono)
 		"pipe:1", // Output to stdout
 	)
 
