@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"golang.org/x/text/cases"
@@ -36,6 +37,7 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"getAudioMimeType":      getAudioMimeType,
 		"urlsafe":               urlSafe,
 		"ffmpegAvailable":       conf.IsFfmpegAvailable,
+		"formatDateTime":        formatDateTime,
 	}
 }
 
@@ -112,6 +114,8 @@ func getAudioMimeType(filename string) string {
 		return "audio/flac"
 	case ".aac", ".m4a":
 		return "audio/aac"
+	case ".alac":
+		return "audio/x-alac"
 	default:
 		return "audio/mpeg" // Default to MP3 if unknown
 	}
@@ -120,4 +124,13 @@ func getAudioMimeType(filename string) string {
 // urlSafe converts a path to a slash format and encodes it for URL query
 func urlSafe(path string) string {
 	return url.QueryEscape(filepath.ToSlash(path))
+}
+
+// formatDateTime converts a date string to a formatted string
+func formatDateTime(dateStr string) string {
+	t, err := time.Parse("2006-01-02 15:04:05", dateStr)
+	if err != nil {
+		return dateStr // Return original string if parsing fails
+	}
+	return t.Format("2006-01-02 15:04:05") // Or any other format you prefer
 }
