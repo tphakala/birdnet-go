@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observation"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
@@ -350,7 +351,7 @@ func (p *Processor) generateClipName(scientificName string, confidence float32) 
 	month := currentTime.Format("01")
 
 	// Get the file extension from the export settings
-	fileType := p.Settings.Realtime.Audio.Export.Type
+	fileType := myaudio.GetFileExtension(p.Settings.Realtime.Audio.Export.Type)
 
 	// Construct the clip name with the new pattern, including year and month subdirectories
 	// Use filepath.ToSlash to convert the path to a forward slash on Windows to avoid issues with URL encoding
