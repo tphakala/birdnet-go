@@ -112,8 +112,10 @@ func getAudioMimeType(filename string) string {
 		return "audio/wav"
 	case ".flac":
 		return "audio/flac"
-	case ".aac", ".m4a":
+	case ".aac":
 		return "audio/aac"
+	case ".m4a":
+		return "audio/mp4"
 	case ".alac":
 		return "audio/x-alac"
 	default:
