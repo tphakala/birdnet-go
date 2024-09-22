@@ -2,13 +2,13 @@
 <header class="col-span-12 flex items-center justify-between gap-2 p-1 sm:gap-4 sm:p-2 lg:p-4">
 
     <!-- Sidebar toggle button -->
-    <label for="my-drawer" class="btn btn-ghost btn-sm p-1 drawer-button lg:hidden">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+    <label for="my-drawer" class="btn btn-ghost btn-sm p-0 sm:p-1 drawer-button lg:hidden">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
         </svg>
     </label>
 
-    <div class="text-lg xs:text-base sm:text-xl md:text-xl lg:text-2xl font-bold">{{.Title}}</div>
+    <div class="text-base sm:text-xl lg:text-2xl font-bold">{{.Title}}</div>
     
     <div class="flex-grow flex justify-center relative">
         {{if eq .Title "Dashboard"}}

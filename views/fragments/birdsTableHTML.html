@@ -5,16 +5,16 @@
   <!-- Table header -->
   <thead class="text-xs">
       <!-- Species header -->
-      <th scope="col" class="py-4 px-6 w-0">Species</th>
+      <th scope="col" class="py-0 px-2 sm:px-4 w-0">Species</th>
       {{if .DashboardSettings.Thumbnails.Summary}}
       <!-- Thumbnail header -->
-      <th scope="col" class="py-4 px-6 w-0">Thumbnail</th>
+      <th scope="col" class="py-0 px-6 w-0">Thumbnail</th>
       {{end}}
       <!-- Total detections header -->
-      <th scope="col" class="py-4 px-4 w-100 hidden md:table-cell">Detections</th>
+      <th scope="col" class="py-0 px-4 w-100 hidden md:table-cell">Detections</th>
       {{range .Hours}}
       <!-- Hourly headers -->
-      <th scope="col" class="text-center py-4 px-0">
+      <th scope="col" class="text-center py-0 pt-4 px-0">
         <a href="#"
           hx-get="/detections?date={{urlquery $.SelectedDate}}&hour={{printf "%02d" .}}&queryType=hourly"
           hx-target="#mainContent"
@@ -35,7 +35,7 @@
         </a>
       </th>        
       {{end}}
-      <th scope="col" class="py-2 px-0"></th>
+      <th scope="col" class="py-0 px-0"></th>
     </tr>
   </thead>
   <!-- Table body -->
@@ -44,7 +44,7 @@
 
     <tr class="">
       <!-- Species row -->
-      <th scope="row" class="py-1 px-6 font-medium">
+      <th scope="row" class="py-1 px-2 sm:px-4 font-medium">
         <a href="#"
           hx-get="/detections?species={{urlquery .Note.CommonName}}&date={{urlquery $.SelectedDate}}&queryType=species"
           hx-target="#mainContent"
