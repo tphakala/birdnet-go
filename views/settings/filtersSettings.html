@@ -1,5 +1,8 @@
 {{define "detectionfiltersSettings"}}
 
+<!-- Hidden input to always submit the template name -->
+<input type="hidden" name="templateName" value="{{.TemplateName}}">
+
 <!-- Privacy Filter start -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3"
 x-data="{ 
@@ -73,7 +76,7 @@ x-init="
         enabled: {{.Settings.Realtime.DogBarkFilter.Enabled}},
         confidence: {{.Settings.Realtime.DogBarkFilter.Confidence}},
         remember: {{.Settings.Realtime.DogBarkFilter.Remember}},
-        species: {{.Settings.Realtime.DogBarkFilter.Species | toJSON}}
+        species: {{.Settings.Realtime.DogBarkFilter.Species | toJSON}} || [],
     },
     newSpecies: '',
     editIndex: null,
@@ -87,13 +90,16 @@ x-init="
         this.hasChanges = false;
     },
     addSpecies() {
-        if (this.newSpecies.trim()) {
-            this.dogBarkFilter.species.push(this.newSpecies.trim());
-            this.newSpecies = '';
-            this.hasChanges = true;
-            this.predictions = [];
-        }
-    },
+    if (!this.dogBarkFilter.species) {
+        this.dogBarkFilter.species = [];
+    }
+    if (this.newSpecies.trim()) {
+        this.dogBarkFilter.species.push(this.newSpecies.trim());
+        this.newSpecies = '';
+        this.hasChanges = true;
+        this.predictions = [];
+    }
+},
     removeSpecies(index) {
         this.dogBarkFilter.species.splice(index, 1);
         this.hasChanges = true;
