@@ -1,5 +1,8 @@
 {{define "audioSettings"}}
 
+<!-- Hidden input to always submit the template name -->
+<input type="hidden" name="templateName" value="{{.TemplateName}}">
+
 <!-- Audio Capture Settings start -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3"
 x-data="{ 
@@ -8,7 +11,22 @@ x-data="{
         rtsp: {
             transport: '{{.Settings.Realtime.RTSP.Transport}}',
             urls: {{if .Settings.Realtime.RTSP.URLs}}{{.Settings.Realtime.RTSP.URLs | toJSON}}{{else}}[]{{end}}
-        }
+        },
+        equalizer: {
+            enabled: {{.Settings.Realtime.Audio.Equalizer.Enabled}},
+            filters: [
+                {{range .Settings.Realtime.Audio.Equalizer.Filters}}
+                {
+                    type: '{{.Type}}',
+                    frequency: {{.Frequency}},
+                    q: {{.Q}},
+                    gain: {{.Gain}},
+                    passes: {{.Passes}}
+                },
+                {{end}}
+            ]
+        },
+        eqFilterConfig: {{.EqFilterConfig | toJSON}},
     },
     audioDevices: [],
     selectedDeviceIndex: -1,
@@ -18,6 +36,13 @@ x-data="{
     newUrl: '',
     editIndex: null,
     editUrl: '',
+    newFilter: {
+        type: '',
+        frequency: 0,
+        q: 0,
+        gain: 0,
+        passes: 0
+    },
     resetChanges() {
         this.hasChanges = false;
     },
@@ -39,6 +64,32 @@ x-data="{
                 this.audioDevices = data;
             })
             .catch(error => console.error('Error fetching audio devices:', error));
+    },
+    getEqFilterParameters(filterType) {
+        return this.audioCapture.eqFilterConfig[filterType]?.Parameters || [];
+    },
+    getEqFilterTooltip(filterType) {
+        return this.audioCapture.eqFilterConfig[filterType]?.Tooltip || '';
+    },
+    addNewFilter() {
+        if (this.newFilter.type) {
+            this.audioCapture.equalizer.filters.push({...this.newFilter});
+            this.newFilter = { type: '', frequency: 0, q: 0, gain: 0, passes: 0 };
+            this.hasChanges = true;
+        }
+    },
+    getFilterDefaults(filterType) {
+        if (this.newFilter.type) {
+            this.getEqFilterParameters(this.newFilter.type).forEach(param => {
+                this.newFilter[param.Name.toLowerCase()] = param.Default;
+            });
+        } else {
+            this.newFilter = { type: '', frequency: 0, q: 0, gain: 0, passes: 0 };
+        }
+    },
+    removeFilter(index) {
+        this.audioCapture.equalizer.filters.splice(index, 1);
+        this.hasChanges = true;
     }
 }"
 x-init="
@@ -86,6 +137,7 @@ x-init="
             </div>
         </div>
 
+        <!-- RTSP Source start -->
         <div class="text-lg font-medium pt-4 pb-2">RTSP Source</div>
 
         <div class="form-control relative">
@@ -102,9 +154,10 @@ x-init="
             </div>
         </div>
 
+        <!-- RTSP Stream URLs start -->
         <div class="form-control relative">
             <label class="label justify-start" for="rtspUrls">
-                <span class="label-text">RTSP Stream URLs</span>
+                <span class="label-text mt-2">RTSP Stream URLs</span>
                 <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'rtspUrls'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
         
@@ -117,7 +170,9 @@ x-init="
 
             <div x-show="showTooltip === 'rtspUrls'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
                 Add or remove RTSP stream URLs. (rtsp://user:password@example.com/stream1)
-            </div>            
+            </div>
+
+            <!-- Add new RTSP URL button -->
             <div class="flex items-center mt-2">
                 <input type="text" x-model="newUrl" class="input input-bordered input-sm w-full mr-2" placeholder="Enter RTSP URL (rtsp://user:password@example.com/stream1)">
                 <button type="button" class="btn btn-primary btn-sm" @click="addUrl">Add</button>
@@ -126,6 +181,144 @@ x-init="
             <!-- Hidden input to always submit the RTSP URLs, even when empty -->
             <input type="hidden" name="realtime.rtsp.urls" :value="JSON.stringify(audioCapture.rtsp.urls)">
         </div>
+        <!-- RTSP Source end -->
+
+        <!-- Audio Filters start -->
+        <div class="text-lg font-medium pt-4 pb-2">Audio Filters</div>
+
+        <div class="form-control relative">
+            <label class="label justify-start" for="audioFiltersEnabled">
+                <input type="checkbox" id="audioFiltersEnabled" name="realtime.audio.equalizer.enabled" x-model="audioCapture.equalizer.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
+                <input type="hidden" name="realtime.audio.equalizer.enabled" value="false">
+                <span class="label-text">Enable Audio Equalizer</span>
+                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'audioEqualizerEnabled'" @mouseleave="showTooltip = null">ⓘ</span>
+            </label>
+            <div x-show="showTooltip === 'audioEqualizerEnabled'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                Enable or disable audio equalizer.
+            </div>
+            
+            <div x-show="audioCapture.equalizer.enabled" x-cloak>
+                <!-- Existing filters -->
+                <template x-for="(filter, index) in audioCapture.equalizer.filters" :key="index">
+                    <div class="grid grid-cols-1 md:grid-cols-5 gap-6 items-end mt-2 bg-gray-50 rounded-md p-2" x-data="{ hasFilterChanges: false }">
+
+                        <div class="relative flex items-end">
+                            <input type="hidden" :name="'realtime.audio.equalizer.filters['+index+'].type'" :value="filter.type">
+                            <button type="button" class="btn btn-sm w-full bg-slate-300 pointer-events-none select-none">
+                                <span class="font-medium" x-text="filter.type + ' Filter'"></span>
+                            </button>
+                        </div>
+
+                        <!-- Existing Audio Filter Parameters -->
+                        <template x-for="param in getEqFilterParameters(filter.type)" :key="param.Name">
+                            <div class="flex flex-col items-end">
+                                <label class="label pt-0">
+                                    <span class="label-text-alt" x-text="param.Label + (param.Unit ? ' (' + param.Unit + ')' : '')"></span>
+                                    <span class="ml-2 text-sm text-gray-500 cursor-help"
+                                          @mouseenter="showTooltip = param.Tooltip"
+                                          @mouseleave="showTooltip = null">ⓘ</span>
+                                </label>
+                                <!-- Select for Attenuation -->
+                                <template x-if="param.Label === 'Attenuation'">
+                                    <select x-model.number="filter[param.Name.toLowerCase()]"
+                                            :name="'realtime.audio.equalizer.filters['+index+'].'+param.Name.toLowerCase()"
+                                            class="select select-bordered select-sm w-full"
+                                            @change="hasFilterChanges = true">
+                                        <option value="0">0dB</option>
+                                        <option value="1">12dB</option>
+                                        <option value="2">24dB</option>
+                                        <option value="3">36dB</option>
+                                        <option value="4">48dB</option>
+                                    </select>
+                                </template>
+                                <!-- Input for other parameters -->
+                                <template x-if="param.Label !== 'Attenuation'">
+                                    <input x-model.number="filter[param.Name.toLowerCase()]"
+                                           :name="'realtime.audio.equalizer.filters['+index+'].'+param.Name.toLowerCase()"
+                                           :type="param.Type === 'float' ? 'number' : param.Type"
+                                           :step="param.Type === 'float' ? '0.1' : '1'"
+                                           :min="param.Min"
+                                           :max="param.Max"
+                                           class="input input-bordered input-sm w-full"
+                                           @input="hasFilterChanges = true">
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- Remove filter button -->
+                        <div class="relative flex items-end md:justify-end md:col-start-5">
+                            <button type="button" @click="removeFilter(index)" class="btn btn-error btn-sm w-full md:w-24">Remove</button>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Add new filter -->
+            
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-6 items-end mt-6">
+                    <!-- New Filter Type -->
+                    <div class="flex flex-col">
+                        <label class="label">
+                            <span class="label-text">New Filter Type</span>
+                        </label>
+                        <select x-model="newFilter.type" 
+                                @change="getFilterDefaults(newFilter.type)"
+                                class="select select-bordered select-sm w-full">
+                            <option value="">Select filter type</option>
+                            <template x-for="(config, type) in audioCapture.eqFilterConfig" :key="type">
+                                <option :value="type" x-text="type"></option>
+                            </template>
+                        </select>
+                    </div>
+                    
+                    <!-- New Audio Filter Parameters -->
+                    <template x-if="newFilter.type">
+                        <template x-for="param in getEqFilterParameters(newFilter.type)" :key="param.Name">
+                            <div class="flex flex-col">
+                                <label class="label">
+                                    <span class="label-text" x-text="param.Label + (param.Unit ? ' (' + param.Unit + ')' : '')"></span>
+                                    <span class="ml-2 text-sm text-gray-500 cursor-help"
+                                          @mouseenter="showTooltip = param.Tooltip"
+                                          @mouseleave="showTooltip = null">ⓘ</span>
+                                </label>
+                                <!-- Select for Attenuation -->
+                                <template x-if="param.Label === 'Attenuation'">
+                                    <select x-model.number="newFilter[param.Name.toLowerCase()]"
+                                            class="select select-bordered select-sm w-full">
+                                        <option value="0">0dB</option>
+                                        <option value="1">12dB</option>
+                                        <option value="2">24dB</option>
+                                        <option value="3">36dB</option>
+                                        <option value="4">48dB</option>
+                                    </select>
+                                </template>
+                                <!-- Input for other parameters -->
+                                <template x-if="param.Name !== 'Passes'">
+                                    <input x-model.number="newFilter[param.Name.toLowerCase()]"
+                                           :type="param.Type === 'float' ? 'number' : param.Type"
+                                           :step="param.Type === 'float' ? '0.1' : '1'"
+                                           :min="param.Min"
+                                           :max="param.Max"
+                                           class="input input-bordered input-sm w-full">
+                                </template>
+                            </div>
+                        </template>
+                    </template>
+                
+                    <!-- Add new filter button -->
+                    <div class="flex flex-col">
+                        <label class="label">
+                            <span class="label-text">&nbsp;</span>
+                        </label>
+                        <button type="button" @click="addNewFilter" class="btn btn-primary btn-sm w-24" x-bind:disabled="!newFilter.type">
+                            Add Filter
+                        </button>
+                    </div>
+                    
+                </div>
+
+            </div>
+        </div>
+        <!-- Audio Filters end -->
 
     </div>
 </div>

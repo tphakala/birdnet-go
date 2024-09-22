@@ -270,9 +270,20 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 	}
 	deviceConfig.Capture.DeviceID = captureSource.Pointer
 
-	// Write to ringbuffer when audio data is received
-	// BufferMonitor() will poll this buffer and read data from it
+	// Initialize the filter chain
+	if err := InitializeFilterChain(settings); err != nil {
+		log.Printf("Error initializing filter chain: %v", err)
+	}
+
 	onReceiveFrames := func(pSample2, pSamples []byte, framecount uint32) {
+		// Apply audio EQ filters if enabled
+		if settings.Realtime.Audio.Equalizer.Enabled {
+			err := ApplyFilters(pSamples)
+			if err != nil {
+				log.Printf("Error applying audio EQ filters: %v", err)
+			}
+		}
+
 		WriteToAnalysisBuffer("malgo", pSamples)
 		WriteToCaptureBuffer("malgo", pSamples)
 
