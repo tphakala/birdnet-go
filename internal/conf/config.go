@@ -34,7 +34,7 @@ type AudioSettings struct {
 	Source        string   // audio source to use for analysis
 	FfmpegPath    string   // path to ffmpeg, runtime value
 	SoxPath       string   // path to sox, runtime value
-	SoxAudioTypes []string // supported audio types of sox, runtime value
+	SoxAudioTypes []string `yaml:"-"` // supported audio types of sox, runtime value
 	Export        struct {
 		Debug     bool   // true to enable audio export debug
 		Enabled   bool   // export audio clips containing indentified bird calls
@@ -135,29 +135,29 @@ type RealtimeSettings struct {
 	RTSP          RTSPSettings          // RTSP settings
 	MQTT          MQTTSettings          // MQTT settings
 	Telemetry     TelemetrySettings     // Telemetry settings
-	Species       SpeciesSettings       // Custom thresholds and actions for species
+	Species       SpeciesSettings       `yaml:"-"` // Custom thresholds and actions for species
 }
 
 // RangeFilterSettings contains settings for the range filter
 type RangeFilterSettings struct {
 	Model       string    // range filter model model
 	Threshold   float32   // rangefilter species occurrence threshold
-	Species     []string  // included species list
-	LastUpdated time.Time // last time the species list was updated
+	Species     []string  `yaml:"-"` // list of included species, runtime value
+	LastUpdated time.Time `yaml:"-"` // last time the species list was updated, runtime value
 }
 
 // SpeciesSettings holds custom thresholds and action configurations for species.
 type SpeciesSettings struct {
-	Threshold map[string]float32             // Custom confidence thresholds for species
-	Actions   map[string]SpeciesActionConfig // Actions configurations for species
+	Threshold map[string]float32             `yaml:"-"` // Custom confidence thresholds for species
+	Actions   map[string]SpeciesActionConfig `yaml:"-"` // Actions configurations for species
 }
 
 // SpeciesActionConfig represents the configuration for actions specific to a species.
 type SpeciesActionConfig struct {
-	SpeciesName string         // Name of the species
-	Actions     []ActionConfig // Configurations for actions associated with this species
-	Exclude     []string       // List of actions to exclude
-	OnlyActions bool           // Flag to indicate if only these actions should be executed
+	SpeciesName string         `yaml:"-"` // Name of the species
+	Actions     []ActionConfig `yaml:"-"` // Configurations for actions associated with this species
+	Exclude     []string       `yaml:"-"` // List of actions to exclude
+	OnlyActions bool           `yaml:"-"` // Flag to indicate if only these actions should be executed
 }
 
 // ActionConfig holds configuration details for a specific action.
@@ -206,9 +206,9 @@ type Settings struct {
 
 	Output struct {
 		File struct {
-			Enabled bool   // true to enable file output
-			Path    string // directory to output results
-			Type    string // table, csv
+			Enabled bool   `yaml:"-"` // true to enable file output
+			Path    string `yaml:"-"` // directory to output results
+			Type    string `yaml:"-"` // table, csv
 		}
 
 		SQLite struct {
