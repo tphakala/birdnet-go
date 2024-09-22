@@ -3566,10 +3566,6 @@ html:has(.drawer-toggle:checked) {
   margin-left: 0.5rem;
 }
 
-.ml-4 {
-  margin-left: 1rem;
-}
-
 .ml-8 {
   margin-left: 2rem;
 }
@@ -3672,10 +3668,6 @@ html:has(.drawer-toggle:checked) {
 
 .w-24 {
   width: 6rem;
-}
-
-.w-36 {
-  width: 9rem;
 }
 
 .w-4 {
@@ -3932,6 +3924,10 @@ html:has(.drawer-toggle:checked) {
   stroke: currentColor;
 }
 
+.p-0 {
+  padding: 0px;
+}
+
 .p-1 {
   padding: 0.25rem;
 }
@@ -4002,11 +3998,6 @@ html:has(.drawer-toggle:checked) {
   padding-bottom: 0.5rem;
 }
 
-.py-4 {
-  padding-top: 1rem;
-  padding-bottom: 1rem;
-}
-
 .pb-2 {
   padding-bottom: 0.5rem;
 }
@@ -4058,6 +4049,11 @@ html:has(.drawer-toggle:checked) {
   line-height: 1;
 }
 
+.text-base {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
 .text-lg {
   font-size: 1.125rem;
   line-height: 1.75rem;
@@ -4104,10 +4100,6 @@ html:has(.drawer-toggle:checked) {
 
 .leading-5 {
   line-height: 1.25rem;
-}
-
-.leading-7 {
-  line-height: 1.75rem;
 }
 
 .text-base-content\/50 {
@@ -4345,13 +4337,6 @@ html:has(.drawer-toggle:checked) {
   visibility: visible;
 }
 
-@media (min-width: 400px) {
-  .xs\:text-base {
-    font-size: 1rem;
-    line-height: 1.5rem;
-  }
-}
-
 @media (min-width: 640px) {
   .sm\:table {
     display: table;
@@ -4365,6 +4350,10 @@ html:has(.drawer-toggle:checked) {
     height: 1.5rem;
   }
 
+  .sm\:w-36 {
+    width: 9rem;
+  }
+
   .sm\:w-6 {
     width: 1.5rem;
   }
@@ -4373,8 +4362,21 @@ html:has(.drawer-toggle:checked) {
     gap: 1rem;
   }
 
+  .sm\:p-1 {
+    padding: 0.25rem;
+  }
+
   .sm\:p-2 {
     padding: 0.5rem;
+  }
+
+  .sm\:p-4 {
+    padding: 1rem;
+  }
+
+  .sm\:px-4 {
+    padding-left: 1rem;
+    padding-right: 1rem;
   }
 
   .sm\:pl-4 {
@@ -4387,6 +4389,10 @@ html:has(.drawer-toggle:checked) {
 
   .sm\:pr-3 {
     padding-right: 0.75rem;
+  }
+
+  .sm\:pt-3 {
+    padding-top: 0.75rem;
   }
 
   .sm\:text-xl {
@@ -4438,11 +4444,6 @@ html:has(.drawer-toggle:checked) {
 
   .md\:justify-end {
     justify-content: flex-end;
-  }
-
-  .md\:text-xl {
-    font-size: 1.25rem;
-    line-height: 1.75rem;
   }
 }
 
@@ -4496,11 +4497,6 @@ html:has(.drawer-toggle:checked) {
   .lg\:text-4xl {
     font-size: 2.25rem;
     line-height: 2.5rem;
-  }
-
-  .lg\:text-xl {
-    font-size: 1.25rem;
-    line-height: 1.75rem;
   }
 }
 
