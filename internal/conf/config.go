@@ -19,13 +19,20 @@ import (
 //go:embed config.yaml
 var configFiles embed.FS
 
-// Dashboard contains settings for the web dashboard.
-type Dashboard struct {
-	Thumbnails struct {
-		Summary bool // show thumbnails on summary table
-		Recent  bool // show thumbnails on recent table
-	}
-	SummaryLimit int // limit for the number of species shown in the summary table
+// EqualizerFilter is a struct for equalizer filter settings
+type EqualizerFilter struct {
+	Type      string // e.g., "LowPass", "HighPass", "BandPass", etc.
+	Frequency float64
+	Q         float64
+	Gain      float64 // Only used for certain filter types like Peaking
+	Width     float64 // Only used for certain filter types like BandPass and BandReject
+	Passes    int     // Filter passes for added attenuation or gain
+}
+
+// EqualizerSettings is a struct for audio EQ settings
+type EqualizerSettings struct {
+	Enabled bool              // global flag to enable/disable equalizer filters
+	Filters []EqualizerFilter // equalizer filter configuration
 }
 
 // AudioSettings contains settings for audio processing and export.
@@ -48,6 +55,16 @@ type AudioSettings struct {
 			MinClips int    // minimum number of clips per species to keep
 		}
 	}
+	Equalizer EqualizerSettings // equalizer settings
+}
+
+// Dashboard contains settings for the web dashboard.
+type Dashboard struct {
+	Thumbnails struct {
+		Summary bool // show thumbnails on summary table
+		Recent  bool // show thumbnails on recent table
+	}
+	SummaryLimit int // limit for the number of species shown in the summary table
 }
 
 // DynamicThresholdSettings contains settings for dynamic threshold adjustment.

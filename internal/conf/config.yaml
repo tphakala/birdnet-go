@@ -33,6 +33,15 @@ realtime:
   
   audio:
     source: "sysdefault"  # audio source to use for analysis
+    equalizer:
+      enabled: false
+      filters:
+        - type: HighPass
+          frequency: 100
+          passes: 0 
+        - type: LowPass
+          frequency: 15000
+          passes: 0 
     export:
       enabled: true       # true to export audio clips containing indentified bird calls
       debug: false        # true to enable audio export debug messages
@@ -44,6 +53,7 @@ realtime:
         maxage: 30d       # age policy: maximum age of clips to keep before starting evictions
         maxusage: 80%     # usage policy: percentage of disk usage to trigger eviction        
         minclips: 10      # minumum number of clips per species to keep before starting evictions
+
 
   dashboard:
     thumbnails:

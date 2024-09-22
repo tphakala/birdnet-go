@@ -123,8 +123,10 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 
 	// Prepare the data for the template
 	data := map[string]interface{}{
-		"Settings": s.Settings,
-		"Locales":  s.prepareLocalesData(),
+		"Settings":       s.Settings,             // Application settings
+		"Locales":        s.prepareLocalesData(), // Prepare locales data for the UI
+		"EqFilterConfig": conf.EqFilterConfig,    // Equalizer filter configuration for the UI
+		"TemplateName":   templateName,
 	}
 
 	// Add prepared species data for specific settings pages
