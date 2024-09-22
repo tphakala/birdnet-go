@@ -1,5 +1,8 @@
 {{define "integrationsSettings"}}
 
+<!-- Hidden input to always submit the template name -->
+<input type="hidden" name="templateName" value="{{.TemplateName}}">
+
 <!-- BirdWeather Settings start -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3"
 x-data="{ 
