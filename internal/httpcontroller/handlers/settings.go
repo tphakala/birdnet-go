@@ -69,6 +69,7 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		Type:    "success",
 	})
 
+	// Save settings to YAML file
 	if err := conf.SaveSettings(); err != nil {
 		// Send error notification if saving settings fails
 		h.SSE.SendNotification(Notification{
