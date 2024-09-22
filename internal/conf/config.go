@@ -162,8 +162,14 @@ type SpeciesActionConfig struct {
 
 // ActionConfig holds configuration details for a specific action.
 type ActionConfig struct {
-	Type       string   // Type of the action (e.g. ExecuteScript which is only type for now)
-	Parameters []string // List of parameters for the action
+	Type       string   `yaml:"-"` // Type of the action (e.g. ExecuteScript which is only type for now)
+	Parameters []string `yaml:"-"` // List of parameters for the action
+}
+
+// InputConfig holds settings for file or directory analysis
+type InputConfig struct {
+	Path      string `yaml:"-"` // path to input file or directory
+	Recursive bool   `yaml:"-"` // true for recursive directory analysis
 }
 
 // Settings contains all configuration options for the BirdNET-Go application.
@@ -187,10 +193,7 @@ type Settings struct {
 		RangeFilter RangeFilterSettings // range filter settings
 	}
 
-	Input struct {
-		Path      string // path to input file or directory
-		Recursive bool   // true for recursive directory analysis
-	}
+	Input InputConfig `yaml:"-"` // Input configuration for file and directory analysis
 
 	Realtime RealtimeSettings // Realtime processing settings
 
