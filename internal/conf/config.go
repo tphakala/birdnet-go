@@ -3,18 +3,17 @@ package conf
 
 import (
 	"embed"
-	"encoding/csv"
 	"errors"
 	"fmt"
 	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 //go:embed config.yaml
@@ -374,14 +373,9 @@ func SaveSettings() error {
 		return fmt.Errorf("error finding config file: %w", err)
 	}
 
-	// Use UpdateYAMLConfig to write the new settings
-	if err := UpdateYAMLConfig(configPath, &settingsCopy); err != nil {
-		return fmt.Errorf("error updating config: %w", err)
-	}
-
-	// Save the dog bark filter species list to a CSV file
-	if err := settingsCopy.SaveDogBarkFilter(); err != nil {
-		return fmt.Errorf("error saving dog bark filter: %w", err)
+	// Save the settings to the config file
+	if err := SaveYAMLConfig(configPath, &settingsCopy); err != nil {
+		return fmt.Errorf("error saving config: %w", err)
 	}
 
 	log.Printf("Settings saved successfully to %s", configPath)
@@ -401,92 +395,35 @@ func Setting() *Settings {
 	return GetSettings()
 }
 
-// SaveCSVList saves a list of strings to a CSV file
-func SaveCSVList(fileName string, list []string) error {
-	// Retrieve the default config paths
-	configPaths, err := GetDefaultConfigPaths()
+// SaveYAMLConfig updates the YAML configuration file with new settings.
+// It overwrites the existing file, not preserving comments or structure.
+func SaveYAMLConfig(configPath string, settings *Settings) error {
+	// Marshal the settings struct to YAML
+	yamlData, err := yaml.Marshal(settings)
 	if err != nil {
-		return err
+		return fmt.Errorf("error marshaling settings to YAML: %w", err)
 	}
 
-	// Use the first config path to save the file
-	fullPath := filepath.Join(configPaths[0], fileName)
-
-	// Create the file
-	file, err := os.Create(fullPath)
+	// Write the YAML data to a temporary file
+	tempFile, err := os.CreateTemp(os.TempDir(), "config-*.yaml")
 	if err != nil {
-		return fmt.Errorf("error creating file: %w", err)
+		return fmt.Errorf("error creating temporary file: %w", err)
 	}
-	defer file.Close()
+	tempFileName := tempFile.Name()
+	defer os.Remove(tempFileName) // Clean up the temp file in case of failure
 
-	// Create a CSV writer
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
+	if _, err := tempFile.Write(yamlData); err != nil {
+		tempFile.Close()
+		return fmt.Errorf("error writing to temporary file: %w", err)
+	}
+	if err := tempFile.Close(); err != nil {
+		return fmt.Errorf("error closing temporary file: %w", err)
+	}
 
-	// Write each item in the list as a separate row
-	for _, item := range list {
-		if err := writer.Write([]string{item}); err != nil {
-			return fmt.Errorf("error writing to CSV: %w", err)
-		}
+	// Rename the temporary file to replace the original config file
+	if err := os.Rename(tempFileName, configPath); err != nil {
+		return fmt.Errorf("error replacing config file: %w", err)
 	}
 
 	return nil
-}
-
-// LoadDogBarkFilterConfig reads the dog bark filter configuration from a CSV file.
-func (s *Settings) LoadDogBarkFilter(fileName string) error {
-	var Species []string
-
-	// Init the species list
-	s.Realtime.DogBarkFilter.Species = []string{}
-
-	// Retrieve the default config paths from your application settings.
-	configPaths, err := GetDefaultConfigPaths()
-	if err != nil {
-		return err
-	}
-
-	var file *os.File
-	// Attempt to open the file from one of the default config paths.
-	for _, path := range configPaths {
-		fullPath := filepath.Join(path, fileName)
-		file, err = os.Open(fullPath)
-		if err == nil {
-			break
-		}
-	}
-
-	if file == nil {
-		// if file is not found just return empty config and error
-		return fmt.Errorf("file '%s' not found in default config paths", fileName)
-	}
-	defer file.Close()
-
-	reader := csv.NewReader(file)
-	// Assuming no header and one species per line.
-	records, err := reader.ReadAll()
-	if err != nil {
-		return err
-	}
-
-	// Iterate over the records and add them to the species list.
-	for _, record := range records {
-		if len(record) == 0 {
-			continue // Skip empty lines
-		}
-		// Assuming the species name is the only entry in each record.
-		species := strings.ToLower(strings.TrimSpace(record[0]))
-		log.Printf("Adding species '%s' to dog bark filter", species)
-		Species = append(Species, species)
-	}
-	log.Println("Dog bark filter config loaded")
-
-	s.Realtime.DogBarkFilter.Species = Species
-
-	return nil
-}
-
-// SaveDogBarkFilter saves the dog bark filter species list to a CSV file
-func (s *Settings) SaveDogBarkFilter() error {
-	return SaveCSVList(DogBarkFilterCSV, s.Realtime.DogBarkFilter.Species)
 }

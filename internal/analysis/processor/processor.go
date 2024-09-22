@@ -102,11 +102,6 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	// Load Species configs
 	p.Settings.Realtime.Species, _ = LoadSpeciesConfig(conf.SpeciesConfigCSV)
 
-	// Load configurations
-	if err := p.Settings.LoadDogBarkFilter(conf.DogBarkFilterCSV); err != nil {
-		log.Printf("Error loading dog bark filter: %v", err)
-	}
-
 	// Initialize BirdWeather client if enabled in settings
 	if settings.Realtime.Birdweather.Enabled {
 		var err error
