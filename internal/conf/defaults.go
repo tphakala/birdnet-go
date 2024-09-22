@@ -45,6 +45,23 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.export.type", "wav")
 	viper.SetDefault("realtime.audio.export.bitrate", "128k")
 
+	// Audio equalizer configuration
+	viper.SetDefault("realtime.audio.equalizer.enabled", false)
+	viper.SetDefault("realtime.audio.equalizer.filters", []map[string]interface{}{
+		{
+			"type":      "HighPass",
+			"frequency": 100,
+			"q":         0.7,
+			"passes":    0,
+		},
+		{
+			"type":      "LowPass",
+			"frequency": 15000,
+			"q":         0.7,
+			"passes":    0,
+		},
+	})
+
 	// Dashboard thumbnails configuration
 	viper.SetDefault("realtime.dashboard.thumbnails.summary", false)
 	viper.SetDefault("realtime.dashboard.thumbnails.recent", true)
@@ -106,6 +123,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dogbarkfilter.debug", false)
 	viper.SetDefault("realtime.dogbarkfilter.remember", 5)
 	viper.SetDefault("realtime.dogbarkfilter.confidence", 0.1)
+	viper.SetDefault("realtime.dogbarkfilter.species", []string{})
 
 	// Telemetry configuration
 	viper.SetDefault("realtime.telemetry.enabled", false)
