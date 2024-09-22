@@ -14,9 +14,20 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
+// fieldsToSkip is a map of fields that should not be updated from the form
+// most of these are runtime settings that are dynamically generated
+// some are file analysis settings which do not apply to realtime analysis
 var fieldsToSkip = map[string]bool{
 	"birdnet.rangefilter.species":     true,
 	"birdnet.rangefilter.lastupdated": true,
+	"audio.soxaudiotypes":             true,
+	"input.path":                      true,
+	"input.recursive":                 true,
+	"output.file.enabled":             true,
+	"output.file.path":                true,
+	"output.file.type":                true,
+	"realtime.species.threshold":      true,
+	"realtime.species.actions":        true,
 }
 
 // GetAudioDevices handles the request to list available audio devices
