@@ -124,12 +124,14 @@ x-init="
             </label>
             <!--<input type="text" id="audioSource" name="realtime.audio.source" x-model="audioCapture.source" class="input input-bordered input-sm w-full" :disabled="audioCapture.rtsp.urls.length > 0">-->
             <select x-model="audioCapture.source"
-                    name="realtime.audio.source"
-                    class="select select-bordered select-sm w-full"
-                    :disabled="audioCapture.rtsp.urls.length > 0">
+            name="realtime.audio.source"
+            class="select select-bordered select-sm w-full"
+            :disabled="audioCapture.rtsp.urls.length > 0">
                 <option value="">Select an audio source</option>
                 <template x-for="device in audioDevices" :key="device.Index">
-                    <option :value="device.Name" x-text="device.Name"></option>
+                    <option :value="device.Name" 
+                            :selected="device.Name === audioCapture.source" 
+                            x-text="device.Name"></option>
                 </template>
             </select>
             <div x-show="showTooltip === 'audioSource'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
