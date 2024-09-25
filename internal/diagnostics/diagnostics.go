@@ -41,13 +41,14 @@ func CollectDiagnostics() (string, error) {
 
 	// Compress the diagnostics files
 	zipFile := tmpDir + ".zip"
-	err = zipDirectory(tmpDir, zipFile)
-	if err != nil {
+	if err := zipDirectory(tmpDir, zipFile); err != nil {
 		return "", fmt.Errorf("failed to compress diagnostics: %w", err)
 	}
 
 	// Clean up the temporary directory
-	os.RemoveAll(tmpDir)
+	if err := os.RemoveAll(tmpDir); err != nil {
+		return "", fmt.Errorf("failed to clean up temporary directory: %w", err)
+	}
 
 	return zipFile, nil
 }
@@ -55,25 +56,37 @@ func CollectDiagnostics() (string, error) {
 func collectLinuxDiagnostics(tmpDir string) error {
 	// Check if system is systemd-based with journald
 	if hasSystemd() {
-		collectJournaldLogs(tmpDir)
+		if err := collectJournaldLogs(tmpDir); err != nil {
+			fmt.Printf("Warning: Failed to collect journald logs: %v\n", err)
+		}
 	}
 
 	// Collect hardware details
-	runCommand("lshw", []string{"-short"}, filepath.Join(tmpDir, "hardware_info.txt"))
+	if err := runCommand("lshw", []string{"-short"}, filepath.Join(tmpDir, "hardware_info.txt")); err != nil {
+		fmt.Printf("Warning: Failed to collect hardware info: %v\n", err)
+	}
 
 	// Check for Raspberry Pi
 	if isRaspberryPi() {
-		runCommand("cat", []string{"/proc/cpuinfo"}, filepath.Join(tmpDir, "raspberry_pi_info.txt"))
+		if err := runCommand("cat", []string{"/proc/cpuinfo"}, filepath.Join(tmpDir, "raspberry_pi_info.txt")); err != nil {
+			fmt.Printf("Warning: Failed to collect Raspberry Pi info: %v\n", err)
+		}
 	}
 
 	// Collect package list
-	collectPackageList(tmpDir)
+	if err := collectPackageList(tmpDir); err != nil {
+		fmt.Printf("Warning: Failed to collect package list: %v\n", err)
+	}
 
 	// Collect sound devices
-	collectSoundDevices(tmpDir)
+	if err := collectSoundDevices(tmpDir); err != nil {
+		fmt.Printf("Warning: Failed to collect sound devices info: %v\n", err)
+	}
 
 	// Collect resource information
-	collectResourceInfo(tmpDir)
+	if err := collectResourceInfo(tmpDir); err != nil {
+		fmt.Printf("Warning: Failed to collect resource info: %v\n", err)
+	}
 
 	// Collect config file
 	if err := collectConfigFile(tmpDir); err != nil {
@@ -100,9 +113,9 @@ func hasSystemd() bool {
 	return err == nil
 }
 
-func collectJournaldLogs(tmpDir string) {
+func collectJournaldLogs(tmpDir string) error {
 	sevenDaysAgo := time.Now().AddDate(0, 0, -7).Format("2006-01-02 15:04:05")
-	runCommand("journalctl", []string{"-u", "birdnet-go", "--since", sevenDaysAgo}, filepath.Join(tmpDir, "birdnet-go_logs.txt"))
+	return runCommand("journalctl", []string{"-u", "birdnet-go", "--since", sevenDaysAgo}, filepath.Join(tmpDir, "birdnet-go_logs.txt"))
 }
 
 func isRaspberryPi() bool {
@@ -113,29 +126,55 @@ func isRaspberryPi() bool {
 	return strings.Contains(string(content), "Raspberry Pi")
 }
 
-func collectPackageList(tmpDir string) {
+func collectPackageList(tmpDir string) error {
 	if _, err := exec.LookPath("dpkg"); err == nil {
-		runCommand("dpkg", []string{"-l"}, filepath.Join(tmpDir, "package_list_dpkg.txt"))
+		return runCommand("dpkg", []string{"-l"}, filepath.Join(tmpDir, "package_list_dpkg.txt"))
 	} else if _, err := exec.LookPath("rpm"); err == nil {
-		runCommand("rpm", []string{"-qa"}, filepath.Join(tmpDir, "package_list_rpm.txt"))
+		return runCommand("rpm", []string{"-qa"}, filepath.Join(tmpDir, "package_list_rpm.txt"))
 	} else {
 		// Fallback to a generic package list method
-		runCommand("ls", []string{"/var/lib/dpkg/info/*.list"}, filepath.Join(tmpDir, "package_list_generic.txt"))
+		return runCommand("ls", []string{"/var/lib/dpkg/info/*.list"}, filepath.Join(tmpDir, "package_list_generic.txt"))
 	}
 }
 
-func collectSoundDevices(tmpDir string) {
-	runCommand("aplay", []string{"-l"}, filepath.Join(tmpDir, "alsa_devices.txt"))
-	runCommand("pactl", []string{"list"}, filepath.Join(tmpDir, "pulseaudio_info.txt"))
-	runCommand("pw-cli", []string{"list-objects"}, filepath.Join(tmpDir, "pipewire_info.txt"))
-	runCommand("lsusb", []string{}, filepath.Join(tmpDir, "usb_devices.txt"))
+func collectSoundDevices(tmpDir string) error {
+	commands := []struct {
+		cmd  string
+		args []string
+		out  string
+	}{
+		{"aplay", []string{"-l"}, "alsa_devices.txt"},
+		{"pactl", []string{"list"}, "pulseaudio_info.txt"},
+		{"pw-cli", []string{"list-objects"}, "pipewire_info.txt"},
+		{"lsusb", []string{}, "usb_devices.txt"},
+	}
+
+	for _, c := range commands {
+		if err := runCommand(c.cmd, c.args, filepath.Join(tmpDir, c.out)); err != nil {
+			fmt.Printf("Warning: Failed to collect %s: %v\n", c.out, err)
+		}
+	}
+	return nil
 }
 
-func collectResourceInfo(tmpDir string) {
-	runCommand("free", []string{"-h"}, filepath.Join(tmpDir, "memory_info.txt"))
-	runCommand("df", []string{"-h"}, filepath.Join(tmpDir, "disk_space.txt"))
-	runCommand("lsblk", []string{}, filepath.Join(tmpDir, "block_devices.txt"))
-	runCommand("top", []string{"-bn1"}, filepath.Join(tmpDir, "cpu_info.txt"))
+func collectResourceInfo(tmpDir string) error {
+	commands := []struct {
+		cmd  string
+		args []string
+		out  string
+	}{
+		{"free", []string{"-h"}, "memory_info.txt"},
+		{"df", []string{"-h"}, "disk_space.txt"},
+		{"lsblk", []string{}, "block_devices.txt"},
+		{"top", []string{"-bn1"}, "cpu_info.txt"},
+	}
+
+	for _, c := range commands {
+		if err := runCommand(c.cmd, c.args, filepath.Join(tmpDir, c.out)); err != nil {
+			fmt.Printf("Warning: Failed to collect %s: %v\n", c.out, err)
+		}
+	}
+	return nil
 }
 
 func runCommand(command string, args []string, outputFile string) error {
