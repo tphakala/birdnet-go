@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/cmd/license"
 	"github.com/tphakala/birdnet-go/cmd/rangefilter"
 	"github.com/tphakala/birdnet-go/cmd/realtime"
+	"github.com/tphakala/birdnet-go/cmd/support"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -37,6 +38,7 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 	authorsCmd := authors.Command()
 	licenseCmd := license.Command()
 	rangeCmd := rangefilter.Command(settings)
+	supportCmd := support.Command(settings)
 
 	subcommands := []*cobra.Command{
 		fileCmd,
@@ -45,6 +47,7 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 		authorsCmd,
 		licenseCmd,
 		rangeCmd,
+		supportCmd,
 	}
 
 	rootCmd.AddCommand(subcommands...)
