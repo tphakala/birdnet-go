@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -104,39 +105,48 @@ func GetBasePath(path string) string {
 
 // PrintUserInfo checks the operating system. If it's Linux, it prints the current user and their group memberships.
 func PrintUserInfo() {
+	// Initialize a flag to check if the user is a member of the audio group
 	var audioMember bool = false
-	// Get current user
+
+	// Check if the operating system is Linux
 	if runtime.GOOS == "linux" {
+		// Get current user information
 		currentUser, err := user.Current()
 		if err != nil {
 			fmt.Printf("Failed to get current user: %v\n", err)
 			return
 		}
 
-		// if current user is root, return as it has all permissions anyway
+		// If current user is root, return as it has all permissions anyway
 		if currentUser.Username == "root" {
 			return
 		}
 
-		// Get group memberships
+		// Get group memberships for the current user
 		groupIDs, err := currentUser.GroupIds()
 		if err != nil {
 			log.Printf("Failed to get group memberships: %v\n", err)
 			return
 		}
 
+		// Iterate through each group ID
 		for _, gid := range groupIDs {
+			// Look up the group information for each group ID
 			group, err := user.LookupGroupId(gid)
 			if err != nil {
 				log.Printf("Failed to lookup group for ID %s: %v\n", gid, err)
 				continue
 			}
+			// Uncomment the following line to print group information
 			//fmt.Printf(" - %s (ID: %s)\n", group.Name, group.Gid)
-			// check if audio is one of groups
+
+			// Check if the user is a member of the 'audio' group
 			if group.Name == "audio" {
 				audioMember = true
 			}
 		}
+
+		// If the user is not a member of the 'audio' group, print an error message
 		if !audioMember {
 			log.Printf("ERROR: User '%s' is not member of audio group, add user to audio group by executing", currentUser.Username)
 			log.Println("sudo usermod -a -G audio", currentUser.Username)
@@ -346,4 +356,40 @@ func IsSoxAvailable() (bool, []string) {
 	}
 
 	return true, audioFormats // SoX is available, return the list of supported formats
+}
+
+// moveFile moves a file from src to dst, working across devices
+func moveFile(src, dst string) error {
+	// Try to rename the file first (this works for moves within the same filesystem)
+	if err := os.Rename(src, dst); err == nil {
+		return nil // If rename succeeds, we're done
+	}
+
+	// If rename fails, fall back to copy and delete method
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("error opening source file: %w", err)
+	}
+	defer srcFile.Close() // Ensure the source file is closed when we're done
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("error creating destination file: %w", err)
+	}
+	defer dstFile.Close() // Ensure the destination file is closed when we're done
+
+	// Copy the contents from source to destination
+	_, err = io.Copy(dstFile, srcFile)
+	if err != nil {
+		return fmt.Errorf("error copying file contents: %w", err)
+	}
+
+	// After successful copy, delete the source file
+	if err := os.Remove(src); err != nil {
+		// If we can't remove the source, we should inform the caller
+		// The move was partially successful (the copy succeeded)
+		return fmt.Errorf("error removing source file after copy: %w", err)
+	}
+
+	return nil // Move completed successfully
 }
