@@ -151,7 +151,7 @@ type RealtimeSettings struct {
 	RTSP          RTSPSettings          // RTSP settings
 	MQTT          MQTTSettings          // MQTT settings
 	Telemetry     TelemetrySettings     // Telemetry settings
-	Species       SpeciesSettings       `yaml:"-"` // Custom thresholds and actions for species
+	Species       SpeciesSettings       // Custom thresholds and actions for species
 }
 
 // RangeFilterSettings contains settings for the range filter
@@ -166,6 +166,8 @@ type RangeFilterSettings struct {
 type SpeciesSettings struct {
 	Threshold map[string]float32             `yaml:"-"` // Custom confidence thresholds for species
 	Actions   map[string]SpeciesActionConfig `yaml:"-"` // Actions configurations for species
+	Include   []string                       // List of species to always include
+	Exclude   []string                       // List of species to always exclude
 }
 
 // SpeciesActionConfig represents the configuration for actions specific to a species.
@@ -422,25 +424,35 @@ func SaveYAMLConfig(configPath string, settings *Settings) error {
 	}
 
 	// Write the YAML data to a temporary file
-	tempFile, err := os.CreateTemp(os.TempDir(), "config-*.yaml")
+	// This is done to ensure atomic write operation
+	tempFile, err := os.CreateTemp(filepath.Dir(configPath), "config-*.yaml")
 	if err != nil {
 		return fmt.Errorf("error creating temporary file: %w", err)
 	}
 	tempFileName := tempFile.Name()
-	defer os.Remove(tempFileName) // Clean up the temp file in case of failure
+	// Ensure the temporary file is removed in case of any failure
+	defer os.Remove(tempFileName)
 
+	// Write the YAML data to the temporary file
 	if _, err := tempFile.Write(yamlData); err != nil {
 		tempFile.Close()
 		return fmt.Errorf("error writing to temporary file: %w", err)
 	}
+	// Close the temporary file after writing
 	if err := tempFile.Close(); err != nil {
 		return fmt.Errorf("error closing temporary file: %w", err)
 	}
 
-	// Rename the temporary file to replace the original config file
+	// Try to rename the temporary file to replace the original config file
+	// This is typically an atomic operation on most filesystems
 	if err := os.Rename(tempFileName, configPath); err != nil {
-		return fmt.Errorf("error replacing config file: %w", err)
+		// If rename fails (e.g., cross-device link), fall back to copy & delete
+		// This might happen when the temp directory is on a different filesystem
+		if err := moveFile(tempFileName, configPath); err != nil {
+			return fmt.Errorf("error copying config file: %w", err)
+		}
 	}
 
+	// If we've reached this point, the operation was successful
 	return nil
 }
