@@ -138,10 +138,16 @@ func collectResourceInfo(tmpDir string) {
 	runCommand("top", []string{"-bn1"}, filepath.Join(tmpDir, "cpu_info.txt"))
 }
 
-func runCommand(command string, args []string, outputFile string) {
+func runCommand(command string, args []string, outputFile string) error {
 	cmd := exec.Command(command, args...)
-	output, _ := cmd.CombinedOutput()
-	os.WriteFile(outputFile, output, 0644)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error running command %s: %w", command, err)
+	}
+	if err := os.WriteFile(outputFile, output, 0644); err != nil {
+		return fmt.Errorf("error writing output to file %s: %w", outputFile, err)
+	}
+	return nil
 }
 
 func zipDirectory(source, target string) error {
@@ -154,7 +160,7 @@ func zipDirectory(source, target string) error {
 	archive := zip.NewWriter(zipfile)
 	defer archive.Close()
 
-	filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -194,6 +200,9 @@ func zipDirectory(source, target string) error {
 		}
 		return err
 	})
+	if err != nil {
+		return fmt.Errorf("error walking the path %s: %w", source, err)
+	}
 
 	return nil
 }
