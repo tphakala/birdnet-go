@@ -253,6 +253,9 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 		cmd.Stderr = &ffmpegOutput
 		soxCmd.Stderr = &soxOutput
 
+		// Allow other goroutines to run before starting SoX
+		runtime.Gosched()
+
 		// Start sox command
 		if err := soxCmd.Start(); err != nil {
 			log.Printf("SoX cmd: %s", soxCmd.String())
@@ -281,10 +284,16 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 			return fmt.Errorf(errMsg)
 		}
 
+		// Allow other goroutines to run before waiting for SoX to finish
+		runtime.Gosched()
+
 		// Wait for sox command to finish
 		if err := soxCmd.Wait(); err != nil {
 			return fmt.Errorf("SoX command failed: %w\nffmpeg output: %s\nsox output: %s", err, ffmpegOutput.String(), soxOutput.String())
 		}
+
+		// Allow other goroutines to run after SoX finishes
+		runtime.Gosched()
 	} else {
 		// Use SoX directly for supported formats
 		soxArgs := append([]string{audioClipPath}, getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath)...)
@@ -300,10 +309,16 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 		soxCmd.Stderr = &soxOutput
 		soxCmd.Stdout = &soxOutput
 
+		// Allow other goroutines to run before running SoX
+		runtime.Gosched()
+
 		// Run SoX command
 		if err := soxCmd.Run(); err != nil {
 			return fmt.Errorf("SoX command failed: %w\nOutput: %s", err, soxOutput.String())
 		}
+
+		// Allow other goroutines to run after SoX finishes
+		runtime.Gosched()
 	}
 
 	return nil
