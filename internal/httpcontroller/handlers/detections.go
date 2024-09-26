@@ -191,33 +191,93 @@ func (h *Handlers) DetectionDetails(c echo.Context) error {
 	return nil
 }
 
-// GetLastDetections handles requests for the latest detections.
-// It retrieves the last set of detections based on the specified count.
+// RecentDetections handles requests for the latest detections.
+// It retrieves the last set of detections based on the specified count and view type.
 func (h *Handlers) RecentDetections(c echo.Context) error {
 	numDetections := parseNumDetections(c.QueryParam("numDetections"), 10) // Default value is 10
+	//viewType := c.QueryParam("viewType")                                   // "detailed" or "aggregated"
+	viewType := "aggregated"
 
-	// Retrieve the last detections from the database
-	notes, err := h.DS.GetLastDetections(numDetections)
-	if err != nil {
-		return h.NewHandlerError(err, "Failed to fetch recent detections", http.StatusInternalServerError)
+	var data interface{}
+	var templateName string
+
+	if viewType == "aggregated" {
+		aggregatedNotes, err := h.DS.GetAggregatedRecentDetections(numDetections)
+		if err != nil {
+			return h.NewHandlerError(err, "Failed to fetch aggregated recent detections", http.StatusInternalServerError)
+		}
+
+		data = struct {
+			Notes             []datastore.AggregatedNote
+			DashboardSettings conf.Dashboard
+		}{
+			Notes:             aggregatedNotes,
+			DashboardSettings: *h.DashboardSettings,
+		}
+		templateName = "recentDetectionsAggregated"
+	} else {
+		// Use the existing detailed view
+		notes, err := h.DS.GetLastDetections(numDetections)
+		if err != nil {
+			return h.NewHandlerError(err, "Failed to fetch recent detections", http.StatusInternalServerError)
+		}
+
+		data = struct {
+			Notes             []datastore.Note
+			DashboardSettings conf.Dashboard
+		}{
+			Notes:             notes,
+			DashboardSettings: *h.DashboardSettings,
+		}
+		templateName = "recentDetections"
 	}
 
-	// Preparing data for rendering in the template
-	data := struct {
-		Notes             []datastore.Note
-		DashboardSettings conf.Dashboard
-	}{
-		Notes:             notes,
-		DashboardSettings: *h.DashboardSettings,
-	}
-
-	// render the recentDetections template with the data
-	err = c.Render(http.StatusOK, "recentDetections", data)
+	// Render the appropriate template with the data
+	err := c.Render(http.StatusOK, templateName, data)
 	if err != nil {
-		log.Printf("Failed to render recentDetections template: %v", err)
+		log.Printf("Failed to render %s template: %v", templateName, err)
 		return h.NewHandlerError(err, "Failed to render template", http.StatusInternalServerError)
 	}
 	return nil
+}
+
+// aggregateDetections combines detections of the same species into a single entry
+func aggregateDetections(notes []datastore.Note) []datastore.AggregatedNote {
+	aggregated := make(map[string]*datastore.AggregatedNote)
+
+	for _, note := range notes {
+		key := note.CommonName
+		currentDateTime := note.BeginTime.Format("2006-01-02 15:04:05")
+		if existing, found := aggregated[key]; found {
+			existing.Count++
+			existing.Confidence += note.Confidence
+			if currentDateTime > existing.LastDetected {
+				existing.LastDetected = currentDateTime
+			}
+		} else {
+			aggregated[key] = &datastore.AggregatedNote{
+				CommonName:     note.CommonName,
+				ScientificName: note.ScientificName,
+				Count:          1,
+				LastDetected:   currentDateTime,
+				Confidence:     note.Confidence,
+			}
+		}
+	}
+
+	// Convert map to slice and calculate average confidence
+	result := make([]datastore.AggregatedNote, 0, len(aggregated))
+	for _, v := range aggregated {
+		v.Confidence /= float64(v.Count) // Calculate average confidence
+		result = append(result, *v)
+	}
+
+	// Sort by LastDetected in descending order
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].LastDetected > result[j].LastDetected
+	})
+
+	return result
 }
 
 // addWeatherAndTimeOfDay adds weather and time of day information to each note
@@ -277,6 +337,11 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 
 		// Add the processed note to the result slice
 		notesWithWeather[i] = noteWithWeather
+
+		// Add a yield point here, every 10 iterations
+		if i%10 == 0 {
+			runtime.Gosched()
+		}
 	}
 
 	return notesWithWeather, nil
