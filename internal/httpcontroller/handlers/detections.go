@@ -6,7 +6,6 @@ import (
 	"math"
 	"net/http"
 	"runtime"
-	"sort"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -239,45 +238,6 @@ func (h *Handlers) RecentDetections(c echo.Context) error {
 		return h.NewHandlerError(err, "Failed to render template", http.StatusInternalServerError)
 	}
 	return nil
-}
-
-// aggregateDetections combines detections of the same species into a single entry
-func aggregateDetections(notes []datastore.Note) []datastore.AggregatedNote {
-	aggregated := make(map[string]*datastore.AggregatedNote)
-
-	for _, note := range notes {
-		key := note.CommonName
-		currentDateTime := note.BeginTime.Format("2006-01-02 15:04:05")
-		if existing, found := aggregated[key]; found {
-			existing.Count++
-			existing.Confidence += note.Confidence
-			if currentDateTime > existing.LastDetected {
-				existing.LastDetected = currentDateTime
-			}
-		} else {
-			aggregated[key] = &datastore.AggregatedNote{
-				CommonName:     note.CommonName,
-				ScientificName: note.ScientificName,
-				Count:          1,
-				LastDetected:   currentDateTime,
-				Confidence:     note.Confidence,
-			}
-		}
-	}
-
-	// Convert map to slice and calculate average confidence
-	result := make([]datastore.AggregatedNote, 0, len(aggregated))
-	for _, v := range aggregated {
-		v.Confidence /= float64(v.Count) // Calculate average confidence
-		result = append(result, *v)
-	}
-
-	// Sort by LastDetected in descending order
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].LastDetected > result[j].LastDetected
-	})
-
-	return result
 }
 
 // addWeatherAndTimeOfDay adds weather and time of day information to each note
