@@ -137,9 +137,15 @@ func collectLegacyLogs(tmpDir string) error {
 					fmt.Printf("Notice: Failed to tail %s: %v\n", file, err)
 					continue
 				}
-				f.WriteString(fmt.Sprintf("=== %s ===\n", file))
-				f.Write(tailOutput)
-				f.WriteString("\n\n")
+				if _, err := f.WriteString(fmt.Sprintf("=== %s ===\n", file)); err != nil {
+					return fmt.Errorf("failed to write file header: %w", err)
+				}
+				if _, err := f.Write(tailOutput); err != nil {
+					return fmt.Errorf("failed to write tail output: %w", err)
+				}
+				if _, err := f.WriteString("\n\n"); err != nil {
+					return fmt.Errorf("failed to write file footer: %w", err)
+				}
 			}
 		}
 	}
