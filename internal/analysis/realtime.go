@@ -102,7 +102,9 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		//log.Println("No RTSP sources configured, using malgo for audio capture")
 		sources = []string{"malgo"}
 	}
-	myaudio.InitRingBuffers(bufferSize*2, sources)
+
+	// Initialize ring buffers for each audio source
+	myaudio.InitRingBuffers(bufferSize*3, sources) // 3x buffer size to avoid underruns
 
 	// Audio buffer for extended audio clip capture
 	myaudio.InitAudioBuffers(60, conf.SampleRate, conf.BitDepth/8, sources)
