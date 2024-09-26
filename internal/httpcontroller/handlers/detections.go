@@ -5,6 +5,8 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"runtime"
+	"sort"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -74,6 +76,9 @@ func (h *Handlers) Detections(c echo.Context) error {
 		return h.NewHandlerError(fmt.Errorf("invalid query type"), "Invalid query type specified", http.StatusBadRequest)
 	}
 
+	// Yield CPU to other goroutines
+	runtime.Gosched()
+
 	if err != nil {
 		return h.NewHandlerError(err, "Failed to get detections", http.StatusInternalServerError)
 	}
@@ -86,6 +91,9 @@ func (h *Handlers) Detections(c echo.Context) error {
 	if err != nil {
 		return h.NewHandlerError(err, "Failed to add weather and time of day data", http.StatusInternalServerError)
 	}
+
+	// Yield CPU to other goroutines
+	runtime.Gosched()
 
 	// Calculate pagination info
 	currentPage := (req.Offset / req.NumResults) + 1
