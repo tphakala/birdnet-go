@@ -194,45 +194,27 @@ func (h *Handlers) DetectionDetails(c echo.Context) error {
 // It retrieves the last set of detections based on the specified count and view type.
 func (h *Handlers) RecentDetections(c echo.Context) error {
 	numDetections := parseNumDetections(c.QueryParam("numDetections"), 10) // Default value is 10
-	//viewType := c.QueryParam("viewType")                                   // "detailed" or "aggregated"
-	viewType := "aggregated"
 
 	var data interface{}
 	var templateName string
 
-	if viewType == "aggregated" {
-		aggregatedNotes, err := h.DS.GetAggregatedRecentDetections(numDetections)
-		if err != nil {
-			return h.NewHandlerError(err, "Failed to fetch aggregated recent detections", http.StatusInternalServerError)
-		}
-
-		data = struct {
-			Notes             []datastore.AggregatedNote
-			DashboardSettings conf.Dashboard
-		}{
-			Notes:             aggregatedNotes,
-			DashboardSettings: *h.DashboardSettings,
-		}
-		templateName = "recentDetectionsAggregated"
-	} else {
-		// Use the existing detailed view
-		notes, err := h.DS.GetLastDetections(numDetections)
-		if err != nil {
-			return h.NewHandlerError(err, "Failed to fetch recent detections", http.StatusInternalServerError)
-		}
-
-		data = struct {
-			Notes             []datastore.Note
-			DashboardSettings conf.Dashboard
-		}{
-			Notes:             notes,
-			DashboardSettings: *h.DashboardSettings,
-		}
-		templateName = "recentDetections"
+	// Use the existing detailed view
+	notes, err := h.DS.GetLastDetections(numDetections)
+	if err != nil {
+		return h.NewHandlerError(err, "Failed to fetch recent detections", http.StatusInternalServerError)
 	}
 
+	data = struct {
+		Notes             []datastore.Note
+		DashboardSettings conf.Dashboard
+	}{
+		Notes:             notes,
+		DashboardSettings: *h.DashboardSettings,
+	}
+	templateName = "recentDetections"
+
 	// Render the appropriate template with the data
-	err := c.Render(http.StatusOK, templateName, data)
+	err = c.Render(http.StatusOK, templateName, data)
 	if err != nil {
 		log.Printf("Failed to render %s template: %v", templateName, err)
 		return h.NewHandlerError(err, "Failed to render template", http.StatusInternalServerError)
