@@ -18,8 +18,10 @@ import (
 )
 
 const (
-	chunkSize    = 288000 // 3 seconds of 16-bit PCM data at 48 kHz
-	pollInterval = time.Millisecond * 10
+	pollInterval             = time.Millisecond * 10
+	maxRetries               = 3
+	retryDelay               = time.Millisecond * 10
+	warningCapacityThreshold = 0.9 // 90% full
 )
 
 var (
@@ -30,11 +32,9 @@ var (
 	rbMutex     sync.RWMutex                      // Mutex to protect access to the ringBuffers and prevData maps
 )
 
-// ConvertSecondsToBytes converts overlap in seconds to bytes
-func ConvertSecondsToBytes(seconds float64) int {
-	const sampleRate = 48000 // 48 kHz
-	const bytesPerSample = 2 // 16-bit PCM data (2 bytes per sample)
-	return int(seconds * sampleRate * bytesPerSample)
+// SecondsToBytes converts overlap in seconds to bytes
+func SecondsToBytes(seconds float64) int {
+	return int(seconds * float64(conf.SampleRate) * float64(conf.BitDepth/8))
 }
 
 // InitRingBuffers initializes the ring buffers for each audio source with a given capacity.
@@ -44,8 +44,11 @@ func InitRingBuffers(capacity int, sources []string) {
 
 	settings := conf.Setting()
 
+	// Set chunkSize based on CaptureLength
+	chunkSize = conf.SampleRate * conf.BitDepth / 8 * conf.CaptureLength
+
 	// Set overlapSize based on user setting in seconds
-	overlapSize = ConvertSecondsToBytes(settings.BirdNET.Overlap)
+	overlapSize = SecondsToBytes(settings.BirdNET.Overlap)
 	readSize = chunkSize - overlapSize
 
 	// Initialize ring buffers and prevData map for each source
