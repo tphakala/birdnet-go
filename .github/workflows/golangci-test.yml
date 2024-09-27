@@ -6,7 +6,11 @@ on:
   pull_request:
 
 jobs:
+  golangci:
+    uses: ./.github/workflows/golangci-lint.yml
+
   unit-tests:
+    needs: golangci
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v4
