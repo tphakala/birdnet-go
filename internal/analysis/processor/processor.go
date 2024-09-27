@@ -63,7 +63,6 @@ type PendingDetection struct {
 	Detection     Detections // The detection data
 	Confidence    float64    // Confidence level of the detection
 	Source        string     // Audio source of the detection, RTSP URL or audio card name
-	HumanDetected bool       // Flag to indicate if the clip contains human vocal
 	FirstDetected time.Time  // Time the detection was first detected
 	LastUpdated   time.Time  // Last time this detection was updated
 	FlushDeadline time.Time  // Deadline by which the detection must be processed
@@ -157,7 +156,9 @@ func (p *Processor) processDetections(item queue.Results) {
 	// Delay before a detection is considered final and is flushed.
 	const delay = 15 * time.Second
 
-	// Iterate through each detection result from the processed item
+	// processResults() returns a slice of detections, we iterate through each and process them
+	// detections are put into pendingDetections map where they are held until flush deadline is reached
+	// once deadline is reached detections are delivered to workers for actions (save to db etc) processing
 	for _, detection := range p.processResults(item) {
 		commonName := strings.ToLower(detection.Note.CommonName)
 		confidence := detection.Note.Confidence
@@ -169,16 +170,17 @@ func (p *Processor) processDetections(item queue.Results) {
 		pendingDetection, exists := p.pendingDetections[commonName]
 
 		if exists {
-			// Update the existing detection if it's already pending
+			// Update the existing detection if it's already in pendingDetections map
 			p.updateExistingDetection(&pendingDetection, detection, item, confidence)
 		} else {
 			// Create a new pending detection if it doesn't exist
 			p.createNewDetection(&pendingDetection, detection, item, confidence, delay)
 		}
 
-		// Always update the count
+		// Update detection count for this species
 		pendingDetection.Count++
-		log.Printf("increasing count for %s to %d\n", commonName, pendingDetection.Count)
+		// DEBUG
+		//log.Printf("debug: increasing count for %s to %d\n", commonName, pendingDetection.Count)
 
 		// Update the detection in the map with the modified or new pending detection
 		p.pendingDetections[commonName] = pendingDetection
@@ -220,7 +222,6 @@ func (p *Processor) createNewDetection(pendingDetection *PendingDetection, detec
 		Detection:     detection,
 		Confidence:    confidence,
 		Source:        item.Source,
-		HumanDetected: strings.Contains(strings.ToLower(detection.Note.CommonName), "human"),
 		FirstDetected: firstDetected,
 		FlushDeadline: firstDetected.Add(delay),
 		Count:         0, // Will be incremented to 1 in the main function
@@ -244,12 +245,20 @@ func (p *Processor) processResults(item queue.Results) []Detections {
 		// Convert species to lowercase for case-insensitive comparison
 		speciesLowercase := strings.ToLower(commonName)
 
-		// Handle dog and human detection
+		// Handle dog and human detection, this sets LastDogDetection and LastHumanDetection which is
+		// later used to discard detection if privacy filter or dog bark filters are enabled in settings.
 		p.handleDogDetection(item, speciesLowercase, result)
 		p.handleHumanDetection(item, speciesLowercase, result)
 
 		// Determine base confidence threshold
 		baseThreshold := p.getBaseConfidenceThreshold(speciesLowercase)
+
+		// If result is human and detection exceeds base threshold, discard it
+		// due to privacy reasons we do not want human detections to reach actions stage
+		if strings.Contains(strings.ToLower(commonName), "human") &&
+			result.Confidence > baseThreshold {
+			continue
+		}
 
 		if p.Settings.Realtime.DynamicThreshold.Enabled {
 			// Apply dynamic threshold adjustments
@@ -305,9 +314,12 @@ func (p *Processor) handleDogDetection(item queue.Results, speciesLowercase stri
 
 // handleHumanDetection handles the detection of human vocalizations and updates the last detection timestamp.
 func (p *Processor) handleHumanDetection(item queue.Results, speciesLowercase string, result datastore.Results) {
-	if p.Settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human vocal") &&
+	// only check this if privacy filter is enabled
+	if p.Settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human ") &&
 		result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
 		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, item.Source)
+		// put human detection timestamp into LastHumanDetection map. This is used to discard
+		// bird detections if a human vocalization is detected after the first detection
 		p.LastHumanDetection[item.Source] = item.StartTime
 	}
 }
@@ -377,7 +389,7 @@ func (p *Processor) pendingDetectionsFlusher() {
 	var minDetections int
 	if p.Settings.BirdNET.Overlap >= 2.7 {
 		// Use deep detection to avoid false positives
-		minDetections = 2
+		minDetections = 4
 	} else {
 		// Use single detection
 		minDetections = 1
@@ -401,20 +413,18 @@ func (p *Processor) pendingDetectionsFlusher() {
 				if now.After(item.FlushDeadline) {
 					// check if count is less than minDetections, if so discard the detection
 					if item.Count < minDetections {
-						log.Printf("Discarding detection of %s from source %s due to low number of detections\n", species, item.Source)
+						log.Printf("Discarding detection of %s from source %s as false positive, matched %d/%d times\n", species, item.Source, item.Count, minDetections)
 						delete(p.pendingDetections, species)
 						continue
 					}
 
 					// Check if human was detected after the first detection and discard if so
 					if p.Settings.Realtime.PrivacyFilter.Enabled {
-						if !item.HumanDetected {
-							lastHumanDetection, exists := p.LastHumanDetection[item.Source]
-							if exists && lastHumanDetection.After(item.FirstDetected) {
-								log.Printf("Discarding detection of %s from source %s due to privacy filter\n", species, item.Source)
-								delete(p.pendingDetections, species)
-								continue
-							}
+						lastHumanDetection, exists := p.LastHumanDetection[item.Source]
+						if exists && lastHumanDetection.After(item.FirstDetected) {
+							log.Printf("Discarding detection of %s from source %s due to privacy filter\n", species, item.Source)
+							delete(p.pendingDetections, species)
+							continue
 						}
 					}
 
@@ -440,6 +450,7 @@ func (p *Processor) pendingDetectionsFlusher() {
 					// Set the detection's begin time to the time it was first detected, this is
 					// where we start audio export for the detection.
 					item.Detection.Note.BeginTime = item.FirstDetected
+
 					// Retrieve and execute actions based on the held detection.
 					actionList := p.getActionsForItem(item.Detection)
 					for _, action := range actionList {
