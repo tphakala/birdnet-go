@@ -4,17 +4,15 @@ package myaudio
 import (
 	"fmt"
 	"log"
-	"os/exec"
-	"runtime"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/shirou/gopsutil/cpu"
-	"github.com/shirou/gopsutil/mem"
+	"errors"
+
 	"github.com/smallnest/ringbuffer"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/diagnostics"
 )
 
 const (
@@ -25,12 +23,18 @@ const (
 )
 
 var (
-	overlapSize int                               // overlapSize is the number of bytes to overlap between chunks
-	readSize    int                               // readSize is the number of bytes to read from the ring buffer
-	ringBuffers map[string]*ringbuffer.RingBuffer // ringBuffers is a map to store ring buffers for each audio source
-	prevData    map[string][]byte                 // prevData is a map to store the previous data for each audio source
-	rbMutex     sync.RWMutex                      // Mutex to protect access to the ringBuffers and prevData maps
+	overlapSize    int                               // overlapSize is the number of bytes to overlap between chunks
+	readSize       int                               // readSize is the number of bytes to read from the ring buffer
+	ringBuffers    map[string]*ringbuffer.RingBuffer // ringBuffers is a map to store ring buffers for each audio source
+	prevData       map[string][]byte                 // prevData is a map to store the previous data for each audio source
+	rbMutex        sync.RWMutex                      // Mutex to protect access to the ringBuffers and prevData maps
+	warningCounter map[string]int
 )
+
+// init initializes the warningCounter map
+func init() {
+	warningCounter = make(map[string]int)
+}
 
 // SecondsToBytes converts overlap in seconds to bytes
 func SecondsToBytes(seconds float64) int {
@@ -39,17 +43,11 @@ func SecondsToBytes(seconds float64) int {
 
 // InitRingBuffers initializes the ring buffers for each audio source with a given capacity.
 func InitRingBuffers(capacity int, sources []string) {
-	//rbMutex.Lock()
-	//defer rbMutex.Unlock()
-
 	settings := conf.Setting()
-
-	// Set chunkSize based on CaptureLength
-	chunkSize = conf.SampleRate * conf.BitDepth / 8 * conf.CaptureLength
 
 	// Set overlapSize based on user setting in seconds
 	overlapSize = SecondsToBytes(settings.BirdNET.Overlap)
-	readSize = chunkSize - overlapSize
+	readSize = conf.BufferSize - overlapSize
 
 	// Initialize ring buffers and prevData map for each source
 	ringBuffers = make(map[string]*ringbuffer.RingBuffer)
@@ -60,7 +58,7 @@ func InitRingBuffers(capacity int, sources []string) {
 	}
 }
 
-// WriteToBuffer writes audio data into the ring buffer for a given stream.
+// WriteToAnalysisBuffer writes audio data into the ring buffer for a given stream.
 func WriteToAnalysisBuffer(stream string, data []byte) {
 	rbMutex.RLock()
 	rb, exists := ringBuffers[stream]
@@ -71,13 +69,43 @@ func WriteToAnalysisBuffer(stream string, data []byte) {
 		return
 	}
 
-	// Write data to the ring buffer
-	_, err := rb.Write(data)
-	if err != nil {
-		// Capture system resource utilization
-		debugInfo := captureSystemInfo()
-		log.Printf("Error writing to ring buffer for stream %s: %v\n%s", stream, err, debugInfo)
+	// Check buffer capacity
+	capacityUsed := float64(rb.Length()) / float64(rb.Capacity())
+	if capacityUsed > warningCapacityThreshold {
+		warningCounter[stream]++
+		if warningCounter[stream]%32 == 1 {
+			log.Printf("Warning: Buffer for stream %s is %.2f%% full", stream, capacityUsed*100)
+		}
 	}
+
+	// Write data to the ring buffer
+	for retry := 0; retry < maxRetries; retry++ {
+		n, err := rb.Write(data)
+		if err == nil {
+			if n < len(data) {
+				log.Printf("Warning: Only wrote %d of %d bytes to buffer for stream %s", n, len(data), stream)
+			}
+			return
+		}
+		// print available free space in the buffer and amount we tried to write
+		log.Printf("Buffer for stream %s has %d bytes free, tried to write %d bytes", stream, rb.Free(), len(data))
+
+		if errors.Is(err, ringbuffer.ErrIsFull) {
+			log.Printf("Buffer for stream %s is full. Waiting before retry %d/%d", stream, retry+1, maxRetries)
+		} else {
+			log.Printf("Unexpected error writing to buffer for stream %s: %v", stream, err)
+		}
+
+		// Capture system resource utilization
+		diagnostics.CaptureSystemInfo(fmt.Sprintf("Buffer write error for stream %s", stream))
+
+		if retry < maxRetries-1 {
+			time.Sleep(retryDelay)
+		}
+	}
+
+	// If we've reached this point, we've failed all retries
+	log.Printf("Failed to write to ring buffer for stream %s after %d attempts. Dropping %d bytes of PCM data.", stream, maxRetries, len(data))
 }
 
 // readFromBuffer reads a sliding chunk of audio data from the ring buffer for a given stream.
@@ -85,29 +113,37 @@ func readFromBuffer(stream string) []byte {
 	rbMutex.Lock()
 	defer rbMutex.Unlock()
 
+	// Get the ring buffer for the given stream
 	rb, exists := ringBuffers[stream]
 	if !exists {
+		// If the ring buffer doesn't exist, log an error and return nil
 		log.Printf("No ring buffer found for stream: %s", stream)
 		return nil
 	}
 
+	// Calculate the number of bytes written to the buffer
 	bytesWritten := rb.Length() - rb.Free()
 	if bytesWritten < readSize {
+		// If there's not enough data to read, return nil
 		return nil
 	}
 
+	// Create a slice to hold the data we're going to read
 	data := make([]byte, readSize)
-	_, err := rb.Read(data)
+	// Read data from the ring buffer
+	bytesRead, err := rb.Read(data)
 	if err != nil {
+		// If there is an error reading from the buffer, log error and return nil
+		log.Printf("Error reading from ring buffer for stream %s, got %d bytes: %v", stream, bytesRead, err)
 		return nil
 	}
 
 	// Join with previous data to ensure we're processing chunkSize bytes
 	fullData := append(prevData[stream], data...)
-	if len(fullData) > chunkSize {
+	if len(fullData) > conf.BufferSize {
 		// Update prevData for the next iteration
 		prevData[stream] = fullData[readSize:]
-		fullData = fullData[:chunkSize]
+		fullData = fullData[:conf.BufferSize]
 	} else {
 		// If there isn't enough data even after appending, update prevData and return nil
 		prevData[stream] = fullData
@@ -118,12 +154,19 @@ func readFromBuffer(stream string) []byte {
 }
 
 // BufferMonitor monitors the buffer and processes audio data when enough data is present.
-func BufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}, source string) {
+func BufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}, source string, heartbeatChan chan<- time.Time) {
+	// preRecordingTime is the time to subtract from the current time to get the start time of the detection
+	const preRecordingTime = -5000 * time.Millisecond
+
 	defer wg.Done()
 
 	// Creating a ticker that ticks every 100ms
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
+
+	// Create a heartbeat ticker
+	heartbeatTicker := time.NewTicker(time.Second) // Send heartbeat every second
+	defer heartbeatTicker.Stop()
 
 	for {
 		select {
@@ -134,14 +177,14 @@ func BufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct
 		case <-ticker.C: // Wait for the next tick
 			data := readFromBuffer(source)
 			// if buffer has 3 seconds of data, process it
-			if len(data) == chunkSize {
+			if len(data) == conf.BufferSize {
 
 				/*if err := validatePCMData(data); err != nil {
 					log.Printf("Invalid PCM data for source %s: %v", source, err)
 					continue
 				}*/
 
-				startTime := time.Now().Add(-4500 * time.Millisecond)
+				startTime := time.Now().Add(preRecordingTime)
 				// DEBUG
 				//log.Printf("Processing data for source %s", source)
 				err := ProcessData(bn, data, startTime, source)
@@ -149,61 +192,18 @@ func BufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct
 					log.Printf("Error processing data for source %s: %v", source, err)
 				}
 			}
+
+		case <-heartbeatTicker.C:
+			// Send a heartbeat
+			select {
+			case heartbeatChan <- time.Now():
+				// Heartbeat sent successfully
+			default:
+				// Channel is full, log a warning
+				log.Printf("Warning: Heartbeat channel for source %s is full", source)
+			}
 		}
 	}
-}
-
-// captureSystemInfo captures system information and returns it as a string
-func captureSystemInfo() string {
-	var info strings.Builder
-
-	// Add a clear separator at the beginning
-	separator := "======== DEBUG INFO START ========"
-	info.WriteString(fmt.Sprintf("%s\n", separator))
-
-	// CPU Utilization
-	cpuPercent, err := cpu.Percent(time.Second, false)
-	if err == nil {
-		info.WriteString(fmt.Sprintf("CPU Utilization: %.2f%%\n", cpuPercent[0]))
-	}
-
-	// RAM Usage
-	vmStat, err := mem.VirtualMemory()
-	if err == nil {
-		info.WriteString(fmt.Sprintf("RAM Usage: %.2f%%\n", vmStat.UsedPercent))
-	}
-
-	// Page File Usage (Swap)
-	swapStat, err := mem.SwapMemory()
-	if err == nil {
-		info.WriteString(fmt.Sprintf("Page File Usage: %.2f%%\n", swapStat.UsedPercent))
-	}
-
-	// Run 'ps axuw' command
-	cmd := exec.Command("ps", "axuww")
-	output, err := cmd.Output()
-	if err != nil {
-		log.Printf("Error running 'ps axuw': %v", err)
-	} else {
-		info.WriteString("\nProcess List (ps axuw):\n")
-		info.Write(output)
-	}
-
-	// Go runtime statistics
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	info.WriteString(fmt.Sprintf("Go Runtime: Alloc = %v MiB, TotalAlloc = %v MiB, Sys = %v MiB, NumGC = %v\n",
-		bToMb(m.Alloc), bToMb(m.TotalAlloc), bToMb(m.Sys), m.NumGC))
-
-	// Add a clear separator at the end
-	info.WriteString(fmt.Sprintf("%s\n", strings.ReplaceAll(separator, "START", "END")))
-
-	return info.String()
-}
-
-// bToMb converts bytes to megabytes
-func bToMb(b uint64) uint64 {
-	return b / 1024 / 1024
 }
 
 /*func validatePCMData(data []byte) error {
