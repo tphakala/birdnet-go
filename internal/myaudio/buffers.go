@@ -154,7 +154,7 @@ func readFromBuffer(stream string) []byte {
 }
 
 // BufferMonitor monitors the buffer and processes audio data when enough data is present.
-func BufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}, source string, heartbeatChan chan<- time.Time) {
+func BufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}, source string) {
 	// preRecordingTime is the time to subtract from the current time to get the start time of the detection
 	const preRecordingTime = -5000 * time.Millisecond
 
@@ -163,10 +163,6 @@ func BufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct
 	// Creating a ticker that ticks every 100ms
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
-
-	// Create a heartbeat ticker
-	heartbeatTicker := time.NewTicker(time.Second) // Send heartbeat every second
-	defer heartbeatTicker.Stop()
 
 	for {
 		select {
@@ -191,16 +187,6 @@ func BufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct
 				if err != nil {
 					log.Printf("Error processing data for source %s: %v", source, err)
 				}
-			}
-
-		case <-heartbeatTicker.C:
-			// Send a heartbeat
-			select {
-			case heartbeatChan <- time.Now():
-				// Heartbeat sent successfully
-			default:
-				// Channel is full, log a warning
-				log.Printf("Warning: Heartbeat channel for source %s is full", source)
 			}
 		}
 	}

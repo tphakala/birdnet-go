@@ -24,11 +24,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
-const (
-	bytesPerSample = conf.BitDepth / 8
-	bufferSize     = (conf.SampleRate * conf.NumChannels * conf.CaptureLength) * bytesPerSample
-)
-
 // audioLevelChan is a channel to send audio level updates
 var audioLevelChan = make(chan myaudio.AudioLevelData, 100)
 
@@ -104,7 +99,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	}
 
 	// Initialize ring buffers for each audio source
-	myaudio.InitRingBuffers(bufferSize*3, sources) // 3x buffer size to avoid underruns
+	myaudio.InitRingBuffers(conf.BufferSize*3, sources) // 3x buffer size to avoid underruns
 
 	// Audio buffer for extended audio clip capture
 	myaudio.InitAudioBuffers(60, conf.SampleRate, conf.BitDepth/8, sources)
