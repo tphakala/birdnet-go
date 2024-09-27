@@ -6,7 +6,11 @@ on:
   workflow_dispatch:
 
 jobs:
+  golangci:
+    uses: ./.github/workflows/golangci-lint.yml
+
   test-docker-image:
+    needs: golangci
     # Ubuntu-20.04 required until this is fixed: https://github.com/actions/runner-images/discussions/9074
     runs-on: ubuntu-20.04
     steps:
@@ -77,3 +81,5 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
+
+  
