@@ -4,14 +4,30 @@
 }
 
 .confidence-ball {
-    width: 54px; /* You can adjust the size as needed */
-    height: 25px; /* You can adjust the size as needed */
+    width: 54px; 
+    height: 25px; 
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 5px; /* This creates the rounded ball shape */
-    font-size: 0.75rem; /* Adjust the font size as needed */
+    border-radius: 5px; 
+    font-size: 0.75rem; 
 }
+
+@media (max-width: 1024px) {
+    .confidence-ball {
+        width: 40px;
+        height: 20px;
+        font-size: 0.65rem;
+    }
+}
+
+/*@media (max-width: 768px) {
+    .confidence-ball {
+        width: 32px;
+        height: 18px;
+        font-size: 0.6rem;
+    }
+}*/
 
 .input:focus-visible {
     outline: 1px solid transparent;
