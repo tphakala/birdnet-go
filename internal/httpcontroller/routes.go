@@ -31,6 +31,17 @@ type PartialRouteConfig struct {
 	Handler      echo.HandlerFunc
 }
 
+type RenderData struct {
+	C               echo.Context
+	Page            string
+	Title           string
+	Settings        *conf.Settings
+	Locales         []LocaleData
+	Charts          template.HTML
+	ContentTemplate string
+	PreloadFragment string
+}
+
 // initRoutes initializes the routes for the server.
 func (s *Server) initRoutes() {
 	// Initialize handlers
@@ -56,18 +67,26 @@ func (s *Server) initRoutes() {
 	}
 
 	// Partial routes (HTMX responses)
-	partialRoutes := []PartialRouteConfig{
-		{Path: "/detections", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.Detections)},
-		{Path: "/detections/recent", TemplateName: "recentDetections", Title: "Recent Detections", Handler: h.WithErrorHandling(h.RecentDetections)},
-		{Path: "/detections/details", TemplateName: "detectionDetails", Title: "Detection Details", Handler: h.WithErrorHandling(h.DetectionDetails)},
-		{Path: "/top-birds", TemplateName: "birdsTableHTML", Title: "Top Birds", Handler: h.WithErrorHandling(h.TopBirds)},
-		{Path: "/notes", TemplateName: "notes", Title: "All Notes", Handler: h.WithErrorHandling(h.GetAllNotes)},
-		{Path: "/media/spectrogram", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.ServeSpectrogram)},
+	s.partialRoutes = map[string]PartialRouteConfig{
+		"/detections": {Path: "/detections", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.Detections)},
+		"/detections/recent": {Path: "/detections/recent", TemplateName: "recentDetections", Title: "Recent Detections", Handler: h.WithErrorHandling(h.RecentDetections)},
+		"/detections/details": {Path: "/detections/details", TemplateName: "detectionDetails", Title: "Detection Details", Handler: h.WithErrorHandling(h.DetectionDetails)},
+		"/top-birds": {Path: "/top-birds", TemplateName: "birdsTableHTML", Title: "Top Birds", Handler: h.WithErrorHandling(h.TopBirds)},
+		"/notes": {Path: "/notes", TemplateName: "notes", Title: "All Notes", Handler: h.WithErrorHandling(h.GetAllNotes)},
+		"/media/spectrogram": {Path: "/media/spectrogram", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.ServeSpectrogram)},
 	}
 
 	// Set up partial routes
-	for _, route := range partialRoutes {
-		s.Echo.GET(route.Path, route.Handler)
+	for _, route := range s.partialRoutes {
+		s.Echo.GET(route.Path, func(c echo.Context) error {
+			// If the request is a hx-request or spectrogram, call the partial route handler
+			if c.Request().Header.Get("HX-Request") != "" || c.Request().URL.Path == "/media/spectrogram" {
+				return route.Handler(c)
+			} else {
+				// Call the full page route handler
+				return s.handlePageRequest(c)
+			}
+		})
 	}
 
 	// Special routes
@@ -103,9 +122,13 @@ func (s *Server) initRoutes() {
 
 // handlePageRequest handles requests for full page routes
 func (s *Server) handlePageRequest(c echo.Context) error {
+	var data RenderData
 	path := c.Path()
-	route, exists := s.pageRoutes[path]
-	if !exists {
+	pageRoute, isPageRoute := s.pageRoutes[path]
+	_, isFragment := s.partialRoutes[path]
+
+	// Return an error if route is unknown
+	if !isPageRoute && !isFragment {
 		return s.Handlers.NewHandlerError(
 			fmt.Errorf("no route found for path: %s", path),
 			"Page not found",
@@ -113,19 +136,22 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 		)
 	}
 
-	data := struct {
-		C               echo.Context
-		Page            string
-		Title           string
-		Settings        *conf.Settings
-		Locales         []LocaleData
-		Charts          template.HTML
-		ContentTemplate string
-	}{
-		C:        c,
-		Page:     route.TemplateName,
-		Title:    route.Title,
-		Settings: s.Settings,
+	if isPageRoute {
+		data = RenderData{
+			C:        c,
+			Page:     pageRoute.TemplateName,
+			Title:    pageRoute.Title,
+			Settings: s.Settings,
+		}
+	} else {
+		// If the route is for a fragment, render it with the dashboard template
+		data = RenderData{
+			C:               c,
+			Page:            "dashboard",
+			Title:           "Dashboard",
+			Settings: 		 s.Settings,
+			PreloadFragment: c.Request().RequestURI,
+		}
 	}
 
 	return c.Render(http.StatusOK, "index", data)

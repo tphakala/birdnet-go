@@ -26,6 +26,7 @@ type PageData struct {
 	Settings *conf.Settings // Application settings
 	Locales  []LocaleData   // List of available locales
 	Charts   template.HTML  // HTML content for charts, if any
+	PreloadFragment    string       // The preload route for the current page
 }
 
 // TemplateRenderer is a custom HTML template renderer for Echo framework.
@@ -73,18 +74,10 @@ func (s *Server) setupTemplateRenderer() {
 // RenderContent renders the content template with the given data
 func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 	// Assert that the data is of the expected type
-	d, ok := data.(struct {
-		C               echo.Context
-		Page            string
-		Title           string
-		Settings        *conf.Settings
-		Locales         []LocaleData
-		Charts          template.HTML
-		ContentTemplate string
-	})
+	d, ok := data.(RenderData)
 	if !ok {
 		// Return an error if the data type is invalid
-		return "", fmt.Errorf("invalid data type")
+		return "", fmt.Errorf("invalid data type: %s", data)
 	}
 
 	// Extract the context from the data
@@ -94,8 +87,9 @@ func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 	path := c.Path()
 
 	// Look up the route for the current path
-	route, exists := s.pageRoutes[path]
-	if !exists {
+	_, isPageRoute := s.pageRoutes[path]
+	_, isFragment := s.partialRoutes[path]
+	if !isPageRoute && !isFragment{
 		// Return an error if no route is found for the path
 		return "", fmt.Errorf("no route found for path: %s", path)
 	}
@@ -104,7 +98,7 @@ func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 	buf := new(bytes.Buffer)
 
 	// Render the template using the Echo renderer
-	err := s.Echo.Renderer.Render(buf, route.TemplateName, d, c)
+	err := s.Echo.Renderer.Render(buf, d.Page, d, c)
 	if err != nil {
 		// Return an error if template rendering fails
 		return "", err
