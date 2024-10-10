@@ -29,6 +29,25 @@
     }
 }*/
 
+.species-ball {
+    min-width: 1rem;
+    height: 1.25rem;
+    font-size: 0.55rem;
+    display: inline-flex;
+    padding: 0.2rem 0.25rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 1rem;
+    font-size: 0.75rem;
+    line-height: 1;
+}
+
+@media (max-width: 1024px) {
+  .species-ball {
+    font-size: 0.65rem;
+  }
+}
+
 .input:focus-visible {
     outline: 1px solid transparent;
     outline-offset: 0px;
