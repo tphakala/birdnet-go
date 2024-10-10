@@ -19,14 +19,13 @@
   
   		<!-- Spectrogram Image -->
   		<div class="flex justify-center items-center mb-4">
-    		<!--<img src="/media/{{.Spectrogram}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">-->
 			<img loading="lazy" width="1000" src="/media/spectrogram?clip={{urlquery .Note.ClipName}}" alt="Spectrogram Image" class="max-w-full h-auto rounded-md">
   		</div>
   
   		<!-- Audio Player -->
-  		<div class="audio-control p-4">
+  		<div class="audio-control">
     		<audio controls preload="auto" class="w-full">
-      			<source src="{{.Note.ClipName}}" type="audio/wav">
+      			<source src="/{{.Note.ClipName}}" type="audio/wav">
       			Your browser does not support the audio element.
     		</audio>
   		</div>

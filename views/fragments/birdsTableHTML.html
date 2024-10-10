@@ -5,7 +5,9 @@
   <!-- Table header -->
   <thead class="text-xs">
       <!-- Species header -->
-      <th scope="col" class="py-0 px-2 sm:px-4 w-0">Species</th>
+      <th scope="col" class="py-0 px-2 sm:px-4 w-0">Species
+        <span class="species-ball bg-blue-500 text-white">{{len .NotesWithIndex}}</span>
+      </th>
       {{if .DashboardSettings.Thumbnails.Summary}}
       <!-- Thumbnail header -->
       <th scope="col" class="py-0 px-6 w-0">Thumbnail</th>
@@ -57,7 +59,13 @@
       {{if $.DashboardSettings.Thumbnails.Summary}}
       <th scope="row" class="py-1 px-6">
         <div class="thumbnail-container">
-          <img loading="lazy" width="100%" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
+          <a href="#"
+            hx-get="/detections?species={{urlquery .Note.CommonName}}&date={{urlquery $.SelectedDate}}&queryType=species"
+            hx-target="#mainContent"
+            hx-trigger="click"
+            hx-push-url="true">
+            <img loading="lazy" width="100%" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
+          </a>
           <div class="thumbnail-tooltip hidden">
             {{thumbnailAttribution .ScientificName}}
           </div>
