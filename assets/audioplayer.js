@@ -1,4 +1,4 @@
-htmx.on('htmx:_afterSettle', function () {
+htmx.on('htmx:afterSettle', function (event) {
     // Attach the audio players
     const audioElements = document.querySelectorAll('[id^="audio-"]');
     audioElements && audioElements.forEach(audio => {
