@@ -19,7 +19,7 @@
                 placeholder="Search detections"
                 hx-get="/detections?queryType=search"
                 hx-params="search"
-                hx-trigger="keyup[key!='ArrowLeft'][key!='ArrowRight'] change delay:200ms" 
+                hx-trigger="keyup[isNotArrowKey(event)] delay:200ms, change delay:200ms" 
                 hx-target="#mainContent"
                 hx-swap="innerHTML"
                 hx-push-url="true"
