@@ -1,12 +1,11 @@
 {
 	"name": "Go Build Environment",
 	"dockerFile": "../Dockerfile",
-	"forwardPorts": [8080],
+	"appPort": [8080],
 	"build": {
 		"context": "..",
 		"target": "buildenv"
 	},
-	"runArgs": ["--device=/dev/snd"],
 	"containerEnv": {
 		"ALSA_CARD": "0",
 		"CGO_ENABLED": "1",
@@ -24,6 +23,9 @@
 		}
 	},
 	"features": {
+		"ghcr.io/devcontainers/features/go:1": {
+		  "version": "1.23.2"
+		},
 		"ghcr.io/devcontainers/features/github-cli:1": {}
-	}
+	  }
 }
