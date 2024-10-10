@@ -10,7 +10,8 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
     if command -v tailwindcss >/dev/null 2>&1; then
       tailwindcss -i input.css -o assets/tailwind.css
     elif command -v npx >/dev/null 2>&1; then
-      npx tailwindcss -i input.css -o assets/tailwind.css
+      npm install -D daisyui
+      npx --yes tailwindcss@latest -i input.css -o assets/tailwind.css
     else
       echo "Error: Neither 'tailwindcss' binary nor 'npx' found. Please install Tailwind CSS."
       exit 1
@@ -33,14 +34,14 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
   delay = 1000  # Delay (in milliseconds) before restarting the app after a change
   
   # Directories to exclude from watching
-  exclude_dir = ["assets", "tmp", "vendor", "testdata", "bin"]
+  exclude_dir = ["tmp", "vendor", "testdata", "bin"]
   exclude_file = []  # Files to exclude from watching (none specified)
   exclude_regex = ["_test.go"]  # Exclude test files
   exclude_unchanged = false  # Watch even files that haven't changed
   follow_symlink = false  # Don't follow symlinks
   full_bin = ""  # Additional arguments when running the built binary
-  include_dir = ["views", "internal"] # Directories to include (watches all if empty)
-  include_ext = ["go", "tpl", "tmpl", "html", "css"]  # File extensions to watch
+  include_dir = ["views", "internal", "assets"] # Directories to include (watches all if empty)
+  include_ext = ["go", "tpl", "tmpl", "html", "css", "js"]  # File extensions to watch
   kill_delay = "0s"  # Delay before killing the app on a rebuild
   log = "build-errors.log"  # File to log build errors
   send_interrupt = false  # Send interrupt signal before killing the app
