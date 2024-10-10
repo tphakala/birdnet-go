@@ -18,7 +18,8 @@ x-data="{
         rotationDay: '{{.Settings.Main.Log.RotationDay}}',
     },
     mainSettingsOpen: false,
-    hasChanges: false
+    hasChanges: false,
+    showTooltip: null
 }" 
 x-init="
     $watch('main', () => { hasChanges = true }, { deep: true });
@@ -48,8 +49,8 @@ x-init="
                 <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'nodeName'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
             <input type="text" id="nodeName" name="main.name" x-model="main.name" class="input input-sm input-bordered" placeholder="Enter node name">
-            <div x-show="showTooltip === 'nodeName'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                Node name is used to identify source system in multi node setup, also used as identifier for MQTT messages
+            <div x-show="showTooltip === 'nodeName'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md w-96">
+                Node name is used to identify source system in multi node setup, also used as identifier for MQTT messages.
             </div>
         </div>
     </div>
@@ -252,8 +253,8 @@ x-init="
         <!-- Dynamic Threshold Enabled -->
         <div class="form-control relative">
             <label class="label justify-start" for="dynamicThresholdEnabled">
-                <input type="checkbox" id="dynamicThresholdEnabled" name="realtime.dynamicThreshold.enabled" x-model="dynamicThreshold.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
-                <input type="hidden" name="realtime.dynamicThreshold.enabled" value="false">
+                <input type="checkbox" id="dynamicThresholdEnabled" name="realtime.dynamicthreshold.enabled" x-model="dynamicThreshold.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
+                <input type="hidden" name="realtime.dynamicthreshold.enabled" value="false">
                 <span class="label-text">Enable Dynamic Threshold (BirdNET-Go specific feature)</span>
                 <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'dynamicThreshold'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
@@ -270,7 +271,7 @@ x-init="
                     <span class="label-text">Trigger Threshold</span>
                     <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'trigger'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
-                <input type="number" id="dynamicThresholdTrigger" name="realtime.dynamicThreshold.trigger" x-model="dynamicThreshold.trigger" step="0.01" class="input input-bordered input-sm w-full">
+                <input type="number" id="dynamicThresholdTrigger" name="realtime.dynamicthreshold.trigger" x-model="dynamicThreshold.trigger" step="0.01" class="input input-bordered input-sm w-full">
                 <div x-show="showTooltip === 'trigger'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
                     The confidence level at which the dynamic threshold is activated. If a bird call is detected with confidence over this value, the threshold for positive matches of that species will be lowered for subsequent calls.
                 </div>
@@ -282,7 +283,7 @@ x-init="
                     <span class="label-text">Minimum Dynamic Threshold</span>
                     <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'min'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
-                <input type="number" id="dynamicThresholdMin" name="realtime.dynamicThreshold.min" x-model="dynamicThreshold.min" step="0.01" class="input input-bordered input-sm w-full">
+                <input type="number" id="dynamicThresholdMin" name="realtime.dynamicthreshold.min" x-model="dynamicThreshold.min" step="0.01" class="input input-bordered input-sm w-full">
                 <div x-show="showTooltip === 'min'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
                     The minimum value to which the dynamic threshold can be lowered. This ensures that the threshold does not drop below an unwanted level.
                 </div>
@@ -294,7 +295,7 @@ x-init="
                     <span class="label-text">Dynamic Threshold Expire Time (Hours)</span>
                     <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'validHours'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
-                <input type="number" id="dynamicThresholdValidHours" name="realtime.dynamicThreshold.validHours" x-model="dynamicThreshold.validHours" class="input input-bordered input-sm w-full">
+                <input type="number" id="dynamicThresholdValidHours" name="realtime.dynamicthreshold.validhours" x-model="dynamicThreshold.validHours" class="input input-bordered input-sm w-full">
                 <div x-show="showTooltip === 'validHours'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
                     The number of hours during which the dynamic threshold adjustments remain valid. After this period, the dynamic threshold is reset.
                 </div>
@@ -314,7 +315,7 @@ x-init="
                     <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'locationMap'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <div x-show="showTooltip === 'locationMap'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                    Station location, used to limit bird species to those propable in the region
+                    Station location, used to limit bird species to those propable in the region.
                 </div>
                 <div id="locationMap" style="height: 300px;"></div>
             </div> 
@@ -330,7 +331,7 @@ x-init="
                     </label>
                     <input type="number" id="birdnetLatitude" name="birdnet.latitude" x-model="birdnet.latitude" step="0.001" class="input input-bordered input-sm w-full">
                     <div x-show="showTooltip === 'latitude'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                        Station location latitude, used to limit bird species to those propable in the region
+                        Station location latitude, used to limit bird species to those propable in the region.
                     </div>
                 </div>
                 
@@ -342,7 +343,7 @@ x-init="
                     </label>
                     <input type="number" id="birdnetLongitude" name="birdnet.longitude" x-model="birdnet.longitude" step="0.001" class="input input-bordered input-sm w-full">
                     <div x-show="showTooltip === 'longitude'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                        Station location latitude, used to limit bird species to those propable in the region
+                        Station location longitude, used to limit bird species to those propable in the region.
                     </div>
                 </div>
             
@@ -357,7 +358,7 @@ x-init="
                         <option value="latest">latest</option>
                     </select>
                     <div x-show="showTooltip === 'rangeFilterModel'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                        BirdNET range filter model version: latest or legacy
+                        BirdNET range filter model version: latest or legacy.
                     </div>
                 </div>
 
@@ -369,7 +370,7 @@ x-init="
                     </label>
                     <input type="number" id="birdnetRangeFilterThreshold" name="birdnet.rangefilter.threshold" x-model="rangeFilter.threshold" step="0.01" min="0" max="1" class="input input-bordered input-sm w-full">
                     <div x-show="showTooltip === 'rangeFilterThreshold'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                        Station location longitude
+                        Confidence level determining which identifications are considered valid, e.g. a threshold of 0.7 means only detections with higher than 70% confidence score are accepted.
                     </div>
                 </div>
             </div>
