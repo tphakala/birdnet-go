@@ -262,6 +262,9 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 			return fmt.Errorf("error starting SoX command: %w", err)
 		}
 
+		// Define error message template
+		const errFFmpegSoxFailed = "ffmpeg command failed: %v\nffmpeg output: %s\nsox output: %s"
+
 		// Run ffmpeg command
 		if err := cmd.Run(); err != nil {
 			// Stop the SoX command to clean up resources
@@ -273,8 +276,7 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 			waitErr := soxCmd.Wait()
 
 			// Prepare error message with both ffmpeg and SoX outputs
-			errMsg := fmt.Sprintf("ffmpeg command failed: %v\nffmpeg output: %s\nsox output: %s",
-				err, ffmpegOutput.String(), soxOutput.String())
+			errMsg := fmt.Sprintf(errFFmpegSoxFailed, err, ffmpegOutput.String(), soxOutput.String())
 
 			// If SoX also encountered an error, include it in the message
 			if waitErr != nil && !errors.Is(waitErr, os.ErrProcessDone) {
