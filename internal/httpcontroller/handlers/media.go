@@ -263,7 +263,7 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 		}
 
 		// Define error message template
-		const errFFmpegSoxFailed = "ffmpeg command failed: %v\nffmpeg output: %s\nsox output: %s"
+		const errFFmpegSoxFailed = "ffmpeg command failed: %v\nffmpeg output: %s\nsox output: %s\n%s"
 
 		// Run ffmpeg command
 		if err := cmd.Run(); err != nil {
@@ -275,15 +275,14 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 			// Wait for SoX to finish and collect its error, if any
 			waitErr := soxCmd.Wait()
 
-			// Prepare error message with both ffmpeg and SoX outputs
-			errMsg := fmt.Sprintf(errFFmpegSoxFailed, err, ffmpegOutput.String(), soxOutput.String())
-
-			// If SoX also encountered an error, include it in the message
+			// Prepare additional error information
+			var additionalInfo string
 			if waitErr != nil && !errors.Is(waitErr, os.ErrProcessDone) {
-				errMsg += fmt.Sprintf("\nsox wait error: %v", waitErr)
+				additionalInfo = fmt.Sprintf("sox wait error: %v", waitErr)
 			}
 
-			return fmt.Errorf(errMsg)
+			// Use fmt.Errorf with the constant format string
+			return fmt.Errorf(errFFmpegSoxFailed, err, ffmpegOutput.String(), soxOutput.String(), additionalInfo)
 		}
 
 		// Allow other goroutines to run before waiting for SoX to finish
