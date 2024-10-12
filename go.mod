@@ -1,6 +1,6 @@
 module github.com/tphakala/birdnet-go
 
-go 1.22.3
+go 1.23.2
 
 require (
 	cgt.name/pkg/go-mwclient v1.3.0

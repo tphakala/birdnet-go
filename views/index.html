@@ -6,8 +6,12 @@
 <head>
 	<meta charset="utf-8" />
 	<title>BirdNET-Go Dashboard</title>
-	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-	<link rel="icon" href="data:,"> <!-- Blank favicon to prevent 404 errors -->
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+	<link rel="icon" type="image/png" sizes="32x32" href="/assets/images/favicon-32x32.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="/assets/images/favicon-16x16.png">
+	<link rel="apple-touch-icon" sizes="180x180" href="/assets/images/apple-touch-icon.png">
+    <link rel="shortcut icon" href="/assets/images/favicon.ico">
+
 	<link href="/assets/tailwind.css" rel="stylesheet" />
 	<link href="/assets/custom.css" rel="stylesheet" />
 	<!-- htmx -->
@@ -15,6 +19,7 @@
 	<!-- alpine.js -->
 	<script src="/assets/alpinejs.min.js" defer></script>
 	<!-- Custom utilities -->
+	<script src="/assets/audioplayer.js" type="module"></script>
 	<script src="/assets/util.js" defer></script>
 </head>
 
@@ -29,7 +34,13 @@
 	
 		<!-- content -->
 		<main>
-			<div id="mainContent" class="grid grid-cols-12 grid-rows-[min-content] gap-y-8 p-3 pt-0 lg:p-8 lg:pt-0">
+			<div id="mainContent" 
+			     class="grid grid-cols-12 grid-rows-[min-content] gap-y-8 p-3 pt-0 lg:p-8 lg:pt-0"
+				 {{if .PreloadFragment}}
+				 hx-trigger="load"
+				 hx-get="{{.PreloadFragment}}"
+				 hx-target="this"
+				 {{end}}>
 				{{ RenderContent . }}
 			</div>
 			<!-- Placeholder for dynamic notifications -->

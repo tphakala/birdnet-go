@@ -18,353 +18,201 @@
         </div>
     </div>
 
-    <table class="table w-full text-left">
-        <thead class="text-xs">
-            <tr>
-                <!-- Date/Time Column -->
-                <th scope="col" class="py-0 px-2 sm:px-4" style="width: auto">
-                    <span class="hidden sm:inline">Date</span>
-                    <span class="sm:hidden">Date Time</span>
-                </th>
-                
-                <!-- Time Column (hidden on small screens) -->
-                <th scope="col" class="py-2 px-2 hidden sm:table-cell" style="width: auto">Time</th>
-                
-                <!-- Weather Column, selectively enabled -->
-                {{if .WeatherEnabled}}                
-                    {{if eq .QueryType "species"}}
-                    <!-- Show weather column for species query type -->
-                    <th scope="col" class="py-2 px-4" style="width: auto">Weather</th>
-                    {{else}}
-                    <!-- Hide weather column on small screens for other query types -->
-                    <th scope="col" class="py-2 px-2 hidden sm:table-cell" style="width: auto">Weather</th>
+    <div class="overflow-x-auto">
+        <table class="table w-full text-left">
+            <thead class="text-xs">
+                <tr>
+                    <!-- Date/Time Column -->
+                    <th scope="col" class="py-0 px-2 sm:px-4" style="width: auto">
+                        <span class="hidden sm:inline">Date</span>
+                        <span class="sm:hidden">Date Time</span>
+                    </th>
+                    
+                    <!-- Time Column (hidden on small screens) -->
+                    <th scope="col" class="py-2 px-2 hidden sm:table-cell" style="width: auto">Time</th>
+                    
+                    <!-- Weather Column, selectively enabled -->
+                    {{if .WeatherEnabled}}                
+                        {{if eq .QueryType "species"}}
+                        <!-- Show weather column for species query type -->
+                        <th scope="col" class="py-2 px-4" style="width: auto">Weather</th>
+                        {{else}}
+                        <!-- Hide weather column on small screens for other query types -->
+                        <th scope="col" class="py-2 px-2 hidden sm:table-cell" style="width: auto">Weather</th>
+                        {{end}}
                     {{end}}
-                {{end}}
 
-                <!-- Common Name Column -->
-                {{if ne .QueryType "species"}}
-                    <th scope="col" class="py-2 px-4" style="width: auto">Species</th>
-                {{end}}
-                
-                <!-- Thumbnail Column -->
-                {{if .DashboardSettings.Thumbnails.Summary}}
-                    <th scope="col" class="py-2 px-4" style="width: 20%">Thumbnail</th>
-                {{end}}
-                
-                <!-- Confidence Column -->
-                <th scope="col" class="py-2 px-4" style="width: auto">
-                    <span class="hidden sm:inline">Confidence</span>
-                    <span class="sm:hidden">Confid.</span>
-                </th>
-                
-                <!-- Recording Column -->
-                <th scope="col" class="py-2 px-4" style="width: 30%">Audio</th>
-            </tr>
-        </thead>
-        <tbody>
-            {{range .Notes}}
-            <tr class="text-xs sm:text-sm">
-                <!-- Date/Time Column -->
-                <td class="py-0 px-2 sm:px-4 font-normal">
-                    <div class="flex flex-col sm:flex-row sm:items-center">
-                        <span>{{.Date}}</span>
-                        <span class="sm:hidden">{{.Time}}</span>
-                    </div>
-                </td>
-                
-                <!-- Time Column (hidden on small screens) -->
-                <td class="py-1 px-2 font-normal hidden sm:table-cell">
-                    <div class="flex items-center gap-2">
-                        <span>{{sunPositionIcon .TimeOfDay}}</span>
-                        <span>{{.Time}}</span>
-                    </div>
-                </td>
-
-                <!-- Weather Column -->
-                {{if $.WeatherEnabled}}
-                    <!-- For species query type, always show weather -->
-                    <!-- For other query types, hide weather on small screens -->
-                    <td class="py-1 px-2 font-normal {{if ne $.QueryType "species"}}hidden sm:table-cell{{end}}">
-                        {{if .Weather}}
-                            <div class="flex items-center gap-2">
-                                <span>{{weatherIcon .Weather.WeatherMain .TimeOfDay}}</span>
-                                <span>{{.Weather.WeatherMain}}</span>
-                            </div>
-                        {{else}}
-                            <div>No weather data</div>
-                        {{end}}
+                    <!-- Common Name Column -->
+                    {{if ne .QueryType "species"}}
+                        <th scope="col" class="py-2 px-4" style="width: auto">Species</th>
+                    {{end}}
+                    
+                    <!-- Thumbnail Column -->
+                    {{if .DashboardSettings.Thumbnails.Summary}}
+                        <th scope="col" class="py-2 px-4" style="width: 20%">Thumbnail</th>
+                    {{end}}
+                    
+                    <!-- Confidence Column -->
+                    <th scope="col" class="py-2 px-4" style="width: auto">
+                        <span class="hidden sm:inline">Confidence</span>
+                        <span class="sm:hidden">Confid.</span>
+                    </th>
+                    
+                    <!-- Recording Column -->
+                    <th scope="col" class="py-2 px-4" style="width: 30%">Recording</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Notes}}
+                <tr class="text-xs sm:text-sm">
+                    <!-- Date/Time Column -->
+                    <td class="py-0 px-2 sm:px-4 font-normal">
+                        <div class="flex flex-col sm:flex-row sm:items-center">
+                            <span>{{.Date}}</span>
+                            <span class="sm:hidden">{{.Time}}</span>
+                        </div>
                     </td>
-                {{end}}
-                
-                <!-- Common Name Column -->
-                {{if ne $.QueryType "species"}}
-                <td class="py-1 px-4 font-normal">
-                    <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
-                        {{.CommonName}}
-                    </a>
-                </td>
-                {{end}}
-                <!-- Thumbnail Column -->
-                {{if $.DashboardSettings.Thumbnails.Summary}}
-                <td class="py-1 px-4 font-normal">
-                    <div class="thumbnail-container">
-                        <img loading="lazy" width="150" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
-                        <div class="thumbnail-tooltip hidden">
-                            {{thumbnailAttribution .ScientificName}}
+                    
+                    <!-- Time Column (hidden on small screens) -->
+                    <td class="py-1 px-2 font-normal hidden sm:table-cell">
+                        <div class="flex items-center gap-2">
+                            <span>{{sunPositionIcon .TimeOfDay}}</span>
+                            <span>{{.Time}}</span>
                         </div>
-                    </div>
-                </td>
-                {{end}}
-                
-                <!-- Confidence Column -->
-                <td class="py-1 px-4 font-normal">
-                    <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
-                        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
-                            {{confidence .Confidence}}
-                        </a>
-                    </div>
-                </td>
-                
-                <!-- Recording Column -->
-                <td class="py-1 px-6 font-normal">
-                    <div class="relative max-w-[400px]">                        
-                        <!-- Spectrogram Image -->
-                        <img loading="lazy" width="400" src="/media/spectrogram?clip={{urlsafe .ClipName}}" alt="Spectrogram Image" class="w-full h-auto rounded-md">
-                        
-                        <!-- Play position indicator -->
-                        <div id="position-indicator-{{.ID}}" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none" style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
+                    </td>
 
-                        <!-- Audio player overlay - Full version -->
-                        <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 p-2 rounded-b-md transition-opacity duration-300 opacity-0 group-hover:opacity-100 hidden sm:block">
-                            <audio id="audio-{{.ID}}" src="{{urlsafe .ClipName}}" preload="metadata" class="hidden"></audio>
-                            <div class="flex items-center justify-between">
-                                <button id="playPause-{{.ID}}" class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
-                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    </svg>
-                                </button>
-                                <div id="progress-{{.ID}}" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
-                                    <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
+                    <!-- Weather Column -->
+                    {{if $.WeatherEnabled}}
+                        <!-- For species query type, always show weather -->
+                        <!-- For other query types, hide weather on small screens -->
+                        <td class="py-1 px-2 font-normal {{if ne $.QueryType "species"}}hidden sm:table-cell{{end}}">
+                            {{if .Weather}}
+                                <div class="flex items-center gap-2">
+                                    <span>{{weatherIcon .Weather.WeatherMain .TimeOfDay}}</span>
+                                    <span>{{.Weather.WeatherMain}}</span>
                                 </div>
-                                <span id="currentTime-{{.ID}}" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-                                <a href="{{urlsafe .ClipName}}" download class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                                    </svg>
-                                </a>
+                            {{else}}
+                                <div>No weather data</div>
+                            {{end}}
+                        </td>
+                    {{end}}
+                    
+                    <!-- Common Name Column -->
+                    {{if ne $.QueryType "species"}}
+                    <td class="py-1 px-4 font-normal">
+                        <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
+                            {{.CommonName}}
+                        </a>
+                    </td>
+                    {{end}}
+                    <!-- Thumbnail Column -->
+                    {{if $.DashboardSettings.Thumbnails.Summary}}
+                    <td class="py-1 px-4 font-normal">
+                        <div class="thumbnail-container">
+                            <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
+                                <img loading="lazy" width="150" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
+                            </a>
+                            <div class="thumbnail-tooltip hidden">
+                                {{thumbnailAttribution .ScientificName}}
                             </div>
                         </div>
+                    </td>
+                    {{end}}
+                    
+                    <!-- Confidence Column -->
+                    <td class="py-1 px-4 font-normal">
+                        <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
+                            <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
+                                {{confidence .Confidence}}
+                            </a>
+                        </div>
+                    </td>
+                    
+                    <!-- Recording Column -->
+                    <td class="py-1 px-4 font-normal">
+                        <div class="relative min-w-[50px] max-w-[400px]">
+                            <!-- Spectrogram Image -->
+                            <img loading="lazy" width="400" src="/media/spectrogram?clip={{urlsafe .ClipName}}" alt="Spectrogram Image" class="w-full h-auto rounded-md">
+                            
+                            <!-- Play position indicator -->
+                            <div id="position-indicator-{{.ID}}" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none" style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
 
-                        <!-- Audio player overlay - Compact version -->
-                        <div class="absolute inset-0 flex items-center justify-center sm:hidden" style="--player-opacity: 0.7;">
-                            <div class="w-full h-full flex items-center justify-center">
-                                <button id="playPause-compact-{{.ID}}" class="w-6 h-6 flex items-center justify-center text-white hover:text-blue-200 bg-black bg-opacity-50 rounded-full" style="opacity: var(--player-opacity);">
-                                    <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                                    </svg>
-                                </button>                               
+                            <!-- Audio player overlay - Full version -->
+                            <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 p-2 rounded-b-md transition-opacity duration-300 opacity-0 group-hover:opacity-100 hidden sm:block">
+                                <audio id="audio-{{.ID}}" src="/{{urlsafe .ClipName}}" preload="metadata" class="hidden"></audio>
+                                <div class="flex items-center justify-between">
+                                    <button id="playPause-{{.ID}}" class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
+                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </button>
+                                    <div id="progress-{{.ID}}" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
+                                        <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
+                                    </div>
+                                    <span id="currentTime-{{.ID}}" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
+                                    <a href="/{{urlsafe .ClipName}}" download class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                        </svg>
+                                    </a>
+                                </div>
+                            </div>
+
+                            <!-- Audio player overlay - Compact version -->
+                            <div class="absolute inset-0 flex items-center justify-center sm:hidden" style="--player-opacity: 0.7;">
+                                <div class="w-full h-full flex items-center justify-center">
+                                    <button id="playPause-compact-{{.ID}}" class="w-6 h-6 flex items-center justify-center text-white hover:text-blue-200 bg-black bg-opacity-50 rounded-full" style="opacity: var(--player-opacity);">
+                                        <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                        </svg>
+                                    </button>                               
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </td>
-            </tr>
-            {{end}}
+                    </td>
+                </tr>
+                {{end}}
 
-            {{if gt .TotalResults .ItemsPerPage}}
-            <tr>
-                <td colspan="6">
-                    <div class="flex justify-between items-center p-4">
-                    <div class="text-sm text-gray-600">
-                        Showing {{.ShowingFrom}} to {{.ShowingTo}} of {{.TotalResults}} results
-                    </div>
-                    <div class="flex space-x-2">
-                        {{if gt .CurrentPage 1}}
-                            <button hx-get="?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
-                                hx-target="#mainContent"
-                                class="btn btn-sm btn-primary">
-                                Previous
-                            </button>
-                        {{else}}
-                            <button class="btn btn-sm btn-disabled">
-                                Previous
-                            </button>            
-                        {{end}}
-                        {{if lt .CurrentPage .TotalPages}}
-                            <button hx-get="?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
-                                hx-target="#mainContent"
-                                class="btn btn-sm btn-primary">
-                                Next
-                            </button>
-                        {{else}}
-                            <button class="btn btn-sm btn-disabled">
-                                Next
-                            </button>       
-                        {{end}}
-                    </div>
-                    </div>
-                </td>
-            </tr>
-            {{end}}
-            
-        </tbody>
-    </table>
+                {{if gt .TotalResults .ItemsPerPage}}
+                <tr>
+                    <td colspan="6">
+                        <div class="flex justify-between items-center p-4">
+                        <div class="text-sm text-gray-600">
+                            Showing {{.ShowingFrom}} to {{.ShowingTo}} of {{.TotalResults}} results
+                        </div>
+                        <div class="flex space-x-2">
+                            {{if gt .CurrentPage 1}}
+                                <button hx-get="?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
+                                    hx-target="#mainContent"
+                                    class="btn btn-sm btn-primary">
+                                    Previous
+                                </button>
+                            {{else}}
+                                <button class="btn btn-sm btn-disabled">
+                                    Previous
+                                </button>            
+                            {{end}}
+                            {{if lt .CurrentPage .TotalPages}}
+                                <button hx-get="?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
+                                    hx-target="#mainContent"
+                                    class="btn btn-sm btn-primary">
+                                    Next
+                                </button>
+                            {{else}}
+                                <button class="btn btn-sm btn-disabled">
+                                    Next
+                                </button>       
+                            {{end}}
+                        </div>
+                        </div>
+                    </td>
+                </tr>
+                {{end}}
+                
+            </tbody>
+        </table>
+    </div>
 
 </section>
-
-<script>
-    document.querySelectorAll('[id^="audio-"]').forEach(audio => {
-        const id = audio.id.split('-')[1];
-        const playPause = document.getElementById(`playPause-${id}`);
-        const playPauseCompact = document.getElementById(`playPause-compact-${id}`);
-        const progress = document.getElementById(`progress-${id}`);
-        
-        const currentTime = document.getElementById(`currentTime-${id}`);
-        const playerOverlay = playPause.closest('.absolute');
-        const spectrogramContainer = playerOverlay.closest('.relative');
-        const positionIndicator = document.getElementById(`position-indicator-${id}`);
-    
-        // Editable translucency parameter (0 to 1, where 1 is fully opaque)
-        const playerOpacity = 0.7;
-        playPauseCompact.style.setProperty('--player-opacity', playerOpacity);
-    
-        let updateInterval;
-    
-        // Function to update progress
-        const updateProgress = () => {
-            const percent = (audio.currentTime / audio.duration) * 100;
-            progress.firstElementChild.style.width = `${percent}%`;
-            currentTime.textContent = formatTime(audio.currentTime);
-         
-            // Update position indicator
-            positionIndicator.style.left = `${percent}%`;
-            if (audio.currentTime === 0 || audio.currentTime === audio.duration) {
-                positionIndicator.style.opacity = '0';
-            } else {
-                positionIndicator.style.opacity = '0.7';
-            }
-        };
-    
-        // Function to start the interval
-        const startInterval = () => {
-            updateInterval = setInterval(updateProgress, 100);
-        };
-    
-        // Function to stop the interval
-        const stopInterval = () => {
-            clearInterval(updateInterval);
-        };
-    
-        // Function to toggle play/pause state of the audio
-        const togglePlay = () => {
-            if (audio.paused) {
-                audio.play();
-            } else {
-                audio.pause();
-            }
-        };
-    
-        // Add event listeners for play/pause buttons
-        playPause.addEventListener('click', togglePlay);
-        playPauseCompact.addEventListener('click', togglePlay);
-    
-        // Update play/pause button icons and start/stop interval when audio is played
-        audio.addEventListener('play', () => {
-            playPause.innerHTML = `
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-            `;
-            playPauseCompact.innerHTML = `
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6"></path>
-                </svg>
-            `;
-            startInterval();
-        });
-    
-        // Update play/pause button icons and stop interval when audio is paused
-        audio.addEventListener('pause', () => {
-            playPause.innerHTML = `
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-            `;
-            playPauseCompact.innerHTML = `
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                </svg>
-            `;
-            stopInterval();
-        });
-    
-        // Stop interval when audio ends
-        audio.addEventListener('ended', stopInterval);
-    
-        // Initial update and interval start if audio is already playing
-        if (!audio.paused) {
-            updateProgress();
-            startInterval();
-        }
-    
-        // Allow seeking by clicking on the progress bar
-        progress.addEventListener('click', (e) => {
-            const rect = progress.getBoundingClientRect();
-            const pos = (e.clientX - rect.left) / rect.width;
-            audio.currentTime = pos * audio.duration;
-            updateProgress(); // Immediately update visuals
-        });
-        
-        // Allow seeking by clicking on the spectrogram for desktop version
-        // Allow seeking by dragging on the spectrogram for mobile version
-        if (window.matchMedia("(min-width: 640px)").matches) {
-            spectrogramContainer.addEventListener('click', (e) => {
-                if (!playerOverlay.contains(e.target)) {
-                    const rect = spectrogramContainer.getBoundingClientRect();
-                    const pos = (e.clientX - rect.left) / rect.width;
-                    audio.currentTime = pos * audio.duration;
-                    updateProgress(); // Immediately update visuals
-                }
-            });
-        } else {
-            let isDragging = false;
-            spectrogramContainer.addEventListener('touchstart', (e) => {
-                isDragging = true;
-            });
-            spectrogramContainer.addEventListener('touchmove', (e) => {
-                if (isDragging) {
-                    e.preventDefault(); // Prevent scrolling while dragging
-                    const touch = e.touches[0];
-                    const rect = spectrogramContainer.getBoundingClientRect();
-                    const pos = (touch.clientX - rect.left) / rect.width;
-                    audio.currentTime = pos * audio.duration;
-                    updateProgress(); // Immediately update visuals
-                }
-            });
-            spectrogramContainer.addEventListener('touchend', (e) => {
-                isDragging = false;
-            });
-        }
-    
-        // Show full version player when hovering over the spectrogram (desktop only)
-        if (window.matchMedia("(min-width: 640px)").matches) {
-            spectrogramContainer.addEventListener('mouseenter', () => {
-                playerOverlay.style.opacity = '1';
-            });
-    
-            spectrogramContainer.addEventListener('mouseleave', () => {
-                playerOverlay.style.opacity = '0';
-            });
-        }
-    });
-    
-    // Function to format time in minutes and seconds
-    function formatTime(seconds) {
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = Math.floor(seconds % 60);
-        return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-    }
-</script>
-
 {{end}}
