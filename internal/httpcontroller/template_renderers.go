@@ -20,13 +20,13 @@ type LocaleData struct {
 
 // PageData represents data for rendering a page.
 type PageData struct {
-	C        echo.Context   // The Echo context for the current request
-	Page     string         // The name or identifier of the current page
-	Title    string         // The title of the page
-	Settings *conf.Settings // Application settings
-	Locales  []LocaleData   // List of available locales
-	Charts   template.HTML  // HTML content for charts, if any
-	PreloadFragment    string       // The preload route for the current page
+	C               echo.Context   // The Echo context for the current request
+	Page            string         // The name or identifier of the current page
+	Title           string         // The title of the page
+	Settings        *conf.Settings // Application settings
+	Locales         []LocaleData   // List of available locales
+	Charts          template.HTML  // HTML content for charts, if any
+	PreloadFragment string         // The preload route for the current page
 }
 
 // TemplateRenderer is a custom HTML template renderer for Echo framework.
@@ -89,7 +89,7 @@ func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 	// Look up the route for the current path
 	_, isPageRoute := s.pageRoutes[path]
 	_, isFragment := s.partialRoutes[path]
-	if !isPageRoute && !isFragment{
+	if !isPageRoute && !isFragment {
 		// Return an error if no route is found for the path
 		return "", fmt.Errorf("no route found for path: %s", path)
 	}

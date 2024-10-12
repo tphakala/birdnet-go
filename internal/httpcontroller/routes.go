@@ -68,12 +68,12 @@ func (s *Server) initRoutes() {
 
 	// Partial routes (HTMX responses)
 	s.partialRoutes = map[string]PartialRouteConfig{
-		"/detections": {Path: "/detections", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.Detections)},
-		"/detections/recent": {Path: "/detections/recent", TemplateName: "recentDetections", Title: "Recent Detections", Handler: h.WithErrorHandling(h.RecentDetections)},
+		"/detections":         {Path: "/detections", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.Detections)},
+		"/detections/recent":  {Path: "/detections/recent", TemplateName: "recentDetections", Title: "Recent Detections", Handler: h.WithErrorHandling(h.RecentDetections)},
 		"/detections/details": {Path: "/detections/details", TemplateName: "detectionDetails", Title: "Detection Details", Handler: h.WithErrorHandling(h.DetectionDetails)},
-		"/top-birds": {Path: "/top-birds", TemplateName: "birdsTableHTML", Title: "Top Birds", Handler: h.WithErrorHandling(h.TopBirds)},
-		"/notes": {Path: "/notes", TemplateName: "notes", Title: "All Notes", Handler: h.WithErrorHandling(h.GetAllNotes)},
-		"/media/spectrogram": {Path: "/media/spectrogram", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.ServeSpectrogram)},
+		"/top-birds":          {Path: "/top-birds", TemplateName: "birdsTableHTML", Title: "Top Birds", Handler: h.WithErrorHandling(h.TopBirds)},
+		"/notes":              {Path: "/notes", TemplateName: "notes", Title: "All Notes", Handler: h.WithErrorHandling(h.GetAllNotes)},
+		"/media/spectrogram":  {Path: "/media/spectrogram", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.ServeSpectrogram)},
 	}
 
 	// Set up partial routes
@@ -149,7 +149,7 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 			C:               c,
 			Page:            "dashboard",
 			Title:           "Dashboard",
-			Settings: 		 s.Settings,
+			Settings:        s.Settings,
 			PreloadFragment: c.Request().RequestURI,
 		}
 	}
