@@ -13,7 +13,7 @@ require (
 	github.com/go-echarts/go-echarts/v2 v2.4.0
 	github.com/k3a/html2text v1.2.1
 	github.com/labstack/echo/v4 v4.12.0
-	github.com/prometheus/client_golang v1.20.3
+	github.com/prometheus/client_golang v1.20.4
 	github.com/prometheus/client_model v0.6.1
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/shirou/gopsutil/v3 v3.24.5
