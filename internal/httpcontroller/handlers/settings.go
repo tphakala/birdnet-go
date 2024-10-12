@@ -79,12 +79,6 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		}
 	}
 
-	// Send success notification for reloading settings
-	h.SSE.SendNotification(Notification{
-		Message: "Settings applied successfully",
-		Type:    "success",
-	})
-
 	// Save settings to YAML file
 	if err := conf.SaveSettings(); err != nil {
 		// Send error notification if saving settings fails
@@ -95,9 +89,9 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		return h.NewHandlerError(err, "Failed to save settings", http.StatusInternalServerError)
 	}
 
-	// Send success notification for saving settings
+	// Send success notification for applying and saving settings
 	h.SSE.SendNotification(Notification{
-		Message: "Settings saved successfully",
+		Message: "Settings saved and applied",
 		Type:    "success",
 	})
 

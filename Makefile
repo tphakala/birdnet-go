@@ -10,6 +10,10 @@ LDFLAGS := -ldflags "-s -w -X 'main.buildDate=$(shell date -u +%Y-%m-%dT%H:%M:%S
 UNAME_S := $(shell uname -s)
 UNAME_M := $(shell uname -m)
 
+# Tailwind CSS
+TAILWIND_INPUT := input.css
+TAILWIND_OUTPUT := assets/tailwind.css
+
 ifeq ($(UNAME_S),Linux)
     NATIVE_TARGET := linux_$(if $(filter x86_64,$(UNAME_M)),amd64,arm64)
     TFLITE_LIB_DIR := /usr/lib
@@ -68,6 +72,24 @@ download-tflite:
 	else \
 		echo "TensorFlow Lite C library already exists."; \
 	fi
+
+
+# Download assets
+download-assets:
+	@echo "Downloading latest versions of Leaflet, htmx, Alpine.js, and Tailwind CSS"
+	@mkdir -p assets
+	@curl -sL https://unpkg.com/leaflet/dist/leaflet.js -o assets/leaflet.js
+	@curl -sL https://unpkg.com/leaflet/dist/leaflet.css -o assets/leaflet.css
+	@curl -sL https://unpkg.com/htmx.org -o assets/htmx.min.js
+	@curl -sL https://unpkg.com/alpinejs -o assets/alpinejs.min.js
+	@echo "Assets downloaded successfully"
+
+# Create Tailwind CSS
+generate-tailwindcss:
+	@echo "Creating Tailwind CSS with DaisyUI"
+	npm -D install daisyui
+	npx --yes tailwindcss@latest -i $(TAILWIND_INPUT) -o $(TAILWIND_OUTPUT) --minify
+	@echo "Tailwind CSS processed successfully"
 
 # labels.zip depends on all files in the labels directory
 $(LABELS_ZIP): $(LABELS_FILES)

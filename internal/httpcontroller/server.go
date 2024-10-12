@@ -27,6 +27,7 @@ type Server struct {
 	BirdImageCache    *imageprovider.BirdImageCache
 	Handlers          *handlers.Handlers
 	pageRoutes        map[string]PageRouteConfig
+	partialRoutes     map[string]PartialRouteConfig
 	SunCalc           *suncalc.SunCalc            // SunCalc instance for calculating sun event times
 	AudioLevelChan    chan myaudio.AudioLevelData // Channel for audio level updates
 }

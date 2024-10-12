@@ -12,15 +12,19 @@ function moveDatePicker(days) {
 function renderChart(chartId, chartData) {
 	const chart = echarts.init(document.getElementById(chartId));
 	chart.setOption(chartData);
-	
+
 	window.addEventListener('resize', () => chart.resize());
-  }
-  
-  htmx.on('htmx:afterSettle', function(event) {
-	if (event.detail.target.id.endsWith('-content')) {
-	  // Find all chart containers in the newly loaded content and render them
-	  event.detail.target.querySelectorAll('[id$="-chart"]').forEach(function(chartContainer) {
-		renderChart(chartContainer.id, chartContainer.dataset.chartOptions);
-	  });
-	}
-  });
+}
+
+function isNotArrowKey(event) {
+	return !['ArrowLeft', 'ArrowRight'].includes(event.key);
+}
+
+htmx.on('htmx:afterSettle', function (event) {
+    if (event.detail.target.id.endsWith('-content')) {
+        // Find all chart containers in the newly loaded content and render them
+        event.detail.target.querySelectorAll('[id$="-chart"]').forEach(function (chartContainer) {
+            renderChart(chartContainer.id, chartContainer.dataset.chartOptions);
+        });
+    }
+});
