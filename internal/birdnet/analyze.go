@@ -173,9 +173,9 @@ func applySigmoidToPredictions(predictions []float32, sensitivity float64) []flo
 }
 
 // trimResultsToMax trims the results to a maximum specified count.
-func trimResultsToMax(results []datastore.Results, max int) []datastore.Results {
-	if len(results) > max {
-		return results[:max]
+func trimResultsToMax(results []datastore.Results, maxResults int) []datastore.Results {
+	if len(results) > maxResults {
+		return results[:maxResults]
 	}
 	return results
 }
