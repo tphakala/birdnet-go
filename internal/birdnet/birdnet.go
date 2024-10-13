@@ -111,7 +111,7 @@ func (bn *BirdNET) initializeModel() error {
 
 	// Replace model version if custom model is used
 	if bn.Settings.BirdNET.ModelPath != "" {
-		modelVersion = fmt.Sprintf("%s", bn.Settings.BirdNET.ModelPath)
+		modelVersion = bn.Settings.BirdNET.ModelPath
 	}
 
 	fmt.Printf("%s model initialized, using %v threads of available %v CPUs\n", modelVersion, threads, runtime.NumCPU())
