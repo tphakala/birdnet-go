@@ -154,40 +154,53 @@ type RealtimeSettings struct {
 	Species       SpeciesSettings       // Custom thresholds and actions for species
 }
 
-// RangeFilterSettings contains settings for the range filter
-type RangeFilterSettings struct {
-	Model       string    // range filter model model
-	Threshold   float32   // rangefilter species occurrence threshold
-	Species     []string  `yaml:"-"` // list of included species, runtime value
-	LastUpdated time.Time `yaml:"-"` // last time the species list was updated, runtime value
-}
-
 // SpeciesSettings holds custom thresholds and action configurations for species.
 type SpeciesSettings struct {
-	Threshold map[string]float32             `yaml:"-"` // Custom confidence thresholds for species
-	Actions   map[string]SpeciesActionConfig `yaml:"-"` // Actions configurations for species
+	Threshold map[string]float32             // Custom confidence thresholds for species
+	Actions   map[string]SpeciesActionConfig // Actions configurations for species
 	Include   []string                       // List of species to always include
 	Exclude   []string                       // List of species to always exclude
 }
 
 // SpeciesActionConfig represents the configuration for actions specific to a species.
 type SpeciesActionConfig struct {
-	SpeciesName string         `yaml:"-"` // Name of the species
-	Actions     []ActionConfig `yaml:"-"` // Configurations for actions associated with this species
-	Exclude     []string       `yaml:"-"` // List of actions to exclude
-	OnlyActions bool           `yaml:"-"` // Flag to indicate if only these actions should be executed
+	SpeciesName string         // Name of the species
+	Actions     []ActionConfig // Configurations for actions associated with this species
+	Exclude     []string       // List of actions to exclude
+	OnlyActions bool           // Flag to indicate if only these actions should be executed
 }
 
 // ActionConfig holds configuration details for a specific action.
 type ActionConfig struct {
-	Type       string   `yaml:"-"` // Type of the action (e.g. ExecuteScript which is only type for now)
-	Parameters []string `yaml:"-"` // List of parameters for the action
+	Type       string   // Type of the action (e.g. ExecuteScript which is only type for now)
+	Parameters []string // List of parameters for the action
 }
 
 // InputConfig holds settings for file or directory analysis
 type InputConfig struct {
 	Path      string `yaml:"-"` // path to input file or directory
 	Recursive bool   `yaml:"-"` // true for recursive directory analysis
+}
+
+type BirdNETConfig struct {
+	Sensitivity float64             // birdnet analysis sigmoid sensitivity
+	Threshold   float64             // threshold for prediction confidence to report
+	Overlap     float64             // birdnet analysis overlap between chunks
+	Longitude   float64             // longitude of recording location for prediction filtering
+	Latitude    float64             // latitude of recording location for prediction filtering
+	Threads     int                 // number of CPU threads to use for analysis
+	Locale      string              // language to use for labels
+	RangeFilter RangeFilterSettings // range filter settings
+	ModelPath   string              // path to external model file (empty for embedded)
+	LabelPath   string              // path to external label file (empty for embedded)
+}
+
+// RangeFilterSettings contains settings for the range filter
+type RangeFilterSettings struct {
+	Model       string    // range filter model model
+	Threshold   float32   // rangefilter species occurrence threshold
+	Species     []string  `yaml:"-"` // list of included species, runtime value
+	LastUpdated time.Time `yaml:"-"` // last time the species list was updated, runtime value
 }
 
 // Settings contains all configuration options for the BirdNET-Go application.
@@ -200,16 +213,7 @@ type Settings struct {
 		Log       LogConfig // logging configuration
 	}
 
-	BirdNET struct {
-		Sensitivity float64             // birdnet analysis sigmoid sensitivity
-		Threshold   float64             // threshold for prediction confidence to report
-		Overlap     float64             // birdnet analysis overlap between chunks
-		Longitude   float64             // longitude of recording location for prediction filtering
-		Latitude    float64             // latitude of recording location for prediction filtering
-		Threads     int                 // number of CPU threads to use for analysis
-		Locale      string              // language to use for labels
-		RangeFilter RangeFilterSettings // range filter settings
-	}
+	BirdNET BirdNETConfig // BirdNET configuration
 
 	Input InputConfig `yaml:"-"` // Input configuration for file and directory analysis
 
@@ -292,6 +296,12 @@ func Load() (*Settings, error) {
 	if err := ValidateSettings(settings); err != nil {
 		return nil, fmt.Errorf("error validating settings: %w", err)
 	}
+
+	// Log the loaded species settings for debugging
+	log.Printf("Loaded Species Settings: Include: %v, Exclude: %v, Threshold: %v",
+		settings.Realtime.Species.Include,
+		settings.Realtime.Species.Exclude,
+		settings.Realtime.Species.Threshold)
 
 	// Save settings instance
 	settingsInstance = settings
