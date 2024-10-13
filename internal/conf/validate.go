@@ -69,16 +69,7 @@ func ValidateSettings(settings *Settings) error {
 }
 
 // validateBirdNETSettings validates the BirdNET-specific settings
-func validateBirdNETSettings(settings *struct {
-	Sensitivity float64
-	Threshold   float64
-	Overlap     float64
-	Longitude   float64
-	Latitude    float64
-	Threads     int
-	Locale      string
-	RangeFilter RangeFilterSettings
-}) error {
+func validateBirdNETSettings(settings *BirdNETConfig) error {
 	var errs []string
 
 	// Check if sensitivity is within valid range

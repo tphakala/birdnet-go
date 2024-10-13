@@ -143,6 +143,8 @@ x-data="{
         threads: {{.Settings.BirdNET.Threads}},
         latitude: {{.Settings.BirdNET.Latitude}},
         longitude: {{.Settings.BirdNET.Longitude}},
+        modelPath: '{{.Settings.BirdNET.ModelPath}}',
+        labelPath: '{{.Settings.BirdNET.LabelPath}}',
     },   
     dynamicThreshold: {
         enabled: {{.Settings.Realtime.DynamicThreshold.Enabled}},
@@ -245,6 +247,33 @@ x-init="
                 </div>
             </div>
 
+        </div>
+
+        <!-- Custom BirdNET Classifier Settings -->
+        <div class="text-lg font-medium pt-4 pb-2">Custom BirdNET Classifier</div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div class="form-control relative">
+                <label class="label justify-start" for="birdnetModelPath">
+                    <span class="label-text">Model Path (Requires restart to apply)</span>
+                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'modelPath'" @mouseleave="showTooltip = null">ⓘ</span>
+                </label>
+                <input type="text" id="birdnetModelPath" name="birdnet.modelpath" x-model="birdnet.modelPath" class="input input-bordered input-sm w-full">
+                <div x-show="showTooltip === 'modelPath'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    Path to external BirdNET model file. Enter absolute or relative path to birdnet-go binary. Leave empty to use the default embedded model.
+                </div>
+            </div>
+
+            <div class="form-control relative">
+                <label class="label justify-start" for="birdnetLabelPath">
+                    <span class="label-text">Label Path (Requires restart to apply)</span>
+                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'labelPath'" @mouseleave="showTooltip = null">ⓘ</span>
+                </label>
+                <input type="text" id="birdnetLabelPath" name="birdnet.labelpath" x-model="birdnet.labelPath" class="input input-bordered input-sm w-full">
+                <div x-show="showTooltip === 'labelPath'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    Path to external model labels file, .zip or .txt file. Enter absolute or relative path to birdnet-go binary. Leave empty to use the default embedded labels.
+                </div>
+            </div>
         </div>
     
         <!-- Dynamic Threshold Settings -->
