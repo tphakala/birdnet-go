@@ -80,7 +80,9 @@ func WriteToAnalysisBuffer(stream string, data []byte) {
 
 	// Write data to the ring buffer
 	for retry := 0; retry < maxRetries; retry++ {
-		n, err := rb.Write(data)
+		rbMutex.Lock()           // Lock the mutex to prevent other goroutines from reading or writing to the buffer
+		n, err := rb.Write(data) // Write data to the ring buffer
+		rbMutex.Unlock()         // Unlock the mutex
 		if err == nil {
 			if n < len(data) {
 				log.Printf("Warning: Only wrote %d of %d bytes to buffer for stream %s", n, len(data), stream)
