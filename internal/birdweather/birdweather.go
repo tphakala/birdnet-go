@@ -5,12 +5,15 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"math"
 	"math/rand"
+	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -77,6 +80,22 @@ func (b *BwClient) RandomizeLocation(radiusMeters float64) (float64, float64) {
 	return newLatitude, newLongitude
 }
 
+// handleNetworkError handles network errors and returns a more specific error message.
+func handleNetworkError(err error) error {
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return fmt.Errorf("request timed out: %w", err)
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		var dnsErr *net.DNSError
+		if errors.As(urlErr.Err, &dnsErr) {
+			return fmt.Errorf("DNS resolution failed: %w", err)
+		}
+	}
+	return fmt.Errorf("network error: %w", err)
+}
+
 // UploadSoundscape uploads a soundscape file to the Birdweather API and returns the soundscape ID if successful.
 // It handles the PCM to WAV conversion, compresses the data, and manages HTTP request creation and response handling safely.
 func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscapeID string, err error) {
@@ -119,11 +138,12 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	resp, err := b.HTTPClient.Do(req)
 	if err != nil {
 		log.Printf("Request to upload soundscape failed: %v\n", err)
-		return "", fmt.Errorf("request to upload soundscape failed: %w", err)
+		return "", handleNetworkError(err)
 	}
-	if resp != nil {
-		defer resp.Body.Close()
+	if resp == nil {
+		return "", fmt.Errorf("received nil response")
 	}
+	defer resp.Body.Close()
 
 	// Process the response
 	responseBody, err := io.ReadAll(resp.Body)
@@ -214,7 +234,10 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 	resp, err := b.HTTPClient.Post(detectionURL, "application/json", bytes.NewBuffer(postDataBytes))
 	if err != nil {
 		log.Printf("Failed to post detection, err: %v\n", err)
-		return fmt.Errorf("failed to post detection: %w", err)
+		return handleNetworkError(err)
+	}
+	if resp == nil {
+		return fmt.Errorf("received nil response")
 	}
 	defer resp.Body.Close()
 
