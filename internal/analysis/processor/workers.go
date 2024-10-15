@@ -104,9 +104,14 @@ func (p *Processor) getDefaultActions(detection Detections) []Action {
 		actions = append(actions, SaveAudioAction{Settings: p.Settings, EventTracker: p.EventTracker, pcmData: detection.pcmDataExt, ClipName: detection.Note.ClipName})
 	}*/
 
-	// Add BirdWeatherAction if enabled
-	if p.Settings.Realtime.Birdweather.Enabled {
-		actions = append(actions, BirdWeatherAction{Settings: p.Settings, EventTracker: p.EventTracker, BwClient: p.BwClient, Note: detection.Note, pcmData: detection.pcmData3s})
+	// Add BirdWeatherAction if enabled and client is initialized
+	if p.Settings.Realtime.Birdweather.Enabled && p.BwClient != nil {
+		actions = append(actions, BirdWeatherAction{
+			Settings:     p.Settings,
+			EventTracker: p.EventTracker,
+			BwClient:     p.BwClient,
+			Note:         detection.Note,
+			pcmData:      detection.pcmData3s})
 	}
 
 	// Add MQTT action if enabled
