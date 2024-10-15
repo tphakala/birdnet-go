@@ -171,6 +171,15 @@ func (a BirdWeatherAction) Execute(data interface{}) error {
 	species := strings.ToLower(a.Note.CommonName)
 
 	if a.EventTracker.TrackEvent(species, BirdWeatherSubmit) {
+		// Add threshold check here
+		if a.Note.Confidence < float64(a.Settings.Realtime.Birdweather.Threshold) {
+			if a.Settings.Debug {
+				log.Printf("Skipping BirdWeather upload for %s: confidence %.2f below threshold %.2f\n",
+					species, a.Note.Confidence, a.Settings.Realtime.Birdweather.Threshold)
+			}
+			return nil
+		}
+
 		if err := a.BwClient.Publish(a.Note, a.pcmData); err != nil {
 			log.Printf("error uploading to BirdWeather: %s\n", err)
 			return err
