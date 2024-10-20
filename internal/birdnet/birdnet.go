@@ -16,6 +16,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/go-tflite"
+	"github.com/tphakala/go-tflite/delegates/xnnpack"
 )
 
 // Embedded TensorFlow Lite model data.
@@ -95,6 +96,10 @@ func (bn *BirdNET) initializeModel() error {
 
 	// Configure interpreter options.
 	options := tflite.NewInterpreterOptions()
+	// If OS is Linux and XNNPACK library is available, enable XNNPACK delegate
+	if runtime.GOOS == "linux" && CheckXNNPACKLibrary() && bn.Settings.BirdNET.UseXNNPACK {
+		options.AddDelegate(xnnpack.New(xnnpack.DelegateOptions{NumThreads: int32(threads)}))
+	}
 	options.SetNumThread(threads)
 	options.SetErrorReporter(func(msg string, user_data interface{}) {
 		fmt.Println(msg)

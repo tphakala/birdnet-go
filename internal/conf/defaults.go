@@ -30,6 +30,9 @@ func setDefaultConfig() {
 	viper.SetDefault("birdnet.longitude", 0.000)
 	viper.SetDefault("birdnet.rangefilter.model", "latest")
 	viper.SetDefault("birdnet.rangefilter.threshold", 0.01)
+	viper.SetDefault("birdnet.modelpath", "")
+	viper.SetDefault("birdnet.labelpath", "")
+	viper.SetDefault("birdnet.usexnnpack", false)
 
 	// Realtime configuration
 	viper.SetDefault("realtime.interval", 15)
