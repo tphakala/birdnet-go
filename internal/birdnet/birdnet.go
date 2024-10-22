@@ -97,7 +97,7 @@ func (bn *BirdNET) initializeModel() error {
 	// Configure interpreter options.
 	options := tflite.NewInterpreterOptions()
 	// If OS is Linux and XNNPACK library is available, enable XNNPACK delegate
-	if runtime.GOOS == "linux" && CheckXNNPACKLibrary() && bn.Settings.BirdNET.UseXNNPACK {
+	if bn.Settings.BirdNET.UseXNNPACK {
 		options.AddDelegate(xnnpack.New(xnnpack.DelegateOptions{NumThreads: int32(threads)}))
 	}
 	options.SetNumThread(threads)
