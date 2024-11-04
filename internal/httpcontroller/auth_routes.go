@@ -1,8 +1,10 @@
 package httpcontroller
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth/gothic"
@@ -50,7 +52,7 @@ func handleGothCallback(c echo.Context) error {
 	response := c.Response().Writer
 	user, err := gothic.CompleteUserAuth(response, request)
 	if err != nil {
-		return c.String(http.StatusBadRequest, err.Error())
+		return c.String(http.StatusBadRequest, "Authentication failed")
 	}
 
 	// Store provider and user info in session
@@ -69,6 +71,11 @@ func (s *Server) handleLoginPage(c echo.Context) error {
 	// If the request is a partial request, render the login modal
 	if c.Request().Header.Get("HX-Request") == "true" {
 		redirect := c.QueryParam("redirect")
+
+		// Validate the redirect parameter
+		if !isValidRedirect(redirect) {
+			redirect = "/settings/main"
+		}
 
 		// If no redirect is provided, redirect to the main settings page
 		if redirect == "" {
@@ -92,12 +99,18 @@ func (s *Server) handleLoginPage(c echo.Context) error {
 	})
 }
 
+// isValidRedirect ensures the redirect path is safe and internal
+func isValidRedirect(redirect string) bool {
+	// Allow only relative paths starting with '/'
+	return strings.HasPrefix(redirect, "/") && !strings.Contains(redirect, "//")
+}
+
 // handleBasicAuthLogin handles password login POST request
 func (s *Server) handleBasicAuthLogin(c echo.Context) error {
 	password := c.FormValue("password")
 	storedPassword := s.Settings.Security.BasicAuth.Password
 
-	if password != storedPassword {
+	if subtle.ConstantTimeCompare([]byte(password), []byte(storedPassword)) != 1 {
 		return c.HTML(http.StatusUnauthorized, "<div class='text-red-500'>Invalid password</div>")
 	}
 

@@ -1,4 +1,6 @@
 #!/bin/bash
+set -eo pipefail
+IFS=$'\n\t'
 
 # Text styling
 BOLD='\033[1m'
@@ -24,12 +26,20 @@ for CONFIG_PATH in "${CONFIG_PATHS[@]}"; do
     [ -z "$CONFIG_PATH" ] && continue  # Skip empty paths
     
     if [ -f "$CONFIG_PATH" ]; then
+        # Check write permissions
+        if [ ! -w "$CONFIG_PATH" ]; then
+            echo -e "${BOLD}Error:${NC} No write permission for $CONFIG_PATH"
+            continue
+        fi
+
         echo -e "${BLUE}Found config at:${NC} $CONFIG_PATH"
         
         # Create timestamped backup
         BACKUP="${CONFIG_PATH}.$(date +%Y%m%d_%H%M%S).bak"
-        cp "$CONFIG_PATH" "$BACKUP"
-        
+        while [ -f "$BACKUP" ]; do
+            BACKUP="${CONFIG_PATH}.$(date +%Y%m%d_%H%M%S)_$RANDOM.bak"
+        done
+        cp "$CONFIG_PATH" "$BACKUP"        
         # Reset auth settings
         sed -i '
             /^security:/,/^[^ ]/ {

@@ -129,7 +129,7 @@ security:
   redirecttohttps: false     # true to redirect http to https
   allowsubnetbypass:
     enabled: false           # true to disable OAuth in subnet
-    subnet: ""               # disable OAuth in this subnet
+    subnet: ""               # comma-separated list of CIDR ranges (e.g., "192.168.1.0/24,10.0.0.0/8")
   allowcftunnelbypass: false # true to disable OAuth for Cloudflare Tunnel requests
   basicauth:
     enabled: false           # true to enable basic auth

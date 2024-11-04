@@ -88,8 +88,8 @@ func (s *OAuth2Server) UpdateProviders() {
 }
 
 func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
-	if token, _ := gothic.GetFromSession("access_token", c.Request()); token != "" && s.ValidateAccessToken(token) {
-		log.Printf("User is authenticated with token: %s", token)
+	if token, err := gothic.GetFromSession("access_token", c.Request()); err == nil &&
+		token != "" && s.ValidateAccessToken(token) {
 		return true
 	}
 
@@ -166,14 +166,11 @@ func (s *OAuth2Server) ExchangeAuthCode(code string) (string, error) {
 }
 
 func (s *OAuth2Server) ValidateAccessToken(token string) bool {
-	log.Printf("Validating access token: %s", token)
-
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
 	accessToken, exists := s.accessTokens[token]
 	if !exists {
-		log.Printf("Access token not found: %s", token)
 		return false
 	}
 

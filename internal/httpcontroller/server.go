@@ -119,7 +119,8 @@ func (s *Server) RealIP(c echo.Context) string {
 	var ip string
 
 	if forwardedFor := c.Request().Header.Get("X-Forwarded-For"); forwardedFor != "" {
-		ip = strings.Split(forwardedFor, ", ")[0]
+		ip = strings.Split(forwardedFor, ",")[0]
+		ip = strings.TrimSpace(ip)
 	} else {
 		ip = strings.Split(c.Request().RemoteAddr, ":")[0]
 	}
