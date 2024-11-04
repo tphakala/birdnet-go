@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log"
 	"net"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +51,9 @@ func NewOAuth2Server(config *conf.Settings) *OAuth2Server {
 	// Initialize Gothic with the provided configuration
 	InitializeGoth(config)
 
+	// Clean up expired tokens every hour
+	server.StartTokenCleanup(time.Hour)
+
 	return server
 }
 
@@ -61,10 +63,6 @@ func InitializeGoth(settings *conf.Settings) {
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	// Initialize Gothic providers
-	gothic.SetState = func(req *http.Request) string {
-		return "" // Gothic handles state automatically
-	}
-
 	googleProvider :=
 		gothGoogle.New(settings.Security.GoogleAuth.ClientID,
 			settings.Security.GoogleAuth.ClientSecret,
@@ -217,4 +215,32 @@ func (s *OAuth2Server) IsRequestFromAllowedSubnet(ip string) bool {
 	}
 
 	return false
+}
+
+func (s *OAuth2Server) StartTokenCleanup(interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			now := time.Now()
+			s.mutex.Lock()
+
+			// Clean up expired auth codes
+			for code, ac := range s.authCodes {
+				if now.After(ac.ExpiresAt) {
+					delete(s.authCodes, code)
+				}
+			}
+
+			// Clean up expired access tokens
+			for token, at := range s.accessTokens {
+				if now.After(at.ExpiresAt) {
+					delete(s.accessTokens, token)
+				}
+			}
+
+			s.mutex.Unlock()
+		}
+	}()
 }
