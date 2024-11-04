@@ -1,0 +1,25 @@
+{{define "checkbox"}}
+
+<!-- Checkbox field -->
+<div class="form-control relative {{.class}}" x-data="checkbox('{{.id}}', '{{.label}}', '{{.model}}', '{{.name}}')">
+    <label class="label cursor-pointer justify-start" for="{{.id}}">
+
+        <!-- Checkbox field -->
+        <input type="checkbox" id="{{.id}}" :name="name" 
+               x-model="{{.model}}" class="checkbox checkbox-primary checkbox-xs mr-2">
+
+        <!-- Have a value for the above field even if checkbox is unchecked -->
+        <input type="hidden" :name="name" value="false">
+
+        <span class="label-text">{{.label}}</span>
+        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = '{{.id}}'"
+            @mouseleave="showTooltip = null">ⓘ</span>
+    </label>
+
+    <!-- Tooltip -->
+    <div x-show="showTooltip === '{{.id}}'" x-cloak
+        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+        {{.tooltip}}
+    </div>
+</div>
+{{end}}

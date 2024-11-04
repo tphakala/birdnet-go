@@ -36,7 +36,7 @@ skills and a keen interest in contributing to a nature-focused project, I'd love
 
 ## Installation
 
-For detailed installation instructions, see the [installation documentation](doc/installation.md).
+For detailed installation instructions, see the [installation documentation](doc/installation.md). For securing your BirdNET-Go installation, see the [security documentation](doc/security.md).
 
 
 ## Building

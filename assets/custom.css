@@ -18,7 +18,22 @@
         width: 40px;
         height: 20px;
         font-size: 0.65rem;
+        margin: auto;
     }
+}
+
+.htmx-indicator {
+  display: none;
+}
+.htmx-request .htmx-indicator {
+  display: inline-block;
+}
+.htmx-request.htmx-indicator {
+  display: inline-block;
+}
+
+input.invalid {
+  border-color: #dc2626;
 }
 
 /*@media (max-width: 768px) {
@@ -47,6 +62,52 @@
   }
 }
 
+.hour-header, .hour-data { display: table-cell; }
+.hourly-count { display: table-cell; }
+.bi-hourly-count, .six-hourly-count { display: none; }
+
+@media (max-width: 767px) {
+  .hour-header:not(.bi-hourly), .hour-data:not(.bi-hourly) { display: none; }
+  .hourly-count { display: none; }
+  .bi-hourly-count { display: table-cell; }
+}
+
+@media (max-width: 479px) {
+  .hour-header:not(.six-hourly), .hour-data:not(.six-hourly) { display: none; }
+  .bi-hourly-count { display: none; }
+  .six-hourly-count { display: table-cell; }
+}
+
+.text-2xs {
+  font-size: 0.6rem;
+}
+
+.h {
+  /* bottom: 0;*/
+  height: 10rem !important;
+}
+
+/* Audio player skeleton prior to loading */
+.audio-player-container {
+  background: linear-gradient(to bottom, rgba(128, 128, 128, 0.4), rgba(128, 128, 128, 0.1));
+  border-radius: 0.5rem;
+}
+
+.audio-player-container::before {
+  content: "";
+  width: 1px;
+  margin-left: -1px;
+  float: left;
+  height: 0;
+  padding-top: 50%; /* audio player ratio is 2:1 */
+}
+
+.audio-player-container::after { /* clear float */
+  content: "";
+  display: table;
+  clear: both;
+}
+
 .input:focus-visible {
     outline: 1px solid transparent;
     outline-offset: 0px;
@@ -62,6 +123,7 @@
 .thumbnail-container {
   position: relative;
   display: inline-block;
+  max-width: 16vw;
 }
 
 .thumbnail-tooltip {
