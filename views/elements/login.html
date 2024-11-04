@@ -1,0 +1,113 @@
+{{define "login"}}
+<div id="loginForm" class="modal-box sm:p-6 sm:pb-10 p-3 overflow-hidden">
+  <form id="loginForm" hx-post="/login" hx-on:submit="showError(false)">
+    <input type="hidden" id="redirectUri" name="redirect" value="{{.RedirectURL}}">
+
+    <div class="flex items-start flex-row">
+      <div class="flex-initial">
+        <div
+          class="mx-auto flex h-12 w-12 sm:w-12 sm:h-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 sm:mx-0 sm:h-10 sm:w-10">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            class="lucide-lock-open stroke-white dark:stroke-gray-200">
+            <rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="flex-1">
+        <h3 class="text-xl font-black py-2 px-6">Login to BirdNET-Go</h3>
+        {{if .BasicEnabled }}
+        <div class="form-control p-6 mx-14 ml-0">
+          <label class="label" for="password">Password</label>
+          <input type="password" id="loginPassword" name="password" class="input input-bordered" required
+            autocomplete="current-password">
+          <div id="loginError" class="text-red-700 relative hidden" role="alert"></div>
+        </div>
+        {{end}}
+      </div>
+    </div>
+
+    {{if .BasicEnabled }}
+    <div id="loginResult" class="px-6 my-2"></div>
+    <div class="modal-action px-[4.5rem] flex-row gap-4 justify-between">
+      <button type="button" onclick="loginModal.close()" class="btn btn-outline">Cancel</button>
+      <button type="submit" class="btn btn-primary grow pr-10"
+        hx-on:click="event.target.form.reportValidity() && showSpinner('basicSpinner')">
+        <span id="basicSpinner" class="invisible loading loading-spinner"></span>
+        Login
+      </button>
+    </div>
+    {{end}}
+
+    {{if and .BasicEnabled (or .GoogleEnabled .GithubEnabled) }}
+    <div class="divider">or</div>
+    {{end}}
+
+    {{if or .GoogleEnabled .GithubEnabled }}
+    <div class="flex flex-col sm:flex-row gap-4 flex-wrap px-16 pb-6">
+      {{if or .GoogleEnabled }}
+      <a href="/auth/google" class="btn btn-primary grow pr-10" onclick="showSpinner('googleSpinner')">
+        <span id="googleSpinner" class="invisible loading loading-spinner"></span>
+        Login with Google
+      </a>
+      {{end}}
+      {{if or .GithubEnabled }}
+      <a href="/auth/github" class="btn btn-primary grow pr-10" onclick="showSpinner('githubSpinner')">
+        <span id="githubSpinner" class="invisible loading loading-spinner"></span>
+        Login with GitHub
+      </a>
+      {{end}}
+    </div>
+    {{end}}
+  </form>
+  <form method="dialog">
+    <button class="btn btn-ghost btn-circle btn absolute text-lg right-2 top-2" aria-label="Close">✕</button>
+  </form>
+
+</div>
+
+<form method="dialog" class="modal-backdrop">
+  <button>close</button>
+</form>
+
+<script>
+  function closeLoginModal() {
+    document.getElementById('loginModal').classList.remove('modal-open')
+  }
+
+  function showSpinner(spinnerId) {
+    document.getElementById(spinnerId).classList.remove('invisible');
+  }
+
+  function hideSpinner(spinnerId) {
+    document.getElementById(spinnerId).classList.add('invisible');
+  }
+
+  // Show error message if login failed
+  function showError(message) {
+    let errorBanner = document.getElementById("loginError");
+
+    if (!message) {
+      errorBanner.style.display = 'hidden';
+      return;
+    }
+
+    errorBanner.innerHTML = message;
+    errorBanner.style.display = 'block';
+    hideSpinner('basicSpinner');
+  }
+
+  // Handle login result and focus on password field if shown
+  document.body.addEventListener('htmx:afterSettle', function (event) {
+    if (event.detail.elt.id === 'loginResult' && event.detail.xhr.status === 200) {
+      setTimeout(closeLoginModal, 2000)
+    }
+
+    if (event.detail.target.id === 'loginModal') {
+      document.getElementById('loginPassword')?.focus();
+    }
+  })
+</script>
+{{end}}

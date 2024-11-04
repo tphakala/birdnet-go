@@ -21,6 +21,7 @@ type PageRouteConfig struct {
 	Path         string
 	TemplateName string
 	Title        string
+	Authorized   bool // Whether the route requires authentication
 }
 
 // PartialRouteConfig defines the structure for each partial route (HTMX response).
@@ -29,6 +30,12 @@ type PartialRouteConfig struct {
 	TemplateName string
 	Title        string
 	Handler      echo.HandlerFunc
+}
+
+type Security struct {
+	Enabled       bool
+	AccessAllowed bool
+	IsCloudflare  bool
 }
 
 type RenderData struct {
@@ -40,12 +47,16 @@ type RenderData struct {
 	Charts          template.HTML
 	ContentTemplate string
 	PreloadFragment string
+	Security        *Security
 }
 
 // initRoutes initializes the routes for the server.
 func (s *Server) initRoutes() {
 	// Initialize handlers
 	h := s.Handlers
+
+	// Initialize OAuth2 routes
+	s.initAuthRoutes()
 
 	// Full page routes
 	s.pageRoutes = map[string]PageRouteConfig{
@@ -54,16 +65,22 @@ func (s *Server) initRoutes() {
 		"/logs":      {Path: "/logs", TemplateName: "logs", Title: "Logs"},
 		"/stats":     {Path: "/stats", TemplateName: "stats", Title: "Statistics"},
 		// Settings Routes are managed by settingsBase template
-		"/settings/main":             {Path: "/settings/main", TemplateName: "settingsBase", Title: "Main Settings"},
-		"/settings/audio":            {Path: "/settings/audio", TemplateName: "settingsBase", Title: "Audio Settings"},
-		"/settings/detectionfilters": {Path: "/settings/detectionfilters", TemplateName: "settingsBase", Title: "Detection Filters"},
-		"/settings/integrations":     {Path: "/settings/integrations", TemplateName: "settingsBase", Title: "Integration Settings"},
-		"/settings/species":          {Path: "/settings/species", TemplateName: "settingsBase", Title: "Editor"},
+		"/settings/main":             {Path: "/settings/main", TemplateName: "settingsBase", Title: "Main Settings", Authorized: true},
+		"/settings/audio":            {Path: "/settings/audio", TemplateName: "settingsBase", Title: "Audio Settings", Authorized: true},
+		"/settings/detectionfilters": {Path: "/settings/detectionfilters", TemplateName: "settingsBase", Title: "Detection Filters", Authorized: true},
+		"/settings/integrations":     {Path: "/settings/integrations", TemplateName: "settingsBase", Title: "Integration Settings", Authorized: true},
+		"/settings/security":         {Path: "/settings/security", TemplateName: "settingsBase", Title: "Security & Access Settings", Authorized: true},
+		"/settings/species":          {Path: "/settings/species", TemplateName: "settingsBase", Title: "Editor", Authorized: true},
 	}
 
 	// Set up full page routes
 	for _, route := range s.pageRoutes {
-		s.Echo.GET(route.Path, h.WithErrorHandling(s.handlePageRequest))
+		if route.Authorized {
+			s.Echo.GET(route.Path, h.WithErrorHandling(s.handlePageRequest), s.AuthMiddleware)
+		} else {
+			s.Echo.GET(route.Path, h.WithErrorHandling(s.handlePageRequest))
+
+		}
 	}
 
 	// Partial routes (HTMX responses)
@@ -74,6 +91,7 @@ func (s *Server) initRoutes() {
 		"/top-birds":          {Path: "/top-birds", TemplateName: "birdsTableHTML", Title: "Top Birds", Handler: h.WithErrorHandling(h.TopBirds)},
 		"/notes":              {Path: "/notes", TemplateName: "notes", Title: "All Notes", Handler: h.WithErrorHandling(h.GetAllNotes)},
 		"/media/spectrogram":  {Path: "/media/spectrogram", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.ServeSpectrogram)},
+		"/login":              {Path: "/login", TemplateName: "login", Title: "Login", Handler: h.WithErrorHandling(s.handleLoginPage)},
 	}
 
 	// Set up partial routes
@@ -89,12 +107,15 @@ func (s *Server) initRoutes() {
 		})
 	}
 
+	s.Echo.POST("/login", s.handleBasicAuthLogin)
+	s.Echo.GET("/logout", s.handleLogout)
+
 	// Special routes
 	s.Echo.GET("/sse", s.Handlers.SSE.ServeSSE)
 	s.Echo.GET("/audio-level", s.Handlers.WithErrorHandling(s.Handlers.AudioLevelSSE))
 	s.Echo.DELETE("/note", h.WithErrorHandling(h.DeleteNote))
-	s.Echo.POST("/settings/save", h.WithErrorHandling(h.SaveSettings))
-	s.Echo.GET("/settings/audio/get", h.WithErrorHandling(h.GetAudioDevices))
+	s.Echo.POST("/settings/save", h.WithErrorHandling(h.SaveSettings), s.AuthMiddleware)
+	s.Echo.GET("/settings/audio/get", h.WithErrorHandling(h.GetAudioDevices), s.AuthMiddleware)
 
 	// Setup Error handler
 	s.Echo.HTTPErrorHandler = func(err error, c echo.Context) {
@@ -122,10 +143,10 @@ func (s *Server) initRoutes() {
 
 // handlePageRequest handles requests for full page routes
 func (s *Server) handlePageRequest(c echo.Context) error {
-	var data RenderData
 	path := c.Path()
 	pageRoute, isPageRoute := s.pageRoutes[path]
-	_, isFragment := s.partialRoutes[path]
+	partialRoute, isFragment := s.partialRoutes[path]
+	isCloudflare := s.Settings.Security.AllowCloudflareBypass && s.CloudflareAccess.IsEnabled(c)
 
 	// Return an error if route is unknown
 	if !isPageRoute && !isFragment {
@@ -136,22 +157,23 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 		)
 	}
 
-	if isPageRoute {
-		data = RenderData{
-			C:        c,
-			Page:     pageRoute.TemplateName,
-			Title:    pageRoute.Title,
-			Settings: s.Settings,
-		}
-	} else {
+	data := RenderData{
+		C:        c,
+		Page:     pageRoute.TemplateName,
+		Title:    pageRoute.Title,
+		Settings: s.Settings,
+		Security: &Security{
+			Enabled:       s.isAuthenticationEnabled(c),
+			AccessAllowed: s.IsAccessAllowed(c),
+			IsCloudflare:  isCloudflare,
+		},
+	}
+
+	if isFragment {
 		// If the route is for a fragment, render it with the dashboard template
-		data = RenderData{
-			C:               c,
-			Page:            "dashboard",
-			Title:           "Dashboard",
-			Settings:        s.Settings,
-			PreloadFragment: c.Request().RequestURI,
-		}
+		data.Page = "dashboard"
+		data.Title = partialRoute.Title
+		data.PreloadFragment = c.Request().RequestURI
 	}
 
 	return c.Render(http.StatusOK, "index", data)

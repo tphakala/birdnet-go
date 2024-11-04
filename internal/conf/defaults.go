@@ -2,6 +2,8 @@
 package conf
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"time"
 
 	"github.com/spf13/viper"
@@ -135,7 +137,6 @@ func setDefaultConfig() {
 	// Webserver configuration
 	viper.SetDefault("webserver.enabled", true)
 	viper.SetDefault("webserver.port", "8080")
-	viper.SetDefault("webserver.autotls", false)
 
 	// Webserver log configuration
 	viper.SetDefault("webserver.log.enabled", false)
@@ -160,4 +161,44 @@ func setDefaultConfig() {
 	viper.SetDefault("output.mysql.database", "birdnet")
 	viper.SetDefault("output.mysql.host", "localhost")
 	viper.SetDefault("output.mysql.port", 3306)
+
+	// Security configuration
+	viper.SetDefault("security.host", "")
+	viper.SetDefault("security.autotls", false)
+	viper.SetDefault("security.redirecttohttps", false)
+	viper.SetDefault("security.allowsubnetbypass.enabled", false)
+	viper.SetDefault("security.allowsubnetbypass.subnet", "")
+	viper.SetDefault("security.allowcloudflaretunnelbypass", false)
+
+	// Basic authentication configuration
+	viper.SetDefault("security.basic.enabled", false)
+	viper.SetDefault("security.basic.password", "")
+	viper.SetDefault("security.basic.clientid", "birdnet-client")
+	viper.SetDefault("security.basic.redirecturi", "/settings")
+	viper.SetDefault("security.basic.authcodeexp", "10m")
+	viper.SetDefault("security.basic.accesstokenexp", "1h")
+
+	// Google OAuth2 configuration
+	viper.SetDefault("security.google.enabled", false)
+	viper.SetDefault("security.google.clientid", "")
+	viper.SetDefault("security.google.clientsecret", "")
+	viper.SetDefault("security.google.redirecturi", "/settings")
+	viper.SetDefault("security.google.userid", "")
+
+	// GittHub OAuth2 configuration
+	viper.SetDefault("security.github.enabled", false)
+	viper.SetDefault("security.github.clientid", "")
+	viper.SetDefault("security.github.clientsecret", "")
+	viper.SetDefault("security.github.redirecturi", "/settings")
+	viper.SetDefault("security.github.userid", "")
+}
+
+// Generate a secure random string for the client secret.
+func GenerateRandomSecret() string {
+	// Use crypto/rand for secure random generation
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		panic(err)
+	}
+	return base64.RawURLEncoding.EncodeToString(bytes)
 }

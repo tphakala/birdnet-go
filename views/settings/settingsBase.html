@@ -1,7 +1,33 @@
 {{define "settingsBase"}}
-
 <script>
     document.addEventListener('alpine:init', () => {
+        // Define a new Alpine.js component for the password field
+        Alpine.data('inputField', (id, label, model, name, placeholder) => ({
+            id: id,
+            name: name || model.toLowerCase(),
+            model: model,
+            placeholder: placeholder || `Enter ${label}`,
+            showPassword: false
+        }));
+
+        // Define a new Alpine.js component for the checkbox field
+        Alpine.data('checkbox', (id, label, model, name) => ({
+            id: id,
+            name: name || model.toLowerCase(),
+            model: model
+        }));
+
+        Alpine.store('security', {
+            hasChanges: false,
+            showPasswords: {}  // Track visibility state for each password field
+        });
+
+        // Add password toggle handler for all password fields
+        document.querySelectorAll('input[type="password"]').forEach(field => {
+            const id = field.id;
+            Alpine.store('security').showPasswords[id] = false;
+        });
+
         Alpine.store('pageLoaded', {
             loaded: false
         });
@@ -13,9 +39,10 @@
         });
     });
 </script>
-
 <style>
-    [x-cloak] { display: none !important; }
+    [x-cloak] {
+        display: none !important;
+    }
 
     .input {
         border-radius: 0.3rem;
@@ -24,21 +51,23 @@
     .select {
         border-radius: 0.3rem;
     }
-    
+
     .badge.badge-primary.badge-sm.changed-badge {
         opacity: 1;
         transition: opacity 0.3s ease-out;
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-top: 0.125rem; /* mt-0.5 */
-        height: 1rem; /* h-4 */
+        margin-top: 0.125rem;
+        /* mt-0.5 */
+        height: 1rem;
+        /* h-4 */
     }
 </style>
-
 <div class="col-span-12" x-data="{ 
     notifications: [],
     hasChanges: false,
+    saving: false,
     initSSE() {
         const eventSource = new EventSource('/sse');
         eventSource.onmessage = (event) => {
@@ -53,10 +82,34 @@
             this.notifications = this.notifications.filter(n => n.id !== id);
         }, 5000);
     },
+    isFormValid(form) {
+        const visibleFieldsValid = Array.from(form.elements)
+        .filter(element => element.offsetParent !== null)
+        .every(element => element.checkValidity());
+
+        const inputSelector = 'input[type=\'password\'], input[type=\'text\']';
+        if(!visibleFieldsValid) {
+            form.querySelectorAll(inputSelector).forEach(input => {
+                if (input.offsetParent === null) return;
+
+                input.checkValidity();
+                if (!input.validity.valid)
+                    // Trigger validation message
+                    input.dispatchEvent(new Event('blur'));
+            });
+        }
+        return visibleFieldsValid;
+    },
     saveSettings() {
         const form = document.getElementById('settingsForm');
         const formData = new FormData(form);
 
+        if(!this.isFormValid(form)) {
+            this.addNotification('Please fill out all required fields.', 'error');
+            return;
+        }
+
+        this.saving = true;
         fetch('/settings/save', {
             method: 'POST',
             body: formData
@@ -65,56 +118,69 @@
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-        })
-        .then(data => {
-            this.resetComponentChanges();
+            const security = Alpine.store('security');
+            if (security?.hasChanges) {
+                setTimeout(() => {
+                    this.notifications = [];  // Clear existing notifications
+                    this.addNotification('Settings saved, reloading page...', 'success');
+                    setTimeout(() => window.location.reload(), 1500);
+                }, 50);
+            } else {
+                this.resetComponentChanges();
+                this.saving = false;
+            }
         })
         .catch(error => {
             console.error('Error:', error);
             this.addNotification('An error occurred while saving settings. Please try again.', 'error');
+            this.saving = false;
         });
     },
     resetComponentChanges() {
-        console.log('Resetting component changes');
         this.$root.querySelectorAll('[x-data]').forEach(el => {
             if (el._x_resetChanges && typeof el._x_resetChanges === 'function') {
-                console.log('Calling resetChanges on component');
                 el._x_resetChanges();
             }
         });
     }
-}" x-init="initSSE()"
-   x-bind:class="$store.pageLoaded.loaded ? 'page-loaded' : ''">
-
-    <form id="settingsForm" @submit.prevent="saveSettings">
+}" x-init="initSSE()" x-bind:class="$store.pageLoaded.loaded ? 'page-loaded' : ''">
+    <form id="settingsForm" @submit.prevent="saveSettings()">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             <!-- Settings content rendered here -->
             {{renderSettingsContent .C}}
         </div>
-
-        <button @click.prevent="saveSettings()" class="btn btn-primary mt-6">
+        <button @click.prevent="saveSettings()" class="btn btn-primary mt-6" :disabled="saving">
             Save Changes
         </button>
     </form>
 
     <div class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2">
         <template x-for="notification in notifications" :key="notification.id">
-            <div x-show="!notification.removing"
-                 :class="{
+            <div x-show="!notification.removing" :class="{
                     'alert-success': notification.type === 'success',
                     'alert-error': notification.type === 'error',
                     'alert-info': notification.type === 'info'
-                 }"
-                 class="alert">
+                 }" class="alert">
                 <div class="flex items-start">
-                    <svg x-show="notification.type === 'success'" xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    <svg x-show="notification.type === 'error'" xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    <svg x-show="notification.type === 'info'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current flex-shrink-0 w-6 h-6 mr-2"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <svg x-show="notification.type === 'success'" xmlns="http://www.w3.org/2000/svg"
+                        class="stroke-current flex-shrink-0 h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <svg x-show="notification.type === 'error'" xmlns="http://www.w3.org/2000/svg"
+                        class="stroke-current flex-shrink-0 h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <svg x-show="notification.type === 'info'" xmlns="http://www.w3.org/2000/svg" fill="none"
+                        viewBox="0 0 24 24" class="stroke-current flex-shrink-0 w-6 h-6 mr-2">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
                     <span x-text="notification.message"></span>
                 </div>
             </div>
         </template>
     </div>
 </div>
-
 {{end}}

@@ -1,6 +1,7 @@
 package httpcontroller
 
 import (
+	"net/http"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -9,6 +10,9 @@ import (
 
 // configureMiddleware sets up middleware for the server.
 func (s *Server) configureMiddleware() {
+	s.Echo.Use(s.AuthMiddleware)
+	//s.Echo.Use(corsMiddleware())
+
 	s.Echo.Use(middleware.Recover())
 	s.Echo.Use(middleware.GzipWithConfig(middleware.GzipConfig{
 		Level:     6,
@@ -48,4 +52,33 @@ func VaryHeaderMiddleware() echo.MiddlewareFunc {
 			return next(c)
 		}
 	}
+}
+
+func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		if isProtectedRoute(c.Path()) {
+			// Check for Cloudflare bypass
+			if s.Settings.Security.AllowCloudflareBypass && s.CloudflareAccess.IsEnabled(c) {
+				return next(c)
+			}
+
+			// Check if authentication is required for this IP
+			if s.OAuth2Server.IsAuthenticationEnabled(s.RealIP(c)) {
+				if !s.IsAccessAllowed(c) {
+					if c.Request().Header.Get("HX-Request") == "true" {
+						c.Response().Header().Set("HX-Redirect", "/login?redirect="+c.Request().URL.Path)
+						return c.String(http.StatusUnauthorized, "")
+					}
+					return c.Redirect(http.StatusFound, "/login?redirect="+c.Request().URL.Path)
+				}
+			}
+
+			// User is authenticated
+		}
+		return next(c)
+	}
+}
+
+func isProtectedRoute(path string) bool {
+	return strings.HasPrefix(path, "/settings/")
 }
