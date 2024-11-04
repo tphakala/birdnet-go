@@ -12,6 +12,9 @@
 	<link rel="icon" type="image/png" sizes="16x16" href="/assets/images/favicon-16x16.png">
 	<link rel="apple-touch-icon" sizes="180x180" href="/assets/images/apple-touch-icon.png">
 	<link rel="shortcut icon" href="/assets/images/favicon.ico">
+	<meta http-equiv="Content-Security-Policy"
+		content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.openstreetmap.org https://*.wikimedia.org">
+	<meta http-equiv="X-Content-Type-Options" content="nosniff">
 
 	<link href="/assets/tailwind.css" rel="stylesheet" />
 	<link href="/assets/custom.css" rel="stylesheet" />
@@ -35,17 +38,10 @@
 
 		<!-- content -->
 		<main>
-			<div id="mainContent" class="grid grid-cols-12 grid-rows-[min-content] gap-y-8 p-3 pt-0 lg:p-8 lg:pt-0" 
-				{{if eq .Title "Login" }} 
-					hx-trigger="load" 
-					hx-get="{{.PreloadFragment}}" 
-					hx-target="#loginModal"
-					hx-on::after-request="loginModal.showModal()" 
-				{{else if .PreloadFragment}} 
-					hx-trigger="load"
-					hx-get="{{.PreloadFragment}}" 
-					hx-target="this"
-				{{end}}>
+			<div id="mainContent" class="grid grid-cols-12 grid-rows-[min-content] gap-y-8 p-3 pt-0 lg:p-8 lg:pt-0" {{if
+				eq .Title "Login" }} hx-trigger="load" hx-get="{{.PreloadFragment}}" hx-target="#loginModal"
+				hx-on::after-request="loginModal.showModal()" {{else if .PreloadFragment}} hx-trigger="load"
+				hx-get="{{.PreloadFragment}}" hx-target="this" {{end}}>
 				{{ RenderContent . }}
 			</div>
 			<!-- Placeholder for dynamic notifications -->

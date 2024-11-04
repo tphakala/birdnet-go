@@ -82,6 +82,9 @@ If you end up locking yourself out, authentication can be turned off with the fo
 
 # For Docker deployments
 docker exec $(docker ps | grep birdnet-go | awk '{print $1}') reset_auth.sh
+
+# For a devcontainer
+docker exec $(docker ps | grep birdnet-go | awk '{print $1}') ./reset_auth.sh
 ```
 
 The script automatically creates a timestamped backup of your current configuration before disabling the authentication.

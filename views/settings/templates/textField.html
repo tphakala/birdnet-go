@@ -5,7 +5,7 @@
     showTooltip: null,
     touched: false,
     validInput() {
-        return this.$refs.{{.id}}.validity.valid;
+        return this.$refs.{{.id}} ? this.$refs.{{.id}}.validity.valid : true;
     },
     ...inputField('{{.id}}', '{{.label}}', '{{.model}}', '{{.name}}', '{{.placeholder}}')
 }">
@@ -20,26 +20,28 @@
     {{end}}
 
     <!-- Input field -->
-    <input type="text" id="{{.id}}" :name="name" x-model="{{.model}}" :placeholder="placeholder"
-        class="input input-sm input-bordered {{.class}}" :class="{ 'invalid': touched && !validInput() }" 
-        x-ref="{{.id}}"
+    <input type="text" 
+        id="{{.id}}" :name="name" x-model="{{.model}}" :placeholder="placeholder"
+        class="input input-sm input-bordered {{.class}}" :class="{ 'invalid': touched && !validInput() }"
+        x-ref="{{.id}}" 
         {{if .disabled}} 
             x-bind:disabled="{{.disabled}}" 
         {{end}}
         {{if .pattern}} 
-            pattern="{{.pattern}}" 
+            pattern="{{.pattern}}"
             @blur="touched = true" 
             @invalid="touched = true"
             @input="touched = false"
-            required
-        {{end}}>
+            required 
+        {{end}}
+        maxlength="255">
 
     <!-- Validation messages -->
     <span class="text-sm text-red-500" x-show="touched && !validInput()" x-cloak>
         {{with .validationMessage}}
-            {{.}}
+        {{.}}
         {{else}}
-            Please enter a valid {{$.label}}
+        Please enter a valid {{$.label}}
         {{end}}
     </span>
 

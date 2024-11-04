@@ -2,6 +2,7 @@ package httpcontroller
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -11,8 +12,6 @@ import (
 // configureMiddleware sets up middleware for the server.
 func (s *Server) configureMiddleware() {
 	s.Echo.Use(s.AuthMiddleware)
-	//s.Echo.Use(corsMiddleware())
-
 	s.Echo.Use(middleware.Recover())
 	s.Echo.Use(middleware.GzipWithConfig(middleware.GzipConfig{
 		Level:     6,
@@ -20,7 +19,6 @@ func (s *Server) configureMiddleware() {
 	}))
 	// Apply the Cache Control Middleware
 	s.Echo.Use(CacheControlMiddleware())
-	// Apply a middleware to set the Vary: HX-Request header for all responses
 	s.Echo.Use(VaryHeaderMiddleware())
 }
 
@@ -45,7 +43,6 @@ func CacheControlMiddleware() echo.MiddlewareFunc {
 func VaryHeaderMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// Example check: only set Vary header for specific routes or under certain conditions
 			if c.Request().Header.Get("HX-Request") != "" {
 				c.Response().Header().Set("Vary", "HX-Request")
 			}
@@ -65,20 +62,20 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			// Check if authentication is required for this IP
 			if s.OAuth2Server.IsAuthenticationEnabled(s.RealIP(c)) {
 				if !s.IsAccessAllowed(c) {
+					redirectPath := url.QueryEscape(c.Request().URL.Path)
 					if c.Request().Header.Get("HX-Request") == "true" {
-						c.Response().Header().Set("HX-Redirect", "/login?redirect="+c.Request().URL.Path)
+						c.Response().Header().Set("HX-Redirect", "/login?redirect="+redirectPath)
 						return c.String(http.StatusUnauthorized, "")
 					}
-					return c.Redirect(http.StatusFound, "/login?redirect="+c.Request().URL.Path)
+					return c.Redirect(http.StatusFound, "/login?redirect="+redirectPath)
 				}
 			}
 
-			// User is authenticated
 		}
 		return next(c)
 	}
-}
 
+}
 func isProtectedRoute(path string) bool {
 	return strings.HasPrefix(path, "/settings/")
 }

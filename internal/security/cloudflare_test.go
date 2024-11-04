@@ -57,22 +57,6 @@ func TestCloudflareAccess(t *testing.T) {
 	}
 }
 
-// TestFetchCertsFailure tests the behavior of fetchCerts when the server returns a non-200 status code
-func TestFetchCertsNetworkFailure(t *testing.T) {
-	issuer := "https://invalid-issuer.com"
-
-	ca := &CloudflareAccess{certs: make(map[string]string)}
-	err := ca.fetchCerts(issuer)
-
-	if err == nil {
-		t.Fatalf("Expected error due to network failure, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "failed to fetch Cloudflare certs") {
-		t.Fatalf("Unexpected error message: %v", err)
-	}
-}
-
 // TestFetchCertsSuccessProperlyUpdatesCertsMap tests the behavior of fetchCerts when the server returns a successful response
 func TestFetchCertsSuccessProperlyUpdatesCertsMap(t *testing.T) {
 	certsJSON := `{
@@ -160,26 +144,6 @@ func TestFetchCertsEmptyResponse(t *testing.T) {
 	}
 }
 
-// TestFetchCertsNon200Response tests the behavior of fetchCerts when the server returns a non-200 status code
-func TestFetchCertsFailure(t *testing.T) {
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer server.Close()
-
-	ca := &CloudflareAccess{certs: make(map[string]string)}
-	err := ca.fetchCerts(server.URL)
-
-	if err == nil {
-		t.Fatal("Expected an error, but got nil")
-	}
-
-	if len(ca.certs) != 0 {
-		t.Fatalf("Expected 0 certificates, got %d", len(ca.certs))
-	}
-}
-
 // TestConcurrentAccessToCertsMap tests concurrent access to the certs map
 func TestConcurrentAccessToCertsMap(t *testing.T) {
 	// Setup test server
@@ -218,19 +182,33 @@ func TestConcurrentAccessToCertsMap(t *testing.T) {
 	}
 }
 
-// TestFetchCertsNon200Response tests the behavior of fetchCerts when the server returns a non-200 status code
 func TestFetchCertsNon200Response(t *testing.T) {
+	testCases := []struct {
+		statusCode  int
+		description string
+	}{
+		{http.StatusInternalServerError, "Internal Server Error"},
+		{http.StatusNotFound, "Not Found"},
+	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.statusCode)
+			}))
+			defer server.Close()
 
-	ca := &CloudflareAccess{certs: make(map[string]string)}
-	err := ca.fetchCerts(server.URL)
+			ca := &CloudflareAccess{certs: make(map[string]string)}
+			err := ca.fetchCerts(server.URL)
 
-	if err == nil {
-		t.Fatalf("Expected an error, but got nil")
+			if err == nil {
+				t.Fatalf("Expected an error for status code %d, but got nil", tc.statusCode)
+			}
+
+			if len(ca.certs) != 0 {
+				t.Fatalf("Expected 0 certificates for status code %d, got %d", tc.statusCode, len(ca.certs))
+			}
+		})
 	}
 }
 

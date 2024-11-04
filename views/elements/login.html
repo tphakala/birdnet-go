@@ -1,6 +1,6 @@
 {{define "login"}}
-<div id="loginForm" class="modal-box sm:p-6 sm:pb-10 p-3 overflow-hidden">
-  <form id="loginForm" hx-post="/login" hx-on:submit="showError(false)">
+<div class="modal-box sm:p-6 sm:pb-10 p-3 overflow-hidden" role="dialog">
+  <form id="loginForm" hx-post="/login" hx-on:submit="showError(false)" role="form">
     <input type="hidden" id="redirectUri" name="redirect" value="{{.RedirectURL}}">
 
     <div class="flex items-start flex-row">
@@ -22,8 +22,9 @@
         <div class="form-control p-6 mx-14 ml-0">
           <label class="label" for="password">Password</label>
           <input type="password" id="loginPassword" name="password" class="input input-bordered" required
-            autocomplete="current-password">
-          <div id="loginError" class="text-red-700 relative hidden" role="alert"></div>
+            autocomplete="current-password" aria-required="true" aria-labelledby="passwordLabel"
+            aria-describedby="loginError">
+          <div id="loginError" class="text-red-700 relative hidden" role="alert" aria-live="polite"></div>
         </div>
         {{end}}
       </div>
@@ -32,10 +33,11 @@
     {{if .BasicEnabled }}
     <div id="loginResult" class="px-6 my-2"></div>
     <div class="modal-action px-[4.5rem] flex-row gap-4 justify-between">
-      <button type="button" onclick="loginModal.close()" class="btn btn-outline">Cancel</button>
-      <button type="submit" class="btn btn-primary grow pr-10"
+      <button type="button" onclick="loginModal.close()" class="btn btn-outline"
+        aria-label="Cancel login">Cancel</button>
+      <button type="submit" class="btn btn-primary grow pr-10" aria-label="Login with password"
         hx-on:click="event.target.form.reportValidity() && showSpinner('basicSpinner')">
-        <span id="basicSpinner" class="invisible loading loading-spinner"></span>
+        <span id="basicSpinner" class="invisible loading loading-spinner" aria-hidden="true"></span>
         Login
       </button>
     </div>
@@ -48,14 +50,16 @@
     {{if or .GoogleEnabled .GithubEnabled }}
     <div class="flex flex-col sm:flex-row gap-4 flex-wrap px-16 pb-6">
       {{if or .GoogleEnabled }}
-      <a href="/auth/google" class="btn btn-primary grow pr-10" onclick="showSpinner('googleSpinner')">
-        <span id="googleSpinner" class="invisible loading loading-spinner"></span>
+      <a href="/auth/google" class="btn btn-primary grow pr-10" onclick="showSpinner('googleSpinner')" role="button"
+        aria-label="Login with Google">
+        <span id="googleSpinner" class="invisible loading loading-spinner" aria-hidden="true"></span>
         Login with Google
       </a>
       {{end}}
       {{if or .GithubEnabled }}
-      <a href="/auth/github" class="btn btn-primary grow pr-10" onclick="showSpinner('githubSpinner')">
-        <span id="githubSpinner" class="invisible loading loading-spinner"></span>
+      <a href="/auth/github" class="btn btn-primary grow pr-10" onclick="showSpinner('githubSpinner')" role="button"
+        aria-label="Login with GitHub">
+        <span id="githubSpinner" class="invisible loading loading-spinner" aria-hidden="true"></span>
         Login with GitHub
       </a>
       {{end}}
@@ -63,13 +67,14 @@
     {{end}}
   </form>
   <form method="dialog">
-    <button class="btn btn-ghost btn-circle btn absolute text-lg right-2 top-2" aria-label="Close">✕</button>
+    <button class="btn btn-ghost btn-circle btn absolute text-lg right-2 top-2"
+      aria-label="Close login dialog">✕</button>
   </form>
 
 </div>
 
 <form method="dialog" class="modal-backdrop">
-  <button>close</button>
+  <button aria-label="Close modal background">close</button>
 </form>
 
 <script>
@@ -109,5 +114,13 @@
       document.getElementById('loginPassword')?.focus();
     }
   })
+
+  // Handle login error
+  document.body.addEventListener('htmx:afterRequest', function (event) {
+    if (event.detail.elt.id === 'loginForm' && event.detail.xhr.status !== 200) {
+      showError(event.detail.xhr.response || 'Login failed');
+      hideSpinner('basicSpinner');
+    }
+  });
 </script>
 {{end}}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -78,6 +79,9 @@ func (ca *CloudflareAccess) fetchCerts(issuer string) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch Cloudflare certs: %w", err)
 	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to fetch Cloudflare certs: received status code %d", resp.StatusCode)
+	}
 	defer resp.Body.Close()
 
 	var certsResponse struct {
@@ -127,10 +131,12 @@ func (ca *CloudflareAccess) VerifyAccessJWT(r *http.Request) (*CloudflareAccessC
 
 	// Extract team domain from issuer URL
 	if claims.Issuer != "" {
-		parts := strings.Split(claims.Issuer, ".")
-		if len(parts) > 0 {
-			ca.teamDomain = strings.TrimPrefix(parts[0], "https://")
+		parsedIssuer, err := url.Parse(claims.Issuer)
+		if err != nil {
+			log.Printf("Invalid issuer URL: %v", err)
+			return nil, fmt.Errorf("invalid issuer URL: %w", err)
 		}
+		ca.teamDomain = strings.Split(parsedIssuer.Hostname(), ".")[0]
 	}
 
 	// Verify the JWT with the public key
@@ -215,6 +221,13 @@ func (c *CloudflareAccessClaims) GetAudience() (jwt.ClaimStrings, error) {
 }
 
 func (c *CloudflareAccessClaims) Valid() error {
+	now := time.Now().Unix()
+	if c.ExpiresAt < now {
+		return fmt.Errorf("token expired")
+	}
+	if c.NotBefore > now {
+		return fmt.Errorf("token not yet valid")
+	}
 	return nil
 }
 

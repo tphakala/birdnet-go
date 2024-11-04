@@ -2,7 +2,9 @@
 package conf
 
 import (
+	"crypto/rand"
 	"embed"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -517,4 +519,17 @@ func SaveYAMLConfig(configPath string, settings *Settings) error {
 
 	// If we've reached this point, the operation was successful
 	return nil
+}
+
+// GenerateRandomSecret generates a URL-safe base64 encoded random string
+// suitable for use as a client secret. The output is 43 characters long,
+// providing 256 bits of entropy.
+func GenerateRandomSecret() string {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		// Log the error and return a safe fallback or empty string
+		log.Printf("Failed to generate random secret: %v", err)
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString(bytes)
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -102,15 +103,33 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
-func (h *Handlers) updateAuthenticationSettings(settings *conf.Settings) {
+func formatAndValidateHost(host string, useHTTPS bool) (string, error) {
 	protocol := "http"
-	if settings.Security.RedirectToHTTPS {
+	if useHTTPS {
 		protocol = "https"
 	}
 
-	host := strings.TrimRight(settings.Security.Host, "/")
+	host = strings.TrimRight(host, "/")
 	if !strings.HasPrefix(host, "http") {
 		host = fmt.Sprintf("%s://%s", protocol, host)
+	}
+
+	parsedHost, err := url.Parse(host)
+	if err != nil || parsedHost.Host == "" {
+		return "", fmt.Errorf("Invalid host address")
+	}
+
+	return host, nil
+}
+
+func (h *Handlers) updateAuthenticationSettings(settings *conf.Settings) {
+	host, err := formatAndValidateHost(settings.Security.Host, settings.Security.RedirectToHTTPS)
+	if err != nil {
+		h.SSE.SendNotification(Notification{
+			Message: err.Error(),
+			Type:    "error",
+		})
+		return
 	}
 
 	settings.Security.BasicAuth.RedirectURI = host

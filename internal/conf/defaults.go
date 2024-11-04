@@ -2,11 +2,9 @@
 package conf
 
 import (
-	"crypto/rand"
-	"encoding/base64"
-	"time"
-
 	"github.com/spf13/viper"
+
+	"time"
 )
 
 // Sets default values for the configuration.
@@ -191,14 +189,4 @@ func setDefaultConfig() {
 	viper.SetDefault("security.github.clientsecret", "")
 	viper.SetDefault("security.github.redirecturi", "/settings")
 	viper.SetDefault("security.github.userid", "")
-}
-
-// Generate a secure random string for the client secret.
-func GenerateRandomSecret() string {
-	// Use crypto/rand for secure random generation
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		panic(err)
-	}
-	return base64.RawURLEncoding.EncodeToString(bytes)
 }
