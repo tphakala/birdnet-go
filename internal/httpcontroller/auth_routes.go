@@ -133,7 +133,7 @@ func (s *Server) handleLogout(c echo.Context) error {
 	gothic.Logout(c.Response(), c.Request()) //nolint:errcheck
 
 	// Handle Cloudflare logout if enabled
-	if s.Settings.Security.AllowCloudflareBypass && s.CloudflareAccess.IsEnabled(c) {
+	if s.CloudflareAccess.IsEnabled(c) {
 		return s.CloudflareAccess.Logout(c)
 	}
 

@@ -36,23 +36,28 @@ type OAuth2Server struct {
 	authCodes    map[string]AuthCode
 	accessTokens map[string]AccessToken
 	mutex        sync.RWMutex
+	debug        bool
 
 	GithubConfig *oauth2.Config
 	GoogleConfig *oauth2.Config
 }
 
-func NewOAuth2Server(config *conf.Settings) *OAuth2Server {
+func NewOAuth2Server() *OAuth2Server {
+	settings := conf.GetSettings()
+	debug := settings.Debug
+
 	server := &OAuth2Server{
-		Settings:     config,
+		Settings:     settings,
 		authCodes:    make(map[string]AuthCode),
 		accessTokens: make(map[string]AccessToken),
+		debug:        debug,
 	}
 
 	// Initialize Gothic with the provided configuration
-	InitializeGoth(config)
+	InitializeGoth(settings)
 
 	// Clean up expired tokens every hour
-	server.StartTokenCleanup(time.Hour)
+	server.StartAuthCleanup(time.Hour)
 
 	return server
 }
@@ -88,17 +93,20 @@ func (s *OAuth2Server) UpdateProviders() {
 func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 	if token, err := gothic.GetFromSession("access_token", c.Request()); err == nil &&
 		token != "" && s.ValidateAccessToken(token) {
+		s.Debug("User was authenticated with valid access_token")
 		return true
 	}
 
 	userId, _ := gothic.GetFromSession("userId", c.Request())
 	if s.Settings.Security.GoogleAuth.Enabled {
 		if googleUser, _ := gothic.GetFromSession("google", c.Request()); isValidUserId(s.Settings.Security.GoogleAuth.UserId, userId) && googleUser != "" {
+			s.Debug("User was authenticated with valid Google user")
 			return true
 		}
 	}
 	if s.Settings.Security.GithubAuth.Enabled {
 		if githubUser, _ := gothic.GetFromSession("github", c.Request()); isValidUserId(s.Settings.Security.GithubAuth.UserId, userId) && githubUser != "" {
+			s.Debug("User was authenticated with valid GitHub user")
 			return true
 		}
 	}
@@ -118,7 +126,6 @@ func isValidUserId(configuredIds string, providedId string) bool {
 		}
 	}
 
-	log.Printf("User with userId is not allowed to login: %s", providedId)
 	return false
 }
 
@@ -200,7 +207,7 @@ func (s *OAuth2Server) IsRequestFromAllowedSubnet(ip string) bool {
 	clientIP := net.ParseIP(ip)
 	log.Printf("*** %s", clientIP)
 	if clientIP == nil {
-		log.Printf("Invalid IP address: %s", ip)
+		s.Debug("Invalid IP address: %s", ip)
 		return false
 	}
 
@@ -210,14 +217,16 @@ func (s *OAuth2Server) IsRequestFromAllowedSubnet(ip string) bool {
 	for _, subnet := range subnets {
 		_, ipNet, err := net.ParseCIDR(strings.TrimSpace(subnet))
 		if err == nil && ipNet.Contains(clientIP) {
+			s.Debug("Access allowed for IP %s", clientIP)
 			return true
 		}
 	}
 
+	s.Debug("IP %s is not in the allowed subnet", clientIP)
 	return false
 }
 
-func (s *OAuth2Server) StartTokenCleanup(interval time.Duration) {
+func (s *OAuth2Server) StartAuthCleanup(interval time.Duration) {
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -241,6 +250,17 @@ func (s *OAuth2Server) StartTokenCleanup(interval time.Duration) {
 			}
 
 			s.mutex.Unlock()
+			s.Debug("Token & code cleanup completed")
 		}
 	}()
+}
+
+func (s *OAuth2Server) Debug(format string, v ...interface{}) {
+	if s.debug {
+		if len(v) == 0 {
+			log.Print(format)
+		} else {
+			log.Printf(format, v...)
+		}
+	}
 }

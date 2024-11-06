@@ -49,7 +49,7 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 		BirdImageCache:    birdImageCache,
 		AudioLevelChan:    audioLevelChan,
 		DashboardSettings: &settings.Realtime.Dashboard,
-		OAuth2Server:      security.NewOAuth2Server(settings),
+		OAuth2Server:      security.NewOAuth2Server(),
 		CloudflareAccess:  security.NewCloudflareAccess(),
 	}
 
@@ -107,8 +107,7 @@ func (s *Server) isAuthenticationEnabled(c echo.Context) bool {
 
 func (s *Server) IsAccessAllowed(c echo.Context) bool {
 	// First check Cloudflare Access JWT
-	if s.Settings.Security.AllowCloudflareBypass && s.CloudflareAccess.IsEnabled(c) {
-		log.Printf("\033[1;35m*** IsAccessAllowed: Cloudflare Access token valid")
+	if s.CloudflareAccess.IsEnabled(c) {
 		return true
 	}
 

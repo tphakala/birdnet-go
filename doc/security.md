@@ -61,9 +61,19 @@ security:
 
 ### Cloudflare Access Authentication Bypass
 
-Cloudflare Access provides an authentication layer that uses your existing identity providers, such as Google or GitHub accounts,
-to control access to your applications. When using Cloudflare Access for authentication, you can configure BirdNET-Go to trust traffic coming through the Cloudflare tunnel. The system authenticates requests by validating the `Cf-Access-Jwt-Assertion` header containing a JWT token from Cloudflare.
+Cloudflare Access provides an authentication layer that uses your existing identity providers, such as Google or GitHub accounts, to control access to your applications. When using Cloudflare Access for authentication, you can configure BirdNET-Go to trust traffic coming through the Cloudflare tunnel. The system authenticates requests by validating the `Cf-Access-Jwt-Assertion` header containing a JWT token from Cloudflare.
 
+To add even more security, you can also require that the Cloudflare Team Domain Name and Policy audience are valid in the JWT token. Enable these by defining them in the `config.yaml` file:
+
+```yaml
+security:
+  allowcloudflarebypass:
+          enabled: true
+          teamdomain: "your-subdomain-of-cloudflareaccess.com"
+          audience: "your-policy-auddience"
+```	
+
+See the following links for more information on Cloudflare Access:
 - [Cloudflare tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/)
 - [Create a remotely-managed tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-remote-tunnel/)
 - [Self-hosted applications](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/)

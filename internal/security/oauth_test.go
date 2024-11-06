@@ -15,13 +15,16 @@ import (
 
 // TestIsUserAuthenticatedValidAccessToken tests the IsUserAuthenticated function with a valid access token
 func TestIsUserAuthenticatedValidAccessToken(t *testing.T) {
+	// Set the settings instance
+	conf.Setting()
+
 	settings := &conf.Settings{
 		Security: conf.Security{
 			SessionSecret: "test-secret",
 		},
 	}
 
-	s := NewOAuth2Server(settings)
+	s := NewOAuth2Server()
 
 	// Initialize gothic exactly as in production
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
@@ -55,6 +58,9 @@ func TestIsUserAuthenticatedValidAccessToken(t *testing.T) {
 
 // TestIsUserAuthenticatedInvalidAccessToken tests the IsUserAuthenticated function with an invalid access token
 func TestIsUserAuthenticated(t *testing.T) {
+	// Set the settings instance
+	conf.Setting()
+
 	tests := []struct {
 		name    string
 		token   string
@@ -77,7 +83,7 @@ func TestIsUserAuthenticated(t *testing.T) {
 				},
 			}
 
-			s := NewOAuth2Server(settings)
+			s := NewOAuth2Server()
 
 			// Initialize gothic exactly as in production
 			gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
@@ -106,6 +112,73 @@ func TestIsUserAuthenticated(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("IsUserAuthenticated() = %v, want %v", got, tt.want)
 			}
+		})
+	}
+}
+
+func TestOAuth2Server(t *testing.T) {
+	// Set the settings instance
+	conf.Setting()
+
+	tests := []struct {
+		name string
+		test func(*testing.T, *OAuth2Server)
+	}{
+		{
+			name: "generate and validate auth code",
+			test: func(t *testing.T, s *OAuth2Server) {
+				// Initialize settings
+				s.Settings = &conf.Settings{
+					Security: conf.Security{
+						BasicAuth: conf.BasicAuth{
+							Enabled:        true,
+							ClientID:       "test-client",
+							ClientSecret:   "test-secret",
+							AuthCodeExp:    10 * time.Minute,
+							AccessTokenExp: 1 * time.Hour,
+						},
+					},
+				}
+
+				// Generate and immediately use the auth code
+				code, err := s.GenerateAuthCode()
+				if err != nil {
+					t.Fatalf("Failed to generate auth code: %v", err)
+				}
+
+				token, err := s.ExchangeAuthCode(code)
+				if err != nil {
+					t.Fatalf("Failed to exchange auth code: %v", err)
+				}
+
+				if !s.ValidateAccessToken(token) {
+					t.Error("Token validation failed")
+				}
+			},
+		},
+		{
+			name: "subnet bypass validation",
+			test: func(t *testing.T, s *OAuth2Server) {
+				s.Settings.Security.AllowSubnetBypass = conf.AllowSubnetBypass{
+					Enabled: true,
+					Subnet:  "192.168.1.0/24",
+				}
+
+				if !s.IsRequestFromAllowedSubnet("192.168.1.100") {
+					t.Error("Expected IP to be allowed")
+				}
+
+				if s.IsRequestFromAllowedSubnet("10.0.0.1") {
+					t.Error("Expected IP to be denied")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewOAuth2Server()
+			tt.test(t, s)
 		})
 	}
 }
