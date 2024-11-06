@@ -22,16 +22,6 @@
     }
 }
 
-.htmx-indicator {
-  display: none;
-}
-.htmx-request .htmx-indicator {
-  display: inline-block;
-}
-.htmx-request.htmx-indicator {
-  display: inline-block;
-}
-
 input.invalid {
   border-color: #dc2626;
 }
@@ -80,11 +70,6 @@ input.invalid {
 
 .text-2xs {
   font-size: 0.6rem;
-}
-
-.h {
-  /* bottom: 0;*/
-  height: 10rem !important;
 }
 
 /* Audio player skeleton prior to loading */

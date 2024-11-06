@@ -4,6 +4,7 @@ package httpcontroller
 import (
 	"fmt"
 	"log"
+	"net"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -115,14 +116,25 @@ func (s *Server) IsAccessAllowed(c echo.Context) bool {
 }
 
 func (s *Server) RealIP(c echo.Context) string {
-	var ip string
-
-	if forwardedFor := c.Request().Header.Get("X-Forwarded-For"); forwardedFor != "" {
-		ip = strings.Split(forwardedFor, ",")[0]
-		ip = strings.TrimSpace(ip)
-	} else {
-		ip = strings.Split(c.Request().RemoteAddr, ":")[0]
+	// If Cloudflare Access is enabled, prioritize CF-Connecting-IP
+	if s.CloudflareAccess.IsEnabled(c) {
+		if cfIP := c.Request().Header.Get("CF-Connecting-IP"); cfIP != "" {
+			return strings.TrimSpace(cfIP)
+		}
 	}
+
+	// Get the X-Forwarded-For header
+	if xff := c.Request().Header.Get("X-Forwarded-For"); xff != "" {
+		// Split and get the first IP in the chain
+		ips := strings.Split(xff, ",")
+		if len(ips) > 0 {
+			// Take the last IP which should be the original client IP
+			return strings.TrimSpace(ips[len(ips)-1])
+		}
+	}
+
+	// Fallback to direct RemoteAddr
+	ip, _, _ := net.SplitHostPort(c.Request().RemoteAddr)
 	return ip
 }
 

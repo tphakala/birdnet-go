@@ -11,8 +11,8 @@ import (
 
 // configureMiddleware sets up middleware for the server.
 func (s *Server) configureMiddleware() {
-	s.Echo.Use(s.AuthMiddleware)
 	s.Echo.Use(middleware.Recover())
+	s.Echo.Use(s.AuthMiddleware)
 	s.Echo.Use(middleware.GzipWithConfig(middleware.GzipConfig{
 		Level:     6,
 		MinLength: 2048,
@@ -63,6 +63,10 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			if s.OAuth2Server.IsAuthenticationEnabled(s.RealIP(c)) {
 				if !s.IsAccessAllowed(c) {
 					redirectPath := url.QueryEscape(c.Request().URL.Path)
+					// Validate redirect path against whitelist
+					if !isValidRedirect(redirectPath) {
+						redirectPath = "/"
+					}
 					if c.Request().Header.Get("HX-Request") == "true" {
 						c.Response().Header().Set("HX-Redirect", "/login?redirect="+redirectPath)
 						return c.String(http.StatusUnauthorized, "")

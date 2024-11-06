@@ -205,7 +205,6 @@ func (s *OAuth2Server) IsRequestFromAllowedSubnet(ip string) bool {
 	}
 
 	clientIP := net.ParseIP(ip)
-	log.Printf("*** %s", clientIP)
 	if clientIP == nil {
 		s.Debug("Invalid IP address: %s", ip)
 		return false

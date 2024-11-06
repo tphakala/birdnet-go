@@ -42,13 +42,19 @@ for CONFIG_PATH in "${CONFIG_PATHS[@]}"; do
         cp "$CONFIG_PATH" "$BACKUP"        
         # Reset auth settings
         sed -i '
-            /^security:/,/^[^ ]/ {
+            /^security:/,/^[^[:space:]]/ {
                 s/\(host:\).*/\1 ""/
                 s/\(autotls:\).*/\1 false/
                 s/\(redirecttohttps:\).*/\1 false/
-                s/\(googleauth.enabled:\).*/\1 false/
-                s/\(githubauth.enabled:\).*/\1 false/
-                s/\(basicauth.enabled:\).*/\1 false/
+            }
+            /^[[:space:]]*basicauth:/,/^[[:space:]]*[^[:space:]]/ {
+                s/\(enabled:\).*/\1 false/
+            }
+            /^[[:space:]]*googleauth:/,/^[[:space:]]*[^[:space:]]/ {
+                s/\(enabled:\).*/\1 false/
+            }
+            /^[[:space:]]*githubauth:/,/^[[:space:]]*[^[:space:]]/ {
+                s/\(enabled:\).*/\1 false/
             }
         ' "$CONFIG_PATH"
         

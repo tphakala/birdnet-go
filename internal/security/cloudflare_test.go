@@ -299,6 +299,15 @@ func TestFetchCertsLogging(t *testing.T) {
 
 	var logs logWriter
 	log.SetOutput(io.Discard)
+
+	// Setup logging
+	originalOutput := log.Writer()
+	originalFlags := log.Flags()
+	defer func() {
+		// Restore original log settings after test
+		log.SetOutput(originalOutput)
+		log.SetFlags(originalFlags)
+	}()
 	log.SetFlags(0)
 	log.SetOutput(&logs)
 

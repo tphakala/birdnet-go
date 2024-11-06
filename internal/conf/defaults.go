@@ -185,7 +185,7 @@ func setDefaultConfig() {
 	viper.SetDefault("security.google.redirecturi", "/settings")
 	viper.SetDefault("security.google.userid", "")
 
-	// GittHub OAuth2 configuration
+	// GitHub OAuth2 configuration
 	viper.SetDefault("security.github.enabled", false)
 	viper.SetDefault("security.github.clientid", "")
 	viper.SetDefault("security.github.clientsecret", "")
