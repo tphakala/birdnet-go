@@ -147,7 +147,7 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 	path := c.Path()
 	pageRoute, isPageRoute := s.pageRoutes[path]
 	partialRoute, isFragment := s.partialRoutes[path]
-	isCloudflare := s.Settings.Security.AllowCloudflareBypass && s.CloudflareAccess.IsEnabled(c)
+	isCloudflare := s.CloudflareAccess.IsEnabled(c)
 
 	// Return an error if route is unknown
 	if !isPageRoute && !isFragment {

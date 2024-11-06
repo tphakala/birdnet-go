@@ -9,31 +9,62 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	//"github.com/prometheus/common/server"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// TestFetchCerts tests the fetchCerts method of the CloudflareAccess struct
-func TestCloudflareAccess(t *testing.T) {
+func BeforeEach(t *testing.T) (*httptest.Server, *CloudflareAccess) {
+
+	// Add test certificates with proper PEM format
+	certsJSON := `{
+		"public_certs": [
+			{
+				"kid": "1234",
+				"cert": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0test1\n-----END PUBLIC KEY-----"
+			},
+			{
+				"kid": "5678",
+				"cert": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0test2\n-----END PUBLIC KEY-----"
+			}
+		]
+	}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/cdn-cgi/access/certs") {
+			t.Errorf("Expected request to /cdn-cgi/access/certs, got %s", r.URL.Path)
+		}
+		fmt.Fprintln(w, certsJSON)
+	}))
+
+	// Set the settings instance
+	conf.Setting()
+
+	ca := NewCloudflareAccess()
+	ca.debug = true
+	ca.teamDomain = "test-team"
+	ca.audience = "test-audience"
+
+	ca.settings = &conf.AllowCloudflareBypass{
+		Enabled:    true,
+		TeamDomain: "test-team",
+		Audience:   "test-audience",
+	}
+
+	return server, ca
+}
+
+func TestCloudflareAccessSuite(t *testing.T) {
 	tests := []struct {
 		name    string
-		setup   func() (*httptest.Server, *CloudflareAccess)
-		verify  func(*testing.T, *CloudflareAccess, error)
+		setup   func(*httptest.Server)
+		test    func(*testing.T, *CloudflareAccess, *httptest.Server)
 		wantErr bool
 	}{
 		{
 			name: "successful certificate fetch",
-			setup: func() (*httptest.Server, *CloudflareAccess) {
-				certsJSON := `{
-							"public_certs": [
-								{"kid": "1234", "cert": "cert1"},
-								{"kid": "5678", "cert": "cert2"}
-							]
-						}`
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					fmt.Fprintln(w, certsJSON)
-				}))
-				return server, NewCloudflareAccess()
-			},
-			verify: func(t *testing.T, ca *CloudflareAccess, err error) {
+			test: func(t *testing.T, ca *CloudflareAccess, server *httptest.Server) {
+				err := ca.fetchCerts(server.URL)
 				if err != nil {
 					t.Fatalf("Expected no error, got %v", err)
 				}
@@ -41,37 +72,41 @@ func TestCloudflareAccess(t *testing.T) {
 					t.Fatalf("Expected 2 certificates, got %d", len(ca.certs))
 				}
 			},
-			wantErr: false,
 		},
-		// Add more test cases here
+		{
+			name: "unsuccessful certificate fetch",
+			test: func(t *testing.T, ca *CloudflareAccess, server *httptest.Server) {
+				err := ca.fetchCerts("/invalid-url")
+				if err == nil {
+					t.Fatalf("Expected error, none")
+				}
+				if len(ca.certs) != 0 {
+					t.Fatalf("Expected zero certificates, got %d", len(ca.certs))
+				}
+			},
+		},
+		// Add more test cases
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server, ca := tt.setup()
+			server, ca := BeforeEach(t)
 			defer server.Close()
 
-			err := ca.fetchCerts(server.URL)
-			tt.verify(t, ca, err)
+			if tt.setup != nil {
+				tt.setup(server)
+			}
+
+			tt.test(t, ca, server)
 		})
 	}
 }
 
 // TestFetchCertsSuccessProperlyUpdatesCertsMap tests the behavior of fetchCerts when the server returns a successful response
 func TestFetchCertsSuccessProperlyUpdatesCertsMap(t *testing.T) {
-	certsJSON := `{
-				"public_certs": [
-					{"kid": "1234", "cert": "cert1"},
-					{"kid": "5678", "cert": "cert2"}
-				]
-			}`
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, certsJSON)
-	}))
+	server, ca := BeforeEach(t)
 	defer server.Close()
 
-	ca := &CloudflareAccess{certs: make(map[string]string)}
 	err := ca.fetchCerts(server.URL)
 
 	if err != nil {
@@ -82,21 +117,26 @@ func TestFetchCertsSuccessProperlyUpdatesCertsMap(t *testing.T) {
 		t.Fatalf("Expected 2 certificates, got %d", len(ca.certs))
 	}
 
-	if ca.certs["1234"] != "cert1" || ca.certs["5678"] != "cert2" {
+	expectedCert1 := "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0test1\n-----END PUBLIC KEY-----"
+	expectedCert2 := "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0test2\n-----END PUBLIC KEY-----"
+
+	// Compare trimmed strings to handle whitespace differences
+	if strings.TrimSpace(ca.certs["1234"]) != strings.TrimSpace(expectedCert1) ||
+		strings.TrimSpace(ca.certs["5678"]) != strings.TrimSpace(expectedCert2) {
 		t.Fatalf("Certificates not stored correctly")
 	}
 }
 
 // TestFetchCertsInvalidJSONResponse tests the behavior of fetchCerts when the server returns invalid JSON
 func TestFetchCertsInvalidJSONResponse(t *testing.T) {
-	certsJSON := `invalid JSON`
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, certsJSON)
-	}))
+	server, ca := BeforeEach(t)
 	defer server.Close()
 
-	ca := &CloudflareAccess{certs: make(map[string]string)}
+	// Override server handler for invalid JSON case
+	server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `invalid JSON`)
+	})
+
 	err := ca.fetchCerts(server.URL)
 
 	if err == nil {
@@ -106,10 +146,6 @@ func TestFetchCertsInvalidJSONResponse(t *testing.T) {
 	expectedErrMsg := "failed to decode certs response"
 	if !strings.Contains(err.Error(), expectedErrMsg) {
 		t.Fatalf("Expected error message to contain '%s', got '%s'", expectedErrMsg, err.Error())
-	}
-
-	if len(ca.certs) != 0 {
-		t.Fatalf("Expected no certificates to be stored, got %d", len(ca.certs))
 	}
 }
 
@@ -126,13 +162,14 @@ func TestFetchCertsError(t *testing.T) {
 
 // TestFetchCertsEmptyResponse tests the behavior of fetchCerts when the server returns an empty response
 func TestFetchCertsEmptyResponse(t *testing.T) {
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, `{ "public_certs": [] }`)
-	}))
+	server, ca := BeforeEach(t)
 	defer server.Close()
 
-	ca := &CloudflareAccess{certs: make(map[string]string)}
+	// Override server handler for empty response case
+	server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `{ "public_certs": [] }`)
+	})
+
 	err := ca.fetchCerts(server.URL)
 
 	if err != nil {

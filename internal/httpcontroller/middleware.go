@@ -55,7 +55,7 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if isProtectedRoute(c.Path()) {
 			// Check for Cloudflare bypass
-			if s.Settings.Security.AllowCloudflareBypass && s.CloudflareAccess.IsEnabled(c) {
+			if s.CloudflareAccess.IsEnabled(c) {
 				return next(c)
 			}
 

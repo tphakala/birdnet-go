@@ -12,6 +12,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 type CloudflareAccessClaims struct {
@@ -30,24 +31,34 @@ type CloudflareAccessClaims struct {
 type CloudflareAccess struct {
 	certs      map[string]string
 	teamDomain string
+	audience   string
 	certCache  struct {
 		lastFetch time.Time
 		mutex     sync.RWMutex
 	}
+	settings *conf.AllowCloudflareBypass
+	debug    bool
 }
 
 func NewCloudflareAccess() *CloudflareAccess {
+	settings := conf.GetSettings()
+	cfBypass := settings.Security.AllowCloudflareBypass
+
 	return &CloudflareAccess{
-		certs: make(map[string]string),
+		certs:      make(map[string]string),
+		teamDomain: cfBypass.TeamDomain,
+		audience:   cfBypass.Audience,
 		certCache: struct {
 			lastFetch time.Time
 			mutex     sync.RWMutex
 		}{
 			lastFetch: time.Time{},
 		},
+		settings: &cfBypass,
 	}
 }
 
+// fetchCertsIfNeeded fetches the certificates using a cache
 func (ca *CloudflareAccess) fetchCertsIfNeeded(issuer string) error {
 	ca.certCache.mutex.RLock()
 	cacheAge := time.Since(ca.certCache.lastFetch)
@@ -73,9 +84,10 @@ func (ca *CloudflareAccess) fetchCertsIfNeeded(issuer string) error {
 // fetchCerts fetches the certificates from Cloudflare
 func (ca *CloudflareAccess) fetchCerts(issuer string) error {
 	certsURL := fmt.Sprintf("%s/cdn-cgi/access/certs", issuer)
-	log.Printf("Fetching Cloudflare certs from URL: %s", certsURL)
+	ca.Debug("Fetching Cloudflare certs from URL: %s", certsURL)
 
 	resp, err := http.Get(certsURL)
+
 	if err != nil {
 		return fmt.Errorf("failed to fetch Cloudflare certs: %w", err)
 	}
@@ -90,14 +102,14 @@ func (ca *CloudflareAccess) fetchCerts(issuer string) error {
 			Cert string `json:"cert"`
 		} `json:"public_certs"`
 	}
-
 	if err := json.NewDecoder(resp.Body).Decode(&certsResponse); err != nil {
 		return fmt.Errorf("failed to decode certs response: %w", err)
 	}
 
+	// Store the certificates with kids as keys
 	for _, cert := range certsResponse.PublicCerts {
 		ca.certs[cert.Kid] = cert.Cert
-		log.Printf("Added certificate with Kid: %s", cert.Kid)
+		ca.Debug("Added certificate with Kid: %s", cert.Kid)
 	}
 
 	return nil
@@ -105,6 +117,11 @@ func (ca *CloudflareAccess) fetchCerts(issuer string) error {
 
 // IsEnabled returns true if Cloudflare Access is enabled
 func (ca *CloudflareAccess) IsEnabled(c echo.Context) bool {
+
+	if !ca.settings.Enabled {
+		return false
+	}
+
 	claims, err := ca.VerifyAccessJWT(c.Request())
 	if err == nil && claims != nil {
 		return true
@@ -116,7 +133,7 @@ func (ca *CloudflareAccess) IsEnabled(c echo.Context) bool {
 func (ca *CloudflareAccess) VerifyAccessJWT(r *http.Request) (*CloudflareAccessClaims, error) {
 	jwtToken := r.Header.Get("Cf-Access-Jwt-Assertion")
 	if jwtToken == "" {
-		log.Println("No Cloudflare Access JWT found")
+		ca.Debug("No Cloudflare Access JWT found")
 		return nil, fmt.Errorf("no Cloudflare Access JWT found")
 	}
 
@@ -125,7 +142,7 @@ func (ca *CloudflareAccess) VerifyAccessJWT(r *http.Request) (*CloudflareAccessC
 	claims := &CloudflareAccessClaims{}
 	token, _, err := parser.ParseUnverified(jwtToken, claims)
 	if err != nil {
-		log.Printf("Failed to parse JWT: %v", err)
+		ca.Debug("Failed to parse JWT: %v", err)
 		return nil, fmt.Errorf("failed to parse JWT: %w", err)
 	}
 
@@ -133,16 +150,23 @@ func (ca *CloudflareAccess) VerifyAccessJWT(r *http.Request) (*CloudflareAccessC
 	if claims.Issuer != "" {
 		parsedIssuer, err := url.Parse(claims.Issuer)
 		if err != nil {
-			log.Printf("Invalid issuer URL: %v", err)
+			ca.Debug("Invalid issuer URL: %v", err)
 			return nil, fmt.Errorf("invalid issuer URL: %w", err)
 		}
 		ca.teamDomain = strings.Split(parsedIssuer.Hostname(), ".")[0]
+
+		// Validate team domain if configured
+		if ca.settings.TeamDomain != "" {
+			if ca.teamDomain != ca.settings.TeamDomain {
+				return nil, fmt.Errorf("team domain mismatch")
+			}
+		}
 	}
 
 	// Verify the JWT with the public key
 	kid, ok := token.Header["kid"].(string)
 	if !ok {
-		log.Println("No key ID in JWT header")
+		ca.Debug("No key ID in JWT header")
 		return nil, fmt.Errorf("no key ID in JWT header")
 	}
 
@@ -154,7 +178,7 @@ func (ca *CloudflareAccess) VerifyAccessJWT(r *http.Request) (*CloudflareAccessC
 	cert := ca.certs[kid]
 	pubKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(cert))
 	if err != nil {
-		log.Printf("Failed to parse public key: %v", err)
+		ca.Debug("Failed to parse public key: %v", err)
 		return nil, fmt.Errorf("failed to parse public key: %w", err)
 	}
 
@@ -164,35 +188,39 @@ func (ca *CloudflareAccess) VerifyAccessJWT(r *http.Request) (*CloudflareAccessC
 	})
 
 	if err != nil {
-		log.Printf("Invalid JWT: %v", err)
+		ca.Debug("Invalid JWT: %v", err)
 		return nil, fmt.Errorf("invalid JWT: %w", err)
 	}
 
 	if !token.Valid {
-		log.Println("Token is not valid")
+		ca.Debug("Token is not valid")
 		return nil, fmt.Errorf("token is not valid")
 	}
 
 	if err := claims.Valid(); err != nil {
-		log.Printf("Invalid claims: %v", err)
+		ca.Debug("Invalid claims: %v", err)
 		return nil, fmt.Errorf("invalid claims: %w", err)
 	}
 
-	now := time.Now().Unix()
-	if claims.ExpiresAt < now {
-		log.Println("Token expired")
-		return nil, fmt.Errorf("token expired")
+	// Validate audience if configured
+	if ca.settings.Audience != "" {
+		audienceValid := false
+		for _, aud := range claims.Audience {
+			if aud == ca.settings.Audience {
+				audienceValid = true
+				break
+			}
+		}
+		if !audienceValid {
+			return nil, fmt.Errorf("audience mismatch")
+		}
 	}
-	if claims.NotBefore > now {
-		log.Println("Token not yet valid")
-		return nil, fmt.Errorf("token not yet valid")
-	}
+
 	if claims.Type != "app" {
-		log.Printf("Invalid token type: %s", claims.Type)
+		ca.Debug("Invalid token type: %s", claims.Type)
 		return nil, fmt.Errorf("invalid token type: %s", claims.Type)
 	}
 
-	log.Println("Cloudflare Access JWT successfully verified")
 	return claims, nil
 }
 
@@ -238,6 +266,7 @@ func (ca *CloudflareAccess) Logout(c echo.Context) error {
 		Value:   "",
 		Expires: time.Now().Add(-time.Hour),
 	})
+	ca.Debug("Logged out from Cloudflare Access")
 
 	// Redirect to GetLogoutURL
 	return c.Redirect(http.StatusFound, ca.GetLogoutURL())
@@ -245,4 +274,14 @@ func (ca *CloudflareAccess) Logout(c echo.Context) error {
 
 func (ca *CloudflareAccess) GetLogoutURL() string {
 	return fmt.Sprintf("https://%s.cloudflareaccess.com/cdn-cgi/access/logout", ca.teamDomain)
+}
+
+func (ca *CloudflareAccess) Debug(format string, v ...interface{}) {
+	if !ca.debug {
+		if len(v) == 0 {
+			log.Print(format)
+		} else {
+			log.Printf(format, v...)
+		}
+	}
 }
