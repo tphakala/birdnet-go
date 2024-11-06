@@ -7,24 +7,29 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/markbates/goth/gothic"
 )
 
 // initAuthRoutes initializes all authentication related routes
 func (s *Server) initAuthRoutes() {
+	// Add rate limiter for auth and login routes
+	g := s.Echo.Group("")
+	g.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(10)))
+
 	// OAuth2 routes
-	s.Echo.GET("/oauth2/authorize", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthorize))
-	s.Echo.POST("/oauth2/token", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthToken))
-	s.Echo.GET("/callback", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthCallback))
+	g.GET("/oauth2/authorize", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthorize))
+	g.POST("/oauth2/token", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthToken))
+	g.GET("/callback", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthCallback))
 
 	// Social authentication routes
-	s.Echo.GET("/auth/:provider", s.Handlers.WithErrorHandling(handleGothProvider))
-	s.Echo.GET("/auth/:provider/callback", s.Handlers.WithErrorHandling(handleGothCallback))
+	g.GET("/auth/:provider", s.Handlers.WithErrorHandling(handleGothProvider))
+	g.GET("/auth/:provider/callback", s.Handlers.WithErrorHandling(handleGothCallback))
 
 	// Basic authentication routes
-	s.Echo.GET("/login", s.Handlers.WithErrorHandling(s.handleLoginPage))
-	s.Echo.POST("/login", s.handleBasicAuthLogin)
-	s.Echo.GET("/logout", s.Handlers.WithErrorHandling(s.handleLogout))
+	g.GET("/login", s.Handlers.WithErrorHandling(s.handleLoginPage))
+	g.POST("/login", s.handleBasicAuthLogin)
+	g.GET("/logout", s.Handlers.WithErrorHandling(s.handleLogout))
 }
 
 func handleGothProvider(c echo.Context) error {
@@ -100,9 +105,14 @@ func (s *Server) handleLoginPage(c echo.Context) error {
 }
 
 // isValidRedirect ensures the redirect path is safe and internal
-func isValidRedirect(redirect string) bool {
-	// Allow only relative paths starting with '/'
-	return strings.HasPrefix(redirect, "/") && !strings.Contains(redirect, "//")
+func isValidRedirect(redirectPath string) bool {
+	// Allow only relative paths
+	return strings.HasPrefix(redirectPath, "/") &&
+		!strings.Contains(redirectPath, "//") &&
+		!strings.Contains(redirectPath, "\\") &&
+		!strings.Contains(redirectPath, "://") &&
+		!strings.Contains(redirectPath, "..") &&
+		len(redirectPath) < 512
 }
 
 // handleBasicAuthLogin handles password login POST request
@@ -118,7 +128,11 @@ func (s *Server) handleBasicAuthLogin(c echo.Context) error {
 	if err != nil {
 		return c.HTML(http.StatusUnauthorized, "<div class='text-red-500'>Unable to login at this time</div>")
 	}
-	redirectURL := fmt.Sprintf("/callback?code=%s&redirect=%s", authCode, c.FormValue("redirect"))
+	redirect := c.FormValue("redirect")
+	if !isValidRedirect(redirect) {
+		redirect = "/"
+	}
+	redirectURL := fmt.Sprintf("/callback?code=%s&redirect=%s", authCode, redirect)
 	c.Response().Header().Set("HX-Redirect", redirectURL)
 	return c.String(http.StatusOK, "")
 }

@@ -28,9 +28,6 @@ func TestIsUserAuthenticatedValidAccessToken(t *testing.T) {
 
 	// Initialize gothic exactly as in production
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
-	gothic.SetState = func(req *http.Request) string {
-		return ""
-	}
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -87,9 +84,6 @@ func TestIsUserAuthenticated(t *testing.T) {
 
 			// Initialize gothic exactly as in production
 			gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
-			gothic.SetState = func(req *http.Request) string {
-				return ""
-			}
 
 			e := echo.New()
 			req := httptest.NewRequest(http.MethodGet, "/", nil)

@@ -409,7 +409,7 @@ func createDefaultConfig() error {
 	defaultConfig := getDefaultConfig()
 
 	// If the basicauth secret is not set, generate a random one
-	if viper.GetString("security.basicauth.secret") == "" {
+	if viper.GetString("security.basicauth.clientsecret") == "" {
 		viper.Set("security.basicauth.clientsecret", GenerateRandomSecret())
 	}
 

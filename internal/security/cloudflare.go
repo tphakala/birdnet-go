@@ -119,6 +119,7 @@ func (ca *CloudflareAccess) fetchCerts(issuer string) error {
 func (ca *CloudflareAccess) IsEnabled(c echo.Context) bool {
 
 	if !ca.settings.Enabled {
+		ca.Debug("Cloudflare Access is disabled")
 		return false
 	}
 

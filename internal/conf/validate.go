@@ -166,7 +166,7 @@ func validateWebServerSettings(settings *struct {
 func validateSecuritySettings(settings *Security) error {
 	// Check if any OAuth provider is enabled
 	if (settings.BasicAuth.Enabled || settings.GoogleAuth.Enabled || settings.GithubAuth.Enabled) && settings.Host == "" {
-		return fmt.Errorf("security host must be set when using authentication providers")
+		return fmt.Errorf("security.host must be set when using authentication providers")
 	}
 
 	// Validate the subnet bypass setting against the allowed pattern
