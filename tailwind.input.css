@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Remove when fixed in DaisyUI: https://github.com/saadeghi/daisyui/issues/3040 */
+html {
+    scrollbar-gutter: auto !important;
+}

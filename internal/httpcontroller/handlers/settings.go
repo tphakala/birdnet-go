@@ -123,6 +123,14 @@ func formatAndValidateHost(host string, useHTTPS bool) (string, error) {
 }
 
 func (h *Handlers) updateAuthenticationSettings(settings *conf.Settings) {
+	basicAuth := &settings.Security.BasicAuth
+
+	// Check if any authentication settings are enabled
+	if !settings.Security.GoogleAuth.Enabled && !settings.Security.GithubAuth.Enabled && !basicAuth.Enabled {
+		return
+	}
+
+	// Format and validate the host address
 	host, err := formatAndValidateHost(settings.Security.Host, settings.Security.RedirectToHTTPS)
 	if err != nil {
 		h.SSE.SendNotification(Notification{
@@ -136,7 +144,7 @@ func (h *Handlers) updateAuthenticationSettings(settings *conf.Settings) {
 	settings.Security.GoogleAuth.RedirectURI = fmt.Sprintf("%s/auth/google/callback", host)
 	settings.Security.GithubAuth.RedirectURI = fmt.Sprintf("%s/auth/github/callback", host)
 
-	basicAuth := &settings.Security.BasicAuth
+	// Generate secrets if they are empty
 	if basicAuth.Enabled {
 		if basicAuth.ClientID == "" {
 			basicAuth.ClientID = conf.GenerateRandomSecret()
@@ -152,8 +160,8 @@ func (h *Handlers) updateAuthenticationSettings(settings *conf.Settings) {
 		}
 	}
 
-	if (settings.Security.GoogleAuth.Enabled || settings.Security.GithubAuth.Enabled || basicAuth.Enabled) &&
-		settings.Security.SessionSecret == "" {
+	// Generate a random session secret for Gothic
+	if settings.Security.SessionSecret == "" {
 		settings.Security.SessionSecret = conf.GenerateRandomSecret()
 	}
 

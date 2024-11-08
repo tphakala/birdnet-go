@@ -10,7 +10,6 @@ import (
 	"sync"
 	"testing"
 
-	//"github.com/prometheus/common/server"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
