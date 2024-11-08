@@ -171,24 +171,24 @@ func setDefaultConfig() {
 	viper.SetDefault("security.allowcloudflarebypass.audience", "")
 
 	// Basic authentication configuration
-	viper.SetDefault("security.basic.enabled", false)
-	viper.SetDefault("security.basic.password", "")
-	viper.SetDefault("security.basic.clientid", "birdnet-client")
-	viper.SetDefault("security.basic.redirecturi", "/settings")
-	viper.SetDefault("security.basic.authcodeexp", "10m")
-	viper.SetDefault("security.basic.accesstokenexp", "1h")
+	viper.SetDefault("security.basicauth.enabled", false)
+	viper.SetDefault("security.basicauth.password", "")
+	viper.SetDefault("security.basicauth.clientid", "birdnet-client")
+	viper.SetDefault("security.basicauth.redirecturi", "/settings")
+	viper.SetDefault("security.basicauth.authcodeexp", "10m")
+	viper.SetDefault("security.basicauth.accesstokenexp", "1h")
 
 	// Google OAuth2 configuration
-	viper.SetDefault("security.google.enabled", false)
-	viper.SetDefault("security.google.clientid", "")
-	viper.SetDefault("security.google.clientsecret", "")
-	viper.SetDefault("security.google.redirecturi", "/settings")
-	viper.SetDefault("security.google.userid", "")
+	viper.SetDefault("security.googleauth.enabled", false)
+	viper.SetDefault("security.googleauth.clientid", "")
+	viper.SetDefault("security.googleauth.clientsecret", "")
+	viper.SetDefault("security.googleauth.redirecturi", "/settings")
+	viper.SetDefault("security.googleauth.userid", "")
 
 	// GitHub OAuth2 configuration
-	viper.SetDefault("security.github.enabled", false)
-	viper.SetDefault("security.github.clientid", "")
-	viper.SetDefault("security.github.clientsecret", "")
-	viper.SetDefault("security.github.redirecturi", "/settings")
-	viper.SetDefault("security.github.userid", "")
+	viper.SetDefault("security.githubauth.enabled", false)
+	viper.SetDefault("security.githubauth.clientid", "")
+	viper.SetDefault("security.githubauth.clientsecret", "")
+	viper.SetDefault("security.githubauth.redirecturi", "/settings")
+	viper.SetDefault("security.githubauth.userid", "")
 }

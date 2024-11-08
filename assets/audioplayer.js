@@ -126,7 +126,7 @@ htmx.on('htmx:afterSettle', function (event) {
                 if (!audio.paused && !playerOverlay.contains(e.target)) {
                     isDragging = true; 
                 }
-            });
+            }, {passive: true});
             spectrogramContainer.addEventListener('touchmove', (e) => {
                 if (isDragging && !playerOverlay.contains(e.target)) {
                     e.preventDefault(); // Prevent scrolling while dragging
@@ -136,14 +136,18 @@ htmx.on('htmx:afterSettle', function (event) {
                     audio.currentTime = pos * audio.duration;
                     updateProgress(); // Immediately update visuals
                 }
-            });
-            spectrogramContainer.addEventListener('touchend', () => { isDragging = false; });
+            }, {passive: true});
+            spectrogramContainer.addEventListener('touchend', () => { isDragging = false; }, {passive: true});
         }
 
-        // Show full version player when hovering over the spectrogram (desktop only)
         if (isDesktop()) {
+            // On desktop show full version player when hovering over the spectrogram
             spectrogramContainer.addEventListener('mouseenter', () => { playerOverlay.style.opacity = '1'; });
             spectrogramContainer.addEventListener('mouseleave', () => { playerOverlay.style.opacity = '0'; });
+            playerOverlay.style.opacity = '0';
+        } else {
+            // On mobile show always full version player controls
+            playerOverlay.style.opacity = '1';
         }
 
         // Mark this audio element as initialized
@@ -177,10 +181,6 @@ function isTouchDevice() {
 	return false;
 }
 
-function isMobileUserAgent() {
-	return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-};
-
 function isDesktop() {
-	return !isMobileUserAgent() && !isTouchDevice();
+	return !isTouchDevice();
 };
