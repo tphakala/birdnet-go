@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -67,6 +69,9 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		return h.NewHandlerError(err, "Error updating settings", http.StatusInternalServerError)
 	}
 
+	// Check the authentication settings and update if needed
+	h.updateAuthenticationSettings(settings)
+
 	// Check if audio equalizer settings have changed
 	if equalizerSettingsChanged(oldEqualizerSettings, settings.Realtime.Audio.Equalizer) {
 		log.Println("Debug (SaveSettings): Equalizer settings changed, reloading audio filters")
@@ -96,6 +101,63 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 	})
 
 	return c.NoContent(http.StatusOK)
+}
+
+func formatAndValidateHost(host string, useHTTPS bool) (string, error) {
+	protocol := "http"
+	if useHTTPS {
+		protocol = "https"
+	}
+
+	host = strings.TrimRight(host, "/")
+	if !strings.HasPrefix(host, "http") {
+		host = fmt.Sprintf("%s://%s", protocol, host)
+	}
+
+	parsedHost, err := url.Parse(host)
+	if err != nil || parsedHost.Host == "" {
+		return "", fmt.Errorf("Invalid host address")
+	}
+
+	return host, nil
+}
+
+func (h *Handlers) updateAuthenticationSettings(settings *conf.Settings) {
+	host, err := formatAndValidateHost(settings.Security.Host, settings.Security.RedirectToHTTPS)
+	if err != nil {
+		h.SSE.SendNotification(Notification{
+			Message: err.Error(),
+			Type:    "error",
+		})
+		return
+	}
+
+	settings.Security.BasicAuth.RedirectURI = host
+	settings.Security.GoogleAuth.RedirectURI = fmt.Sprintf("%s/auth/google/callback", host)
+	settings.Security.GithubAuth.RedirectURI = fmt.Sprintf("%s/auth/github/callback", host)
+
+	basicAuth := &settings.Security.BasicAuth
+	if basicAuth.Enabled {
+		if basicAuth.ClientID == "" {
+			basicAuth.ClientID = conf.GenerateRandomSecret()
+		}
+		if basicAuth.ClientSecret == "" {
+			basicAuth.ClientSecret = conf.GenerateRandomSecret()
+		}
+		if basicAuth.AuthCodeExp == 0 {
+			basicAuth.AuthCodeExp = 10 * time.Minute
+		}
+		if basicAuth.AccessTokenExp == 0 {
+			basicAuth.AccessTokenExp = 1 * time.Hour
+		}
+	}
+
+	if (settings.Security.GoogleAuth.Enabled || settings.Security.GithubAuth.Enabled || basicAuth.Enabled) &&
+		settings.Security.SessionSecret == "" {
+		settings.Security.SessionSecret = conf.GenerateRandomSecret()
+	}
+
+	h.OAuth2Server.UpdateProviders()
 }
 
 // updateSettingsFromForm updates the settings based on form values

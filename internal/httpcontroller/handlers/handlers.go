@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -27,6 +28,7 @@ type Handlers struct {
 	SSE               *SSEHandler                 // Server Side Events handler
 	SunCalc           *suncalc.SunCalc            // SunCalc instance for calculating sun event times
 	AudioLevelChan    chan myaudio.AudioLevelData // Channel for audio level updates
+	OAuth2Server      *security.OAuth2Server
 }
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.
@@ -69,10 +71,11 @@ func (bh *baseHandler) logInfo(message string) {
 }
 
 // New creates a new Handlers instance with the given dependencies.
-func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData) *Handlers {
+func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server) *Handlers {
 	if logger == nil {
 		logger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
+
 	return &Handlers{
 		baseHandler: baseHandler{
 			errorHandler: defaultErrorHandler,
@@ -85,6 +88,7 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		SSE:               NewSSEHandler(),
 		SunCalc:           sunCalc,
 		AudioLevelChan:    audioLevelChan,
+		OAuth2Server:      oauth2Server,
 	}
 }
 

@@ -5,12 +5,13 @@
 
 <head>
 	<meta charset="utf-8" />
-	<title>BirdNET-Go Dashboard</title>
-	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+	<title>BirdNET-Go {{ .Title }}</title>
+	<meta name="viewport"
+		content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 	<link rel="icon" type="image/png" sizes="32x32" href="/assets/images/favicon-32x32.png">
 	<link rel="icon" type="image/png" sizes="16x16" href="/assets/images/favicon-16x16.png">
 	<link rel="apple-touch-icon" sizes="180x180" href="/assets/images/apple-touch-icon.png">
-    <link rel="shortcut icon" href="/assets/images/favicon.ico">
+	<link rel="shortcut icon" href="/assets/images/favicon.ico">
 
 	<link href="/assets/tailwind.css" rel="stylesheet" />
 	<link href="/assets/custom.css" rel="stylesheet" />
@@ -31,16 +32,13 @@
 		<div class="grid grid-cols-12 grid-rows-[min-content] p-3 pt-0 lg:px-8 lg:pb-0">
 			{{ template "header" . }}
 		</div>
-	
+
 		<!-- content -->
 		<main>
-			<div id="mainContent" 
-			     class="grid grid-cols-12 grid-rows-[min-content] gap-y-8 p-3 pt-0 lg:p-8 lg:pt-0"
-				 {{if .PreloadFragment}}
-				 hx-trigger="load"
-				 hx-get="{{.PreloadFragment}}"
-				 hx-target="this"
-				 {{end}}>
+			<div id="mainContent" class="grid grid-cols-12 grid-rows-[min-content] gap-y-8 p-3 pt-0 lg:p-8 lg:pt-0" {{if
+				eq .Title "Login" }} hx-trigger="load" hx-get="{{.PreloadFragment}}" hx-target="#loginModal"
+				hx-on::after-request="loginModal.showModal()" {{else if .PreloadFragment}} hx-trigger="load"
+				hx-get="{{.PreloadFragment}}" hx-target="this" {{end}}>
 				{{ RenderContent . }}
 			</div>
 			<!-- Placeholder for dynamic notifications -->
@@ -50,47 +48,62 @@
 
 	{{ template "sidebar" . }}
 
+	<!-- Login form in a DaisyUI modal -->
+	<dialog id="loginModal" class="modal modal-bottom sm:modal-middle"></dialog>
 	<script>
-		// Set the date picker to today's date
+		// Initialize date picker with either the date from URL hash or today's date
 		setTimeout(function () {
 			var datePicker = document.getElementById('datePicker');
-			var today = new Date().toLocaleString('sv').split(' ')[0];
-			datePicker.value = today;
-		}, 0); // Set timeout for 0ms
 
+			if (datePicker) {
+				var dateInHash = window.location.hash.substring(1);
+				var date = dateInHash ? dateInHash : new Date().toLocaleDateString('sv');
+				datePicker.value = date;
+			}
+		}, 0); // ensure the DOM is fully loaded
 
-    // Function to set theme
-    function setTheme(themeName) {
-        localStorage.setItem('theme', themeName);
-        document.documentElement.setAttribute('data-theme', themeName);
-    }
+		// Function to set theme
+		function setTheme(themeName) {
+			localStorage.setItem('theme', themeName);
+			document.documentElement.setAttribute('data-theme', themeName);
+		}
 
-    // Function to toggle theme
-    function toggleTheme() {
-        if (localStorage.getItem('theme') === 'dark') {
-            setTheme('light');
-        } else {
-            setTheme('dark');
-        }
-    }
+		// Function to toggle theme
+		function toggleTheme() {
+			if (localStorage.getItem('theme') === 'dark') {
+				setTheme('light');
+			} else {
+				setTheme('dark');
+			}
+		}
 
-    // Immediately invoked function to set the theme on initial load
-    (function () {
-        if (localStorage.getItem('theme') === 'dark') {
-            setTheme('dark');
-            document.querySelector('.theme-controller').checked = true;
-        } else {
-            setTheme('light');
-            document.querySelector('.theme-controller').checked = false;
-        }
-    })();
+		// Immediately invoked function to set the theme on initial load
+		(function () {
+			if (localStorage.getItem('theme') === 'dark') {
+				setTheme('dark');
+				document.querySelector('.theme-controller').checked = true;
+			} else {
+				setTheme('light');
+				document.querySelector('.theme-controller').checked = false;
+			}
+		})();
 
-    // Event listener for theme toggle
-    document.querySelector('.theme-controller').addEventListener('change', function() {
-        toggleTheme();
-        this.checked = localStorage.getItem('theme') === 'dark';
-    });
+		// Event listener for theme toggle
+		document.querySelector('.theme-controller').addEventListener('change', function () {
+			toggleTheme();
+			this.checked = localStorage.getItem('theme') === 'dark';
+		});
 
+		{{if .Settings.Security.RedirectToHTTPS}}
+		// Check for HTTPS redirect
+		(function () {
+			if (window.location.protocol !== 'https:' &&
+				window.location.hostname !== 'localhost' &&
+				window.location.hostname !== '127.0.0.1') {
+				window.location.href = 'https:' + window.location.href.substring(window.location.protocol.length);
+			}
+		})();
+		{{end}}
 	</script>
 </body>
 

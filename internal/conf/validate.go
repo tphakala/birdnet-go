@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -38,6 +39,11 @@ func ValidateSettings(settings *Settings) error {
 
 	// Validate WebServer settings
 	if err := validateWebServerSettings(&settings.WebServer); err != nil {
+		ve.Errors = append(ve.Errors, err.Error())
+	}
+
+	// Validate Security settings
+	if err := validateSecuritySettings(&settings.Security); err != nil {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
@@ -143,7 +149,6 @@ func validateOpenWeatherSettings(settings *OpenWeatherSettings) error {
 func validateWebServerSettings(settings *struct {
 	Enabled bool
 	Port    string
-	AutoTLS bool
 	Log     LogConfig
 }) error {
 	if settings.Enabled {
@@ -153,6 +158,28 @@ func validateWebServerSettings(settings *struct {
 		}
 		// You might want to add more specific port validation here
 	}
+
+	return nil
+}
+
+// validateSecuritySettings validates the security-specific settings
+func validateSecuritySettings(settings *Security) error {
+	// Check if any OAuth provider is enabled
+	if (settings.BasicAuth.Enabled || settings.GoogleAuth.Enabled || settings.GithubAuth.Enabled) && settings.Host == "" {
+		return fmt.Errorf("security.host must be set when using authentication providers")
+	}
+
+	// Validate the subnet bypass setting against the allowed pattern
+	if settings.AllowSubnetBypass.Enabled {
+		subnets := strings.Split(settings.AllowSubnetBypass.Subnet, ",")
+		for _, subnet := range subnets {
+			_, _, err := net.ParseCIDR(strings.TrimSpace(subnet))
+			if err != nil {
+				return fmt.Errorf("invalid subnet format: %w", err)
+			}
+		}
+	}
+
 	return nil
 }
 
