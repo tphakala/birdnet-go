@@ -1,0 +1,74 @@
+{{define "hostField"}}
+
+<!-- Text input field -->
+<div class="form-control relative" x-data="{
+        showPassword: false,
+        showTooltip: null,
+        touched: false,
+        validInput() {
+            return this.$refs.{{.id}}.validity.valid;
+        },
+        validHost() {
+            const configHost = security.host.replace(/^https?:\/\//, '');
+            const currentHost = location.host;
+            return configHost === currentHost;
+        },
+        ...inputField('{{.id}}', '{{.label}}', '{{.model}}', '{{.name}}', '{{.placeholder}}')
+    }">
+
+    {{if .label}}
+    <!-- Label -->
+    <label class="label justify-start" for="{{.id}}">
+        <span class="label-text capitalize">{{.label}}</span>
+        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = '{{.id}}'"
+            @mouseleave="showTooltip = null">ⓘ</span>
+    </label>
+    {{end}}
+
+    <!-- Input field -->
+    <input type="text" 
+        id="{{.id}}" 
+        :name="name" 
+        x-model="{{.model}}" 
+        :placeholder="placeholder"
+        class="input input-sm input-bordered {{.class}}" 
+        :class="{ 'invalid': touched && !validInput() }"
+        x-ref="{{.id}}" 
+        @blur="touched = true"
+        {{if .disabled}}x-bind:disabled="{{.disabled}}"{{end}}
+        pattern="^(https?:\/\/)?(localhost|([a-zA-Z0-9](-*[a-zA-Z0-9])*\.)+[a-zA-Z]{2,}|(\d{1,3}\.){3}\d{1,3})(:\d{1,5})?$"
+        @invalid="touched = true; validHost()" 
+        @input="touched = false; validHost()" 
+        required 
+        maxlength="255"
+        aria-required="true"
+        aria-invalid="touched && !validInput()"
+        aria-describedby="{{.id}}-error {{.id}}-warning {{.id}}-tooltip">
+
+    <!-- Validation messages -->
+    <span class="text-sm text-red-500" 
+        id="{{.id}}-error"
+        role="alert" 
+        aria-live="polite"
+        x-show="touched && !validInput()" 
+        x-cloak>
+        Please enter a valid host address
+    </span>
+    <span class="text-sm text-red-500" 
+        id="{{.id}}-warning"
+        x-show="!validHost() && validInput()"
+        x-cloak>
+        Warning: host address does not match the current location "<span x-text="location.host"></span>"
+    </span>
+
+    <!-- Tooltip -->
+    <div x-show="showTooltip === '{{.id}}'" 
+        id="{{.id}}-tooltip"
+        role="tooltip"
+        aria-hidden="true"
+        x-cloak
+        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md">
+        {{.tooltip}}
+    </div>
+</div>
+{{end}}

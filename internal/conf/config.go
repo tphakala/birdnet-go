@@ -2,7 +2,9 @@
 package conf
 
 import (
+	"crypto/rand"
 	"embed"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -204,6 +206,59 @@ type RangeFilterSettings struct {
 	LastUpdated time.Time `yaml:"-"` // last time the species list was updated, runtime value
 }
 
+// BasicAuth holds settings for the password authentication
+type BasicAuth struct {
+	Enabled        bool          // true to enable password authentication
+	Password       string        // password for admin interface
+	ClientID       string        // client id for OAuth2
+	ClientSecret   string        // client secret for OAuth2
+	RedirectURI    string        // redirect uri for OAuth2
+	AuthCodeExp    time.Duration // duration for authorization code
+	AccessTokenExp time.Duration // duration for access token
+}
+
+// SocialProvider holds settings for an OAuth2 identity provider
+type SocialProvider struct {
+	Enabled      bool   // true to enable social provider
+	ClientID     string // client id for OAuth2
+	ClientSecret string // client secret for OAuth2
+	RedirectURI  string // redirect uri for OAuth2
+	UserId       string // valid user id for OAuth2
+}
+
+type AllowSubnetBypass struct {
+	Enabled bool   // true to enable subnet bypass
+	Subnet  string // disable OAuth2 in subnet
+}
+
+type AllowCloudflareBypass struct {
+	Enabled    bool   // true to enable CF Access
+	TeamDomain string // Cloudflare team domain
+	Audience   string // Cloudflare policy audience
+}
+
+// SecurityConfig handles all security-related settings and validations
+// for the application, including authentication, TLS, and access control.
+type Security struct {
+
+	// Host is the primary hostname used for TLS certificates
+	// and OAuth redirect URLs. Required when using AutoTLS or
+	// authentication providers. Used to form the redirect URIs.
+	Host string
+
+	// AutoTLS enables automatic TLS certificate management using
+	// Let's Encrypt. Requires Host to be set and port 80/443 access.
+	AutoTLS bool
+
+	RedirectToHTTPS       bool                  // true to redirect to HTTPS
+	AllowSubnetBypass     AllowSubnetBypass     // subnet bypass configuration
+	AllowCloudflareBypass AllowCloudflareBypass // Cloudflare Access configuration
+	BasicAuth             BasicAuth             // password authentication configuration
+	GoogleAuth            SocialProvider        // Google OAuth2 configuration
+	GithubAuth            SocialProvider        // Github OAuth2 configuration
+	SessionSecret         string                // secret for session cookie
+}
+
 // Settings contains all configuration options for the BirdNET-Go application.
 type Settings struct {
 	Debug bool // true to enable debug mode
@@ -223,9 +278,10 @@ type Settings struct {
 	WebServer struct {
 		Enabled bool      // true to enable web server
 		Port    string    // port for web server
-		AutoTLS bool      // true to enable auto TLS
 		Log     LogConfig // logging configuration for web server
 	}
+
+	Security Security // security configuration
 
 	Output struct {
 		File struct {
@@ -352,6 +408,11 @@ func createDefaultConfig() error {
 	configPath := filepath.Join(configPaths[0], "config.yaml")
 	defaultConfig := getDefaultConfig()
 
+	// If the basicauth secret is not set, generate a random one
+	if viper.GetString("security.basicauth.clientsecret") == "" {
+		viper.Set("security.basicauth.clientsecret", GenerateRandomSecret())
+	}
+
 	// Create directories for config file
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		return fmt.Errorf("error creating directories for config file: %w", err)
@@ -466,4 +527,17 @@ func SaveYAMLConfig(configPath string, settings *Settings) error {
 
 	// If we've reached this point, the operation was successful
 	return nil
+}
+
+// GenerateRandomSecret generates a URL-safe base64 encoded random string
+// suitable for use as a client secret. The output is 43 characters long,
+// providing 256 bits of entropy.
+func GenerateRandomSecret() string {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		// Log the error and return a safe fallback or empty string
+		log.Printf("Failed to generate random secret: %v", err)
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString(bytes)
 }

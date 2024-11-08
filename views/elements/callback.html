@@ -1,0 +1,59 @@
+{{define "callback"}}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BirdNET-Go</title>
+    <link href="/assets/tailwind.css" rel="stylesheet" />
+    <link href="/assets/custom.css" rel="stylesheet" />
+    <script>
+        function showError(message) {
+            document.getElementById('loginTitle').textContent = 'Login failed';
+            document.getElementById('errorMessage').textContent =
+                message || 'Authentication failed. Please try again.';
+            document.getElementById('errorContainer').classList.remove('hidden');
+        }
+
+        function exchangeToken() {
+            const clientId = '{{.ClientID}}';
+            const clientSecret = '{{.Secret}}';
+            const redirectUri = window.location.origin + '{{.RedirectURL}}';
+
+            fetch('/oauth2/token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Authorization': 'Basic ' + btoa(clientId + ':' + clientSecret)
+                },
+                body: `grant_type=authorization_code&code={{.Code}}&redirect_uri=${encodeURIComponent(redirectUri)}`
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.access_token) {
+                        window.location.href = redirectUri;
+                    } else {
+                        showError(data.error);
+                    }
+                })
+                .catch(error => showError(error.message));
+        }
+
+        document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
+        window.onload = exchangeToken;
+    </script>
+</head>
+
+<body class="flex flex-col items-center justify-center h-screen">
+    <h3 id="loginTitle" class="text-xl text-base-content font-semibold opacity-30 mb-8">Logging in...</h3>
+    <div id="errorContainer" class="hidden">
+        <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md shadow-md" role="alert">
+            <p class="font-bold">Unable to login at this time.</p>
+            <p id="errorMessage"></p>
+        </div>
+    </div>
+</body>
+
+</html>
+{{end}}

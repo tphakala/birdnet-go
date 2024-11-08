@@ -59,7 +59,7 @@ func (s *Server) setupTemplateRenderer() {
 	funcMap := s.GetTemplateFunctions()
 
 	// Parse all templates from the ViewsFs
-	tmpl, err := template.New("").Funcs(funcMap).ParseFS(ViewsFs, "views/*.html", "views/**/*.html")
+	tmpl, err := template.New("").Funcs(funcMap).ParseFS(ViewsFs, "views/*.html", "views/*/*.html", "views/*/*/*.html")
 	if err != nil {
 		s.Echo.Logger.Fatal(err)
 	}
@@ -89,7 +89,11 @@ func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 	// Look up the route for the current path
 	_, isPageRoute := s.pageRoutes[path]
 	_, isFragment := s.partialRoutes[path]
-	if !isPageRoute && !isFragment {
+
+	// Is a login route, set isLoginRoute to true
+	isLoginRoute := path == "/login"
+
+	if !isPageRoute && !isFragment && !isLoginRoute {
 		// Return an error if no route is found for the path
 		return "", fmt.Errorf("no route found for path: %s", path)
 	}
