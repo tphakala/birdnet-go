@@ -103,7 +103,7 @@
 
 {{define "countDisplay"}}
 <td
-  class="hour-data {{.Class}} {{if eq (mod .HourIndex 2) 0}}bi-hourly{{end}} {{if eq (mod .HourIndex 3) 0}}six-hourly{{end}} heatmap-color-{{heatmapColor .Count}} text-center h-full py-0 px-0 border border-base-100 dark:border-base-900">
+  class="hour-data {{.Class}} {{if eq (mod .HourIndex 2) 0}}bi-hourly{{end}} {{if eq (mod .HourIndex 3) 0}}six-hourly{{end}} heatmap-color-{{heatmapColor .Count}} text-center h-full py-0 px-0">
   {{if gt .Count 0}}
     <a href="#"
       class="flex items-center justify-center h-full"
