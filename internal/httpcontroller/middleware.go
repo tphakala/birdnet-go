@@ -27,12 +27,18 @@ func CacheControlMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			path := c.Request().URL.Path
-			// Apply cache control for assets and clips paths
-			if strings.HasPrefix(path, "/assets/") || strings.HasPrefix(path, "/clips/") {
-				c.Response().Header().Set("Cache-Control", "no-store, max-age=0") // 1 day
-			} else {
-				// No cache for other routes
-				c.Response().Header().Set("Cache-Control", "no-store, max-age=0")
+
+			switch {
+			case strings.HasPrefix(path, "/assets/"):
+				// Static assets (1 week)
+				c.Response().Header().Set("Cache-Control", "public, max-age=604800")
+			case strings.HasPrefix(path, "/clips/") ||
+				(path == "/media/spectrogram" && strings.Contains(c.QueryParam("clip"), "clips/")):
+				// Clips and their spectrograms are immutable (1 month)
+				c.Response().Header().Set("Cache-Control", "public, max-age=2592000, immutable")
+			default:
+				// Dynamic content
+				c.Response().Header().Set("Cache-Control", "private, max-age=0, must-revalidate")
 			}
 			return next(c)
 		}
