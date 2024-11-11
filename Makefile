@@ -11,7 +11,7 @@ UNAME_S := $(shell uname -s)
 UNAME_M := $(shell uname -m)
 
 # Tailwind CSS
-TAILWIND_INPUT := input.css
+TAILWIND_INPUT := tailwind.input.css
 TAILWIND_OUTPUT := assets/tailwind.css
 
 # Function to determine library path based on target and host architecture

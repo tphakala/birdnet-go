@@ -23,7 +23,7 @@ type NoteWithSpectrogram struct {
 
 // topBirdsHandler handles requests for the top bird sightings.
 // It retrieves data based on the specified date and minimum confidence,
-// then renders it using the 'birdsTableHTML' template.
+// then renders it using the 'birdsTable' template.
 func (h *Handlers) TopBirds(c echo.Context) error {
 	// Retrieving query parameters
 	selectedDate := c.QueryParam("date")
@@ -96,8 +96,8 @@ func (h *Handlers) TopBirds(c echo.Context) error {
 		Sunset:            sunsetHour,
 	}
 
-	// Render the birdsTableHTML template with the data
-	return c.Render(http.StatusOK, "birdsTableHTML", data)
+	// Render the birdsTable template with the data
+	return c.Render(http.StatusOK, "birdsTable", data)
 }
 
 func closestHour(t time.Time) int {

@@ -10,18 +10,23 @@
 				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 123.96 123.96" fill="currentColor" class="w-5 h-5">
 					<g>
 						<g>
-							<path d="M85.742,1.779l-56,56c-2.3,2.3-2.3,6.1,0,8.401l56,56c3.801,3.8,10.2,1.1,10.2-4.2v-112 C95.942,0.679,89.543-2.021,85.742,1.779z"></path>
+							<path
+								d="M85.742,1.779l-56,56c-2.3,2.3-2.3,6.1,0,8.401l56,56c3.801,3.8,10.2,1.1,10.2-4.2v-112 C95.942,0.679,89.543-2.021,85.742,1.779z">
+							</path>
 						</g>
 					</g>
 				</svg>
 			</button>
-			<input type="date" hx-get="/top-birds" hx-target="#topBirdsChart" hx-trigger="load, change" hx-include="*[name]"
-				hx-params="date" class="input input-sm sm:w-36 focus-visible:outline-none self-center whitespace-nowrap" id="datePicker" name="date">
+			<input type="date" hx-get="/top-birds" hx-target="#topBirdsChart" hx-trigger="load, change"
+				hx-include="*[name]" hx-params="date"
+				class="input input-sm sm:w-36 focus-visible:outline-none self-center whitespace-nowrap" id="datePicker"
+				name="date" onchange="updateDate(this.value)">
 			<button onclick="moveDatePicker(1)">
 				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 123.96 123.96" fill="currentColor" class="w-5 h-5">
 					<g>
 						<g transform="rotate(-180, 61.9775, 61.98)">
-							<path d="m85.74,1.78l-56,56c-2.3,2.3 -2.3,6.1 0,8.4l56,56c3.8,3.8 10.2,1.1 10.2,-4.2l0,-112c0,-5.3 -6.4,-8 -10.2,-4.2z" />
+							<path
+								d="m85.74,1.78l-56,56c-2.3,2.3 -2.3,6.1 0,8.4l56,56c3.8,3.8 10.2,1.1 10.2,-4.2l0,-112c0,-5.3 -6.4,-8 -10.2,-4.2z" />
 						</g>
 					</g>
 				</svg>
@@ -29,7 +34,7 @@
 		</div>
 	</div>
 
-	<div class="overflow-x-auto" id="topBirdsChart">
+	<div id="topBirdsChart">
 		<!-- Daily Summary Chart will be loaded here -->
 	</div>
 </section>
@@ -43,11 +48,8 @@
 			<span class="card-title grow text-base sm:text-xl">Recent Detections</span>
 			<label for="numDetections" class="label-text">Show:</label>
 			<!-- Dropdown for selecting number of detections -->
-			<select id="numDetections" name="numDetections"
-				hx-get="/detections/recent"
-				hx-target="#recentDetections"
-				hx-trigger="load, change"
-				class="select select-sm focus-visible:outline-none">
+			<select id="numDetections" name="numDetections" hx-get="/detections/recent" hx-target="#recentDetections"
+				hx-trigger="load, change" class="select select-sm focus-visible:outline-none">
 				<option value="5" selected>5</option>
 				<option value="10">10</option>
 				<option value="25">25</option>
@@ -61,4 +63,23 @@
 		<!-- last detections list will be loaded here -->
 	</div>
 </section>
+
+
+<script>
+	function updateDate(newDate) {
+		var currentDate = location.hash.substring(1);
+		if (currentDate !== newDate) {
+			history.pushState({ date: newDate }, null, '#' + newDate);
+		}
+	}
+
+	window.addEventListener('popstate', function (event) {
+		var datePicker = document.getElementById('datePicker');
+		var date = event.state && event.state.date || location.hash.substring(1);
+		if (datePicker && date) {
+			datePicker.value = date;
+			htmx.trigger(datePicker, 'change');
+		}
+	});
+</script>
 {{end}}

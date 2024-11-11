@@ -115,6 +115,9 @@ func even(index int) bool {
 
 // heatmapColor assigns a color based on a provided value using predefined thresholds.
 func heatmapColor(value int) string {
+	if value == 0 {
+		return "0"
+	}
 	thresholds := []int{10, 20, 30, 40, 50, 60, 70, 80, 90}
 	colors := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}
 
