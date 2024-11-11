@@ -1,10 +1,10 @@
 {{define "login"}}
-<div class="modal-box sm:p-6 sm:pb-10 p-3 overflow-hidden" role="dialog">
+<div class="modal-box sm:p-6 sm:pb-10 p-3 overflow-y-auto" role="dialog">
   <form id="loginForm" hx-post="/login" hx-on:submit="showError(false)" role="form">
     <input type="hidden" id="redirectUri" name="redirect" value="{{.RedirectURL}}">
 
     <div class="flex items-start flex-row">
-      <div class="flex-initial">
+      <div class="hidden xs:flex flex-initial">
         <div
           class="mx-auto flex h-12 w-12 sm:w-12 sm:h-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 sm:mx-0 sm:h-10 sm:w-10">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
@@ -19,7 +19,7 @@
       <div class="flex-1">
         <h3 class="text-xl font-black py-2 px-6">Login to BirdNET-Go</h3>
         {{if .BasicEnabled }}
-        <div class="form-control p-6 mx-14 ml-0">
+        <div class="form-control p-6 mx-2 xs:ml-0 xs:mx-14">
           <label class="label" for="password">Password</label>
           <input type="password" id="loginPassword" name="password" class="input input-bordered" required
             autocomplete="current-password" aria-required="true" aria-labelledby="passwordLabel"
@@ -32,7 +32,7 @@
 
     {{if .BasicEnabled }}
     <div id="loginResult" class="px-6 my-2"></div>
-    <div class="modal-action px-[4.5rem] flex-row gap-4 justify-between">
+    <div class="modal-action px-8 xs:px-[4.5rem] flex-row gap-4 justify-between">
       <button type="button" onclick="loginModal.close()" class="btn btn-outline"
         aria-label="Cancel login">Cancel</button>
       <button type="submit" class="btn btn-primary grow pr-10" aria-label="Login with password"
@@ -48,18 +48,18 @@
     {{end}}
 
     {{if or .GoogleEnabled .GithubEnabled }}
-    <div class="flex flex-col sm:flex-row gap-4 flex-wrap px-16 pb-6">
+    <div class="flex flex-col sm:flex-row gap-4 flex-wrap px-6 xs:px-16 pb-6">
       {{if or .GoogleEnabled }}
-      <a href="/auth/google" class="btn btn-primary grow pr-10" onclick="showSpinner('googleSpinner')" role="button"
+      <a href="/auth/google" class="btn btn-primary grow xs:pr-10 text-xs xs:text-sm" onclick="showSpinner('googleSpinner')" role="button"
         aria-label="Login with Google">
-        <span id="googleSpinner" class="invisible loading loading-spinner" aria-hidden="true"></span>
+        <span id="googleSpinner" class="invisible xs:loading xs:loading-spinner" aria-hidden="true"></span>
         Login with Google
       </a>
       {{end}}
       {{if or .GithubEnabled }}
-      <a href="/auth/github" class="btn btn-primary grow pr-10" onclick="showSpinner('githubSpinner')" role="button"
+      <a href="/auth/github" class="btn btn-primary grow xs:pr-10 text-xs xs:text-sm" onclick="showSpinner('githubSpinner')" role="button"
         aria-label="Login with GitHub">
-        <span id="githubSpinner" class="invisible loading loading-spinner" aria-hidden="true"></span>
+        <span id="githubSpinner" class="invisible xs:loading xs:loading-spinner" aria-hidden="true"></span>
         Login with GitHub
       </a>
       {{end}}
