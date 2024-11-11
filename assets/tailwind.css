@@ -107,7 +107,7 @@
 }
 
 /*
-! tailwindcss v3.4.14 | MIT License | https://tailwindcss.com
+! tailwindcss v3.4.13 | MIT License | https://tailwindcss.com
 */
 
 /*
@@ -550,7 +550,7 @@ video {
 
 /* Make elements with the HTML hidden attribute stay hidden by default */
 
-[hidden]:where(:not([hidden="until-found"])) {
+[hidden] {
   display: none;
 }
 
@@ -1411,24 +1411,24 @@ html {
   transform: translateX(0%);
 }
 
-.drawer-end > .drawer-toggle ~ .drawer-content {
+.drawer-end .drawer-toggle ~ .drawer-content {
   grid-column-start: 1;
 }
 
-.drawer-end > .drawer-toggle ~ .drawer-side {
+.drawer-end .drawer-toggle ~ .drawer-side {
   grid-column-start: 2;
   justify-items: end;
 }
 
-.drawer-end > .drawer-toggle ~ .drawer-side > *:not(.drawer-overlay) {
+.drawer-end .drawer-toggle ~ .drawer-side > *:not(.drawer-overlay) {
   transform: translateX(100%);
 }
 
-[dir="rtl"] .drawer-end > .drawer-toggle ~ .drawer-side > *:not(.drawer-overlay) {
+[dir="rtl"] .drawer-end .drawer-toggle ~ .drawer-side > *:not(.drawer-overlay) {
   transform: translateX(-100%);
 }
 
-.drawer-end > .drawer-toggle:checked ~ .drawer-side > *:not(.drawer-overlay) {
+.drawer-end .drawer-toggle:checked ~ .drawer-side > *:not(.drawer-overlay) {
   transform: translateX(0%);
 }
 
@@ -4495,17 +4495,8 @@ html:has(.drawer-toggle:checked) {
   border-bottom-left-radius: 0.375rem;
 }
 
-.border {
-  border-width: 1px;
-}
-
 .border-l-4 {
   border-left-width: 4px;
-}
-
-.border-base-100 {
-  --tw-border-opacity: 1;
-  border-color: var(--fallback-b1,oklch(var(--b1)/var(--tw-border-opacity)));
 }
 
 .border-base-200 {
