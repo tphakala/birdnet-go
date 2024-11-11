@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -387,13 +388,11 @@ func isSpeciesIncluded(species string, includedList []string) bool {
 func (p *Processor) pendingDetectionsFlusher() {
 	// Determine minDetections based on Settings.BirdNET.Overlap
 	var minDetections int
-	if p.Settings.BirdNET.Overlap >= 2.7 {
-		// Use deep detection to avoid false positives
-		minDetections = 4
-	} else {
-		// Use single detection
-		minDetections = 1
-	}
+
+	// Calculate segment length based on overlap setting, minimum 0.1 seconds
+	segmentLength := math.Max(0.1, 3.0-p.Settings.BirdNET.Overlap)
+	// Calculate minimum detections needed based on segment length, at least 1
+	minDetections = int(math.Max(1, 3/segmentLength))
 
 	go func() {
 		// Create a ticker that ticks every second to frequently check for flush deadlines.
