@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,21 +45,30 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"urlsafe":               urlSafe,
 		"ffmpegAvailable":       conf.IsFfmpegAvailable,
 		"formatDateTime":        formatDateTime,
+		"getHourlyHeaderData":   getHourlyHeaderData,
 		"getHourlyCounts":       getHourlyCounts,
 		"sumHourlyCountsRange":  sumHourlyCountsRange,
 	}
 }
 
-/**
- * addFunc calculates the sum of the input integers.
- *
- * @param numbers The integers to be summed up.
- * @return The total sum of the input integers.
- */
-func addFunc(numbers ...int) int {
+// addFunc calculates the sum of the input integers.
+// Parameters:
+//   - numbers: Variadic list of integers or strings representing integers
+//
+// Returns:
+//
+//	The total sum of all input numbers
+func addFunc(numbers ...interface{}) int {
 	sum := 0
 	for _, num := range numbers {
-		sum += num
+		switch v := num.(type) {
+		case int:
+			sum += v
+		case string:
+			if i, err := strconv.Atoi(v); err == nil {
+				sum += i
+			}
+		}
 	}
 	return sum
 }
@@ -66,13 +76,13 @@ func subFunc(a, b int) int { return a - b }
 func divFunc(a, b int) int { return a / b }
 func modFunc(a, b int) int { return a % b }
 
-/**
- * dictFunc creates a dictionary from key-value pairs provided as arguments.
- *
- * @param values A variadic parameter list of key-value pairs. Keys must be strings.
- * @return A map[string]interface{} representing the dictionary created.
- * An error if the number of arguments is odd or if keys are not strings.
- */
+// dictFunc creates a dictionary from key-value pairs.
+// Parameters:
+//   - values: Variadic list of alternating string keys and interface{} values
+//
+// Returns:
+//   - map[string]interface{}: Dictionary with provided key-value pairs
+//   - error: Invalid dict call or non-string keys
 func dictFunc(values ...interface{}) (map[string]interface{}, error) {
 	if len(values)%2 != 0 {
 		return nil, errors.New("invalid dict call")
@@ -183,13 +193,14 @@ func formatDateTime(dateStr string) string {
 	return t.Format("2006-01-02 15:04:05") // Or any other format you prefer
 }
 
-/**
- * seqFunc generates a sequence of integers starting from 'start' to 'end' (inclusive).
- *
- * @param start The starting integer of the sequence
- * @param end The ending integer of the sequence
- * @return []int The generated sequence of integers
- */
+// seqFunc generates a sequence of integers.
+// Parameters:
+//   - start: First integer in sequence
+//   - end: Last integer in sequence (inclusive)
+//
+// Returns:
+//
+//	[]int: Generated sequence from start to end
 func seqFunc(start, end int) []int {
 	seq := make([]int, end-start+1)
 	for i := range seq {
@@ -198,13 +209,38 @@ func seqFunc(start, end int) []int {
 	return seq
 }
 
-/**
- * getHourlyCounts returns a map containing hourly counts data for a given element.
- *
- * @param element handlers.NoteWithIndex - The element for which hourly counts are generated.
- * @param hourIndex int - The index representing the hour for which counts are calculated.
- * @return map[string]interface{} - A map with HourIndex and Name fields.
- */
+// getHourlyHeaderData constructs a map containing metadata for a specific hour.
+// Parameters:
+//   - hourIndex: The index of the hour (0-23)
+//   - class: CSS class name for styling ("hourly-count", "bi-hourly-count", "six-hourly-count")
+//   - length: Time period length in hours (1, 2, or 6)
+//   - date: Date string in YYYY-MM-DD format
+//   - sunrise: Hour index when sunrise occurs
+//   - sunset: Hour index when sunset occurs
+//
+// Returns:
+//
+//	A map containing the hour metadata with keys:
+//	"Class", "Length", "HourIndex", "Date", "Sunrise", "Sunset"
+func getHourlyHeaderData(hourIndex int, class string, length int, date string, sunrise int, sunset int) map[string]interface{} {
+	baseData := map[string]interface{}{
+		"Class":     class,
+		"Length":    length,
+		"HourIndex": hourIndex,
+		"Date":      date,
+		"Sunrise":   sunrise,
+		"Sunset":    sunset,
+	}
+	return baseData
+}
+
+// getHourlyCounts returns hourly count data for a detection.
+// Parameters:
+//   - element: NoteWithIndex containing detection data
+//   - hourIndex: Hour index (0-23) to get counts for
+// Returns:
+//   map[string]interface{} with HourIndex and species Name
+
 func getHourlyCounts(element handlers.NoteWithIndex, hourIndex int) map[string]interface{} {
 	baseData := map[string]interface{}{
 		"HourIndex": hourIndex,
@@ -214,14 +250,15 @@ func getHourlyCounts(element handlers.NoteWithIndex, hourIndex int) map[string]i
 	return baseData
 }
 
-/**
- * sumHourlyCountsRange calculates the sum of counts within a specified range of hours.
- *
- * @param counts An array containing hourly counts.
- * @param start The starting hour index of the range.
- * @param length The length of the range in hours.
- * @return The sum of counts within the specified range.
- */
+// sumHourlyCountsRange calculates sum of counts in hour range.
+// Parameters:
+//   - counts: 24-hour array of detection counts
+//   - start: Starting hour index
+//   - length: Number of hours to sum
+//
+// Returns:
+//
+//	Sum of counts within specified range
 func sumHourlyCountsRange(counts [24]int, start, length int) int {
 	sum := 0
 	for i := start; i < start+length; i++ {

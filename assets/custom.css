@@ -1,49 +1,40 @@
 .audio-control {
-    width: 100%;
-    height: 25px;
+  width: 100%;
+  height: 25px;
 }
 
 .confidence-ball {
-    width: 54px; 
-    height: 25px; 
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 5px; 
-    font-size: 0.75rem; 
+  width: 54px;
+  height: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  font-size: 0.75rem;
 }
 
 @media (max-width: 1024px) {
-    .confidence-ball {
-        width: 40px;
-        height: 20px;
-        font-size: 0.65rem;
-        margin: auto;
-    }
+  .confidence-ball {
+    width: 40px;
+    height: 20px;
+    font-size: 0.65rem;
+  }
 }
 
 input.invalid {
   border-color: #dc2626;
 }
 
-/*@media (max-width: 768px) {
-    .confidence-ball {
-        width: 32px;
-        height: 18px;
-        font-size: 0.6rem;
-    }
-}*/
-
 .species-ball {
-    min-width: 1rem;
-    height: 1.25rem;
-    display: inline-flex;
-    padding: 0.2rem 0.25rem;
-    align-items: center;
-    justify-content: center;
-    border-radius: 1rem;
-    font-size: 0.75rem;
-    line-height: 1;
+  min-width: 1rem;
+  height: 1.25rem;
+  display: inline-flex;
+  padding: 0.2rem 0.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  line-height: 1;
 }
 
 @media (max-width: 1024px) {
@@ -52,20 +43,88 @@ input.invalid {
   }
 }
 
-.hour-header, .hour-data { display: table-cell; }
-.hourly-count { display: table-cell; }
-.bi-hourly-count, .six-hourly-count { display: none; }
+/* Sticky header for the recent detections table */
+thead.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-image: linear-gradient(to bottom, white 70%, transparent 100%);
+}
+
+[data-theme=dark] thead.sticky-header {
+  background-image: linear-gradient(to bottom, #1d232a 50%, transparent 100%);
+}
+
+.hour-header,
+.hour-data {
+  display: table-cell;
+}
+
+.hourly-count {
+  display: table-cell;
+}
+
+.bi-hourly-count,
+.six-hourly-count {
+  display: none;
+}
+
+/* Add borders to hour data cells for light theme */
+[data-theme=light] .hour-data:not(.heatmap-color-0) {
+  position: relative;
+  z-index: 1;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-clip: padding-box;
+  border-collapse: collapse;
+}
+
+.hour-data a {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.table :where(thead tr, tbody tr:not(:last-child), tbody tr:first-child:last-child) {
+  border-bottom-width: 0;
+}
+
+.table :where(thead td, thead th) {
+  border-bottom: 1px solid var(--fallback-b2, oklch(var(--b2)/var(--tw-border-opacity)));
+}
 
 @media (max-width: 767px) {
-  .hour-header:not(.bi-hourly), .hour-data:not(.bi-hourly) { display: none; }
-  .hourly-count { display: none; }
-  .bi-hourly-count { display: table-cell; }
+
+  .hour-header:not(.bi-hourly),
+  .hour-data:not(.bi-hourly) {
+    display: none;
+  }
+
+  .hourly-count {
+    display: none;
+  }
+
+  .bi-hourly-count {
+    display: table-cell;
+  }
 }
 
 @media (max-width: 479px) {
-  .hour-header:not(.six-hourly), .hour-data:not(.six-hourly) { display: none; }
-  .bi-hourly-count { display: none; }
-  .six-hourly-count { display: table-cell; }
+
+  .hour-header:not(.six-hourly),
+  .hour-data:not(.six-hourly) {
+    display: none;
+  }
+
+  .bi-hourly-count {
+    display: none;
+  }
+
+  .six-hourly-count {
+    display: table-cell;
+  }
 }
 
 .text-2xs {
@@ -94,9 +153,9 @@ input.invalid {
 }
 
 .input:focus-visible {
-    outline: 1px solid transparent;
-    outline-offset: 0px;
-    box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
+  outline: 1px solid transparent;
+  outline-offset: 0px;
+  box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
 }
 
 .select:focus-visible {
@@ -129,22 +188,23 @@ input.invalid {
   display: block;
 }
 
-  /* Define your custom background colors here if the default Tailwind classes aren't working */
-  .bg-confidence-high { background-color: #10b981; } /* Green for high confidence */
-  .bg-confidence-medium { background-color: #f97316; } /* Orange for average confidence */
-  .bg-confidence-low { background-color: #ef4444; } /* Red for low confidence */
+/* Define your custom background colors here if the default Tailwind classes aren't working */
+.bg-confidence-high { background-color: #10b981; } /* Green for high confidence */
+.bg-confidence-medium { background-color: #f97316; } /* Orange for average confidence */
+.bg-confidence-low { background-color: #ef4444; } /* Red for low confidence */
 
 .progress {
-    min-height: 14px; /* Adjust this value as needed */
+  min-height: 14px; /* Adjust this value as needed */
 }   
 
 .heatmap-cell {
-    text-align: center;
-    font-weight: bold;
+  text-align: center;
+  font-weight: bold;
 }
 
 /* Light theme (default) */
 :root {
+  --heatmap-color-0: #f0f9fc;
   --heatmap-color-1: #e0f3f8;
   --heatmap-color-2: #ccebf6;
   --heatmap-color-3: #99d7ed;
@@ -158,6 +218,7 @@ input.invalid {
 
 /* Dark theme */
 [data-theme=dark] {
+  --heatmap-color-0: #001a20;
   --heatmap-color-1: #002933;
   --heatmap-color-2: #004466;
   --heatmap-color-3: #005c80;
@@ -168,17 +229,6 @@ input.invalid {
   --heatmap-color-8: #99cde9;
   --heatmap-color-9: #cce3f1;
 }
-
-/* Heatmap cell styles */
-.heatmap-color-1 { background-color: var(--heatmap-color-1); color: var(--heatmap-text-1, #000); }
-.heatmap-color-2 { background-color: var(--heatmap-color-2); color: var(--heatmap-text-2, #000); }
-.heatmap-color-3 { background-color: var(--heatmap-color-3); color: var(--heatmap-text-3, #000); }
-.heatmap-color-4 { background-color: var(--heatmap-color-4); color: var(--heatmap-text-4, #000); }
-.heatmap-color-5 { background-color: var(--heatmap-color-5); color: var(--heatmap-text-5, #fff); }
-.heatmap-color-6 { background-color: var(--heatmap-color-6); color: var(--heatmap-text-6, #fff); }
-.heatmap-color-7 { background-color: var(--heatmap-color-7); color: var(--heatmap-text-7, #fff); }
-.heatmap-color-8 { background-color: var(--heatmap-color-8); color: var(--heatmap-text-8, #fff); }
-.heatmap-color-9 { background-color: var(--heatmap-color-9); color: var(--heatmap-text-9, #fff); }
 
 /* Text color adjustments for dark theme */
 [data-theme=dark] {
@@ -191,4 +241,96 @@ input.invalid {
   --heatmap-text-7: #000;
   --heatmap-text-8: #000;
   --heatmap-text-9: #000;
+}
+
+/* Heatmap cell styles for light theme */
+[data-theme=light] .heatmap-color-1 {
+  background: linear-gradient(-45deg, var(--heatmap-color-1) 45%, var(--heatmap-color-0) 95%);
+  color: var(--heatmap-text-1, #000);
+}
+
+[data-theme=light] .heatmap-color-2 {
+  background: linear-gradient(-45deg, var(--heatmap-color-2) 45%, var(--heatmap-color-1) 95%);
+  color: var(--heatmap-text-2, #000);
+}
+
+[data-theme=light] .heatmap-color-3 {
+  background: linear-gradient(-45deg, var(--heatmap-color-3) 45%, var(--heatmap-color-2) 95%);
+  color: var(--heatmap-text-3, #000);
+}
+
+[data-theme=light] .heatmap-color-4 {
+  background: linear-gradient(-45deg, var(--heatmap-color-4) 45%, var(--heatmap-color-3) 95%);
+  color: var(--heatmap-text-4, #000);
+}
+
+[data-theme=light] .heatmap-color-5 {
+  background: linear-gradient(-45deg, var(--heatmap-color-5) 45%, var(--heatmap-color-4) 95%);
+  color: var(--heatmap-text-5, #fff);
+}
+
+[data-theme=light] .heatmap-color-6 {
+  background: linear-gradient(-45deg, var(--heatmap-color-6) 45%, var(--heatmap-color-5) 95%);
+  color: var(--heatmap-text-6, #fff);
+}
+
+[data-theme=light] .heatmap-color-7 {
+  background: linear-gradient(-45deg, var(--heatmap-color-7) 45%, var(--heatmap-color-6) 95%);
+  color: var(--heatmap-text-7, #fff);
+}
+
+[data-theme=light] .heatmap-color-8 {
+  background: linear-gradient(-45deg, var(--heatmap-color-8) 45%, var(--heatmap-color-7) 95%);
+  color: var(--heatmap-text-8, #fff);
+}
+
+[data-theme=light] .heatmap-color-9 {
+  background: linear-gradient(-45deg, var(--heatmap-color-9) 45%, var(--heatmap-color-8) 95%);
+  color: var(--heatmap-text-9, #fff);
+}
+
+/* Heatmap cell styles for dark theme */
+[data-theme=dark] .heatmap-color-1 {
+  background: linear-gradient(135deg, var(--heatmap-color-1) 45%, var(--heatmap-color-0) 95%);
+  color: var(--heatmap-text-1, #000);
+}
+
+[data-theme=dark] .heatmap-color-2 {
+  background: linear-gradient(135deg, var(--heatmap-color-2) 45%, var(--heatmap-color-1) 95%);
+  color: var(--heatmap-text-2, #000);
+}
+
+[data-theme=dark] .heatmap-color-3 {
+  background: linear-gradient(135deg, var(--heatmap-color-3) 45%, var(--heatmap-color-2) 95%);
+  color: var(--heatmap-text-3, #000);
+}
+
+[data-theme=dark] .heatmap-color-4 {
+  background: linear-gradient(135deg, var(--heatmap-color-4) 66%, var(--heatmap-color-3) 110%);
+  color: var(--heatmap-text-4, #000);
+}
+
+[data-theme=dark] .heatmap-color-5 {
+  background: linear-gradient(135deg, var(--heatmap-color-5) 66%, var(--heatmap-color-4) 110%);
+  color: var(--heatmap-text-5, #fff);
+}
+
+[data-theme=dark] .heatmap-color-6 {
+  background: linear-gradient(135deg, var(--heatmap-color-6) 66%, var(--heatmap-color-5) 110%);
+  color: var(--heatmap-text-6, #fff);
+}
+
+[data-theme=dark] .heatmap-color-7 {
+  background: linear-gradient(135deg, var(--heatmap-color-7) 66%, var(--heatmap-color-6) 110%);
+  color: var(--heatmap-text-7, #fff);
+}
+
+[data-theme=dark] .heatmap-color-8 {
+  background: linear-gradient(135deg, var(--heatmap-color-8) 66%, var(--heatmap-color-7) 110%);
+  color: var(--heatmap-text-8, #fff);
+}
+
+[data-theme=dark] .heatmap-color-9 {
+  background: linear-gradient(135deg, var(--heatmap-color-9) 66%, var(--heatmap-color-8) 110%);
+  color: var(--heatmap-text-9, #fff);
 }

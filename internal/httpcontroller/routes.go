@@ -4,7 +4,6 @@ package httpcontroller
 import (
 	"embed"
 	"fmt"
-	"html"
 	"html/template"
 	"io/fs"
 	"net/http"
@@ -170,11 +169,12 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 		},
 	}
 
-	if isFragment {
+	fragmentPath := c.Request().RequestURI
+	if isFragment && conf.IsSafePath(fragmentPath) {
 		// If the route is for a fragment, render it with the dashboard template
 		data.Page = "dashboard"
 		data.Title = partialRoute.Title
-		data.PreloadFragment = html.EscapeString(c.Request().RequestURI)
+		data.PreloadFragment = fragmentPath
 	}
 
 	return c.Render(http.StatusOK, "index", data)

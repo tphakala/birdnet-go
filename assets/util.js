@@ -1,5 +1,5 @@
 function logout() {
-    window.location.href = `/logout`;
+	window.location.href = `/logout`;
 }
 
 function moveDatePicker(days) {
@@ -23,11 +23,16 @@ function isNotArrowKey(event) {
 	return !['ArrowLeft', 'ArrowRight'].includes(event.key);
 }
 
+function isLocationDashboard() {
+	const pathname = window.location.pathname;
+	return pathname === '/' || pathname.endsWith('/dashboard');
+}
+
 htmx.on('htmx:afterSettle', function (event) {
-    if (event.detail.target.id.endsWith('-content')) {
-        // Find all chart containers in the newly loaded content and render them
-        event.detail.target.querySelectorAll('[id$="-chart"]').forEach(function (chartContainer) {
-            renderChart(chartContainer.id, chartContainer.dataset.chartOptions);
-        });
-    }
+	if (event.detail.target.id.endsWith('-content')) {
+		// Find all chart containers in the newly loaded content and render them
+		event.detail.target.querySelectorAll('[id$="-chart"]').forEach(function (chartContainer) {
+			renderChart(chartContainer.id, chartContainer.dataset.chartOptions);
+		});
+	}
 });
