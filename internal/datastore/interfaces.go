@@ -24,7 +24,7 @@ type Interface interface {
 	GetAllNotes() ([]Note, error)
 	GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]Note, error)
 	GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error)
-	SpeciesDetections(species, date, hour string, sortAscending bool, limit int, offset int) ([]Note, error)
+	SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit int, offset int) ([]Note, error)
 	GetLastDetections(numDetections int) ([]Note, error)
 	GetAllDetectedSpecies() ([]Note, error)
 	SearchNotes(query string, sortAscending bool, limit int, offset int) ([]Note, error)
@@ -37,8 +37,8 @@ type Interface interface {
 	SaveHourlyWeather(hourlyWeather *HourlyWeather) error
 	GetHourlyWeather(date string) ([]HourlyWeather, error)
 	LatestHourlyWeather() (*HourlyWeather, error)
-	GetHourlyDetections(date, hour string) ([]Note, error)
-	CountSpeciesDetections(species, date, hour string) (int64, error)
+	GetHourlyDetections(date, hour string, duration int) ([]Note, error)
+	CountSpeciesDetections(species, date, hour string, duration int) (int64, error)
 	CountSearchResults(query string) (int64, error)
 }
 
@@ -284,17 +284,13 @@ func (ds *DataStore) GetHourlyOccurrences(date, commonName string, minConfidence
 }
 
 // SpeciesDetections retrieves bird species detections for a specific date and time period.
-func (ds *DataStore) SpeciesDetections(species, date, hour string, sortAscending bool, limit int, offset int) ([]Note, error) {
+func (ds *DataStore) SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit int, offset int) ([]Note, error) {
 	sortOrder := sortAscendingString(sortAscending)
 
 	query := ds.DB.Where("common_name = ? AND date = ?", species, date)
 	if hour != "" {
-		if len(hour) < 2 {
-			hour = "0" + hour
-		}
-		startTime := hour + ":00"
-		endTime := hour + ":59"
-		query = query.Where("time >= ? AND time <= ?", startTime, endTime)
+		startTime, endTime := getHourRange(hour, duration)
+		query = query.Where("time >= ? AND time < ?", startTime, endTime)
 	}
 
 	query = query.Order("id " + sortOrder).
@@ -448,13 +444,11 @@ func createGormLogger() logger.Interface {
 }
 
 // GetHourlyDetections retrieves bird detections for a specific date and hour.
-func (ds *DataStore) GetHourlyDetections(date, hour string) ([]Note, error) {
+func (ds *DataStore) GetHourlyDetections(date string, hour string, duration int) ([]Note, error) {
 	var detections []Note
 
-	startTime := hour + ":00:00"
-	endTime := hour + ":59:59"
-
-	err := ds.DB.Where("date = ? AND time >= ? AND time <= ?", date, startTime, endTime).
+	startTime, endTime := getHourRange(hour, duration)
+	err := ds.DB.Where("date = ? AND time >= ? AND time < ?", date, startTime, endTime).
 		Order("time ASC").
 		Find(&detections).Error
 
@@ -462,17 +456,13 @@ func (ds *DataStore) GetHourlyDetections(date, hour string) ([]Note, error) {
 }
 
 // CountSpeciesDetections counts the number of detections for a specific species, date, and hour.
-func (ds *DataStore) CountSpeciesDetections(species, date, hour string) (int64, error) {
+func (ds *DataStore) CountSpeciesDetections(species, date, hour string, duration int) (int64, error) {
 	var count int64
 	query := ds.DB.Model(&Note{}).Where("common_name = ? AND date = ?", species, date)
 
 	if hour != "" {
-		if len(hour) < 2 {
-			hour = "0" + hour
-		}
-		startTime := hour + ":00"
-		endTime := hour + ":59"
-		query = query.Where("time >= ? AND time <= ?", startTime, endTime)
+		startTime, endTime := getHourRange(hour, duration)
+		query = query.Where("time >= ? AND time < ?", startTime, endTime)
 	}
 
 	err := query.Count(&count).Error
@@ -495,4 +485,12 @@ func (ds *DataStore) CountSearchResults(query string) (int64, error) {
 	}
 
 	return count, nil
+}
+
+func getHourRange(hour string, duration int) (string, string) {
+	startHour, _ := strconv.Atoi(hour)
+	endHour := (startHour + duration) % 24
+	startTime := fmt.Sprintf("%02d:00:00", startHour)
+	endTime := fmt.Sprintf("%02d:00:00", endHour)
+	return startTime, endTime
 }

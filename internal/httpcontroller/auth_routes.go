@@ -4,11 +4,11 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/markbates/goth/gothic"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // initAuthRoutes initializes all authentication related routes
@@ -106,13 +106,7 @@ func (s *Server) handleLoginPage(c echo.Context) error {
 
 // isValidRedirect ensures the redirect path is safe and internal
 func isValidRedirect(redirectPath string) bool {
-	// Allow only relative paths
-	return strings.HasPrefix(redirectPath, "/") &&
-		!strings.Contains(redirectPath, "//") &&
-		!strings.Contains(redirectPath, "\\") &&
-		!strings.Contains(redirectPath, "://") &&
-		!strings.Contains(redirectPath, "..") &&
-		len(redirectPath) < 512
+	return conf.IsSafePath(redirectPath)
 }
 
 // handleBasicAuthLogin handles password login POST request
