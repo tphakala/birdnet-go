@@ -35,10 +35,16 @@
 
 		<!-- content -->
 		<main>
-			<div id="mainContent" class="grid grid-cols-12 grid-rows-[min-content] gap-y-8 p-3 pt-0 lg:p-8 lg:pt-0" {{if
-				eq .Title "Login" }} hx-trigger="load" hx-get="{{.PreloadFragment}}" hx-target="#loginModal"
-				hx-on::after-request="loginModal.showModal()" {{else if .PreloadFragment}} hx-trigger="load"
-				hx-get="{{.PreloadFragment}}" hx-target="this" {{end}}>
+			<div id="mainContent" class="grid grid-cols-12 grid-rows-[min-content] gap-y-8 p-3 pt-0 lg:p-8 lg:pt-0" 
+				{{if eq .Title "Login" }}
+					hx-trigger="load" 
+					hx-get="{{.PreloadFragment}}" 
+					hx-target="#loginModal"
+					hx-on::after-request="loginModal.showModal()" 
+				{{else if .PreloadFragment}} hx-trigger="load"
+					hx-get="{{.PreloadFragment}}" 
+					hx-target="this"
+				{{end}}>
 				{{ RenderContent . }}
 			</div>
 			<!-- Placeholder for dynamic notifications -->
@@ -52,15 +58,19 @@
 	<dialog id="loginModal" class="modal modal-bottom sm:modal-middle"></dialog>
 	<script>
 		// Initialize date picker with either the date from URL hash or today's date
-		setTimeout(function () {
+		document.addEventListener('htmx:afterSettle', function () {
 			var datePicker = document.getElementById('datePicker');
 
-			if (datePicker) {
+			if (datePicker && isLocationDashboard()) {
 				var dateInHash = window.location.hash.substring(1);
 				var date = dateInHash ? dateInHash : new Date().toLocaleDateString('sv');
-				datePicker.value = date;
+				if (datePicker.value !== date) {
+					datePicker.value = date;
+					datePicker.classList.remove('invisible');
+					htmx.trigger(datePicker, 'change');
+				}
 			}
-		}, 0); // ensure the DOM is fully loaded
+		}); // ensure the DOM is fully loaded
 
 		// Function to set theme
 		function setTheme(themeName) {
@@ -94,7 +104,7 @@
 			this.checked = localStorage.getItem('theme') === 'dark';
 		});
 
-		{{if .Settings.Security.RedirectToHTTPS}}
+		{{ if .Settings.Security.RedirectToHTTPS}}
 		// Check for HTTPS redirect
 		(function () {
 			if (window.location.protocol !== 'https:' &&
@@ -103,7 +113,7 @@
 				window.location.href = 'https:' + window.location.href.substring(window.location.protocol.length);
 			}
 		})();
-		{{end}}
+		{{ end }}
 	</script>
 </body>
 

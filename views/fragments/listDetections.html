@@ -1,12 +1,16 @@
 {{define "listDetections"}}
 
-<section class="card col-span-12 overflow-hidden bg-base-100 shadow-sm">
+<section class="card col-span-12 overflow-x-auto bg-base-100 shadow-sm">
     <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
         <div class="flex justify-between">
             <!-- Title -->
             <span class="card-title grow text-base sm:text-xl">
                 {{if eq .QueryType "hourly"}}
-                Hourly Results for {{.Hour}}:00 on {{.Date}}
+                    {{if gt .Duration 1}}
+                        Hourly Results from {{.Hour}}:00 to {{add .Hour .Duration}}:00 on {{.Date}}
+                    {{else}}
+                        Hourly Results for {{.Hour}}:00 on {{.Date}}
+                    {{end}}
                 {{else if eq .QueryType "species"}}
                 Results for {{.Species}} on {{.Date}}
                 {{else if eq .QueryType "search"}}
@@ -18,7 +22,6 @@
         </div>
     </div>
 
-    <div class="overflow-x-auto">
         <table class="table w-full text-left">
             <thead class="text-xs">
                 <tr>
@@ -100,7 +103,7 @@
                     <!-- Common Name Column -->
                     {{if ne $.QueryType "species"}}
                     <td class="py-1 px-4 font-normal">
-                        <a href="#" hx-get="/note?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
+                        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
                             hx-trigger="click" hx-push-url="true">
                             {{.CommonName}}
                         </a>
@@ -239,7 +242,6 @@
 
             </tbody>
         </table>
-    </div>
 
 </section>
 {{end}}

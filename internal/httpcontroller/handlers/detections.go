@@ -18,6 +18,7 @@ import (
 type DetectionRequest struct {
 	Date       string `query:"date"`
 	Hour       string `query:"hour"`
+	Duration   int    `query:"duration"`
 	Species    string `query:"species"`
 	Search     string `query:"search"`
 	NumResults int    `query:"numResults"`
@@ -57,14 +58,14 @@ func (h *Handlers) Detections(c echo.Context) error {
 		if req.Date == "" || req.Hour == "" {
 			return h.NewHandlerError(fmt.Errorf("missing date or hour"), "Date and hour parameters are required for hourly detections", http.StatusBadRequest)
 		}
-		notes, err = h.DS.GetHourlyDetections(req.Date, req.Hour)
+		notes, err = h.DS.GetHourlyDetections(req.Date, req.Hour, req.Duration)
 		totalResults = int64(len(notes))
 	case "species":
 		if req.Species == "" {
 			return h.NewHandlerError(fmt.Errorf("missing species"), "Species parameter is required for species detections", http.StatusBadRequest)
 		}
-		notes, err = h.DS.SpeciesDetections(req.Species, req.Date, req.Hour, false, req.NumResults, req.Offset)
-		totalResults, _ = h.DS.CountSpeciesDetections(req.Species, req.Date, req.Hour)
+		notes, err = h.DS.SpeciesDetections(req.Species, req.Date, req.Hour, req.Duration, false, req.NumResults, req.Offset)
+		totalResults, _ = h.DS.CountSpeciesDetections(req.Species, req.Date, req.Hour, req.Duration)
 	case "search":
 		if req.Search == "" {
 			return h.NewHandlerError(fmt.Errorf("missing search query"), "Search query is required for search detections", http.StatusBadRequest)
@@ -107,6 +108,7 @@ func (h *Handlers) Detections(c echo.Context) error {
 	data := struct {
 		Date              string
 		Hour              string
+		Duration          int
 		Species           string
 		Search            string
 		Notes             []NoteWithWeather
@@ -124,6 +126,7 @@ func (h *Handlers) Detections(c echo.Context) error {
 	}{
 		Date:              req.Date,
 		Hour:              req.Hour,
+		Duration:          req.Duration,
 		Species:           req.Species,
 		Search:            req.Search,
 		Notes:             notesWithWeather,
