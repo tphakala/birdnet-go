@@ -393,3 +393,14 @@ func moveFile(src, dst string) error {
 
 	return nil // Move completed successfully
 }
+
+// IsSafePath ensures the given path is internal
+func IsSafePath(path string) bool {
+	return strings.HasPrefix(path, "/") &&
+		!strings.Contains(path, "//") &&
+		!strings.Contains(path, "\\") &&
+		!strings.Contains(path, "://") &&
+		!strings.Contains(path, "..") &&
+		!strings.Contains(path, "\x00") &&
+		len(path) < 512
+}
