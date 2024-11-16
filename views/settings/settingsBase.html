@@ -83,13 +83,14 @@
         }, 5000);
     },
     isFormValid(form) {
-        const visibleFieldsValid = Array.from(form.elements)
-        .filter(element => element.offsetParent !== null)
-        .every(element => element.checkValidity());
+        const inputSelector = 'input[type=\'password\'][required], input[type=\'text\'][required]';
+        const requiredFields = form.querySelectorAll(inputSelector);
+        const visibleFieldsValid = Array.from(requiredFields)
+            .filter(element => element.offsetParent !== null)
+            .every(element => element.checkValidity());
 
-        const inputSelector = 'input[type=\'password\'], input[type=\'text\']';
         if(!visibleFieldsValid) {
-            form.querySelectorAll(inputSelector).forEach(input => {
+            requiredFields.forEach(input => {
                 if (input.offsetParent === null) return;
 
                 input.checkValidity();
