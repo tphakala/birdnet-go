@@ -197,9 +197,9 @@ func selectCaptureSource(settings *conf.Settings, infos []malgo.DeviceInfo) (cap
 		return captureSource{}, fmt.Errorf("no audio devices available in container. Please map host audio devices by running docker with: --device /dev/snd")
 	}
 
-	// If no device was found, return an error
+	// If no device was found, print a message
 	if !deviceFound {
-		return captureSource{}, fmt.Errorf("no suitable capture source found for device setting %s", settings.Realtime.Audio.Source)
+		fmt.Printf("No suitable capture source found for device setting %s, please configure audio device in application settings\n", settings.Realtime.Audio.Source)
 	}
 
 	return selectedSource, nil
