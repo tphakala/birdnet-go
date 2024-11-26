@@ -260,7 +260,8 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 		"-f", ffmpegFormat, // Set output format to signed 16-bit little-endian
 		"-ar", ffmpegSampleRate, // Set audio sample rate to 48kHz
 		"-ac", ffmpegNumChannels, // Set number of audio channels to 1 (mono)
-		"pipe:1", // Output to stdout
+		"-hide_banner", // Hide the banner
+		"pipe:1",       // Output to stdout
 	)
 
 	// Set up platform-specific process group
