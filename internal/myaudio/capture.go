@@ -13,6 +13,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/fatih/color"
 	"github.com/gen2brain/malgo"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -194,7 +195,10 @@ func selectCaptureSource(settings *conf.Settings, infos []malgo.DeviceInfo) (cap
 
 	// Check if running in container and only null device is available
 	if conf.RunningInContainer() && len(infos) == 1 && strings.Contains(infos[0].Name(), "Discard all samples") {
-		return captureSource{}, fmt.Errorf("no audio devices available in container. Please map host audio devices by running docker with: --device /dev/snd")
+		return captureSource{}, fmt.Errorf(
+			"no audio devices available in container\n" +
+				"Please map host audio devices by running docker with: --device /dev/snd\n" +
+				"Instructions for running BirdNET-Go in Docker are at https://github.com/tphakala/birdnet-go/blob/main/doc/installation.md")
 	}
 
 	// If no device was found, print a message
@@ -248,7 +252,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 		}
 	})
 	if err != nil {
-		log.Fatalf("context init failed %v", err)
+		color.New(color.FgHiYellow).Fprintln(os.Stderr, "context init failed:", err)
 	}
 	defer malgoCtx.Uninit() //nolint:errcheck
 
@@ -263,15 +267,15 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 	// Get list of capture sources
 	infos, err = malgoCtx.Devices(malgo.Capture)
 	if err != nil {
-		fmt.Println(err)
+		color.New(color.FgHiYellow).Fprintln(os.Stderr, "Error getting capture devices:", err)
 		os.Exit(1)
 	}
 
 	// Select the capture source based on the settings
 	captureSource, err := selectCaptureSource(settings, infos)
 	if err != nil {
-		log.Fatalf("Error selecting capture source: %v", err)
-		panic(err)
+		color.New(color.FgHiYellow).Fprintln(os.Stderr, "Error selecting capture source:", err)
+		os.Exit(1)
 	}
 	deviceConfig.Capture.DeviceID = captureSource.Pointer
 
@@ -343,7 +347,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 	// Initialize the capture device
 	device, err = malgo.InitDevice(malgoCtx.Context, deviceConfig, deviceCallbacks)
 	if err != nil {
-		log.Printf("Device init failed %v", err)
+		color.New(color.FgHiYellow).Fprintln(os.Stderr, "Device initialization failed:", err)
 		conf.PrintUserInfo()
 		os.Exit(1)
 	}
@@ -353,7 +357,8 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 	}
 	err = device.Start()
 	if err != nil {
-		log.Fatalf("Device start failed %v", err)
+		color.New(color.FgHiYellow).Fprintln(os.Stderr, "Device start failed:", err)
+		os.Exit(1)
 	}
 	defer device.Stop() //nolint:errcheck
 
@@ -361,7 +366,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 		fmt.Println("Device started")
 	}
 	// print audio device we are attached to
-	fmt.Printf("Listening on source: %s (%s)\n", captureSource.Name, captureSource.ID)
+	color.New(color.FgHiGreen).Printf("Listening on source: %s (%s)\n", captureSource.Name, captureSource.ID)
 
 	// Now, instead of directly waiting on QuitChannel,
 	// check if it's closed in a non-blocking select.
