@@ -8,7 +8,9 @@ import (
 	"io"
 	"log"
 	"os/exec"
+	"runtime"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -152,17 +154,30 @@ func (p *FFmpegProcess) getRestartDelay() time.Duration {
 // Cleanup cleans up the FFmpeg process and removes it from the map
 func (p *FFmpegProcess) Cleanup(url string) {
 	if p != nil && p.cmd.Process != nil {
+		// First close stdout to prevent blocking reads
+		if p.stdout != nil {
+			p.stdout.Close()
+		}
+
 		// Cancel the context to signal process termination
 		p.cancel()
 
 		// Use a timeout to wait for the process to finish
+		done := make(chan struct{})
+		go func() {
+			<-p.done
+			close(done)
+		}()
+
 		select {
-		case <-p.done:
+		case <-done:
 			// Process finished normally
 		case <-time.After(10 * time.Second):
 			// Timeout occurred, forcefully kill the process
 			log.Printf("FFmpeg process for %s did not exit gracefully, forcefully terminating", url)
-			if err := p.cmd.Process.Kill(); err != nil {
+
+			// Kill process and all its children
+			if err := killProcessGroup(p.cmd); err != nil {
 				log.Printf("Failed to kill FFmpeg process for %s: %v", url, err)
 			}
 		}
@@ -385,6 +400,18 @@ func getExitCode(err error) int {
 		return exitErr.ExitCode()
 	}
 	return -1
+}
+
+// killProcessGroup kills a process and its children across different platforms
+func killProcessGroup(cmd *exec.Cmd) error {
+	if runtime.GOOS == "windows" {
+		// On Windows, we need to use taskkill to kill the process tree
+		killCmd := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprint(cmd.Process.Pid))
+		return killCmd.Run()
+	}
+
+	// On Unix systems (Linux, macOS), we can use process groups
+	return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 }
 
 // CaptureAudioRTSP is the main function for capturing audio from an RTSP stream
