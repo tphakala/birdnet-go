@@ -8,9 +8,7 @@ import (
 	"io"
 	"log"
 	"os/exec"
-	"runtime"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -153,35 +151,43 @@ func (p *FFmpegProcess) getRestartDelay() time.Duration {
 
 // Cleanup cleans up the FFmpeg process and removes it from the map
 func (p *FFmpegProcess) Cleanup(url string) {
-	if p != nil && p.cmd.Process != nil {
-		// First close stdout to prevent blocking reads
-		if p.stdout != nil {
-			p.stdout.Close()
-		}
+	if p == nil || p.cmd == nil || p.cmd.Process == nil {
+		ffmpegProcesses.Delete(url)
+		return
+	}
 
-		// Cancel the context to signal process termination
-		p.cancel()
+	// First close stdout to prevent blocking reads
+	if p.stdout != nil {
+		p.stdout.Close()
+	}
 
-		// Use a timeout to wait for the process to finish
-		done := make(chan struct{})
-		go func() {
-			<-p.done
-			close(done)
-		}()
+	// Cancel the context to signal process termination
+	p.cancel()
 
-		select {
-		case <-done:
-			// Process finished normally
-		case <-time.After(10 * time.Second):
-			// Timeout occurred, forcefully kill the process
-			log.Printf("FFmpeg process for %s did not exit gracefully, forcefully terminating", url)
+	// Use a timeout to wait for the process to finish
+	done := make(chan struct{})
+	go func() {
+		<-p.done
+		close(done)
+	}()
 
-			// Kill process and all its children
-			if err := killProcessGroup(p.cmd); err != nil {
-				log.Printf("Failed to kill FFmpeg process for %s: %v", url, err)
+	select {
+	case <-done:
+		// Process finished normally
+	case <-time.After(10 * time.Second):
+		// Timeout occurred, forcefully kill the process
+		log.Printf("FFmpeg process for %s did not exit gracefully, forcefully terminating", url)
+
+		// Kill process and all its children
+		if err := killProcessGroup(p.cmd); err != nil {
+			log.Printf("Failed to kill FFmpeg process for %s: %v", url, err)
+			// Attempt direct process kill as fallback
+			if err := p.cmd.Process.Kill(); err != nil {
+				log.Printf("Failed to kill FFmpeg process directly for %s: %v", url, err)
 			}
 		}
 	}
+
 	ffmpegProcesses.Delete(url)
 }
 
@@ -256,6 +262,9 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 		"-ac", ffmpegNumChannels, // Set number of audio channels to 1 (mono)
 		"pipe:1", // Output to stdout
 	)
+
+	// Set up platform-specific process group
+	setupProcessGroup(cmd)
 
 	// Create a bounded buffer for stderr with a 4KB limit
 	stderrBuf := NewBoundedBuffer(4096)
@@ -400,18 +409,6 @@ func getExitCode(err error) int {
 		return exitErr.ExitCode()
 	}
 	return -1
-}
-
-// killProcessGroup kills a process and its children across different platforms
-func killProcessGroup(cmd *exec.Cmd) error {
-	if runtime.GOOS == "windows" {
-		// On Windows, we need to use taskkill to kill the process tree
-		killCmd := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprint(cmd.Process.Pid))
-		return killCmd.Run()
-	}
-
-	// On Unix systems (Linux, macOS), we can use process groups
-	return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 }
 
 // CaptureAudioRTSP is the main function for capturing audio from an RTSP stream
