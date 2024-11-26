@@ -192,6 +192,11 @@ func selectCaptureSource(settings *conf.Settings, infos []malgo.DeviceInfo) (cap
 		fmt.Println(output)
 	}
 
+	// Check if running in container and only null device is available
+	if conf.RunningInContainer() && len(infos) == 1 && strings.Contains(infos[0].Name(), "Discard all samples") {
+		return captureSource{}, fmt.Errorf("no audio devices available in container. Please map host audio devices by running docker with: --device /dev/snd")
+	}
+
 	// If no device was found, return an error
 	if !deviceFound {
 		return captureSource{}, fmt.Errorf("no suitable capture source found for device setting %s", settings.Realtime.Audio.Source)
