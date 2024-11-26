@@ -194,7 +194,7 @@ func (p *FFmpegProcess) Cleanup(url string) {
 // processAudio reads audio data from FFmpeg's stdout and writes it to buffers
 func (p *FFmpegProcess) processAudio(ctx context.Context, url string, audioLevelChan chan AudioLevelData) error {
 	// Create a buffer to store audio data
-	buf := make([]byte, 65535)
+	buf := make([]byte, 32768)
 
 	// Continuously process audio data
 	for {
