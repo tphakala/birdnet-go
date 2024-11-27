@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -33,7 +33,7 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         goos: ${{ matrix.goos }}
         goarch: ${{ matrix.goarch }}
-        goversion: "https://dl.google.com/go/go1.22.1.linux-amd64.tar.gz"
+        goversion: "https://dl.google.com/go/go1.23.3.linux-amd64.tar.gz"
         md5sum: false
         sha256sum: false
         compress_assets: auto
@@ -43,30 +43,30 @@ jobs:
         project_path: "."
         binary_name: "birdnet-go"
 
-  docker-nightly:
-    runs-on: ubuntu-20.04
-    steps:
-    - name: Login to GitHub Container Registry
-      uses: docker/login-action@v3.0.0
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+  # docker-nightly:
+  #   runs-on: ubuntu-20.04
+  #   steps:
+  #   - name: Login to GitHub Container Registry
+  #     uses: docker/login-action@v3.0.0
+  #     with:
+  #       registry: ghcr.io
+  #       username: ${{ github.actor }}
+  #       password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Generate downcase repository name
-      run: |
-        echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+  #   - name: Generate downcase repository name
+  #     run: |
+  #       echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
 
-    - name: Extract metadata for Docker
-      id: meta
-      uses: docker/metadata-action@v5.5.1
-      with:
-        images: ghcr.io/${{ env.REPO }}
-        tags: |
-          type=raw,value=nightly
-          type=raw,value=nightly-{{date 'YYYYMMDD'}}
+  #   - name: Extract metadata for Docker
+  #     id: meta
+  #     uses: docker/metadata-action@v5.5.1
+  #     with:
+  #       images: ghcr.io/${{ env.REPO }}
+  #       tags: |
+  #         type=raw,value=nightly
+  #         type=raw,value=nightly-{{date 'YYYYMMDD'}}
 
-    - name: Tag docker image with nightly version
-      run: |
-        docker buildx imagetools create -t ghcr.io/${{ env.REPO }}:nightly ghcr.io/${{ env.REPO }}:${{ github.sha }}
-        docker buildx imagetools create -t ghcr.io/${{ env.REPO }}:nightly-$(date +%Y%m%d) ghcr.io/${{ env.REPO }}:${{ github.sha }} 
+  #   - name: Tag docker image with nightly version
+  #     run: |
+  #       docker buildx imagetools create -t ghcr.io/${{ env.REPO }}:nightly ghcr.io/${{ env.REPO }}:${{ github.sha }}
+  #       docker buildx imagetools create -t ghcr.io/${{ env.REPO }}:nightly-$(date +%Y%m%d) ghcr.io/${{ env.REPO }}:${{ github.sha }} 
