@@ -421,6 +421,18 @@ curl -s https://raw.githubusercontent.com/tphakala/birdnet-go/main/internal/conf
 # Configure audio input
 configure_audio_input
 
+# Configure audio format
+configure_audio_format
+
+# Configure locale
+configure_locale
+
+# Configure location
+configure_location
+
+# Configure security
+configure_auth
+
 # Get timezone
 if [ -f /etc/timezone ]; then
     TZ=$(cat /etc/timezone)
@@ -428,8 +440,11 @@ else
     TZ="UTC"
 fi
 
+# Pause for 5 seconds
+sleep 5
+
 # Create systemd service
-print_message "Creating systemd service..." "$YELLOW"
+print_message "\nCreating systemd service..." "$YELLOW"
 sudo tee /etc/systemd/system/birdnet-go.service << EOF
 [Unit]
 Description=BirdNET-Go
