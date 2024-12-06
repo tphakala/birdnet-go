@@ -14,7 +14,11 @@ NC='\033[0m' # No Color
 
 # Function to print colored messages
 print_message() {
-    echo -e "${2}${1}${NC}"
+    if [ "$3" = "nonewline" ]; then
+        echo -en "${2}${1}${NC}"
+    else
+        echo -e "${2}${1}${NC}"
+    fi
 }
 
 # Function to check if a command exists
@@ -103,9 +107,142 @@ test_rtsp_url() {
     return 1
 }
 
+# Function to configure audio input
+configure_audio_input() {
+    print_message "\nAudio Input Configuration" "$GREEN"
+    print_message "1) Use sound card" 
+    print_message "2) Use RTSP stream" 
+    print_message "Select audio input method (1/2): " "$YELLOW" "nonewline"
+    read -r audio_choice
+
+    case $audio_choice in
+        1)
+            configure_sound_card
+            ;;
+        2)
+            configure_rtsp_stream
+            ;;
+        *)
+            print_message "Invalid choice. Exiting." "$RED"
+            exit 1
+            ;;
+    esac
+}
+
+# Function to configure sound card
+configure_sound_card() {
+    print_message "\nDetected audio devices:" "$GREEN"
+    
+    # Create an array to store device information
+    declare -a devices
+    declare -a device_names
+    
+    # Parse arecord output and create a numbered list
+    while IFS= read -r line; do
+        if [[ $line =~ ^card[[:space:]]+([0-9]+)[[:space:]]*:[[:space:]]*([^,]+),[[:space:]]*device[[:space:]]+([0-9]+)[[:space:]]*:[[:space:]]*([^[]+)[[:space:]]*\[(.*)\] ]]; then
+            card_num="${BASH_REMATCH[1]}"
+            card_name="${BASH_REMATCH[2]}"
+            device_num="${BASH_REMATCH[3]}"
+            device_name="${BASH_REMATCH[4]}"
+            device_desc="${BASH_REMATCH[5]}"
+            # Clean up names
+            card_name=$(echo "$card_name" | sed 's/\[//g' | sed 's/\]//g' | xargs)
+            device_name=$(echo "$device_name" | xargs)
+            device_desc=$(echo "$device_desc" | xargs)
+            
+            devices+=("$device_desc")
+            echo "[$((${#devices[@]}))] Card $card_num: $card_name"
+            echo "    Device $device_num: $device_name [$device_desc]"
+        fi
+    done < <(arecord -l)
+
+    if [ ${#devices[@]} -eq 0 ]; then
+        print_message "No audio capture devices found!" "$RED"
+        exit 1
+    fi
+
+    while true; do
+        print_message "\nPlease select a device number from the list above (1-${#devices[@]}): " "$YELLOW" "nonewline"
+        read -r selection
+
+        if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#devices[@]}" ]; then
+            ALSA_CARD="${devices[$((selection-1))]}"
+            print_message "Selected device: $ALSA_CARD" "$GREEN"
+            break
+        else
+            print_message "Invalid selection. Please try again." "$RED"
+        fi
+    done
+    
+    # Update config file
+    sed -i "s/source: \"sysdefault\"/source: \"${ALSA_CARD}\"/" "$CONFIG_FILE"
+    # Comment out RTSP section
+    sed -i '/rtsp:/,/      # - rtsp/s/^/#/' "$CONFIG_FILE"
+    
+    AUDIO_ENV="--device /dev/snd"
+}
+
+# Function to configure RTSP stream
+configure_rtsp_stream() {
+    while true; do
+        print_message "\nEnter RTSP URL (format: rtsp://user:password@address/path): " "$YELLOW" "nonewline"
+        read -r RTSP_URL
+        
+        if [[ ! $RTSP_URL =~ ^rtsp:// ]]; then
+            print_message "Invalid RTSP URL format. Please try again." "$RED"
+            continue
+        fi
+        
+        if test_rtsp_url "$RTSP_URL"; then
+            print_message "RTSP connection successful!" "$GREEN"
+            break
+        else
+            print_message "Could not connect to RTSP stream. Do you want to try again? (y/n)" "$RED"
+            read -r retry
+            if [[ $retry != "y" ]]; then
+                break
+            fi
+        fi
+    done
+    
+    # Update config file
+    sed -i "s|# - rtsp://user:password@example.com/stream1|      - ${RTSP_URL}|" "$CONFIG_FILE"
+    # Comment out audio source section
+    sed -i '/source: "sysdefault"/s/^/#/' "$CONFIG_FILE"
+    
+    AUDIO_ENV=""
+}
+
+# Function to configure audio export format
+configure_audio_format() {
+    print_message "\nAudio Export Configuration" "$GREEN"
+    print_message "Select audio format for captured sounds:"
+    print_message "1) WAV (Uncompressed, largest files)" 
+    print_message "2) FLAC (Lossless compression)"
+    print_message "3) AAC (High quality, smaller files)" 
+    print_message "4) MP3 (Most compatible)" 
+    print_message "5) Opus (Best compression)" 
+    
+    while true; do
+        print_message "Select format (1-5): " "$YELLOW" "nonewline"
+        read -r format_choice
+        case $format_choice in
+            1) format="wav"; break;;
+            2) format="flac"; break;;
+            3) format="aac"; break;;
+            4) format="mp3"; break;;
+            5) format="opus"; break;;
+            *) print_message "Invalid choice. Please try again." "$RED";;
+        esac
+    done
+
+    # Update config file
+    sed -i "s/type: wav/type: $format/" "$CONFIG_FILE"
+}
+
 # Function to configure locale
 configure_locale() {
-    print_message "\nLocale Configuration" "$GREEN"
+    print_message "\nLocale Configuration for bird species names" "$GREEN"
     print_message "Available languages:" "$YELLOW"
     
     # Create arrays for locales
@@ -122,7 +259,7 @@ configure_locale() {
     echo
 
     while true; do
-        print_message "\nSelect your language (1-${#locale_codes[@]}):" "$YELLOW"
+        print_message "Select your language (1-${#locale_codes[@]}): " "$YELLOW" "nonewline"
         read -r selection
         
         if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#locale_codes[@]}" ]; then
@@ -189,136 +326,6 @@ configure_location() {
     sed -i "s/longitude: 00.000/longitude: $lon/" "$CONFIG_FILE"
 }
 
-# Function to configure audio input
-configure_audio_input() {
-    print_message "\nAudio Input Configuration" "$GREEN"
-    print_message "1) Use sound card" "$YELLOW"
-    print_message "2) Use RTSP stream" "$YELLOW"
-    read -p "Select audio input method (1/2): " audio_choice
-
-    case $audio_choice in
-        1)
-            configure_sound_card
-            ;;
-        2)
-            configure_rtsp_stream
-            ;;
-        *)
-            print_message "Invalid choice. Exiting." "$RED"
-            exit 1
-            ;;
-    esac
-}
-
-# Function to configure sound card
-configure_sound_card() {
-    print_message "\nDetected audio devices:" "$GREEN"
-    
-    # Create an array to store device information
-    declare -a devices
-    declare -a device_names
-    
-    # Parse arecord output and create a numbered list
-    while IFS= read -r line; do
-        if [[ $line =~ ^card[[:space:]]+([0-9]+)[[:space:]]*:[[:space:]]*([^,]+),[[:space:]]*device[[:space:]]+([0-9]+)[[:space:]]*:[[:space:]]*([^[]+)[[:space:]]*\[(.*)\] ]]; then
-            card_num="${BASH_REMATCH[1]}"
-            card_name="${BASH_REMATCH[2]}"
-            device_num="${BASH_REMATCH[3]}"
-            device_name="${BASH_REMATCH[4]}"
-            device_desc="${BASH_REMATCH[5]}"
-            # Clean up names
-            card_name=$(echo "$card_name" | sed 's/\[//g' | sed 's/\]//g' | xargs)
-            device_name=$(echo "$device_name" | xargs)
-            device_desc=$(echo "$device_desc" | xargs)
-            
-            devices+=("$device_desc")
-            echo "[$((${#devices[@]}))] Card $card_num: $card_name"
-            echo "    Device $device_num: $device_name [$device_desc]"
-        fi
-    done < <(arecord -l)
-
-    if [ ${#devices[@]} -eq 0 ]; then
-        print_message "No audio capture devices found!" "$RED"
-        exit 1
-    fi
-
-    while true; do
-        print_message "\nPlease select a device number from the list above (1-${#devices[@]}):" "$YELLOW"
-        read -r selection
-
-        if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#devices[@]}" ]; then
-            ALSA_CARD="${devices[$((selection-1))]}"
-            print_message "Selected device: $ALSA_CARD" "$GREEN"
-            break
-        else
-            print_message "Invalid selection. Please try again." "$RED"
-        fi
-    done
-    
-    # Update config file
-    sed -i "s/source: \"sysdefault\"/source: \"${ALSA_CARD}\"/" "$CONFIG_FILE"
-    # Comment out RTSP section
-    sed -i '/rtsp:/,/      # - rtsp/s/^/#/' "$CONFIG_FILE"
-    
-    AUDIO_ENV="--device /dev/snd"
-}
-
-# Function to configure RTSP stream
-configure_rtsp_stream() {
-    while true; do
-        print_message "\nEnter RTSP URL (format: rtsp://user:password@address/path):" "$YELLOW"
-        read -r RTSP_URL
-        
-        if [[ ! $RTSP_URL =~ ^rtsp:// ]]; then
-            print_message "Invalid RTSP URL format. Please try again." "$RED"
-            continue
-        fi
-        
-        if test_rtsp_url "$RTSP_URL"; then
-            print_message "RTSP connection successful!" "$GREEN"
-            break
-        else
-            print_message "Could not connect to RTSP stream. Do you want to try again? (y/n)" "$RED"
-            read -r retry
-            if [[ $retry != "y" ]]; then
-                break
-            fi
-        fi
-    done
-    
-    # Update config file
-    sed -i "s|# - rtsp://user:password@example.com/stream1|      - ${RTSP_URL}|" "$CONFIG_FILE"
-    # Comment out audio source section
-    sed -i '/source: "sysdefault"/s/^/#/' "$CONFIG_FILE"
-    
-    AUDIO_ENV=""
-}
-
-# Function to configure audio export format
-configure_audio_format() {
-    print_message "\nAudio Export Configuration" "$GREEN"
-    print_message "Select audio format for captured sounds:" "$YELLOW"
-    print_message "1) WAV (Uncompressed, largest files)" "$YELLOW"
-    print_message "2) FLAC (Lossless compression)" "$YELLOW"
-    print_message "3) AAC (High quality, smaller files)" "$YELLOW"
-    print_message "4) MP3 (Most compatible)" "$YELLOW"
-    print_message "5) Opus (Best compression)" "$YELLOW"
-    
-    while true; do
-        read -p "Select format (1-5): " format_choice
-        case $format_choice in
-            1) format="wav"; break;;
-            2) format="flac"; break;;
-            3) format="aac"; break;;
-            4) format="mp3"; break;;
-            5) format="opus"; break;;
-            *) print_message "Invalid choice. Please try again." "$RED";;
-        esac
-    done
-
-    # Update config file
-    sed -i "s/type: wav/type: $format/" "$CONFIG_FILE"
-}
 
 # Function to configure basic authentication
 configure_auth() {
@@ -349,6 +356,35 @@ configure_auth() {
             fi
         done
     fi
+}
+
+# Function to add systemd service configuration
+add_systemd_config() {
+    # Create systemd service
+    print_message "\nCreating systemd service..." "$GREEN"
+    sudo tee /etc/systemd/system/birdnet-go.service << EOF
+[Unit]
+Description=BirdNET-Go
+After=docker.service
+Requires=docker.service
+
+[Service]
+Restart=always
+ExecStart=/usr/bin/docker run --rm \\
+    -p 8080:8080 \\
+    --env TZ="${TZ}" \\
+    ${AUDIO_ENV} \\
+    -v ${CONFIG_DIR}:/config \\
+    -v ${DATA_DIR}:/data \\
+    ${BIRDNET_GO_IMAGE}
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Reload systemd and enable service
+    sudo systemctl daemon-reload
+    sudo systemctl enable birdnet-go.service
 }
 
 # ASCII Art Banner
@@ -398,11 +434,17 @@ check_install_package "apache2-utils"
 # Check and install Docker
 if ! command_exists docker; then
     print_message "Docker not found. Installing Docker..." "$YELLOW"
-    # Install Docker using convenience script
-    curl -fsSL https://get.docker.com | sh
+    # Install Docker from apt repository
+    sudo apt-get install -y docker.io
     # Add current user to docker group
     sudo usermod -aG docker "$USER"
-    print_message "Docker installed successfully. You may need to log out and back in for group changes to take effect." "$GREEN"
+    # Start and enable Docker service
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    print_message "Docker installed successfully. To make group member changes take effect, please log out and log back in and run install.sh again." "$GREEN"
+    print_message "Exiting install script..." "$YELLOW"
+    # exit install script
+    exit 0
 fi
 
 # Check if directories can be created
@@ -443,31 +485,8 @@ fi
 # Pause for 5 seconds
 sleep 5
 
-# Create systemd service
-print_message "\nCreating systemd service..." "$YELLOW"
-sudo tee /etc/systemd/system/birdnet-go.service << EOF
-[Unit]
-Description=BirdNET-Go
-After=docker.service
-Requires=docker.service
-
-[Service]
-Restart=always
-ExecStart=/usr/bin/docker run --rm \\
-    -p 8080:8080 \\
-    --env TZ="${TZ}" \\
-    ${AUDIO_ENV} \\
-    -v ${CONFIG_DIR}:/config \\
-    -v ${DATA_DIR}:/data \\
-    ${BIRDNET_GO_IMAGE}
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Reload systemd and enable service
-sudo systemctl daemon-reload
-sudo systemctl enable birdnet-go.service
+# Add systemd service configuration
+add_systemd_config
 
 print_message "\nInstallation completed!" "$GREEN"
 print_message "Configuration directory: $CONFIG_DIR" "$GREEN"
