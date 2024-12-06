@@ -48,7 +48,7 @@ check_prerequisites() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
     else
-        print_message "Error: Cannot determine OS version" "$RED"
+        print_message "❌ Cannot determine OS version" "$RED"
         exit 1
     fi
 
@@ -57,28 +57,47 @@ check_prerequisites() {
         debian|raspbian)
             # Debian 11 (Bullseye) has VERSION_ID="11"
             if [ -n "$VERSION_ID" ] && [ "$VERSION_ID" -lt 11 ]; then
-                print_message "Error: Debian/Raspberry Pi OS version too old. Version 11 (Bullseye) or newer required" "$RED"
-                print_message "Current version: Debian/Raspberry Pi OS $VERSION_ID" "$RED"
+                print_message "❌ Debian/Raspberry Pi OS version $VERSION_ID too old. Version 11 (Bullseye) or newer required" "$RED"
                 exit 1
+            else
+                print_message "✅ Debian/Raspberry Pi OS version $VERSION_ID found." "$GREEN"
             fi
             ;;
         ubuntu)
             # Ubuntu 20.04 has VERSION_ID="20.04"
             ubuntu_version=$(echo "$VERSION_ID" | awk -F. '{print $1$2}')
             if [ "$ubuntu_version" -lt 2004 ]; then
-                print_message "Error: Ubuntu version too old. Version 20.04 or newer required" "$RED"
-                print_message "Current version: Ubuntu $VERSION_ID" "$RED"
+                print_message "❌ Ubuntu version $VERSION_ID too old. Version 20.04 or newer required   " "$RED"
                 exit 1
+            else
+                print_message "✅ Ubuntu version $VERSION_ID found." "$GREEN"
             fi
             ;;
         *)
-            print_message "Error: Unsupported Linux distribution. Please use Debian 11+, Ubuntu 20.04+, or Raspberry Pi OS (Bullseye+)" "$RED"
-            print_message "Current distribution: $PRETTY_NAME" "$RED"
+            print_message "❌ Unsupported Linux distribution for install.sh. Please use Debian 11+, Ubuntu 20.04+, or Raspberry Pi OS (Bullseye+)" "$RED"
             exit 1
             ;;
     esac
 
-    print_message "System prerequisites check passed: $PRETTY_NAME" "$GREEN"
+     # Check and install Docker
+    if ! command_exists docker; then
+        print_message "❌Docker not found. Installing Docker..." "$YELLOW"
+        # Install Docker from apt repository
+        sudo apt-get install -y docker.io
+        # Add current user to docker group
+        sudo usermod -aG docker "$USER"
+        # Start and enable Docker service
+        sudo systemctl start docker
+        sudo systemctl enable docker
+        print_message "✅ Docker installed successfully. To make group member changes take effect, please log out and log back in and run install.sh again." "$GREEN"
+        print_message "Exiting install script..." "$YELLOW"
+        # exit install script
+        exit 0
+    else
+        print_message "✅ Docker found." "$GREEN"
+    fi
+
+    print_message "System prerequisites checks passed" "$GREEN"
 }
 
 # Function to check if directories can be created
@@ -219,8 +238,8 @@ configure_audio_format() {
     print_message "Select audio format for captured sounds:"
     print_message "1) WAV (Uncompressed, largest files)" 
     print_message "2) FLAC (Lossless compression)"
-    print_message "3) AAC (High quality, smaller files)" 
-    print_message "4) MP3 (Most compatible)" 
+    print_message "3) AAC (High quality, smaller files) - recommended" 
+    print_message "4) MP3 (For legacy use only)" 
     print_message "5) Opus (Best compression)" 
     
     while true; do
@@ -326,7 +345,6 @@ configure_location() {
     sed -i "s/longitude: 00.000/longitude: $lon/" "$CONFIG_FILE"
 }
 
-
 # Function to configure basic authentication
 configure_auth() {
     print_message "\nSecurity Configuration" "$GREEN"
@@ -430,22 +448,6 @@ check_install_package "ffmpeg"
 check_install_package "bc"
 check_install_package "jq"
 check_install_package "apache2-utils"
-
-# Check and install Docker
-if ! command_exists docker; then
-    print_message "Docker not found. Installing Docker..." "$YELLOW"
-    # Install Docker from apt repository
-    sudo apt-get install -y docker.io
-    # Add current user to docker group
-    sudo usermod -aG docker "$USER"
-    # Start and enable Docker service
-    sudo systemctl start docker
-    sudo systemctl enable docker
-    print_message "Docker installed successfully. To make group member changes take effect, please log out and log back in and run install.sh again." "$GREEN"
-    print_message "Exiting install script..." "$YELLOW"
-    # exit install script
-    exit 0
-fi
 
 # Check if directories can be created
 check_directory "$CONFIG_DIR"
