@@ -21,6 +21,21 @@ print_message() {
     fi
 }
 
+# Function to get IP address
+get_ip_address() {
+    # Get primary IP address, excluding docker and localhost interfaces
+    ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '^127\.' | grep -v '^172\.' | grep -v '^10\.' | head -n 1
+}
+
+# Function to check if mDNS is available
+check_mdns() {
+    if systemctl is-active --quiet avahi-daemon; then
+        hostname -f | grep -q ".local"
+        return $?
+    fi
+    return 1
+}
+
 # Function to check if a command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
@@ -29,14 +44,21 @@ command_exists() {
 # Function to check and install required packages
 check_install_package() {
     if ! dpkg -l "$1" >/dev/null 2>&1; then
-        print_message "Installing $1..." "$YELLOW"
-        sudo apt-get install -y "$1"
+        print_message "🔧 Installing $1..." "$YELLOW"
+        if sudo apt install -qq -y "$1"; then
+            print_message "✅ $1 installed successfully" "$GREEN"
+        else
+            print_message "❌ Failed to install $1" "$RED"
+            exit 1
+        fi
+    else
+        print_message "✅ $1 found" "$GREEN"
     fi
 }
 
 # Function to check system prerequisites
 check_prerequisites() {
-    print_message "Checking system prerequisites..." "$YELLOW"
+    print_message "🔧 Checking system prerequisites..." "$YELLOW"
 
     # Check CPU architecture and generation
     case "$(uname -m)" in
@@ -72,23 +94,27 @@ check_prerequisites() {
 
     # Check for supported distributions
     case "$ID" in
-        debian|raspbian)
+        debian)
             # Debian 11 (Bullseye) has VERSION_ID="11"
             if [ -n "$VERSION_ID" ] && [ "$VERSION_ID" -lt 11 ]; then
-                print_message "❌ Debian/Raspberry Pi OS version $VERSION_ID too old. Version 11 (Bullseye) or newer required" "$RED"
+                print_message "❌ Debian $VERSION_ID too old. Version 11 (Bullseye) or newer required" "$RED"
                 exit 1
             else
-                print_message "✅ Debian/Raspberry Pi OS version $VERSION_ID found." "$GREEN"
+                print_message "✅ Debian $VERSION_ID found" "$GREEN"
             fi
+            ;;
+        raspbian)
+            print_message "❌ You are running 32-bit version of Raspberry Pi OS. BirdNET-Go requires 64-bit version" "$RED"
+            exit 1
             ;;
         ubuntu)
             # Ubuntu 20.04 has VERSION_ID="20.04"
             ubuntu_version=$(echo "$VERSION_ID" | awk -F. '{print $1$2}')
             if [ "$ubuntu_version" -lt 2004 ]; then
-                print_message "❌ Ubuntu version $VERSION_ID too old. Version 20.04 or newer required   " "$RED"
+                print_message "❌ Ubuntu $VERSION_ID too old. Version 20.04 or newer required" "$RED"
                 exit 1
             else
-                print_message "✅ Ubuntu version $VERSION_ID found." "$GREEN"
+                print_message "✅ Ubuntu $VERSION_ID found" "$GREEN"
             fi
             ;;
         *)
@@ -97,25 +123,40 @@ check_prerequisites() {
             ;;
     esac
 
-     # Check and install Docker
+    # Check and install Docker
     if ! command_exists docker; then
-        print_message "❌ Docker not found. Installing Docker..." "$YELLOW"
+        print_message "🐳 Docker not found. Installing Docker..." "$YELLOW"
         # Install Docker from apt repository
-        sudo apt-get install -y docker.io
+        sudo apt -qq update
+        sudo apt -qq install -y docker.io
         # Add current user to docker group
-        sudo usermod -aG docker "$USER"
-        # Start and enable Docker service
-        sudo systemctl start docker
-        sudo systemctl enable docker
-        print_message "✅ Docker installed successfully. To make group member changes take effect, please log out and log back in and run install.sh again." "$GREEN"
+        if sudo usermod -aG docker "$USER"; then
+            print_message "✅ Added user $USER to docker group" "$GREEN"
+        fi
+        # Start Docker service
+        if sudo systemctl start docker; then
+            print_message "✅ Docker service started successfully" "$GREEN"
+        else
+            print_message "❌ Failed to start Docker service" "$RED"
+            exit 1
+        fi
+       
+        # Enable Docker service on boot
+        if  sudo systemctl enable docker; then
+            print_message "✅ Docker service start on boot enabled successfully" "$GREEN"
+        else
+            print_message "❌ Failed to enable Docker service on boot" "$RED"
+            exit 1
+        fi
+        print_message "✅ Docker installed successfully. To make group member changes take effect, please log out and log back in and rerun install.sh to continue with install" "$GREEN"
         print_message "Exiting install script..." "$YELLOW"
         # exit install script
         exit 0
     else
-        print_message "✅ Docker found." "$GREEN"
+        print_message "✅ Docker found" "$GREEN"
     fi
 
-    print_message "System prerequisites checks passed" "$GREEN"
+    print_message "🥳 System prerequisites checks passed" "$GREEN"
 }
 
 # Function to check if directories can be created
@@ -132,11 +173,59 @@ check_directory() {
     fi
 }
 
+# Function to download base config file
+download_base_config() {
+    print_message "\n📥 Downloading base configuration file from GitHub to: " "$YELLOW" "nonewline"
+    print_message "$CONFIG_FILE" "$NC"
+    
+    # Download new config to temporary file first
+    local temp_config="/tmp/config.yaml.new"
+    if ! curl -s --fail https://raw.githubusercontent.com/tphakala/birdnet-go/main/internal/conf/config.yaml > "$temp_config"; then
+        print_message "❌ Failed to download configuration template" "$RED"
+        print_message "This could be due to:" "$YELLOW"
+        print_message "- No internet connection or DNS resolution failed" "$YELLOW"
+        print_message "- Firewall blocking outgoing connections" "$YELLOW"
+        print_message "- GitHub being unreachable" "$YELLOW"
+        print_message "\nPlease check your internet connection and try again." "$YELLOW"
+        rm -f "$temp_config"
+        exit 1
+    fi
+
+    if [ -f "$CONFIG_FILE" ]; then
+        if cmp -s "$CONFIG_FILE" "$temp_config"; then
+            print_message "✅ Base configuration already exists" "$GREEN"
+            rm -f "$temp_config"
+            return 0
+        fi
+
+        print_message "⚠️ Existing configuration file found." "$YELLOW"
+        print_message "❓ Do you want to overwrite it? Backup of current configuration will be created (y/n): " "$YELLOW" "nonewline"
+        read -r response
+        
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            # Create backup with timestamp
+            local backup_file="${CONFIG_FILE}.$(date '+%Y%m%d_%H%M%S').backup"
+            cp "$CONFIG_FILE" "$backup_file"
+            print_message "✅ Backup created: " "$GREEN" "nonewline"
+            print_message "$backup_file" "$NC"
+            
+            mv "$temp_config" "$CONFIG_FILE"
+            print_message "✅ Configuration updated successfully" "$GREEN"
+        else
+            print_message "✅ Keeping existing configuration file" "$YELLOW"
+            rm -f "$temp_config"
+        fi
+    else
+        mv "$temp_config" "$CONFIG_FILE"
+        print_message "✅ Base configuration downloaded successfully" "$GREEN"
+    fi
+}
+
 # Function to test RTSP URL
 test_rtsp_url() {
     local url=$1
     if command_exists ffprobe; then
-        print_message "Testing RTSP connection..." "$YELLOW"
+        print_message "🧪 Testing RTSP connection..." "$YELLOW"
         if ffprobe -v quiet -i "$url" -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 2>/dev/null; then
             return 0
         fi
@@ -147,10 +236,10 @@ test_rtsp_url() {
 # Function to configure audio input
 configure_audio_input() {
     while true; do
-        print_message "\nAudio Input Configuration" "$GREEN"
+        print_message "\n🎤 Audio Capture Configuration" "$GREEN"
         print_message "1) Use sound card" 
         print_message "2) Use RTSP stream" 
-        print_message "Select audio input method (1/2): " "$YELLOW" "nonewline"
+        print_message "❓ Select audio input method (1/2): " "$YELLOW" "nonewline"
         read -r audio_choice
 
         case $audio_choice in
@@ -171,7 +260,7 @@ configure_audio_input() {
 
 # Function to configure sound card
 configure_sound_card() {
-    print_message "\nDetected audio devices:" "$GREEN"
+    print_message "\n🎤 Detected audio devices:" "$GREEN"
     
     # Create an array to store device information
     declare -a devices
@@ -238,7 +327,7 @@ configure_rtsp_stream() {
             print_message "✅ RTSP connection successful!" "$GREEN"
             break
         else
-            print_message "Could not connect to RTSP stream. Do you want to try again? (y/n)" "$RED"
+            print_message "❌ Could not connect to RTSP stream. Do you want to try again? (y/n)" "$RED"
             read -r retry
             if [[ $retry != "y" ]]; then
                 break
@@ -256,7 +345,7 @@ configure_rtsp_stream() {
 
 # Function to configure audio export format
 configure_audio_format() {
-    print_message "\nAudio Export Configuration" "$GREEN"
+    print_message "\n🔊 Audio Export Configuration" "$GREEN"
     print_message "Select audio format for captured sounds:"
     print_message "1) WAV (Uncompressed, largest files)" 
     print_message "2) FLAC (Lossless compression)"
@@ -265,8 +354,9 @@ configure_audio_format() {
     print_message "5) Opus (Best compression)" 
     
     while true; do
-        print_message "Select format (1-5): " "$YELLOW" "nonewline"
+        print_message "❓ Select format (1-5): " "$YELLOW" "nonewline"
         read -r format_choice
+
         case $format_choice in
             1) format="wav"; break;;
             2) format="flac"; break;;
@@ -286,7 +376,7 @@ configure_audio_format() {
 
 # Function to configure locale
 configure_locale() {
-    print_message "\nLocale Configuration for bird species names" "$GREEN"
+    print_message "\n🌐 Locale Configuration for bird species names" "$GREEN"
     print_message "Available languages:" "$YELLOW"
     
     # Create arrays for locales
@@ -303,7 +393,7 @@ configure_locale() {
     echo
 
     while true; do
-        print_message "Select your language (1-${#locale_codes[@]}): " "$YELLOW" "nonewline"
+        print_message "❓ Select your language (1-${#locale_codes[@]}): " "$YELLOW" "nonewline"
         read -r selection
         
         if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#locale_codes[@]}" ]; then
@@ -321,10 +411,11 @@ configure_locale() {
 
 # Function to configure location
 configure_location() {
-    print_message "\nLocation Configuration" "$GREEN"
+    print_message "\n🌍 Location Configuration, this is used to limit bird species present in your region" "$GREEN"
     print_message "1) Enter coordinates manually" "$YELLOW"
     print_message "2) Enter city name" "$YELLOW"
-    read -p "Select location input method (1/2): " location_choice
+    print_message "❓ Select location input method (1/2): " "$YELLOW" "nonewline"
+    read -r location_choice
 
     case $location_choice in
         1)
@@ -374,10 +465,11 @@ configure_location() {
 
 # Function to configure basic authentication
 configure_auth() {
-    print_message "\nSecurity Configuration" "$GREEN"
+    print_message "\n🔒 Security Configuration" "$GREEN"
     print_message "Do you want to enable password protection for the settings interface?" "$YELLOW"
-    print_message "This is recommended if BirdNET-Go will be accessible from the internet." "$YELLOW"
-    read -p "Enable password protection? (y/n): " enable_auth
+    print_message "This is highly recommended if BirdNET-Go will be accessible from the internet." "$YELLOW"
+    print_message "❓ Enable password protection? (y/n): " "$YELLOW" "nonewline"
+    read -r enable_auth
 
     if [[ $enable_auth == "y" ]]; then
         while true; do
@@ -413,7 +505,7 @@ add_systemd_config() {
     fi
 
     # Create systemd service
-    print_message "\nCreating systemd service..." "$GREEN"
+    print_message "\n🚀 Creating systemd service..." "$GREEN"
     sudo tee /etc/systemd/system/birdnet-go.service << EOF
 [Unit]
 Description=BirdNET-Go
@@ -439,6 +531,32 @@ EOF
     sudo systemctl enable birdnet-go.service
 }
 
+# Function to start BirdNET-Go
+start_birdnet_go() {
+    print_message "\n🚀 Starting BirdNET-Go..." "$GREEN"
+    sudo systemctl start birdnet-go.service
+    # check status
+    if sudo systemctl is-active --quiet birdnet-go.service; then
+        print_message "✅ BirdNET-Go started successfully!" "$GREEN"
+        print_message "\n🐳 Checking container logs..." "$YELLOW"
+        # Wait a moment for the container to start
+        sleep 2
+        # Get container ID and show logs
+        container_id=$(docker ps --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}")
+        if [ -n "$container_id" ]; then
+            docker logs "$container_id"
+            print_message "\nTo follow logs in real-time, use:" "$YELLOW"
+            print_message "docker logs -f $container_id" "$NC"
+        else
+            print_message "❌ Container not found. Please check 'docker ps' output." "$RED"
+            exit 1
+        fi
+    else
+        print_message "❌ Failed to start BirdNET-Go. Please check the logs for errors." "$RED"
+        exit 1
+    fi
+}
+
 # ASCII Art Banner
 cat << "EOF"
  ____  _         _ _   _ _____ _____    ____      
@@ -448,12 +566,13 @@ cat << "EOF"
 |____/|_|_|  \__,_|_| \_|_____| |_|    \____|\___/ 
 EOF
 
-print_message "\nBirdNET-Go Installation Script" "$GREEN"
+print_message "\n🐦 BirdNET-Go Installation Script" "$GREEN"
 print_message "This script will install BirdNET-Go and its dependencies." "$YELLOW"
 print_message "Note: Root privileges will be required for:" "$YELLOW"
 print_message "  - Installing system packages (alsa-utils, curl, ffmpeg, bc, jq, apache2-utils)" "$YELLOW"
 print_message "  - Installing Docker" "$YELLOW"
 print_message "  - Creating systemd service\n" "$YELLOW"
+print_message "\n"
 
 # Default paths
 CONFIG_DIR="$HOME/birdnet-go-app/config"
@@ -461,21 +580,15 @@ DATA_DIR="$HOME/birdnet-go-app/data"
 CONFIG_FILE="$CONFIG_DIR/config.yaml"
 TEMP_CONFIG="/tmp/config.yaml"
 
-# Check if script is run as root
-if [ "$EUID" -eq 0 ]; then
-    print_message "Please do not run this script as root or with sudo" "$RED"
-    exit 1
-fi
-
 # Check prerequisites before proceeding
 check_prerequisites
 
 # Update package list
-print_message "Updating package list..." "$YELLOW"
-sudo apt-get update
+print_message "\n🔧 Updating package list..." "$YELLOW"
+sudo apt -qq update
 
 # Install required packages
-print_message "Checking and installing required packages..." "$YELLOW"
+print_message "\n🔧 Checking and installing required packages..." "$YELLOW"
 check_install_package "alsa-utils"
 check_install_package "curl"
 check_install_package "ffmpeg"
@@ -488,13 +601,19 @@ check_directory "$CONFIG_DIR"
 check_directory "$DATA_DIR"
 
 # Create directories
-print_message "Creating directories..." "$YELLOW"
+print_message "\n🔧 Creating config and data directories..." "$YELLOW"
+print_message "📁 Config directory: " "$GREEN" "nonewline"
+print_message "$CONFIG_DIR" "$NC"
+print_message "📁 Data directory: " "$GREEN" "nonewline"
+print_message "$DATA_DIR" "$NC"
 mkdir -p "$CONFIG_DIR"
 mkdir -p "$DATA_DIR"
 
-# Download original config file
-print_message "Downloading configuration template..." "$YELLOW"
-curl -s https://raw.githubusercontent.com/tphakala/birdnet-go/main/internal/conf/config.yaml > "$CONFIG_FILE"
+# Download base config file
+download_base_config
+
+# Now lets query user for configuration
+print_message "\n🔧 Now lets configure some basic settings" "$YELLOW"
 
 # Configure audio input
 configure_audio_input
@@ -517,16 +636,24 @@ sleep 5
 # Add systemd service configuration
 add_systemd_config
 
-print_message "\n"
-print_message "✅ Installation completed!" "$GREEN"
-print_message "Configuration directory: " "$GREEN" "nonewline"
-print_message "$CONFIG_DIR"
-print_message "Data directory: " "$GREEN" "nonewline"
-print_message "$DATA_DIR"
-print_message "\nTo start BirdNET-Go, run: sudo systemctl start birdnet-go" "$YELLOW"
-print_message "To check status, run: sudo systemctl status birdnet-go" "$YELLOW"
-print_message "The web interface will be available at http://localhost:8080" "$YELLOW"
+# Start BirdNET-Go
+start_birdnet_go
 
-if ! groups "$USER" | grep -q docker; then
-    print_message "\nIMPORTANT: Please log out and log back in for Docker permissions to take effect." "$RED"
+print_message ""
+print_message "✅ Installation completed!" "$GREEN"
+print_message "📁 Configuration directory: " "$GREEN" "nonewline"
+print_message "$CONFIG_DIR"
+print_message "📁 Data directory: " "$GREEN" "nonewline"
+print_message "$DATA_DIR"
+
+# Get IP address
+IP_ADDR=$(get_ip_address)
+if [ -n "$IP_ADDR" ]; then
+    print_message "🌐 BirdNET-Go web interface is available at http://${IP_ADDR}:8080" "$GREEN"
+fi
+
+# Check if mDNS is available
+if check_mdns; then
+    HOSTNAME=$(hostname)
+    print_message "🌐 Also available at http://${HOSTNAME}.local:8080" "$GREEN"
 fi
