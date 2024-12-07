@@ -23,6 +23,15 @@ BirdNET-Go is an AI solution for continuous avian monitoring and identification
 - Runs on Windows, Linux and macOS
 - Low resource usage, works on Raspberry Pi 3 and equivalent 64-bit single board computers
 
+## Installation
+
+Quick install script for Debian, Ubuntu and Raspberry Pi OS based systems:
+
+```bash
+curl -fsSL https://github.com/tphakala/birdnet-go/raw/main/install.sh -o install.sh
+bash ./install.sh
+```
+
 ## Help Improve BirdNET-Go
 
 I am seeking web developer with experience in Go HTML templating, Tailwind CSS, HTMX, Alpine.js, or
@@ -34,10 +43,7 @@ skills and a keen interest in contributing to a nature-focused project, I'd love
 
 <img src="doc/BirdNET-Go-dashboard.webp" />
 
-## Installation
-
 For detailed installation instructions, see the [installation documentation](doc/installation.md). For securing your BirdNET-Go installation, see the [security documentation](doc/security.md).
-
 
 ## Building
 For instructions on how to build the project, see the [building documentation](doc/building.md).
