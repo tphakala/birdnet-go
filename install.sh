@@ -173,6 +173,21 @@ check_directory() {
     fi
 }
 
+# Function to pull Docker image
+pull_docker_image() {
+    print_message "\n🐳 Pulling BirdNET-Go Docker image from GitHub Container Registry..." "$YELLOW"
+    if docker pull "${BIRDNET_GO_IMAGE}"; then
+        print_message "✅ Docker image pulled successfully" "$GREEN"
+    else
+        print_message "❌ Failed to pull Docker image" "$RED"
+        print_message "This could be due to:" "$YELLOW"
+        print_message "- No internet connection" "$YELLOW"
+        print_message "- GitHub container registry being unreachable" "$YELLOW"
+        print_message "- Invalid image name or tag" "$YELLOW"
+        exit 1
+    fi
+}
+
 # Function to download base config file
 download_base_config() {
     print_message "\n📥 Downloading base configuration file from GitHub to: " "$YELLOW" "nonewline"
@@ -596,6 +611,9 @@ check_install_package "ffmpeg"
 check_install_package "bc"
 check_install_package "jq"
 check_install_package "apache2-utils"
+
+# Pull Docker image
+pull_docker_image
 
 # Check if directories can be created
 check_directory "$CONFIG_DIR"
