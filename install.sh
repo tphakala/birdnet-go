@@ -487,6 +487,7 @@ configure_auth() {
                 print_message "✅ Password protection enabled successfully!" "$GREEN"
                 print_message "If you forget your password, you can reset it by editing:" "$YELLOW"
                 print_message "$CONFIG_FILE" "$YELLOW"
+                sleep 3
                 break
             else
                 print_message "❌ Passwords don't match. Please try again." "$RED"
@@ -571,8 +572,8 @@ print_message "This script will install BirdNET-Go and its dependencies." "$YELL
 print_message "Note: Root privileges will be required for:" "$YELLOW"
 print_message "  - Installing system packages (alsa-utils, curl, ffmpeg, bc, jq, apache2-utils)" "$YELLOW"
 print_message "  - Installing Docker" "$YELLOW"
-print_message "  - Creating systemd service\n" "$YELLOW"
-print_message "\n"
+print_message "  - Creating systemd service" "$YELLOW"
+print_message ""
 
 # Default paths
 CONFIG_DIR="$HOME/birdnet-go-app/config"
@@ -629,9 +630,6 @@ configure_location
 
 # Configure security
 configure_auth
-
-# Pause for 5 seconds
-sleep 5
 
 # Add systemd service configuration
 add_systemd_config
