@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Exit on error
-set -e
-
 BIRDNET_GO_VERSION="dev"
 BIRDNET_GO_IMAGE="ghcr.io/tphakala/birdnet-go:${BIRDNET_GO_VERSION}"
 
@@ -24,8 +21,9 @@ print_message() {
 # Function to get IP address
 get_ip_address() {
     # Get primary IP address, excluding docker and localhost interfaces
-    ip -4 addr show | grep -v 'docker\|br-\|veth\|lo' | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1
+    ip -4 addr show scope global | grep -v 'docker\|br-\|veth' | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1
 }
+
 # Function to check if mDNS is available
 check_mdns() {
     if systemctl is-active --quiet avahi-daemon; then
@@ -546,8 +544,44 @@ EOF
     sudo systemctl enable birdnet-go.service
 }
 
+# Function to check and handle existing BirdNET-Go containers
+check_existing_containers() {
+    print_message "🐳 Checking for existing BirdNET-Go containers..." "$YELLOW"
+    local existing_containers=$(docker ps --format "{{.ID}}: {{.Command}}" --no-trunc | grep "/usr/bin/birdnet-go" | cut -d: -f1)
+    
+    if [ -n "$existing_containers" ]; then
+        print_message "⚠️ Found existing BirdNET-Go container: " "$YELLOW" "nonewline"
+        print_message "$existing_containers"
+        print_message "❓ Do you want to update BirdNET-Go? (y/n): " "$YELLOW" "nonewline"
+        read -r response
+        
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            # First stop the systemd service to prevent auto-restart
+            print_message "🛑 Stopping BirdNET-Go service..." "$YELLOW"
+            if sudo systemctl stop birdnet-go.service; then
+                print_message "✅ Service stopped successfully" "$GREEN"
+                print_message ""
+            else
+                print_message "⚠️ Could not stop service, attempting to stop container directly..." "$YELLOW"
+                # Then stop the container
+                print_message "🛑 Stopping container..." "$YELLOW"
+                docker stop "$existing_containers"
+                print_message "✅ Container stopped successfully" "$GREEN"
+                print_message ""
+            fi
+            
+
+            # Continue with installation/update
+            return 0
+        else
+            print_message "❌ Installation cancelled" "$RED"
+            exit 1
+        fi
+    fi
+}
+
 # Function to start BirdNET-Go
-start_birdnet_go() {
+start_birdnet_go() {   
     print_message "\n🚀 Starting BirdNET-Go..." "$GREEN"
     sudo systemctl start birdnet-go.service
     # check status
@@ -572,6 +606,73 @@ start_birdnet_go() {
     fi
 }
 
+# Function to detect Raspberry Pi model
+detect_rpi_model() {
+    if [ -f /proc/device-tree/model ]; then
+        local model=$(tr -d '\0' < /proc/device-tree/model)
+        case "$model" in
+            *"Raspberry Pi 5"*)
+                print_message "✅ Detected Raspberry Pi 5" "$GREEN"
+                return 5
+                ;;
+            *"Raspberry Pi 4"*)
+                print_message "✅ Detected Raspberry Pi 4" "$GREEN"
+                return 4
+                ;;
+            *"Raspberry Pi 3"*)
+                print_message "✅ Detected Raspberry Pi 3" "$GREEN"
+                return 3
+                ;;
+            *"Raspberry Pi Zero 2"*)
+                print_message "✅ Detected Raspberry Pi Zero 2" "$GREEN"
+                return 2
+                ;;
+            *)
+                print_message "ℹ️ Unknown Raspberry Pi model: $model" "$YELLOW"
+                return 0
+                ;;
+        esac
+    fi
+
+    # Return 0 if no Raspberry Pi model is detected
+    return 0
+}
+
+# Function to configure performance settings based on RPi model
+optimize_settings() {
+    print_message "\n⏱️ Optimizing settings based on system performance" "$GREEN"
+    # enable XNNPACK delegate for inference acceleration
+    sed -i 's/usexnnpack: false/usexnnpack: true/' "$CONFIG_FILE"
+    print_message "✅ Enabled XNNPACK delegate for inference acceleration" "$GREEN"
+
+    # Detect RPi model
+    detect_rpi_model
+    local rpi_model=$?
+    
+    case $rpi_model in
+        5)
+            # RPi 5 settings
+            sed -i 's/overlap: 1.5/overlap: 2.7/' "$CONFIG_FILE"
+            print_message "✅ Applied optimized settings for Raspberry Pi 5" "$GREEN"
+            ;;
+        4)
+            # RPi 4 settings
+            sed -i 's/overlap: 1.5/overlap: 2.7/' "$CONFIG_FILE"
+            print_message "✅ Applied optimized settings for Raspberry Pi 4" "$GREEN"
+            ;;
+        3)
+            # RPi 3 settings
+            sed -i 's/overlap: 1.5/overlap: 2.5/' "$CONFIG_FILE"
+            print_message "✅ Applied optimized settings for Raspberry Pi 3" "$GREEN"
+            ;;
+        2)
+            # RPi Zero 2 settings
+            sed -i 's/overlap: 1.5/overlap: 2.5/' "$CONFIG_FILE"
+            print_message "✅ Applied optimized settings for Raspberry Pi Zero 2" "$GREEN"
+            ;;
+    esac
+}
+
 # ASCII Art Banner
 cat << "EOF"
  ____  _         _ _   _ _____ _____    ____      
@@ -594,6 +695,9 @@ CONFIG_DIR="$HOME/birdnet-go-app/config"
 DATA_DIR="$HOME/birdnet-go-app/data"
 CONFIG_FILE="$CONFIG_DIR/config.yaml"
 TEMP_CONFIG="/tmp/config.yaml"
+
+# Check and handle existing containers
+check_existing_containers
 
 # Check prerequisites before proceeding
 check_prerequisites
@@ -647,6 +751,9 @@ configure_location
 
 # Configure security
 configure_auth
+
+# Optimize settings
+optimize_settings
 
 # Add systemd service configuration
 add_systemd_config
