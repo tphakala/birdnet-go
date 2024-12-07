@@ -38,11 +38,29 @@ check_install_package() {
 check_prerequisites() {
     print_message "Checking system prerequisites..." "$YELLOW"
 
-    # Check if system is using apt package manager
-    if ! command_exists apt-get; then
-        print_message "Error: This script requires an apt-based Linux distribution (Debian, Ubuntu, or Raspberry Pi OS)" "$RED"
-        exit 1
-    fi
+    # Check CPU architecture and generation
+    case "$(uname -m)" in
+        "x86_64")
+            # Check CPU flags for AVX2 (Haswell and newer)
+            if ! grep -q "avx2" /proc/cpuinfo; then
+                print_message "❌ Your Intel CPU is too old. BirdNET-Go requires Intel Haswell (2013) or newer CPU with AVX2 support" "$RED"
+                exit 1
+            else
+                print_message "✅ Intel CPU architecture and generation check passed" "$GREEN"
+            fi
+            ;;
+        "aarch64"|"arm64")
+            print_message "✅ ARM 64-bit architecture detected, continuing with installation" "$GREEN"
+            ;;
+        "armv7l"|"armv6l"|"arm")
+            print_message "❌ 32-bit ARM architecture detected. BirdNET-Go requires 64-bit ARM processor and OS" "$RED"
+            exit 1
+            ;;
+        *)
+            print_message "❌ Unsupported CPU architecture: $(uname -m)" "$RED"
+            exit 1
+            ;;
+    esac
 
     # Get OS information
     if [ -f /etc/os-release ]; then
@@ -81,7 +99,7 @@ check_prerequisites() {
 
      # Check and install Docker
     if ! command_exists docker; then
-        print_message "❌Docker not found. Installing Docker..." "$YELLOW"
+        print_message "❌ Docker not found. Installing Docker..." "$YELLOW"
         # Install Docker from apt repository
         sudo apt-get install -y docker.io
         # Add current user to docker group
@@ -105,11 +123,11 @@ check_directory() {
     local dir="$1"
     if [ ! -d "$dir" ]; then
         if ! mkdir -p "$dir" 2>/dev/null; then
-            print_message "Error: Cannot create directory $dir" "$RED"
+            print_message "❌ Cannot create directory $dir" "$RED"
             exit 1
         fi
     elif [ ! -w "$dir" ]; then
-        print_message "Error: Cannot write to directory $dir" "$RED"
+        print_message "❌ Cannot write to directory $dir" "$RED"
         exit 1
     fi
 }
@@ -128,24 +146,27 @@ test_rtsp_url() {
 
 # Function to configure audio input
 configure_audio_input() {
-    print_message "\nAudio Input Configuration" "$GREEN"
-    print_message "1) Use sound card" 
-    print_message "2) Use RTSP stream" 
-    print_message "Select audio input method (1/2): " "$YELLOW" "nonewline"
-    read -r audio_choice
+    while true; do
+        print_message "\nAudio Input Configuration" "$GREEN"
+        print_message "1) Use sound card" 
+        print_message "2) Use RTSP stream" 
+        print_message "Select audio input method (1/2): " "$YELLOW" "nonewline"
+        read -r audio_choice
 
-    case $audio_choice in
-        1)
-            configure_sound_card
-            ;;
-        2)
-            configure_rtsp_stream
-            ;;
-        *)
-            print_message "Invalid choice. Exiting." "$RED"
-            exit 1
-            ;;
-    esac
+        case $audio_choice in
+            1)
+                configure_sound_card
+                break
+                ;;
+            2)
+                configure_rtsp_stream
+                break
+                ;;
+            *)
+                print_message "❌ Invalid selection. Please try again." "$RED"
+                ;;
+        esac
+    done
 }
 
 # Function to configure sound card
@@ -176,7 +197,7 @@ configure_sound_card() {
     done < <(arecord -l)
 
     if [ ${#devices[@]} -eq 0 ]; then
-        print_message "No audio capture devices found!" "$RED"
+        print_message "❌ No audio capture devices found!" "$RED"
         exit 1
     fi
 
@@ -186,10 +207,11 @@ configure_sound_card() {
 
         if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#devices[@]}" ]; then
             ALSA_CARD="${devices[$((selection-1))]}"
-            print_message "Selected device: $ALSA_CARD" "$GREEN"
+            print_message "✅ Selected capture device: " "$GREEN" "nonewline"
+            print_message "$ALSA_CARD"
             break
         else
-            print_message "Invalid selection. Please try again." "$RED"
+            print_message "❌ Invalid selection. Please try again." "$RED"
         fi
     done
     
@@ -208,12 +230,12 @@ configure_rtsp_stream() {
         read -r RTSP_URL
         
         if [[ ! $RTSP_URL =~ ^rtsp:// ]]; then
-            print_message "Invalid RTSP URL format. Please try again." "$RED"
+            print_message "❌ Invalid RTSP URL format. Please try again." "$RED"
             continue
         fi
         
         if test_rtsp_url "$RTSP_URL"; then
-            print_message "RTSP connection successful!" "$GREEN"
+            print_message "✅ RTSP connection successful!" "$GREEN"
             break
         else
             print_message "Could not connect to RTSP stream. Do you want to try again? (y/n)" "$RED"
@@ -251,9 +273,12 @@ configure_audio_format() {
             3) format="aac"; break;;
             4) format="mp3"; break;;
             5) format="opus"; break;;
-            *) print_message "Invalid choice. Please try again." "$RED";;
+            *) print_message "❌ Invalid selection. Please try again." "$RED";;
         esac
     done
+
+    print_message "✅ Selected audio format: " "$GREEN" "nonewline"
+    print_message "$format"
 
     # Update config file
     sed -i "s/type: wav/type: $format/" "$CONFIG_FILE"
@@ -283,12 +308,13 @@ configure_locale() {
         
         if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#locale_codes[@]}" ]; then
             LOCALE_CODE="${locale_codes[$((selection-1))]}"
-            print_message "Selected language: ${locale_names[$((selection-1))]}" "$GREEN"
+            print_message "✅ Selected language: " "$GREEN" "nonewline"
+            print_message "${locale_names[$((selection-1))]}"
             # Update config file
             sed -i "s/locale: en/locale: ${LOCALE_CODE}/" "$CONFIG_FILE"
             break
         else
-            print_message "Invalid selection. Please try again." "$RED"
+            print_message "❌ Invalid selection. Please try again." "$RED"
         fi
     done
 }
@@ -312,7 +338,7 @@ configure_location() {
                    (( $(echo "$lon >= -180 && $lon <= 180" | bc -l) )); then
                     break
                 else
-                    print_message "Invalid coordinates. Please try again." "$RED"
+                    print_message "❌ Invalid coordinates. Please try again." "$RED"
                 fi
             done
             ;;
@@ -327,15 +353,16 @@ configure_location() {
                 if [ -n "$coordinates" ] && [ "$coordinates" != "null null" ]; then
                     lat=$(echo "$coordinates" | cut -d' ' -f1)
                     lon=$(echo "$coordinates" | cut -d' ' -f2)
-                    print_message "Found coordinates: $lat, $lon" "$GREEN"
+                    print_message "✅ Found coordinates: " "$GREEN" "nonewline"
+                    print_message "$lat, $lon"
                     break
                 else
-                    print_message "Could not find coordinates for the specified city. Please try again." "$RED"
+                    print_message "❌ Could not find coordinates for the specified city. Please try again." "$RED"
                 fi
             done
             ;;
         *)
-            print_message "Invalid choice. Exiting." "$RED"
+            print_message "❌ Invalid selection. Exiting." "$RED"
             exit 1
             ;;
     esac
@@ -365,12 +392,12 @@ configure_auth() {
                 sed -i "s|enabled: false    # true to enable basic auth|enabled: true    # true to enable basic auth|" "$CONFIG_FILE"
                 sed -i "s|password: \"\"|password: \"$password_hash\"|" "$CONFIG_FILE"
                 
-                print_message "\nPassword protection enabled successfully!" "$GREEN"
+                print_message "✅ Password protection enabled successfully!" "$GREEN"
                 print_message "If you forget your password, you can reset it by editing:" "$YELLOW"
                 print_message "$CONFIG_FILE" "$YELLOW"
                 break
             else
-                print_message "Passwords don't match. Please try again." "$RED"
+                print_message "❌ Passwords don't match. Please try again." "$RED"
             fi
         done
     fi
@@ -378,6 +405,13 @@ configure_auth() {
 
 # Function to add systemd service configuration
 add_systemd_config() {
+    # Get timezone
+    if [ -f /etc/timezone ]; then
+        TZ=$(cat /etc/timezone)
+    else
+        TZ="UTC"
+    fi
+
     # Create systemd service
     print_message "\nCreating systemd service..." "$GREEN"
     sudo tee /etc/systemd/system/birdnet-go.service << EOF
@@ -417,7 +451,7 @@ EOF
 print_message "\nBirdNET-Go Installation Script" "$GREEN"
 print_message "This script will install BirdNET-Go and its dependencies." "$YELLOW"
 print_message "Note: Root privileges will be required for:" "$YELLOW"
-print_message "  - Installing system packages (alsa-utils, curl, ffmpeg)" "$YELLOW"
+print_message "  - Installing system packages (alsa-utils, curl, ffmpeg, bc, jq, apache2-utils)" "$YELLOW"
 print_message "  - Installing Docker" "$YELLOW"
 print_message "  - Creating systemd service\n" "$YELLOW"
 
@@ -477,22 +511,18 @@ configure_location
 # Configure security
 configure_auth
 
-# Get timezone
-if [ -f /etc/timezone ]; then
-    TZ=$(cat /etc/timezone)
-else
-    TZ="UTC"
-fi
-
 # Pause for 5 seconds
 sleep 5
 
 # Add systemd service configuration
 add_systemd_config
 
-print_message "\nInstallation completed!" "$GREEN"
-print_message "Configuration directory: $CONFIG_DIR" "$GREEN"
-print_message "Data directory: $DATA_DIR" "$GREEN"
+print_message "\n"
+print_message "✅ Installation completed!" "$GREEN"
+print_message "Configuration directory: " "$GREEN" "nonewline"
+print_message "$CONFIG_DIR"
+print_message "Data directory: " "$GREEN" "nonewline"
+print_message "$DATA_DIR"
 print_message "\nTo start BirdNET-Go, run: sudo systemctl start birdnet-go" "$YELLOW"
 print_message "To check status, run: sudo systemctl status birdnet-go" "$YELLOW"
 print_message "The web interface will be available at http://localhost:8080" "$YELLOW"
