@@ -24,9 +24,8 @@ print_message() {
 # Function to get IP address
 get_ip_address() {
     # Get primary IP address, excluding docker and localhost interfaces
-    ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '^127\.' | grep -v '^172\.' | grep -v '^10\.' | head -n 1
+    ip -4 addr show | grep -v 'docker\|br-\|veth\|lo' | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1
 }
-
 # Function to check if mDNS is available
 check_mdns() {
     if systemctl is-active --quiet avahi-daemon; then
