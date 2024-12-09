@@ -518,9 +518,67 @@ configure_locale() {
     done
 }
 
+# Function to get location from NordVPN and OpenStreetMap
+get_ip_location() {
+    # First try NordVPN's service for city/country
+    local nordvpn_info
+    nordvpn_info=$(curl -s "https://nordvpn.com/wp-admin/admin-ajax.php" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        --data-urlencode "action=get_user_info_data")
+    
+    if [ $? -eq 0 ] && [ -n "$nordvpn_info" ]; then
+        local city=$(echo "$nordvpn_info" | jq -r '.city')
+        local country=$(echo "$nordvpn_info" | jq -r '.country')
+        
+        if [ "$city" != "null" ] && [ "$country" != "null" ] && [ -n "$city" ] && [ -n "$country" ]; then
+            # Use OpenStreetMap to get precise coordinates
+            local coordinates
+            coordinates=$(curl -s "https://nominatim.openstreetmap.org/search?city=${city}&country=${country}&format=json" | jq -r '.[0] | "\(.lat) \(.lon)"')
+            
+            if [ -n "$coordinates" ] && [ "$coordinates" != "null null" ]; then
+                local lat=$(echo "$coordinates" | cut -d' ' -f1)
+                local lon=$(echo "$coordinates" | cut -d' ' -f2)
+                echo "$lat|$lon|$city|$country"
+                return 0
+            fi
+        fi
+    fi
+    return 1
+}
+
 # Function to configure location
 configure_location() {
     print_message "\n🌍 Location Configuration, this is used to limit bird species present in your region" "$GREEN"
+    
+    # Try to get location from NordVPN/OpenStreetMap
+    local ip_location
+    ip_location=$(get_ip_location)
+    
+    if [ $? -eq 0 ]; then
+        local ip_lat=$(echo "$ip_location" | cut -d'|' -f1)
+        local ip_lon=$(echo "$ip_location" | cut -d'|' -f2)
+        local ip_city=$(echo "$ip_location" | cut -d'|' -f3)
+        local ip_country=$(echo "$ip_location" | cut -d'|' -f4)
+        
+        print_message "📍 Based on your IP address, your location appears to be: " "$YELLOW" "nonewline"
+        print_message "$ip_city, $ip_country ($ip_lat, $ip_lon)" "$NC"
+        print_message "❓ Would you like to use this location? (y/n): " "$YELLOW" "nonewline"
+        read -r use_ip_location
+        
+        if [[ $use_ip_location == "y" ]]; then
+            lat=$ip_lat
+            lon=$ip_lon
+            print_message "✅ Using IP-based location" "$GREEN"
+            # Update config file and return
+            sed -i "s/latitude: 00.000/latitude: $lat/" "$CONFIG_FILE"
+            sed -i "s/longitude: 00.000/longitude: $lon/" "$CONFIG_FILE"
+            return
+        fi
+    else
+        print_message "⚠️ Could not automatically determine location" "$YELLOW"
+    fi
+    
+    # If automatic location failed or was rejected, continue with manual input
     print_message "1) Enter coordinates manually" "$YELLOW"
     print_message "2) Enter city name for OpenStreetMap lookup" "$YELLOW"
     
@@ -547,7 +605,6 @@ configure_location() {
                 ;;
             2)
                 while true; do
-                    # add message about openstreet map lookup
                     print_message "Enter location (e.g., 'Helsinki, Finland', 'New York, US', or 'Sungei Buloh, Singapore'): " "$YELLOW" "nonewline"
                     read -r location
                     
@@ -922,4 +979,3 @@ if check_mdns; then
     HOSTNAME=$(hostname)
     print_message "🌐 Also available at http://${HOSTNAME}.local:8080" "$GREEN"
 fi
-
