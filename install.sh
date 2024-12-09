@@ -38,6 +38,64 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Function to check network connectivity
+check_network() {
+    print_message "🌐 Checking network connectivity..." "$YELLOW"
+    local success=true
+    local test_hosts=("github.com" "raw.githubusercontent.com" "ghcr.io")
+    
+    # DNS Check
+    print_message "📡 Testing DNS resolution..." "$YELLOW"
+    for host in "${test_hosts[@]}"; do
+        if host "$host" >/dev/null 2>&1; then
+            print_message "✅ DNS resolution successful for $host" "$GREEN"
+        else
+            print_message "❌ DNS resolution failed for $host" "$RED"
+            success=false
+        fi
+    done
+
+    # HTTP/HTTPS Check
+    print_message "\n📡 Testing HTTP/HTTPS connectivity..." "$YELLOW"
+    local urls=(
+        "https://github.com"
+        "https://raw.githubusercontent.com"
+        "https://ghcr.io"
+    )
+    
+    for url in "${urls[@]}"; do
+        local http_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$url")
+        if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+            print_message "✅ HTTPS connection successful to $url (HTTP $http_code)" "$GREEN"
+        else
+            print_message "❌ HTTPS connection failed to $url (HTTP $http_code)" "$RED"
+            success=false
+        fi
+    done
+
+    # Docker Registry Check
+    print_message "\n📡 Testing GitHub registry connectivity..." "$YELLOW"
+    if curl -s "https://ghcr.io/v2/" >/dev/null 2>&1; then
+        print_message "✅ GitHub registry is accessible" "$GREEN"
+    else
+        print_message "❌ Cannot access Docker registry" "$RED"
+        success=false
+    fi
+
+    if [ "$success" = false ]; then
+        print_message "\n❌ Network connectivity check failed" "$RED"
+        print_message "Please check:" "$YELLOW"
+        print_message "  • Internet connection" "$YELLOW"
+        print_message "  • DNS settings (/etc/resolv.conf)" "$YELLOW"
+        print_message "  • Firewall rules" "$YELLOW"
+        print_message "  • Proxy settings (if applicable)" "$YELLOW"
+        return 1
+    fi
+
+    print_message "\n✅ Network connectivity check passed" "$GREEN"
+    return 0
+}
+
 # Function to check and install required packages
 check_install_package() {
     if ! dpkg -l "$1" >/dev/null 2>&1; then
@@ -180,6 +238,7 @@ check_prerequisites() {
     fi
 
     print_message "🥳 System prerequisites checks passed" "$GREEN"
+    print_message ""
 }
 
 # Function to check if directories can be created
@@ -463,50 +522,64 @@ configure_locale() {
 configure_location() {
     print_message "\n🌍 Location Configuration, this is used to limit bird species present in your region" "$GREEN"
     print_message "1) Enter coordinates manually" "$YELLOW"
-    print_message "2) Enter city name" "$YELLOW"
-    print_message "❓ Select location input method (1/2): " "$YELLOW" "nonewline"
-    read -r location_choice
+    print_message "2) Enter city name for OpenStreetMap lookup" "$YELLOW"
+    
+    while true; do
+        print_message "❓ Select location input method (1/2): " "$YELLOW" "nonewline"
+        read -r location_choice
 
-    case $location_choice in
-        1)
-            while true; do
-                read -p "Enter latitude (-90 to 90): " lat
-                read -p "Enter longitude (-180 to 180): " lon
-                
-                if [[ "$lat" =~ ^-?[0-9]*\.?[0-9]+$ ]] && \
-                   [[ "$lon" =~ ^-?[0-9]*\.?[0-9]+$ ]] && \
-                   (( $(echo "$lat >= -90 && $lat <= 90" | bc -l) )) && \
-                   (( $(echo "$lon >= -180 && $lon <= 180" | bc -l) )); then
-                    break
-                else
-                    print_message "❌ Invalid coordinates. Please try again." "$RED"
-                fi
-            done
-            ;;
-        2)
-            while true; do
-                read -p "Enter city name: " city
-                read -p "Enter country code (e.g., US, FI): " country
-                
-                # Use OpenStreetMap Nominatim API to get coordinates
-                coordinates=$(curl -s "https://nominatim.openstreetmap.org/search?city=${city}&country=${country}&format=json" | jq -r '.[0] | "\(.lat) \(.lon)"')
-                
-                if [ -n "$coordinates" ] && [ "$coordinates" != "null null" ]; then
-                    lat=$(echo "$coordinates" | cut -d' ' -f1)
-                    lon=$(echo "$coordinates" | cut -d' ' -f2)
-                    print_message "✅ Found coordinates: " "$GREEN" "nonewline"
-                    print_message "$lat, $lon"
-                    break
-                else
-                    print_message "❌ Could not find coordinates for the specified city. Please try again." "$RED"
-                fi
-            done
-            ;;
-        *)
-            print_message "❌ Invalid selection. Exiting." "$RED"
-            exit 1
-            ;;
-    esac
+        case $location_choice in
+            1)
+                while true; do
+                    read -p "Enter latitude (-90 to 90): " lat
+                    read -p "Enter longitude (-180 to 180): " lon
+                    
+                    if [[ "$lat" =~ ^-?[0-9]*\.?[0-9]+$ ]] && \
+                       [[ "$lon" =~ ^-?[0-9]*\.?[0-9]+$ ]] && \
+                       (( $(echo "$lat >= -90 && $lat <= 90" | bc -l) )) && \
+                       (( $(echo "$lon >= -180 && $lon <= 180" | bc -l) )); then
+                        break
+                    else
+                        print_message "❌ Invalid coordinates. Please try again." "$RED"
+                    fi
+                done
+                break
+                ;;
+            2)
+                while true; do
+                    # add message about openstreet map lookup
+                    print_message "Enter location (e.g., 'Helsinki, Finland', 'New York, US', or 'Sungei Buloh, Singapore'): " "$YELLOW" "nonewline"
+                    read -r location
+                    
+                    # Split input into city and country
+                    city=$(echo "$location" | cut -d',' -f1 | xargs)
+                    country=$(echo "$location" | cut -d',' -f2 | xargs)
+                    
+                    if [ -z "$city" ] || [ -z "$country" ]; then
+                        print_message "❌ Invalid format. Please use format: 'City, Country'" "$RED"
+                        continue
+                    fi
+                    
+                    # Use OpenStreetMap Nominatim API to get coordinates
+                    coordinates=$(curl -s "https://nominatim.openstreetmap.org/search?city=${city}&country=${country}&format=json" | jq -r '.[0] | "\(.lat) \(.lon)"')
+                    
+                    if [ -n "$coordinates" ] && [ "$coordinates" != "null null" ]; then
+                        lat=$(echo "$coordinates" | cut -d' ' -f1)
+                        lon=$(echo "$coordinates" | cut -d' ' -f2)
+                        print_message "✅ Found coordinates for $city, $country: " "$GREEN" "nonewline"
+                        print_message "$lat, $lon"
+                        break
+                    else
+                        print_message "❌ Could not find coordinates. Please try again with format: 'City, Country'" "$RED"
+                    fi
+                done
+                break
+                ;;
+            *)
+                print_message "❌ Invalid selection. Please try again." "$RED"
+                ;;
+        esac
+    done
 
     # Update config file
     sed -i "s/latitude: 00.000/latitude: $lat/" "$CONFIG_FILE"
@@ -711,6 +784,34 @@ optimize_settings() {
     esac
 }
 
+# Function to validate installation
+validate_installation() {
+    print_message "\n🔍 Validating installation..." "$YELLOW"
+    local checks=0
+    
+    # Check Docker container
+    if docker ps | grep -q 'birdnet-go'; then
+        ((checks++))
+    fi
+    
+    # Check service status
+    if systemctl is-active --quiet birdnet-go.service; then
+        ((checks++))
+    fi
+    
+    # Check web interface
+    if curl -s "http://localhost:8080" >/dev/null; then
+        ((checks++))
+    fi
+    
+    if [ "$checks" -eq 3 ]; then
+        print_message "✅ Installation validated successfully" "$GREEN"
+        return 0
+    fi
+    print_message "⚠️ Installation validation failed" "$RED"
+    return 1
+}
+
 # ASCII Art Banner
 cat << "EOF"
  ____  _         _ _   _ _____ _____    ____      
@@ -739,6 +840,7 @@ check_existing_containers
 
 # Check prerequisites before proceeding
 check_prerequisites
+check_network
 
 # Update package list
 print_message "\n🔧 Updating package list..." "$YELLOW"
@@ -799,6 +901,9 @@ add_systemd_config
 # Start BirdNET-Go
 start_birdnet_go
 
+# Validate installation
+validate_installation
+
 print_message ""
 print_message "✅ Installation completed!" "$GREEN"
 print_message "📁 Configuration directory: " "$GREEN" "nonewline"
@@ -817,3 +922,4 @@ if check_mdns; then
     HOSTNAME=$(hostname)
     print_message "🌐 Also available at http://${HOSTNAME}.local:8080" "$GREEN"
 fi
+
