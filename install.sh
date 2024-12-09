@@ -379,6 +379,15 @@ configure_sound_card() {
         declare -a device_names
         local default_selection=0
         
+        # Capture arecord output to a variable first
+        local arecord_output
+        arecord_output=$(arecord -l 2>/dev/null)
+        
+        if [ -z "$arecord_output" ]; then
+            print_message "❌ No audio capture devices found!" "$RED"
+            return 1
+        fi
+        
         # Parse arecord output and create a numbered list
         while IFS= read -r line; do
             if [[ $line =~ ^card[[:space:]]+([0-9]+)[[:space:]]*:[[:space:]]*([^,]+),[[:space:]]*device[[:space:]]+([0-9]+)[[:space:]]*:[[:space:]]*([^[]+)[[:space:]]*\[(.*)\] ]]; then
@@ -402,7 +411,7 @@ configure_sound_card() {
                 echo "[$((${#devices[@]}))] Card $card_num: $card_name"
                 echo "    Device $device_num: $device_name [$device_desc]"
             fi
-        done < <(arecord -l)
+        done <<< "$arecord_output"
 
         if [ ${#devices[@]} -eq 0 ]; then
             print_message "❌ No audio capture devices found!" "$RED"
