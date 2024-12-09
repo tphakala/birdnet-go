@@ -199,6 +199,17 @@ check_directory() {
 # Function to pull Docker image
 pull_docker_image() {
     print_message "\n🐳 Pulling BirdNET-Go Docker image from GitHub Container Registry..." "$YELLOW"
+    
+    # Check if Docker can be used by the user
+    if ! docker info &>/dev/null; then
+        print_message "❌ Docker cannot be accessed by user $USER. Please ensure you have the necessary permissions." "$RED"
+        print_message "This could be due to:" "$YELLOW"
+        print_message "- User $USER is not in the docker group" "$YELLOW"
+        print_message "- Docker service is not running" "$YELLOW"
+        print_message "- Insufficient privileges to access Docker socket" "$YELLOW"
+        exit 1
+    fi
+
     if docker pull "${BIRDNET_GO_IMAGE}"; then
         print_message "✅ Docker image pulled successfully" "$GREEN"
     else
@@ -207,6 +218,7 @@ pull_docker_image() {
         print_message "- No internet connection" "$YELLOW"
         print_message "- GitHub container registry being unreachable" "$YELLOW"
         print_message "- Invalid image name or tag" "$YELLOW"
+        print_message "- Insufficient privileges to access Docker socket on local system" "$YELLOW"
         exit 1
     fi
 }
