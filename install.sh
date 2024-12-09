@@ -98,7 +98,7 @@ check_network() {
 
 # Function to check and install required packages
 check_install_package() {
-    if ! dpkg -l "$1" >/dev/null 2>&1; then
+    if ! dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "install ok installed"; then
         print_message "🔧 Installing $1..." "$YELLOW"
         if sudo apt install -qq -y "$1"; then
             print_message "✅ $1 installed successfully" "$GREEN"
