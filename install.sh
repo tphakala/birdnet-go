@@ -353,12 +353,14 @@ configure_audio_input() {
 
         case $audio_choice in
             1)
-                configure_sound_card
-                break
+                if configure_sound_card; then
+                    break
+                fi
                 ;;
             2)
-                configure_rtsp_stream
-                break
+                if configure_rtsp_stream; then
+                    break
+                fi
                 ;;
             *)
                 print_message "❌ Invalid selection. Please try again." "$RED"
@@ -369,63 +371,90 @@ configure_audio_input() {
 
 # Function to configure sound card
 configure_sound_card() {
-    print_message "\n🎤 Detected audio devices:" "$GREEN"
-    
-    # Create an array to store device information
-    declare -a devices
-    declare -a device_names
-    
-    # Parse arecord output and create a numbered list
-    while IFS= read -r line; do
-        if [[ $line =~ ^card[[:space:]]+([0-9]+)[[:space:]]*:[[:space:]]*([^,]+),[[:space:]]*device[[:space:]]+([0-9]+)[[:space:]]*:[[:space:]]*([^[]+)[[:space:]]*\[(.*)\] ]]; then
-            card_num="${BASH_REMATCH[1]}"
-            card_name="${BASH_REMATCH[2]}"
-            device_num="${BASH_REMATCH[3]}"
-            device_name="${BASH_REMATCH[4]}"
-            device_desc="${BASH_REMATCH[5]}"
-            # Clean up names
-            card_name=$(echo "$card_name" | sed 's/\[//g' | sed 's/\]//g' | xargs)
-            device_name=$(echo "$device_name" | xargs)
-            device_desc=$(echo "$device_desc" | xargs)
-            
-            devices+=("$device_desc")
-            echo "[$((${#devices[@]}))] Card $card_num: $card_name"
-            echo "    Device $device_num: $device_name [$device_desc]"
-        fi
-    done < <(arecord -l)
+    while true; do
+        print_message "\n🎤 Detected audio devices:" "$GREEN"
+        
+        # Create arrays to store device information
+        declare -a devices
+        declare -a device_names
+        local default_selection=0
+        
+        # Parse arecord output and create a numbered list
+        while IFS= read -r line; do
+            if [[ $line =~ ^card[[:space:]]+([0-9]+)[[:space:]]*:[[:space:]]*([^,]+),[[:space:]]*device[[:space:]]+([0-9]+)[[:space:]]*:[[:space:]]*([^[]+)[[:space:]]*\[(.*)\] ]]; then
+                card_num="${BASH_REMATCH[1]}"
+                card_name="${BASH_REMATCH[2]}"
+                device_num="${BASH_REMATCH[3]}"
+                device_name="${BASH_REMATCH[4]}"
+                device_desc="${BASH_REMATCH[5]}"
+                # Clean up names
+                card_name=$(echo "$card_name" | sed 's/\[//g' | sed 's/\]//g' | xargs)
+                device_name=$(echo "$device_name" | xargs)
+                device_desc=$(echo "$device_desc" | xargs)
+                
+                devices+=("$device_desc")
+                
+                # Set first USB device as default
+                if [[ "$card_name" =~ USB && $default_selection -eq 0 ]]; then
+                    default_selection=${#devices[@]}
+                fi
+                
+                echo "[$((${#devices[@]}))] Card $card_num: $card_name"
+                echo "    Device $device_num: $device_name [$device_desc]"
+            fi
+        done < <(arecord -l)
 
-    if [ ${#devices[@]} -eq 0 ]; then
-        print_message "❌ No audio capture devices found!" "$RED"
-        exit 1
+        if [ ${#devices[@]} -eq 0 ]; then
+            print_message "❌ No audio capture devices found!" "$RED"
+            return 1
+        fi
+
+    # If no USB device was found, use first device as default
+    if [ $default_selection -eq 0 ]; then
+        default_selection=1
     fi
 
-    while true; do
-        print_message "\nPlease select a device number from the list above (1-${#devices[@]}): " "$YELLOW" "nonewline"
+        print_message "\nPlease select a device number from the list above (1-${#devices[@]}) [${default_selection}] or 'b' to go back: " "$YELLOW" "nonewline"
         read -r selection
+
+        if [ "$selection" = "b" ]; then
+            return 1
+        fi
+
+        # If empty, use default selection
+        if [ -z "$selection" ]; then
+            selection=$default_selection
+        fi
 
         if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#devices[@]}" ]; then
             ALSA_CARD="${devices[$((selection-1))]}"
             print_message "✅ Selected capture device: " "$GREEN" "nonewline"
             print_message "$ALSA_CARD"
-            break
+            
+            # Update config file
+            sed -i "s/source: \"sysdefault\"/source: \"${ALSA_CARD}\"/" "$CONFIG_FILE"
+            # Comment out RTSP section
+            sed -i '/rtsp:/,/      # - rtsp/s/^/#/' "$CONFIG_FILE"
+            
+            AUDIO_ENV="--device /dev/snd"
+            return 0
         else
             print_message "❌ Invalid selection. Please try again." "$RED"
         fi
     done
-    
-    # Update config file
-    sed -i "s/source: \"sysdefault\"/source: \"${ALSA_CARD}\"/" "$CONFIG_FILE"
-    # Comment out RTSP section
-    sed -i '/rtsp:/,/      # - rtsp/s/^/#/' "$CONFIG_FILE"
-    
-    AUDIO_ENV="--device /dev/snd"
 }
 
 # Function to configure RTSP stream
 configure_rtsp_stream() {
     while true; do
-        print_message "\nEnter RTSP URL (format: rtsp://user:password@address/path): " "$YELLOW" "nonewline"
+        print_message "\n🎥 RTSP Stream Configuration" "$GREEN"
+        print_message "Configure primary RTSP stream. Additional streams can be added later via web interface at Audio Capture Settings." "$YELLOW"
+        print_message "Enter RTSP URL (format: rtsp://user:password@address/path) or 'b' to go back: " "$YELLOW" "nonewline"
         read -r RTSP_URL
+
+        if [ "$RTSP_URL" = "b" ]; then
+            return 1
+        fi
         
         if [[ ! $RTSP_URL =~ ^rtsp:// ]]; then
             print_message "❌ Invalid RTSP URL format. Please try again." "$RED"
@@ -434,22 +463,25 @@ configure_rtsp_stream() {
         
         if test_rtsp_url "$RTSP_URL"; then
             print_message "✅ RTSP connection successful!" "$GREEN"
-            break
+            
+            # Update config file
+            sed -i "s|# - rtsp://user:password@example.com/stream1|      - ${RTSP_URL}|" "$CONFIG_FILE"
+            # Comment out audio source section
+            sed -i '/source: "sysdefault"/s/^/#/' "$CONFIG_FILE"
+            
+            AUDIO_ENV=""
+            return 0
         else
-            print_message "❌ Could not connect to RTSP stream. Do you want to try again? (y/n)" "$RED"
+            print_message "❌ Could not connect to RTSP stream. Do you want to:" "$RED"
+            print_message "1) Try again"
+            print_message "2) Go back to audio input selection"
+            print_message "❓ Select option (1/2): " "$YELLOW" "nonewline"
             read -r retry
-            if [[ $retry != "y" ]]; then
-                break
+            if [ "$retry" = "2" ]; then
+                return 1
             fi
         fi
     done
-    
-    # Update config file
-    sed -i "s|# - rtsp://user:password@example.com/stream1|      - ${RTSP_URL}|" "$CONFIG_FILE"
-    # Comment out audio source section
-    sed -i '/source: "sysdefault"/s/^/#/' "$CONFIG_FILE"
-    
-    AUDIO_ENV=""
 }
 
 # Function to configure audio export format
@@ -458,13 +490,18 @@ configure_audio_format() {
     print_message "Select audio format for captured sounds:"
     print_message "1) WAV (Uncompressed, largest files)" 
     print_message "2) FLAC (Lossless compression)"
-    print_message "3) AAC (High quality, smaller files) - recommended" 
+    print_message "3) AAC (High quality, smaller files) - default" 
     print_message "4) MP3 (For legacy use only)" 
     print_message "5) Opus (Best compression)" 
     
     while true; do
-        print_message "❓ Select format (1-5): " "$YELLOW" "nonewline"
+        print_message "❓ Select format (1-5) [3]: " "$YELLOW" "nonewline"
         read -r format_choice
+
+        # If empty, use default (AAC)
+        if [ -z "$format_choice" ]; then
+            format_choice="3"
+        fi
 
         case $format_choice in
             1) format="wav"; break;;
