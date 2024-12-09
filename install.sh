@@ -247,10 +247,24 @@ check_directory() {
     if [ ! -d "$dir" ]; then
         if ! mkdir -p "$dir" 2>/dev/null; then
             print_message "❌ Cannot create directory $dir" "$RED"
+            print_message "Please check permissions" "$YELLOW"
             exit 1
         fi
     elif [ ! -w "$dir" ]; then
         print_message "❌ Cannot write to directory $dir" "$RED"
+        print_message "Please check permissions" "$YELLOW"
+        exit 1
+    fi
+}
+
+# Function to check if there is enough disk space for Docker image
+check_docker_space() {
+    local required_space=2000000  # 2GB in KB
+    local available_space=$(df -k /var/lib/docker | awk 'NR==2 {print $4}')
+    
+    if [ "$available_space" -lt "$required_space" ]; then
+        print_message "❌ Insufficient disk space for Docker image" "$RED"
+        print_message "Required: 2GB, Available: $((available_space/1024))MB" "$YELLOW"
         exit 1
     fi
 }
@@ -369,6 +383,38 @@ configure_audio_input() {
     done
 }
 
+# Function to validate audio device
+validate_audio_device() {
+    local device="$1"
+    
+    # Check if user is in audio group
+    if ! groups "$USER" | grep &>/dev/null "\baudio\b"; then
+        print_message "⚠️ User $USER is not in the audio group" "$YELLOW"
+        if sudo usermod -aG audio "$USER"; then
+            print_message "✅ Added user $USER to audio group" "$GREEN"
+            print_message "⚠️ Please log out and log back in for group changes to take effect" "$YELLOW"
+            exit 0
+        else
+            print_message "❌ Failed to add user to audio group" "$RED"
+            return 1
+        fi
+    fi
+
+    # Test audio device access
+    if ! arecord -c 1 -f S16_LE -r 48000 -d 1 -D "$device" /dev/null 2>/dev/null; then
+        print_message "❌ Failed to access audio device" "$RED"
+        print_message "This could be due to:" "$YELLOW"
+        print_message "  • Device is busy" "$YELLOW"
+        print_message "  • Insufficient permissions" "$YELLOW"
+        print_message "  • Device is not properly connected" "$YELLOW"
+        return 1
+    else
+        print_message "✅ Audio device validated successfully, tested 48kHz 16-bit mono capture" "$GREEN"
+    fi
+    
+    return 0
+}
+
 # Function to configure sound card
 configure_sound_card() {
     while true; do
@@ -418,10 +464,10 @@ configure_sound_card() {
             return 1
         fi
 
-    # If no USB device was found, use first device as default
-    if [ $default_selection -eq 0 ]; then
-        default_selection=1
-    fi
+        # If no USB device was found, use first device as default
+        if [ $default_selection -eq 0 ]; then
+            default_selection=1
+        fi
 
         print_message "\nPlease select a device number from the list above (1-${#devices[@]}) [${default_selection}] or 'b' to go back: " "$YELLOW" "nonewline"
         read -r selection
@@ -436,15 +482,40 @@ configure_sound_card() {
         fi
 
         if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#devices[@]}" ]; then
-            ALSA_CARD="${devices[$((selection-1))]}"
+            local friendly_name="${devices[$((selection-1))]}"
+            
+            # Parse the original arecord output to get the correct card and device numbers
+            local card_num
+            local device_num
+            local index=1
+            while IFS= read -r line; do
+                if [[ $line =~ ^card[[:space:]]+([0-9]+)[[:space:]]*:[[:space:]]*([^,]+),[[:space:]]*device[[:space:]]+([0-9]+) ]]; then
+                    if [ $index -eq $selection ]; then
+                        card_num="${BASH_REMATCH[1]}"
+                        device_num="${BASH_REMATCH[3]}"
+                        break
+                    fi
+                    ((index++))
+                fi
+            done <<< "$(arecord -l)"
+
+            local alsa_hw="hw:${card_num},${device_num}"  # Use actual card and device numbers
+            
+            ALSA_CARD="$friendly_name"
             print_message "✅ Selected capture device: " "$GREEN" "nonewline"
             print_message "$ALSA_CARD"
-            
-            # Update config file
+
+            # validate audio device using ALSA hw format
+            if ! validate_audio_device "$alsa_hw"; then
+                print_message "❌ Failed to validate audio device" "$RED"
+                return 1                
+            fi
+
+            # Update config file with the friendly name
             sed -i "s/source: \"sysdefault\"/source: \"${ALSA_CARD}\"/" "$CONFIG_FILE"
             # Comment out RTSP section
             sed -i '/rtsp:/,/      # - rtsp/s/^/#/' "$CONFIG_FILE"
-            
+                
             AUDIO_ENV="--device /dev/snd"
             return 0
         else
@@ -1025,3 +1096,4 @@ if check_mdns; then
     HOSTNAME=$(hostname)
     print_message "🌐 Also available at http://${HOSTNAME}.local:8080" "$GREEN"
 fi
+
