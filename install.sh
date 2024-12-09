@@ -120,6 +120,19 @@ check_prerequisites() {
             ;;
     esac
 
+    # Function to add user to docker group
+    add_user_to_docker_group() {
+        print_message "🔧 Adding user $USER to docker group..." "$YELLOW"
+        if sudo usermod -aG docker "$USER"; then
+            print_message "✅ Added user $USER to docker group" "$GREEN"
+            print_message "Please log out and log back in for group changes to take effect." "$YELLOW"
+            exit 0
+        else
+            print_message "❌ Failed to add user $USER to docker group" "$RED"
+            exit 1
+        fi
+    }
+
     # Check and install Docker
     if ! command_exists docker; then
         print_message "🐳 Docker not found. Installing Docker..." "$YELLOW"
@@ -127,9 +140,7 @@ check_prerequisites() {
         sudo apt -qq update
         sudo apt -qq install -y docker.io
         # Add current user to docker group
-        if sudo usermod -aG docker "$USER"; then
-            print_message "✅ Added user $USER to docker group" "$GREEN"
-        fi
+        add_user_to_docker_group
         # Start Docker service
         if sudo systemctl start docker; then
             print_message "✅ Docker service started successfully" "$GREEN"
@@ -151,6 +162,21 @@ check_prerequisites() {
         exit 0
     else
         print_message "✅ Docker found" "$GREEN"
+        
+        # Check if user is in the docker group
+        if groups "$USER" | grep &>/dev/null "\bdocker\b"; then
+            print_message "✅ User $USER is in the docker group" "$GREEN"
+        else
+            add_user_to_docker_group
+        fi
+
+        # Check if Docker can be used by the user
+        if ! docker info &>/dev/null; then
+            print_message "❌ Docker cannot be accessed by user $USER. Please ensure you have the necessary permissions." "$RED"
+            exit 1
+        else
+            print_message "✅ Docker is accessible by user $USER" "$GREEN"
+        fi
     fi
 
     print_message "🥳 System prerequisites checks passed" "$GREEN"
