@@ -347,11 +347,60 @@ download_base_config() {
 # Function to test RTSP URL
 test_rtsp_url() {
     local url=$1
-    if command_exists ffprobe; then
-        print_message "🧪 Testing RTSP connection..." "$YELLOW"
-        if ffprobe -v quiet -i "$url" -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 2>/dev/null; then
-            return 0
+    
+    # Parse URL to get host and port
+    if [[ $url =~ rtsp://([^@]+@)?([^:/]+)(:([0-9]+))? ]]; then
+        local host="${BASH_REMATCH[2]}"
+        local port="${BASH_REMATCH[4]:-554}"  # Default RTSP port is 554
+        
+        print_message "🧪 Testing connection to $host:$port..." "$YELLOW"
+        
+        # Test port using timeout and nc, redirect all output to /dev/null
+        if ! timeout 5 nc -zv "$host" "$port" &>/dev/null; then
+            print_message "❌ Could not connect to $host:$port" "$RED"
+            print_message "❓ Do you want to use this URL anyway? (y/n): " "$YELLOW" "nonewline"
+            read -r force_continue
+            
+            if [[ $force_continue == "y" ]]; then
+                print_message "⚠️ Continuing with untested RTSP URL" "$YELLOW"
+                return 0
+            fi
+            return 1
         fi
+        
+        # If port is open, test RTSP stream
+        if command_exists ffprobe; then
+            print_message "✅ Port is open, testing RTSP stream (30 second timeout)..." "$GREEN"
+            
+            # Create a timeout function using background process, redirect all output to /dev/null
+            ( 
+                ffprobe -v quiet -i "$url" -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 &>/dev/null
+            ) & pid=$!
+            
+            # Wait for specified time, redirect all output to /dev/null
+            ( sleep 30 && kill -HUP $pid &>/dev/null ) & waiter=$!
+            
+            # Wait for completion and cleanup
+            if wait $pid &>/dev/null; then
+                kill $waiter &>/dev/null 2>&1 || true
+                wait $waiter &>/dev/null 2>&1 || true
+                print_message "✅ RTSP connection successful!" "$GREEN"
+                return 0
+            else
+                kill $waiter &>/dev/null 2>&1 || true
+                wait $waiter &>/dev/null 2>&1 || true
+                print_message "❌ RTSP stream test failed" "$RED"
+                print_message "❓ Do you want to use this URL anyway? (y/n): " "$YELLOW" "nonewline"
+                read -r force_continue
+                
+                if [[ $force_continue == "y" ]]; then
+                    print_message "⚠️ Continuing with untested RTSP URL" "$YELLOW"
+                    return 0
+                fi
+            fi
+        fi
+    else
+        print_message "❌ Invalid RTSP URL format" "$RED"
     fi
     return 1
 }
@@ -529,7 +578,7 @@ configure_rtsp_stream() {
     while true; do
         print_message "\n🎥 RTSP Stream Configuration" "$GREEN"
         print_message "Configure primary RTSP stream. Additional streams can be added later via web interface at Audio Capture Settings." "$YELLOW"
-        print_message "Enter RTSP URL (format: rtsp://user:password@address/path) or 'b' to go back: " "$YELLOW" "nonewline"
+        print_message "Enter RTSP URL (format: rtsp://user:password@address:port/path) or 'b' to go back: " "$YELLOW" "nonewline"
         read -r RTSP_URL
 
         if [ "$RTSP_URL" = "b" ]; then
@@ -1028,6 +1077,7 @@ check_install_package "ffmpeg"
 check_install_package "bc"
 check_install_package "jq"
 check_install_package "apache2-utils"
+check_install_package "netcat-openbsd"
 
 # Pull Docker image
 pull_docker_image
