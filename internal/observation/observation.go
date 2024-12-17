@@ -26,7 +26,7 @@ func ParseSpeciesString(species string) (string, string, string) {
 
 // New creates and returns a new Note with the provided parameters and current date and time.
 // It uses the configuration and parsing functions to set the appropriate fields.
-func New(settings *conf.Settings, beginTime, endTime float64, species string, confidence float64, source string, clipName string, elapsedTime time.Duration) datastore.Note {
+func New(settings *conf.Settings, beginTime, endTime time.Time, species string, confidence float64, source string, clipName string, elapsedTime time.Duration) datastore.Note {
 	// Parse the species string to get the scientific name, common name, and species code.
 	scientificName, commonName, speciesCode := ParseSpeciesString(species)
 
@@ -45,12 +45,12 @@ func New(settings *conf.Settings, beginTime, endTime float64, species string, co
 
 	// Return a new Note struct populated with the provided parameters as well as the current date and time.
 	return datastore.Note{
-		SourceNode: settings.Main.Name, // From the provided configuration settings.
-		Date:       date,               // Use ISO 8601 date format.
-		Time:       time,               // Use 24-hour time format.
-		Source:     audioSource,        // From the provided configuration settings.
-		//BeginTime:      beginTime,                    // Start time of the observation.
-		//EndTime:        endTime,                      // End time of the observation.
+		SourceNode:     settings.Main.Name,           // From the provided configuration settings.
+		Date:           date,                         // Use ISO 8601 date format.
+		Time:           time,                         // Use 24-hour time format.
+		Source:         audioSource,                  // From the provided configuration settings.
+		BeginTime:      beginTime,                    // Start time of the observation.
+		EndTime:        endTime,                      // End time of the observation.
 		SpeciesCode:    speciesCode,                  // Parsed species code.
 		ScientificName: scientificName,               // Parsed scientific name of the species.
 		CommonName:     commonName,                   // Parsed common name of the species.

@@ -155,6 +155,7 @@ func (p *Processor) startDetectionProcessor() {
 // with new or higher-confidence instances and setting an appropriate flush deadline.
 func (p *Processor) processDetections(item queue.Results) {
 	// Delay before a detection is considered final and is flushed.
+	// TODO: make this configurable
 	const delay = 15 * time.Second
 
 	// processResults() returns a slice of detections, we iterate through each and process them
@@ -290,7 +291,10 @@ func (p *Processor) processResults(item queue.Results) []Detections {
 		// Create file name for audio clip
 		clipName := p.generateClipName(scientificName, result.Confidence)
 
-		beginTime, endTime := 0.0, 0.0
+		// set begin and end time for note
+		// TODO: adjust end time based on detection pending delay
+		beginTime, endTime := item.StartTime, item.StartTime.Add(15*time.Second)
+
 		note := observation.New(p.Settings, beginTime, endTime, result.Species, float64(result.Confidence), item.Source, clipName, item.ElapsedTime)
 
 		// Detection passed all filters, process it

@@ -65,7 +65,7 @@ func (bn *BirdNET) Predict(sample [][]float32) ([]datastore.Results, error) {
 
 // AnalyzeAudio processes audio data in chunks and predicts species using the BirdNET model.
 // It returns a slice of observations with the identified species and their confidence levels.
-func (bn *BirdNET) AnalyzeAudio(chunks [][]float32) ([]datastore.Note, error) {
+/*func (bn *BirdNET) AnalyzeAudio(chunks [][]float32) ([]datastore.Note, error) {
 	var observations []datastore.Note
 	startTime := time.Now()
 	predStart := 0.0
@@ -84,21 +84,25 @@ func (bn *BirdNET) AnalyzeAudio(chunks [][]float32) ([]datastore.Note, error) {
 
 	fmt.Printf("\r\033[KAnalysis completed in %s\n", FormatDuration(time.Since(startTime)))
 	return observations, nil
-}
+}*/
 
 // processChunk handles the prediction for a single chunk of audio data.
-func (bn *BirdNET) ProcessChunk(chunk []float32, predStart float64) ([]datastore.Note, error) {
+func (bn *BirdNET) ProcessChunk(chunk []float32, predStart time.Time) ([]datastore.Note, error) {
 	results, err := bn.Predict([][]float32{chunk})
 	if err != nil {
 		return nil, fmt.Errorf("prediction failed: %w", err)
 	}
+
+	// calculate predEnd time based on settings.BirdNET.Overlap
+	predEnd := predStart.Add(time.Duration((3.0 - bn.Settings.BirdNET.Overlap) * float64(time.Second)))
 
 	var source = ""
 	var clipName = ""
 
 	var notes []datastore.Note
 	for _, result := range results {
-		note := observation.New(bn.Settings, predStart, predStart+3.0, result.Species, float64(result.Confidence), source, clipName, 0)
+		// TODO: adjust end time based on overlap
+		note := observation.New(bn.Settings, predStart, predEnd, result.Species, float64(result.Confidence), source, clipName, 0)
 		notes = append(notes, note)
 	}
 	return notes, nil

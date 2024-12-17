@@ -49,6 +49,9 @@ func FileAnalysis(settings *conf.Settings) error {
 	startTime := time.Now()
 	chunkCount := 0
 
+	// Lets set predStart to 0 time
+	predStart := time.Time{}
+
 	// Process audio chunks as they're read
 	err = myaudio.ReadAudioFileBuffered(settings, func(chunk []float32) error {
 		chunkCount++
@@ -57,11 +60,16 @@ func FileAnalysis(settings *conf.Settings) error {
 			totalChunks,
 			birdnet.EstimateTimeRemaining(startTime, chunkCount, totalChunks))
 
-		notes, err := bn.ProcessChunk(chunk, float64(chunkCount-1)*(3-settings.BirdNET.Overlap))
+		//notes, err := bn.ProcessChunk(chunk, float64(chunkCount-1)*(3-settings.BirdNET.Overlap))
+		notes, err := bn.ProcessChunk(chunk, predStart)
 		if err != nil {
 			return err
 		}
 		allNotes = append(allNotes, notes...)
+
+		// advance predStart by 3 seconds - overlap
+		predStart = predStart.Add(time.Duration((3.0 - bn.Settings.BirdNET.Overlap) * float64(time.Second)))
+
 		return nil
 	})
 
