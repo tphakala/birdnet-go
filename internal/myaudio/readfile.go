@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
@@ -12,6 +13,67 @@ import (
 
 // AudioChunkCallback is a function type that processes audio chunks
 type AudioChunkCallback func([]float32) error
+
+// GetAudioInfo returns basic information about the audio file
+type AudioInfo struct {
+	SampleRate   int
+	TotalSamples int
+	NumChannels  int
+	BitDepth     int
+}
+
+// GetTotalChunks calculates the total number of chunks for a given audio file
+func GetTotalChunks(sampleRate, totalSamples int, overlap float64) int {
+	chunkSamples := 3 * sampleRate                          // samples in 3 seconds
+	stepSamples := int((3 - overlap) * float64(sampleRate)) // samples per step based on overlap
+
+	if stepSamples <= 0 {
+		return 0
+	}
+
+	// Calculate total chunks including partial chunks, rounding up
+	return (totalSamples - chunkSamples + stepSamples + (stepSamples - 1)) / stepSamples
+}
+
+func GetAudioInfo(filePath string) (AudioInfo, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return AudioInfo{}, err
+	}
+	defer file.Close()
+
+	// Get file extension
+	ext := filepath.Ext(filePath)
+
+	switch ext {
+	case ".wav":
+		decoder := wav.NewDecoder(file)
+		decoder.ReadInfo()
+		if !decoder.IsValidFile() {
+			return AudioInfo{}, errors.New("input is not a valid WAV audio file")
+		}
+
+		// Get file size in bytes
+		fileInfo, err := file.Stat()
+		if err != nil {
+			return AudioInfo{}, err
+		}
+
+		// Calculate total samples
+		bytesPerSample := int(decoder.BitDepth / 8)
+		totalSamples := int(fileInfo.Size()) / bytesPerSample / int(decoder.NumChans)
+
+		return AudioInfo{
+			SampleRate:   int(decoder.SampleRate),
+			TotalSamples: totalSamples,
+			NumChannels:  int(decoder.NumChans),
+			BitDepth:     int(decoder.BitDepth),
+		}, nil
+
+	default:
+		return AudioInfo{}, fmt.Errorf("unsupported audio format: %s", ext)
+	}
+}
 
 // ReadAudioFileBuffered reads and processes audio data in chunks
 func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback) error {

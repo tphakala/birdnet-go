@@ -32,6 +32,19 @@ func FileAnalysis(settings *conf.Settings) error {
 		return fmt.Errorf("the path is a directory, not a file")
 	}
 
+	// Get audio file information
+	audioInfo, err := myaudio.GetAudioInfo(settings.Input.Path)
+	if err != nil {
+		return fmt.Errorf("error getting audio info: %w", err)
+	}
+
+	// Calculate total chunks
+	totalChunks := myaudio.GetTotalChunks(
+		audioInfo.SampleRate,
+		audioInfo.TotalSamples,
+		settings.BirdNET.Overlap,
+	)
+
 	var allNotes []datastore.Note
 	startTime := time.Now()
 	chunkCount := 0
@@ -39,10 +52,12 @@ func FileAnalysis(settings *conf.Settings) error {
 	// Process audio chunks as they're read
 	err = myaudio.ReadAudioFileBuffered(settings, func(chunk []float32) error {
 		chunkCount++
-		fmt.Printf("\r\033[KAnalyzing chunk %d %s", chunkCount,
-			birdnet.EstimateTimeRemaining(startTime, chunkCount, int(fileInfo.Size()/48000/3))) // Rough estimation
+		fmt.Printf("\r\033[KAnalyzing chunk %d/%d %s",
+			chunkCount,
+			totalChunks,
+			birdnet.EstimateTimeRemaining(startTime, chunkCount, totalChunks))
 
-		notes, err := bn.ProcessChunk(chunk, float64(chunkCount-1)*3.0)
+		notes, err := bn.ProcessChunk(chunk, float64(chunkCount-1)*(3-settings.BirdNET.Overlap))
 		if err != nil {
 			return err
 		}
@@ -53,6 +68,9 @@ func FileAnalysis(settings *conf.Settings) error {
 	if err != nil {
 		return fmt.Errorf("error processing audio: %w", err)
 	}
+
+	// Add a newline to the console
+	fmt.Println()
 
 	// Prepare the output file path if OutputDir is specified in the configuration.
 	var outputFile string
