@@ -45,6 +45,9 @@ func FileAnalysis(settings *conf.Settings) error {
 		settings.BirdNET.Overlap,
 	)
 
+	// Calculate audio duration
+	duration := time.Duration(float64(audioInfo.TotalSamples) / float64(audioInfo.SampleRate) * float64(time.Second))
+
 	var allNotes []datastore.Note
 	startTime := time.Now()
 	chunkCount := 0
@@ -55,7 +58,8 @@ func FileAnalysis(settings *conf.Settings) error {
 	// Process audio chunks as they're read
 	err = myaudio.ReadAudioFileBuffered(settings, func(chunk []float32) error {
 		chunkCount++
-		fmt.Printf("\r\033[KAnalyzing chunk %d/%d %s",
+		fmt.Printf("\r\033[KAudio length: %s | Analyzing chunk %d/%d %s",
+			duration.Round(time.Second),
 			chunkCount,
 			totalChunks,
 			birdnet.EstimateTimeRemaining(startTime, chunkCount, totalChunks))
@@ -77,8 +81,10 @@ func FileAnalysis(settings *conf.Settings) error {
 		return fmt.Errorf("error processing audio: %w", err)
 	}
 
-	// Show total time taken for analysis
-	fmt.Printf("\r\033[KAnalysis completed in %s\n", birdnet.FormatDuration(time.Since(startTime)))
+	// Show total time taken for analysis, including audio length
+	fmt.Printf("\r\033[KAudio length: %s | Analysis completed in %s\n",
+		duration.Round(time.Second),
+		birdnet.FormatDuration(time.Since(startTime)))
 
 	// Add a newline to the console
 	fmt.Println()
