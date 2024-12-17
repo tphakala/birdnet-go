@@ -10,20 +10,23 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// Read 48000 sample rate WAV file into 3 second chunks
-func ReadAudioFile(settings *conf.Settings) ([][]float32, error) {
+// AudioChunkCallback is a function type that processes audio chunks
+type AudioChunkCallback func([]float32) error
+
+// ReadAudioFileBuffered reads and processes audio data in chunks
+func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback) error {
 	fmt.Print("- Reading audio data")
 
 	file, err := os.Open(settings.Input.Path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer file.Close()
 
 	decoder := wav.NewDecoder(file)
 	decoder.ReadInfo()
 	if !decoder.IsValidFile() {
-		return nil, errors.New("input is not a valid WAV audio file")
+		return errors.New("input is not a valid WAV audio file")
 	}
 
 	if settings.Debug {
@@ -52,48 +55,50 @@ func ReadAudioFile(settings *conf.Settings) ([][]float32, error) {
 	case 32:
 		divisor = 2147483648.0
 	default:
-		return nil, errors.New("unsupported audio file bit depth")
+		return errors.New("unsupported audio file bit depth")
 	}
 
 	step := int((3 - settings.BirdNET.Overlap) * conf.SampleRate)
 	minLenSamples := int(1.5 * conf.SampleRate)
 	secondsSamples := int(3 * conf.SampleRate)
 
-	var chunks [][]float32
 	var currentChunk []float32
-
-	buf := &audio.IntBuffer{Data: make([]int, step), Format: &audio.Format{SampleRate: int(conf.SampleRate), NumChannels: conf.NumChannels}}
+	// Use a smaller buffer size, e.g., 1MB worth of samples
+	bufferSize := 262144 // Adjust this value based on your needs
+	buf := &audio.IntBuffer{
+		Data:   make([]int, bufferSize),
+		Format: &audio.Format{SampleRate: int(conf.SampleRate), NumChannels: conf.NumChannels},
+	}
 
 	for {
 		n, err := decoder.PCMBuffer(buf)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
-		// If no data is read, we've reached the end of the file
 		if n == 0 {
 			break
 		}
 
 		var floatChunk []float32
 		for _, sample := range buf.Data[:n] {
-			// Convert sample from int to float32 type
 			floatChunk = append(floatChunk, float32(sample)/divisor)
 		}
 
-		// Perform resampling if needed
 		if doResample {
-			var err error
 			floatChunk, err = ResampleAudio(floatChunk, sourceSampleRate, conf.SampleRate)
 			if err != nil {
-				return nil, fmt.Errorf("error resampling audio: %w", err)
+				return fmt.Errorf("error resampling audio: %w", err)
 			}
 		}
 
 		currentChunk = append(currentChunk, floatChunk...)
 
-		if len(currentChunk) >= secondsSamples {
-			chunks = append(chunks, currentChunk[:secondsSamples])
+		// Process complete 3-second chunks
+		for len(currentChunk) >= secondsSamples {
+			if err := callback(currentChunk[:secondsSamples]); err != nil {
+				return err
+			}
 			currentChunk = currentChunk[step:]
 		}
 	}
@@ -104,8 +109,10 @@ func ReadAudioFile(settings *conf.Settings) ([][]float32, error) {
 			padding := make([]float32, secondsSamples-len(currentChunk))
 			currentChunk = append(currentChunk, padding...)
 		}
-		chunks = append(chunks, currentChunk)
+		if err := callback(currentChunk); err != nil {
+			return err
+		}
 	}
 
-	return chunks, nil
+	return nil
 }
