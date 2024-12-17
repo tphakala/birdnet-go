@@ -2,6 +2,7 @@ package myaudio
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -57,7 +58,7 @@ func readFLACBuffered(file *os.File, settings *conf.Settings, callback AudioChun
 	// Process FLAC frames
 	for {
 		frame, err := decoder.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
 			return err
