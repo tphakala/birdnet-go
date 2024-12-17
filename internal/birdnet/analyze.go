@@ -82,7 +82,7 @@ func (bn *BirdNET) AnalyzeAudio(chunks [][]float32) ([]datastore.Note, error) {
 		predStart += 3.0 - bn.Settings.BirdNET.Overlap // Adjust for overlap.
 	}
 
-	fmt.Printf("\r\033[KAnalysis completed in %s\n", formatDuration(time.Since(startTime)))
+	fmt.Printf("\r\033[KAnalysis completed in %s\n", FormatDuration(time.Since(startTime)))
 	return observations, nil
 }
 
@@ -129,22 +129,24 @@ func pairLabelsAndConfidence(labels []string, preds []float32) ([]datastore.Resu
 	return results, nil
 }
 
-// Function to format duration in a readable way
-func formatDuration(d time.Duration) string {
+// FormatDuration formats duration in a human-readable way based on the total time
+func FormatDuration(d time.Duration) string {
 	hours := int(d.Hours())
-	minutes := int(d.Minutes()) % 60 // modulus to get remainder minutes after hours
-	seconds := int(d.Seconds()) % 60 // modulus to get remainder seconds after minutes
+	minutes := int(d.Minutes()) % 60
+	seconds := int(d.Seconds()) % 60
+	milliseconds := int(d.Milliseconds()) % 1000
 
-	if hours >= 1 {
-		return fmt.Sprintf("%d hour(s) %d minute(s)", hours, minutes)
-	} else if minutes >= 1 {
-		return fmt.Sprintf("%d minute(s) %d second(s)", minutes, seconds)
-	} else {
-		return fmt.Sprintf("%d second(s)", seconds)
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm %ds", hours, minutes, seconds)
+	} else if minutes > 0 {
+		return fmt.Sprintf("%dm %ds", minutes, seconds)
+	} else if seconds > 0 {
+		return fmt.Sprintf("%d.%03ds", seconds, milliseconds)
 	}
+	return fmt.Sprintf("%dms", milliseconds)
 }
 
-// estimateTimeRemaining estimates the time remaining for processing.
+// Update EstimateTimeRemaining to use the new format
 func EstimateTimeRemaining(start time.Time, current, total int) string {
 	if current == 0 {
 		return "Estimating time..."
@@ -152,7 +154,7 @@ func EstimateTimeRemaining(start time.Time, current, total int) string {
 	elapsed := time.Since(start)
 	estimatedTotal := elapsed / time.Duration(current) * time.Duration(total)
 	remaining := estimatedTotal - elapsed
-	return fmt.Sprintf("(Estimated time remaining: %s)", formatDuration(remaining))
+	return fmt.Sprintf("(Estimated time remaining: %s)", FormatDuration(remaining))
 }
 
 // extractPredictions extracts prediction results from a TensorFlow Lite tensor.
