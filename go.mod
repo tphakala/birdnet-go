@@ -1,6 +1,6 @@
 module github.com/tphakala/birdnet-go
 
-go 1.22.8
+go 1.23.2
 
 require (
 	cgt.name/pkg/go-mwclient v1.3.0
@@ -22,7 +22,7 @@ require (
 	github.com/smallnest/ringbuffer v0.0.0-20230728150354-35801fa39d0e
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.19.0
-	github.com/tphakala/flac v0.0.0-20171003200620-9a6fb92396d1
+	github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3
 	github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e
 	golang.org/x/crypto v0.28.0
 	golang.org/x/net v0.30.0
@@ -86,9 +86,9 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
-	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
+	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67 // indirect
 	golang.org/x/oauth2 v0.23.0
-	golang.org/x/sync v0.8.0 // indirect
+	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.26.0 // indirect
 	golang.org/x/time v0.7.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
