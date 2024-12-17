@@ -69,6 +69,9 @@ func FileAnalysis(settings *conf.Settings) error {
 		return fmt.Errorf("error processing audio: %w", err)
 	}
 
+	// Show total time taken for analysis
+	fmt.Printf("\r\033[KAnalysis completed in %s\n", birdnet.FormatDuration(time.Since(startTime)))
+
 	// Add a newline to the console
 	fmt.Println()
 
