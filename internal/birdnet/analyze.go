@@ -71,9 +71,9 @@ func (bn *BirdNET) AnalyzeAudio(chunks [][]float32) ([]datastore.Note, error) {
 	predStart := 0.0
 
 	for idx, chunk := range chunks {
-		fmt.Printf("\r\033[KAnalyzing chunk [%d/%d] %s", idx+1, len(chunks), estimateTimeRemaining(startTime, idx, len(chunks)))
+		fmt.Printf("\r\033[KAnalyzing chunk [%d/%d] %s", idx+1, len(chunks), EstimateTimeRemaining(startTime, idx, len(chunks)))
 
-		chunkResults, err := bn.processChunk(chunk, predStart)
+		chunkResults, err := bn.ProcessChunk(chunk, predStart)
 		if err != nil {
 			return nil, err
 		}
@@ -87,7 +87,7 @@ func (bn *BirdNET) AnalyzeAudio(chunks [][]float32) ([]datastore.Note, error) {
 }
 
 // processChunk handles the prediction for a single chunk of audio data.
-func (bn *BirdNET) processChunk(chunk []float32, predStart float64) ([]datastore.Note, error) {
+func (bn *BirdNET) ProcessChunk(chunk []float32, predStart float64) ([]datastore.Note, error) {
 	results, err := bn.Predict([][]float32{chunk})
 	if err != nil {
 		return nil, fmt.Errorf("prediction failed: %w", err)
@@ -145,7 +145,7 @@ func formatDuration(d time.Duration) string {
 }
 
 // estimateTimeRemaining estimates the time remaining for processing.
-func estimateTimeRemaining(start time.Time, current, total int) string {
+func EstimateTimeRemaining(start time.Time, current, total int) string {
 	if current == 0 {
 		return "Estimating time..."
 	}

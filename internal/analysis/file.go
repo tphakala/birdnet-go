@@ -2,12 +2,13 @@ package analysis
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observation"
 )
@@ -31,18 +32,26 @@ func FileAnalysis(settings *conf.Settings) error {
 		return fmt.Errorf("the path is a directory, not a file")
 	}
 
-	// Load and analyze the input audio file.
-	audioData, err := myaudio.ReadAudioFile(settings)
-	if err != nil {
-		// Use log.Fatalf to log the error and exit the program.
-		log.Fatalf("error while reading input audio: %v", err)
-	}
+	var allNotes []datastore.Note
+	startTime := time.Now()
+	chunkCount := 0
 
-	// Analyze the loaded audio data for bird sounds.
-	notes, err := bn.AnalyzeAudio(audioData)
+	// Process audio chunks as they're read
+	err = myaudio.ReadAudioFileBuffered(settings, func(chunk []float32) error {
+		chunkCount++
+		fmt.Printf("\r\033[KAnalyzing chunk %d %s", chunkCount,
+			birdnet.EstimateTimeRemaining(startTime, chunkCount, int(fileInfo.Size()/48000/3))) // Rough estimation
+
+		notes, err := bn.ProcessChunk(chunk, float64(chunkCount-1)*3.0)
+		if err != nil {
+			return err
+		}
+		allNotes = append(allNotes, notes...)
+		return nil
+	})
+
 	if err != nil {
-		// Corrected typo "eailed" to "failed" and used log.Fatalf to log the error and exit.
-		log.Fatalf("failed to analyze audio data: %v", err)
+		return fmt.Errorf("error processing audio: %w", err)
 	}
 
 	// Prepare the output file path if OutputDir is specified in the configuration.
@@ -55,14 +64,14 @@ func FileAnalysis(settings *conf.Settings) error {
 	// Output the notes based on the desired output type in the configuration.
 	// If OutputType is not specified or if it's set to "table", output as a table format.
 	if settings.Output.File.Type == "" || settings.Output.File.Type == "table" {
-		if err := observation.WriteNotesTable(settings, notes, outputFile); err != nil {
-			log.Fatalf("failed to write notes table: %v", err)
+		if err := observation.WriteNotesTable(settings, allNotes, outputFile); err != nil {
+			return fmt.Errorf("failed to write notes table: %w", err)
 		}
 	}
 	// If OutputType is set to "csv", output as CSV format.
 	if settings.Output.File.Type == "csv" {
-		if err := observation.WriteNotesCsv(settings, notes, outputFile); err != nil {
-			log.Fatalf("failed to write notes CSV: %v", err)
+		if err := observation.WriteNotesCsv(settings, allNotes, outputFile); err != nil {
+			return fmt.Errorf("failed to write notes CSV: %w", err)
 		}
 	}
 	return nil
