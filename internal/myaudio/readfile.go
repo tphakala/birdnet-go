@@ -125,8 +125,12 @@ func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback)
 	secondsSamples := int(3 * conf.SampleRate)
 
 	var currentChunk []float32
-	// Use a smaller buffer size, e.g., 1MB worth of samples
-	bufferSize := 262144 // Adjust this value based on your needs
+	// Calculate buffer size for 8 complete chunks of audio
+	// One chunk = 3 seconds = 48000 * 3 = 144000 samples
+	// Using 8 chunks worth of data = 1,152,000 samples
+	// This provides 24 seconds of buffered audio
+	// Memory usage: 1,152,000 samples * 2 bytes = 2.3MB
+	bufferSize := 1_152_000
 	buf := &audio.IntBuffer{
 		Data:   make([]int, bufferSize),
 		Format: &audio.Format{SampleRate: int(conf.SampleRate), NumChannels: conf.NumChannels},
