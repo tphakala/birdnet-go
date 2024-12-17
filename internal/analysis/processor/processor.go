@@ -450,6 +450,8 @@ func (p *Processor) pendingDetectionsFlusher() {
 						}
 					}
 
+					log.Printf("Approving detection of %s from source %s, matched %d/%d times\n", species, item.Source, item.Count, minDetections)
+
 					// Set the detection's begin time to the time it was first detected, this is
 					// where we start audio export for the detection.
 					item.Detection.Note.BeginTime = item.FirstDetected
@@ -459,6 +461,7 @@ func (p *Processor) pendingDetectionsFlusher() {
 					for _, action := range actionList {
 						workerQueue <- Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
 					}
+
 					// Detection is now processed, remove it from pending detections map.
 					delete(p.pendingDetections, species)
 
