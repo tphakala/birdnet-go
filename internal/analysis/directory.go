@@ -7,11 +7,20 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // DirectoryAnalysis processes all .wav files in the given directory for analysis.
 func DirectoryAnalysis(settings *conf.Settings) error {
+	// Initialize the BirdNET interpreter only if not already initialized
+	if bn == nil {
+		var err error
+		bn, err = birdnet.NewBirdNET(settings)
+		if err != nil {
+			return fmt.Errorf("failed to initialize BirdNET: %w", err)
+		}
+	}
 	analyzeFunc := func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			// Return the error to stop the walking process.
@@ -30,7 +39,7 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 		// Check for both .wav and .flac files
 		if strings.HasSuffix(strings.ToLower(d.Name()), ".wav") ||
 			strings.HasSuffix(strings.ToLower(d.Name()), ".flac") {
-			fmt.Println("Analyzing file:", path)
+
 			settings.Input.Path = path
 			if err := FileAnalysis(settings); err != nil {
 				// If FileAnalysis returns an error log it and continue
