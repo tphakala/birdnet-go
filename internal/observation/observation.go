@@ -72,6 +72,7 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 	// Determine the output destination based on the filename argument.
 	if filename == "" {
 		w = os.Stdout
+		fmt.Println()
 	} else {
 		// Ensure the filename has a .txt extension.
 		if !strings.HasSuffix(filename, ".txt") {
