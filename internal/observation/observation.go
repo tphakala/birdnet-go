@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
@@ -72,7 +73,6 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 	// Determine the output destination based on the filename argument.
 	if filename == "" {
 		w = os.Stdout
-		fmt.Println()
 	} else {
 		// Ensure the filename has a .txt extension.
 		if !strings.HasSuffix(filename, ".txt") {
@@ -86,6 +86,9 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 		defer file.Close() // Ensure the file is closed when the function exits.
 		w = file
 	}
+
+	// Add color functions
+	yellow := color.New(color.FgYellow)
 
 	// Write the header to the output destination.
 	header := "Selection\tView\tChannel\tBegin File\tBegin Time (s)\tEnd Time (s)\tLow Freq (Hz)\tHigh Freq (Hz)\tSpecies Code\tCommon Name\tConfidence\n"
@@ -115,7 +118,7 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 	if err != nil {
 		return fmt.Errorf("failed to write note: %w", err)
 	} else if filename != "" {
-		fmt.Println("Output written to", filename)
+		yellow.Println("📁 Output written to", filename)
 	}
 
 	// Return nil if the writing operation completes successfully.
