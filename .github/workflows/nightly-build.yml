@@ -2,17 +2,19 @@ name: BirdNET-Go Nightly Build
 
 on:
   schedule:
-    # Runs at 00:00 UTC every day
     - cron: '0 0 * * *'
-  # Optional: allow manual trigger
   workflow_dispatch:
+
+env:
+  ACTIONS_RUNNER_DEBUG: true
+  ACTIONS_STEP_DEBUG: true
 
 permissions:
   contents: write
   packages: write
 
 jobs:
-  build:
+  nightly:
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -22,51 +24,67 @@ jobs:
         exclude:
           - goarch: arm64
             goos: windows
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-  
-    - name: Build binaries
-      uses: tphakala/go-release-action@master
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        goos: ${{ matrix.goos }}
-        goarch: ${{ matrix.goarch }}
-        goversion: "https://dl.google.com/go/go1.23.3.linux-amd64.tar.gz"
-        md5sum: false
-        sha256sum: false
-        compress_assets: auto
-        build_command: make ${{ matrix.goos }}_${{ matrix.goarch }}
-        extra_files: libtensorflowlite_c.so
-        # Instead of attaching to a release, artifacts will be uploaded
-        project_path: "."
-        binary_name: "birdnet-go"
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  # docker-nightly:
-  #   runs-on: ubuntu-20.04
-  #   steps:
-  #   - name: Login to GitHub Container Registry
-  #     uses: docker/login-action@v3.0.0
-  #     with:
-  #       registry: ghcr.io
-  #       username: ${{ github.actor }}
-  #       password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          check-latest: true
 
-  #   - name: Generate downcase repository name
-  #     run: |
-  #       echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config
 
-  #   - name: Extract metadata for Docker
-  #     id: meta
-  #     uses: docker/metadata-action@v5.5.1
-  #     with:
-  #       images: ghcr.io/${{ env.REPO }}
-  #       tags: |
-  #         type=raw,value=nightly
-  #         type=raw,value=nightly-{{date 'YYYYMMDD'}}
+      - name: Build BirdNET-Go
+        run: |
+          # Build the application
+          make ${{ matrix.goos }}_${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
 
-  #   - name: Tag docker image with nightly version
-  #     run: |
-  #       docker buildx imagetools create -t ghcr.io/${{ env.REPO }}:nightly ghcr.io/${{ env.REPO }}:${{ github.sha }}
-  #       docker buildx imagetools create -t ghcr.io/${{ env.REPO }}:nightly-$(date +%Y%m%d) ghcr.io/${{ env.REPO }}:${{ github.sha }} 
+      - name: Create Release Artifacts
+        run: |
+          # Create artifacts directory
+          mkdir -p artifacts
+          
+          # Copy binary and any necessary files
+          cp bin/birdnet-go artifacts/
+          # cp /usr/lib/libtensorflow_c.so artifacts/
+          
+          # Create tarball
+          cd artifacts
+          tar czf ../birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz *
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+
+      # Optional: Create a GitHub release for tagged builds
+      - name: Create Release
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+          tag_name: nightly-${{ github.run_number }}
+          name: "Nightly Build ${{ github.run_number }}"
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete old releases
+        uses: dev-drprasad/delete-older-releases@v0.3.2
+        with:
+          keep_latest: 14
+          delete_tags: true
+          delete_tag_pattern: ^nightly-
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
