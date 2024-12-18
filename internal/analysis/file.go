@@ -13,13 +13,18 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observation"
 )
 
+var bn *birdnet.BirdNET
+
 // executeFileAnalysis conducts an analysis of an audio file and outputs the results.
 // It reads an audio file, analyzes it for bird sounds, and prints the results based on the provided configuration.
 func FileAnalysis(settings *conf.Settings) error {
-	// Initialize the BirdNET interpreter.
-	bn, err := birdnet.NewBirdNET(settings)
-	if err != nil {
-		return fmt.Errorf("failed to initialize BirdNET: %w", err)
+	// Initialize the BirdNET interpreter only if not already initialized
+	if bn == nil {
+		var err error
+		bn, err = birdnet.NewBirdNET(settings)
+		if err != nil {
+			return fmt.Errorf("failed to initialize BirdNET: %w", err)
+		}
 	}
 
 	fileInfo, err := os.Stat(settings.Input.Path)
@@ -85,9 +90,6 @@ func FileAnalysis(settings *conf.Settings) error {
 	fmt.Printf("\r\033[KAudio length: %s | Analysis completed in %s\n",
 		duration.Round(time.Second),
 		birdnet.FormatDuration(time.Since(startTime)))
-
-	// Add a newline to the console
-	fmt.Println()
 
 	// Prepare the output file path if OutputDir is specified in the configuration.
 	var outputFile string
