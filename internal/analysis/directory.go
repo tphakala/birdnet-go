@@ -27,7 +27,9 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 			return nil
 		}
 
-		if strings.HasSuffix(d.Name(), ".wav") {
+		// Check for both .wav and .flac files
+		if strings.HasSuffix(strings.ToLower(d.Name()), ".wav") ||
+			strings.HasSuffix(strings.ToLower(d.Name()), ".flac") {
 			fmt.Println("Analyzing file:", path)
 			settings.Input.Path = path
 			if err := FileAnalysis(settings); err != nil {
