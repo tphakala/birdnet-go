@@ -54,9 +54,25 @@ jobs:
           # Create artifacts directory
           mkdir -p artifacts
           
-          # Copy binary and any necessary files
-          cp bin/birdnet-go artifacts/
-          # cp /usr/lib/libtensorflow_c.so artifacts/
+          # Set binary name based on OS
+          BINARY_NAME=birdnet-go
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            BINARY_NAME=birdnet-go.exe
+          fi
+          
+          # Copy binary
+          cp bin/$BINARY_NAME artifacts/
+          
+          # Copy required library files based on OS and architecture
+          if [ "${{ matrix.goos }}" = "linux" ]; then
+            if [ "${{ matrix.goarch }}" = "amd64" ]; then
+              cp /usr/lib/libtensorflowlite_c.so artifacts/
+            elif [ "${{ matrix.goarch }}" = "arm64" ]; then
+              cp /usr/aarch64-linux-gnu/lib/libtensorflowlite_c.so artifacts/
+            fi
+          elif [ "${{ matrix.goos }}" = "windows" ]; then
+            cp /usr/x86_64-w64-mingw32/lib/tensorflowlite_c.dll artifacts/
+          fi
           
           # Create tarball
           cd artifacts
@@ -71,11 +87,17 @@ jobs:
       # Optional: Create a GitHub release for tagged builds
       - name: Create Release
         if: github.event_name == 'workflow_dispatch'
+        run: |
+          DATE=$(date +'%Y%m%d')
+          echo "RELEASE_DATE=$DATE" >> $GITHUB_ENV
+        
+      - name: Create GitHub Release
+        if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v1
         with:
           files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
-          tag_name: nightly-${{ github.run_number }}
-          name: "Nightly Build ${{ github.run_number }}"
+          tag_name: nightly-${{ env.RELEASE_DATE }}
+          name: "Nightly Build ${{ env.RELEASE_DATE }}"
           prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
