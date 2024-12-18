@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -57,17 +58,28 @@ func FileAnalysis(settings *conf.Settings) error {
 	startTime := time.Now()
 	chunkCount := 0
 
+	// Get filename and truncate if necessary (showing max 30 chars)
+	filename := filepath.Base(settings.Input.Path)
+	if len(filename) > 30 {
+		filename = filename[:27] + "..."
+	}
+
 	// Lets set predStart to 0 time
 	predStart := time.Time{}
+
+	// Add color functions
+	white := color.New(color.FgWhite)
+	yellow := color.New(color.FgYellow)
+	green := color.New(color.FgGreen)
 
 	// Process audio chunks as they're read
 	err = myaudio.ReadAudioFileBuffered(settings, func(chunk []float32) error {
 		chunkCount++
-		fmt.Printf("\r\033[KAudio length: %s | Analyzing chunk %d/%d %s",
-			duration.Round(time.Second),
-			chunkCount,
-			totalChunks,
-			birdnet.EstimateTimeRemaining(startTime, chunkCount, totalChunks))
+		fmt.Printf("\r\033[K") // Clear line
+		white.Printf("📄 %s [%s]", filename, duration.Round(time.Second))
+		fmt.Print(" | ")
+		yellow.Printf("🔍 Analyzing chunk %d/%d ", chunkCount, totalChunks)
+		fmt.Print(birdnet.EstimateTimeRemaining(startTime, chunkCount, totalChunks))
 
 		//notes, err := bn.ProcessChunk(chunk, float64(chunkCount-1)*(3-settings.BirdNET.Overlap))
 		notes, err := bn.ProcessChunk(chunk, predStart)
@@ -86,10 +98,11 @@ func FileAnalysis(settings *conf.Settings) error {
 		return fmt.Errorf("error processing audio: %w", err)
 	}
 
-	// Show total time taken for analysis, including audio length
-	fmt.Printf("\r\033[KAudio length: %s | Analysis completed in %s\n",
-		duration.Round(time.Second),
-		birdnet.FormatDuration(time.Since(startTime)))
+	// Show total time taken for analysis
+	fmt.Printf("\r\033[K") // Clear line
+	white.Printf("📄 %s [%s]", filename, duration.Round(time.Second))
+	fmt.Print(" | ")
+	green.Printf("✅ Analysis completed in %s\n", birdnet.FormatDuration(time.Since(startTime)))
 
 	// Prepare the output file path if OutputDir is specified in the configuration.
 	var outputFile string
