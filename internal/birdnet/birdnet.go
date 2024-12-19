@@ -7,7 +7,6 @@ import (
 	"bytes"
 	_ "embed" // Embedding data directly into the binary.
 	"fmt"
-	"log"
 	"os"
 	"runtime"
 	"strings"
@@ -131,10 +130,9 @@ func (bn *BirdNET) initializeModel() error {
 // getMetaModelData returns the appropriate meta model data based on the settings.
 func (bn *BirdNET) getMetaModelData() []byte {
 	if bn.Settings.BirdNET.RangeFilter.Model == "legacy" {
-		log.Printf("Using legacy range filter model")
+		fmt.Printf("⚠️ Using legacy range filter model")
 		return metaModelDataV1
 	}
-	log.Printf("Using latest range filter model")
 	return metaModelDataV2
 }
 
