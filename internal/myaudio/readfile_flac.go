@@ -14,7 +14,16 @@ import (
 func readFLACInfo(file *os.File) (AudioInfo, error) {
 	decoder, err := flac.NewDecoder(file)
 	if err != nil {
-		return AudioInfo{}, err
+		return AudioInfo{}, fmt.Errorf("invalid FLAC file: %w", err)
+	}
+
+	// Additional FLAC-specific validations
+	if decoder.BitsPerSample != 16 && decoder.BitsPerSample != 24 && decoder.BitsPerSample != 32 {
+		return AudioInfo{}, fmt.Errorf("unsupported bit depth: %d", decoder.BitsPerSample)
+	}
+
+	if decoder.NChannels != 1 && decoder.NChannels != 2 {
+		return AudioInfo{}, fmt.Errorf("unsupported number of channels: %d", decoder.NChannels)
 	}
 
 	return AudioInfo{

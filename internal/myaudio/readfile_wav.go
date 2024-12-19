@@ -13,8 +13,18 @@ import (
 func readWAVInfo(file *os.File) (AudioInfo, error) {
 	decoder := wav.NewDecoder(file)
 	decoder.ReadInfo()
+
 	if !decoder.IsValidFile() {
-		return AudioInfo{}, errors.New("input is not a valid WAV audio file")
+		return AudioInfo{}, errors.New("invalid WAV file format")
+	}
+
+	// Additional WAV-specific validations
+	if decoder.BitDepth != 16 && decoder.BitDepth != 24 && decoder.BitDepth != 32 {
+		return AudioInfo{}, fmt.Errorf("unsupported bit depth: %d", decoder.BitDepth)
+	}
+
+	if decoder.NumChans != 1 && decoder.NumChans != 2 {
+		return AudioInfo{}, fmt.Errorf("unsupported number of channels: %d", decoder.NumChans)
 	}
 
 	// Get file size in bytes
