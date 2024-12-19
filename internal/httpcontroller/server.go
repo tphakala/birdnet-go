@@ -57,8 +57,6 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 	// Configure an IP extractor
 	s.Echo.IPExtractor = echo.ExtractIPFromXFFHeader()
 
-	s.initLogger()
-
 	// Initialize SunCalc for calculating sun event times
 	s.SunCalc = suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
 
