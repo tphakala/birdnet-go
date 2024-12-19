@@ -113,7 +113,16 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 		if err != nil {
 			return err
 		}
-		allNotes = append(allNotes, notes...)
+
+		// Filter notes based on included species list
+		var filteredNotes []datastore.Note
+		for _, note := range notes {
+			if settings.IsSpeciesIncluded(note.ScientificName) {
+				filteredNotes = append(filteredNotes, note)
+			}
+		}
+
+		allNotes = append(allNotes, filteredNotes...)
 
 		// advance predStart by 3 seconds - overlap
 		predStart = predStart.Add(time.Duration((3.0 - bn.Settings.BirdNET.Overlap) * float64(time.Second)))
