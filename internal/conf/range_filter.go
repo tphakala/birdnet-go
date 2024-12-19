@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"strings"
 	"sync"
 	"time"
 )
@@ -27,12 +28,17 @@ func (s *Settings) GetIncludedSpecies() []string {
 	return speciesCopy
 }
 
-// IsSpeciesIncluded checks if a given species is in the included list of the RangeFilter
-func (s *Settings) IsSpeciesIncluded(species string) bool {
+// IsSpeciesIncluded checks if a given scientific name matches the scientific name part of any included species
+func (s *Settings) IsSpeciesIncluded(scientificName string) bool {
 	speciesListMutex.RLock()
 	defer speciesListMutex.RUnlock()
-	for _, s := range s.BirdNET.RangeFilter.Species {
-		if s == species {
+
+	// Add underscore to the scientific name to prevent partial matches
+	searchTerm := scientificName + "_"
+
+	for _, fullSpeciesString := range s.BirdNET.RangeFilter.Species {
+		// Check if the full species string starts with our search term
+		if strings.HasPrefix(fullSpeciesString, searchTerm) {
 			return true
 		}
 	}
