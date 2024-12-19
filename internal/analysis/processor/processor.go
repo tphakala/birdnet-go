@@ -133,11 +133,6 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		}
 	}
 
-	// Initialize included species list if it's empty
-	if len(p.Settings.BirdNET.RangeFilter.Species) == 0 {
-		p.updateIncludedSpecies(time.Now().Truncate(24 * time.Hour))
-	}
-
 	return p
 }
 
@@ -276,7 +271,8 @@ func (p *Processor) processResults(item queue.Results) []Detections {
 		}
 
 		// Match against location-based filter
-		if !p.Settings.IsSpeciesIncluded(result.Species) {
+		//if !p.Settings.IsSpeciesIncluded(result.Species) {
+		if !p.Settings.IsSpeciesIncluded(scientificName) {
 			if p.Settings.Debug {
 				log.Printf("Species not on included list: %s\n", commonName)
 			}
