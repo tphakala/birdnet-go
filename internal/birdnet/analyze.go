@@ -101,7 +101,6 @@ func (bn *BirdNET) ProcessChunk(chunk []float32, predStart time.Time) ([]datasto
 
 	var notes []datastore.Note
 	for _, result := range results {
-		// TODO: adjust end time based on overlap
 		note := observation.New(bn.Settings, predStart, predEnd, result.Species, float64(result.Confidence), source, clipName, 0)
 		notes = append(notes, note)
 	}
