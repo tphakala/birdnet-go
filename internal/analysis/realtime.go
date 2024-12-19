@@ -14,7 +14,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/analysis/queue"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
@@ -29,10 +28,9 @@ var audioLevelChan = make(chan myaudio.AudioLevelData, 100)
 
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 func RealtimeAnalysis(settings *conf.Settings) error {
-	// Initialize the BirdNET interpreter.
-	bn, err := birdnet.NewBirdNET(settings)
-	if err != nil {
-		return fmt.Errorf("failed to initialize BirdNET: %w", err)
+	// Initialize BirdNET interpreter
+	if err := initializeBirdNET(settings); err != nil {
+		return err
 	}
 
 	// Initialize occurrence monitor to filter out repeated observations.
