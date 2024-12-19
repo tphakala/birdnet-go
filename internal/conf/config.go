@@ -355,10 +355,12 @@ func Load() (*Settings, error) {
 	}
 
 	// Log the loaded species settings for debugging
-	log.Printf("Loaded Species Settings: Include: %v, Exclude: %v, Threshold: %v",
-		settings.Realtime.Species.Include,
-		settings.Realtime.Species.Exclude,
-		settings.Realtime.Species.Threshold)
+	/*
+		log.Printf("Loaded Species Settings: Include: %v, Exclude: %v, Threshold: %v",
+			settings.Realtime.Species.Include,
+			settings.Realtime.Species.Exclude,
+			settings.Realtime.Species.Threshold)
+	*/
 
 	// Save settings instance
 	settingsInstance = settings
