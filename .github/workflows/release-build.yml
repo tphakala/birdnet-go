@@ -1,4 +1,4 @@
-name: Build Binaries for BirdNET-Go release
+name: BirdNET-Go Release Build
 
 on:
   release:
@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   build:
+    if: ${{ !contains(github.ref, 'nightly') }}
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
