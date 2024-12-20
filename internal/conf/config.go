@@ -59,14 +59,16 @@ type AudioSettings struct {
 	}
 	Equalizer EqualizerSettings // equalizer settings
 }
+type Thumbnails struct {
+	Debug   bool // true to enable debug mode
+	Summary bool // show thumbnails on summary table
+	Recent  bool // show thumbnails on recent table
+}
 
 // Dashboard contains settings for the web dashboard.
 type Dashboard struct {
-	Thumbnails struct {
-		Summary bool // show thumbnails on summary table
-		Recent  bool // show thumbnails on recent table
-	}
-	SummaryLimit int // limit for the number of species shown in the summary table
+	Thumbnails   Thumbnails // thumbnails settings
+	SummaryLimit int        // limit for the number of species shown in the summary table
 }
 
 // DynamicThresholdSettings contains settings for dynamic threshold adjustment.

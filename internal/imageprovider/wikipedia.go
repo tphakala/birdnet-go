@@ -4,17 +4,20 @@ package imageprovider
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"strings"
 
 	"cgt.name/pkg/go-mwclient"
 	"github.com/antonholmquist/jason"
 	"github.com/k3a/html2text"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"golang.org/x/net/html"
 )
 
 // wikiMediaProvider implements the ImageProvider interface for Wikipedia.
 type wikiMediaProvider struct {
 	client *mwclient.Client
+	debug  bool
 }
 
 // wikiMediaAuthor represents the author information for a Wikipedia image.
@@ -28,46 +31,83 @@ type wikiMediaAuthor struct {
 // NewWikiMediaProvider creates a new Wikipedia media provider.
 // It initializes a new mwclient for interacting with the Wikipedia API.
 func NewWikiMediaProvider() (*wikiMediaProvider, error) {
+	settings := conf.Setting()
 	client, err := mwclient.New("https://wikipedia.org/w/api.php", "BirdNET-Go")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create mwclient: %w", err)
 	}
 	return &wikiMediaProvider{
 		client: client,
+		debug:  settings.Realtime.Dashboard.Thumbnails.Debug,
 	}, nil
 }
 
 // queryAndGetFirstPage queries Wikipedia with given parameters and returns the first page hit.
 // It handles the API request and response parsing.
 func (l *wikiMediaProvider) queryAndGetFirstPage(params map[string]string) (*jason.Object, error) {
+	if l.debug {
+		log.Printf("Debug: Querying Wikipedia API with params: %v", params)
+	}
+
 	resp, err := l.client.Get(params)
 	if err != nil {
+		if l.debug {
+			log.Printf("Debug: Wikipedia API query failed: %v", err)
+		}
 		return nil, fmt.Errorf("failed to query Wikipedia: %w", err)
 	}
 
 	pages, err := resp.GetObjectArray("query", "pages")
 	if err != nil {
+		if l.debug {
+			log.Printf("Debug: Failed to parse Wikipedia response pages: %v", err)
+		}
 		return nil, fmt.Errorf("failed to get pages from response: %w", err)
 	}
 
 	if len(pages) == 0 {
+		if l.debug {
+			log.Printf("Debug: No pages found in Wikipedia response for params: %v", params)
+		}
 		return nil, fmt.Errorf("no pages found for request: %v", params)
 	}
 
+	if l.debug {
+		log.Printf("Debug: Successfully retrieved Wikipedia page")
+	}
 	return pages[0], nil
 }
 
 // fetch retrieves the bird image for a given scientific name.
 // It queries for the thumbnail and author information, then constructs a BirdImage.
 func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
+	if l.debug {
+		log.Printf("Debug: Starting Wikipedia fetch for species: %s", scientificName)
+	}
+
 	thumbnailURL, thumbnailSourceFile, err := l.queryThumbnail(scientificName)
 	if err != nil {
+		if l.debug {
+			log.Printf("Debug: Failed to fetch thumbnail for %s: %v", scientificName, err)
+		}
 		return BirdImage{}, fmt.Errorf("failed to query thumbnail of bird: %s : %w", scientificName, err)
+	}
+
+	if l.debug {
+		log.Printf("Debug: Successfully retrieved thumbnail URL: %s", thumbnailURL)
+		log.Printf("Debug: Thumbnail source file: %s", thumbnailSourceFile)
 	}
 
 	authorInfo, err := l.queryAuthorInfo(thumbnailSourceFile)
 	if err != nil {
+		if l.debug {
+			log.Printf("Debug: Failed to fetch author info for %s: %v", scientificName, err)
+		}
 		return BirdImage{}, fmt.Errorf("failed to query thumbnail credit of bird: %s : %w", scientificName, err)
+	}
+
+	if l.debug {
+		log.Printf("Debug: Successfully retrieved author info for %s - Author: %s", scientificName, authorInfo.name)
 	}
 
 	return BirdImage{
@@ -82,6 +122,10 @@ func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
 // queryThumbnail queries Wikipedia for the thumbnail image of the given scientific name.
 // It returns the URL and file name of the thumbnail.
 func (l *wikiMediaProvider) queryThumbnail(scientificName string) (url, fileName string, err error) {
+	if l.debug {
+		log.Printf("Debug: Querying thumbnail for species: %s", scientificName)
+	}
+
 	params := map[string]string{
 		"action":      "query",
 		"prop":        "pageimages",
@@ -94,17 +138,30 @@ func (l *wikiMediaProvider) queryThumbnail(scientificName string) (url, fileName
 
 	page, err := l.queryAndGetFirstPage(params)
 	if err != nil {
+		if l.debug {
+			log.Printf("Debug: Failed to query thumbnail page: %v", err)
+		}
 		return "", "", fmt.Errorf("failed to query thumbnail: %w", err)
 	}
 
 	url, err = page.GetString("thumbnail", "source")
 	if err != nil {
+		if l.debug {
+			log.Printf("Debug: Failed to extract thumbnail URL: %v", err)
+		}
 		return "", "", fmt.Errorf("failed to get thumbnail URL: %w", err)
 	}
 
 	fileName, err = page.GetString("pageimage")
 	if err != nil {
+		if l.debug {
+			log.Printf("Debug: Failed to extract thumbnail filename: %v", err)
+		}
 		return "", "", fmt.Errorf("failed to get thumbnail file name: %w", err)
+	}
+
+	if l.debug {
+		log.Printf("Debug: Successfully retrieved thumbnail - URL: %s, File: %s", url, fileName)
 	}
 
 	return url, fileName, nil
@@ -113,6 +170,10 @@ func (l *wikiMediaProvider) queryThumbnail(scientificName string) (url, fileName
 // queryAuthorInfo queries Wikipedia for the author information of the given thumbnail URL.
 // It returns a wikiMediaAuthor struct containing the author and license information.
 func (l *wikiMediaProvider) queryAuthorInfo(thumbnailURL string) (*wikiMediaAuthor, error) {
+	if l.debug {
+		log.Printf("Debug: Querying author info for thumbnail: %s", thumbnailURL)
+	}
+
 	params := map[string]string{
 		"action":    "query",
 		"prop":      "imageinfo",
@@ -123,14 +184,27 @@ func (l *wikiMediaProvider) queryAuthorInfo(thumbnailURL string) (*wikiMediaAuth
 
 	page, err := l.queryAndGetFirstPage(params)
 	if err != nil {
+		if l.debug {
+			log.Printf("Debug: Failed to query author info page: %v", err)
+		}
 		return nil, fmt.Errorf("failed to query thumbnail: %w", err)
+	}
+
+	if l.debug {
+		log.Printf("Debug: Processing image info response")
 	}
 
 	imageInfo, err := page.GetObjectArray("imageinfo")
 	if err != nil {
+		if l.debug {
+			log.Printf("Debug: Failed to extract image info: %v", err)
+		}
 		return nil, fmt.Errorf("failed to get image info from response: %w", err)
 	}
 	if len(imageInfo) == 0 {
+		if l.debug {
+			log.Printf("Debug: No image info found for thumbnail: %s", thumbnailURL)
+		}
 		return nil, fmt.Errorf("no image info found for thumbnail URL: %s", thumbnailURL)
 	}
 
@@ -156,7 +230,14 @@ func (l *wikiMediaProvider) queryAuthorInfo(thumbnailURL string) (*wikiMediaAuth
 
 	href, text, err := extractArtistInfo(artistHref)
 	if err != nil {
+		if l.debug {
+			log.Printf("Debug: Failed to extract artist info from HTML: %v", err)
+		}
 		return nil, fmt.Errorf("failed to extract link information: %w", err)
+	}
+
+	if l.debug {
+		log.Printf("Debug: Successfully extracted author info - Name: %s, URL: %s", text, href)
 	}
 
 	return &wikiMediaAuthor{
