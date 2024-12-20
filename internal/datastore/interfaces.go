@@ -191,14 +191,15 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 	// Get the number of species to report from the dashboard settings
 	reportCount := conf.Setting().Realtime.Dashboard.SummaryLimit
 
-	err := ds.DB.Table("notes").
-		Select("common_name", "scientific_name", "COUNT(*) as count").
+	// First, get the count and common names
+	query := ds.DB.Table("notes").
+		Select("common_name, MAX(scientific_name) as scientific_name, COUNT(*) as count").
 		Where("date = ? AND confidence >= ?", selectedDate, minConfidenceNormalized).
 		Group("common_name").
 		Order("count DESC").
-		Limit(reportCount).
-		Scan(&results).Error
+		Limit(reportCount)
 
+	err := query.Scan(&results).Error
 	return results, err
 }
 
