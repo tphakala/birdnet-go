@@ -7,6 +7,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"github.com/tphakala/birdnet-go/internal/telemetry/metrics"
 )
@@ -32,6 +33,7 @@ type BirdImageCache struct {
 	birdImageProvider    ImageProvider
 	nonBirdImageProvider ImageProvider
 	metrics              *metrics.ImageProviderMetrics
+	debug                bool // Add debug flag
 }
 
 // emptyImageProvider is an ImageProvider that always returns an empty BirdImage.
@@ -53,10 +55,12 @@ func (c *BirdImageCache) SetImageProvider(provider ImageProvider) {
 
 // initCache initializes a new BirdImageCache with the given ImageProvider.
 func InitCache(e ImageProvider, t *telemetry.Metrics) *BirdImageCache {
+	settings := conf.Setting()
 	return &BirdImageCache{
 		birdImageProvider:    e,
 		nonBirdImageProvider: &emptyImageProvider{},
 		metrics:              t.ImageProvider,
+		debug:                settings.Realtime.Dashboard.Thumbnails.Debug,
 	}
 }
 
@@ -72,21 +76,31 @@ func CreateDefaultCache(metrics *telemetry.Metrics) (*BirdImageCache, error) {
 // Get retrieves the BirdImage for a given scientific name from the cache,
 // fetching it from the provider if not already cached.
 func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
+	if c.debug {
+		log.Printf("Debug: Attempting to get image for species: %s", scientificName)
+	}
+
 	if c.metrics == nil {
 		log.Println("Warning: ImageProviderMetrics is nil")
 	}
 
 	if birdImage, ok := c.dataMap.Load(scientificName); ok {
+		if c.debug {
+			img := birdImage.(BirdImage)
+			if img.URL == "" {
+				log.Printf("Debug: Cache hit for species: %s (no image available)", scientificName)
+			} else {
+				log.Printf("Debug: Cache hit for species: %s (image URL: %s)", scientificName, img.URL)
+			}
+		}
 		if c.metrics != nil {
 			c.metrics.IncrementCacheHits()
-			//log.Printf("Cache hit for %s", scientificName)
 		}
 		return birdImage.(BirdImage), nil
 	}
 
 	if c.metrics != nil {
 		c.metrics.IncrementCacheMisses()
-		//log.Printf("Cache miss for %s", scientificName)
 	}
 
 	mu, _ := c.dataMutexMap.LoadOrStore(scientificName, &sync.Mutex{})
@@ -116,25 +130,51 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 
 // fetch retrieves the BirdImage for a given scientific name from the appropriate provider.
 func (c *BirdImageCache) fetch(scientificName string) (BirdImage, error) {
-	nonBirdScientificNames := map[string]struct{}{
+	if c.debug {
+		log.Printf("Debug: Fetching image for species: %s", scientificName)
+	}
+
+	// This is set to empty for now
+	nonBirdScientificNames := map[string]struct{}{}
+
+	/*nonBirdScientificNames := map[string]struct{}{
 		"Dog": {}, "Engine": {}, "Environmental": {}, "Fireworks": {},
 		"Gun": {}, "Human non-vocal": {}, "Human vocal": {}, "Human whistle": {},
 		"Noise": {}, "Power tools": {}, "Siren": {},
-	}
+	}*/
 
 	var imageProviderToUse ImageProvider
 
 	if _, isNonBird := nonBirdScientificNames[scientificName]; isNonBird {
+		if c.debug {
+			log.Printf("Debug: Using non-bird image provider for: %s (no images available for non-bird species)", scientificName)
+		}
 		imageProviderToUse = c.nonBirdImageProvider
 	} else {
+		if c.debug {
+			log.Printf("Debug: Using bird image provider for: %s", scientificName)
+		}
 		imageProviderToUse = c.birdImageProvider
 	}
 
 	startTime := time.Now()
 	birdImage, err := imageProviderToUse.Fetch(scientificName)
 	duration := time.Since(startTime).Seconds()
-	c.metrics.ObserveDownloadDuration(duration)
 
+	if err != nil {
+		if c.debug {
+			log.Printf("Debug: Error fetching image for %s: %v", scientificName, err)
+		}
+	} else if c.debug {
+		if birdImage.URL == "" {
+			log.Printf("Debug: No image available for %s (took %.2fs)", scientificName, duration)
+		} else {
+			log.Printf("Debug: Successfully fetched image for %s (took %.2fs)", scientificName, duration)
+			log.Printf("Debug: Image details - URL: %s, Author: %s", birdImage.URL, birdImage.AuthorName)
+		}
+	}
+
+	c.metrics.ObserveDownloadDuration(duration)
 	return birdImage, err
 }
 
@@ -163,7 +203,6 @@ func (c *BirdImageCache) updateMetrics() {
 	if c.metrics != nil {
 		size := float64(c.MemoryUsage())
 		c.metrics.SetCacheSize(size)
-		//log.Printf("Updated cache size: %f bytes", size)
 	} else {
 		log.Println("Warning: Unable to update metrics, ImageProviderMetrics is nil")
 	}
