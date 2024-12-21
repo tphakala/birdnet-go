@@ -30,8 +30,7 @@ func (m *mockImageProvider) Fetch(scientificName string) (imageprovider.BirdImag
 
 // TestBirdImageCache tests the BirdImageCache implementation
 func TestBirdImageCache(t *testing.T) {
-	mockBirdProvider := &mockImageProvider{}
-	mockNonBirdProvider := &mockImageProvider{}
+	mockProvider := &mockImageProvider{}
 	metrics, err := telemetry.NewMetrics()
 	if err != nil {
 		t.Fatalf("Failed to create metrics: %v", err)
@@ -40,21 +39,19 @@ func TestBirdImageCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create default cache: %v", err)
 	}
-	cache.SetImageProvider(mockBirdProvider)
-	cache.SetNonBirdImageProvider(mockNonBirdProvider)
+	cache.SetImageProvider(mockProvider)
 
 	tests := []struct {
-		name                  string
-		scientificName        string
-		wantBirdFetchCount    int
-		wantNonBirdFetchCount int
-		wantErr               bool
+		name           string
+		scientificName string
+		wantFetchCount int
+		wantErr        bool
 	}{
-		{"Bird species", "Turdus merula", 1, 0, false},
-		{"Cached bird species", "Turdus merula", 1, 0, false},
-		{"Another bird species", "Parus major", 2, 0, false},
-		{"Non-bird entry", "Human non-vocal", 2, 1, false},
-		{"Cached non-bird entry", "Human non-vocal", 2, 1, false},
+		{"Bird species", "Turdus merula", 1, false},
+		{"Cached bird species", "Turdus merula", 1, false},
+		{"Another species", "Parus major", 2, false},
+		{"Animal entry", "Canis lupus", 3, false}, // Dog species
+		{"Cached animal entry", "Canis lupus", 3, false},
 	}
 
 	for _, tt := range tests {
@@ -64,11 +61,8 @@ func TestBirdImageCache(t *testing.T) {
 				t.Errorf("BirdImageCache.Get() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if mockBirdProvider.fetchCounter != tt.wantBirdFetchCount {
-				t.Errorf("Bird fetch count = %d, want %d", mockBirdProvider.fetchCounter, tt.wantBirdFetchCount)
-			}
-			if mockNonBirdProvider.fetchCounter != tt.wantNonBirdFetchCount {
-				t.Errorf("Non-bird fetch count = %d, want %d", mockNonBirdProvider.fetchCounter, tt.wantNonBirdFetchCount)
+			if mockProvider.fetchCounter != tt.wantFetchCount {
+				t.Errorf("Fetch count = %d, want %d", mockProvider.fetchCounter, tt.wantFetchCount)
 			}
 			if !tt.wantErr && got.URL == "" {
 				t.Errorf("BirdImageCache.Get() returned empty URL for %s", tt.scientificName)
@@ -127,7 +121,7 @@ func TestBirdImageEstimateSize(t *testing.T) {
 	}
 }
 
-// TestBirdImageCacheMemoryUsage tests the BirdImageCache.MemoryUsage method// TestBirdImageCacheMemoryUsage tests the BirdImageCache.MemoryUsage method
+// TestBirdImageCacheMemoryUsage tests the BirdImageCache.MemoryUsage method
 func TestBirdImageCacheMemoryUsage(t *testing.T) {
 	metrics, err := telemetry.NewMetrics()
 	if err != nil {
