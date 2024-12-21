@@ -16,9 +16,24 @@ import (
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
+// Add this helper function at the top of the file
+func isMosquittoTestServerAvailable() bool {
+	conn, err := net.DialTimeout("tcp", "test.mosquitto.org:1883", 5*time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
 // TestMQTTClient runs a suite of tests for the MQTT client implementation.
 // It covers basic functionality, error handling, reconnection scenarios, and metrics collection.
 func TestMQTTClient(t *testing.T) {
+	mosquittoAvailable := isMosquittoTestServerAvailable()
+	if !mosquittoAvailable {
+		t.Skip("Skipping MQTT tests: test.mosquitto.org is not available")
+	}
+
 	t.Run("Basic Functionality", testBasicFunctionality)
 	t.Run("Incorrect Broker Address", testIncorrectBrokerAddress)
 	t.Run("Connection Loss Before Publish", testConnectionLossBeforePublish)
