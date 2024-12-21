@@ -89,6 +89,13 @@ type BirdweatherSettings struct {
 	LocationAccuracy float64 // accuracy of location in meters
 }
 
+// WeatherSettings contains all weather-related settings
+type WeatherSettings struct {
+	Provider    string              // "yrno" or "openweather"
+	YrNo        YrNoSettings        // Yr.no integration settings
+	OpenWeather OpenWeatherSettings // OpenWeather integration settings
+}
+
 // OpenWeatherSettings contains settings for OpenWeather integration.
 type OpenWeatherSettings struct {
 	Enabled  bool   // true to enable OpenWeather integration
@@ -98,6 +105,13 @@ type OpenWeatherSettings struct {
 	Interval int    // interval for fetching weather data in minutes
 	Units    string // units of measurement: standard, metric, or imperial
 	Language string // language code for the response
+}
+
+// YrNoSettings contains settings for Yr.no integration
+type YrNoSettings struct {
+	Enabled  bool // true to enable Yr.no integration
+	Debug    bool // true to enable debug mode
+	Interval int  // interval for fetching weather data in minutes
 }
 
 // PrivacyFilterSettings contains settings for the privacy filter.
@@ -156,6 +170,7 @@ type RealtimeSettings struct {
 	MQTT          MQTTSettings          // MQTT settings
 	Telemetry     TelemetrySettings     // Telemetry settings
 	Species       SpeciesSettings       // Custom thresholds and actions for species
+	Weather       WeatherSettings       // Weather provider related settings
 }
 
 // SpeciesSettings holds custom thresholds and action configurations for species.
@@ -544,4 +559,48 @@ func GenerateRandomSecret() string {
 		return ""
 	}
 	return base64.RawURLEncoding.EncodeToString(bytes)
+}
+
+// migrateWeatherSettings handles the migration of weather settings from the old to new format
+func migrateWeatherSettings(settings *Settings) {
+	// If new weather settings are not configured but old ones are, migrate them
+	if settings.Realtime.Weather.Provider == "" {
+		if settings.Realtime.OpenWeather.Enabled {
+			settings.Realtime.Weather.Provider = "openweather"
+			settings.Realtime.Weather.OpenWeather = settings.Realtime.OpenWeather
+		} else {
+			// Set default provider if none is configured
+			settings.Realtime.Weather.Provider = "yrno"
+			settings.Realtime.Weather.YrNo.Enabled = true
+			settings.Realtime.Weather.YrNo.Interval = 15 // default 15 minutes
+		}
+	}
+
+	// Ensure the selected provider is properly enabled
+	switch settings.Realtime.Weather.Provider {
+	case "yrno":
+		settings.Realtime.Weather.YrNo.Enabled = true
+		settings.Realtime.Weather.OpenWeather.Enabled = false
+	case "openweather":
+		settings.Realtime.Weather.YrNo.Enabled = false
+		settings.Realtime.Weather.OpenWeather.Enabled = true
+	}
+}
+
+// GetWeatherSettings returns the appropriate weather settings based on the configuration
+func (s *Settings) GetWeatherSettings() (provider string, yrno YrNoSettings, openweather OpenWeatherSettings) {
+	// First check new format
+	if s.Realtime.Weather.Provider != "" {
+		return s.Realtime.Weather.Provider, s.Realtime.Weather.YrNo, s.Realtime.Weather.OpenWeather
+	}
+
+	if s.Realtime.OpenWeather.Enabled {
+		return "openweather", YrNoSettings{}, s.Realtime.OpenWeather
+	}
+
+	// Default to YrNo if nothing is configured
+	return "yrno", YrNoSettings{
+		Enabled:  true,
+		Interval: 15,
+	}, OpenWeatherSettings{}
 }
