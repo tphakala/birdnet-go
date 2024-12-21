@@ -280,12 +280,18 @@ func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailURL string) (*wikiMe
 
 	licenseName, err := extMetadata.GetString("LicenseShortName", "value")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get license name from extmetadata: %w", err)
+		if l.debug {
+			log.Printf("[%s] Debug: License name not found, using 'Unknown'", reqID)
+		}
+		licenseName = "Unknown"
 	}
 
 	licenseURL, err := extMetadata.GetString("LicenseUrl", "value")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get license URL from extmetadata: %w", err)
+		if l.debug {
+			log.Printf("[%s] Debug: License URL not found, using empty string", reqID)
+		}
+		licenseURL = ""
 	}
 
 	artistHref, err := extMetadata.GetString("Artist", "value")
