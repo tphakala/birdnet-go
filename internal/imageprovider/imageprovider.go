@@ -134,20 +134,13 @@ func (c *BirdImageCache) fetch(scientificName string) (BirdImage, error) {
 		log.Printf("Debug: Fetching image for species: %s", scientificName)
 	}
 
-	// This is set to empty for now
+	// Keep the infrastructure but make the list empty for now
 	nonBirdScientificNames := map[string]struct{}{}
 
-	/*nonBirdScientificNames := map[string]struct{}{
-		"Dog": {}, "Engine": {}, "Environmental": {}, "Fireworks": {},
-		"Gun": {}, "Human non-vocal": {}, "Human vocal": {}, "Human whistle": {},
-		"Noise": {}, "Power tools": {}, "Siren": {},
-	}*/
-
 	var imageProviderToUse ImageProvider
-
 	if _, isNonBird := nonBirdScientificNames[scientificName]; isNonBird {
 		if c.debug {
-			log.Printf("Debug: Using non-bird image provider for: %s (no images available for non-bird species)", scientificName)
+			log.Printf("Debug: Using non-bird image provider for: %s", scientificName)
 		}
 		imageProviderToUse = c.nonBirdImageProvider
 	} else {
