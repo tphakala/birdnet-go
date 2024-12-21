@@ -247,7 +247,13 @@ func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailURL string) (*wikiMe
 		if l.debug {
 			log.Printf("Debug: Failed to query author info page: %v", err)
 		}
-		return nil, fmt.Errorf("failed to query thumbnail: %w", err)
+		// Return default author info instead of error
+		return &wikiMediaAuthor{
+			name:        "Unknown Author",
+			URL:         "",
+			licenseName: "Unknown",
+			licenseURL:  "",
+		}, nil
 	}
 
 	if l.debug {
@@ -275,45 +281,45 @@ func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailURL string) (*wikiMe
 
 	extMetadata, err := imageInfo[0].GetObject("extmetadata")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get extmetadata from response: %w", err)
+		// Return default author info instead of error
+		return &wikiMediaAuthor{
+			name:        "Unknown Author",
+			URL:         "",
+			licenseName: "Unknown",
+			licenseURL:  "",
+		}, nil
 	}
 
-	licenseName, err := extMetadata.GetString("LicenseShortName", "value")
-	if err != nil {
-		if l.debug {
-			log.Printf("[%s] Debug: License name not found, using 'Unknown'", reqID)
+	// Get license info with fallbacks
+	licenseName := "Unknown"
+	if ln, err := extMetadata.GetString("LicenseShortName", "value"); err == nil {
+		licenseName = ln
+	}
+
+	licenseURL := ""
+	if lu, err := extMetadata.GetString("LicenseUrl", "value"); err == nil {
+		licenseURL = lu
+	}
+
+	// Get artist info with fallback
+	artistName := "Unknown Author"
+	artistURL := ""
+
+	if artistHref, err := extMetadata.GetString("Artist", "value"); err == nil {
+		href, text, err := extractArtistInfo(artistHref)
+		if err == nil {
+			artistName = text
+			artistURL = href
 		}
-		licenseName = "Unknown"
-	}
-
-	licenseURL, err := extMetadata.GetString("LicenseUrl", "value")
-	if err != nil {
-		if l.debug {
-			log.Printf("[%s] Debug: License URL not found, using empty string", reqID)
-		}
-		licenseURL = ""
-	}
-
-	artistHref, err := extMetadata.GetString("Artist", "value")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get artist from extmetadata: %w", err)
-	}
-
-	href, text, err := extractArtistInfo(artistHref)
-	if err != nil {
-		if l.debug {
-			log.Printf("Debug: Failed to extract artist info from HTML: %v", err)
-		}
-		return nil, fmt.Errorf("failed to extract link information: %w", err)
 	}
 
 	if l.debug {
-		log.Printf("[%s] Debug: Successfully extracted author info - Name: %s, URL: %s", reqID, text, href)
+		log.Printf("[%s] Debug: Successfully extracted author info - Name: %s, URL: %s", reqID, artistName, artistURL)
 	}
 
 	return &wikiMediaAuthor{
-		name:        text,
-		URL:         href,
+		name:        artistName,
+		URL:         artistURL,
 		licenseName: licenseName,
 		licenseURL:  licenseURL,
 	}, nil
