@@ -26,7 +26,7 @@ require (
 	github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3
 	github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e
 	golang.org/x/crypto v0.31.0
-	golang.org/x/net v0.30.0
+	golang.org/x/net v0.33.0
 	golang.org/x/text v0.21.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.5.6
