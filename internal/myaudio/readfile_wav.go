@@ -122,7 +122,7 @@ func readWAVBuffered(file *os.File, settings *conf.Settings, callback AudioChunk
 	}
 
 	// Handle the last chunk
-	if len(currentChunk) >= minLenSamples {
+	if len(currentChunk) >= minLenSamples || len(currentChunk) > 0 {
 		if len(currentChunk) < secondsSamples {
 			padding := make([]float32, secondsSamples-len(currentChunk))
 			currentChunk = append(currentChunk, padding...)
