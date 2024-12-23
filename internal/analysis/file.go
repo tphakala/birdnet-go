@@ -95,6 +95,12 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 
 	startTime := time.Now()
 	chunkCount := 0
+	lastChunkCount := 0
+	lastProgressUpdate := startTime
+
+	// Moving average window for chunks/sec calculation
+	const windowSize = 10 // Number of samples to average
+	chunkRates := make([]float64, 0, windowSize)
 
 	// Determine number of workers (between 1 and 8)
 	numWorkers := settings.BirdNET.Threads
@@ -164,11 +170,40 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 			case <-doneChan:
 				return
 			default:
-				fmt.Printf("\r\033[K\033[37m📄 %s [%s]\033[0m | \033[33m🔍 Analyzing chunk %d/%d\033[0m %s",
+				currentTime := time.Now()
+				timeSinceLastUpdate := currentTime.Sub(lastProgressUpdate)
+
+				// Calculate current chunk rate
+				chunksProcessed := chunkCount - lastChunkCount
+				currentRate := float64(chunksProcessed) / timeSinceLastUpdate.Seconds()
+
+				// Update moving average
+				if len(chunkRates) >= windowSize {
+					// Remove oldest value
+					chunkRates = chunkRates[1:]
+				}
+				chunkRates = append(chunkRates, currentRate)
+
+				// Calculate average rate
+				var avgRate float64
+				if len(chunkRates) > 0 {
+					sum := 0.0
+					for _, rate := range chunkRates {
+						sum += rate
+					}
+					avgRate = sum / float64(len(chunkRates))
+				}
+
+				// Update counters for next iteration
+				lastChunkCount = chunkCount
+				lastProgressUpdate = currentTime
+
+				fmt.Printf("\r\033[K\033[37m📄 %s [%s]\033[0m | \033[33m🔍 Analyzing chunk %d/%d\033[0m | \033[36m%.1f chunks/sec\033[0m %s",
 					filename,
 					duration.Round(time.Second),
 					chunkCount,
 					totalChunks,
+					avgRate,
 					birdnet.EstimateTimeRemaining(startTime, chunkCount, totalChunks))
 			}
 		}
@@ -195,6 +230,14 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 				processingError = err
 				close(doneChan)
 				return
+			// Add timeout to prevent hanging
+			case <-time.After(5 * time.Second):
+				if settings.Debug {
+					fmt.Printf("DEBUG: Timeout waiting for chunk %d results\n", i)
+				}
+				processingError = fmt.Errorf("timeout waiting for analysis results")
+				close(doneChan)
+				return
 			}
 		}
 		if settings.Debug {
@@ -203,10 +246,7 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 		close(doneChan)
 	}()
 
-	// Read and send audio chunks
-	if settings.Debug {
-		fmt.Println("DEBUG: Starting to read audio chunks")
-	}
+	// Read and send audio chunks with timeout
 	err := myaudio.ReadAudioFileBuffered(settings, func(chunk []float32) error {
 		if settings.Debug {
 			fmt.Println("DEBUG: Read new chunk from file")
@@ -224,6 +264,8 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 				fmt.Println("DEBUG: Chunk processing interrupted")
 			}
 			return processingError
+		case <-time.After(30 * time.Second):
+			return fmt.Errorf("timeout sending chunk to processing")
 		}
 	})
 
@@ -254,11 +296,15 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 	if settings.Debug {
 		fmt.Println("DEBUG: Analysis completed successfully")
 	}
-	// Show total time taken for analysis
-	fmt.Printf("\r\033[K\033[37m📄 %s [%s]\033[0m | \033[32m✅ Analysis completed in %s\033[0m\n",
+	// Update final statistics
+	totalTime := time.Since(startTime)
+	avgChunksPerSec := float64(totalChunks) / totalTime.Seconds()
+
+	fmt.Printf("\r\033[K\033[37m📄 %s [%s]\033[0m | \033[32m✅ Analysis completed in %s\033[0m | \033[36m%.1f chunks/sec avg\033[0m\n",
 		filename,
 		duration.Round(time.Second),
-		birdnet.FormatDuration(time.Since(startTime)))
+		birdnet.FormatDuration(totalTime),
+		avgChunksPerSec)
 
 	return allNotes, nil
 }
