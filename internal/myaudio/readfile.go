@@ -54,8 +54,6 @@ func GetAudioInfo(filePath string) (AudioInfo, error) {
 
 // ReadAudioFileBuffered reads and processes audio data in chunks
 func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback) error {
-	fmt.Print("- Reading audio data")
-
 	file, err := os.Open(settings.Input.Path)
 	if err != nil {
 		return err

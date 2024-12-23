@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/birdnet"
@@ -94,7 +93,7 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 	filename := truncateFilename(settings.Input.Path)
 
 	startTime := time.Now()
-	chunkCount := 0
+	chunkCount := 1
 	lastChunkCount := 0
 	lastProgressUpdate := startTime
 
@@ -102,12 +101,8 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 	const windowSize = 10 // Number of samples to average
 	chunkRates := make([]float64, 0, windowSize)
 
-	// Determine number of workers (between 1 and 8)
-	numWorkers := settings.BirdNET.Threads
-	if numWorkers <= 0 {
-		numWorkers = runtime.NumCPU()
-	}
-	numWorkers = clampInt(numWorkers, 1, 8) // Ensure between 1 and 8 workers
+	// Set number of workers to 1
+	numWorkers := 1
 
 	if settings.Debug {
 		fmt.Printf("DEBUG: Starting analysis with %d total chunks and %d workers\n", totalChunks, numWorkers)
@@ -129,9 +124,6 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 				fmt.Printf("DEBUG: Worker %d started\n", workerID)
 			}
 			for chunk := range chunkChan {
-				if settings.Debug {
-					fmt.Printf("DEBUG: Worker %d processing chunk\n", workerID)
-				}
 				notes, err := bn.ProcessChunk(chunk, predStart)
 				if err != nil {
 					if settings.Debug {
@@ -215,11 +207,11 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 		if settings.Debug {
 			fmt.Println("DEBUG: Result collector started")
 		}
-		for i := 0; i < totalChunks; i++ {
+		for i := 1; i <= totalChunks; i++ {
 			select {
 			case notes := <-resultChan:
 				if settings.Debug {
-					fmt.Printf("DEBUG: Collector received results for chunk %d\n", chunkCount)
+					fmt.Printf("DEBUG: Received results for chunk #%d\n", chunkCount)
 				}
 				allNotes = append(allNotes, notes...)
 				chunkCount++
@@ -248,23 +240,14 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 
 	// Read and send audio chunks with timeout
 	err := myaudio.ReadAudioFileBuffered(settings, func(chunk []float32) error {
-		if settings.Debug {
-			fmt.Println("DEBUG: Read new chunk from file")
-		}
 		select {
 		case chunkChan <- chunk:
-			if settings.Debug {
-				fmt.Println("DEBUG: Sent chunk to processing channel")
-			}
 			// advance predStart by 3 seconds - overlap
 			predStart = predStart.Add(time.Duration((3.0 - bn.Settings.BirdNET.Overlap) * float64(time.Second)))
 			return nil
 		case <-doneChan:
-			if settings.Debug {
-				fmt.Println("DEBUG: Chunk processing interrupted")
-			}
 			return processingError
-		case <-time.After(30 * time.Second):
+		case <-time.After(5 * time.Second):
 			return fmt.Errorf("timeout sending chunk to processing")
 		}
 	})
@@ -341,15 +324,4 @@ func writeResults(settings *conf.Settings, notes []datastore.Note) error {
 		}
 	}
 	return nil
-}
-
-// clampInt ensures a value is between min and max (inclusive)
-func clampInt(value, minValue, maxValue int) int {
-	if value < minValue {
-		return minValue
-	}
-	if value > maxValue {
-		return maxValue
-	}
-	return value
 }
