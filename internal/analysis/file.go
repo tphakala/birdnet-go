@@ -101,7 +101,7 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 	if numWorkers <= 0 {
 		numWorkers = runtime.NumCPU()
 	}
-	numWorkers = min(max(numWorkers, 1), 8) // Ensure between 1 and 8 workers
+	numWorkers = clampInt(numWorkers, 1, 8) // Ensure between 1 and 8 workers
 
 	if settings.Debug {
 		fmt.Printf("DEBUG: Starting analysis with %d total chunks and %d workers\n", totalChunks, numWorkers)
@@ -297,17 +297,13 @@ func writeResults(settings *conf.Settings, notes []datastore.Note) error {
 	return nil
 }
 
-// Helper functions for min/max if not already defined
-func min(a, b int) int {
-	if a < b {
-		return a
+// clampInt ensures a value is between min and max (inclusive)
+func clampInt(value, minValue, maxValue int) int {
+	if value < minValue {
+		return minValue
 	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
+	if value > maxValue {
+		return maxValue
 	}
-	return b
+	return value
 }
