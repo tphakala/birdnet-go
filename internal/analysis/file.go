@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/birdnet"
@@ -89,51 +90,171 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 	// Calculate audio duration
 	duration := time.Duration(float64(audioInfo.TotalSamples) / float64(audioInfo.SampleRate) * float64(time.Second))
 
-	var allNotes []datastore.Note
+	// Get filename and truncate if necessary
+	filename := truncateFilename(settings.Input.Path)
+
 	startTime := time.Now()
 	chunkCount := 0
 
-	// Get filename and truncate if necessary (showing max 30 chars)
-	filename := truncateFilename(settings.Input.Path)
+	// Determine number of workers (between 1 and 8)
+	numWorkers := settings.BirdNET.Threads
+	if numWorkers <= 0 {
+		numWorkers = runtime.NumCPU()
+	}
+	numWorkers = min(max(numWorkers, 1), 8) // Ensure between 1 and 8 workers
 
-	// Set predStart to 0 time
+	if settings.Debug {
+		fmt.Printf("DEBUG: Starting analysis with %d total chunks and %d workers\n", totalChunks, numWorkers)
+	}
+
+	// Create buffered channels for processing
+	chunkChan := make(chan []float32, 4)
+	resultChan := make(chan []datastore.Note, 4)
+	errorChan := make(chan error, 1)
+	doneChan := make(chan struct{})
+
+	var allNotes []datastore.Note
 	predStart := time.Time{}
 
-	// Process audio chunks as they're read
-	err := myaudio.ReadAudioFileBuffered(settings, func(chunk []float32) error {
-		chunkCount++
-		fmt.Printf("\r\033[K\033[37m📄 %s [%s]\033[0m | \033[33m🔍 Analyzing chunk %d/%d\033[0m %s",
-			filename,
-			duration.Round(time.Second),
-			chunkCount,
-			totalChunks,
-			birdnet.EstimateTimeRemaining(startTime, chunkCount, totalChunks))
+	// Start worker goroutines for BirdNET analysis
+	for i := 0; i < numWorkers; i++ {
+		go func(workerID int) {
+			if settings.Debug {
+				fmt.Printf("DEBUG: Worker %d started\n", workerID)
+			}
+			for chunk := range chunkChan {
+				if settings.Debug {
+					fmt.Printf("DEBUG: Worker %d processing chunk\n", workerID)
+				}
+				notes, err := bn.ProcessChunk(chunk, predStart)
+				if err != nil {
+					if settings.Debug {
+						fmt.Printf("DEBUG: Worker %d encountered error: %v\n", workerID, err)
+					}
+					errorChan <- err
+					return
+				}
 
-		notes, err := bn.ProcessChunk(chunk, predStart)
-		if err != nil {
-			return err
-		}
+				// Filter notes based on included species list
+				var filteredNotes []datastore.Note
+				for _, note := range notes {
+					if settings.IsSpeciesIncluded(note.ScientificName) {
+						filteredNotes = append(filteredNotes, note)
+					}
+				}
 
-		// Filter notes based on included species list
-		var filteredNotes []datastore.Note
-		for _, note := range notes {
-			if settings.IsSpeciesIncluded(note.ScientificName) {
-				filteredNotes = append(filteredNotes, note)
+				if settings.Debug {
+					fmt.Printf("DEBUG: Worker %d sending results\n", workerID)
+				}
+				resultChan <- filteredNotes
+			}
+			if settings.Debug {
+				fmt.Printf("DEBUG: Worker %d finished\n", workerID)
+			}
+		}(i)
+	}
+
+	// Start progress monitoring goroutine
+	go func() {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			select {
+			case <-doneChan:
+				return
+			default:
+				fmt.Printf("\r\033[K\033[37m📄 %s [%s]\033[0m | \033[33m🔍 Analyzing chunk %d/%d\033[0m %s",
+					filename,
+					duration.Round(time.Second),
+					chunkCount,
+					totalChunks,
+					birdnet.EstimateTimeRemaining(startTime, chunkCount, totalChunks))
 			}
 		}
+	}()
 
-		allNotes = append(allNotes, filteredNotes...)
+	// Start result collector goroutine
+	var processingError error
+	go func() {
+		if settings.Debug {
+			fmt.Println("DEBUG: Result collector started")
+		}
+		for i := 0; i < totalChunks; i++ {
+			select {
+			case notes := <-resultChan:
+				if settings.Debug {
+					fmt.Printf("DEBUG: Collector received results for chunk %d\n", chunkCount)
+				}
+				allNotes = append(allNotes, notes...)
+				chunkCount++
+			case err := <-errorChan:
+				if settings.Debug {
+					fmt.Printf("DEBUG: Collector received error: %v\n", err)
+				}
+				processingError = err
+				close(doneChan)
+				return
+			}
+		}
+		if settings.Debug {
+			fmt.Println("DEBUG: Collector finished")
+		}
+		close(doneChan)
+	}()
 
-		// advance predStart by 3 seconds - overlap
-		predStart = predStart.Add(time.Duration((3.0 - bn.Settings.BirdNET.Overlap) * float64(time.Second)))
-		return nil
+	// Read and send audio chunks
+	if settings.Debug {
+		fmt.Println("DEBUG: Starting to read audio chunks")
+	}
+	err := myaudio.ReadAudioFileBuffered(settings, func(chunk []float32) error {
+		if settings.Debug {
+			fmt.Println("DEBUG: Read new chunk from file")
+		}
+		select {
+		case chunkChan <- chunk:
+			if settings.Debug {
+				fmt.Println("DEBUG: Sent chunk to processing channel")
+			}
+			// advance predStart by 3 seconds - overlap
+			predStart = predStart.Add(time.Duration((3.0 - bn.Settings.BirdNET.Overlap) * float64(time.Second)))
+			return nil
+		case <-doneChan:
+			if settings.Debug {
+				fmt.Println("DEBUG: Chunk processing interrupted")
+			}
+			return processingError
+		}
 	})
 
+	if settings.Debug {
+		fmt.Println("DEBUG: Finished reading audio file")
+	}
+	close(chunkChan)
+
+	if settings.Debug {
+		fmt.Println("DEBUG: Waiting for processing to complete")
+	}
+	<-doneChan // Wait for processing to complete
+
 	if err != nil {
+		if settings.Debug {
+			fmt.Printf("DEBUG: File processing error: %v\n", err)
+		}
 		return nil, fmt.Errorf("error processing audio: %w", err)
 	}
 
-	// Show total time taken for analysis, including audio length
+	if processingError != nil {
+		if settings.Debug {
+			fmt.Printf("DEBUG: Processing error encountered: %v\n", processingError)
+		}
+		return nil, processingError
+	}
+
+	if settings.Debug {
+		fmt.Println("DEBUG: Analysis completed successfully")
+	}
+	// Show total time taken for analysis
 	fmt.Printf("\r\033[K\033[37m📄 %s [%s]\033[0m | \033[32m✅ Analysis completed in %s\033[0m\n",
 		filename,
 		duration.Round(time.Second),
@@ -174,4 +295,19 @@ func writeResults(settings *conf.Settings, notes []datastore.Note) error {
 		}
 	}
 	return nil
+}
+
+// Helper functions for min/max if not already defined
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
