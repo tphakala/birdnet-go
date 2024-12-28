@@ -95,16 +95,21 @@ func (bn *BirdNET) initializeModel() error {
 
 	// Configure interpreter options.
 	options := tflite.NewInterpreterOptions()
-	// Use XNNPACK delegate if enabled in settings
+
+	// Try to use XNNPACK delegate if enabled in settings
 	if bn.Settings.BirdNET.UseXNNPACK {
-		// Set XNNPACK threads to 1 less than configured threads but never less than 1
-		threads = max(1, threads-1)
-		options.AddDelegate(xnnpack.New(xnnpack.DelegateOptions{NumThreads: int32(threads)}))
-		// Set the interpreter to use only 1 thread
-		options.SetNumThread(1)
+		delegate := xnnpack.New(xnnpack.DelegateOptions{NumThreads: int32(max(1, threads-1))})
+		if delegate == nil {
+			fmt.Println("⚠️ Failed to create XNNPACK delegate, falling back to default CPU execution")
+			options.SetNumThread(threads)
+		} else {
+			options.AddDelegate(delegate)
+			options.SetNumThread(1)
+		}
 	} else {
 		options.SetNumThread(threads)
 	}
+
 	options.SetErrorReporter(func(msg string, user_data interface{}) {
 		fmt.Println(msg)
 	}, nil)
