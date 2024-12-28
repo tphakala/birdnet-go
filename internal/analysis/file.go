@@ -34,11 +34,11 @@ func FileAnalysis(settings *conf.Settings) error {
 	notes, err := processAudioFile(settings, &audioInfo)
 	if err != nil {
 		// If we have partial results, write them before returning the error
-		if notes != nil && len(notes) > 0 {
+		if len(notes) > 0 {
 			fmt.Printf("\n\033[33m⚠️  Writing partial results before exiting due to error\033[0m\n")
 			if writeErr := writeResults(settings, notes); writeErr != nil {
-				// Combine both errors in the return message
-				return fmt.Errorf("analysis error: %v; failed to write partial results: %v", err, writeErr)
+				// Changed to use %w for error wrapping
+				return fmt.Errorf("analysis error: %w; failed to write partial results: %w", err, writeErr)
 			}
 		}
 		return err
