@@ -1,6 +1,6 @@
 BINARY_DIR := bin
 BINARY_NAME := birdnet-go
-TFLITE_VERSION := v2.17.0
+TFLITE_VERSION := v2.17.1
 
 # Common flags
 CGO_FLAGS := CGO_ENABLED=1 CGO_CFLAGS="-I$(HOME)/src/tensorflow"
