@@ -193,16 +193,34 @@ check_prerequisites() {
             ;;
     esac
 
-    # Function to add user to docker group
-    add_user_to_docker_group() {
-        print_message "🔧 Adding user $USER to docker group..." "$YELLOW"
-        if sudo usermod -aG docker "$USER"; then
-            print_message "✅ Added user $USER to docker group" "$GREEN"
+    # Function to add user to required groups
+    add_user_to_groups() {
+        print_message "🔧 Adding user $USER to required groups..." "$YELLOW"
+        local groups_added=false
+
+        if ! groups "$USER" | grep &>/dev/null "\bdocker\b"; then
+            if sudo usermod -aG docker "$USER"; then
+                print_message "✅ Added user $USER to docker group" "$GREEN"
+                groups_added=true
+            else
+                print_message "❌ Failed to add user $USER to docker group" "$RED"
+                exit 1
+            fi
+        fi
+
+        if ! groups "$USER" | grep &>/dev/null "\baudio\b"; then
+            if sudo usermod -aG audio "$USER"; then
+                print_message "✅ Added user $USER to audio group" "$GREEN"
+                groups_added=true
+            else
+                print_message "❌ Failed to add user $USER to audio group" "$RED"
+                exit 1
+            fi
+        fi
+
+        if [ "$groups_added" = true ]; then
             print_message "Please log out and log back in for group changes to take effect, and rerun install.sh to continue with install" "$YELLOW"
             exit 0
-        else
-            print_message "❌ Failed to add user $USER to docker group" "$RED"
-            exit 1
         fi
     }
 
@@ -212,8 +230,8 @@ check_prerequisites() {
         # Install Docker from apt repository
         sudo apt -qq update
         sudo apt -qq install -y docker.io
-        # Add current user to docker group
-        add_user_to_docker_group
+        # Add current user to required groups
+        add_user_to_groups
         # Start Docker service
         if sudo systemctl start docker; then
             print_message "✅ Docker service started successfully" "$GREEN"
@@ -221,7 +239,7 @@ check_prerequisites() {
             print_message "❌ Failed to start Docker service" "$RED"
             exit 1
         fi
-       
+        
         # Enable Docker service on boot
         if  sudo systemctl enable docker; then
             print_message "✅ Docker service start on boot enabled successfully" "$GREEN"
@@ -229,19 +247,14 @@ check_prerequisites() {
             print_message "❌ Failed to enable Docker service on boot" "$RED"
             exit 1
         fi
-        print_message "✅ Docker installed successfully. To make group member changes take effect, please log out and log back in and rerun install.sh to continue with install" "$GREEN"
-        print_message "Exiting install script..." "$YELLOW"
+        print_message "⚠️ Docker installed successfully. To make group member changes take effect, please log out and log back in and rerun install.sh to continue with install" "$YELLOW"
         # exit install script
         exit 0
     else
         print_message "✅ Docker found" "$GREEN"
         
-        # Check if user is in the docker group
-        if groups "$USER" | grep &>/dev/null "\bdocker\b"; then
-            print_message "✅ User $USER is in the docker group" "$GREEN"
-        else
-            add_user_to_docker_group
-        fi
+        # Check if user is in required groups
+        add_user_to_groups
 
         # Check if Docker can be used by the user
         if ! docker info &>/dev/null; then
