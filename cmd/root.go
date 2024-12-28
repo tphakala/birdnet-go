@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/cmd/authors"
+	"github.com/tphakala/birdnet-go/cmd/benchmark"
 	"github.com/tphakala/birdnet-go/cmd/directory"
 	"github.com/tphakala/birdnet-go/cmd/file"
 	"github.com/tphakala/birdnet-go/cmd/license"
@@ -39,6 +40,7 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 	licenseCmd := license.Command()
 	rangeCmd := rangefilter.Command(settings)
 	supportCmd := support.Command(settings)
+	benchmarkCmd := benchmark.Command(settings)
 
 	subcommands := []*cobra.Command{
 		fileCmd,
@@ -48,6 +50,7 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 		licenseCmd,
 		rangeCmd,
 		supportCmd,
+		benchmarkCmd,
 	}
 
 	rootCmd.AddCommand(subcommands...)
