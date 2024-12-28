@@ -38,23 +38,38 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Function to check if curl is available and install it if needed
+ensure_curl() {
+    if ! command_exists curl; then
+        print_message "📦 curl not found. Installing curl..." "$YELLOW"
+        if sudo apt -qq update && sudo apt install -qq -y curl; then
+            print_message "✅ curl installed successfully" "$GREEN"
+        else
+            print_message "❌ Failed to install curl" "$RED"
+            print_message "Please install curl manually and try again" "$YELLOW"
+            exit 1
+        fi
+    fi
+}
+
 # Function to check network connectivity
 check_network() {
     print_message "🌐 Checking network connectivity..." "$YELLOW"
     local success=true
+
+    # First do a basic ping test to check general connectivity
+    if ! ping -c 1 8.8.8.8 >/dev/null 2>&1; then
+        print_message "❌ No network connectivity (ping test failed)" "$RED"
+        print_message "Please check your internet connection and try again" "$YELLOW"
+        exit 1
+    fi
+
+    # Now ensure curl is available for further tests
+    ensure_curl
+
+    # Continue with existing HTTP/HTTPS checks...
     local test_hosts=("github.com" "raw.githubusercontent.com" "ghcr.io")
     
-    # DNS Check
-    print_message "📡 Testing DNS resolution..." "$YELLOW"
-    for host in "${test_hosts[@]}"; do
-        if host "$host" >/dev/null 2>&1; then
-            print_message "✅ DNS resolution successful for $host" "$GREEN"
-        else
-            print_message "❌ DNS resolution failed for $host" "$RED"
-            success=false
-        fi
-    done
-
     # HTTP/HTTPS Check
     print_message "\n📡 Testing HTTP/HTTPS connectivity..." "$YELLOW"
     local urls=(
@@ -92,7 +107,7 @@ check_network() {
         return 1
     fi
 
-    print_message "\n✅ Network connectivity check passed" "$GREEN"
+    print_message "\n✅ Network connectivity check passed\n" "$GREEN"
     return 0
 }
 
@@ -183,7 +198,7 @@ check_prerequisites() {
         print_message "🔧 Adding user $USER to docker group..." "$YELLOW"
         if sudo usermod -aG docker "$USER"; then
             print_message "✅ Added user $USER to docker group" "$GREEN"
-            print_message "Please log out and log back in for group changes to take effect." "$YELLOW"
+            print_message "Please log out and log back in for group changes to take effect, and rerun install.sh to continue with install" "$YELLOW"
             exit 0
         else
             print_message "❌ Failed to add user $USER to docker group" "$RED"
@@ -368,37 +383,9 @@ test_rtsp_url() {
             return 1
         fi
         
-        # If port is open, test RTSP stream
-        if command_exists ffprobe; then
-            print_message "✅ Port is open, testing RTSP stream (30 second timeout)..." "$GREEN"
-            
-            # Create a timeout function using background process, redirect all output to /dev/null
-            ( 
-                ffprobe -v quiet -i "$url" -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 &>/dev/null
-            ) & pid=$!
-            
-            # Wait for specified time, redirect all output to /dev/null
-            ( sleep 30 && kill -HUP $pid &>/dev/null ) & waiter=$!
-            
-            # Wait for completion and cleanup
-            if wait $pid &>/dev/null; then
-                kill $waiter &>/dev/null 2>&1 || true
-                wait $waiter &>/dev/null 2>&1 || true
-                print_message "✅ RTSP connection successful!" "$GREEN"
-                return 0
-            else
-                kill $waiter &>/dev/null 2>&1 || true
-                wait $waiter &>/dev/null 2>&1 || true
-                print_message "❌ RTSP stream test failed" "$RED"
-                print_message "❓ Do you want to use this URL anyway? (y/n): " "$YELLOW" "nonewline"
-                read -r force_continue
-                
-                if [[ $force_continue == "y" ]]; then
-                    print_message "⚠️ Continuing with untested RTSP URL" "$YELLOW"
-                    return 0
-                fi
-            fi
-        fi
+        # Skip RTSP stream test, assume connection is good if port is open
+        print_message "✅ Port is accessible, continuing with RTSP URL" "$GREEN"
+        return 0
     else
         print_message "❌ Invalid RTSP URL format" "$RED"
     fi
@@ -1047,7 +1034,7 @@ EOF
 print_message "\n🐦 BirdNET-Go Installation Script" "$GREEN"
 print_message "This script will install BirdNET-Go and its dependencies." "$YELLOW"
 print_message "Note: Root privileges will be required for:" "$YELLOW"
-print_message "  - Installing system packages (alsa-utils, curl, ffmpeg, bc, jq, apache2-utils)" "$YELLOW"
+print_message "  - Installing system packages (alsa-utils, curl, bc, jq, apache2-utils)" "$YELLOW"
 print_message "  - Installing Docker" "$YELLOW"
 print_message "  - Creating systemd service" "$YELLOW"
 print_message ""
@@ -1058,26 +1045,41 @@ DATA_DIR="$HOME/birdnet-go-app/data"
 CONFIG_FILE="$CONFIG_DIR/config.yaml"
 TEMP_CONFIG="/tmp/config.yaml"
 
-# Check and handle existing containers
-check_existing_containers
+# First check basic network connectivity and ensure curl is available
+check_network
 
 # Check prerequisites before proceeding
 check_prerequisites
-check_network
 
-# Update package list
+# Now proceed with rest of package installation
 print_message "\n🔧 Updating package list..." "$YELLOW"
 sudo apt -qq update
 
 # Install required packages
 print_message "\n🔧 Checking and installing required packages..." "$YELLOW"
-check_install_package "alsa-utils"
-check_install_package "curl"
-check_install_package "ffmpeg"
-check_install_package "bc"
-check_install_package "jq"
-check_install_package "apache2-utils"
-check_install_package "netcat-openbsd"
+
+# Check which packages need to be installed
+REQUIRED_PACKAGES="alsa-utils curl bc jq apache2-utils netcat-openbsd"
+TO_INSTALL=""
+
+for pkg in $REQUIRED_PACKAGES; do
+    if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed"; then
+        TO_INSTALL="$TO_INSTALL $pkg"
+    else
+        print_message "✅ $pkg found" "$GREEN"
+    fi
+done
+
+# Install missing packages in a single command
+if [ ! -z "$TO_INSTALL" ]; then
+    print_message "🔧 Installing missing packages:$TO_INSTALL" "$YELLOW"
+    if sudo apt install -qq -y $TO_INSTALL; then
+        print_message "✅ All packages installed successfully" "$GREEN"
+    else
+        print_message "❌ Failed to install some packages" "$RED"
+        exit 1
+    fi
+fi
 
 # Pull Docker image
 pull_docker_image
