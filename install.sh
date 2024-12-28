@@ -918,26 +918,48 @@ check_existing_containers() {
 start_birdnet_go() {   
     print_message "\n🚀 Starting BirdNET-Go..." "$GREEN"
     sudo systemctl start birdnet-go.service
-    # check status
-    if sudo systemctl is-active --quiet birdnet-go.service; then
-        print_message "✅ BirdNET-Go started successfully!" "$GREEN"
-        print_message "\n🐳 Checking container logs..." "$YELLOW"
-        # Wait a moment for the container to start
-        sleep 2
-        # Get container ID and show logs
-        container_id=$(docker ps --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}")
-        if [ -n "$container_id" ]; then
-            docker logs "$container_id"
-            print_message "\nTo follow logs in real-time, use:" "$YELLOW"
-            print_message "docker logs -f $container_id" "$NC"
-        else
-            print_message "❌ Container not found. Please check 'docker ps' output." "$RED"
-            exit 1
-        fi
-    else
-        print_message "❌ Failed to start BirdNET-Go. Please check the logs for errors." "$RED"
+    
+    # Check if service started
+    if ! sudo systemctl is-active --quiet birdnet-go.service; then
+        print_message "❌ Failed to start BirdNET-Go service" "$RED"
         exit 1
     fi
+    print_message "✅ BirdNET-Go service started successfully!" "$GREEN"
+
+    print_message "\n🐳 Waiting for container to start..." "$YELLOW"
+    
+    # Wait for container to appear and be running (max 30 seconds)
+    local max_attempts=30
+    local attempt=1
+    local container_id=""
+    
+    while [ $attempt -le $max_attempts ]; do
+        container_id=$(docker ps --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}")
+        if [ -n "$container_id" ]; then
+            print_message "✅ Container started successfully!" "$GREEN"
+            break
+        fi
+        print_message "⏳ Waiting for container to start (attempt $attempt/$max_attempts)..." "$YELLOW"
+        sleep 1
+        ((attempt++))
+    done
+
+    if [ -z "$container_id" ]; then
+        print_message "❌ Container failed to start within ${max_attempts} seconds" "$RED"
+        print_message "Please check 'docker ps' and 'journalctl -u birdnet-go' for errors" "$YELLOW"
+        exit 1
+    fi
+
+    # Wait additional time for application to initialize
+    print_message "⏳ Waiting for application to initialize..." "$YELLOW"
+    sleep 5
+
+    # Show logs
+    print_message "\n📝 Container logs:" "$GREEN"
+    docker logs "$container_id"
+    
+    print_message "\nTo follow logs in real-time, use:" "$YELLOW"
+    print_message "docker logs -f $container_id" "$NC"
 }
 
 # Function to detect Raspberry Pi model
@@ -991,17 +1013,17 @@ optimize_settings() {
             ;;
         4)
             # RPi 4 settings
-            sed -i 's/overlap: 1.5/overlap: 2.7/' "$CONFIG_FILE"
+            sed -i 's/overlap: 1.5/overlap: 2.6/' "$CONFIG_FILE"
             print_message "✅ Applied optimized settings for Raspberry Pi 4" "$GREEN"
             ;;
         3)
             # RPi 3 settings
-            sed -i 's/overlap: 1.5/overlap: 2.5/' "$CONFIG_FILE"
+            sed -i 's/overlap: 1.5/overlap: 2.0/' "$CONFIG_FILE"
             print_message "✅ Applied optimized settings for Raspberry Pi 3" "$GREEN"
             ;;
         2)
             # RPi Zero 2 settings
-            sed -i 's/overlap: 1.5/overlap: 2.5/' "$CONFIG_FILE"
+            sed -i 's/overlap: 1.5/overlap: 2.0/' "$CONFIG_FILE"
             print_message "✅ Applied optimized settings for Raspberry Pi Zero 2" "$GREEN"
             ;;
     esac
