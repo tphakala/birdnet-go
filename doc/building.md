@@ -13,14 +13,15 @@ The provided [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json
 also mounts the source code into the container, so one can immediately start coding. 
 
 After the container starts, a development server is started that can be reached at [localhost:8080](http://localhost:8080). 
-The development server will automatically reload on any code changes.
+The development server will automatically reload on any code changes. 
 
-### Notes: 
+### Notes
+
+**Dependency Changes:** If you make changes to the devcontainer configuration or dependencies, you'll need to rebuild the container using "Rebuild Container" from the command palette.
 
 **VSCode Extensions:** Ensure Docker and [Remote Development](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack) extensions are installed.
 
-**Docker Engine:** Ensure the development host has a full docker engine install (not just the docker.io runtime package).  Instructions are at [Docker Engine Install On Debian](https://docs.docker.com/engine/install/debian/).
-
+**Docker Engine:** Ensure the development host has a full Docker engine installation (not just the docker.io runtime package). The full engine is required for buildx support, which enables cross-compilation features. Follow the official [Docker Engine Install On Debian](https://docs.docker.com/engine/install/debian/) guide for installation instructions.
 
 ## Building locally
 
