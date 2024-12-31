@@ -2,9 +2,9 @@
 
 Building can be tricky because of the many system development library dependencies. 
 It is recommended to follow the [building locally guide](#building-locally). 
-However, there is also a [devcontainer](#devcontainer) approach with the dependencies all installed inside a container.
+However, there is also a [devcontainer guide](#devcontainer) with all the dependencies installed inside a container.
 
-## Devcontainer approach
+## Devcontainer
 
 For development in VSCode, a [devcontainer](https://code.visualstudio.com/docs/remote/containers) can be used. 
 Open the project in VSCode and hit `F1` or `Shift-Command-P` on Mac, type `Reopen in Container` and wait for the container to build.
@@ -22,7 +22,7 @@ The development server will automatically reload on any code changes.
 **Docker Engine:** Ensure the development host has a full docker engine install (not just the docker.io runtime package).  Instructions are at [Docker Engine Install On Debian](https://docs.docker.com/engine/install/debian/).
 
 
-## Building locally approach
+## Building locally
 
 ### Install prerequisites
 
