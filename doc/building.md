@@ -1,18 +1,28 @@
 # Building
 
-Building can be a bit tricky because of the many dependencies. It is recommended to follow the [building locally guide](#building-locally) for building the project. However, there is also a provided [devcontainer](#devcontainer) approach that allows for easy development.
+Building can be tricky because of the many system development library dependencies. 
+It is recommended to follow the [building locally guide](#building-locally). 
+However, there is also a [devcontainer](#devcontainer) approach with the dependencies all installed inside a container.
 
-## Devcontainer
+## Devcontainer approach
 
-For convenient development in VSCode, a [devcontainer](https://code.visualstudio.com/docs/remote/containers) can be used. Simply open the project in VSCode and hit `F1`, type `Remote-Containers: Reopen in Container` and wait for the container to build.
+For development in VSCode, a [devcontainer](https://code.visualstudio.com/docs/remote/containers) can be used. 
+Open the project in VSCode and hit `F1` or `Shift-Command-P` on Mac, type `Reopen in Container` and wait for the container to build.
 
-The provided [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) contains all required dependencies and also mounts the source code into the container, so one can immediately start coding. When the container starts, a development server is started that can be reached at [localhost:8080](http://localhost:8080). The server automatically reloads the application on any code changes.
+The provided [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) contains all required dependencies and 
+also mounts the source code into the container, so one can immediately start coding. 
 
-Note: Ensure Docker and VSCode with [Remote Development](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack) extension are installed.
+After the container starts, a development server is started that can be reached at [localhost:8080](http://localhost:8080). 
+The development server will automatically reload on any code changes.
+
+### Notes: 
+
+**VSCode Extensions:** Ensure Docker and [Remote Development](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack) extensions are installed.
+
+**Docker Engine:** Ensure the development host has a full docker engine install (not just the docker.io runtime package).  Instructions are at [Docker Engine Install On Debian](https://docs.docker.com/engine/install/debian/).
 
 
-
-## Building locally
+## Building locally approach
 
 ### Install prerequisites
 
@@ -81,7 +91,7 @@ cd ~/src
 git clone https://github.com/tensorflow/tensorflow.git
 ```
 
-### Cross #compiling BirdNET-Go
+### Cross compiling BirdNET-Go
 
 Clone BirdNET-Go repository
 
