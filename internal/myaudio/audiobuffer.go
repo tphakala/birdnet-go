@@ -133,6 +133,13 @@ func (ab *AudioBuffer) Write(data []byte) {
 			log.Printf("Buffer wrapped during write, adjusting start time to %v", ab.startTime)
 		}
 	}
+
+	if conf.Setting().Realtime.Audio.Export.Debug {
+		if ab.writeIndex <= prevWriteIndex {
+			log.Printf("Buffer wrapped during write: writeIndex moved from %d to %d, lastSampleIdx: %d",
+				prevWriteIndex, ab.writeIndex, ab.lastSampleIdx)
+		}
+	}
 }
 
 // ReadSegment extracts a segment of audio data based on precise start and end times, handling wraparounds.
@@ -220,12 +227,26 @@ func (ab *AudioBuffer) ReadSegment(requestedStartTime time.Time, duration int) (
 
 			if conf.Setting().Realtime.Audio.Export.Debug {
 				if len(discontinuities) > 0 {
-					log.Printf("Found %d discontinuities in samples %d to %d at positions: %v",
-						len(discontinuities), startSampleIdx, endSampleIdx, discontinuities)
+					log.Printf("Found %d discontinuities in samples %d to %d:",
+						len(discontinuities), startSampleIdx, endSampleIdx)
+					for i, pos := range discontinuities {
+						sampleIdx := (startIndex + pos) / ab.bytesPerSample
+						log.Printf("  Discontinuity %d: position=%d, before=%d, after=%d, gap=%d samples",
+							i+1,
+							pos,
+							ab.sampleIndices[sampleIdx-1],
+							ab.sampleIndices[sampleIdx],
+							ab.sampleIndices[sampleIdx]-ab.sampleIndices[sampleIdx-1]-1)
+					}
 				} else {
 					log.Printf("Sample sequence continuous from %d to %d",
 						startSampleIdx, endSampleIdx)
 				}
+			}
+
+			if conf.Setting().Realtime.Audio.Export.Debug {
+				log.Printf("Reading audio segment: startTime=%v, endTime=%v, bufferStartTime=%v",
+					requestedStartTime, requestedEndTime, ab.startTime)
 			}
 
 			ab.lock.Unlock()
