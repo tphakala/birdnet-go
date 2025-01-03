@@ -111,7 +111,7 @@ func (a DatabaseAction) Execute(data interface{}) error {
 			saveAudioAction := SaveAudioAction{
 				Settings: a.Settings,
 				ClipName: a.Note.ClipName,
-				pcmData:  pcmData,
+				pcmData:  pcmData.Data,
 			}
 
 			if err := saveAudioAction.Execute(nil); err != nil {
