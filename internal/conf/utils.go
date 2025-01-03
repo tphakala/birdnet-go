@@ -23,6 +23,12 @@ import (
 func GetDefaultConfigPaths() ([]string, error) {
 	var configPaths []string
 
+	// Prioritize CONFIG_PATH environment variable if set
+	configPath := os.Getenv("CONFIG_PATH")
+	if configPath != "" {
+		return []string{configPath}, nil
+	}
+
 	// Fetch the directory of the executable.
 	exePath, err := os.Executable()
 	if err != nil {
