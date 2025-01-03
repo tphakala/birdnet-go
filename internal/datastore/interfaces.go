@@ -7,8 +7,10 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -66,39 +68,79 @@ func New(settings *conf.Settings) Interface {
 
 // Save stores a note and its associated results as a single transaction in the database.
 func (ds *DataStore) Save(note *Note, results []Results) error {
-	// Begin a transaction
-	tx := ds.DB.Begin()
-	if tx.Error != nil {
-		return fmt.Errorf("starting transaction: %w", tx.Error)
-	}
+	// Generate a unique transaction ID (first 8 chars of UUID)
+	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
 
-	// Roll back the transaction if a panic occurs
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
+	// Retry configuration
+	maxRetries := 5
+	baseDelay := 500 * time.Millisecond
+
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Begin a transaction
+		tx := ds.DB.Begin()
+		if tx.Error != nil {
+			lastErr = fmt.Errorf("starting transaction: %w", tx.Error)
+			continue
 		}
-	}()
 
-	// Save the note and its associated results within the transaction
-	if err := tx.Create(note).Error; err != nil {
-		tx.Rollback()
-		return fmt.Errorf("saving note: %w", err)
-	}
+		// Roll back the transaction if a panic occurs
+		defer func() {
+			if r := recover(); r != nil {
+				tx.Rollback()
+			}
+		}()
 
-	// Assign the note ID to each result and save them
-	for _, result := range results {
-		result.NoteID = note.ID
-		if err := tx.Create(&result).Error; err != nil {
+		// Save the note and its associated results within the transaction
+		if err := tx.Create(note).Error; err != nil {
 			tx.Rollback()
-			return fmt.Errorf("saving result: %w", err)
+			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
+				delay := baseDelay * time.Duration(attempt+1)
+				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				time.Sleep(delay)
+				continue
+			}
+			return fmt.Errorf("saving note: %w", err)
 		}
+
+		// Assign the note ID to each result and save them
+		for _, result := range results {
+			result.NoteID = note.ID
+			if err := tx.Create(&result).Error; err != nil {
+				tx.Rollback()
+				if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
+					delay := baseDelay * time.Duration(attempt+1)
+					log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+					time.Sleep(delay)
+					continue
+				}
+				lastErr = fmt.Errorf("saving result: %w", err)
+				return lastErr
+			}
+		}
+
+		// Commit the transaction
+		if err := tx.Commit().Error; err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
+				delay := baseDelay * time.Duration(attempt+1)
+				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				time.Sleep(delay)
+				continue
+			}
+			return fmt.Errorf("committing transaction: %w", err)
+		}
+
+		// Log if retry count is not 0 and transaction was successful
+		if attempt > 0 {
+			log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
+		}
+
+		// If we get here, the transaction was successful
+		return nil
 	}
 
-	// Commit the transaction
-	if err := tx.Commit().Error; err != nil {
-		return fmt.Errorf("committing transaction: %w", err)
-	}
-	return nil
+	// If we've exhausted all retries
+	return fmt.Errorf("[%s] failed after %d attempts: %w", txID, maxRetries, lastErr)
 }
 
 // Get retrieves a note by its ID from the database.
