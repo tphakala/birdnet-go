@@ -98,10 +98,8 @@ func (ab *AudioBuffer) Write(data []byte) {
 		ab.initialized = true
 	}
 
-	// Store previous state for debugging
+	// Store the current write index to determine if we've wrapped around the buffer.
 	prevWriteIndex := ab.writeIndex
-	prevLastSampleIdx := ab.lastSampleIdx
-
 	samplesWritten := 0
 
 	// Write data and sample indices
@@ -129,16 +127,11 @@ func (ab *AudioBuffer) Write(data []byte) {
 	ab.lastSampleIdx += uint64(samplesWritten)
 
 	if ab.writeIndex <= prevWriteIndex {
-		// Buffer wrapped - log more details
+		// If old data has been overwritten, adjust startTime to maintain accurate timekeeping.
+		ab.startTime = time.Now().Add(-ab.bufferDuration)
 		if conf.Setting().Realtime.Audio.Export.Debug {
-			log.Printf("Buffer wrap details: prevWriteIndex=%d, newWriteIndex=%d, "+
-				"prevLastSampleIdx=%d, newLastSampleIdx=%d, samplesWritten=%d",
-				prevWriteIndex, ab.writeIndex,
-				prevLastSampleIdx, ab.lastSampleIdx,
-				samplesWritten)
+			log.Printf("Buffer wrapped during write, adjusting start time to %v", ab.startTime)
 		}
-		// Adjust startTime with a small safety margin
-		ab.startTime = time.Now().Add(-ab.bufferDuration + 100*time.Millisecond)
 	}
 
 	if conf.Setting().Realtime.Audio.Export.Debug {
@@ -182,74 +175,52 @@ func (ab *AudioBuffer) ReadSegment(requestedStartTime time.Time, duration int) (
 		// Wait until the current time is past the requested end time
 		if time.Now().After(requestedEndTime) {
 			var segment []byte
-
-			// Set the sample indices based on the buffer positions
-			startSampleIdx := ab.sampleIndices[startIndex/ab.bytesPerSample]
-			endSampleIdx := ab.sampleIndices[(endIndex-ab.bytesPerSample)/ab.bytesPerSample]
-
+			var startSampleIdx, endSampleIdx uint64
 			discontinuities := make([]int, 0)
 
 			if startIndex < endIndex {
-				// Non-wrapped case - check discontinuities in one continuous block
+				if conf.Setting().Realtime.Audio.Export.Debug {
+					log.Printf("Reading segment from %d to %d", startIndex, endIndex)
+				}
+				segmentSize := endIndex - startIndex
+				segment = make([]byte, segmentSize)
+				copy(segment, ab.data[startIndex:endIndex])
+
+				// Track sample indices
+				startSampleIdx = ab.sampleIndices[startIndex/ab.bytesPerSample]
+				endSampleIdx = ab.sampleIndices[(endIndex/ab.bytesPerSample)-1] + 1
+
+				// Check for discontinuities
 				for i := startIndex/ab.bytesPerSample + 1; i < endIndex/ab.bytesPerSample; i++ {
 					if ab.sampleIndices[i] != ab.sampleIndices[i-1]+1 {
-						pos := (i * ab.bytesPerSample) - startIndex
-						if pos >= 0 {
-							discontinuities = append(discontinuities, pos)
-							if conf.Setting().Realtime.Audio.Export.Debug {
-								log.Printf("Discontinuity at sample %d: expected %d, got %d (gap=%d)",
-									i, ab.sampleIndices[i-1]+1, ab.sampleIndices[i],
-									ab.sampleIndices[i]-ab.sampleIndices[i-1]-1)
-							}
-						}
+						discontinuities = append(discontinuities, (i*ab.bytesPerSample)-startIndex)
 					}
 				}
 			} else {
-				// Wrapped case - check each section separately
-				// First part: startIndex to buffer end
-				for i := startIndex/ab.bytesPerSample + 1; i < ab.bufferSize/ab.bytesPerSample; i++ {
-					if ab.sampleIndices[i] != ab.sampleIndices[i-1]+1 {
-						pos := (i * ab.bytesPerSample) - startIndex
-						if pos >= 0 {
-							discontinuities = append(discontinuities, pos)
-							if conf.Setting().Realtime.Audio.Export.Debug {
-								log.Printf("First part discontinuity at sample %d: expected %d, got %d (gap=%d)",
-									i, ab.sampleIndices[i-1]+1, ab.sampleIndices[i],
-									ab.sampleIndices[i]-ab.sampleIndices[i-1]-1)
-							}
+				if conf.Setting().Realtime.Audio.Export.Debug {
+					log.Printf("Buffer wrapped during read, reading segment from %d to %d", startIndex, endIndex)
+				}
+				segmentSize := (ab.bufferSize - startIndex) + endIndex
+				segment = make([]byte, segmentSize)
+				firstPartSize := ab.bufferSize - startIndex
+				copy(segment[:firstPartSize], ab.data[startIndex:])
+				copy(segment[firstPartSize:], ab.data[:endIndex])
+
+				// Track sample indices for wrapped buffer
+				startSampleIdx = ab.sampleIndices[startIndex/ab.bytesPerSample]
+				endSampleIdx = ab.sampleIndices[(endIndex/ab.bytesPerSample)-1] + 1
+
+				// Check for discontinuities including wrap point
+				for i := startIndex / ab.bytesPerSample; i < ab.bufferSize/ab.bytesPerSample; i++ {
+					if i > startIndex/ab.bytesPerSample && i > 0 {
+						if ab.sampleIndices[i] != ab.sampleIndices[i-1]+1 {
+							discontinuities = append(discontinuities, (i*ab.bytesPerSample)-startIndex)
 						}
 					}
 				}
-
-				// Second part: start to endIndex
-				// Skip the first sample after wrap as it's expected to be discontinuous
 				for i := 1; i < endIndex/ab.bytesPerSample; i++ {
 					if ab.sampleIndices[i] != ab.sampleIndices[i-1]+1 {
-						pos := ((i * ab.bytesPerSample) + (ab.bufferSize - startIndex))
-						if pos >= 0 {
-							discontinuities = append(discontinuities, pos)
-							if conf.Setting().Realtime.Audio.Export.Debug {
-								log.Printf("Second part discontinuity at sample %d: expected %d, got %d (gap=%d)",
-									i, ab.sampleIndices[i-1]+1, ab.sampleIndices[i],
-									ab.sampleIndices[i]-ab.sampleIndices[i-1]-1)
-							}
-						}
-					}
-				}
-
-				// Only check wrap point if there's a gap larger than expected
-				lastIdx := (ab.bufferSize / ab.bytesPerSample) - 1
-				firstWrappedIdx := 0
-				if lastIdx >= 0 && firstWrappedIdx < endIndex/ab.bytesPerSample {
-					expectedNext := ab.sampleIndices[lastIdx] + 1
-					actual := ab.sampleIndices[firstWrappedIdx]
-					// Allow for normal wrap progression
-					if actual != expectedNext && (actual < ab.sampleIndices[lastIdx]) {
-						discontinuities = append(discontinuities, ab.bufferSize-startIndex)
-						if conf.Setting().Realtime.Audio.Export.Debug {
-							log.Printf("Wrap point gap detected: expected %d, got %d (possible dropout)",
-								expectedNext, actual)
-						}
+						discontinuities = append(discontinuities, ((i*ab.bytesPerSample)+firstPartSize)-startIndex)
 					}
 				}
 			}
@@ -260,20 +231,12 @@ func (ab *AudioBuffer) ReadSegment(requestedStartTime time.Time, duration int) (
 						len(discontinuities), startSampleIdx, endSampleIdx)
 					for i, pos := range discontinuities {
 						sampleIdx := (startIndex + pos) / ab.bytesPerSample
-						before := ab.sampleIndices[sampleIdx-1]
-						after := ab.sampleIndices[sampleIdx]
-
-						// Use signed math to avoid wrap-around
-						gap := int64(after) - int64(before) - 1
-
-						// If gap < 0, treat it as a "wrapped" or "backward" jump
-						if gap < 0 {
-							log.Printf("  Discontinuity %d: position=%d, before=%d, after=%d (wrapped)",
-								i+1, pos, before, after)
-						} else {
-							log.Printf("  Discontinuity %d: position=%d, before=%d, after=%d, gap=%d samples",
-								i+1, pos, before, after, gap)
-						}
+						log.Printf("  Discontinuity %d: position=%d, before=%d, after=%d, gap=%d samples",
+							i+1,
+							pos,
+							ab.sampleIndices[sampleIdx-1],
+							ab.sampleIndices[sampleIdx],
+							ab.sampleIndices[sampleIdx]-ab.sampleIndices[sampleIdx-1]-1)
 					}
 				} else {
 					log.Printf("Sample sequence continuous from %d to %d",
@@ -299,12 +262,4 @@ func (ab *AudioBuffer) ReadSegment(requestedStartTime time.Time, duration int) (
 		ab.lock.Unlock()
 		time.Sleep(1 * time.Second) // Sleep briefly to avoid busy waiting
 	}
-}
-
-// Helper function for absolute duration
-func absDuration(d time.Duration) time.Duration {
-	if d < 0 {
-		return -d
-	}
-	return d
 }
