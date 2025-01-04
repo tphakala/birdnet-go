@@ -97,7 +97,7 @@ func (ab *AudioBuffer) Write(data []byte) {
 		// If old data has been overwritten, adjust startTime to maintain accurate timekeeping.
 		ab.startTime = time.Now().Add(-ab.bufferDuration)
 		if conf.Setting().Realtime.Audio.Export.Debug {
-			log.Printf("Buffer has wrapped around, adjusting start time to %v", ab.startTime)
+			log.Printf("Buffer wrapped during write, adjusting start time to %v", ab.startTime)
 		}
 	}
 }
@@ -144,7 +144,7 @@ func (ab *AudioBuffer) ReadSegment(requestedStartTime time.Time, duration int) (
 				copy(segment, ab.data[startIndex:endIndex])
 			} else {
 				if conf.Setting().Realtime.Audio.Export.Debug {
-					log.Printf("Buffer has wrapped, reading segment from %d to %d", startIndex, endIndex)
+					log.Printf("Buffer wrapped during read, reading segment from %d to %d", startIndex, endIndex)
 				}
 				segmentSize := (ab.bufferSize - startIndex) + endIndex
 				segment = make([]byte, segmentSize)

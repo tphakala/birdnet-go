@@ -38,23 +38,38 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Function to check if curl is available and install it if needed
+ensure_curl() {
+    if ! command_exists curl; then
+        print_message "📦 curl not found. Installing curl..." "$YELLOW"
+        if sudo apt -qq update && sudo apt install -qq -y curl; then
+            print_message "✅ curl installed successfully" "$GREEN"
+        else
+            print_message "❌ Failed to install curl" "$RED"
+            print_message "Please install curl manually and try again" "$YELLOW"
+            exit 1
+        fi
+    fi
+}
+
 # Function to check network connectivity
 check_network() {
     print_message "🌐 Checking network connectivity..." "$YELLOW"
     local success=true
+
+    # First do a basic ping test to check general connectivity
+    if ! ping -c 1 8.8.8.8 >/dev/null 2>&1; then
+        print_message "❌ No network connectivity (ping test failed)" "$RED"
+        print_message "Please check your internet connection and try again" "$YELLOW"
+        exit 1
+    fi
+
+    # Now ensure curl is available for further tests
+    ensure_curl
+
+    # Continue with existing HTTP/HTTPS checks...
     local test_hosts=("github.com" "raw.githubusercontent.com" "ghcr.io")
     
-    # DNS Check
-    print_message "📡 Testing DNS resolution..." "$YELLOW"
-    for host in "${test_hosts[@]}"; do
-        if host "$host" >/dev/null 2>&1; then
-            print_message "✅ DNS resolution successful for $host" "$GREEN"
-        else
-            print_message "❌ DNS resolution failed for $host" "$RED"
-            success=false
-        fi
-    done
-
     # HTTP/HTTPS Check
     print_message "\n📡 Testing HTTP/HTTPS connectivity..." "$YELLOW"
     local urls=(
@@ -92,7 +107,7 @@ check_network() {
         return 1
     fi
 
-    print_message "\n✅ Network connectivity check passed" "$GREEN"
+    print_message "\n✅ Network connectivity check passed\n" "$GREEN"
     return 0
 }
 
@@ -178,16 +193,34 @@ check_prerequisites() {
             ;;
     esac
 
-    # Function to add user to docker group
-    add_user_to_docker_group() {
-        print_message "🔧 Adding user $USER to docker group..." "$YELLOW"
-        if sudo usermod -aG docker "$USER"; then
-            print_message "✅ Added user $USER to docker group" "$GREEN"
-            print_message "Please log out and log back in for group changes to take effect." "$YELLOW"
+    # Function to add user to required groups
+    add_user_to_groups() {
+        print_message "🔧 Adding user $USER to required groups..." "$YELLOW"
+        local groups_added=false
+
+        if ! groups "$USER" | grep &>/dev/null "\bdocker\b"; then
+            if sudo usermod -aG docker "$USER"; then
+                print_message "✅ Added user $USER to docker group" "$GREEN"
+                groups_added=true
+            else
+                print_message "❌ Failed to add user $USER to docker group" "$RED"
+                exit 1
+            fi
+        fi
+
+        if ! groups "$USER" | grep &>/dev/null "\baudio\b"; then
+            if sudo usermod -aG audio "$USER"; then
+                print_message "✅ Added user $USER to audio group" "$GREEN"
+                groups_added=true
+            else
+                print_message "❌ Failed to add user $USER to audio group" "$RED"
+                exit 1
+            fi
+        fi
+
+        if [ "$groups_added" = true ]; then
+            print_message "Please log out and log back in for group changes to take effect, and rerun install.sh to continue with install" "$YELLOW"
             exit 0
-        else
-            print_message "❌ Failed to add user $USER to docker group" "$RED"
-            exit 1
         fi
     }
 
@@ -197,8 +230,8 @@ check_prerequisites() {
         # Install Docker from apt repository
         sudo apt -qq update
         sudo apt -qq install -y docker.io
-        # Add current user to docker group
-        add_user_to_docker_group
+        # Add current user to required groups
+        add_user_to_groups
         # Start Docker service
         if sudo systemctl start docker; then
             print_message "✅ Docker service started successfully" "$GREEN"
@@ -206,7 +239,7 @@ check_prerequisites() {
             print_message "❌ Failed to start Docker service" "$RED"
             exit 1
         fi
-       
+        
         # Enable Docker service on boot
         if  sudo systemctl enable docker; then
             print_message "✅ Docker service start on boot enabled successfully" "$GREEN"
@@ -214,19 +247,14 @@ check_prerequisites() {
             print_message "❌ Failed to enable Docker service on boot" "$RED"
             exit 1
         fi
-        print_message "✅ Docker installed successfully. To make group member changes take effect, please log out and log back in and rerun install.sh to continue with install" "$GREEN"
-        print_message "Exiting install script..." "$YELLOW"
+        print_message "⚠️ Docker installed successfully. To make group member changes take effect, please log out and log back in and rerun install.sh to continue with install" "$YELLOW"
         # exit install script
         exit 0
     else
         print_message "✅ Docker found" "$GREEN"
         
-        # Check if user is in the docker group
-        if groups "$USER" | grep &>/dev/null "\bdocker\b"; then
-            print_message "✅ User $USER is in the docker group" "$GREEN"
-        else
-            add_user_to_docker_group
-        fi
+        # Check if user is in required groups
+        add_user_to_groups
 
         # Check if Docker can be used by the user
         if ! docker info &>/dev/null; then
@@ -368,37 +396,9 @@ test_rtsp_url() {
             return 1
         fi
         
-        # If port is open, test RTSP stream
-        if command_exists ffprobe; then
-            print_message "✅ Port is open, testing RTSP stream (30 second timeout)..." "$GREEN"
-            
-            # Create a timeout function using background process, redirect all output to /dev/null
-            ( 
-                ffprobe -v quiet -i "$url" -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 &>/dev/null
-            ) & pid=$!
-            
-            # Wait for specified time, redirect all output to /dev/null
-            ( sleep 30 && kill -HUP $pid &>/dev/null ) & waiter=$!
-            
-            # Wait for completion and cleanup
-            if wait $pid &>/dev/null; then
-                kill $waiter &>/dev/null 2>&1 || true
-                wait $waiter &>/dev/null 2>&1 || true
-                print_message "✅ RTSP connection successful!" "$GREEN"
-                return 0
-            else
-                kill $waiter &>/dev/null 2>&1 || true
-                wait $waiter &>/dev/null 2>&1 || true
-                print_message "❌ RTSP stream test failed" "$RED"
-                print_message "❓ Do you want to use this URL anyway? (y/n): " "$YELLOW" "nonewline"
-                read -r force_continue
-                
-                if [[ $force_continue == "y" ]]; then
-                    print_message "⚠️ Continuing with untested RTSP URL" "$YELLOW"
-                    return 0
-                fi
-            fi
-        fi
+        # Skip RTSP stream test, assume connection is good if port is open
+        print_message "✅ Port is accessible, continuing with RTSP URL" "$GREEN"
+        return 0
     else
         print_message "❌ Invalid RTSP URL format" "$RED"
     fi
@@ -918,26 +918,48 @@ check_existing_containers() {
 start_birdnet_go() {   
     print_message "\n🚀 Starting BirdNET-Go..." "$GREEN"
     sudo systemctl start birdnet-go.service
-    # check status
-    if sudo systemctl is-active --quiet birdnet-go.service; then
-        print_message "✅ BirdNET-Go started successfully!" "$GREEN"
-        print_message "\n🐳 Checking container logs..." "$YELLOW"
-        # Wait a moment for the container to start
-        sleep 2
-        # Get container ID and show logs
-        container_id=$(docker ps --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}")
-        if [ -n "$container_id" ]; then
-            docker logs "$container_id"
-            print_message "\nTo follow logs in real-time, use:" "$YELLOW"
-            print_message "docker logs -f $container_id" "$NC"
-        else
-            print_message "❌ Container not found. Please check 'docker ps' output." "$RED"
-            exit 1
-        fi
-    else
-        print_message "❌ Failed to start BirdNET-Go. Please check the logs for errors." "$RED"
+    
+    # Check if service started
+    if ! sudo systemctl is-active --quiet birdnet-go.service; then
+        print_message "❌ Failed to start BirdNET-Go service" "$RED"
         exit 1
     fi
+    print_message "✅ BirdNET-Go service started successfully!" "$GREEN"
+
+    print_message "\n🐳 Waiting for container to start..." "$YELLOW"
+    
+    # Wait for container to appear and be running (max 30 seconds)
+    local max_attempts=30
+    local attempt=1
+    local container_id=""
+    
+    while [ $attempt -le $max_attempts ]; do
+        container_id=$(docker ps --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}")
+        if [ -n "$container_id" ]; then
+            print_message "✅ Container started successfully!" "$GREEN"
+            break
+        fi
+        print_message "⏳ Waiting for container to start (attempt $attempt/$max_attempts)..." "$YELLOW"
+        sleep 1
+        ((attempt++))
+    done
+
+    if [ -z "$container_id" ]; then
+        print_message "❌ Container failed to start within ${max_attempts} seconds" "$RED"
+        print_message "Please check 'docker ps' and 'journalctl -u birdnet-go' for errors" "$YELLOW"
+        exit 1
+    fi
+
+    # Wait additional time for application to initialize
+    print_message "⏳ Waiting for application to initialize..." "$YELLOW"
+    sleep 5
+
+    # Show logs
+    print_message "\n📝 Container logs:" "$GREEN"
+    docker logs "$container_id"
+    
+    print_message "\nTo follow logs in real-time, use:" "$YELLOW"
+    print_message "docker logs -f $container_id" "$NC"
 }
 
 # Function to detect Raspberry Pi model
@@ -991,17 +1013,17 @@ optimize_settings() {
             ;;
         4)
             # RPi 4 settings
-            sed -i 's/overlap: 1.5/overlap: 2.7/' "$CONFIG_FILE"
+            sed -i 's/overlap: 1.5/overlap: 2.6/' "$CONFIG_FILE"
             print_message "✅ Applied optimized settings for Raspberry Pi 4" "$GREEN"
             ;;
         3)
             # RPi 3 settings
-            sed -i 's/overlap: 1.5/overlap: 2.5/' "$CONFIG_FILE"
+            sed -i 's/overlap: 1.5/overlap: 2.0/' "$CONFIG_FILE"
             print_message "✅ Applied optimized settings for Raspberry Pi 3" "$GREEN"
             ;;
         2)
             # RPi Zero 2 settings
-            sed -i 's/overlap: 1.5/overlap: 2.5/' "$CONFIG_FILE"
+            sed -i 's/overlap: 1.5/overlap: 2.0/' "$CONFIG_FILE"
             print_message "✅ Applied optimized settings for Raspberry Pi Zero 2" "$GREEN"
             ;;
     esac
@@ -1047,7 +1069,7 @@ EOF
 print_message "\n🐦 BirdNET-Go Installation Script" "$GREEN"
 print_message "This script will install BirdNET-Go and its dependencies." "$YELLOW"
 print_message "Note: Root privileges will be required for:" "$YELLOW"
-print_message "  - Installing system packages (alsa-utils, curl, ffmpeg, bc, jq, apache2-utils)" "$YELLOW"
+print_message "  - Installing system packages (alsa-utils, curl, bc, jq, apache2-utils)" "$YELLOW"
 print_message "  - Installing Docker" "$YELLOW"
 print_message "  - Creating systemd service" "$YELLOW"
 print_message ""
@@ -1058,26 +1080,41 @@ DATA_DIR="$HOME/birdnet-go-app/data"
 CONFIG_FILE="$CONFIG_DIR/config.yaml"
 TEMP_CONFIG="/tmp/config.yaml"
 
-# Check and handle existing containers
-check_existing_containers
+# First check basic network connectivity and ensure curl is available
+check_network
 
 # Check prerequisites before proceeding
 check_prerequisites
-check_network
 
-# Update package list
+# Now proceed with rest of package installation
 print_message "\n🔧 Updating package list..." "$YELLOW"
 sudo apt -qq update
 
 # Install required packages
 print_message "\n🔧 Checking and installing required packages..." "$YELLOW"
-check_install_package "alsa-utils"
-check_install_package "curl"
-check_install_package "ffmpeg"
-check_install_package "bc"
-check_install_package "jq"
-check_install_package "apache2-utils"
-check_install_package "netcat-openbsd"
+
+# Check which packages need to be installed
+REQUIRED_PACKAGES="alsa-utils curl bc jq apache2-utils netcat-openbsd"
+TO_INSTALL=""
+
+for pkg in $REQUIRED_PACKAGES; do
+    if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed"; then
+        TO_INSTALL="$TO_INSTALL $pkg"
+    else
+        print_message "✅ $pkg found" "$GREEN"
+    fi
+done
+
+# Install missing packages in a single command
+if [ ! -z "$TO_INSTALL" ]; then
+    print_message "🔧 Installing missing packages:$TO_INSTALL" "$YELLOW"
+    if sudo apt install -qq -y $TO_INSTALL; then
+        print_message "✅ All packages installed successfully" "$GREEN"
+    else
+        print_message "❌ Failed to install some packages" "$RED"
+        exit 1
+    fi
+fi
 
 # Pull Docker image
 pull_docker_image
