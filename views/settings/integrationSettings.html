@@ -123,172 +123,6 @@
 </div>
 <!-- BirdWeather Settings end -->
 
-<!-- OpenWeather Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
-    openWeather: {
-        enabled: {{.Settings.Realtime.OpenWeather.Enabled}},
-        debug: {{.Settings.Realtime.OpenWeather.Debug}},
-        apiKey: '{{.Settings.Realtime.OpenWeather.APIKey}}',
-        endpoint: '{{.Settings.Realtime.OpenWeather.Endpoint}}',
-        interval: {{.Settings.Realtime.OpenWeather.Interval}},
-        units: '{{.Settings.Realtime.OpenWeather.Units}}',
-        language: '{{.Settings.Realtime.OpenWeather.Language}}'
-    },
-    openWeatherSettingsOpen: false,
-    showTooltip: null,
-    hasChanges: false,
-    resetChanges() {
-        this.hasChanges = false;
-    }
-}" x-init="
-    $watch('openWeather', (value) => { hasChanges = true }, { deep: true });
-">
-
-    <!-- control collapse element open state and label visibility -->
-    <input type="checkbox" id="openWeatherSettingsOpen"
-        x-on:change="openWeatherSettingsOpen = !openWeatherSettingsOpen" />
-
-    <div class="collapse-title text-xl font-medium">
-        <div class="flex items-center">
-            <label for="birdnetSettingsOpen" class="cursor-pointer">OpenWeather</label>
-            <div x-show="hasChanges" x-cloak class="ml-2">
-                <span class="badge badge-primary badge-sm changed-badge">
-                    <span class="text-xs mb-0.5">changed</span>
-                </span>
-            </div>
-        </div>
-        <!-- short descripton of this section -->
-        <p class="text-sm text-gray-500">Get weather data from OpenWeatherMap</p>
-    </div>
-
-    <!-- disabled for now
-    <div class="p-4 pt-0" x-show="!openWeatherSettingsOpen">
-        <label class="cursor-pointer" for="openWeatherSettingsOpen">
-            <span>Configure OpenWeather integration</span>
-        </label>
-    </div>-->
-
-    <div class="collapse-content">
-        <div class="form-control relative">
-            <label class="label cursor-pointer justify-start" for="openWeatherEnabled">
-                <input type="checkbox" id="openWeatherEnabled" name="realtime.openweather.enabled"
-                    x-model="openWeather.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
-                <input type="hidden" name="realtime.openweather.enabled" value="false">
-                <span class="label-text">Enable OpenWeather Integration</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherEnabled'"
-                    @mouseleave="showTooltip = null">ⓘ</span>
-            </label>
-            <div x-show="showTooltip === 'openWeatherEnabled'" x-cloak
-                class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                Enable or disable integration with OpenWeather service.
-            </div>
-        </div>
-
-        <div x-show="openWeather.enabled">
-
-            <div class="form-control relative">
-                <label class="label cursor-pointer justify-start" for="openWeatherDebug">
-                    <input type="checkbox" id="openWeatherDebug" name="realtime.openweather.debug"
-                        x-model="openWeather.debug" class="checkbox checkbox-primary checkbox-xs mr-2">
-                    <input type="hidden" name="realtime.openweather.debug" value="false">
-                    <span class="label-text">Debug Mode</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherDebug'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
-                </label>
-                <div x-show="showTooltip === 'openWeatherDebug'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                    Enable debug mode for additional logging information.
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-                <!-- div class="form-control relative">
-                    <label class="label justify-start" for="openWeatherApiKey">
-                        <span class="label-text">API Key</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherApiKey'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <input type="text" id="openWeatherApiKey" name="realtime.openweather.apikey" x-model="openWeather.apiKey" class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'openWeatherApiKey'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                        Your OpenWeather API key. Keep this secret!
-                    </div>
-                </div -->
-
-                {{template "passwordField" dict
-                "id" "openWeatherApiKey"
-                "model" "openWeather.apiKey"
-                "name" "realtime.openweather.apikey"
-                "label" "OpenWeather API Key"
-                "tooltip" "Your OpenWeather API key. Keep this secret!"
-                }}
-
-                <div class="form-control relative">
-                    <label class="label justify-start" for="openWeatherEndpoint">
-                        <span class="label-text">API Endpoint</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help"
-                            @mouseenter="showTooltip = 'openWeatherEndpoint'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <input type="text" id="openWeatherEndpoint" name="realtime.openweather.endpoint"
-                        x-model="openWeather.endpoint" class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'openWeatherEndpoint'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                        The OpenWeather API endpoint URL.
-                    </div>
-                </div>
-
-                <div class="form-control relative">
-                    <label class="label justify-start" for="openWeatherInterval">
-                        <span class="label-text">Fetch Interval (minutes)</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help"
-                            @mouseenter="showTooltip = 'openWeatherInterval'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <input type="number" id="openWeatherInterval" name="realtime.openweather.interval"
-                        x-model="openWeather.interval" min="1" class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'openWeatherInterval'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                        How often to fetch new weather data, in minutes.
-                    </div>
-                </div>
-
-                <div class="form-control relative">
-                    <label class="label justify-start" for="openWeatherUnits">
-                        <span class="label-text">Units of Measurement</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help"
-                            @mouseenter="showTooltip = 'openWeatherUnits'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <select id="openWeatherUnits" name="realtime.openweather.units" x-model="openWeather.units"
-                        class="select select-bordered select-sm w-full">
-                        <option value="standard">Standard</option>
-                        <option value="metric">Metric</option>
-                        <option value="imperial">Imperial</option>
-                    </select>
-                    <div x-show="showTooltip === 'openWeatherUnits'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                        Choose the units system for weather data.
-                    </div>
-                </div>
-
-                <div class="form-control relative">
-                    <label class="label justify-start" for="openWeatherLanguage">
-                        <span class="label-text">Language</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help"
-                            @mouseenter="showTooltip = 'openWeatherLanguage'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <input type="text" id="openWeatherLanguage" name="realtime.openweather.language"
-                        x-model="openWeather.language" class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'openWeatherLanguage'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                        Language code for the API response (e.g., 'en' for English).
-                    </div>
-                </div>
-
-            </div>
-
-        </div>
-    </div>
-</div>
-<!-- OpenWeather Settings end -->
-
 <!-- MQTT Settings start -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
     mqtt: {
@@ -501,5 +335,136 @@
 </div>
 <!-- Telemetry Settings end -->
 
+<!-- Weather Settings start -->
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
+    weather: {
+        provider: '{{.Settings.Realtime.Weather.Provider}}',
+        debug: {{.Settings.Realtime.Weather.Debug}},
+        pollInterval: {{.Settings.Realtime.Weather.PollInterval}},
+        openWeather: {
+            apiKey: '{{.Settings.Realtime.Weather.OpenWeather.APIKey}}',
+            endpoint: '{{.Settings.Realtime.Weather.OpenWeather.Endpoint}}',
+            units: '{{.Settings.Realtime.Weather.OpenWeather.Units}}',
+            language: '{{.Settings.Realtime.Weather.OpenWeather.Language}}'
+        }
+    },
+    weatherSettingsOpen: false,
+    showTooltip: null,
+    hasChanges: false,
+    resetChanges() {
+        this.hasChanges = false;
+    }
+}" x-init="
+    $watch('weather', (value) => { hasChanges = true }, { deep: true });
+">
+
+    <!-- control collapse element open state and label visibility -->
+    <input type="checkbox" id="weatherSettingsOpen" x-on:change="weatherSettingsOpen = !weatherSettingsOpen" />
+
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex items-center">
+            <label for="weatherSettingsOpen" class="cursor-pointer">Weather</label>
+            <div x-show="hasChanges" x-cloak class="ml-2">
+                <span class="badge badge-primary badge-sm changed-badge">
+                    <span class="text-xs mb-0.5">changed</span>
+                </span>
+            </div>
+        </div>
+        <!-- short description of this section -->
+        <p class="text-sm text-gray-500">Configure weather data collection</p>
+    </div>
+
+    <div class="collapse-content">
+        <!-- Weather Provider Selection -->
+        <div class="form-control relative">
+            <label class="label justify-start" for="weatherProvider">
+                <span class="label-text">Weather Provider</span>
+                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'weatherProvider'" @mouseleave="showTooltip = null">ⓘ</span>
+            </label>
+            <select id="weatherProvider" name="realtime.weather.provider" x-model="weather.provider" class="select select-bordered select-sm w-full">
+                <option value="none">None</option>
+                <option value="yrno">Yr.no</option>
+                <option value="openweather">OpenWeather</option>
+            </select>
+            <div x-show="showTooltip === 'weatherProvider'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                Select the weather data provider or choose 'None' to disable weather data collection.
+            </div>
+        </div>
+
+        <!-- none Specific Note -->
+        <div x-show="weather.provider === 'none'" class="mt-4">
+            <div class="mt-4 p-4 bg-base-200 rounded-lg text-sm">
+                <p>No weather data will be retrieved.</p>
+            </div>
+        </div>
+
+        <!-- Yr.no Specific Note -->
+        <div x-show="weather.provider === 'yrno'" class="mt-4">
+            <div class="mt-4 p-4 bg-base-200 rounded-lg text-sm">
+                <p>Weather forecast data is provided by Yr.no, a joint service by the Norwegian Meteorological Institute (met.no) and the Norwegian Broadcasting Corporation (NRK).</p>
+                <p class="mt-2">Yr is a free weather data service. For more information, visit <a href="https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr" class="link link-primary" target="_blank" rel="noopener noreferrer">Yr.no</a>.</p>
+            </div>
+        </div>
+
+        <!-- OpenWeather Specific Note -->
+        <div x-show="weather.provider === 'openweather'" class="mt-4">
+            <div class="mt-4 p-4 bg-base-200 rounded-lg text-sm">
+                <p>Use of OpenWeather requires an API key, sign up for a free API key at <a href="https://home.openweathermap.org/users/sign_up" class="link link-primary" target="_blank" rel="noopener noreferrer">OpenWeather</a>.</p>
+            </div>
+        </div>
+
+        <div x-show="weather.provider !== 'none'">
+            <!-- OpenWeather Specific Settings -->
+            <div x-show="weather.provider === 'openweather'" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                {{template "passwordField" dict
+                "id" "openWeatherApiKey"
+                "model" "weather.openWeather.apiKey"
+                "name" "realtime.weather.openweather.apikey"
+                "label" "API Key"
+                "tooltip" "Your OpenWeather API key. Keep this secret!"
+                }}
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="openWeatherEndpoint">
+                        <span class="label-text">API Endpoint</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherEndpoint'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <input type="text" id="openWeatherEndpoint" name="realtime.weather.openweather.endpoint" x-model="weather.openWeather.endpoint" class="input input-bordered input-sm w-full">
+                    <div x-show="showTooltip === 'openWeatherEndpoint'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        The OpenWeather API endpoint URL.
+                    </div>
+                </div>
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="openWeatherUnits">
+                        <span class="label-text">Units of Measurement</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherUnits'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <select id="openWeatherUnits" name="realtime.weather.openweather.units" x-model="weather.openWeather.units" class="select select-bordered select-sm w-full">
+                        <option value="standard">Standard</option>
+                        <option value="metric">Metric</option>
+                        <option value="imperial">Imperial</option>
+                    </select>
+                    <div x-show="showTooltip === 'openWeatherUnits'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        Choose the units system for weather data.
+                    </div>
+                </div>
+
+                <div class="form-control relative">
+                    <label class="label justify-start" for="openWeatherLanguage">
+                        <span class="label-text">Language</span>
+                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherLanguage'" @mouseleave="showTooltip = null">ⓘ</span>
+                    </label>
+                    <input type="text" id="openWeatherLanguage" name="realtime.weather.openweather.language" x-model="weather.openWeather.language" class="input input-bordered input-sm w-full">
+                    <div x-show="showTooltip === 'openWeatherLanguage'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                        Language code for the API response (e.g., 'en' for English).
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+<!-- Weather Settings end -->
 
 {{end}}
