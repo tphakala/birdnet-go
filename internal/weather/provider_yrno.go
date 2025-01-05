@@ -1,6 +1,7 @@
 package weather
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,10 +12,7 @@ import (
 )
 
 const (
-	YrNoBaseURL    = "https://api.met.no/weatherapi/locationforecast/2.0/complete"
-	YrNoUserAgent  = "BirdNET-Go https://github.com/tphakala/birdnet-go"
-	YrNoMaxRetries = 3
-	YrNoRetryDelay = 2 * time.Second
+	YrNoBaseURL = "https://api.met.no/weatherapi/locationforecast/2.0/complete"
 )
 
 // YrResponse represents the structure of the Yr.no API response
@@ -48,16 +46,12 @@ type YrResponse struct {
 
 // FetchWeather implements the Provider interface for YrNoProvider
 func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
-	if !settings.Realtime.Weather.YrNo.Enabled {
-		return nil, fmt.Errorf("Yr.no integration is disabled")
-	}
-
 	url := fmt.Sprintf("%s?lat=%.6f&lon=%.6f", YrNoBaseURL,
 		settings.BirdNET.Latitude,
 		settings.BirdNET.Longitude)
 
 	client := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: RequestTimeout,
 	}
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -65,21 +59,53 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 
-	req.Header.Set("User-Agent", YrNoUserAgent)
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
+
+	if p.lastModified != "" {
+		req.Header.Set("If-Modified-Since", p.lastModified)
+	}
 
 	var response YrResponse
-	for i := 0; i < YrNoMaxRetries; i++ {
+	for i := 0; i < MaxRetries; i++ {
 		resp, err := client.Do(req)
 		if err != nil {
-			if i == YrNoMaxRetries-1 {
+			if i == MaxRetries-1 {
 				return nil, fmt.Errorf("error fetching weather data: %w", err)
 			}
-			time.Sleep(YrNoRetryDelay)
+			time.Sleep(RetryDelay)
 			continue
 		}
 		defer resp.Body.Close()
 
-		body, err := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			if i == MaxRetries-1 {
+				return nil, fmt.Errorf("received non-200 response: %d", resp.StatusCode)
+			}
+			time.Sleep(RetryDelay)
+			continue
+		}
+
+		if resp.StatusCode == http.StatusNotModified {
+			return nil, fmt.Errorf("no new data available")
+		}
+
+		if lastMod := resp.Header.Get("Last-Modified"); lastMod != "" {
+			p.lastModified = lastMod
+		}
+
+		// Handle gzip compression
+		var reader io.Reader = resp.Body
+		if resp.Header.Get("Content-Encoding") == "gzip" {
+			gzReader, err := gzip.NewReader(resp.Body)
+			if err != nil {
+				return nil, fmt.Errorf("error creating gzip reader: %w", err)
+			}
+			defer gzReader.Close()
+			reader = gzReader
+		}
+
+		body, err := io.ReadAll(reader)
 		if err != nil {
 			return nil, fmt.Errorf("error reading response body: %w", err)
 		}
@@ -110,12 +136,10 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 			Speed: current.Data.Instant.Details.WindSpeed,
 			Deg:   int(current.Data.Instant.Details.WindDirection),
 		},
-		Precipitation: Precipitation{
-			Amount: current.Data.Next1Hours.Details.PrecipitationAmount,
-		},
 		Clouds:      int(current.Data.Instant.Details.CloudArea),
 		Pressure:    int(current.Data.Instant.Details.AirPressure),
 		Humidity:    int(current.Data.Instant.Details.RelHumidity),
 		Description: current.Data.Next1Hours.Summary.SymbolCode,
+		Icon:        string(GetStandardIconCode(current.Data.Next1Hours.Summary.SymbolCode, "yrno")),
 	}, nil
 }

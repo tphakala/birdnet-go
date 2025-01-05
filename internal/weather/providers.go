@@ -10,6 +10,8 @@ func NewOpenWeatherProvider() Provider {
 	return &OpenWeatherProvider{}
 }
 
-// Provider implementations (moved from their respective packages)
-type YrNoProvider struct{}
+// Provider implementations
+type YrNoProvider struct {
+	lastModified string
+}
 type OpenWeatherProvider struct{}

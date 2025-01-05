@@ -10,11 +10,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-const (
-	OpenWeatherRequestTimeout = 10 * time.Second
-	OpenWeatherUserAgent      = "BirdNET-Go"
-)
-
 // OpenWeatherResponse represents the structure of weather data returned by the OpenWeather API
 type OpenWeatherResponse struct {
 	Coord struct {
@@ -55,21 +50,20 @@ type OpenWeatherResponse struct {
 
 // FetchWeather implements the Provider interface for OpenWeatherProvider
 func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
-	if !settings.Realtime.OpenWeather.Enabled {
-		return nil, fmt.Errorf("OpenWeather integration is disabled")
+	if settings.Realtime.Weather.OpenWeather.APIKey == "" {
+		return nil, fmt.Errorf("OpenWeather API key not configured")
 	}
 
-	url := fmt.Sprintf("%s?lat=%f&lon=%f&appid=%s&units=%s&lang=%s",
-		settings.Realtime.OpenWeather.Endpoint,
+	url := fmt.Sprintf("%s?lat=%.3f&lon=%.3f&appid=%s&units=%s&lang=en",
+		settings.Realtime.Weather.OpenWeather.Endpoint,
 		settings.BirdNET.Latitude,
 		settings.BirdNET.Longitude,
-		settings.Realtime.OpenWeather.APIKey,
-		settings.Realtime.OpenWeather.Units,
-		settings.Realtime.OpenWeather.Language,
+		settings.Realtime.Weather.OpenWeather.APIKey,
+		settings.Realtime.Weather.OpenWeather.Units,
 	)
 
 	client := &http.Client{
-		Timeout: OpenWeatherRequestTimeout,
+		Timeout: RequestTimeout,
 	}
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -77,26 +71,41 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 
-	req.Header.Set("User-Agent", OpenWeatherUserAgent)
+	req.Header.Set("User-Agent", UserAgent)
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching weather data: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("received non-200 response: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %w", err)
-	}
+	// debug print request
+	fmt.Println("Request:", req)
 
 	var weatherData OpenWeatherResponse
-	if err := json.Unmarshal(body, &weatherData); err != nil {
-		return nil, fmt.Errorf("error unmarshaling weather data: %w", err)
+	for i := 0; i < MaxRetries; i++ {
+		resp, err := client.Do(req)
+		if err != nil {
+			if i == MaxRetries-1 {
+				return nil, fmt.Errorf("error fetching weather data: %w", err)
+			}
+			time.Sleep(RetryDelay)
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			if i == MaxRetries-1 {
+				return nil, fmt.Errorf("received non-200 response: %d", resp.StatusCode)
+			}
+			time.Sleep(RetryDelay)
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("error reading response body: %w", err)
+		}
+
+		if err := json.Unmarshal(body, &weatherData); err != nil {
+			return nil, fmt.Errorf("error unmarshaling weather data: %w", err)
+		}
+
+		break
 	}
 
 	return &WeatherData{
@@ -104,25 +113,18 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 		Location: Location{
 			Latitude:  weatherData.Coord.Lat,
 			Longitude: weatherData.Coord.Lon,
-			Country:   weatherData.Sys.Country,
-			City:      weatherData.Name,
 		},
 		Temperature: Temperature{
-			Current:   weatherData.Main.Temp,
-			FeelsLike: weatherData.Main.FeelsLike,
-			Min:       weatherData.Main.TempMin,
-			Max:       weatherData.Main.TempMax,
+			Current: weatherData.Main.Temp,
 		},
 		Wind: Wind{
 			Speed: weatherData.Wind.Speed,
 			Deg:   weatherData.Wind.Deg,
-			Gust:  weatherData.Wind.Gust,
 		},
 		Clouds:      weatherData.Clouds.All,
-		Visibility:  weatherData.Visibility,
 		Pressure:    weatherData.Main.Pressure,
 		Humidity:    weatherData.Main.Humidity,
 		Description: weatherData.Weather[0].Description,
-		Icon:        weatherData.Weather[0].Icon,
+		Icon:        string(GetStandardIconCode(weatherData.Weather[0].Icon, "openweather")),
 	}, nil
 }
