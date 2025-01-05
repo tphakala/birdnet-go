@@ -105,6 +105,11 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 		break
 	}
 
+	// Safety check for weather data
+	if len(weatherData.Weather) == 0 {
+		return nil, fmt.Errorf("no weather conditions returned from API")
+	}
+
 	return &WeatherData{
 		Time: time.Unix(weatherData.Dt, 0),
 		Location: Location{
