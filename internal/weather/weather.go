@@ -216,9 +216,6 @@ func (s *Service) fetchAndSave() error {
 		)
 	}
 
-	// debug print data
-	fmt.Printf("[weather] Saving weather data: %+v\n", data)
-
 	if err := s.SaveWeatherData(data); err != nil {
 		if s.settings.Realtime.Weather.Debug {
 			fmt.Printf("[weather] Error saving weather data: %v\n", err)

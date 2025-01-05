@@ -73,9 +73,6 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 
 	req.Header.Set("User-Agent", UserAgent)
 
-	// debug print request
-	fmt.Println("Request:", req)
-
 	var weatherData OpenWeatherResponse
 	for i := 0; i < MaxRetries; i++ {
 		resp, err := client.Do(req)
