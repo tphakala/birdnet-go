@@ -91,27 +91,25 @@ type BirdweatherSettings struct {
 
 // WeatherSettings contains all weather-related settings
 type WeatherSettings struct {
-	Provider    string              // "yrno" or "openweather"
-	YrNo        YrNoSettings        // Yr.no integration settings
-	OpenWeather OpenWeatherSettings // OpenWeather integration settings
+	Provider     string              // "none", "yrno" or "openweather"
+	PollInterval int                 // weather data polling interval in minutes
+	Debug        bool                // true to enable debug mode
+	YrNo         YrNoSettings        // Yr.no integration settings
+	OpenWeather  OpenWeatherSettings // OpenWeather integration settings
 }
 
 // OpenWeatherSettings contains settings for OpenWeather integration.
 type OpenWeatherSettings struct {
-	Enabled  bool   // true to enable OpenWeather integration
-	Debug    bool   // true to enable debug mode
+	Enabled  bool   // true to enable OpenWeather integration, for legacy support
 	APIKey   string // OpenWeather API key
 	Endpoint string // OpenWeather API endpoint
-	Interval int    // interval for fetching weather data in minutes
 	Units    string // units of measurement: standard, metric, or imperial
 	Language string // language code for the response
 }
 
 // YrNoSettings contains settings for Yr.no integration
 type YrNoSettings struct {
-	Enabled  bool // true to enable Yr.no integration
-	Debug    bool // true to enable debug mode
-	Interval int  // interval for fetching weather data in minutes
+	// add yr.no specific settings here if any
 }
 
 // PrivacyFilterSettings contains settings for the privacy filter.
@@ -571,19 +569,8 @@ func migrateWeatherSettings(settings *Settings) {
 		} else {
 			// Set default provider if none is configured
 			settings.Realtime.Weather.Provider = "yrno"
-			settings.Realtime.Weather.YrNo.Enabled = true
-			settings.Realtime.Weather.YrNo.Interval = 15 // default 15 minutes
 		}
-	}
-
-	// Ensure the selected provider is properly enabled
-	switch settings.Realtime.Weather.Provider {
-	case "yrno":
-		settings.Realtime.Weather.YrNo.Enabled = true
-		settings.Realtime.Weather.OpenWeather.Enabled = false
-	case "openweather":
-		settings.Realtime.Weather.YrNo.Enabled = false
-		settings.Realtime.Weather.OpenWeather.Enabled = true
+		settings.Realtime.Weather.PollInterval = 60 // default 60 minutes
 	}
 }
 
@@ -599,8 +586,5 @@ func (s *Settings) GetWeatherSettings() (provider string, yrno YrNoSettings, ope
 	}
 
 	// Default to YrNo if nothing is configured
-	return "yrno", YrNoSettings{
-		Enabled:  true,
-		Interval: 15,
-	}, OpenWeatherSettings{}
+	return "yrno", YrNoSettings{}, OpenWeatherSettings{}
 }
