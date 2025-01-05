@@ -42,6 +42,20 @@ var OpenWeatherToIcon = map[string]IconCode{
 	"50n": "50",
 }
 
+// IconDescription maps standardized icon codes to human-readable descriptions
+var IconDescription = map[IconCode]string{
+	"01": "Clear Sky",
+	"02": "Fair",
+	"03": "Partly Cloudy",
+	"04": "Cloudy",
+	"09": "Rain Showers",
+	"10": "Rain",
+	"11": "Thunderstorm",
+	"12": "Sleet",
+	"13": "Snow",
+	"50": "Fog",
+}
+
 // GetStandardIconCode converts provider-specific weather codes to our standard icon codes
 func GetStandardIconCode(code string, provider string) IconCode {
 	switch provider {
