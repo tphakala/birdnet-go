@@ -98,13 +98,26 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.birdweather.locationaccuracy", 500)
 
 	// OpenWeather configuration
-	viper.SetDefault("realtime.OpenWeather.Enabled", false)
-	viper.SetDefault("realtime.OpenWeather.Debug", false)
-	viper.SetDefault("realtime.OpenWeather.APIKey", "")
-	viper.SetDefault("realtime.OpenWeather.Endpoint", "https://api.openweathermap.org/data/2.5/weather")
-	viper.SetDefault("realtime.OpenWeather.Interval", 60) // default to fetch every 60 minutes
-	viper.SetDefault("realtime.OpenWeather.Units", "standard")
-	viper.SetDefault("realtime.OpenWeather.Language", "en")
+	/*
+		viper.SetDefault("realtime.OpenWeather.Enabled", false)
+		viper.SetDefault("realtime.OpenWeather.Debug", false)
+		viper.SetDefault("realtime.OpenWeather.APIKey", "")
+		viper.SetDefault("realtime.OpenWeather.Endpoint", "https://api.openweathermap.org/data/2.5/weather")
+		viper.SetDefault("realtime.OpenWeather.Interval", 60) // default to fetch every 60 minutes
+		viper.SetDefault("realtime.OpenWeather.Units", "standard")
+		viper.SetDefault("realtime.OpenWeather.Language", "en")
+	*/
+
+	// New weather configuration
+	viper.SetDefault("realtime.weather.debug", false)
+	viper.SetDefault("realtime.weather.pollinterval", 60)
+	viper.SetDefault("realtime.weather.provider", "yrno")
+
+	// OpenWeather specific configuration
+	viper.SetDefault("realtime.weather.openweather.apikey", "")
+	viper.SetDefault("realtime.weather.openweather.endpoint", "https://api.openweathermap.org/data/2.5/weather")
+	viper.SetDefault("realtime.weather.openweather.units", "metric")
+	viper.SetDefault("realtime.weather.openweather.language", "en")
 
 	// RTSP configuration
 	viper.SetDefault("realtime.rtsp.urls", []string{})

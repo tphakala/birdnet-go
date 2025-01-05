@@ -91,8 +91,8 @@
                         <td class="py-1 px-2 font-normal {{if ne $.QueryType "species"}}hidden sm:table-cell{{end}}">
                             {{if .Weather}}
                                 <div class="flex items-center gap-2">
-                                    <span>{{weatherIcon .Weather.WeatherMain .TimeOfDay}}</span>
-                                    <span>{{.Weather.WeatherMain}}</span>
+                                    <span>{{weatherIcon .Weather.WeatherIcon .TimeOfDay}}</span>
+                                    <span>{{weatherDescription .Weather.WeatherIcon}}</span>
                                 </div>
                             {{else}}
                                 <div>No weather data</div>

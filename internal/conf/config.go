@@ -89,13 +89,19 @@ type BirdweatherSettings struct {
 	LocationAccuracy float64 // accuracy of location in meters
 }
 
+// WeatherSettings contains all weather-related settings
+type WeatherSettings struct {
+	Provider     string              // "none", "yrno" or "openweather"
+	PollInterval int                 // weather data polling interval in minutes
+	Debug        bool                // true to enable debug mode
+	OpenWeather  OpenWeatherSettings // OpenWeather integration settings
+}
+
 // OpenWeatherSettings contains settings for OpenWeather integration.
 type OpenWeatherSettings struct {
-	Enabled  bool   // true to enable OpenWeather integration
-	Debug    bool   // true to enable debug mode
+	Enabled  bool   // true to enable OpenWeather integration, for legacy support
 	APIKey   string // OpenWeather API key
 	Endpoint string // OpenWeather API endpoint
-	Interval int    // interval for fetching weather data in minutes
 	Units    string // units of measurement: standard, metric, or imperial
 	Language string // language code for the response
 }
@@ -149,13 +155,14 @@ type RealtimeSettings struct {
 		Path    string // path to OBS chat log
 	}
 	Birdweather   BirdweatherSettings   // Birdweather integration settings
-	OpenWeather   OpenWeatherSettings   // OpenWeather integration settings
+	OpenWeather   OpenWeatherSettings   `yaml:"-"` // OpenWeather integration settings
 	PrivacyFilter PrivacyFilterSettings // Privacy filter settings
 	DogBarkFilter DogBarkFilterSettings // Dog bark filter settings
 	RTSP          RTSPSettings          // RTSP settings
 	MQTT          MQTTSettings          // MQTT settings
 	Telemetry     TelemetrySettings     // Telemetry settings
 	Species       SpeciesSettings       // Custom thresholds and actions for species
+	Weather       WeatherSettings       // Weather provider related settings
 }
 
 // SpeciesSettings holds custom thresholds and action configurations for species.
@@ -544,4 +551,19 @@ func GenerateRandomSecret() string {
 		return ""
 	}
 	return base64.RawURLEncoding.EncodeToString(bytes)
+}
+
+// GetWeatherSettings returns the appropriate weather settings based on the configuration
+func (s *Settings) GetWeatherSettings() (provider string, openweather OpenWeatherSettings) {
+	// First check new format
+	if s.Realtime.Weather.Provider != "" {
+		return s.Realtime.Weather.Provider, s.Realtime.Weather.OpenWeather
+	}
+
+	if s.Realtime.OpenWeather.Enabled {
+		return "openweather", s.Realtime.OpenWeather
+	}
+
+	// Default to YrNo if nothing is configured
+	return "yrno", OpenWeatherSettings{}
 }

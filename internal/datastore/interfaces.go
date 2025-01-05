@@ -405,27 +405,13 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 
 // SaveDailyEvents saves daily events data to the database.
 func (ds *DataStore) SaveDailyEvents(dailyEvents *DailyEvents) error {
-	// Check if daily events data already exists for the date
-	var existingDailyEvents DailyEvents
-	err := ds.DB.Where("date = ?", dailyEvents.Date).First(&existingDailyEvents).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// Insert new daily events data
-			if err := ds.DB.Create(dailyEvents).Error; err != nil {
-				return err
-			}
-			return nil
-		}
-		return err
-	}
+	// Use upsert to handle the unique date constraint
+	result := ds.DB.Where("date = ?", dailyEvents.Date).
+		Assign(*dailyEvents).
+		FirstOrCreate(dailyEvents)
 
-	// Update existing daily events data
-	existingDailyEvents.Sunrise = dailyEvents.Sunrise
-	existingDailyEvents.Sunset = dailyEvents.Sunset
-	existingDailyEvents.Country = dailyEvents.Country
-	existingDailyEvents.CityName = dailyEvents.CityName
-	if err := ds.DB.Save(&existingDailyEvents).Error; err != nil {
-		return err
+	if result.Error != nil {
+		return fmt.Errorf("failed to save daily events: %w", result.Error)
 	}
 
 	return nil
@@ -442,27 +428,50 @@ func (ds *DataStore) GetDailyEvents(date string) (DailyEvents, error) {
 
 // SaveHourlyWeather saves hourly weather data to the database.
 func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
-	if err := ds.DB.Create(hourlyWeather).Error; err != nil {
-		return err
+	// Basic validation
+	if hourlyWeather.Time.IsZero() {
+		return fmt.Errorf("invalid time value in hourly weather data")
 	}
+
+	// Use upsert to avoid duplicates for the same timestamp
+	result := ds.DB.Where("time = ?", hourlyWeather.Time).
+		Assign(*hourlyWeather).
+		FirstOrCreate(hourlyWeather)
+
+	if result.Error != nil {
+		return fmt.Errorf("failed to save hourly weather: %w", result.Error)
+	}
+
 	return nil
 }
 
 // GetHourlyWeather retrieves hourly weather data by date from the database.
 func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
 	var hourlyWeather []HourlyWeather
-	if err := ds.DB.Where("date(time) = ?", date).Find(&hourlyWeather).Error; err != nil {
-		return nil, err
+
+	err := ds.DB.Where("DATE(time) = ?", date).
+		Order("time ASC").
+		Find(&hourlyWeather).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get hourly weather for date %s: %w", date, err)
 	}
+
 	return hourlyWeather, nil
 }
 
 // LatestHourlyWeather retrieves the latest hourly weather entry from the database.
 func (ds *DataStore) LatestHourlyWeather() (*HourlyWeather, error) {
 	var weather HourlyWeather
-	if err := ds.DB.Order("time DESC").First(&weather).Error; err != nil {
-		return nil, err
+
+	err := ds.DB.Order("time DESC").First(&weather).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("no weather data found")
+		}
+		return nil, fmt.Errorf("failed to get latest weather: %w", err)
 	}
+
 	return &weather, nil
 }
 

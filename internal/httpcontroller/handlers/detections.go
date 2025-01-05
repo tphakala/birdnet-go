@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	"github.com/tphakala/birdnet-go/internal/weather"
 )
 
 // DetectionRequest represents the common parameters for detection requests
@@ -30,7 +31,7 @@ type DetectionRequest struct {
 type NoteWithWeather struct {
 	datastore.Note
 	Weather   *datastore.HourlyWeather
-	TimeOfDay TimeOfDay
+	TimeOfDay weather.TimeOfDay
 }
 
 // ListDetections handles requests for hourly, species-specific, and search detections
@@ -83,8 +84,8 @@ func (h *Handlers) Detections(c echo.Context) error {
 		return h.NewHandlerError(err, "Failed to get detections", http.StatusInternalServerError)
 	}
 
-	// Check if OpenWeather is enabled, used to show weather data in the UI if enabled
-	weatherEnabled := h.Settings.Realtime.OpenWeather.Enabled
+	// Check if weather provider is set, used to show weather data in the UI if enabled
+	weatherEnabled := h.Settings.Realtime.Weather.Provider != "none"
 
 	// Add weather and time of day information to the notes
 	notesWithWeather, err := h.addWeatherAndTimeOfDay(notes)
@@ -231,7 +232,7 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 	notesWithWeather := make([]NoteWithWeather, len(notes))
 
 	// Check if weather data is enabled in the settings
-	weatherEnabled := h.Settings.Realtime.OpenWeather.Enabled
+	weatherEnabled := h.Settings.Realtime.Weather.Provider != "none"
 
 	// Get the local time zone once to avoid repeated calls
 	localLoc, err := conf.GetLocalTimezone()
