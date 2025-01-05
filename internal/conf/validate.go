@@ -280,9 +280,31 @@ func validateDashboardSettings(settings *Dashboard) error {
 
 // validateWeatherSettings validates weather-specific settings
 func validateWeatherSettings(settings *WeatherSettings) error {
+	// First migrate any old settings
+	migrateWeatherSettings(settings)
+
 	// Validate poll interval (minimum 15 minutes)
 	if settings.PollInterval < 15 {
 		return fmt.Errorf("weather poll interval must be at least 15 minutes, got %d", settings.PollInterval)
 	}
 	return nil
+}
+
+// migrateWeatherSettings handles the migration of weather settings from the old to new format
+func migrateWeatherSettings(settings *WeatherSettings) {
+	// If new weather settings are not configured but old ones exist in the realtime settings
+	if settings.Provider == "" {
+		if Setting().Realtime.OpenWeather.Enabled {
+			settings.Provider = "openweather"
+			settings.OpenWeather = Setting().Realtime.OpenWeather
+			log.Println("Migrating weather settings from old to new format")
+		} else {
+			// Set default provider if none is configured
+			settings.Provider = "yrno"
+		}
+		settings.PollInterval = 60 // default 60 minutes
+		// Save the settings after migration to update the config file
+		log.Println("Saving settings after migration")
+		SaveSettings()
+	}
 }
