@@ -19,8 +19,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
-	"github.com/tphakala/birdnet-go/internal/openweather"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
+	"github.com/tphakala/birdnet-go/internal/weather"
 )
 
 // audioLevelChan is a channel to send audio level updates
@@ -144,7 +144,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	}
 
 	// start weather polling
-	if settings.Realtime.OpenWeather.Enabled {
+	if settings.Realtime.Weather.Provider != "none" {
 		startWeatherPolling(&wg, settings, dataStore, quitChan)
 	}
 
@@ -190,10 +190,17 @@ func startClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataSt
 
 // startWeatherPolling initializes and starts the weather polling routine in a new goroutine.
 func startWeatherPolling(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, quitChan chan struct{}) {
+	// Create new weather service
+	weatherService, err := weather.NewService(settings, dataStore)
+	if err != nil {
+		log.Printf("Failed to initialize weather service: %v", err)
+		return
+	}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		openweather.StartWeatherPolling(settings, dataStore, quitChan)
+		weatherService.StartPolling(quitChan)
 	}()
 }
 

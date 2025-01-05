@@ -32,11 +32,6 @@ func ValidateSettings(settings *Settings) error {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
-	// Validate OpenWeather settings
-	if err := validateOpenWeatherSettings(&settings.Realtime.OpenWeather); err != nil {
-		ve.Errors = append(ve.Errors, err.Error())
-	}
-
 	// Validate WebServer settings
 	if err := validateWebServerSettings(&settings.WebServer); err != nil {
 		ve.Errors = append(ve.Errors, err.Error())
@@ -64,6 +59,11 @@ func ValidateSettings(settings *Settings) error {
 
 	// Validate Dashboard settings
 	if err := validateDashboardSettings(&settings.Realtime.Dashboard); err != nil {
+		ve.Errors = append(ve.Errors, err.Error())
+	}
+
+	// Validate Weather settings
+	if err := validateWeatherSettings(&settings.Realtime.Weather); err != nil {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
@@ -123,25 +123,6 @@ func validateBirdNETSettings(settings *BirdNETConfig) error {
 		return fmt.Errorf("BirdNET settings errors: %v", errs)
 	}
 
-	return nil
-}
-
-// validateOpenWeatherSettings validates the OpenWeather-specific settings
-func validateOpenWeatherSettings(settings *OpenWeatherSettings) error {
-	if settings.Enabled {
-		// Check if API key is provided when enabled
-		if settings.APIKey == "" {
-			return errors.New("OpenWeather API key is required when enabled")
-		}
-		// Check if endpoint is provided when enabled
-		if settings.Endpoint == "" {
-			return errors.New("OpenWeather endpoint is required when enabled")
-		}
-		// Check if interval is at least 1 minute
-		if settings.Interval < 1 {
-			return errors.New("OpenWeather interval must be at least 1 minute")
-		}
-	}
 	return nil
 }
 
@@ -294,5 +275,14 @@ func validateDashboardSettings(settings *Dashboard) error {
 		return fmt.Errorf("Dashboard SummaryLimit must be between 10 and 1000")
 	}
 
+	return nil
+}
+
+// validateWeatherSettings validates weather-specific settings
+func validateWeatherSettings(settings *WeatherSettings) error {
+	// Validate poll interval (minimum 15 minutes)
+	if settings.PollInterval < 15 {
+		return fmt.Errorf("weather poll interval must be at least 15 minutes, got %d", settings.PollInterval)
+	}
 	return nil
 }

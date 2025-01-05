@@ -86,12 +86,15 @@ realtime:
     debug: false          # true to enable birdweather api debug mode
     id: ""                # birdweather ID
 
-  openweather:
-    enabled: false
-    apikey: ""        # OpenWeather API key
-    endpoint: "https://api.openweathermap.org/data/2.5/weather" # OpenWeather API endpoint
-    units: metric     # metric or imperial
-    language: en      # language code
+  weather:
+    provider: yrno
+    pollinterval: 60
+    debug: false
+    openweather:
+      apikey: ""        # OpenWeather API key
+      endpoint: "https://api.openweathermap.org/data/2.5/weather" # OpenWeather API endpoint
+      units: metric     # metric or imperial
+      language: en      # language code
 
   mqtt:
     enabled: false        # true to enable MQTT
