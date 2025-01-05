@@ -89,7 +89,7 @@ realtime:
   weather:
     provider: yrno
     pollinterval: 60
-    debug: false  
+    debug: false
     openweather:
       apikey: ""        # OpenWeather API key
       endpoint: "https://api.openweathermap.org/data/2.5/weather" # OpenWeather API endpoint
