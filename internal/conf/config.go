@@ -94,7 +94,6 @@ type WeatherSettings struct {
 	Provider     string              // "none", "yrno" or "openweather"
 	PollInterval int                 // weather data polling interval in minutes
 	Debug        bool                // true to enable debug mode
-	YrNo         YrNoSettings        // Yr.no integration settings
 	OpenWeather  OpenWeatherSettings // OpenWeather integration settings
 }
 
@@ -105,11 +104,6 @@ type OpenWeatherSettings struct {
 	Endpoint string // OpenWeather API endpoint
 	Units    string // units of measurement: standard, metric, or imperial
 	Language string // language code for the response
-}
-
-// YrNoSettings contains settings for Yr.no integration
-type YrNoSettings struct {
-	// add yr.no specific settings here if any
 }
 
 // PrivacyFilterSettings contains settings for the privacy filter.
@@ -161,7 +155,7 @@ type RealtimeSettings struct {
 		Path    string // path to OBS chat log
 	}
 	Birdweather   BirdweatherSettings   // Birdweather integration settings
-	OpenWeather   OpenWeatherSettings   // OpenWeather integration settings
+	OpenWeather   OpenWeatherSettings   `yaml:"-"` // OpenWeather integration settings
 	PrivacyFilter PrivacyFilterSettings // Privacy filter settings
 	DogBarkFilter DogBarkFilterSettings // Dog bark filter settings
 	RTSP          RTSPSettings          // RTSP settings
@@ -559,32 +553,17 @@ func GenerateRandomSecret() string {
 	return base64.RawURLEncoding.EncodeToString(bytes)
 }
 
-// migrateWeatherSettings handles the migration of weather settings from the old to new format
-func migrateWeatherSettings(settings *Settings) {
-	// If new weather settings are not configured but old ones are, migrate them
-	if settings.Realtime.Weather.Provider == "" {
-		if settings.Realtime.OpenWeather.Enabled {
-			settings.Realtime.Weather.Provider = "openweather"
-			settings.Realtime.Weather.OpenWeather = settings.Realtime.OpenWeather
-		} else {
-			// Set default provider if none is configured
-			settings.Realtime.Weather.Provider = "yrno"
-		}
-		settings.Realtime.Weather.PollInterval = 60 // default 60 minutes
-	}
-}
-
 // GetWeatherSettings returns the appropriate weather settings based on the configuration
-func (s *Settings) GetWeatherSettings() (provider string, yrno YrNoSettings, openweather OpenWeatherSettings) {
+func (s *Settings) GetWeatherSettings() (provider string, openweather OpenWeatherSettings) {
 	// First check new format
 	if s.Realtime.Weather.Provider != "" {
-		return s.Realtime.Weather.Provider, s.Realtime.Weather.YrNo, s.Realtime.Weather.OpenWeather
+		return s.Realtime.Weather.Provider, s.Realtime.Weather.OpenWeather
 	}
 
 	if s.Realtime.OpenWeather.Enabled {
-		return "openweather", YrNoSettings{}, s.Realtime.OpenWeather
+		return "openweather", s.Realtime.OpenWeather
 	}
 
 	// Default to YrNo if nothing is configured
-	return "yrno", YrNoSettings{}, OpenWeatherSettings{}
+	return "yrno", OpenWeatherSettings{}
 }
