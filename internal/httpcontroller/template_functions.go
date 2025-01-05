@@ -48,6 +48,7 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"getHourlyHeaderData":   getHourlyHeaderData,
 		"getHourlyCounts":       getHourlyCounts,
 		"sumHourlyCountsRange":  sumHourlyCountsRange,
+		"weatherDescription":    s.Handlers.GetWeatherDescriptionFunc(),
 	}
 }
 
