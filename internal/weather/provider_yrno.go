@@ -46,7 +46,7 @@ type YrResponse struct {
 
 // FetchWeather implements the Provider interface for YrNoProvider
 func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
-	url := fmt.Sprintf("%s?lat=%.6f&lon=%.6f", YrNoBaseURL,
+	url := fmt.Sprintf("%s?lat=%.3f&lon=%.3f", YrNoBaseURL,
 		settings.BirdNET.Latitude,
 		settings.BirdNET.Longitude)
 
