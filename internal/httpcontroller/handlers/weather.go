@@ -3,7 +3,6 @@ package handlers
 
 import (
 	"html/template"
-	"log"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/suncalc"
@@ -18,8 +17,7 @@ func (h *Handlers) GetWeatherIconFunc() func(weatherCode string, timeOfDay weath
 			weatherCode = weatherCode[:2]
 		}
 		iconCode := weather.IconCode(weatherCode)
-		// debug
-		log.Printf("iconCode: %s, weatherCode: %s", iconCode, weatherCode)
+
 		return weather.GetWeatherIcon(iconCode, timeOfDay)
 	}
 }
