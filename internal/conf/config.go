@@ -194,6 +194,7 @@ type InputConfig struct {
 }
 
 type BirdNETConfig struct {
+	Debug       bool                // true to enable debug mode
 	Sensitivity float64             // birdnet analysis sigmoid sensitivity
 	Threshold   float64             // threshold for prediction confidence to report
 	Overlap     float64             // birdnet analysis overlap between chunks
