@@ -21,6 +21,7 @@ func setDefaultConfig() {
 	viper.SetDefault("main.log.rotationday", "Sunday")
 
 	// BirdNET configuration
+	viper.SetDefault("birdnet.debug", false)
 	viper.SetDefault("birdnet.sensitivity", 1.0)
 	viper.SetDefault("birdnet.threshold", 0.8)
 	viper.SetDefault("birdnet.overlap", 0.0)
