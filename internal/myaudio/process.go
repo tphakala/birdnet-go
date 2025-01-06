@@ -33,18 +33,26 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 	// get elapsed time
 	elapsedTime := time.Since(predictStart)
 
-	// Sort results by confidence (descending order)
-	/*sort.Slice(results, func(i, j int) bool {
-		return results[i].Confidence > results[j].Confidence
-	})
-
-	// DEBUG print species of results with confidence > 0.20 in green
-	green := color.New(color.FgGreen).SprintfFunc()
-	for _, result := range results {
-		if result.Confidence > 0.20 {
-			fmt.Println(green("%.2f %s", result.Confidence, result.Species))
+	// DEBUG print all BirdNET results
+	if conf.Setting().BirdNET.Debug {
+		debugThreshold := float32(0) // set to 0 for now, maybe add a config option later
+		hasHighConfidenceResults := false
+		for _, result := range results {
+			if result.Confidence > debugThreshold {
+				hasHighConfidenceResults = true
+				break
+			}
 		}
-	}*/
+
+		if hasHighConfidenceResults {
+			log.Println("[birdnet] results:")
+			for _, result := range results {
+				if result.Confidence > debugThreshold {
+					log.Printf("[birdnet] %.2f %s\n", result.Confidence, result.Species)
+				}
+			}
+		}
+	}
 
 	// Get the current settings
 	settings := conf.Setting()
