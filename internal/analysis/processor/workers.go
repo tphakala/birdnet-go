@@ -51,34 +51,49 @@ func (p *Processor) actionWorker() {
 
 // getActionsForItem determines the actions to be taken for a given detection.
 func (p *Processor) getActionsForItem(detection Detections) []Action {
-	// match lower case
 	speciesName := strings.ToLower(detection.Note.CommonName)
-	speciesConfig, exists := p.Settings.Realtime.Species.Actions[speciesName]
 
-	var actions []Action
-	if exists {
+	// Check if species has custom configuration
+	if speciesConfig, exists := p.Settings.Realtime.Species.Thresholds[speciesName]; exists {
 		if p.Settings.Debug {
 			log.Println("Species config exists for custom actions")
 		}
-		customActions := p.createActionsFromConfig(speciesConfig, detection)
 
-		// Determine whether to use only custom actions or combine with default actions
-		if speciesConfig.OnlyActions {
-			//log.Println("Only using custom actions for", speciesName)
-			actions = customActions
-		} else {
-			//log.Println("Using default actions with custom actions for", speciesName)
-			defaultActions := p.getDefaultActions(detection)
-			actions = append(defaultActions, customActions...)
+		var actions []Action
+
+		// Add custom actions from the new structure
+		for _, actionConfig := range speciesConfig.Actions {
+			switch actionConfig.Type {
+			case "ExecuteScript":
+				if len(actionConfig.Parameters) > 0 {
+					actions = append(actions, ExecuteScriptAction{
+						ScriptPath: actionConfig.Parameters[0],
+						Params:     parseScriptParams(actionConfig.Parameters[1:], detection),
+					})
+				}
+			case "SendNotification":
+				// Add notification action handling
+				// ... implementation ...
+			}
 		}
-	} else {
-		if p.Settings.Debug {
-			log.Println("No species config found, using default actions for", speciesName)
+
+		// If OnlyActions is true, return only custom actions
+		if len(actions) > 0 {
+			return actions
 		}
-		actions = p.getDefaultActions(detection)
 	}
 
-	return actions
+	// Fall back to default actions if no custom actions or if custom actions should be combined
+	return p.getDefaultActions(detection)
+}
+
+// Helper function to parse script parameters
+func parseScriptParams(params []string, detection Detections) map[string]interface{} {
+	scriptParams := make(map[string]interface{})
+	for _, param := range params {
+		scriptParams[param] = getNoteValueByName(detection.Note, param)
+	}
+	return scriptParams
 }
 
 // getDefaultActions returns the default actions to be taken for a given detection.
