@@ -5,8 +5,7 @@ x-data="{
     speciesSettings: {
         Include: {{if .Settings.Realtime.Species.Include}}{{.Settings.Realtime.Species.Include | toJSON}}{{else}}[]{{end}},
         Exclude: {{if .Settings.Realtime.Species.Exclude}}{{.Settings.Realtime.Species.Exclude | toJSON}}{{else}}[]{{end}},
-        customThresholds: {{if .Settings.Realtime.Species.Threshold}}{{.Settings.Realtime.Species.Threshold | toJSON}}{{else}}{}{{end}},
-        actions: {{if .Settings.Realtime.Species.Actions}}{{.Settings.Realtime.Species.Actions | toJSON}}{{else}}{}{{end}},
+        Thresholds: {{if .Settings.Realtime.Species.Thresholds}}{{.Settings.Realtime.Species.Thresholds | toJSON}}{{else}}{}{{end}},
     },
     newIncludeSpecies: '',
     newExcludeSpecies: '',
@@ -38,26 +37,19 @@ x-data="{
         this.hasChanges = true;
     },
     addConfig() {
-        if (this.newThresholdSpecies && !this.speciesSettings.customThresholds[this.newThresholdSpecies]) {
-            this.speciesSettings.customThresholds[this.newThresholdSpecies] = this.newThreshold;
+        if (this.newThresholdSpecies && !this.speciesSettings.Thresholds[this.newThresholdSpecies]) {
+            this.speciesSettings.Thresholds[this.newThresholdSpecies] = {
+                Confidence: this.newThreshold,
+                Actions: []
+            };
             this.newThresholdSpecies = '';
             this.newThreshold = 0.5;
             this.hasChanges = true;
         }
     },
     removeConfig(species) {
-        delete this.speciesSettings.customThresholds[species];
+        delete this.speciesSettings.Thresholds[species];
         this.hasChanges = true;
-    },
-    filterSpecies(input, list) {
-        if (!input) {
-            this.filteredSpecies = [];
-            return;
-        }
-        this.filteredSpecies = this.allSpecies.filter(species => 
-            species.toLowerCase().includes(input.toLowerCase()) &&
-            !this.speciesSettings[list].includes(species)
-        ).slice(0, 5);
     },
     openActionsModal(species) {
         this.currentSpecies = species;
@@ -68,9 +60,34 @@ x-data="{
         this.showActionsModal = false;
     },
     saveAction() {
-        this.speciesSettings.actions[this.currentSpecies] = { ...this.currentAction };
+        if (!this.speciesSettings.Thresholds[this.currentSpecies]) {
+            this.speciesSettings.Thresholds[this.currentSpecies] = {
+                Confidence: 0.5,
+                Actions: []
+            };
+        }
+        
+        this.speciesSettings.Thresholds[this.currentSpecies].Actions.push({
+            Type: this.currentAction.type,
+            Parameters: this.currentAction.parameters.split(',').map(p => p.trim())
+        });
+        
         this.hasChanges = true;
         this.closeActionsModal();
+    },
+    updatePredictions(input, list) {
+        if (!input) {
+            this.filteredSpecies = [];
+            return;
+        }
+        
+        const currentList = this.speciesSettings[list] || [];
+        this.filteredSpecies = this.allSpecies
+            .filter(species => 
+                species.toLowerCase().includes(input.toLowerCase()) &&
+                !currentList.includes(species)
+            )
+            .slice(0, 5);
     },
 }" 
 x-init="
@@ -122,7 +139,7 @@ x-init="
             <div class="flex items-center mt-2">
                 <input type="text" 
                        x-model="newIncludeSpecies" 
-                       @input="filterSpecies(newIncludeSpecies, 'Include')" 
+                       @input="updatePredictions(newIncludeSpecies, 'Include')" 
                        list="include-species-suggestions"
                        placeholder="Add species to include" 
                        class="input input-bordered input-sm w-full" />
@@ -167,7 +184,7 @@ x-init="
             <div class="flex items-center mt-2">
                 <input type="text" 
                        x-model="newExcludeSpecies" 
-                       @input="filterSpecies(newExcludeSpecies, 'Exclude')" 
+                       @input="updatePredictions(newExcludeSpecies, 'Exclude')" 
                        list="exclude-species-suggestions"
                        placeholder="Add species to exclude" 
                        class="input input-bordered input-sm w-full" />
@@ -204,10 +221,10 @@ x-init="
                 </div>
                 
                 <!-- List items -->
-                <template x-for="(threshold, species) in speciesSettings.customThresholds" :key="species">
+                <template x-for="(threshold, species) in speciesSettings.Thresholds" :key="species">
                     <div class="flex items-center bg-gray-50 p-2 rounded-md">
                         <div class="flex-grow text-sm pl-2" x-text="species"></div>
-                        <div class="w-24 text-sm px-3" x-text="threshold"></div>
+                        <div class="w-24 text-sm px-3" x-text="threshold.Confidence"></div>
                         <div class="w-20 text-center">
                             <button type="button" @click="openActionsModal(species)" 
                                     class="btn btn-xs btn-secondary">Actions</button>
@@ -224,7 +241,7 @@ x-init="
             <div class="flex items-center mt-2">
                 <input type="text" 
                        x-model="newThresholdSpecies" 
-                       @input="filterSpecies(newThresholdSpecies, 'customThresholds')" 
+                       @input="updatePredictions(newThresholdSpecies, 'Thresholds')" 
                        list="threshold-species-suggestions"
                        placeholder="Species" 
                        class="input input-bordered input-sm flex-grow" />
@@ -273,8 +290,7 @@ x-init="
         <!-- Hidden inputs to always submit the species settings -->
         <input type="hidden" name="realtime.species.include" :value="JSON.stringify(speciesSettings.Include)">
         <input type="hidden" name="realtime.species.exclude" :value="JSON.stringify(speciesSettings.Exclude)">
-        <input type="hidden" name="realtime.species.customthresholds" :value="JSON.stringify(speciesSettings.customThresholds)">
-        <input type="hidden" name="realtime.species.actions" :value="JSON.stringify(speciesSettings.actions)">
+        <input type="hidden" name="realtime.species.thresholds" :value="JSON.stringify(speciesSettings.Thresholds)">
     </div>
 </div>
 
