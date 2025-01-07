@@ -165,20 +165,23 @@ type RealtimeSettings struct {
 	Weather       WeatherSettings       // Weather provider related settings
 }
 
-// SpeciesSettings holds custom thresholds and action configurations for species.
+// SpeciesSettings represents all species-related configuration
 type SpeciesSettings struct {
-	Threshold map[string]float32             // Custom confidence thresholds for species
-	Actions   map[string]SpeciesActionConfig // Actions configurations for species
-	Include   []string                       // List of species to always include
-	Exclude   []string                       // List of species to always exclude
+	Include    []string                    // Species to always include regardless of range filter
+	Exclude    []string                    // Species to always exclude from detection
+	Thresholds map[string]SpeciesThreshold // Per-species configuration including threshold and actions
 }
 
-// SpeciesActionConfig represents the configuration for actions specific to a species.
-type SpeciesActionConfig struct {
-	SpeciesName string         // Name of the species
-	Actions     []ActionConfig // Configurations for actions associated with this species
-	Exclude     []string       // List of actions to exclude
-	OnlyActions bool           // Flag to indicate if only these actions should be executed
+// SpeciesThreshold represents per-species configuration
+type SpeciesThreshold struct {
+	Confidence float32         // Detection confidence threshold
+	Actions    []SpeciesAction // List of actions for this species
+}
+
+// SpeciesAction represents a single action configuration
+type SpeciesAction struct {
+	Type       string   // Type of action (ExecuteScript, SendNotification, etc)
+	Parameters []string // Action parameters
 }
 
 // ActionConfig holds configuration details for a specific action.
