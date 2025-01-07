@@ -1,0 +1,281 @@
+{{define "speciesSettings"}}
+
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+x-data="{ 
+    speciesSettings: {
+        Include: {{if .Settings.Realtime.Species.Include}}{{.Settings.Realtime.Species.Include | toJSON}}{{else}}[]{{end}},
+        Exclude: {{if .Settings.Realtime.Species.Exclude}}{{.Settings.Realtime.Species.Exclude | toJSON}}{{else}}[]{{end}},
+        customThresholds: {{if .Settings.Realtime.Species.Threshold}}{{.Settings.Realtime.Species.Threshold | toJSON}}{{else}}{}{{end}},
+        actions: {{if .Settings.Realtime.Species.Actions}}{{.Settings.Realtime.Species.Actions | toJSON}}{{else}}{}{{end}},
+    },
+    newIncludeSpecies: '',
+    newExcludeSpecies: '',
+    newThresholdSpecies: '',
+    newThreshold: 0.5,
+    editMode: null,
+    editValue: '',
+    showTooltip: null,
+    hasChanges: false,
+    allSpecies: {{.AllSpecies | toJSON}},
+    filteredSpecies: [],
+    speciesSettingsOpen: false,
+    showActionsModal: false,
+    currentSpecies: '',
+    currentAction: { type: 'ExecuteScript', parameters: '' },
+    resetChanges() {
+        this.hasChanges = false;
+    },
+    addSpecies(list) {
+        const newSpecies = this['new' + list + 'Species'].trim();
+        if (newSpecies && !this.speciesSettings[list].includes(newSpecies)) {
+            this.speciesSettings[list].push(newSpecies);
+            this['new' + list + 'Species'] = '';
+            this.hasChanges = true;
+        }
+    },
+    removeSpecies(list, species) {
+        this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== species);
+        this.hasChanges = true;
+    },
+    addConfig() {
+        if (this.newThresholdSpecies && !this.speciesSettings.customThresholds[this.newThresholdSpecies]) {
+            this.speciesSettings.customThresholds[this.newThresholdSpecies] = this.newThreshold;
+            this.newThresholdSpecies = '';
+            this.newThreshold = 0.5;
+            this.hasChanges = true;
+        }
+    },
+    removeConfig(species) {
+        delete this.speciesSettings.customThresholds[species];
+        this.hasChanges = true;
+    },
+    filterSpecies(input, list) {
+        if (!input) {
+            this.filteredSpecies = [];
+            return;
+        }
+        this.filteredSpecies = this.allSpecies.filter(species => 
+            species.toLowerCase().includes(input.toLowerCase()) &&
+            !this.speciesSettings[list].includes(species)
+        ).slice(0, 5);
+    },
+    openActionsModal(species) {
+        this.currentSpecies = species;
+        this.currentAction = this.speciesSettings.actions[species] || { type: 'ExecuteScript', parameters: '' };
+        this.showActionsModal = true;
+    },
+    closeActionsModal() {
+        this.showActionsModal = false;
+    },
+    saveAction() {
+        this.speciesSettings.actions[this.currentSpecies] = { ...this.currentAction };
+        this.hasChanges = true;
+        this.closeActionsModal();
+    },
+}" 
+x-init="
+    $watch('speciesSettings', () => { hasChanges = true }, { deep: true });
+">
+    <input type="checkbox" id="speciesSettingsOpen" x-on:change="speciesSettingsOpen = !speciesSettingsOpen" />
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex items-center">
+            <label for="speciesSettingsOpen" class="cursor-pointer">Species Settings</label>
+            <div class="ml-2" x-show="hasChanges" x-cloak>
+                <span class="badge badge-primary badge-sm changed-badge">
+                    <span class="text-xs mb-0.5">changed</span>
+                </span>
+            </div>
+        </div>
+        <p class="text-sm text-gray-500">Configure species-specific settings</p>
+    </div>
+
+    <div class="collapse-content">
+        <div class="form-control relative mt-4">
+            <label class="label-text">
+                Always Include Species
+                <span class="ml-2 text-sm text-gray-500 cursor-help"
+                      @mouseenter="showTooltip = 'Include'"
+                      @mouseleave="showTooltip = null">ⓘ</span>
+            </label>
+
+            <div class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50"
+                 x-show="showTooltip === 'Include'" x-cloak>
+                Species in this list will always be included in detection, regardless of range filter settings.
+            </div>
+
+            <!-- Include species list -->
+            <div class="space-y-2">
+                <template x-for="(species, index) in speciesSettings.Include" :key="index">
+                    <div class="flex items-center bg-gray-50 space-x-2 p-2 rounded-md">
+                        <div class="flex-grow">
+                            <span x-text="species" class="text-sm"></span>
+                        </div>
+                        <div class="flex-shrink-0">
+                            <button type="button" @click="removeSpecies('Include', species)" 
+                                    class="btn btn-xs">Remove</button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Include species input -->
+            <div class="flex items-center mt-2">
+                <input type="text" 
+                       x-model="newIncludeSpecies" 
+                       @input="filterSpecies(newIncludeSpecies, 'Include')" 
+                       list="include-species-suggestions"
+                       placeholder="Add species to include" 
+                       class="input input-bordered input-sm w-full" />
+                <datalist id="include-species-suggestions">
+                    <template x-for="species in filteredSpecies" :key="species">
+                        <option :value="species"></option>
+                    </template>
+                </datalist>
+                <button type="button" @click="addSpecies('Include')" class="btn btn-sm btn-primary ml-2 mr-2 w-20">Add</button>
+            </div>
+        </div>
+
+        <div class="form-control relative mt-4">
+            <label class="label-text">
+                Always Exclude Species
+                <span class="ml-2 text-sm text-gray-500 cursor-help"
+                      @mouseenter="showTooltip = 'Exclude'"
+                      @mouseleave="showTooltip = null">ⓘ</span>
+            </label>
+
+            <div class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50"
+                 x-show="showTooltip === 'Exclude'" x-cloak>
+                Species in this list will always be excluded from detection, regardless of range filter settings.
+            </div>
+
+            <!-- Exclude species list -->
+            <div class="space-y-2">
+                <template x-for="(species, index) in speciesSettings.Exclude" :key="index">
+                    <div class="flex items-center bg-gray-50 space-x-2 p-2 rounded-md">
+                        <div class="flex-grow">
+                            <span x-text="species" class="text-sm"></span>
+                        </div>
+                        <div class="flex-shrink-0">
+                            <button type="button" @click="removeSpecies('Exclude', species)" 
+                                    class="btn btn-xs">Remove</button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Exclude species input -->
+            <div class="flex items-center mt-2">
+                <input type="text" 
+                       x-model="newExcludeSpecies" 
+                       @input="filterSpecies(newExcludeSpecies, 'Exclude')" 
+                       list="exclude-species-suggestions"
+                       placeholder="Add species to exclude" 
+                       class="input input-bordered input-sm w-full" />
+                <datalist id="exclude-species-suggestions">
+                    <template x-for="species in filteredSpecies" :key="species">
+                        <option :value="species"></option>
+                    </template>
+                </datalist>
+                <button type="button" @click="addSpecies('Exclude')" class="btn btn-sm btn-primary ml-2 mr-2 w-20">Add</button>
+            </div>
+        </div>
+
+        <div class="form-control relative mt-4">
+            <label class="label-text">
+                Custom Species Thresholds
+                <span class="ml-2 text-sm text-gray-500 cursor-help"
+                      @mouseenter="showTooltip = 'customThresholds'"
+                      @mouseleave="showTooltip = null">ⓘ</span>
+            </label>
+
+            <div class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50"
+                 x-show="showTooltip === 'customThresholds'" x-cloak>
+                Set custom confidence thresholds for specific species. These will override the global threshold for the specified species.
+            </div>
+
+            <!-- Custom thresholds list -->
+            <div class="space-y-2">
+                <!-- Header -->
+                <div class="flex bg-gray-100 p-2 rounded-md">
+                    <div class="flex-grow text-sm font-medium">Species</div>
+                    <div class="w-24 text-sm font-medium">Threshold</div>
+                    <div class="w-20 text-sm font-medium text-center">Actions</div>
+                    <div class="w-20 text-sm font-medium text-center"></div>
+                </div>
+                
+                <!-- List items -->
+                <template x-for="(threshold, species) in speciesSettings.customThresholds" :key="species">
+                    <div class="flex items-center bg-gray-50 p-2 rounded-md">
+                        <div class="flex-grow text-sm pl-2" x-text="species"></div>
+                        <div class="w-24 text-sm px-3" x-text="threshold"></div>
+                        <div class="w-20 text-center">
+                            <button type="button" @click="openActionsModal(species)" 
+                                    class="btn btn-xs btn-secondary">Actions</button>
+                        </div>
+                        <div class="w-20 text-center">
+                            <button type="button" @click="removeConfig(species)" 
+                                    class="btn btn-xs">Remove</button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Custom thresholds input -->
+            <div class="flex items-center mt-2">
+                <input type="text" 
+                       x-model="newThresholdSpecies" 
+                       @input="filterSpecies(newThresholdSpecies, 'customThresholds')" 
+                       list="threshold-species-suggestions"
+                       placeholder="Species" 
+                       class="input input-bordered input-sm flex-grow" />
+                <datalist id="threshold-species-suggestions">
+                    <template x-for="species in filteredSpecies" :key="species">
+                        <option :value="species"></option>
+                    </template>
+                </datalist>
+                <input type="number" 
+                       x-model="newThreshold" 
+                       class="input input-bordered input-sm w-24 ml-2" 
+                       min="0" 
+                       max="1" 
+                       step="0.01" 
+                       placeholder="Threshold" />
+                
+                <button type="button" @click="openActionsModal(newThresholdSpecies)" 
+                        class="btn btn-sm btn-secondary ml-2">Actions</button>
+                <button type="button" @click="addConfig()" class="btn btn-sm btn-primary ml-2 w-20">Add</button>
+            </div>
+        </div>
+
+        <!-- Actions Modal -->
+        <div x-show="showActionsModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" x-cloak>
+            <div class="bg-white p-6 rounded-lg shadow-lg w-96">
+                <h3 class="text-lg font-bold mb-4" x-text="'Actions for ' + currentSpecies"></h3>
+                <!-- Add your action configuration inputs here -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700">Action Type</label>
+                    <select x-model="currentAction.type" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <option value="ExecuteScript">Execute Script</option>
+                        <option value="SendNotification">Send Notification</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700">Parameters</label>
+                    <input type="text" x-model="currentAction.parameters" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Comma-separated parameters">
+                </div>
+                <div class="flex justify-end">
+                    <button @click="saveAction()" class="btn btn-primary mr-2">Save</button>
+                    <button @click="closeActionsModal()" class="btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hidden inputs to always submit the species settings -->
+        <input type="hidden" name="realtime.species.include" :value="JSON.stringify(speciesSettings.Include)">
+        <input type="hidden" name="realtime.species.exclude" :value="JSON.stringify(speciesSettings.Exclude)">
+        <input type="hidden" name="realtime.species.customthresholds" :value="JSON.stringify(speciesSettings.customThresholds)">
+        <input type="hidden" name="realtime.species.actions" :value="JSON.stringify(speciesSettings.actions)">
+    </div>
+</div>
+
+{{end}}
