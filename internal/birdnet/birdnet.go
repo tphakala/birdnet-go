@@ -7,6 +7,7 @@ import (
 	"bytes"
 	_ "embed" // Embedding data directly into the binary.
 	"fmt"
+	"log"
 	"os"
 	"runtime"
 	"strings"
@@ -304,4 +305,15 @@ func (bn *BirdNET) loadModel() ([]byte, error) {
 		return nil, fmt.Errorf("failed to read custom model file: %w", err)
 	}
 	return data, nil
+}
+
+// Debug prints debug messages if debug mode is enabled
+func (bn *BirdNET) Debug(format string, v ...interface{}) {
+	if bn.Settings.BirdNET.Debug {
+		if len(v) == 0 {
+			log.Print("[birdnet] " + format)
+		} else {
+			log.Printf("[birdnet] "+format, v...)
+		}
+	}
 }
