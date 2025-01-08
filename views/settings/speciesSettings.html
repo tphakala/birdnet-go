@@ -15,8 +15,8 @@ x-data="{
     editValue: '',
     showTooltip: null,
     hasChanges: false,
-    allSpecies: {{.AllSpecies | toJSON}},
-    filteredSpecies: [],
+    predictions: [],
+    allowedSpecies: {{.PreparedSpecies | toJSON}},
     speciesSettingsOpen: false,
     showActionsModal: false,
     currentSpecies: '',
@@ -75,17 +75,15 @@ x-data="{
         this.hasChanges = true;
         this.closeActionsModal();
     },
-    updatePredictions(input, list) {
-        if (!input) {
-            this.filteredSpecies = [];
+    updatePredictions(input) {
+        if (!input || !this.allowedSpecies) {
+            this.predictions = [];
             return;
         }
         
-        const currentList = this.speciesSettings[list] || [];
-        this.filteredSpecies = this.allSpecies
+        this.predictions = this.allowedSpecies
             .filter(species => 
-                species.toLowerCase().includes(input.toLowerCase()) &&
-                !currentList.includes(species)
+                species.toLowerCase().includes(input.toLowerCase())
             )
             .slice(0, 5);
     },
@@ -139,12 +137,12 @@ x-init="
             <div class="flex items-center mt-2">
                 <input type="text" 
                        x-model="newIncludeSpecies" 
-                       @input="updatePredictions(newIncludeSpecies, 'Include')" 
-                       list="include-species-suggestions"
+                       @input="updatePredictions(newIncludeSpecies)" 
+                       list="species-suggestions"
                        placeholder="Add species to include" 
                        class="input input-bordered input-sm w-full" />
-                <datalist id="include-species-suggestions">
-                    <template x-for="species in filteredSpecies" :key="species">
+                <datalist id="species-suggestions">
+                    <template x-for="species in predictions" :key="species">
                         <option :value="species"></option>
                     </template>
                 </datalist>
@@ -184,12 +182,12 @@ x-init="
             <div class="flex items-center mt-2">
                 <input type="text" 
                        x-model="newExcludeSpecies" 
-                       @input="updatePredictions(newExcludeSpecies, 'Exclude')" 
-                       list="exclude-species-suggestions"
+                       @input="updatePredictions(newExcludeSpecies)" 
+                       list="species-suggestions"
                        placeholder="Add species to exclude" 
                        class="input input-bordered input-sm w-full" />
-                <datalist id="exclude-species-suggestions">
-                    <template x-for="species in filteredSpecies" :key="species">
+                <datalist id="species-suggestions">
+                    <template x-for="species in predictions" :key="species">
                         <option :value="species"></option>
                     </template>
                 </datalist>
@@ -241,12 +239,12 @@ x-init="
             <div class="flex items-center mt-2">
                 <input type="text" 
                        x-model="newThresholdSpecies" 
-                       @input="updatePredictions(newThresholdSpecies, 'Thresholds')" 
-                       list="threshold-species-suggestions"
+                       @input="updatePredictions(newThresholdSpecies)" 
+                       list="species-suggestions"
                        placeholder="Species" 
                        class="input input-bordered input-sm flex-grow" />
-                <datalist id="threshold-species-suggestions">
-                    <template x-for="species in filteredSpecies" :key="species">
+                <datalist id="species-suggestions">
+                    <template x-for="species in predictions" :key="species">
                         <option :value="species"></option>
                     </template>
                 </datalist>
