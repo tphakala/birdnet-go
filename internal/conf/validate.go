@@ -128,6 +128,7 @@ func validateBirdNETSettings(settings *BirdNETConfig) error {
 
 // validateWebServerSettings validates the WebServer-specific settings
 func validateWebServerSettings(settings *struct {
+	Debug   bool
 	Enabled bool
 	Port    string
 	Log     LogConfig

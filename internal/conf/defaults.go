@@ -148,6 +148,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.telemetry.listen", "0.0.0.0:8090")
 
 	// Webserver configuration
+	viper.SetDefault("webserver.debug", false)
 	viper.SetDefault("webserver.enabled", true)
 	viper.SetDefault("webserver.port", "8080")
 
