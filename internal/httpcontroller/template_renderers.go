@@ -131,6 +131,12 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 	if templateName == "detectionfiltersSettings" ||
 		templateName == "speciesSettings" {
 		data["PreparedSpecies"] = s.prepareSpeciesData()
+
+		// For thresholds, we need to handle the map specially
+		var thresholdStrings []string
+		for species, threshold := range s.Settings.Realtime.Species.Thresholds {
+			thresholdStrings = append(thresholdStrings, fmt.Sprintf("[%s: %f]", species, threshold))
+		}
 	}
 
 	// DEBUG Log the species settings
@@ -142,10 +148,11 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 
 	// Handle rendering errors
 	if err != nil {
-		log.Printf("Error rendering settings content: %v", err)
+		log.Printf("ERROR: Failed to render settings content: %v", err)
+		// Log the template data that caused the error
+		log.Printf("ERROR: Template data dump: %+v", data)
 		return "", err
 	}
 
-	// Return the rendered HTML
 	return template.HTML(buf.String()), nil
 }
