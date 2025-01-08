@@ -286,6 +286,7 @@ type Settings struct {
 	Realtime RealtimeSettings // Realtime processing settings
 
 	WebServer struct {
+		Debug   bool      // true to enable debug mode
 		Enabled bool      // true to enable web server
 		Port    string    // port for web server
 		Log     LogConfig // logging configuration for web server
