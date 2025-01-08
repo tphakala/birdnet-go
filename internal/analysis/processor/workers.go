@@ -54,7 +54,7 @@ func (p *Processor) getActionsForItem(detection Detections) []Action {
 	speciesName := strings.ToLower(detection.Note.CommonName)
 
 	// Check if species has custom configuration
-	if speciesConfig, exists := p.Settings.Realtime.Species.Thresholds[speciesName]; exists {
+	if speciesConfig, exists := p.Settings.Realtime.Species.Config[speciesName]; exists {
 		if p.Settings.Debug {
 			log.Println("Species config exists for custom actions")
 		}
@@ -64,11 +64,11 @@ func (p *Processor) getActionsForItem(detection Detections) []Action {
 		// Add custom actions from the new structure
 		for _, actionConfig := range speciesConfig.Actions {
 			switch actionConfig.Type {
-			case "ExecuteScript":
+			case "ExecuteCommand":
 				if len(actionConfig.Parameters) > 0 {
-					actions = append(actions, ExecuteScriptAction{
-						ScriptPath: actionConfig.Parameters[0],
-						Params:     parseScriptParams(actionConfig.Parameters[1:], detection),
+					actions = append(actions, ExecuteCommandAction{
+						Command: actionConfig.Command,
+						Params:  parseScriptParams(actionConfig.Parameters, detection),
 					})
 				}
 			case "SendNotification":

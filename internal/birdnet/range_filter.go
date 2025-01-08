@@ -81,7 +81,7 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 	}
 
 	// Process species with configured actions
-	for species := range bn.Settings.Realtime.Species.Thresholds {
+	for species := range bn.Settings.Realtime.Species.Config {
 		bn.Debug("Processing species with actions: %s", species)
 		addSpeciesWithMaxScore(bn, &speciesScores, species, processedSpecies)
 	}

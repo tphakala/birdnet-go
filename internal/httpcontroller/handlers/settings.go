@@ -28,8 +28,6 @@ var fieldsToSkip = map[string]bool{
 	"output.file.enabled":             true,
 	"output.file.path":                true,
 	"output.file.type":                true,
-	//"realtime.species.threshold":      true,
-	"realtime.species.actions": true,
 }
 
 // GetAudioDevices handles the request to list available audio devices
@@ -207,14 +205,14 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 						return err
 					}
 				}
-			} else if fieldType.Type == reflect.TypeOf(conf.SpeciesThreshold{}) {
-				// Special handling for SpeciesThreshold
-				if thresholdJSON, exists := formValues[fullName]; exists && len(thresholdJSON) > 0 {
-					var threshold conf.SpeciesThreshold
-					if err := json.Unmarshal([]byte(thresholdJSON[0]), &threshold); err != nil {
-						return fmt.Errorf("error unmarshaling species threshold for %s: %w", fullName, err)
+			} else if fieldType.Type == reflect.TypeOf(conf.SpeciesConfig{}) {
+				// Special handling for SpeciesConfig
+				if configJSON, exists := formValues[fullName]; exists && len(configJSON) > 0 {
+					var config conf.SpeciesConfig
+					if err := json.Unmarshal([]byte(configJSON[0]), &config); err != nil {
+						return fmt.Errorf("error unmarshaling species config for %s: %w", fullName, err)
 					}
-					field.Set(reflect.ValueOf(threshold))
+					field.Set(reflect.ValueOf(config))
 				}
 			} else {
 				//log.Println("Debug (updateStructFromForm): Updating struct field:", fullName)
@@ -307,14 +305,14 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 			}
 		case reflect.Map:
 			// Handle map fields
-			if fieldType.Type == reflect.TypeOf(map[string]conf.SpeciesThreshold{}) {
-				// Special handling for species thresholds map
-				if thresholdsJSON, exists := formValues[fullName]; exists && len(thresholdsJSON) > 0 {
-					var thresholds map[string]conf.SpeciesThreshold
-					if err := json.Unmarshal([]byte(thresholdsJSON[0]), &thresholds); err != nil {
-						return fmt.Errorf("error unmarshaling species thresholds for %s: %w", fullName, err)
+			if fieldType.Type == reflect.TypeOf(map[string]conf.SpeciesConfig{}) {
+				// Special handling for species config map
+				if configJSON, exists := formValues[fullName]; exists && len(configJSON) > 0 {
+					var configs map[string]conf.SpeciesConfig
+					if err := json.Unmarshal([]byte(configJSON[0]), &configs); err != nil {
+						return fmt.Errorf("error unmarshaling species configs for %s: %w", fullName, err)
 					}
-					field.Set(reflect.ValueOf(thresholds))
+					field.Set(reflect.ValueOf(configs))
 				}
 			} else {
 				return fmt.Errorf("unsupported map type for %s", fullName)

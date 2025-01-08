@@ -134,8 +134,8 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 
 		// For thresholds, we need to handle the map specially
 		var thresholdStrings []string
-		for species, threshold := range s.Settings.Realtime.Species.Thresholds {
-			thresholdStrings = append(thresholdStrings, fmt.Sprintf("[%s: %f]", species, threshold))
+		for species, threshold := range s.Settings.Realtime.Species.Config {
+			thresholdStrings = append(thresholdStrings, fmt.Sprintf("[%s: %f]", species, threshold.Threshold))
 		}
 	}
 

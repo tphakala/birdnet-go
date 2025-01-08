@@ -9,15 +9,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
-type ExecuteScriptAction struct {
-	ScriptPath string
-	Params     map[string]interface{}
+type ExecuteCommandAction struct {
+	Command string
+	Params  map[string]interface{}
 }
 
 // A map to store the action configurations for different species
 //var speciesActionsMap map[string]SpeciesActionConfig
 
-func (a ExecuteScriptAction) Execute(data interface{}) error {
+func (a ExecuteCommandAction) Execute(data interface{}) error {
 	//log.Println("Executing script:", a.ScriptPath)
 	// Type assertion to check if data is of type Detections
 	detection, ok := data.(Detections)
@@ -39,7 +39,7 @@ func (a ExecuteScriptAction) Execute(data interface{}) error {
 	}
 
 	// Executing the script with the provided arguments
-	cmd := exec.Command(a.ScriptPath, args...)
+	cmd := exec.Command(a.Command, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("error executing script: %w, output: %s", err, string(output))

@@ -165,23 +165,24 @@ type RealtimeSettings struct {
 	Weather       WeatherSettings       // Weather provider related settings
 }
 
-// SpeciesSettings represents all species-related configuration
-type SpeciesSettings struct {
-	Include    []string                    // Species to always include regardless of range filter
-	Exclude    []string                    // Species to always exclude from detection
-	Thresholds map[string]SpeciesThreshold // Per-species configuration including threshold and actions
-}
-
-// SpeciesThreshold represents per-species configuration
-type SpeciesThreshold struct {
-	Confidence float32         // Detection confidence threshold
-	Actions    []SpeciesAction // List of actions for this species
-}
-
 // SpeciesAction represents a single action configuration
 type SpeciesAction struct {
-	Type       string   // Type of action (ExecuteScript, SendNotification, etc)
-	Parameters []string // Action parameters
+	Type       string   `yaml:"type"`       // Type of action (ExecuteCommand, etc)
+	Command    string   `yaml:"command"`    // Path to the command to execute
+	Parameters []string `yaml:"parameters"` // Action parameters
+}
+
+// SpeciesConfig represents configuration for a specific species
+type SpeciesConfig struct {
+	Threshold float64         `yaml:"threshold"` // Confidence threshold
+	Actions   []SpeciesAction `yaml:"actions"`   // List of actions to execute
+}
+
+// RealtimeSpeciesSettings contains all species-specific settings
+type SpeciesSettings struct {
+	Include []string                 `yaml:"include"` // Always include these species
+	Exclude []string                 `yaml:"exclude"` // Always exclude these species
+	Config  map[string]SpeciesConfig `yaml:"config"`  // Per-species configuration
 }
 
 // ActionConfig holds configuration details for a specific action.

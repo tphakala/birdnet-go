@@ -5,11 +5,11 @@ x-data="{
     speciesSettings: {
         Include: {{if .Settings.Realtime.Species.Include}}{{.Settings.Realtime.Species.Include | toJSON}}{{else}}[]{{end}},
         Exclude: {{if .Settings.Realtime.Species.Exclude}}{{.Settings.Realtime.Species.Exclude | toJSON}}{{else}}[]{{end}},
-        Thresholds: {{if .Settings.Realtime.Species.Thresholds}}{{.Settings.Realtime.Species.Thresholds | toJSON}}{{else}}{}{{end}},
+        Config: {{if .Settings.Realtime.Species.Config}}{{.Settings.Realtime.Species.Config | toJSON}}{{else}}{}{{end}},
     },
     newIncludeSpecies: '',
     newExcludeSpecies: '',
-    newThresholdSpecies: '',
+    newSpeciesConfig: '',
     newThreshold: 0.5,
     editMode: null,
     editValue: '',
@@ -20,7 +20,7 @@ x-data="{
     speciesSettingsOpen: false,
     showActionsModal: false,
     currentSpecies: '',
-    currentAction: { type: 'ExecuteScript', parameters: '' },
+    currentAction: { type: 'ExecuteCommand', parameters: '' },
     resetChanges() {
         this.hasChanges = false;
     },
@@ -37,38 +37,39 @@ x-data="{
         this.hasChanges = true;
     },
     addConfig() {
-        if (this.newThresholdSpecies && !this.speciesSettings.Thresholds[this.newThresholdSpecies]) {
-            this.speciesSettings.Thresholds[this.newThresholdSpecies] = {
-                Confidence: this.newThreshold,
+        if (this.newSpeciesConfig && !this.speciesSettings.Config[this.newSpeciesConfig]) {
+            this.speciesSettings.Config[this.newSpeciesConfig] = {
+                Threshold: this.newThreshold,
                 Actions: []
             };
-            this.newThresholdSpecies = '';
+            this.newSpeciesConfig = '';
             this.newThreshold = 0.5;
             this.hasChanges = true;
         }
     },
     removeConfig(species) {
-        delete this.speciesSettings.Thresholds[species];
+        delete this.speciesSettings.Config[species];
         this.hasChanges = true;
     },
     openActionsModal(species) {
         this.currentSpecies = species;
-        this.currentAction = this.speciesSettings.Thresholds[species]?.Actions?.[0] || { type: 'ExecuteScript', parameters: '' };
+        this.currentAction = this.speciesSettings.Config[species]?.Actions?.[0] || { type: 'ExecuteCommand', parameters: '' };
         this.showActionsModal = true;
     },
     closeActionsModal() {
         this.showActionsModal = false;
     },
     saveAction() {
-        if (!this.speciesSettings.Thresholds[this.currentSpecies]) {
-            this.speciesSettings.Thresholds[this.currentSpecies] = {
-                Confidence: 0.5,
+        if (!this.speciesSettings.Config[this.currentSpecies]) {
+            this.speciesSettings.Config[this.currentSpecies] = {
+                Threshold: 0.5,
                 Actions: []
             };
         }
         
-        this.speciesSettings.Thresholds[this.currentSpecies].Actions.push({
+        this.speciesSettings.Config[this.currentSpecies].Actions.push({
             Type: this.currentAction.type,
+            CommandPath: this.currentAction.commandPath,
             Parameters: this.currentAction.parameters.split(',').map(p => p.trim())
         });
         
@@ -197,18 +198,18 @@ x-init="
 
         <div class="form-control relative mt-4">
             <label class="label-text">
-                Custom Species Thresholds
+                Custom Species Configuration
                 <span class="ml-2 text-sm text-gray-500 cursor-help"
-                      @mouseenter="showTooltip = 'customThresholds'"
+                      @mouseenter="showTooltip = 'customConfig'"
                       @mouseleave="showTooltip = null">ⓘ</span>
             </label>
 
             <div class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50"
-                 x-show="showTooltip === 'customThresholds'" x-cloak>
+                 x-show="showTooltip === 'customConfig'" x-cloak>
                 Set custom confidence thresholds for specific species. These will override the global threshold for the specified species.
             </div>
 
-            <!-- Custom thresholds list -->
+            <!-- Custom configuration list -->
             <div class="space-y-2">
                 <!-- Header -->
                 <div class="flex bg-gray-100 p-2 rounded-md">
@@ -219,13 +220,13 @@ x-init="
                 </div>
                 
                 <!-- List items -->
-                <template x-for="(threshold, species) in speciesSettings.Thresholds" :key="species">
+                <template x-for="(config, species) in speciesSettings.Config" :key="species">
                     <div class="flex items-center bg-gray-50 p-2 rounded-md">
                         <div class="flex-grow text-sm pl-2" x-text="species"></div>
-                        <div class="w-24 text-sm px-3" x-text="threshold.Confidence"></div>
+                        <div class="w-24 text-sm px-3" x-text="config.Threshold"></div>
                         <div class="w-20 text-center">
                             <button type="button" @click="openActionsModal(species)" 
-                                    class="btn btn-xs btn-secondary">Actions</button>
+                                    class="btn btn-xs">Edit</button>
                         </div>
                         <div class="w-20 text-center">
                             <button type="button" @click="removeConfig(species)" 
@@ -235,11 +236,11 @@ x-init="
                 </template>
             </div>
 
-            <!-- Custom thresholds input -->
+            <!-- Custom configuration input -->
             <div class="flex items-center mt-2">
                 <input type="text" 
-                       x-model="newThresholdSpecies" 
-                       @input="updatePredictions(newThresholdSpecies)" 
+                       x-model="newSpeciesConfig" 
+                       @input="updatePredictions(newSpeciesConfig)" 
                        list="species-suggestions"
                        placeholder="Species" 
                        class="input input-bordered input-sm flex-grow" />
@@ -256,8 +257,8 @@ x-init="
                        step="0.01" 
                        placeholder="Threshold" />
                 
-                <button type="button" @click="openActionsModal(newThresholdSpecies)" 
-                        class="btn btn-sm btn-secondary ml-2">Actions</button>
+                <button type="button" @click="openActionsModal(newSpeciesConfig)" 
+                        class="btn btn-sm ml-2">Actions</button>
                 <button type="button" @click="addConfig()" class="btn btn-sm btn-primary ml-2 w-20">Add</button>
             </div>
         </div>
@@ -274,27 +275,27 @@ x-init="
                     <select x-model="currentAction.type" 
                             class="select select-bordered w-full mt-1" 
                             disabled>
-                        <option value="ExecuteScript">Execute Script</option>
+                        <option value="ExecuteCommand">Execute Command</option>
                     </select>
                 </div>
                 
                 <div class="mb-4">
-                    <label class="block text-sm font-medium">Script Path</label>
+                    <label class="block text-sm font-medium">Command</label>
                     <input type="text" 
-                           x-model="currentAction.scriptPath" 
+                           x-model="currentAction.command" 
                            class="input input-bordered w-full mt-1" 
-                           placeholder="/path/to/your/script.sh">
-                    <p class="text-sm text-gray-500 mt-1">Provide the full path to the script you want to execute</p>
+                           placeholder="/path/to/your/command">
+                    <p class="text-sm text-gray-500 mt-1">Provide the full path to the command you want to execute</p>
                 </div>
 
                 <div class="mb-4">
-                    <label class="block text-sm font-medium">Script Parameters</label>
+                    <label class="block text-sm font-medium">Parameters</label>
                     <input type="text" 
                            x-model="currentAction.parameters" 
                            class="input input-bordered w-full mt-1" 
                            placeholder="Parameters will appear here"
                            readonly>
-                    <p class="text-sm text-gray-500 mt-1">Click parameters below to add them to your script</p>
+                    <p class="text-sm text-gray-500 mt-1">Click parameters below to add them to your command</p>
                 </div>
 
                 <div class="mb-4">
@@ -330,7 +331,7 @@ x-init="
         <!-- Hidden inputs to always submit the species settings -->
         <input type="hidden" name="realtime.species.include" :value="JSON.stringify(speciesSettings.Include)">
         <input type="hidden" name="realtime.species.exclude" :value="JSON.stringify(speciesSettings.Exclude)">
-        <input type="hidden" name="realtime.species.thresholds" :value="JSON.stringify(speciesSettings.Thresholds)">
+        <input type="hidden" name="realtime.species.config" :value="JSON.stringify(speciesSettings.Config)">
     </div>
 </div>
 
