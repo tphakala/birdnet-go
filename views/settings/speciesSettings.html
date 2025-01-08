@@ -53,7 +53,7 @@ x-data="{
     },
     openActionsModal(species) {
         this.currentSpecies = species;
-        this.currentAction = this.speciesSettings.actions[species] || { type: 'ExecuteScript', parameters: '' };
+        this.currentAction = this.speciesSettings.Thresholds[species]?.Actions?.[0] || { type: 'ExecuteScript', parameters: '' };
         this.showActionsModal = true;
     },
     closeActionsModal() {
@@ -265,26 +265,35 @@ x-init="
         </div>
 
         <!-- Actions Modal -->
-        <div x-show="showActionsModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" x-cloak>
-            <div class="bg-white p-6 rounded-lg shadow-lg w-96">
+        <div x-show="showActionsModal" 
+             class="modal modal-open" 
+             x-cloak>
+            <div class="modal-box bg-base-100">
                 <h3 class="text-lg font-bold mb-4" x-text="'Actions for ' + currentSpecies"></h3>
-                <!-- Add your action configuration inputs here -->
+                
                 <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700">Action Type</label>
-                    <select x-model="currentAction.type" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <label class="block text-sm font-medium">Action Type</label>
+                    <select x-model="currentAction.type" 
+                            class="select select-bordered w-full mt-1">
                         <option value="ExecuteScript">Execute Script</option>
                         <option value="SendNotification">Send Notification</option>
                     </select>
                 </div>
+                
                 <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700">Parameters</label>
-                    <input type="text" x-model="currentAction.parameters" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Comma-separated parameters">
+                    <label class="block text-sm font-medium">Parameters</label>
+                    <input type="text" 
+                           x-model="currentAction.parameters" 
+                           class="input input-bordered w-full mt-1" 
+                           placeholder="Comma-separated parameters">
                 </div>
-                <div class="flex justify-end">
-                    <button @click="saveAction()" class="btn btn-primary mr-2">Save</button>
+                
+                <div class="modal-action">
+                    <button @click="saveAction()" class="btn btn-primary">Save</button>
                     <button @click="closeActionsModal()" class="btn">Cancel</button>
                 </div>
             </div>
+            <div class="modal-backdrop" @click="closeActionsModal()"></div>
         </div>
 
         <!-- Hidden inputs to always submit the species settings -->
