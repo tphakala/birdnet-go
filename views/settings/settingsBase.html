@@ -38,6 +38,43 @@
             }, 50); // Small delay to ensure Alpine has finished rendering
         });
     });
+
+    // Create a singleton SSE manager
+    window.SSEManager = window.SSEManager || {
+        eventSource: null,
+        notificationCallbacks: new Set(),
+        
+        init() {
+            if (this.eventSource) {
+                return; // Already initialized
+            }
+            
+            this.eventSource = new EventSource('/sse');
+            this.eventSource.onmessage = (event) => {
+                const notification = JSON.parse(event.data);
+                this.notificationCallbacks.forEach(callback => callback(notification));
+            };
+            
+            // Clean up on page unload
+            window.addEventListener('unload', () => this.cleanup());
+        },
+        
+        cleanup() {
+            if (this.eventSource) {
+                this.eventSource.close();
+                this.eventSource = null;
+            }
+            this.notificationCallbacks.clear();
+        },
+        
+        subscribe(callback) {
+            this.notificationCallbacks.add(callback);
+        },
+        
+        unsubscribe(callback) {
+            this.notificationCallbacks.delete(callback);
+        }
+    };
 </script>
 <style>
     [x-cloak] {
@@ -68,13 +105,22 @@
     notifications: [],
     hasChanges: false,
     saving: false,
-    initSSE() {
-        const eventSource = new EventSource('/sse');
-        eventSource.onmessage = (event) => {
-            const notification = JSON.parse(event.data);
+    
+    init() {
+        // Subscribe to notifications using the singleton SSE manager
+        const handleNotification = (notification) => {
             this.addNotification(notification.message, notification.type);
         };
+        
+        window.SSEManager.subscribe(handleNotification);
+        window.SSEManager.init(); // Initialize if not already done
+        
+        // Cleanup on component destroy
+        this.$cleanup(() => {
+            window.SSEManager.unsubscribe(handleNotification);
+        });
     },
+    
     addNotification(message, type) {
         const id = Date.now();
         this.notifications.push({ id, message, type });
@@ -144,7 +190,7 @@
             }
         });
     }
-}" x-init="initSSE()" x-bind:class="$store.pageLoaded.loaded ? 'page-loaded' : ''">
+}" x-init="init()" x-bind:class="$store.pageLoaded.loaded ? 'page-loaded' : ''">
     <form id="settingsForm" @submit.prevent="saveSettings()">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             <!-- Settings content rendered here -->
