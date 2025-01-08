@@ -274,18 +274,51 @@ x-init="
                 <div class="mb-4">
                     <label class="block text-sm font-medium">Action Type</label>
                     <select x-model="currentAction.type" 
-                            class="select select-bordered w-full mt-1">
+                            class="select select-bordered w-full mt-1" 
+                            disabled>
                         <option value="ExecuteScript">Execute Script</option>
-                        <option value="SendNotification">Send Notification</option>
                     </select>
                 </div>
                 
                 <div class="mb-4">
-                    <label class="block text-sm font-medium">Parameters</label>
+                    <label class="block text-sm font-medium">Script Path</label>
+                    <input type="text" 
+                           x-model="currentAction.scriptPath" 
+                           class="input input-bordered w-full mt-1" 
+                           placeholder="/path/to/your/script.sh">
+                    <p class="text-sm text-gray-500 mt-1">Provide the full path to the script you want to execute</p>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium">Script Parameters</label>
                     <input type="text" 
                            x-model="currentAction.parameters" 
                            class="input input-bordered w-full mt-1" 
-                           placeholder="Comma-separated parameters">
+                           placeholder="Parameters will appear here"
+                           readonly>
+                    <p class="text-sm text-gray-500 mt-1">Click parameters below to add them to your script</p>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium">Available Parameters</label>
+                    <p class="text-sm text-gray-500 mb-2">Click to add parameters to your script:</p>
+                    <div class="flex flex-wrap gap-2">
+                        <button @click="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',CommonName' : 'CommonName'" 
+                                class="btn btn-xs">CommonName</button>
+                        <button @click="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',ScientificName' : 'ScientificName'" 
+                                class="btn btn-xs">ScientificName</button>
+                        <button @click="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',Confidence' : 'Confidence'" 
+                                class="btn btn-xs">Confidence</button>
+                        <button @click="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',Time' : 'Time'" 
+                                class="btn btn-xs">Time</button>
+                        <button @click="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',Source' : 'Source'" 
+                                class="btn btn-xs">Source</button>
+                    </div>
+                    <div class="mt-2">
+                        <button @click="currentAction.parameters = ''" 
+                                class="btn btn-xs btn-warning">Clear Parameters</button>
+                    </div>
+                    <p class="text-sm text-gray-500 mt-2">Parameters will be passed to your script in the order they are added</p>
                 </div>
                 
                 <div class="modal-action">
