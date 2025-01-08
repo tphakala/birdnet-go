@@ -49,6 +49,7 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"getHourlyCounts":       getHourlyCounts,
 		"sumHourlyCountsRange":  sumHourlyCountsRange,
 		"weatherDescription":    s.Handlers.GetWeatherDescriptionFunc(),
+		"safeJSON":              safeJSONFunc,
 	}
 }
 
@@ -266,4 +267,20 @@ func sumHourlyCountsRange(counts [24]int, start, length int) int {
 		sum += counts[i%24]
 	}
 	return sum
+}
+
+// safeJSONFunc converts a value to a safely escaped JSON string for use in HTML templates
+func safeJSONFunc(v interface{}) template.JS {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return template.JS("null")
+	}
+
+	// Convert to string and HTML-escape the JSON
+	s := template.JSEscapeString(string(b))
+
+	// Additional escaping for quotes in HTML attributes
+	s = strings.ReplaceAll(s, "'", "\\'")
+
+	return template.JS(s)
 }
