@@ -267,20 +267,6 @@ func (p *Processor) processResults(item queue.Results) []Detections {
 			continue
 		}
 
-		// Check include/exclude lists from new structure
-		if len(p.Settings.Realtime.Species.Include) > 0 {
-			if !contains(p.Settings.Realtime.Species.Include, speciesLowercase) {
-				continue
-			}
-		}
-
-		if contains(p.Settings.Realtime.Species.Exclude, speciesLowercase) {
-			if p.Settings.Debug {
-				log.Printf("Species excluded: %s\n", commonName)
-			}
-			continue
-		}
-
 		if p.Settings.Realtime.DynamicThreshold.Enabled {
 			// Add species to dynamic thresholds if it passes the filter
 			p.addSpeciesToDynamicThresholds(speciesLowercase, baseThreshold)
@@ -330,11 +316,11 @@ func (p *Processor) handleHumanDetection(item queue.Results, speciesLowercase st
 // getBaseConfidenceThreshold retrieves the confidence threshold for a species, using custom or global thresholds.
 func (p *Processor) getBaseConfidenceThreshold(speciesLowercase string) float32 {
 	// Check if species has a custom threshold in the new structure
-	if threshold, exists := p.Settings.Realtime.Species.Thresholds[speciesLowercase]; exists {
+	if config, exists := p.Settings.Realtime.Species.Config[speciesLowercase]; exists {
 		if p.Settings.Debug {
-			log.Printf("\nUsing custom confidence threshold of %.2f for %s\n", threshold.Confidence, speciesLowercase)
+			log.Printf("\nUsing custom confidence threshold of %.2f for %s\n", config.Threshold, speciesLowercase)
 		}
-		return float32(threshold.Confidence)
+		return float32(config.Threshold)
 	}
 
 	// Fall back to global threshold
