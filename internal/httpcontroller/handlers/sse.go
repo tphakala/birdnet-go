@@ -5,10 +5,12 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 type Notification struct {
@@ -55,6 +57,9 @@ func (h *SSEHandler) SendNotification(notification Notification) {
 	h.clientsMux.Lock()
 	defer h.clientsMux.Unlock()
 	for clientChan := range h.clients {
+		if conf.Setting().WebServer.Debug {
+			log.Printf("SSE: Sending notification to client. Total clients: %d", len(h.clients))
+		}
 		clientChan <- notification
 	}
 }
@@ -63,6 +68,10 @@ func (h *SSEHandler) addClient(clientChan chan Notification) {
 	h.clientsMux.Lock()
 	h.clients[clientChan] = true
 	h.clientsMux.Unlock()
+
+	if conf.Setting().WebServer.Debug {
+		log.Printf("SSE: New client connected. Total clients: %d", len(h.clients))
+	}
 }
 
 func (h *SSEHandler) removeClient(clientChan chan Notification) {
@@ -70,4 +79,8 @@ func (h *SSEHandler) removeClient(clientChan chan Notification) {
 	delete(h.clients, clientChan)
 	close(clientChan)
 	h.clientsMux.Unlock()
+
+	if conf.Setting().WebServer.Debug {
+		log.Printf("SSE: Client disconnected. Total clients: %d", len(h.clients))
+	}
 }
