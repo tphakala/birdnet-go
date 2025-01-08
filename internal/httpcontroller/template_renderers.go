@@ -154,5 +154,6 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 		return "", err
 	}
 
+	// Return the rendered HTML
 	return template.HTML(buf.String()), nil
 }
