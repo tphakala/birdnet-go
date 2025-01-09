@@ -240,7 +240,7 @@ x-init="
                 <template x-for="(config, species) in speciesSettings.Config" :key="species">
                     <div class="flex items-center bg-gray-50 p-2 rounded-md">
                         <div class="flex-grow text-sm pl-2" x-text="species"></div>
-                        <div class="w-24 text-sm px-3" x-text="config.Threshold"></div>
+                        <div class="w-24 text-sm px-3" x-text="config.Threshold.toFixed(2)"></div>
                         <div class="w-20 text-center">
                             <button type="button" 
                                     @click.prevent="openActionsModal(species)" 
@@ -271,7 +271,7 @@ x-init="
                     </template>
                 </datalist>
                 <input type="number" 
-                       x-model="newThreshold" 
+                       x-model.number="newThreshold" 
                        class="input input-bordered input-sm w-24 ml-2" 
                        min="0" 
                        max="1" 
