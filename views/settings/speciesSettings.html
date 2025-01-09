@@ -20,6 +20,7 @@ x-data="{
     speciesSettingsOpen: false,
     showActionsModal: false,
     currentSpecies: '',
+    currentActionIndex: null,
     currentAction: { type: 'ExecuteCommand', command: '', parameters: '' },
     resetChanges() {
         this.hasChanges = false;
@@ -53,11 +54,21 @@ x-data="{
     },
     openActionsModal(species) {
         this.currentSpecies = species;
-        this.currentAction = this.speciesSettings.Config[species]?.Actions?.[0] || { type: 'ExecuteCommand', command: '', parameters: '' };
+        
+        // Get existing action if any
+        const existingAction = this.speciesSettings.Config[species]?.Actions?.[0];
+        
+        // Set default or existing action
+        const defaultAction = { Type: 'ExecuteCommand', Command: '', Parameters: [] };
+        const action = existingAction || defaultAction;
+        
+        this.currentAction = {
+            type: action.Type,
+            command: action.Command,
+            parameters: Array.isArray(action.Parameters) ? action.Parameters.join(',') : ''
+        };
+        
         this.showActionsModal = true;
-    },
-    closeActionsModal() {
-        this.showActionsModal = false;
     },
     saveAction() {
         if (!this.speciesSettings.Config[this.currentSpecies]) {
@@ -67,14 +78,20 @@ x-data="{
             };
         }
         
-        this.speciesSettings.Config[this.currentSpecies].Actions.push({
+        const newAction = {
             Type: this.currentAction.type,
             Command: this.currentAction.command,
-            Parameters: this.currentAction.parameters.split(',').map(p => p.trim())
-        });
+            Parameters: this.currentAction.parameters.split(',').map(p => p.trim()).filter(p => p)
+        };
+        
+        // Always replace/set the single action
+        this.speciesSettings.Config[this.currentSpecies].Actions = [newAction];
         
         this.hasChanges = true;
         this.closeActionsModal();
+    },
+    closeActionsModal() {
+        this.showActionsModal = false;
     },
     updatePredictions(input) {
         if (!input || !this.allowedSpecies) {
@@ -225,11 +242,15 @@ x-init="
                         <div class="flex-grow text-sm pl-2" x-text="species"></div>
                         <div class="w-24 text-sm px-3" x-text="config.Threshold"></div>
                         <div class="w-20 text-center">
-                            <button type="button" @click="openActionsModal(species)" 
-                                    class="btn btn-xs">Edit</button>
+                            <button type="button" 
+                                    @click.prevent="openActionsModal(species)" 
+                                    class="btn btn-xs">
+                                <span x-text="config.Actions?.length ? 'Edit Action' : 'Add Action'"></span>
+                            </button>
                         </div>
                         <div class="w-20 text-center">
-                            <button type="button" @click="removeConfig(species)" 
+                            <button type="button" 
+                                    @click="removeConfig(species)" 
                                     class="btn btn-xs">Remove</button>
                         </div>
                     </div>
@@ -302,27 +323,37 @@ x-init="
                     <label class="block text-sm font-medium">Available Parameters</label>
                     <p class="text-sm text-gray-500 mb-2">Click to add parameters to your script:</p>
                     <div class="flex flex-wrap gap-2">
-                        <button @click="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',CommonName' : 'CommonName'" 
+                        <button type="button" 
+                                @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',CommonName' : 'CommonName'" 
                                 class="btn btn-xs">CommonName</button>
-                        <button @click="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',ScientificName' : 'ScientificName'" 
+                        <button type="button" 
+                                @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',ScientificName' : 'ScientificName'" 
                                 class="btn btn-xs">ScientificName</button>
-                        <button @click="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',Confidence' : 'Confidence'" 
+                        <button type="button" 
+                                @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',Confidence' : 'Confidence'" 
                                 class="btn btn-xs">Confidence</button>
-                        <button @click="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',Time' : 'Time'" 
+                        <button type="button" 
+                                @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',Time' : 'Time'" 
                                 class="btn btn-xs">Time</button>
-                        <button @click="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',Source' : 'Source'" 
+                        <button type="button" 
+                                @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',Source' : 'Source'" 
                                 class="btn btn-xs">Source</button>
                     </div>
                     <div class="mt-2">
-                        <button @click="currentAction.parameters = ''" 
+                        <button type="button" 
+                                @click.prevent="currentAction.parameters = ''" 
                                 class="btn btn-xs btn-warning">Clear Parameters</button>
                     </div>
                     <p class="text-sm text-gray-500 mt-2">Parameters will be passed to your script in the order they are added</p>
                 </div>
                 
                 <div class="modal-action">
-                    <button @click="saveAction()" class="btn btn-primary">Save</button>
-                    <button @click="closeActionsModal()" class="btn">Cancel</button>
+                    <button type="button" 
+                            @click.prevent="saveAction()" 
+                            class="btn btn-primary">Save</button>
+                    <button type="button" 
+                            @click.prevent="closeActionsModal()" 
+                            class="btn">Cancel</button>
                 </div>
             </div>
             <div class="modal-backdrop" @click="closeActionsModal()"></div>
