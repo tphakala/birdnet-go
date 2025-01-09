@@ -254,6 +254,7 @@ type AllowCloudflareBypass struct {
 // SecurityConfig handles all security-related settings and validations
 // for the application, including authentication, TLS, and access control.
 type Security struct {
+	Debug bool // true to enable debug mode
 
 	// Host is the primary hostname used for TLS certificates
 	// and OAuth redirect URLs. Required when using AutoTLS or
