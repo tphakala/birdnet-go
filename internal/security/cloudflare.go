@@ -42,6 +42,7 @@ type CloudflareAccess struct {
 
 func NewCloudflareAccess() *CloudflareAccess {
 	settings := conf.GetSettings()
+	debug := settings.Security.Debug
 	cfBypass := settings.Security.AllowCloudflareBypass
 
 	return &CloudflareAccess{
@@ -55,6 +56,7 @@ func NewCloudflareAccess() *CloudflareAccess {
 			lastFetch: time.Time{},
 		},
 		settings: &cfBypass,
+		debug:    debug,
 	}
 }
 
@@ -279,10 +281,11 @@ func (ca *CloudflareAccess) GetLogoutURL() string {
 
 func (ca *CloudflareAccess) Debug(format string, v ...interface{}) {
 	if !ca.debug {
+		prefix := "[security/cloudflare] "
 		if len(v) == 0 {
-			log.Print(format)
+			log.Print(prefix + format)
 		} else {
-			log.Printf(format, v...)
+			log.Printf(prefix+format, v...)
 		}
 	}
 }
