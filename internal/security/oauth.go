@@ -44,7 +44,7 @@ type OAuth2Server struct {
 
 func NewOAuth2Server() *OAuth2Server {
 	settings := conf.GetSettings()
-	debug := settings.Debug
+	debug := settings.Security.Debug
 
 	server := &OAuth2Server{
 		Settings:     settings,
@@ -256,10 +256,11 @@ func (s *OAuth2Server) StartAuthCleanup(interval time.Duration) {
 
 func (s *OAuth2Server) Debug(format string, v ...interface{}) {
 	if s.debug {
+		prefix := "[security/oauth] "
 		if len(v) == 0 {
-			log.Print(format)
+			log.Print(prefix + format)
 		} else {
-			log.Printf(format, v...)
+			log.Printf(prefix+format, v...)
 		}
 	}
 }
