@@ -318,9 +318,9 @@ func TestFetchCertsLogging(t *testing.T) {
 	}
 
 	expectedLogs := []string{
-		fmt.Sprintf("Fetching Cloudflare certs from URL: %s/cdn-cgi/access/certs", server.URL),
-		"Added certificate with Kid: 1234",
-		"Added certificate with Kid: 5678",
+		fmt.Sprintf("[security/cloudflare] Fetching Cloudflare certs from URL: %s/cdn-cgi/access/certs", server.URL),
+		"[security/cloudflare] Added certificate with Kid: 1234",
+		"[security/cloudflare] Added certificate with Kid: 5678",
 	}
 
 	for i, logMsg := range logs {
