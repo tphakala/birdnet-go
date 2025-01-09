@@ -49,7 +49,6 @@
                 return; // Already initialized
             }
             
-            console.log('SSE: Initializing new connection');
             this.eventSource = new EventSource('/sse');
             this.eventSource.onmessage = (event) => {
                 const notification = JSON.parse(event.data);
@@ -112,7 +111,6 @@
     
     init() {
         if (this.initialized) {
-            console.log('SSE: Already initialized for this component');
             return;
         }
         
