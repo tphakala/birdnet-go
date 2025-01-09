@@ -68,7 +68,7 @@ func (p *Processor) getActionsForItem(detection Detections) []Action {
 				if len(actionConfig.Parameters) > 0 {
 					actions = append(actions, ExecuteCommandAction{
 						Command: actionConfig.Command,
-						Params:  parseScriptParams(actionConfig.Parameters, detection),
+						Params:  parseCommandParams(actionConfig.Parameters, detection),
 					})
 				}
 			case "SendNotification":
@@ -87,13 +87,20 @@ func (p *Processor) getActionsForItem(detection Detections) []Action {
 	return p.getDefaultActions(detection)
 }
 
-// Helper function to parse script parameters
-func parseScriptParams(params []string, detection Detections) map[string]interface{} {
-	scriptParams := make(map[string]interface{})
+// Helper function to parse command parameters
+func parseCommandParams(params []string, detection Detections) map[string]interface{} {
+	commandParams := make(map[string]interface{})
 	for _, param := range params {
-		scriptParams[param] = getNoteValueByName(detection.Note, param)
+		value := getNoteValueByName(detection.Note, param)
+		// Check if the parameter is confidence and normalize it
+		if param == "confidence" {
+			if confidence, ok := value.(float64); ok {
+				value = confidence * 100
+			}
+		}
+		commandParams[param] = value
 	}
-	return scriptParams
+	return commandParams
 }
 
 // getDefaultActions returns the default actions to be taken for a given detection.
