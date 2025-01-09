@@ -177,6 +177,7 @@ func setDefaultConfig() {
 	viper.SetDefault("output.mysql.port", 3306)
 
 	// Security configuration
+	viper.SetDefault("security.debug", false)
 	viper.SetDefault("security.host", "")
 	viper.SetDefault("security.autotls", false)
 	viper.SetDefault("security.redirecttohttps", false)
