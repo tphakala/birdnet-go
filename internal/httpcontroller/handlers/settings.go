@@ -63,7 +63,8 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 
 	// Update settings from form parameters
 	if err := updateSettingsFromForm(settings, formParams); err != nil {
-		// Return an error if updating settings from form parameters fails
+		// Add more detailed logging for debugging
+		log.Printf("Debug: Form parameters for species config: %+v", formParams["realtime.species.config"])
 		return h.NewHandlerError(err, "Error updating settings", http.StatusInternalServerError)
 	}
 
@@ -310,8 +311,22 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 				if configJSON, exists := formValues[fullName]; exists && len(configJSON) > 0 {
 					var configs map[string]conf.SpeciesConfig
 					if err := json.Unmarshal([]byte(configJSON[0]), &configs); err != nil {
+						// Add more detailed error logging
+						log.Printf("Debug: Failed to unmarshal species config JSON: %s", configJSON[0])
 						return fmt.Errorf("error unmarshaling species configs for %s: %w", fullName, err)
 					}
+
+					// Clean up the Actions data before setting
+					for species, config := range configs {
+						for i := range config.Actions {
+							// Ensure Parameters is properly initialized as a string slice
+							if config.Actions[i].Parameters == nil {
+								config.Actions[i].Parameters = []string{}
+							}
+						}
+						configs[species] = config
+					}
+
 					field.Set(reflect.ValueOf(configs))
 				}
 			} else {
