@@ -131,16 +131,14 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 	if templateName == "detectionfiltersSettings" ||
 		templateName == "speciesSettings" {
 		data["PreparedSpecies"] = s.prepareSpeciesData()
-
-		// For thresholds, we need to handle the map specially
-		var thresholdStrings []string
-		for species, threshold := range s.Settings.Realtime.Species.Config {
-			thresholdStrings = append(thresholdStrings, fmt.Sprintf("[%s: %f]", species, threshold.Threshold))
-		}
 	}
 
 	// DEBUG Log the species settings
 	//log.Printf("Species Settings: %+v", s.Settings.Realtime.Species)
+
+	if templateName == "speciesSettings" {
+		log.Printf("Debug: Species Config being passed to template: %+v", s.Settings.Realtime.Species.Config)
+	}
 
 	// Render the template
 	var buf bytes.Buffer
