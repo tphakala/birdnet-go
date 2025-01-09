@@ -9,7 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"os"
+
+	"github.com/gorilla/sessions"
 	"github.com/labstack/echo/v4"
+	"github.com/markbates/goth/gothic"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -165,6 +169,9 @@ func TestHandleBasicAuthTokenSuccess(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+
+	// Initialize Gothic session
+	gothic.Store = sessions.NewFilesystemStore(os.TempDir(), []byte("secret-key"))
 
 	s := &OAuth2Server{
 		Settings: &conf.Settings{
