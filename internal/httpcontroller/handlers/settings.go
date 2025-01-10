@@ -48,31 +48,34 @@ func (h *Handlers) GetAudioDevices(c echo.Context) error {
 func (h *Handlers) SaveSettings(c echo.Context) error {
 	settings := conf.Setting()
 	if settings == nil {
-		// Return an error if settings are not initialized
 		return h.NewHandlerError(fmt.Errorf("settings is nil"), "Settings not initialized", http.StatusInternalServerError)
 	}
 
+	// Store old settings for comparison
+	oldSettings := *settings
+
 	formParams, err := c.FormParams()
 	if err != nil {
-		// Return an error if form parameters cannot be parsed
 		return h.NewHandlerError(err, "Failed to parse form", http.StatusBadRequest)
 	}
 
-	// Store old equalizer settings
-	oldEqualizerSettings := settings.Realtime.Audio.Equalizer
-
 	// Update settings from form parameters
 	if err := updateSettingsFromForm(settings, formParams); err != nil {
-		// Add more detailed logging for debugging
 		log.Printf("Debug: Form parameters for species config: %+v", formParams["realtime.species.config"])
 		return h.NewHandlerError(err, "Error updating settings", http.StatusInternalServerError)
+	}
+
+	// Check if range filter related settings have changed
+	if rangeFilterSettingsChanged(oldSettings, *settings) {
+		log.Println("Range filter settings changed, sending reload signal")
+		h.controlChan <- "reload_range_filter"
 	}
 
 	// Check the authentication settings and update if needed
 	h.updateAuthenticationSettings(settings)
 
 	// Check if audio equalizer settings have changed
-	if equalizerSettingsChanged(oldEqualizerSettings, settings.Realtime.Audio.Equalizer) {
+	if equalizerSettingsChanged(settings.Realtime.Audio.Equalizer, settings.Realtime.Audio.Equalizer) {
 		log.Println("Debug (SaveSettings): Equalizer settings changed, reloading audio filters")
 		if err := myaudio.UpdateFilterChain(settings); err != nil {
 			h.SSE.SendNotification(Notification{
@@ -559,4 +562,17 @@ func parseIntFromForm(formValues map[string][]string, key string) (int, error) {
 // audioSettingsChanged checks if the audio settings have been modified
 func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) bool {
 	return !reflect.DeepEqual(oldSettings, newSettings)
+}
+
+// rangeFilterSettingsChanged checks if any settings that require a range filter reload have changed
+func rangeFilterSettingsChanged(old, new conf.Settings) bool {
+	// Check for changes in species include/exclude lists
+	if !reflect.DeepEqual(old.Realtime.Species.Include, new.Realtime.Species.Include) {
+		return true
+	}
+	if !reflect.DeepEqual(old.Realtime.Species.Exclude, new.Realtime.Species.Exclude) {
+		return true
+	}
+
+	return false
 }
