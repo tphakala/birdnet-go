@@ -75,7 +75,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	}
 
 	// Initialize the control channel for restart control.
-	controlChannel := make(chan struct{}, 1)
+	controlChan := make(chan string)
 	// Initialize the restart channel for capture restart control.
 	restartChan := make(chan struct{})
 	// quitChannel is used to signal the goroutines to stop.
@@ -120,10 +120,10 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	}
 
 	// Start worker pool for processing detections
-	processor.New(settings, dataStore, bn, metrics, birdImageCache)
+	processor.New(settings, dataStore, bn, metrics, birdImageCache, controlChan)
 
 	// Initialize and start the HTTP server
-	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan)
+	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan)
 	httpServer.Start()
 
 	// Initialize the wait group to wait for all goroutines to finish
@@ -158,8 +158,8 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	for {
 		select {
 		case <-quitChan:
-			// Close controlChannel to signal that no restart attempts should be made.
-			close(controlChannel)
+			// Close controlChan to signal that no restart attempts should be made.
+			close(controlChan)
 			// Wait for all goroutines to finish.
 			wg.Wait()
 			// Delete the BirdNET interpreter.

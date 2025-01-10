@@ -41,6 +41,7 @@ type Processor struct {
 	pendingMutex        sync.Mutex // Mutex to protect access to pendingDetections
 	lastDogDetectionLog map[string]time.Time
 	dogDetectionMutex   sync.Mutex
+	controlChan         chan string
 }
 
 // DynamicThreshold represents the dynamic threshold configuration for a species.
@@ -75,7 +76,7 @@ type PendingDetection struct {
 var mutex sync.Mutex
 
 // func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *telemetry.Metrics) *Processor {
-func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics, birdImageCache *imageprovider.BirdImageCache) *Processor {
+func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics, birdImageCache *imageprovider.BirdImageCache, controlChan chan string) *Processor {
 	p := &Processor{
 		Settings:            settings,
 		Ds:                  ds,
@@ -88,7 +89,11 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		DynamicThresholds:   make(map[string]*DynamicThreshold),
 		pendingDetections:   make(map[string]PendingDetection),
 		lastDogDetectionLog: make(map[string]time.Time),
+		controlChan:         controlChan,
 	}
+
+	// Start the control signal monitor
+	p.controlSignalMonitor()
 
 	// Start the detection processor
 	p.startDetectionProcessor()

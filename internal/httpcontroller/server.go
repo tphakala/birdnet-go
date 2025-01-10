@@ -33,6 +33,7 @@ type Server struct {
 	Handlers          *handlers.Handlers
 	SunCalc           *suncalc.SunCalc
 	AudioLevelChan    chan myaudio.AudioLevelData
+	controlChan       chan string
 
 	// Page and partial routes
 	pageRoutes    map[string]PageRouteConfig
@@ -40,7 +41,7 @@ type Server struct {
 }
 
 // New initializes a new HTTP server with given context and datastore.
-func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache *imageprovider.BirdImageCache, audioLevelChan chan myaudio.AudioLevelData) *Server {
+func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache *imageprovider.BirdImageCache, audioLevelChan chan myaudio.AudioLevelData, controlChan chan string) *Server {
 	configureDefaultSettings(settings)
 
 	s := &Server{
@@ -52,6 +53,7 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 		DashboardSettings: &settings.Realtime.Dashboard,
 		OAuth2Server:      security.NewOAuth2Server(),
 		CloudflareAccess:  security.NewCloudflareAccess(),
+		controlChan:       controlChan,
 	}
 
 	// Configure an IP extractor
@@ -61,7 +63,7 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 	s.SunCalc = suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
 
 	// Initialize handlers
-	s.Handlers = handlers.New(s.DS, s.Settings, s.DashboardSettings, s.BirdImageCache, nil, s.SunCalc, s.AudioLevelChan, s.OAuth2Server)
+	s.Handlers = handlers.New(s.DS, s.Settings, s.DashboardSettings, s.BirdImageCache, nil, s.SunCalc, s.AudioLevelChan, s.OAuth2Server, s.controlChan)
 
 	s.initializeServer()
 	return s
