@@ -61,13 +61,13 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 
 	// Update settings from form parameters
 	if err := updateSettingsFromForm(settings, formParams); err != nil {
-		log.Printf("Debug: Form parameters for species config: %+v", formParams["realtime.species.config"])
+		//log.Printf("Debug: Form parameters for species config: %+v", formParams["realtime.species.config"])
 		return h.NewHandlerError(err, "Error updating settings", http.StatusInternalServerError)
 	}
 
 	// Check if range filter related settings have changed
 	if rangeFilterSettingsChanged(oldSettings, *settings) {
-		log.Println("Range filter settings changed, sending reload signal")
+		//log.Println("Range filter settings changed, sending reload signal")
 		h.controlChan <- "reload_range_filter"
 	}
 
@@ -76,7 +76,7 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 
 	// Check if audio equalizer settings have changed
 	if equalizerSettingsChanged(settings.Realtime.Audio.Equalizer, settings.Realtime.Audio.Equalizer) {
-		log.Println("Debug (SaveSettings): Equalizer settings changed, reloading audio filters")
+		//log.Println("Debug (SaveSettings): Equalizer settings changed, reloading audio filters")
 		if err := myaudio.UpdateFilterChain(settings); err != nil {
 			h.SSE.SendNotification(Notification{
 				Message: fmt.Sprintf("Error updating audio EQ filters: %v", err),
@@ -233,7 +233,7 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 		formValue, exists := formValues[fullName]
 
 		// DEBUG: Log the field name and form value
-		log.Printf("%s: %v", fullName, formValue)
+		//log.Printf("%s: %v", fullName, formValue)
 
 		// If the form value doesn't exist for this field
 		if !exists {
@@ -315,7 +315,7 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 					var configs map[string]conf.SpeciesConfig
 					if err := json.Unmarshal([]byte(configJSON[0]), &configs); err != nil {
 						// Add more detailed error logging
-						log.Printf("Debug: Failed to unmarshal species config JSON: %s", configJSON[0])
+						//log.Printf("Debug: Failed to unmarshal species config JSON: %s", configJSON[0])
 						return fmt.Errorf("error unmarshaling species configs for %s: %w", fullName, err)
 					}
 
@@ -565,12 +565,12 @@ func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) b
 }
 
 // rangeFilterSettingsChanged checks if any settings that require a range filter reload have changed
-func rangeFilterSettingsChanged(old, new conf.Settings) bool {
+func rangeFilterSettingsChanged(oldSettings, currentSettings conf.Settings) bool {
 	// Check for changes in species include/exclude lists
-	if !reflect.DeepEqual(old.Realtime.Species.Include, new.Realtime.Species.Include) {
+	if !reflect.DeepEqual(oldSettings.Realtime.Species.Include, currentSettings.Realtime.Species.Include) {
 		return true
 	}
-	if !reflect.DeepEqual(old.Realtime.Species.Exclude, new.Realtime.Species.Exclude) {
+	if !reflect.DeepEqual(oldSettings.Realtime.Species.Exclude, currentSettings.Realtime.Species.Exclude) {
 		return true
 	}
 
