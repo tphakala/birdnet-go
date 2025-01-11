@@ -224,3 +224,8 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 		}
 	}
 }
+
+// GetLabels returns the list of all available species labels
+func (h *Handlers) GetLabels() []string {
+	return h.Settings.BirdNET.Labels
+}
