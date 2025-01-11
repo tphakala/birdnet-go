@@ -4,28 +4,14 @@
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
     speciesSettings: {
         Include: {{if .Settings.Realtime.Species.Include}}{{.Settings.Realtime.Species.Include | toJSON}}{{else}}[]{{end}},
-        Exclude: {{if .Settings.Realtime.Species.Exclude}}{{.Settings.Realtime.Species.Exclude | toJSON}}{{else}}[]{{end}},
-        Config: {{if .Settings.Realtime.Species.Config}}{{.Settings.Realtime.Species.Config | toJSON}}{{else}}{}{{end}},
     },
     newIncludeSpecies: '',
-    newExcludeSpecies: '',
-    newSpeciesConfig: '',
-    newThreshold: 0.5,
-    editMode: null,
-    editValue: '',
     showTooltip: null,
     hasChanges: false,
     predictions: [],
     allSpecies: {{getAllSpecies | toJSON}},
-    filteredSpecies: {{getIncludedSpecies | toJSON}},
-    speciesSettingsOpen: false,
-    showActionsModal: false,
-    currentSpecies: '',
-    currentActionIndex: null,
-    currentAction: { type: 'ExecuteCommand', command: '', parameters: '' },
-    resetChanges() {
-        this.hasChanges = false;
-    },
+    includeSpeciesOpen: false,
+    
     addSpecies(list) {
         const newSpecies = this['new' + list + 'Species'].trim();
         if (newSpecies && !this.speciesSettings[list].includes(newSpecies)) {
@@ -38,81 +24,18 @@
         this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== species);
         this.hasChanges = true;
     },
-    addConfig() {
-        if (this.newSpeciesConfig && !this.speciesSettings.Config[this.newSpeciesConfig]) {
-            this.speciesSettings.Config[this.newSpeciesConfig] = {
-                Threshold: this.newThreshold,
-                Actions: []
-            };
-            this.newSpeciesConfig = '';
-            this.newThreshold = 0.5;
-            this.hasChanges = true;
-        }
-    },
-    removeConfig(species) {
-        delete this.speciesSettings.Config[species];
-        this.hasChanges = true;
-    },
-    openActionsModal(species) {
-        this.currentSpecies = species;
-        
-        // Get existing action if any
-        const existingAction = this.speciesSettings.Config[species]?.Actions?.[0];
-        
-        // Set default or existing action
-        const defaultAction = { Type: 'ExecuteCommand', Command: '', Parameters: [] };
-        const action = existingAction || defaultAction;
-        
-        this.currentAction = {
-            type: action.Type,
-            command: action.Command,
-            parameters: Array.isArray(action.Parameters) ? action.Parameters.join(',') : ''
-        };
-        
-        this.showActionsModal = true;
-    },
-    saveAction() {
-        if (!this.speciesSettings.Config[this.currentSpecies]) {
-            this.speciesSettings.Config[this.currentSpecies] = {
-                Threshold: 0.5,
-                Actions: []
-            };
-        }
-        
-        const newAction = {
-            Type: this.currentAction.type,
-            Command: this.currentAction.command,
-            Parameters: this.currentAction.parameters.split(',').map(p => p.trim()).filter(p => p)
-        };
-        
-        // Always replace/set the single action
-        this.speciesSettings.Config[this.currentSpecies].Actions = [newAction];
-        
-        this.hasChanges = true;
-        this.closeActionsModal();
-    },
-    closeActionsModal() {
-        this.showActionsModal = false;
-    },
-    updatePredictions(input, listType) {
+    updatePredictions(input) {
         if (!input) {
             this.predictions = [];
             return;
         }
-        
-        // Use different species list based on whether we're including or excluding
-        const sourceList = listType === 'Include' ? this.allSpecies : this.filteredSpecies;
-        
-        this.predictions = sourceList
+        this.predictions = this.allSpecies
             .filter(species => 
                 species.toLowerCase().includes(input.toLowerCase())
             )
             .slice(0, 5);
-    },
-    includeSpeciesOpen: false,
-}" x-init="
-    $watch('speciesSettings.Include', () => { hasChanges = true }, { deep: true });
-">
+    }
+}" x-init="$watch('speciesSettings.Include', () => { hasChanges = true }, { deep: true });">
     <input type="checkbox" id="includeSpeciesOpen" x-on:change="includeSpeciesOpen = !includeSpeciesOpen" />
     <div class="collapse-title text-xl font-medium">
         <div class="flex items-center">
@@ -159,7 +82,7 @@
             <div class="flex items-center mt-2">
                 <input type="text" 
                        x-model="newIncludeSpecies" 
-                       @input="updatePredictions(newIncludeSpecies, 'Include')" 
+                       @input="updatePredictions(newIncludeSpecies)" 
                        list="species-suggestions"
                        placeholder="Add species to include" 
                        class="input input-bordered input-sm w-full" />
@@ -178,26 +101,14 @@
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
     speciesSettings: {
         Exclude: {{if .Settings.Realtime.Species.Exclude}}{{.Settings.Realtime.Species.Exclude | toJSON}}{{else}}[]{{end}},
-        Config: {{if .Settings.Realtime.Species.Config}}{{.Settings.Realtime.Species.Config | toJSON}}{{else}}{}{{end}},
     },
     newExcludeSpecies: '',
-    newSpeciesConfig: '',
-    newThreshold: 0.5,
-    editMode: null,
-    editValue: '',
     showTooltip: null,
     hasChanges: false,
     predictions: [],
-    allSpecies: {{getAllSpecies | toJSON}},
     filteredSpecies: {{getIncludedSpecies | toJSON}},
-    speciesSettingsOpen: false,
-    showActionsModal: false,
-    currentSpecies: '',
-    currentActionIndex: null,
-    currentAction: { type: 'ExecuteCommand', command: '', parameters: '' },
-    resetChanges() {
-        this.hasChanges = false;
-    },
+    excludeSpeciesOpen: false,
+    
     addSpecies(list) {
         const newSpecies = this['new' + list + 'Species'].trim();
         if (newSpecies && !this.speciesSettings[list].includes(newSpecies)) {
@@ -210,81 +121,18 @@
         this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== species);
         this.hasChanges = true;
     },
-    addConfig() {
-        if (this.newSpeciesConfig && !this.speciesSettings.Config[this.newSpeciesConfig]) {
-            this.speciesSettings.Config[this.newSpeciesConfig] = {
-                Threshold: this.newThreshold,
-                Actions: []
-            };
-            this.newSpeciesConfig = '';
-            this.newThreshold = 0.5;
-            this.hasChanges = true;
-        }
-    },
-    removeConfig(species) {
-        delete this.speciesSettings.Config[species];
-        this.hasChanges = true;
-    },
-    openActionsModal(species) {
-        this.currentSpecies = species;
-        
-        // Get existing action if any
-        const existingAction = this.speciesSettings.Config[species]?.Actions?.[0];
-        
-        // Set default or existing action
-        const defaultAction = { Type: 'ExecuteCommand', Command: '', Parameters: [] };
-        const action = existingAction || defaultAction;
-        
-        this.currentAction = {
-            type: action.Type,
-            command: action.Command,
-            parameters: Array.isArray(action.Parameters) ? action.Parameters.join(',') : ''
-        };
-        
-        this.showActionsModal = true;
-    },
-    saveAction() {
-        if (!this.speciesSettings.Config[this.currentSpecies]) {
-            this.speciesSettings.Config[this.currentSpecies] = {
-                Threshold: 0.5,
-                Actions: []
-            };
-        }
-        
-        const newAction = {
-            Type: this.currentAction.type,
-            Command: this.currentAction.command,
-            Parameters: this.currentAction.parameters.split(',').map(p => p.trim()).filter(p => p)
-        };
-        
-        // Always replace/set the single action
-        this.speciesSettings.Config[this.currentSpecies].Actions = [newAction];
-        
-        this.hasChanges = true;
-        this.closeActionsModal();
-    },
-    closeActionsModal() {
-        this.showActionsModal = false;
-    },
-    updatePredictions(input, listType) {
+    updatePredictions(input) {
         if (!input) {
             this.predictions = [];
             return;
         }
-        
-        // Use different species list based on whether we're including or excluding
-        const sourceList = listType === 'Include' ? this.allSpecies : this.filteredSpecies;
-        
-        this.predictions = sourceList
+        this.predictions = this.filteredSpecies
             .filter(species => 
                 species.toLowerCase().includes(input.toLowerCase())
             )
             .slice(0, 5);
-    },
-    excludeSpeciesOpen: false,
-}" x-init="
-    $watch('speciesSettings.Exclude', () => { hasChanges = true }, { deep: true });
-">
+    }
+}" x-init="$watch('speciesSettings.Exclude', () => { hasChanges = true }, { deep: true });">
     <input type="checkbox" id="excludeSpeciesOpen" x-on:change="excludeSpeciesOpen = !excludeSpeciesOpen" />
     <div class="collapse-title text-xl font-medium">
         <div class="flex items-center">
@@ -331,7 +179,7 @@
             <div class="flex items-center mt-2">
                 <input type="text" 
                        x-model="newExcludeSpecies" 
-                       @input="updatePredictions(newExcludeSpecies, 'Exclude')" 
+                       @input="updatePredictions(newExcludeSpecies)" 
                        list="species-suggestions"
                        placeholder="Add species to exclude" 
                        class="input input-bordered input-sm w-full" />
@@ -350,137 +198,18 @@
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
     speciesSettings: {
         Config: {{if .Settings.Realtime.Species.Config}}{{.Settings.Realtime.Species.Config | toJSON}}{{else}}{}{{end}},
-        newSpeciesConfig: '',
-        newThreshold: 0.5,
-        editMode: null,
-        editValue: '',
-        showTooltip: null,
-        hasChanges: false,
-        predictions: [],
-        allSpecies: {{getAllSpecies | toJSON}},
-        filteredSpecies: {{getIncludedSpecies | toJSON}},
-        speciesSettingsOpen: false,
-        showActionsModal: false,
-        currentSpecies: '',
-        currentActionIndex: null,
-        currentAction: { type: 'ExecuteCommand', command: '', parameters: '' },
-        resetChanges() {
-            this.hasChanges = false;
-        },
-        addSpecies(list) {
-            const newSpecies = this['new' + list + 'Species'].trim();
-            if (newSpecies && !this.speciesSettings[list].includes(newSpecies)) {
-                this.speciesSettings[list].push(newSpecies);
-                this['new' + list + 'Species'] = '';
-                this.hasChanges = true;
-            }
-        },
-        removeSpecies(list, species) {
-            this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== species);
-            this.hasChanges = true;
-        },
-        addConfig() {
-            if (this.newSpeciesConfig && !this.speciesSettings.Config[this.newSpeciesConfig]) {
-                this.speciesSettings.Config[this.newSpeciesConfig] = {
-                    Threshold: this.newThreshold,
-                    Actions: []
-                };
-                this.newSpeciesConfig = '';
-                this.newThreshold = 0.5;
-                this.hasChanges = true;
-            }
-        },
-        removeConfig(species) {
-            delete this.speciesSettings.Config[species];
-            this.hasChanges = true;
-        },
-        openActionsModal(species) {
-            this.currentSpecies = species;
-            
-            // Get existing action if any
-            const existingAction = this.speciesSettings.Config[species]?.Actions?.[0];
-            
-            // Set default or existing action
-            const defaultAction = { Type: 'ExecuteCommand', Command: '', Parameters: [] };
-            const action = existingAction || defaultAction;
-            
-            this.currentAction = {
-                type: action.Type,
-                command: action.Command,
-                parameters: Array.isArray(action.Parameters) ? action.Parameters.join(',') : ''
-            };
-            
-            this.showActionsModal = true;
-        },
-        saveAction() {
-            if (!this.speciesSettings.Config[this.currentSpecies]) {
-                this.speciesSettings.Config[this.currentSpecies] = {
-                    Threshold: 0.5,
-                    Actions: []
-                };
-            }
-            
-            const newAction = {
-                Type: this.currentAction.type,
-                Command: this.currentAction.command,
-                Parameters: this.currentAction.parameters.split(',').map(p => p.trim()).filter(p => p)
-            };
-            
-            // Always replace/set the single action
-            this.speciesSettings.Config[this.currentSpecies].Actions = [newAction];
-            
-            this.hasChanges = true;
-            this.closeActionsModal();
-        },
-        closeActionsModal() {
-            this.showActionsModal = false;
-        },
-        updatePredictions(input, listType) {
-            if (!input) {
-                this.predictions = [];
-                return;
-            }
-            
-            // Use different species list based on whether we're including or excluding
-            const sourceList = listType === 'Include' ? this.allSpecies : this.filteredSpecies;
-            
-            this.predictions = sourceList
-                .filter(species => 
-                    species.toLowerCase().includes(input.toLowerCase())
-                )
-                .slice(0, 5);
-        },
-        customConfigOpen: false,
     },
     newSpeciesConfig: '',
     newThreshold: 0.5,
-    editMode: null,
-    editValue: '',
     showTooltip: null,
     hasChanges: false,
     predictions: [],
     allSpecies: {{getAllSpecies | toJSON}},
-    filteredSpecies: {{getIncludedSpecies | toJSON}},
-    speciesSettingsOpen: false,
+    customConfigOpen: false,
     showActionsModal: false,
     currentSpecies: '',
-    currentActionIndex: null,
     currentAction: { type: 'ExecuteCommand', command: '', parameters: '' },
-    resetChanges() {
-        this.hasChanges = false;
-    },
-    addSpecies(list) {
-        const newSpecies = this['new' + list + 'Species'].trim();
-        if (newSpecies && !this.speciesSettings[list].includes(newSpecies)) {
-            this.speciesSettings[list].push(newSpecies);
-            this['new' + list + 'Species'] = '';
-            this.hasChanges = true;
-        }
-    },
-    removeSpecies(list, species) {
-        this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== species);
-        this.hasChanges = true;
-    },
+    
     addConfig() {
         if (this.newSpeciesConfig && !this.speciesSettings.Config[this.newSpeciesConfig]) {
             this.speciesSettings.Config[this.newSpeciesConfig] = {
@@ -498,11 +227,7 @@
     },
     openActionsModal(species) {
         this.currentSpecies = species;
-        
-        // Get existing action if any
         const existingAction = this.speciesSettings.Config[species]?.Actions?.[0];
-        
-        // Set default or existing action
         const defaultAction = { Type: 'ExecuteCommand', Command: '', Parameters: [] };
         const action = existingAction || defaultAction;
         
@@ -511,7 +236,6 @@
             command: action.Command,
             parameters: Array.isArray(action.Parameters) ? action.Parameters.join(',') : ''
         };
-        
         this.showActionsModal = true;
     },
     saveAction() {
@@ -528,33 +252,25 @@
             Parameters: this.currentAction.parameters.split(',').map(p => p.trim()).filter(p => p)
         };
         
-        // Always replace/set the single action
         this.speciesSettings.Config[this.currentSpecies].Actions = [newAction];
-        
         this.hasChanges = true;
         this.closeActionsModal();
     },
     closeActionsModal() {
         this.showActionsModal = false;
     },
-    updatePredictions(input, listType) {
+    updatePredictions(input) {
         if (!input) {
             this.predictions = [];
             return;
         }
-        
-        // Use different species list based on whether we're including or excluding
-        const sourceList = listType === 'Include' ? this.allSpecies : this.filteredSpecies;
-        
-        this.predictions = sourceList
+        this.predictions = this.allSpecies
             .filter(species => 
                 species.toLowerCase().includes(input.toLowerCase())
             )
             .slice(0, 5);
-    },
-}" x-init="
-    $watch('speciesSettings.Config', () => { hasChanges = true }, { deep: true });
-">
+    }
+}" x-init="$watch('speciesSettings.Config', () => { hasChanges = true }, { deep: true });">
     <input type="checkbox" id="customConfigOpen" x-on:change="customConfigOpen = !customConfigOpen" />
     <div class="collapse-title text-xl font-medium">
         <div class="flex items-center">
@@ -716,9 +432,9 @@
         </div>
 
         <!-- Hidden inputs to always submit the species settings -->
-        <input type="hidden" name="realtime.species.include" :value="JSON.stringify(speciesSettings.Include)">
-        <input type="hidden" name="realtime.species.exclude" :value="JSON.stringify(speciesSettings.Exclude)">
-        <input type="hidden" name="realtime.species.config" :value="JSON.stringify(speciesSettings.Config)">
+        <input type="hidden" name="realtime.species.include" :value="JSON.stringify(speciesSettings.Include || [])">
+        <input type="hidden" name="realtime.species.exclude" :value="JSON.stringify(speciesSettings.Exclude || [])">
+        <input type="hidden" name="realtime.species.config" :value="JSON.stringify(speciesSettings.Config || {})">
     </div>
 </div>
 
