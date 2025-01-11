@@ -78,7 +78,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// Initialize the control channel for restart control.
 	controlChan := make(chan string, 1)
 	// Initialize the restart channel for capture restart control.
-	restartChan := make(chan struct{})
+	restartChan := make(chan struct{}, 3)
 	// quitChannel is used to signal the goroutines to stop.
 	quitChan := make(chan struct{})
 

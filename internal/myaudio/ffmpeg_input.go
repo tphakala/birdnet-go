@@ -198,7 +198,7 @@ func (p *FFmpegProcess) Cleanup(url string) {
 }
 
 // processAudio reads audio data from FFmpeg's stdout and writes it to buffers
-func (p *FFmpegProcess) processAudio(ctx context.Context, url string, audioLevelChan chan AudioLevelData) error {
+func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
 	// Create a buffer to store audio data
 	buf := make([]byte, 32768)
 	watchdog := &audioWatchdog{lastDataTime: time.Now()}
@@ -232,7 +232,14 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, audioLevel
 			// If so, return the context error
 			return ctx.Err()
 		case <-watchdogDone:
-			return fmt.Errorf("watchdog detected no data, restarting RTSP source %s", url)
+			// Trigger restart by sending signal to restartChan
+			select {
+			case restartChan <- struct{}{}:
+				log.Printf("Watchdog triggered restart for RTSP source %s", url)
+			default:
+				log.Printf("Restart channel full, dropping restart request for %s", url)
+			}
+			return fmt.Errorf("watchdog detected no data for RTSP source %s", url)
 		default:
 			// Read audio data from FFmpeg's stdout
 			n, err := p.stdout.Read(buf)
@@ -348,7 +355,7 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 	}, nil
 }
 
-func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan <-chan struct{}, audioLevelChan chan AudioLevelData) error {
+func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
 	// Create a new backoff strategy with 5 attempts, 5 seconds initial delay, and 2 minutes maximum delay
 	backoff := newBackoffStrategy(5, 5*time.Second, 2*time.Minute)
 
@@ -389,7 +396,7 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 		// Start processing audio and wait for it to finish or for a restart signal
 		processDone := make(chan error, 1)
 		go func() {
-			processDone <- process.processAudio(ctx, config.URL, audioLevelChan)
+			processDone <- process.processAudio(ctx, config.URL, restartChan, audioLevelChan)
 		}()
 
 		select {
