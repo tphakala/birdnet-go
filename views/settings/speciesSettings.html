@@ -16,7 +16,8 @@ x-data="{
     showTooltip: null,
     hasChanges: false,
     predictions: [],
-    allowedSpecies: {{.PreparedSpecies | toJSON}},
+    allSpecies: {{getAllSpecies | toJSON}},
+    filteredSpecies: {{getIncludedSpecies | toJSON}},
     speciesSettingsOpen: false,
     showActionsModal: false,
     currentSpecies: '',
@@ -93,13 +94,16 @@ x-data="{
     closeActionsModal() {
         this.showActionsModal = false;
     },
-    updatePredictions(input) {
-        if (!input || !this.allowedSpecies) {
+    updatePredictions(input, listType) {
+        if (!input) {
             this.predictions = [];
             return;
         }
         
-        this.predictions = this.allowedSpecies
+        // Use different species list based on whether we're including or excluding
+        const sourceList = listType === 'Include' ? this.allSpecies : this.filteredSpecies;
+        
+        this.predictions = sourceList
             .filter(species => 
                 species.toLowerCase().includes(input.toLowerCase())
             )
@@ -155,7 +159,7 @@ x-init="
             <div class="flex items-center mt-2">
                 <input type="text" 
                        x-model="newIncludeSpecies" 
-                       @input="updatePredictions(newIncludeSpecies)" 
+                       @input="updatePredictions(newIncludeSpecies, 'Include')" 
                        list="species-suggestions"
                        placeholder="Add species to include" 
                        class="input input-bordered input-sm w-full" />
@@ -200,7 +204,7 @@ x-init="
             <div class="flex items-center mt-2">
                 <input type="text" 
                        x-model="newExcludeSpecies" 
-                       @input="updatePredictions(newExcludeSpecies)" 
+                       @input="updatePredictions(newExcludeSpecies, 'Exclude')" 
                        list="species-suggestions"
                        placeholder="Add species to exclude" 
                        class="input input-bordered input-sm w-full" />
