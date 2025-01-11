@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/shirou/gopsutil/v3/host"
+	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
@@ -75,7 +76,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	}
 
 	// Initialize the control channel for restart control.
-	controlChan := make(chan string)
+	controlChan := make(chan string, 1)
 	// Initialize the restart channel for capture restart control.
 	restartChan := make(chan struct{})
 	// quitChannel is used to signal the goroutines to stop.
@@ -120,7 +121,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	}
 
 	// Start worker pool for processing detections
-	processor.New(settings, dataStore, bn, metrics, birdImageCache, controlChan)
+	processor.New(settings, dataStore, bn, metrics, birdImageCache)
 
 	// Initialize and start the HTTP server
 	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan)
@@ -150,6 +151,9 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 
 	// start telemetry endpoint
 	startTelemetryEndpoint(&wg, settings, metrics, quitChan)
+
+	// start control monitor for hot reloads
+	startControlMonitor(&wg, controlChan, quitChan)
 
 	// start quit signal monitor
 	monitorCtrlC(quitChan)
@@ -320,4 +324,29 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 	}()
 
 	return birdImageCache
+}
+
+// startControlMonitor handles various control signals for realtime analysis mode
+func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan chan struct{}) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case signal := <-controlChan:
+				switch signal {
+				case "rebuild_range_filter":
+					if err := birdnet.BuildRangeFilter(bn); err != nil {
+						log.Printf("\033[31m❌ Error handling range filter rebuild: %v\033[0m", err)
+					} else {
+						log.Printf("\033[32m🔄 Range filter rebuilt successfully\033[0m")
+					}
+				default:
+					log.Printf("Received unknown control signal: %v", signal)
+				}
+			case <-quitChan:
+				return
+			}
+		}
+	}()
 }

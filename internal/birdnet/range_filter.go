@@ -31,6 +31,42 @@ func (a ByScore) Len() int           { return len(a) }
 func (a ByScore) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByScore) Less(i, j int) bool { return a[i].Score > a[j].Score } // For descending order
 
+// BuildRangeFilter updates the range filter with current probable species
+func BuildRangeFilter(bn *BirdNET) error {
+	// Get date for Range Filter week calculation
+	today := time.Now().Truncate(24 * time.Hour)
+
+	// Update location based species list
+	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
+	if err != nil {
+		return err
+	}
+
+	// Convert the speciesScores slice to a slice of species labels
+	var includedSpecies []string
+	for _, speciesScore := range speciesScores {
+		includedSpecies = append(includedSpecies, speciesScore.Label)
+	}
+
+	if conf.Setting().BirdNET.RangeFilter.Debug {
+		// Debug: Write included species to file
+		debugFile := "debug_included_species.txt"
+		content := fmt.Sprintf("Updated at: %s\nSpecies count: %d\n\nSpecies list:\n",
+			time.Now().Format("2006-01-02 15:04:05"),
+			len(includedSpecies))
+		for _, species := range includedSpecies {
+			content += species + "\n"
+		}
+		if err := os.WriteFile(debugFile, []byte(content), 0644); err != nil {
+			log.Printf("❌ [range_filter/rebuild] Warning: Failed to write included species file: %v\n", err)
+		}
+	}
+
+	conf.Setting().UpdateIncludedSpecies(includedSpecies)
+
+	return nil
+}
+
 // GetProbableSpecies filters and sorts bird species based on their scores.
 // It also updates the scores for species that have custom actions defined in the speciesConfigCSV.
 func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
