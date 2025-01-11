@@ -76,7 +76,7 @@ type PendingDetection struct {
 var mutex sync.Mutex
 
 // func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *telemetry.Metrics) *Processor {
-func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics, birdImageCache *imageprovider.BirdImageCache, controlChan chan string) *Processor {
+func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics, birdImageCache *imageprovider.BirdImageCache) *Processor {
 	p := &Processor{
 		Settings:            settings,
 		Ds:                  ds,
@@ -89,11 +89,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		DynamicThresholds:   make(map[string]*DynamicThreshold),
 		pendingDetections:   make(map[string]PendingDetection),
 		lastDogDetectionLog: make(map[string]time.Time),
-		controlChan:         controlChan,
 	}
-
-	// Start the control signal monitor
-	p.controlSignalMonitor()
 
 	// Start the detection processor
 	p.startDetectionProcessor()
@@ -273,10 +269,8 @@ func (p *Processor) processResults(item queue.Results) []Detections {
 		}
 
 		// Match species against range filter included species list
-		if len(p.Settings.Realtime.Species.Include) > 0 {
-			if !contains(p.Settings.Realtime.Species.Include, speciesLowercase) {
-				continue
-			}
+		if !contains(p.Settings.BirdNET.RangeFilter.Species, speciesLowercase) {
+			continue
 		}
 
 		if p.Settings.Realtime.DynamicThreshold.Enabled {
