@@ -165,20 +165,24 @@ type RealtimeSettings struct {
 	Weather       WeatherSettings       // Weather provider related settings
 }
 
-// SpeciesSettings holds custom thresholds and action configurations for species.
-type SpeciesSettings struct {
-	Threshold map[string]float32             // Custom confidence thresholds for species
-	Actions   map[string]SpeciesActionConfig // Actions configurations for species
-	Include   []string                       // List of species to always include
-	Exclude   []string                       // List of species to always exclude
+// SpeciesAction represents a single action configuration
+type SpeciesAction struct {
+	Type       string   `yaml:"type"`       // Type of action (ExecuteCommand, etc)
+	Command    string   `yaml:"command"`    // Path to the command to execute
+	Parameters []string `yaml:"parameters"` // Action parameters
 }
 
-// SpeciesActionConfig represents the configuration for actions specific to a species.
-type SpeciesActionConfig struct {
-	SpeciesName string         // Name of the species
-	Actions     []ActionConfig // Configurations for actions associated with this species
-	Exclude     []string       // List of actions to exclude
-	OnlyActions bool           // Flag to indicate if only these actions should be executed
+// SpeciesConfig represents configuration for a specific species
+type SpeciesConfig struct {
+	Threshold float64         `yaml:"threshold"` // Confidence threshold
+	Actions   []SpeciesAction `yaml:"actions"`   // List of actions to execute
+}
+
+// RealtimeSpeciesSettings contains all species-specific settings
+type SpeciesSettings struct {
+	Include []string                 `yaml:"include"` // Always include these species
+	Exclude []string                 `yaml:"exclude"` // Always exclude these species
+	Config  map[string]SpeciesConfig `yaml:"config"`  // Per-species configuration
 }
 
 // ActionConfig holds configuration details for a specific action.
@@ -205,11 +209,13 @@ type BirdNETConfig struct {
 	RangeFilter RangeFilterSettings // range filter settings
 	ModelPath   string              // path to external model file (empty for embedded)
 	LabelPath   string              // path to external label file (empty for embedded)
+	Labels      []string            `yaml:"-"` // list of available species labels, runtime value
 	UseXNNPACK  bool                // true to use XNNPACK delegate for inference acceleration
 }
 
 // RangeFilterSettings contains settings for the range filter
 type RangeFilterSettings struct {
+	Debug       bool      // true to enable debug mode
 	Model       string    // range filter model model
 	Threshold   float32   // rangefilter species occurrence threshold
 	Species     []string  `yaml:"-"` // list of included species, runtime value

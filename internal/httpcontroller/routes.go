@@ -70,7 +70,7 @@ func (s *Server) initRoutes() {
 		"/settings/detectionfilters": {Path: "/settings/detectionfilters", TemplateName: "settingsBase", Title: "Detection Filters", Authorized: true},
 		"/settings/integrations":     {Path: "/settings/integrations", TemplateName: "settingsBase", Title: "Integration Settings", Authorized: true},
 		"/settings/security":         {Path: "/settings/security", TemplateName: "settingsBase", Title: "Security & Access Settings", Authorized: true},
-		"/settings/species":          {Path: "/settings/species", TemplateName: "settingsBase", Title: "Editor", Authorized: true},
+		"/settings/species":          {Path: "/settings/species", TemplateName: "settingsBase", Title: "Species Settings", Authorized: true},
 	}
 
 	// Set up full page routes

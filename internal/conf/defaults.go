@@ -29,11 +29,14 @@ func setDefaultConfig() {
 	viper.SetDefault("birdnet.locale", "en")
 	viper.SetDefault("birdnet.latitude", 0.000)
 	viper.SetDefault("birdnet.longitude", 0.000)
-	viper.SetDefault("birdnet.rangefilter.model", "latest")
-	viper.SetDefault("birdnet.rangefilter.threshold", 0.01)
 	viper.SetDefault("birdnet.modelpath", "")
 	viper.SetDefault("birdnet.labelpath", "")
 	viper.SetDefault("birdnet.usexnnpack", false)
+
+	// Range filter configuration
+	viper.SetDefault("birdnet.rangefilter.debug", false)
+	viper.SetDefault("birdnet.rangefilter.model", "latest")
+	viper.SetDefault("birdnet.rangefilter.threshold", 0.01)
 
 	// Realtime configuration
 	viper.SetDefault("realtime.interval", 15)
@@ -177,6 +180,7 @@ func setDefaultConfig() {
 	viper.SetDefault("output.mysql.port", 3306)
 
 	// Security configuration
+	viper.SetDefault("security.debug", false)
 	viper.SetDefault("security.host", "")
 	viper.SetDefault("security.autotls", false)
 	viper.SetDefault("security.redirecttohttps", false)

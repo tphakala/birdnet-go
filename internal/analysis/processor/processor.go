@@ -41,6 +41,7 @@ type Processor struct {
 	pendingMutex        sync.Mutex // Mutex to protect access to pendingDetections
 	lastDogDetectionLog map[string]time.Time
 	dogDetectionMutex   sync.Mutex
+	controlChan         chan string
 }
 
 // DynamicThreshold represents the dynamic threshold configuration for a species.
@@ -98,9 +99,6 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 
 	// Start the held detection flusher
 	p.pendingDetectionsFlusher()
-
-	// Load Species configs
-	p.Settings.Realtime.Species, _ = LoadSpeciesConfig(conf.SpeciesConfigCSV)
 
 	// Initialize BirdWeather client if enabled in settings
 	if settings.Realtime.Birdweather.Enabled {
@@ -270,12 +268,8 @@ func (p *Processor) processResults(item queue.Results) []Detections {
 			continue
 		}
 
-		// Match against location-based filter
-		//if !p.Settings.IsSpeciesIncluded(result.Species) {
-		if !p.Settings.IsSpeciesIncluded(scientificName) {
-			if p.Settings.Debug {
-				log.Printf("Species not on included list: %s\n", commonName)
-			}
+		// Match species against range filter included species list
+		if !contains(p.Settings.BirdNET.RangeFilter.Species, speciesLowercase) {
 			continue
 		}
 
@@ -327,13 +321,16 @@ func (p *Processor) handleHumanDetection(item queue.Results, speciesLowercase st
 
 // getBaseConfidenceThreshold retrieves the confidence threshold for a species, using custom or global thresholds.
 func (p *Processor) getBaseConfidenceThreshold(speciesLowercase string) float32 {
-	confidenceThreshold, exists := p.Settings.Realtime.Species.Threshold[speciesLowercase]
-	if !exists {
-		confidenceThreshold = float32(p.Settings.BirdNET.Threshold)
-	} else if p.Settings.Debug {
-		log.Printf("\nUsing confidence threshold of %.2f for %s\n", confidenceThreshold, speciesLowercase)
+	// Check if species has a custom threshold in the new structure
+	if config, exists := p.Settings.Realtime.Species.Config[speciesLowercase]; exists {
+		if p.Settings.Debug {
+			log.Printf("\nUsing custom confidence threshold of %.2f for %s\n", config.Threshold, speciesLowercase)
+		}
+		return float32(config.Threshold)
 	}
-	return confidenceThreshold
+
+	// Fall back to global threshold
+	return float32(p.Settings.BirdNET.Threshold)
 }
 
 // generateClipName generates a clip name for the given scientific name and confidence.
@@ -473,4 +470,15 @@ func (p *Processor) pendingDetectionsFlusher() {
 			p.cleanUpDynamicThresholds()
 		}
 	}()
+}
+
+// Helper function to check if a slice contains a string (case-insensitive)
+func contains(slice []string, item string) bool {
+	item = strings.ToLower(item)
+	for _, s := range slice {
+		if strings.ToLower(s) == item {
+			return true
+		}
+	}
+	return false
 }

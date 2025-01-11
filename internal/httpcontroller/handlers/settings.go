@@ -28,8 +28,6 @@ var fieldsToSkip = map[string]bool{
 	"output.file.enabled":             true,
 	"output.file.path":                true,
 	"output.file.type":                true,
-	"realtime.species.threshold":      true,
-	"realtime.species.actions":        true,
 }
 
 // GetAudioDevices handles the request to list available audio devices
@@ -50,31 +48,35 @@ func (h *Handlers) GetAudioDevices(c echo.Context) error {
 func (h *Handlers) SaveSettings(c echo.Context) error {
 	settings := conf.Setting()
 	if settings == nil {
-		// Return an error if settings are not initialized
 		return h.NewHandlerError(fmt.Errorf("settings is nil"), "Settings not initialized", http.StatusInternalServerError)
 	}
 
+	// Store old settings for comparison
+	oldSettings := *settings
+
 	formParams, err := c.FormParams()
 	if err != nil {
-		// Return an error if form parameters cannot be parsed
 		return h.NewHandlerError(err, "Failed to parse form", http.StatusBadRequest)
 	}
 
-	// Store old equalizer settings
-	oldEqualizerSettings := settings.Realtime.Audio.Equalizer
-
 	// Update settings from form parameters
 	if err := updateSettingsFromForm(settings, formParams); err != nil {
-		// Return an error if updating settings from form parameters fails
+		//log.Printf("Debug: Form parameters for species config: %+v", formParams["realtime.species.config"])
 		return h.NewHandlerError(err, "Error updating settings", http.StatusInternalServerError)
+	}
+
+	// Check if range filter related settings have changed
+	if rangeFilterSettingsChanged(oldSettings, *settings) {
+		//log.Println("Range filter settings changed, sending reload signal")
+		h.controlChan <- "rebuild_range_filter"
 	}
 
 	// Check the authentication settings and update if needed
 	h.updateAuthenticationSettings(settings)
 
 	// Check if audio equalizer settings have changed
-	if equalizerSettingsChanged(oldEqualizerSettings, settings.Realtime.Audio.Equalizer) {
-		log.Println("Debug (SaveSettings): Equalizer settings changed, reloading audio filters")
+	if equalizerSettingsChanged(settings.Realtime.Audio.Equalizer, settings.Realtime.Audio.Equalizer) {
+		//log.Println("Debug (SaveSettings): Equalizer settings changed, reloading audio filters")
 		if err := myaudio.UpdateFilterChain(settings); err != nil {
 			h.SSE.SendNotification(Notification{
 				Message: fmt.Sprintf("Error updating audio EQ filters: %v", err),
@@ -207,9 +209,20 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 						return err
 					}
 				}
+			} else if fieldType.Type == reflect.TypeOf(conf.SpeciesConfig{}) {
+				// Special handling for SpeciesConfig
+				if configJSON, exists := formValues[fullName]; exists && len(configJSON) > 0 {
+					var config conf.SpeciesConfig
+					if err := json.Unmarshal([]byte(configJSON[0]), &config); err != nil {
+						return fmt.Errorf("error unmarshaling species config for %s: %w", fullName, err)
+					}
+					field.Set(reflect.ValueOf(config))
+				}
 			} else {
+				//log.Println("Debug (updateStructFromForm): Updating struct field:", fullName)
 				// For other structs, recursively update their fields
 				if err := updateStructFromForm(field, formValues, fullName+"."); err != nil {
+					//log.Println("Debug (updateStructFromForm): Error updating struct field:", err)
 					return err
 				}
 			}
@@ -293,6 +306,34 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 				if err := updateStructFromForm(field, formValues, fullName+"."); err != nil {
 					return err
 				}
+			}
+		case reflect.Map:
+			// Handle map fields
+			if fieldType.Type == reflect.TypeOf(map[string]conf.SpeciesConfig{}) {
+				// Special handling for species config map
+				if configJSON, exists := formValues[fullName]; exists && len(configJSON) > 0 {
+					var configs map[string]conf.SpeciesConfig
+					if err := json.Unmarshal([]byte(configJSON[0]), &configs); err != nil {
+						// Add more detailed error logging
+						//log.Printf("Debug: Failed to unmarshal species config JSON: %s", configJSON[0])
+						return fmt.Errorf("error unmarshaling species configs for %s: %w", fullName, err)
+					}
+
+					// Clean up the Actions data before setting
+					for species, config := range configs {
+						for i := range config.Actions {
+							// Ensure Parameters is properly initialized as a string slice
+							if config.Actions[i].Parameters == nil {
+								config.Actions[i].Parameters = []string{}
+							}
+						}
+						configs[species] = config
+					}
+
+					field.Set(reflect.ValueOf(configs))
+				}
+			} else {
+				return fmt.Errorf("unsupported map type for %s", fullName)
 			}
 		default:
 			// Return error for unsupported field types
@@ -521,4 +562,17 @@ func parseIntFromForm(formValues map[string][]string, key string) (int, error) {
 // audioSettingsChanged checks if the audio settings have been modified
 func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) bool {
 	return !reflect.DeepEqual(oldSettings, newSettings)
+}
+
+// rangeFilterSettingsChanged checks if any settings that require a range filter reload have changed
+func rangeFilterSettingsChanged(oldSettings, currentSettings conf.Settings) bool {
+	// Check for changes in species include/exclude lists
+	if !reflect.DeepEqual(oldSettings.Realtime.Species.Include, currentSettings.Realtime.Species.Include) {
+		return true
+	}
+	if !reflect.DeepEqual(oldSettings.Realtime.Species.Exclude, currentSettings.Realtime.Species.Exclude) {
+		return true
+	}
+
+	return false
 }

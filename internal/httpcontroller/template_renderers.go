@@ -127,14 +127,12 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 		"TemplateName":   templateName,
 	}
 
-	// Add prepared species data for specific settings pages
-	if templateName == "detectionfiltersSettings" ||
-		templateName == "speciesSettings" {
-		data["PreparedSpecies"] = s.prepareSpeciesData()
-	}
-
 	// DEBUG Log the species settings
 	//log.Printf("Species Settings: %+v", s.Settings.Realtime.Species)
+
+	if templateName == "speciesSettings" {
+		log.Printf("Debug: Species Config being passed to template: %+v", s.Settings.Realtime.Species.Config)
+	}
 
 	// Render the template
 	var buf bytes.Buffer
@@ -142,7 +140,9 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 
 	// Handle rendering errors
 	if err != nil {
-		log.Printf("Error rendering settings content: %v", err)
+		log.Printf("ERROR: Failed to render settings content: %v", err)
+		// Log the template data that caused the error
+		log.Printf("ERROR: Template data dump: %+v", data)
 		return "", err
 	}
 

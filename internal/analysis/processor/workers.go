@@ -51,34 +51,56 @@ func (p *Processor) actionWorker() {
 
 // getActionsForItem determines the actions to be taken for a given detection.
 func (p *Processor) getActionsForItem(detection Detections) []Action {
-	// match lower case
 	speciesName := strings.ToLower(detection.Note.CommonName)
-	speciesConfig, exists := p.Settings.Realtime.Species.Actions[speciesName]
 
-	var actions []Action
-	if exists {
+	// Check if species has custom configuration
+	if speciesConfig, exists := p.Settings.Realtime.Species.Config[speciesName]; exists {
 		if p.Settings.Debug {
 			log.Println("Species config exists for custom actions")
 		}
-		customActions := p.createActionsFromConfig(speciesConfig, detection)
 
-		// Determine whether to use only custom actions or combine with default actions
-		if speciesConfig.OnlyActions {
-			//log.Println("Only using custom actions for", speciesName)
-			actions = customActions
-		} else {
-			//log.Println("Using default actions with custom actions for", speciesName)
-			defaultActions := p.getDefaultActions(detection)
-			actions = append(defaultActions, customActions...)
+		var actions []Action
+
+		// Add custom actions from the new structure
+		for _, actionConfig := range speciesConfig.Actions {
+			switch actionConfig.Type {
+			case "ExecuteCommand":
+				if len(actionConfig.Parameters) > 0 {
+					actions = append(actions, ExecuteCommandAction{
+						Command: actionConfig.Command,
+						Params:  parseCommandParams(actionConfig.Parameters, detection),
+					})
+				}
+			case "SendNotification":
+				// Add notification action handling
+				// ... implementation ...
+			}
 		}
-	} else {
-		if p.Settings.Debug {
-			log.Println("No species config found, using default actions for", speciesName)
+
+		// If OnlyActions is true, return only custom actions
+		if len(actions) > 0 {
+			return actions
 		}
-		actions = p.getDefaultActions(detection)
 	}
 
-	return actions
+	// Fall back to default actions if no custom actions or if custom actions should be combined
+	return p.getDefaultActions(detection)
+}
+
+// Helper function to parse command parameters
+func parseCommandParams(params []string, detection Detections) map[string]interface{} {
+	commandParams := make(map[string]interface{})
+	for _, param := range params {
+		value := getNoteValueByName(detection.Note, param)
+		// Check if the parameter is confidence and normalize it
+		if param == "confidence" {
+			if confidence, ok := value.(float64); ok {
+				value = confidence * 100
+			}
+		}
+		commandParams[param] = value
+	}
+	return commandParams
 }
 
 // getDefaultActions returns the default actions to be taken for a given detection.

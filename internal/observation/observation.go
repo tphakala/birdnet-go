@@ -3,6 +3,7 @@ package observation
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -44,6 +45,9 @@ func New(settings *conf.Settings, beginTime, endTime time.Time, species string, 
 		audioSource = source
 	}
 
+	// Round confidence to two decimal places
+	roundedConfidence := math.Round(confidence*100) / 100
+
 	// Return a new Note struct populated with the provided parameters as well as the current date and time.
 	return datastore.Note{
 		SourceNode:     settings.Main.Name,           // From the provided configuration settings.
@@ -55,7 +59,7 @@ func New(settings *conf.Settings, beginTime, endTime time.Time, species string, 
 		SpeciesCode:    speciesCode,                  // Parsed species code.
 		ScientificName: scientificName,               // Parsed scientific name of the species.
 		CommonName:     commonName,                   // Parsed common name of the species.
-		Confidence:     confidence,                   // Confidence score of the observation.
+		Confidence:     roundedConfidence,            // Confidence score of the observation.
 		Latitude:       settings.BirdNET.Latitude,    // Geographic latitude where the observation was made.
 		Longitude:      settings.BirdNET.Longitude,   // Geographic longitude where the observation was made.
 		Threshold:      settings.BirdNET.Threshold,   // Threshold setting from configuration.

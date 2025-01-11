@@ -31,16 +31,51 @@ func (a ByScore) Len() int           { return len(a) }
 func (a ByScore) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByScore) Less(i, j int) bool { return a[i].Score > a[j].Score } // For descending order
 
+// BuildRangeFilter updates the range filter with current probable species
+func BuildRangeFilter(bn *BirdNET) error {
+	// Get date for Range Filter week calculation
+	today := time.Now().Truncate(24 * time.Hour)
+
+	// Update location based species list
+	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
+	if err != nil {
+		return err
+	}
+
+	// Convert the speciesScores slice to a slice of species labels
+	var includedSpecies []string
+	for _, speciesScore := range speciesScores {
+		includedSpecies = append(includedSpecies, speciesScore.Label)
+	}
+
+	if conf.Setting().BirdNET.RangeFilter.Debug {
+		// Debug: Write included species to file
+		debugFile := "debug_included_species.txt"
+		content := fmt.Sprintf("Updated at: %s\nSpecies count: %d\n\nSpecies list:\n",
+			time.Now().Format("2006-01-02 15:04:05"),
+			len(includedSpecies))
+		for _, species := range includedSpecies {
+			content += species + "\n"
+		}
+		if err := os.WriteFile(debugFile, []byte(content), 0644); err != nil {
+			log.Printf("❌ [range_filter/rebuild] Warning: Failed to write included species file: %v\n", err)
+		}
+	}
+
+	conf.Setting().UpdateIncludedSpecies(includedSpecies)
+
+	return nil
+}
+
 // GetProbableSpecies filters and sorts bird species based on their scores.
 // It also updates the scores for species that have custom actions defined in the speciesConfigCSV.
 func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
+	bn.Debug("Applying range filter")
 	// Skip filtering if location is not set
 	if bn.Settings.BirdNET.Latitude == 0 && bn.Settings.BirdNET.Longitude == 0 {
-		if bn.Settings.Debug {
-			log.Println("Latitude and longitude not set, not using location based prediction filter")
-		}
+		bn.Debug("Latitude and longitude not set, not using location based prediction filter")
 		var speciesScores []SpeciesScore
-		for _, label := range bn.Labels {
+		for _, label := range bn.Settings.BirdNET.Labels {
 			speciesScores = append(speciesScores, SpeciesScore{Score: 0.0, Label: label})
 		}
 		return speciesScores, nil
@@ -63,37 +98,72 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 	var speciesScores []SpeciesScore
 	for _, filter := range filters {
 		if filter.Score >= bn.Settings.BirdNET.RangeFilter.Threshold {
-			speciesScores = append(speciesScores, SpeciesScore{Score: float64(filter.Score), Label: filter.Label})
-		}
-	}
-
-	// Load species from the CSV file containing species with custom actions
-	speciesFromCSV, err := loadSpeciesFromCSV(conf.SpeciesConfigCSV)
-	if err != nil {
-		// Silently ignore the failure to load CSV
-		speciesFromCSV = []string{} // Ensure speciesFromCSV is an empty slice
-	}
-
-	// Create a map for quick lookup of species in speciesScores
-	speciesScoreMap := make(map[string]*SpeciesScore)
-	for i := range speciesScores {
-		speciesScoreMap[speciesScores[i].Label] = &speciesScores[i]
-	}
-
-	// Process species from CSV
-	for _, species := range speciesFromCSV {
-		for _, label := range bn.Labels {
-			if strings.Contains(label, species) {
-				updateOrAddSpecies(speciesScoreMap, &speciesScores, label) // Pass pointer to slice
-				break
+			// Check if species is in exclude list before adding
+			if !isSpeciesExcluded(filter.Label, bn.Settings.Realtime.Species.Exclude) {
+				speciesScores = append(speciesScores, SpeciesScore{Score: float64(filter.Score), Label: filter.Label})
+			} else {
+				bn.Debug("Excluding species from range filter: %s", filter.Label)
 			}
 		}
+	}
+
+	// Add included species and species with actions with maximum score
+	processedSpecies := make(map[string]bool)
+
+	// Process explicitly included species
+	for _, includedSpecies := range bn.Settings.Realtime.Species.Include {
+		bn.Debug("Processing included species: %s", includedSpecies)
+		addSpeciesWithMaxScore(bn, &speciesScores, includedSpecies, processedSpecies)
+	}
+
+	// Process species with configured actions
+	for species := range bn.Settings.Realtime.Species.Config {
+		bn.Debug("Processing species with actions: %s", species)
+		addSpeciesWithMaxScore(bn, &speciesScores, species, processedSpecies)
 	}
 
 	// Sort species scores in descending order
 	sort.Sort(ByScore(speciesScores))
 
 	return speciesScores, nil
+}
+
+// addSpeciesWithMaxScore adds all matching species to the scores list with maximum score
+func addSpeciesWithMaxScore(bn *BirdNET, speciesScores *[]SpeciesScore, speciesName string, processedSpecies map[string]bool) {
+	// Skip if already processed
+	if processedSpecies[speciesName] {
+		return
+	}
+
+	matchFound := false
+	for _, label := range bn.Settings.BirdNET.Labels {
+		if matchesSpecies(label, speciesName) {
+			bn.Debug("Adding species with max score: %s (matched with: %s)", label, speciesName)
+			*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label})
+			matchFound = true
+		}
+	}
+
+	if matchFound {
+		processedSpecies[speciesName] = true
+	}
+}
+
+// isSpeciesExcluded checks if a species should be excluded based on its label
+func isSpeciesExcluded(label string, excludeList []string) bool {
+	for _, excludedSpecies := range excludeList {
+		if matchesSpecies(label, excludedSpecies) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesSpecies checks if a label matches a species name (either common or scientific)
+func matchesSpecies(label, speciesName string) bool {
+	scientificName, commonName, _ := observation.ParseSpeciesString(label)
+	speciesName = strings.ToLower(speciesName)
+	return strings.ToLower(scientificName) == speciesName || strings.ToLower(commonName) == speciesName
 }
 
 // predictFilter applies a TensorFlow Lite model to predict species based on the context.
@@ -136,11 +206,11 @@ func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error)
 	filter := make([]float32, outputSize)
 	copy(filter, output.Float32s())
 
-	// Filter and label the results
+	// Filter and label the results, but only for indices that exist in bn.Labels
 	var results []Filter
 	for i, score := range filter {
-		if score >= bn.Settings.BirdNET.RangeFilter.Threshold {
-			results = append(results, Filter{Score: score, Label: bn.Labels[i]})
+		if score >= bn.Settings.BirdNET.RangeFilter.Threshold && i < len(bn.Settings.BirdNET.Labels) {
+			results = append(results, Filter{Score: score, Label: bn.Settings.BirdNET.Labels[i]})
 		}
 	}
 

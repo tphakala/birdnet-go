@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"log"
 	"strconv"
 	"time"
 
@@ -61,4 +62,15 @@ func parseOffset(offsetStr string, defaultOffset int) int {
 		return defaultOffset
 	}
 	return offset
+}
+
+// Debug logs debug messages if debug mode is enabled
+func (h *Handlers) Debug(format string, v ...interface{}) {
+	if h.Settings.WebServer.Debug {
+		if len(v) == 0 {
+			log.Print(format)
+		} else {
+			log.Printf(format, v...)
+		}
+	}
 }
