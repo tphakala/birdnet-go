@@ -209,6 +209,7 @@ type BirdNETConfig struct {
 	RangeFilter RangeFilterSettings // range filter settings
 	ModelPath   string              // path to external model file (empty for embedded)
 	LabelPath   string              // path to external label file (empty for embedded)
+	Labels      []string            `yaml:"-"` // list of available species labels, runtime value
 	UseXNNPACK  bool                // true to use XNNPACK delegate for inference acceleration
 }
 

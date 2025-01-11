@@ -44,7 +44,6 @@ var labelsZip []byte
 type BirdNET struct {
 	AnalysisInterpreter *tflite.Interpreter
 	RangeInterpreter    *tflite.Interpreter
-	Labels              []string
 	Settings            *conf.Settings
 	SpeciesListUpdated  time.Time // Timestamp for the last update of the species list.
 	mu                  sync.Mutex
@@ -181,7 +180,7 @@ func (bn *BirdNET) determineThreadCount(configuredThreads int) int {
 
 // loadLabels extracts and loads labels from either the embedded zip file or an external file
 func (bn *BirdNET) loadLabels() error {
-	bn.Labels = []string{} // Reset labels.
+	bn.Settings.BirdNET.Labels = []string{} // Reset labels.
 
 	// Use embedded labels if no external label path is set
 	if bn.Settings.BirdNET.LabelPath == "" {
@@ -263,7 +262,7 @@ func (bn *BirdNET) loadLabelsFromZip(file *os.File) error {
 func (bn *BirdNET) loadLabelsFromText(file *os.File) error {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		bn.Labels = append(bn.Labels, strings.TrimSpace(scanner.Text()))
+		bn.Settings.BirdNET.Labels = append(bn.Settings.BirdNET.Labels, strings.TrimSpace(scanner.Text()))
 	}
 	return scanner.Err()
 }
@@ -278,7 +277,7 @@ func (bn *BirdNET) readLabelFile(file *zip.File) error {
 
 	scanner := bufio.NewScanner(fileReader)
 	for scanner.Scan() {
-		bn.Labels = append(bn.Labels, strings.TrimSpace(scanner.Text()))
+		bn.Settings.BirdNET.Labels = append(bn.Settings.BirdNET.Labels, strings.TrimSpace(scanner.Text()))
 	}
 	return scanner.Err() // Returns nil if no errors occurred during scanning.
 }

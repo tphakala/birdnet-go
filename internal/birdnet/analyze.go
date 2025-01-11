@@ -51,7 +51,7 @@ func (bn *BirdNET) Predict(sample [][]float32) ([]datastore.Results, error) {
 
 	confidence := applySigmoidToPredictions(predictions, bn.Settings.BirdNET.Sensitivity)
 
-	results, err := pairLabelsAndConfidence(bn.Labels, confidence)
+	results, err := pairLabelsAndConfidence(bn.Settings.BirdNET.Labels, confidence)
 	if err != nil {
 		return nil, err
 	}

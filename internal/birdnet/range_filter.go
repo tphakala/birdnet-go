@@ -39,7 +39,7 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 	if bn.Settings.BirdNET.Latitude == 0 && bn.Settings.BirdNET.Longitude == 0 {
 		bn.Debug("Latitude and longitude not set, not using location based prediction filter")
 		var speciesScores []SpeciesScore
-		for _, label := range bn.Labels {
+		for _, label := range bn.Settings.BirdNET.Labels {
 			speciesScores = append(speciesScores, SpeciesScore{Score: 0.0, Label: label})
 		}
 		return speciesScores, nil
@@ -100,7 +100,7 @@ func addSpeciesWithMaxScore(bn *BirdNET, speciesScores *[]SpeciesScore, speciesN
 	}
 
 	matchFound := false
-	for _, label := range bn.Labels {
+	for _, label := range bn.Settings.BirdNET.Labels {
 		if matchesSpecies(label, speciesName) {
 			bn.Debug("Adding species with max score: %s (matched with: %s)", label, speciesName)
 			*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label})
@@ -173,8 +173,8 @@ func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error)
 	// Filter and label the results, but only for indices that exist in bn.Labels
 	var results []Filter
 	for i, score := range filter {
-		if score >= bn.Settings.BirdNET.RangeFilter.Threshold && i < len(bn.Labels) {
-			results = append(results, Filter{Score: score, Label: bn.Labels[i]})
+		if score >= bn.Settings.BirdNET.RangeFilter.Threshold && i < len(bn.Settings.BirdNET.Labels) {
+			results = append(results, Filter{Score: score, Label: bn.Settings.BirdNET.Labels[i]})
 		}
 	}
 
