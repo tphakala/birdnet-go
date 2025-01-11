@@ -393,8 +393,9 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
         <!-- Actions Modal -->
         <div x-show="showActionsModal" 
              class="modal modal-open" 
-             x-cloak>
-            <div class="modal-box bg-base-100">
+             x-cloak
+             @keydown.escape.window="closeActionsModal()">
+            <div class="modal-box bg-base-100 max-h-[90vh] overflow-y-auto">
                 <h3 class="text-lg font-bold mb-4" x-text="'Actions for ' + currentSpecies"></h3>
                 
                 <div class="mb-4">
@@ -462,7 +463,7 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
                             class="btn">Cancel</button>
                 </div>
             </div>
-            <div class="modal-backdrop" @click="closeActionsModal()"></div>
+            <div class="modal-backdrop bg-black/50" @click="closeActionsModal()"></div>
         </div>
 
         <!-- Hidden inputs -->
