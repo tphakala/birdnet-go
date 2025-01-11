@@ -29,6 +29,7 @@ type Handlers struct {
 	SunCalc           *suncalc.SunCalc            // SunCalc instance for calculating sun event times
 	AudioLevelChan    chan myaudio.AudioLevelData // Channel for audio level updates
 	OAuth2Server      *security.OAuth2Server
+	controlChan       chan string
 }
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.
@@ -71,7 +72,7 @@ func (bh *baseHandler) logInfo(message string) {
 }
 
 // New creates a new Handlers instance with the given dependencies.
-func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server) *Handlers {
+func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server, controlChan chan string) *Handlers {
 	if logger == nil {
 		logger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
@@ -89,6 +90,7 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		SunCalc:           sunCalc,
 		AudioLevelChan:    audioLevelChan,
 		OAuth2Server:      oauth2Server,
+		controlChan:       controlChan,
 	}
 }
 
@@ -221,4 +223,9 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 			c.Response().Flush()
 		}
 	}
+}
+
+// GetLabels returns the list of all available species labels
+func (h *Handlers) GetLabels() []string {
+	return h.Settings.BirdNET.Labels
 }

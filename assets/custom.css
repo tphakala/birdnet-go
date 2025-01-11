@@ -1,3 +1,28 @@
+/* Ensure scrollbar gutter is stable */
+html {
+  scrollbar-gutter: stable !important;
+}
+
+/* Force page scrolling behavior */
+html, body {
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* Ensure drawer content can scroll */
+.drawer-content {
+  height: auto !important;
+  min-height: 100vh;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+/* Override any DaisyUI overflow constraints */
+.drawer.drawer-open {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
 .audio-control {
   width: 100%;
   height: 25px;
