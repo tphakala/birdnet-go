@@ -8,12 +8,14 @@ import (
 	"html/template"
 	"net/url"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
+	"github.com/tphakala/birdnet-go/internal/observation"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -38,6 +40,7 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"RenderContent":         s.RenderContent,
 		"renderSettingsContent": s.renderSettingsContent,
 		"toJSON":                toJSONFunc,
+		"safeJSON":              safeJSONFunc,
 		"sunPositionIcon":       s.Handlers.GetSunPositionIconFunc(),
 		"weatherIcon":           s.Handlers.GetWeatherIconFunc(),
 		"timeOfDayToInt":        s.Handlers.TimeOfDayToInt,
@@ -49,7 +52,8 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"getHourlyCounts":       getHourlyCounts,
 		"sumHourlyCountsRange":  sumHourlyCountsRange,
 		"weatherDescription":    s.Handlers.GetWeatherDescriptionFunc(),
-		"safeJSON":              safeJSONFunc,
+		"getAllSpecies":         s.GetAllSpecies,
+		"getIncludedSpecies":    s.GetIncludedSpecies,
 	}
 }
 
@@ -240,9 +244,10 @@ func getHourlyHeaderData(hourIndex int, class string, length int, date string, s
 // Parameters:
 //   - element: NoteWithIndex containing detection data
 //   - hourIndex: Hour index (0-23) to get counts for
+//
 // Returns:
-//   map[string]interface{} with HourIndex and species Name
-
+//
+//	map[string]interface{} with HourIndex and species Name
 func getHourlyCounts(element handlers.NoteWithIndex, hourIndex int) map[string]interface{} {
 	baseData := map[string]interface{}{
 		"HourIndex": hourIndex,
@@ -283,4 +288,59 @@ func safeJSONFunc(v interface{}) template.JS {
 	s = strings.ReplaceAll(s, "'", "\\'")
 
 	return template.JS(s)
+}
+
+// GetIncludedSpecies returns a deduplicated list of included species
+func (s *Server) GetIncludedSpecies() []string {
+	var preparedSpecies []string
+	var scientificNames []string
+	var commonNames []string
+
+	// Split species entry into scientific and common names
+	for _, species := range s.Settings.BirdNET.RangeFilter.Species {
+		parts := strings.Split(species, "_")
+		if len(parts) >= 2 {
+			scientificNames = append(scientificNames, strings.TrimSpace(parts[0]))
+			commonNames = append(commonNames, strings.TrimSpace(parts[1]))
+		}
+	}
+
+	// Sort both slices alphabetically
+	sort.Strings(scientificNames)
+	sort.Strings(commonNames)
+
+	// Combine common names first, then scientific names
+	preparedSpecies = append(preparedSpecies, commonNames...)
+	preparedSpecies = append(preparedSpecies, scientificNames...)
+
+	return removeDuplicates(preparedSpecies)
+}
+
+// GetAllSpecies returns a deduplicated list of all available species
+func (s *Server) GetAllSpecies() []string {
+	// Create a map to track unique species
+	uniqueSpecies := make(map[string]bool)
+
+	// Get all labels from the handlers which has access to BirdNET labels through settings
+	for _, label := range s.Handlers.GetLabels() {
+		// Parse the species string to get both scientific and common names
+		scientificName, commonName, _ := observation.ParseSpeciesString(label)
+
+		// Add both names to the unique map
+		uniqueSpecies[scientificName] = true
+		uniqueSpecies[commonName] = true
+	}
+
+	// Convert map keys to sorted slice
+	result := make([]string, 0, len(uniqueSpecies))
+	for species := range uniqueSpecies {
+		if species != "" { // Skip empty strings
+			result = append(result, species)
+		}
+	}
+
+	// Sort the slice alphabetically
+	sort.Strings(result)
+
+	return result
 }
