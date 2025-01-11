@@ -214,6 +214,7 @@ type BirdNETConfig struct {
 
 // RangeFilterSettings contains settings for the range filter
 type RangeFilterSettings struct {
+	Debug       bool      // true to enable debug mode
 	Model       string    // range filter model model
 	Threshold   float32   // rangefilter species occurrence threshold
 	Species     []string  `yaml:"-"` // list of included species, runtime value
