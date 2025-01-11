@@ -68,7 +68,7 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 	// Check if range filter related settings have changed
 	if rangeFilterSettingsChanged(oldSettings, *settings) {
 		//log.Println("Range filter settings changed, sending reload signal")
-		h.controlChan <- "reload_range_filter"
+		h.controlChan <- "rebuild_range_filter"
 	}
 
 	// Check the authentication settings and update if needed
