@@ -272,6 +272,13 @@ func (p *Processor) processResults(item queue.Results) []Detections {
 			continue
 		}
 
+		// Match species against range filter included species list
+		if len(p.Settings.Realtime.Species.Include) > 0 {
+			if !contains(p.Settings.Realtime.Species.Include, speciesLowercase) {
+				continue
+			}
+		}
+
 		if p.Settings.Realtime.DynamicThreshold.Enabled {
 			// Add species to dynamic thresholds if it passes the filter
 			p.addSpeciesToDynamicThresholds(speciesLowercase, baseThreshold)
