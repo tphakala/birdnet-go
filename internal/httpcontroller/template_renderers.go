@@ -127,12 +127,6 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 		"TemplateName":   templateName,
 	}
 
-	// Add prepared species data for specific settings pages
-	if templateName == "detectionfiltersSettings" ||
-		templateName == "speciesSettings" {
-		data["PreparedSpecies"] = s.prepareSpeciesData()
-	}
-
 	// DEBUG Log the species settings
 	//log.Printf("Species Settings: %+v", s.Settings.Realtime.Species)
 
