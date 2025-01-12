@@ -42,6 +42,7 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
   full_bin = ""  # Additional arguments when running the built binary
   include_dir = ["views", "internal", "assets"] # Directories to include (watches all if empty)
   include_ext = ["go", "tpl", "tmpl", "html", "css", "js"]  # File extensions to watch
+  include_file = ["tailwind.config.js", "tailwind.input.css", "main.go"]  # Files to watch
   kill_delay = "0s"  # Delay before killing the app on a rebuild
   log = "build-errors.log"  # File to log build errors
   send_interrupt = false  # Send interrupt signal before killing the app
