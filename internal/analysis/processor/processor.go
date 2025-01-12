@@ -268,8 +268,11 @@ func (p *Processor) processResults(item queue.Results) []Detections {
 			continue
 		}
 
-		// Match species against range filter included species list
-		if !contains(p.Settings.BirdNET.RangeFilter.Species, speciesLowercase) {
+		// Match against location-based filter
+		if !p.Settings.IsSpeciesIncluded(result.Species) {
+			if p.Settings.Debug {
+				log.Printf("Species not on included list: %s\n", result.Species)
+			}
 			continue
 		}
 
@@ -363,21 +366,6 @@ func (p *Processor) generateClipName(scientificName string, confidence float32) 
 	clipName := filepath.ToSlash(filepath.Join(basePath, year, month, fmt.Sprintf("%s_%s_%s.%s", formattedName, formattedConfidence, timestamp, fileType)))
 
 	return clipName
-}
-
-// isSpeciesIncluded checks if the given species is in the included species list.
-// It returns true if the species is in the list, or if the list is empty (no filtering).
-func isSpeciesIncluded(species string, includedList []string) bool {
-	if len(includedList) == 0 {
-		return true // no filtering applied when the list is empty
-	}
-	for _, s := range includedList {
-		if species == s {
-			return true
-		}
-	}
-
-	return false
 }
 
 // pendingDetectionsFlusher runs a goroutine that periodically checks the pending detections
