@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/go-tflite"
@@ -45,7 +44,6 @@ type BirdNET struct {
 	AnalysisInterpreter *tflite.Interpreter
 	RangeInterpreter    *tflite.Interpreter
 	Settings            *conf.Settings
-	SpeciesListUpdated  time.Time // Timestamp for the last update of the species list.
 	mu                  sync.Mutex
 }
 
@@ -301,9 +299,103 @@ func (bn *BirdNET) loadModel() ([]byte, error) {
 	modelPath := bn.Settings.BirdNET.ModelPath
 	data, err := os.ReadFile(modelPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read custom model file: %w", err)
+		return nil, fmt.Errorf("failed to read model file: %w", err)
 	}
 	return data, nil
+}
+
+// validateModelAndLabels checks if the number of labels matches the model's output size
+func (bn *BirdNET) validateModelAndLabels() error {
+	// Get the output tensor to check its dimensions
+	outputTensor := bn.AnalysisInterpreter.GetOutputTensor(0)
+	if outputTensor == nil {
+		return fmt.Errorf("cannot get output tensor")
+	}
+
+	// Get the number of classes from the model's output tensor
+	modelOutputSize := outputTensor.Dim(outputTensor.NumDims() - 1)
+
+	// Compare with the number of labels
+	if len(bn.Settings.BirdNET.Labels) != modelOutputSize {
+		return fmt.Errorf("\033[31m❌ label count mismatch: model expects %d classes but label file has %d labels\033[0m",
+			modelOutputSize, len(bn.Settings.BirdNET.Labels))
+	}
+
+	bn.Debug("\033[32m✅ Model validation successful: %d labels match model output size\033[0m", modelOutputSize)
+	return nil
+}
+
+// ReloadModel safely reloads the BirdNET model and labels while handling ongoing analysis
+func (bn *BirdNET) ReloadModel() error {
+	bn.Debug("\033[33m🔒 Acquiring mutex for model reload\033[0m")
+	bn.mu.Lock()
+	defer bn.mu.Unlock()
+	bn.Debug("\033[32m✅ Acquired mutex for model reload\033[0m")
+
+	// Store old interpreters to clean up after successful reload
+	oldAnalysisInterpreter := bn.AnalysisInterpreter
+	oldRangeInterpreter := bn.RangeInterpreter
+
+	// Initialize new model
+	if err := bn.initializeModel(); err != nil {
+		return fmt.Errorf("\033[31m❌ failed to reload model: %w\033[0m", err)
+	}
+	bn.Debug("\033[32m✅ Model initialized successfully\033[0m")
+
+	// Initialize new meta model
+	if err := bn.initializeMetaModel(); err != nil {
+		// Clean up the newly created analysis interpreter if meta model fails
+		if bn.AnalysisInterpreter != nil {
+			bn.AnalysisInterpreter.Delete()
+		}
+		// Restore the old interpreters
+		bn.AnalysisInterpreter = oldAnalysisInterpreter
+		bn.RangeInterpreter = oldRangeInterpreter
+		return fmt.Errorf("\033[31m❌ failed to reload meta model: %w\033[0m", err)
+	}
+	bn.Debug("\033[32m✅ Meta model initialized successfully\033[0m")
+
+	// Reload labels
+	if err := bn.loadLabels(); err != nil {
+		// Clean up the newly created interpreters if label loading fails
+		if bn.AnalysisInterpreter != nil {
+			bn.AnalysisInterpreter.Delete()
+		}
+		if bn.RangeInterpreter != nil {
+			bn.RangeInterpreter.Delete()
+		}
+		// Restore the old interpreters
+		bn.AnalysisInterpreter = oldAnalysisInterpreter
+		bn.RangeInterpreter = oldRangeInterpreter
+		return fmt.Errorf("\033[31m❌ failed to reload labels: %w\033[0m", err)
+	}
+	bn.Debug("\033[32m✅ Labels loaded successfully\033[0m")
+
+	// Validate that the model and labels match
+	if err := bn.validateModelAndLabels(); err != nil {
+		// Clean up the newly created interpreters if validation fails
+		if bn.AnalysisInterpreter != nil {
+			bn.AnalysisInterpreter.Delete()
+		}
+		if bn.RangeInterpreter != nil {
+			bn.RangeInterpreter.Delete()
+		}
+		// Restore the old interpreters
+		bn.AnalysisInterpreter = oldAnalysisInterpreter
+		bn.RangeInterpreter = oldRangeInterpreter
+		return fmt.Errorf("\033[31m❌ model validation failed: %w\033[0m", err)
+	}
+
+	// Clean up old interpreters after successful reload
+	if oldAnalysisInterpreter != nil {
+		oldAnalysisInterpreter.Delete()
+	}
+	if oldRangeInterpreter != nil {
+		oldRangeInterpreter.Delete()
+	}
+
+	bn.Debug("\033[32m✅ Model reload completed successfully\033[0m")
+	return nil
 }
 
 // Debug prints debug messages if debug mode is enabled

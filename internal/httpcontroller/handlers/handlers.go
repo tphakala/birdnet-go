@@ -30,6 +30,7 @@ type Handlers struct {
 	AudioLevelChan    chan myaudio.AudioLevelData // Channel for audio level updates
 	OAuth2Server      *security.OAuth2Server
 	controlChan       chan string
+	notificationChan  chan Notification
 }
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.
@@ -72,7 +73,7 @@ func (bh *baseHandler) logInfo(message string) {
 }
 
 // New creates a new Handlers instance with the given dependencies.
-func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server, controlChan chan string) *Handlers {
+func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server, controlChan chan string, notificationChan chan Notification) *Handlers {
 	if logger == nil {
 		logger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
@@ -91,6 +92,7 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		AudioLevelChan:    audioLevelChan,
 		OAuth2Server:      oauth2Server,
 		controlChan:       controlChan,
+		notificationChan:  notificationChan,
 	}
 }
 
