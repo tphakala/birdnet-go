@@ -1,6 +1,48 @@
 {{define "listDetections"}}
 
-<section class="card col-span-12 overflow-x-auto bg-base-100 shadow-sm">
+<section class="card col-span-12 overflow-x-auto bg-base-100 shadow-sm" 
+    x-data="{ 
+        selected: [],
+        get hasSelection() { return this.selected.length > 0 },
+        toggleAll() {
+            if (this.selected.length === this.availableIds.length) {
+                this.selected = [];
+            } else {
+                this.selected = [...this.availableIds];
+            }
+        },
+        availableIds: [{{range .Notes}}'{{.ID}}',{{end}}]
+    }">
+    <!-- Actions Menu - Shows when items are selected -->
+    <div class="sticky top-0 z-10 bg-base-100 shadow-sm transition-all"
+        x-show="hasSelection"
+        x-transition:enter="transition ease-out duration-200"
+        x-transition:enter-start="opacity-0 transform -translate-y-2"
+        x-transition:enter-end="opacity-100 transform translate-y-0"
+        x-transition:leave="transition ease-in duration-150"
+        x-transition:leave-start="opacity-100 transform translate-y-0"
+        x-transition:leave-end="opacity-0 transform -translate-y-2">
+        <div class="flex items-center justify-between px-4 py-2">
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-medium text-base-content/70" x-text="`${selected.length} selected`"></span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button class="btn btn-sm btn-primary normal-case" @click="$dispatch('verify-detections', { ids: selected })">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span class="ml-1">Verify</span>
+                </button>
+                <button class="btn btn-sm btn-error normal-case text-error-content" @click="$dispatch('delete-detections', { ids: selected })">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span class="ml-1">Delete</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
         <div class="flex justify-between">
             <!-- Title -->
@@ -25,6 +67,15 @@
         <table class="table w-full text-left">
             <thead class="text-xs">
                 <tr>
+                    <!-- Selection Column -->
+                    <th scope="col" class="py-0 px-2 w-6">
+                        <input type="checkbox" 
+                            class="checkbox checkbox-primary checkbox-xs rounded-sm border-2 border-base-content/30" 
+                            x-on:click="toggleAll()"
+                            x-bind:checked="selected.length === availableIds.length"
+                            x-bind:indeterminate="selected.length > 0 && selected.length < availableIds.length">
+                    </th>
+
                     <!-- Date/Time Column -->
                     <th scope="col" class="py-0 px-2 sm:px-4" style="width: auto">
                         <span class="hidden sm:inline">Date</span>
@@ -68,6 +119,14 @@
             <tbody>
                 {{range .Notes}}
                 <tr class="text-xs sm:text-sm">
+                    <!-- Selection Column -->
+                    <td class="py-1 px-2">
+                        <input type="checkbox" 
+                            class="checkbox checkbox-primary checkbox-xs rounded-sm border-2 border-base-content/30" 
+                            x-model="selected"
+                            value="{{.ID}}">
+                    </td>
+
                     <!-- Date/Time Column -->
                     <td class="py-0 px-2 sm:px-4 font-normal">
                         <div class="flex flex-col sm:flex-row sm:items-center">

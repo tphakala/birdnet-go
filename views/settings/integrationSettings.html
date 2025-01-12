@@ -59,8 +59,7 @@
                 <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'birdweatherEnabled'"
                     @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <div x-show="showTooltip === 'birdweatherEnabled'" x-cloak
-                class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+            <div x-show="showTooltip === 'birdweatherEnabled'" x-cloak class="tooltip">
                 Enable or disable uploads to BirdWeather service.
             </div>
         </div>
@@ -76,8 +75,7 @@
                     <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'birdweatherDebug'"
                         @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
-                <div x-show="showTooltip === 'birdweatherDebug'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'birdweatherDebug'" x-cloak class="tooltip">
                     Enable debug mode for additional logging information.
                 </div>
             </div>
@@ -111,8 +109,7 @@
                     <input type="number" id="birdweatherThreshold" name="realtime.birdweather.threshold"
                         x-model="birdweather.threshold" step="0.01" min="0" max="1"
                         class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'birdweatherThreshold'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'birdweatherThreshold'" x-cloak class="tooltip">
                         Minimum confidence threshold for uploading predictions to BirdWeather.
                     </div>
                 </div>
@@ -175,8 +172,7 @@
                 <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mqttEnabled'"
                     @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <div x-show="showTooltip === 'mqttEnabled'" x-cloak
-                class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+            <div x-show="showTooltip === 'mqttEnabled'" x-cloak class="tooltip">
                 Enable or disable integration with MQTT service.
             </div>
         </div>
@@ -193,8 +189,7 @@
                     </label>
                     <input type="text" id="mqttBroker" name="realtime.mqtt.broker" x-model="mqtt.broker"
                         class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'mqttBroker'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'mqttBroker'" x-cloak class="tooltip">
                         The MQTT broker URL (e.g., tcp://localhost:1883).
                     </div>
                 </div>
@@ -207,8 +202,7 @@
                     </label>
                     <input type="text" id="mqttTopic" name="realtime.mqtt.topic" x-model="mqtt.topic"
                         class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'mqttTopic'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'mqttTopic'" x-cloak class="tooltip">
                         The MQTT topic to publish messages to.
                     </div>
                 </div>
@@ -221,8 +215,7 @@
                     </label>
                     <input type="text" id="mqttUsername" name="realtime.mqtt.username" x-model="mqtt.username"
                         class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'mqttUsername'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'mqttUsername'" x-cloak class="tooltip">
                         The MQTT username.
                     </div>
                 </div>
@@ -304,8 +297,7 @@
                 <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'telemetryEnabled'"
                     @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <div x-show="showTooltip === 'telemetryEnabled'" x-cloak
-                class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+            <div x-show="showTooltip === 'telemetryEnabled'" x-cloak class="tooltip">
                 Enable or disable integration with Telemetry service.
             </div>
         </div>
@@ -322,8 +314,7 @@
                     </label>
                     <input type="text" id="telemetryListen" name="realtime.telemetry.listen" x-model="telemetry.listen"
                         class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'telemetryListen'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'telemetryListen'" x-cloak class="tooltip">
                         The IP address and port to listen on (e.g., 0.0.0.0:8090).
                     </div>
                 </div>
@@ -386,7 +377,7 @@
                 <option value="yrno">Yr.no</option>
                 <option value="openweather">OpenWeather</option>
             </select>
-            <div x-show="showTooltip === 'weatherProvider'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+            <div x-show="showTooltip === 'weatherProvider'" x-cloak class="tooltip">
                 Select the weather data provider or choose 'None' to disable weather data collection.
             </div>
         </div>
@@ -430,7 +421,7 @@
                         <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherEndpoint'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>
                     <input type="text" id="openWeatherEndpoint" name="realtime.weather.openweather.endpoint" x-model="weather.openWeather.endpoint" class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'openWeatherEndpoint'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'openWeatherEndpoint'" x-cloak class="tooltip">
                         The OpenWeather API endpoint URL.
                     </div>
                 </div>
@@ -445,7 +436,7 @@
                         <option value="metric">Metric</option>
                         <option value="imperial">Imperial</option>
                     </select>
-                    <div x-show="showTooltip === 'openWeatherUnits'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'openWeatherUnits'" x-cloak class="tooltip">
                         Choose the units system for weather data.
                     </div>
                 </div>
@@ -456,7 +447,7 @@
                         <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherLanguage'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>
                     <input type="text" id="openWeatherLanguage" name="realtime.weather.openweather.language" x-model="weather.openWeather.language" class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'openWeatherLanguage'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'openWeatherLanguage'" x-cloak class="tooltip">
                         Language code for the API response (e.g., 'en' for English).
                     </div>
                 </div>

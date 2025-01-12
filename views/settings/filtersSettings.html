@@ -47,7 +47,7 @@ x-init="
                 <span class="label-text">Enable Privacy Filtering</span>
                 <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'privacyFilter'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <div x-show="showTooltip === 'privacyFilter'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+            <div x-show="showTooltip === 'privacyFilter'" x-cloak class="tooltip">
                 Enables detection of human voices, if detected discards bird detection to protect privacy
             </div>
         </div>
@@ -59,7 +59,7 @@ x-init="
                     <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'privacyConfidence'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="number" id="privacyFilterConfidence" name="realtime.privacyFilter.confidence" x-model="privacyFilter.confidence" step="0.01" min="0" max="1" class="input input-bordered input-sm w-full mb-4">
-                <div x-show="showTooltip === 'privacyConfidence'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'privacyConfidence'" x-cloak class="tooltip">
                     Set the confidence level for human voice detection, lower value makes filter more sensitive
                 </div>
             </div>
@@ -158,8 +158,7 @@ x-init="
                       @mouseenter="showTooltip = 'dogBarkFilter'"
                       @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <div class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50"
-                 x-show="showTooltip === 'dogBarkFilter'" x-cloak>
+            <div x-show="showTooltip === 'dogBarkFilter'" x-cloak class="tooltip">
                 Filters out dog barks to reduce false positives in bird detection.
             </div>
         </div>
@@ -174,8 +173,7 @@ x-init="
                 </label>
                 <input type="number" id="dogBarkFilterConfidence" name="realtime.dogbarkfilter.confidence"
                        x-model="dogBarkFilter.confidence" step="0.01" min="0" max="1" class="input input-bordered input-sm w-full">
-                <div class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50"
-                     x-show="showTooltip === 'dogBarkConfidence'" x-cloak>
+                <div x-show="showTooltip === 'dogBarkConfidence'" x-cloak class="tooltip">
                     Set the confidence level for dog bark detection, lower value makes filter more sensitive
                 </div>
             </div>
@@ -188,8 +186,7 @@ x-init="
                           @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="number" x-model="dogBarkFilter.remember" min="0" class="input input-bordered input-sm w-full" />
-                <div class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50"
-                     x-show="showTooltip === 'dogBarkExpire'" x-cloak>
+                <div x-show="showTooltip === 'dogBarkExpire'" x-cloak class="tooltip">
                     Set how long to remember a detected dog bark
                 </div>
             </div>
@@ -202,14 +199,14 @@ x-init="
                       @mouseenter="showTooltip = 'dogBarkSpecies'"
                       @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <div class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50"
-                 x-show="showTooltip === 'dogBarkSpecies'" x-cloak>
+            <div x-show="showTooltip === 'dogBarkSpecies'" x-cloak class="tooltip">
                 List of species to filter out as potential dog barks
             </div>
 
             <div class="space-y-2">
                 <template x-for="(species, index) in dogBarkFilter.species" :key="index">
-                    <div class="flex items-center bg-gray-50 space-x-2 p-2 rounded-md">
+                    <div class="flex items-center space-x-2 p-2 rounded-md" 
+                        style="background-color: var(--surface-300); border: 1px solid var(--border-100);">
                         <div class="flex-grow">
                             <span x-show="editIndex !== index" 
                                   @click="startEdit(index)" 

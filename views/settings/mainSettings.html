@@ -49,10 +49,9 @@
                 </label>
                 <input type="text" id="nodeName" name="main.name" x-model="main.name"
                     class="input input-sm input-bordered" placeholder="Enter node name">
-                <div x-show="showTooltip === 'nodeName'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md w-96">
-                    Node name is used to identify source system in multi node setup, also used as identifier for MQTT
-                    messages.
+                <!-- Node Name tooltip -->
+                <div x-show="showTooltip === 'nodeName'" x-cloak class="tooltip">
+                    Node name is used to identify source system in multi node setup, also used as identifier for MQTT messages.
                 </div>
             </div>
         </div>
@@ -199,8 +198,8 @@
                 </label>
                 <input type="number" id="birdnetSensitivity" name="birdnet.sensitivity" x-model="birdnet.sensitivity"
                     step="0.1" min="0.1" max="1.5" class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'sensitivity'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <!-- BirdNET Settings tooltips -->
+                <div x-show="showTooltip === 'sensitivity'" x-cloak class="tooltip">
                     Detection sensitivity. Higher values result in higher sensitivity. Values in 0.5, 1.5.
                 </div>
             </div>
@@ -213,8 +212,7 @@
                 </label>
                 <input type="number" id="birdnetThreshold" name="birdnet.threshold" x-model="birdnet.threshold"
                     step="0.01" min="0" max="1" class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'threshold'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'threshold'" x-cloak class="tooltip">
                     Minimum confidence threshold. Values in 0.01, 0.99.
                 </div>
             </div>
@@ -227,8 +225,7 @@
                 </label>
                 <input type="number" id="birdnetOverlap" name="birdnet.overlap" x-model="birdnet.overlap" step="0.1"
                     min="0" max="2.9" class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'overlap'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'overlap'" x-cloak class="tooltip">
                     Overlap of prediction segments. Values in 0.0, 2.9.
                 </div>
             </div>
@@ -246,8 +243,7 @@
                     {{end}}
                     <!--<option value="{{.Code}}" {{if eq .Code $.Settings.BirdNET.Locale}}selected{{end}}>{{.Name}} ({{.Code}})</option>-->
                 </select>
-                <div x-show="showTooltip === 'locale'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'locale'" x-cloak class="tooltip">
                     Locale for translated species common names.
                 </div>
             </div>
@@ -260,8 +256,7 @@
                 </label>
                 <input type="number" id="birdnetThreads" name="birdnet.threads" x-model="birdnet.threads" step="1"
                     min="0" max="32" class="input input-bordered input-sm w-full" />
-                <div x-show="showTooltip === 'threads'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'threads'" x-cloak class="tooltip">
                     Number of CPU threads. Set to 0 to use all available threads.
                 </div>
             </div>
@@ -280,8 +275,7 @@
                 </label>
                 <input type="text" id="birdnetModelPath" name="birdnet.modelpath" x-model="birdnet.modelPath"
                     class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'modelPath'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'modelPath'" x-cloak class="tooltip">
                     Path to external BirdNET model file. Enter absolute or relative path to birdnet-go binary. Leave
                     empty to use the default embedded model.
                 </div>
@@ -295,8 +289,7 @@
                 </label>
                 <input type="text" id="birdnetLabelPath" name="birdnet.labelpath" x-model="birdnet.labelPath"
                     class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'labelPath'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'labelPath'" x-cloak class="tooltip">
                     Path to external model labels file, .zip or .txt file. Enter absolute or relative path to birdnet-go
                     binary. Leave empty to use the default embedded labels.
                 </div>
@@ -316,8 +309,7 @@
                 <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'dynamicThreshold'"
                     @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <div x-show="showTooltip === 'dynamicThreshold'" x-cloak
-                class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+            <div x-show="showTooltip === 'dynamicThreshold'" x-cloak class="tooltip">
                 Enables dynamic confidence threshold feature for more adaptive bird call detection.
             </div>
         </div>
@@ -333,8 +325,7 @@
                 </label>
                 <input type="number" id="dynamicThresholdTrigger" name="realtime.dynamicthreshold.trigger"
                     x-model="dynamicThreshold.trigger" step="0.01" class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'trigger'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'trigger'" x-cloak class="tooltip">
                     The confidence level at which the dynamic threshold is activated. If a bird call is detected with
                     confidence over this value, the threshold for positive matches of that species will be lowered for
                     subsequent calls.
@@ -350,8 +341,7 @@
                 </label>
                 <input type="number" id="dynamicThresholdMin" name="realtime.dynamicthreshold.min"
                     x-model="dynamicThreshold.min" step="0.01" class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'min'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'min'" x-cloak class="tooltip">
                     The minimum value to which the dynamic threshold can be lowered. This ensures that the threshold
                     does not drop below an unwanted level.
                 </div>
@@ -366,8 +356,7 @@
                 </label>
                 <input type="number" id="dynamicThresholdValidHours" name="realtime.dynamicthreshold.validhours"
                     x-model="dynamicThreshold.validHours" class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'validHours'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'validHours'" x-cloak class="tooltip">
                     The number of hours during which the dynamic threshold adjustments remain valid. After this period,
                     the dynamic threshold is reset.
                 </div>
@@ -387,8 +376,7 @@
                     <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'locationMap'"
                         @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
-                <div x-show="showTooltip === 'locationMap'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'locationMap'" x-cloak class="tooltip">
                     Station location, used to limit bird species to those propable in the region.
                 </div>
                 <div id="locationMap" style="height: 300px;"></div>
@@ -406,8 +394,7 @@
                     </label>
                     <input type="number" id="birdnetLatitude" name="birdnet.latitude" x-model="birdnet.latitude"
                         step="0.001" class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'latitude'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'latitude'" x-cloak class="tooltip">
                         Station location latitude, used to limit bird species to those propable in the region.
                     </div>
                 </div>
@@ -421,8 +408,7 @@
                     </label>
                     <input type="number" id="birdnetLongitude" name="birdnet.longitude" x-model="birdnet.longitude"
                         step="0.001" class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'longitude'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'longitude'" x-cloak class="tooltip">
                         Station location longitude, used to limit bird species to those propable in the region.
                     </div>
                 </div>
@@ -439,8 +425,7 @@
                         <option value="legacy">legacy</option>
                         <option value="latest">latest</option>
                     </select>
-                    <div x-show="showTooltip === 'rangeFilterModel'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'rangeFilterModel'" x-cloak class="tooltip">
                         BirdNET range filter model version: latest or legacy.
                     </div>
                 </div>
@@ -455,8 +440,7 @@
                     <input type="number" id="birdnetRangeFilterThreshold" name="birdnet.rangefilter.threshold"
                         x-model="rangeFilter.threshold" step="0.01" min="0" max="1"
                         class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'rangeFilterThreshold'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'rangeFilterThreshold'" x-cloak class="tooltip">
                         Confidence level determining which identifications are considered valid, e.g. a threshold of 0.7
                         means only detections with higher than 70% confidence score are accepted.
                     </div>
@@ -573,8 +557,7 @@
                     <option value="sqlite">SQLite</option>
                     <option value="mysql">MySQL</option>
                 </select>
-                <div x-show="showTooltip === 'databaseType'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'databaseType'" x-cloak class="tooltip">
                     Database type for storing detections: SQLite or MySQL
                 </div>
             </div>
@@ -591,8 +574,7 @@
                 <div class="flex">
                     <input type="text" id="sqlitePath" x-model="sqlite.path" name="output.sqlite.path"
                         class="input input-sm input-bordered flex-grow" placeholder="Enter SQLite database path">
-                    <div x-show="showTooltip === 'sqlitePath'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'sqlitePath'" x-cloak class="tooltip">
                         SQLite database file path relative to the application directory
                     </div>
                 </div>
@@ -611,8 +593,7 @@
                 </label>
                 <input type="text" id="mysqlHost" x-model="mysql.host" name="output.mysql.host"
                     class="input input-sm input-bordered" placeholder="Enter MySQL host">
-                <div x-show="showTooltip === 'mysqlHost'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'mysqlHost'" x-cloak class="tooltip">
                     MySQL database host (IP or hostname)
                 </div>
             </div>
@@ -626,8 +607,7 @@
                 </label>
                 <input type="text" id="mysqlPort" x-model="mysql.port" name="output.mysql.port"
                     class="input input-sm input-bordered" placeholder="Enter MySQL port">
-                <div x-show="showTooltip === 'mysqlPort'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'mysqlPort'" x-cloak class="tooltip">
                     MySQL database port (default 3306/TCP)
                 </div>
             </div>
@@ -641,8 +621,7 @@
                 </label>
                 <input type="text" id="mysqlUsername" x-model="mysql.username" name="output.mysql.username"
                     class="input input-sm input-bordered" placeholder="Enter MySQL username">
-                <div x-show="showTooltip === 'mysqlUsername'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'mysqlUsername'" x-cloak class="tooltip">
                     MySQL database username
                 </div>
             </div>
@@ -677,8 +656,7 @@
                         </svg>
                     </button>
                 </div>
-                <div x-show="showTooltip === 'mysqlPassword'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'mysqlPassword'" x-cloak class="tooltip">
                     MySQL database password
                 </div>
             </div>
@@ -693,8 +671,7 @@
                     </label>
                     <input type="text" id="mysqlDatabase" x-model="mysql.database" name="output.mysql.database"
                         class="input input-sm input-bordered w-full" placeholder="Enter MySQL database name">
-                    <div x-show="showTooltip === 'mysqlDatabase'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'mysqlDatabase'" x-cloak class="tooltip">
                         MySQL database name
                     </div>
                 </div>
@@ -754,8 +731,7 @@
                 <input type="number" id="dashboardSummaryLimit" name="realtime.dashboard.summarylimit"
                     x-model="dashboard.summarylimit" class="input input-sm input-bordered mb-2 w-full"
                     placeholder="Enter limit" min="10" max="1000">
-                <div x-show="showTooltip === 'dashboardSummaryLimit'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'dashboardSummaryLimit'" x-cloak class="tooltip">
                     Max number of species shown in the daily summary table (Value between 10 and 1000)
                 </div>
             </div>
@@ -772,8 +748,7 @@
                 <span class="ml-2 text-sm text-gray-500 cursor-help"
                     @mouseenter="showTooltip = 'dashboardThumbnailsSummary'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <div x-show="showTooltip === 'dashboardThumbnailsSummary'" x-cloak
-                class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+            <div x-show="showTooltip === 'dashboardThumbnailsSummary'" x-cloak class="tooltip">
                 Enable to show thumbnails of detected species on the daily summary table
             </div>
         </div>
@@ -788,8 +763,7 @@
                 <span class="ml-2 text-sm text-gray-500 cursor-help"
                     @mouseenter="showTooltip = 'dashboardThumbnailsRecent'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <div x-show="showTooltip === 'dashboardThumbnailsRecent'" x-cloak
-                class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+            <div x-show="showTooltip === 'dashboardThumbnailsRecent'" x-cloak class="tooltip">
                 Enable to show thumbnails of detected species on the recent detections list
             </div>
         </div>

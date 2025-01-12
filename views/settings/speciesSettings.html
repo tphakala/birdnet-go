@@ -52,37 +52,26 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
     <input type="checkbox" id="speciesSettingsOpen" x-on:change="speciesSettingsOpen = !speciesSettingsOpen" />
     <div class="collapse-title text-xl font-medium">
         <div class="flex items-center">
-            <label for="speciesSettingsOpen" class="cursor-pointer">Species Settings</label>
+            <label for="speciesSettingsOpen" class="cursor-pointer">Always Include Species</label>
             <div class="ml-2" x-show="hasChanges" x-cloak>
                 <span class="badge badge-primary badge-sm changed-badge">
                     <span class="text-xs mb-0.5">changed</span>
                 </span>
             </div>
         </div>
-        <p class="text-sm text-gray-500">Configure species-specific settings</p>
+        <!-- short descripton of this section -->
+        <p class="text-sm text-gray-500">Species in this list will always be included in range of detected species</p>
     </div>
 
     <div class="collapse-content">
-        <!-- Always Include Species section -->
-        <div class="text-lg font-medium pb-2">Always Include Species</div>
         
         <div class="form-control relative">
-            <label class="label justify-start">
-                <span class="label-text">Species List</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help"
-                      @mouseenter="showTooltip = 'Include'"
-                      @mouseleave="showTooltip = null">ⓘ</span>
-            </label>
-
-            <div class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50"
-                 x-show="showTooltip === 'Include'" x-cloak>
-                Species in this list will always be included in detection, regardless of range filter settings.
-            </div>
 
             <!-- Include species list -->
             <div class="space-y-2">
                 <template x-for="(species, index) in speciesSettings.Include" :key="index">
-                    <div class="flex items-center bg-gray-50 space-x-2 p-2 rounded-md">
+                    <div class="flex items-center space-x-2 p-2 rounded-md" 
+                        style="background-color: var(--surface-300); border: 1px solid var(--border-100);">
                         <div class="flex-grow">
                             <span x-text="species" class="text-sm"></span>
                         </div>
@@ -157,27 +146,30 @@ x-data="{
     },
 }" 
 x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });">
+    <input type="checkbox" id="speciesSettingsOpen" x-on:change="speciesSettingsOpen = !speciesSettingsOpen" />
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex items-center">
+            <label for="speciesSettingsOpen" class="cursor-pointer">Always Exclude Species</label>
+            <div class="ml-2" x-show="hasChanges" x-cloak>
+                <span class="badge badge-primary badge-sm changed-badge">
+                    <span class="text-xs mb-0.5">changed</span>
+                </span>
+            </div>
+        </div>
+        <!-- short descripton of this section -->
+        <p class="text-sm text-gray-500">Species in this list will be excuded from detection</p>
+    </div>
+
     <div class="collapse-content">
         <!-- Always Exclude Species section -->
-        <div class="text-lg font-medium pt-4 pb-2">Always Exclude Species</div>
         
         <div class="form-control relative">
-            <label class="label justify-start">
-                <span class="label-text">Species List</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help"
-                      @mouseenter="showTooltip = 'Exclude'"
-                      @mouseleave="showTooltip = null">ⓘ</span>
-            </label>
-
-            <div class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50"
-                 x-show="showTooltip === 'Exclude'" x-cloak>
-                Species in this list will always be excluded from detection, regardless of range filter settings.
-            </div>
 
             <!-- Exclude species list -->
             <div class="space-y-2">
                 <template x-for="(species, index) in speciesSettings.Exclude" :key="index">
-                    <div class="flex items-center bg-gray-50 space-x-2 p-2 rounded-md">
+                    <div class="flex items-center space-x-2 p-2 rounded-md" 
+                        style="background-color: var(--surface-300); border: 1px solid var(--border-100);">
                         <div class="flex-grow">
                             <span x-text="species" class="text-sm"></span>
                         </div>
@@ -315,27 +307,28 @@ x-data="{
     },
 }" 
 x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });">
-    <div class="collapse-content">
-        <!-- Custom Species Configuration section -->
-        <div class="text-lg font-medium pt-4 pb-2">Custom Species Configuration</div>
-        
-        <div class="form-control relative">
-            <label class="label justify-start">
-                <span class="label-text">Species Configuration List</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help"
-                      @mouseenter="showTooltip = 'customConfig'"
-                      @mouseleave="showTooltip = null">ⓘ</span>
-            </label>
-
-            <div class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50"
-                 x-show="showTooltip === 'customConfig'" x-cloak>
-                Set custom confidence thresholds for specific species. These will override the global threshold for the specified species.
+    <input type="checkbox" id="speciesSettingsOpen" x-on:change="speciesSettingsOpen = !speciesSettingsOpen" />
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex items-center">
+            <label for="speciesSettingsOpen" class="cursor-pointer">Custom Species Configuration</label>
+            <div class="ml-2" x-show="hasChanges" x-cloak>
+                <span class="badge badge-primary badge-sm changed-badge">
+                    <span class="text-xs mb-0.5">changed</span>
+                </span>
             </div>
+        </div>
+        <!-- short descripton of this section -->
+        <p class="text-sm text-gray-500">Species specific threshold values and actions</p>
+    </div>    
+
+    <div class="collapse-content">
+        <!-- Custom Species Configuration section -->                
+        <div class="form-control relative">
 
             <!-- Custom configuration list -->
             <div class="space-y-2">
                 <!-- Header -->
-                <div class="flex bg-gray-100 p-2 rounded-md">
+                <div class="flex bg-base-100 p-2 rounded-md">
                     <div class="flex-grow text-sm font-medium">Species</div>
                     <div class="w-24 text-sm font-medium">Threshold</div>
                     <div class="w-20 text-sm font-medium text-center">Actions</div>
@@ -344,7 +337,8 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
                 
                 <!-- List items -->
                 <template x-for="(config, species) in speciesSettings.Config" :key="species">
-                    <div class="flex items-center bg-gray-50 p-2 rounded-md">
+                    <div class="flex items-center space-x-2 p-2 rounded-md" 
+                        style="background-color: var(--surface-300); border: 1px solid var(--border-100);">
                         <div class="flex-grow text-sm pl-2" x-text="species"></div>
                         <div class="w-24 text-sm px-3" x-text="config.Threshold.toFixed(2)"></div>
                         <div class="w-20 text-center">
@@ -413,7 +407,7 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
                            x-model="currentAction.command" 
                            class="input input-bordered w-full mt-1" 
                            placeholder="/path/to/your/command">
-                    <p class="text-sm text-gray-500 mt-1">Provide the full path to the command you want to execute</p>
+                    <p class="text-sm text-base-content mt-1">Provide the full path to the command you want to execute</p>
                 </div>
 
                 <div class="mb-4">
@@ -423,12 +417,12 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
                            class="input input-bordered w-full mt-1" 
                            placeholder="Parameters will appear here"
                            readonly>
-                    <p class="text-sm text-gray-500 mt-1">Click parameters below to add them to your command</p>
+                    <p class="text-sm text-base-content mt-1">Click parameters below to add them to your command</p>
                 </div>
 
                 <div class="mb-4">
                     <label class="block text-sm font-medium">Available Parameters</label>
-                    <p class="text-sm text-gray-500 mb-2">Click to add parameters to your script:</p>
+                    <p class="text-sm text-base-content mb-2">Click to add parameters to your script:</p>
                     <div class="flex flex-wrap gap-2">
                         <button type="button" 
                                 @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',CommonName' : 'CommonName'" 
@@ -451,7 +445,7 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
                                 @click.prevent="currentAction.parameters = ''" 
                                 class="btn btn-xs btn-warning">Clear Parameters</button>
                     </div>
-                    <p class="text-sm text-gray-500 mt-2">Parameters will be passed to your script in the order they are added</p>
+                    <p class="text-sm text-base-content mt-2">Parameters will be passed to your script in the order they are added</p>
                 </div>
                 
                 <div class="modal-action">
