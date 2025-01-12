@@ -65,9 +65,22 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		return h.NewHandlerError(err, "Error updating settings", http.StatusInternalServerError)
 	}
 
+	// Check if BirdNET settings have changed
+	if birdnetSettingsChanged(oldSettings, *settings) {
+		h.SSE.SendNotification(Notification{
+			Message: "Reloading BirdNET model...",
+			Type:    "info",
+		})
+
+		h.controlChan <- "reload_birdnet"
+	}
+
 	// Check if range filter related settings have changed
 	if rangeFilterSettingsChanged(oldSettings, *settings) {
-		//log.Println("Range filter settings changed, sending reload signal")
+		h.SSE.SendNotification(Notification{
+			Message: "Rebuilding range filter...",
+			Type:    "info",
+		})
 		h.controlChan <- "rebuild_range_filter"
 	}
 
@@ -75,8 +88,7 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 	h.updateAuthenticationSettings(settings)
 
 	// Check if audio equalizer settings have changed
-	if equalizerSettingsChanged(settings.Realtime.Audio.Equalizer, settings.Realtime.Audio.Equalizer) {
-		//log.Println("Debug (SaveSettings): Equalizer settings changed, reloading audio filters")
+	if equalizerSettingsChanged(oldSettings.Realtime.Audio.Equalizer, settings.Realtime.Audio.Equalizer) {
 		if err := myaudio.UpdateFilterChain(settings); err != nil {
 			h.SSE.SendNotification(Notification{
 				Message: fmt.Sprintf("Error updating audio EQ filters: %v", err),
@@ -88,7 +100,6 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 
 	// Save settings to YAML file
 	if err := conf.SaveSettings(); err != nil {
-		// Send error notification if saving settings fails
 		h.SSE.SendNotification(Notification{
 			Message: fmt.Sprintf("Error saving settings: %v", err),
 			Type:    "error",
@@ -571,6 +582,45 @@ func rangeFilterSettingsChanged(oldSettings, currentSettings conf.Settings) bool
 		return true
 	}
 	if !reflect.DeepEqual(oldSettings.Realtime.Species.Exclude, currentSettings.Realtime.Species.Exclude) {
+		return true
+	}
+
+	// Check for changes in BirdNET range filter settings
+	if !reflect.DeepEqual(oldSettings.BirdNET.RangeFilter, currentSettings.BirdNET.RangeFilter) {
+		return true
+	}
+
+	// Check for changes in BirdNET latitude and longitude
+	if oldSettings.BirdNET.Latitude != currentSettings.BirdNET.Latitude || oldSettings.BirdNET.Longitude != currentSettings.BirdNET.Longitude {
+		return true
+	}
+
+	return false
+}
+
+func birdnetSettingsChanged(oldSettings, currentSettings conf.Settings) bool {
+	// Check for changes in BirdNET locale
+	if oldSettings.BirdNET.Locale != currentSettings.BirdNET.Locale {
+		return true
+	}
+
+	// Check for changes in BirdNET threads
+	if oldSettings.BirdNET.Threads != currentSettings.BirdNET.Threads {
+		return true
+	}
+
+	// Check for changes in BirdNET model path
+	if oldSettings.BirdNET.ModelPath != currentSettings.BirdNET.ModelPath {
+		return true
+	}
+
+	// Check for changes in BirdNET label path
+	if oldSettings.BirdNET.LabelPath != currentSettings.BirdNET.LabelPath {
+		return true
+	}
+
+	// Check for changes in BirdNET XNNPACK acceleration
+	if oldSettings.BirdNET.UseXNNPACK != currentSettings.BirdNET.UseXNNPACK {
 		return true
 	}
 
