@@ -29,16 +29,13 @@ func (s *Settings) GetIncludedSpecies() []string {
 }
 
 // IsSpeciesIncluded checks if a given scientific name matches the scientific name part of any included species
-func (s *Settings) IsSpeciesIncluded(scientificName string) bool {
+func (s *Settings) IsSpeciesIncluded(result string) bool {
 	speciesListMutex.RLock()
 	defer speciesListMutex.RUnlock()
 
-	// Add underscore to the scientific name to prevent partial matches
-	searchTerm := scientificName + "_"
-
 	for _, fullSpeciesString := range s.BirdNET.RangeFilter.Species {
 		// Check if the full species string starts with our search term
-		if strings.HasPrefix(fullSpeciesString, searchTerm) {
+		if strings.HasPrefix(fullSpeciesString, result) {
 			return true
 		}
 	}
