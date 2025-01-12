@@ -19,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
+	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"github.com/tphakala/birdnet-go/internal/weather"
@@ -28,7 +29,7 @@ import (
 var audioLevelChan = make(chan myaudio.AudioLevelData, 100)
 
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
-func RealtimeAnalysis(settings *conf.Settings) error {
+func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
 	// Initialize BirdNET interpreter
 	if err := initializeBirdNET(settings); err != nil {
 		return err
@@ -153,7 +154,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	startTelemetryEndpoint(&wg, settings, metrics, quitChan)
 
 	// start control monitor for hot reloads
-	startControlMonitor(&wg, controlChan, quitChan)
+	startControlMonitor(&wg, controlChan, quitChan, notificationChan)
 
 	// start quit signal monitor
 	monitorCtrlC(quitChan)
@@ -327,7 +328,7 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 }
 
 // startControlMonitor handles various control signals for realtime analysis mode
-func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan chan struct{}) {
+func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan chan struct{}, notificationChan chan handlers.Notification) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -338,8 +339,44 @@ func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan c
 				case "rebuild_range_filter":
 					if err := birdnet.BuildRangeFilter(bn); err != nil {
 						log.Printf("\033[31m❌ Error handling range filter rebuild: %v\033[0m", err)
+						notificationChan <- handlers.Notification{
+							Message: fmt.Sprintf("Failed to rebuild range filter: %v", err),
+							Type:    "error",
+						}
 					} else {
 						log.Printf("\033[32m🔄 Range filter rebuilt successfully\033[0m")
+						notificationChan <- handlers.Notification{
+							Message: "Range filter rebuilt successfully",
+							Type:    "success",
+						}
+					}
+				case "reload_birdnet":
+					if err := bn.ReloadModel(); err != nil {
+						log.Printf("\033[31m❌ Error reloading BirdNET model: %v\033[0m", err)
+						notificationChan <- handlers.Notification{
+							Message: fmt.Sprintf("Failed to reload BirdNET model: %v", err),
+							Type:    "error",
+						}
+					} else {
+						log.Printf("\033[32m✅ BirdNET model reloaded successfully\033[0m")
+						notificationChan <- handlers.Notification{
+							Message: "BirdNET model reloaded successfully",
+							Type:    "success",
+						}
+						// Rebuild range filter after model reload
+						if err := birdnet.BuildRangeFilter(bn); err != nil {
+							log.Printf("\033[31m❌ Error rebuilding range filter after model reload: %v\033[0m", err)
+							notificationChan <- handlers.Notification{
+								Message: fmt.Sprintf("Failed to rebuild range filter: %v", err),
+								Type:    "error",
+							}
+						} else {
+							log.Printf("\033[32m✅ Range filter rebuilt successfully\033[0m")
+							notificationChan <- handlers.Notification{
+								Message: "Range filter rebuilt successfully",
+								Type:    "success",
+							}
+						}
 					}
 				default:
 					log.Printf("Received unknown control signal: %v", signal)
