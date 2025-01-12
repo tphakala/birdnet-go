@@ -70,8 +70,7 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
             <!-- Include species list -->
             <div class="space-y-2">
                 <template x-for="(species, index) in speciesSettings.Include" :key="index">
-                    <div class="flex items-center space-x-2 p-2 rounded-md" 
-                        style="background-color: var(--surface-300); border: 1px solid var(--border-100);">
+                    <div class="settings-list-item">
                         <div class="flex-grow">
                             <span x-text="species" class="text-sm"></span>
                         </div>
@@ -168,8 +167,7 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
             <!-- Exclude species list -->
             <div class="space-y-2">
                 <template x-for="(species, index) in speciesSettings.Exclude" :key="index">
-                    <div class="flex items-center space-x-2 p-2 rounded-md" 
-                        style="background-color: var(--surface-300); border: 1px solid var(--border-100);">
+                    <div class="settings-list-item">
                         <div class="flex-grow">
                             <span x-text="species" class="text-sm"></span>
                         </div>
@@ -337,8 +335,7 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
                 
                 <!-- List items -->
                 <template x-for="(config, species) in speciesSettings.Config" :key="species">
-                    <div class="flex items-center space-x-2 p-2 rounded-md" 
-                        style="background-color: var(--surface-300); border: 1px solid var(--border-100);">
+                    <div class="settings-list-item">
                         <div class="flex-grow text-sm pl-2" x-text="species"></div>
                         <div class="w-24 text-sm px-3" x-text="config.Threshold.toFixed(2)"></div>
                         <div class="w-20 text-center">

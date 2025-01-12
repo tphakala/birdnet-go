@@ -205,8 +205,7 @@ x-init="
 
             <div class="space-y-2">
                 <template x-for="(species, index) in dogBarkFilter.species" :key="index">
-                    <div class="flex items-center space-x-2 p-2 rounded-md" 
-                        style="background-color: var(--surface-300); border: 1px solid var(--border-100);">
+                    <div class="settings-list-item">
                         <div class="flex-grow">
                             <span x-show="editIndex !== index" 
                                   @click="startEdit(index)" 
@@ -228,7 +227,7 @@ x-init="
                                         class="btn btn-xs">Cancel</button>
                                 <button type="button" @click="removeSpecies(index)" 
                                         class="btn btn-xs">Remove</button>
-                              </div>
+                            </div>
                         </div>
                     </div>
                 </template>
