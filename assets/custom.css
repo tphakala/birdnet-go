@@ -521,12 +521,12 @@ thead.sticky-header {
     transition: transform 0.2s ease-in-out;
 }
 
-/* Style date input calendar icon for dark mode */
-[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1);
+/* Style date input calendar icon for light mode */
+[data-theme="light"] input[type="date"] {
+  color-scheme: light;
 }
 
-/* For Firefox */
+/* Style date input calendar icon for dark mode */
 [data-theme="dark"] input[type="date"] {
   color-scheme: dark;
 }
