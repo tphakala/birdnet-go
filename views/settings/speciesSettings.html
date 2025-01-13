@@ -5,7 +5,7 @@
 
 <!-- First div - Include Species -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
-x-data="{ 
+x-data="{
     speciesSettings: {
         Include: {{if .Settings.Realtime.Species.Include}}{{.Settings.Realtime.Species.Include | toJSON}}{{else}}[]{{end}},
     },
@@ -48,7 +48,8 @@ x-data="{
             .slice(0, 5);
     },
 }" 
-x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });">
+x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
+x-cloak>
     <input type="checkbox" id="speciesSettingsOpen" x-on:change="speciesSettingsOpen = !speciesSettingsOpen" />
     <div class="collapse-title settings-section-header">
         <div class="flex items-center">
@@ -142,7 +143,8 @@ x-data="{
             .slice(0, 5);
     },
 }" 
-x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });">
+x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
+x-cloak>
     <input type="checkbox" id="speciesSettingsOpen" x-on:change="speciesSettingsOpen = !speciesSettingsOpen" />
     <div class="collapse-title text-xl font-medium">
         <div class="flex items-center">
@@ -301,7 +303,8 @@ x-data="{
             .slice(0, 5);
     },
 }" 
-x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });">
+x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
+x-cloak>
     <input type="checkbox" id="speciesSettingsOpen" x-on:change="speciesSettingsOpen = !speciesSettingsOpen" />
     <div class="collapse-title text-xl font-medium">
         <div class="flex items-center">

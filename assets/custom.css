@@ -512,3 +512,8 @@ thead.sticky-header {
     font-size: 0.875rem;
     margin-top: 0.25rem;
 }
+
+/* Theme toggle */
+.swap-rotate {
+    transition: transform 0.2s ease-in-out;
+}
