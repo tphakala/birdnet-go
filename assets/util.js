@@ -43,19 +43,17 @@ function initializeDatePicker() {
 		return `${year}-${month}-${day}`;
 	}
 
-	const today = getIsoDateString(new Date()); // ensures consistent 'YYYY-MM-DD' format
-	
-	// Set the value first
+	const today = getIsoDateString(new Date());
 	const newValue = hashDate || today;
 	
-	// Only trigger change if the picker is invisible (first load)
-	// or if the value has actually changed
-	if (picker.classList.contains('invisible') || picker.value !== newValue) {
+	// Only trigger change if the value is actually different
+	if (picker.value !== newValue) {
 		picker.value = newValue;
-		picker.classList.remove('invisible'); // Make picker visible
+		picker.classList.remove('invisible');
 		htmx.trigger(picker, 'change');
-	} else {
-		picker.classList.remove('invisible'); // Make picker visible
+	} else if (!document.getElementById('topBirdsChart').children.length) {
+		// If the value hasn't changed but the chart is empty, trigger the change
+		htmx.trigger(picker, 'change');
 	}
 }
 
