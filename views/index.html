@@ -68,20 +68,6 @@
 	<!-- Login form in a DaisyUI modal -->
 	<dialog id="loginModal" class="modal modal-bottom sm:modal-middle"></dialog>
 	<script>
-		// Initialize date picker with either the date from URL hash or today's date
-		document.addEventListener('htmx:afterSettle', function () {
-			var datePicker = document.getElementById('datePicker');
-
-			if (datePicker && isLocationDashboard()) {
-				var dateInHash = window.location.hash.substring(1);
-				var date = dateInHash ? dateInHash : new Date().toLocaleDateString('sv');
-				if (datePicker.value !== date) {
-					datePicker.value = date;
-					datePicker.classList.remove('invisible');
-					htmx.trigger(datePicker, 'change');
-				}
-			}
-		}); // ensure the DOM is fully loaded
 
 		// Function to set theme
 		function setTheme(themeName) {

@@ -36,11 +36,14 @@ function initializeDatePicker() {
 	const hashDate = window.location.hash.substring(1);
 	const today = new Date().toLocaleDateString('sv'); // 'sv' locale gives YYYY-MM-DD format
 	
-	picker.value = hashDate || today;
-	picker.classList.remove('invisible'); // Make picker visible
-	
-	// Trigger the change event to load initial data
-	picker.dispatchEvent(new Event('change'));
+	// Only set value and trigger change if the value is actually different
+	if (picker.value !== (hashDate || today)) {
+		picker.value = hashDate || today;
+		picker.classList.remove('invisible'); // Make picker visible
+		picker.dispatchEvent(new Event('change'));
+	} else {
+		picker.classList.remove('invisible'); // Make picker visible
+	}
 }
 
 htmx.on('htmx:afterSettle', function (event) {
