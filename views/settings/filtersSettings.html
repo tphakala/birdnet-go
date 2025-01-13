@@ -40,29 +40,34 @@ x-init="
         <!-- Privacy Filter Settings -->
         <div class="text-lg font-medium pb-2">Privacy</div>
 
+        <!-- Privacy Filter Enabled -->
         <div class="form-control relative">
             <label class="label justify-start" for="privacyFilterEnabled">
                 <input type="checkbox" id="privacyFilterEnabled" name="realtime.privacyfilter.enabled" x-model="privacyFilter.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
                 <input type="hidden" name="realtime.privacyfilter.enabled" value="false">
                 <span class="label-text">Enable Privacy Filtering</span>
-                <span class="help-" @mouseenter="showTooltip = 'privacyFilter'" @mouseleave="showTooltip = null">ⓘ</span>
+                <span class="help-icon" @mouseenter="showTooltip = 'privacyFilter'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
             <div x-show="showTooltip === 'privacyFilter'" x-cloak class="tooltip">
                 Enables detection of human voices, if detected discards bird detection to protect privacy
             </div>
         </div>
 
+        <!-- Privacy Filter Settings -->
         <div x-show="privacyFilter.enabled" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <!-- Privacy Filter Confidence -->
             <div class="form-control relative">
                 <label class="label justify-start" for="privacyFilterConfidence">
                     <span class="label-text">Confidence Threshold for Human Detection</span>
-                    <span class="help-" @mouseenter="showTooltip = 'privacyConfidence'" @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'privacyConfidence'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="number" id="privacyFilterConfidence" name="realtime.privacyFilter.confidence" x-model="privacyFilter.confidence" step="0.01" min="0" max="1" class="input input-bordered input-sm w-full mb-4">
                 <div x-show="showTooltip === 'privacyConfidence'" x-cloak class="tooltip">
                     Set the confidence level for human voice detection, lower value makes filter more sensitive
                 </div>
             </div>
+
         </div>
 
     </div>
@@ -164,13 +169,13 @@ x-init="
         </div>
 
         <!-- Dog Bark Filter Settings -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6" x-show="dogBarkFilter.enabled">
+        <div x-show="dogBarkFilter.enabled" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <!-- Dog Bark Filter Confidence Threshold -->
             <div class="form-control relative">
-                <label class="label-text">
-                    Confidence Threshold
-                    <span class="help-icon"
-                          @mouseenter="showTooltip = 'dogBarkConfidence'"
-                          @mouseleave="showTooltip = null">ⓘ</span>
+                <label class="label justify-start" for="dogBarkFilterConfidence">
+                    <span class="label-text">Confidence Threshold</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'dogBarkConfidence'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="number" id="dogBarkFilterConfidence" name="realtime.dogbarkfilter.confidence"
                        x-model="dogBarkFilter.confidence" step="0.01" min="0" max="1" class="input input-bordered input-sm w-full">
@@ -181,17 +186,16 @@ x-init="
 
             <!-- Dog Bark Expire Time (Minutes) -->
             <div class="form-control relative">
-                <label class="label-text">
-                    Dog Bark Expire Time (Minutes)
-                    <span class="help-"
-                          @mouseenter="showTooltip = 'dogBarkExpire'"
-                          @mouseleave="showTooltip = null">ⓘ</span>
+                <label class="label justify-start" for="dogBarkFilterRemember">
+                    <span class="label-text">Dog Bark Expire Time (Minutes)</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'dogBarkExpire'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="number" x-model="dogBarkFilter.remember" min="0" class="input input-bordered input-sm w-full" />
                 <div x-show="showTooltip === 'dogBarkExpire'" x-cloak class="tooltip">
                     Set how long to remember a detected dog bark
                 </div>
             </div>
+            
         </div>
 
         <!-- Dog Bark Species List -->
