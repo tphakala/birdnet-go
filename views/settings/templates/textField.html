@@ -14,7 +14,7 @@
     <!-- Label -->
     <label class="label justify-start" for="{{.id}}">
         <span class="label-text capitalize">{{.label}}</span>
-        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = '{{.id}}'"
+        <span class="help-icon" @mouseenter="showTooltip = '{{.id}}'"
             @mouseleave="showTooltip = null">ⓘ</span>
     </label>
     {{end}}
@@ -47,7 +47,7 @@
 
     <!-- Tooltip -->
     <div x-show="showTooltip === '{{.id}}'" x-cloak
-        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md">
+        class="tooltip">
         {{.tooltip}}
     </div>
 </div>

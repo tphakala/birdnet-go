@@ -1,5 +1,5 @@
 {{define "sidebar"}}
-<aside class="drawer-side z-10" x-data="{
+<aside class="drawer-side z-10" role="complementary" aria-label="Main navigation" x-data="{
     currentRoute: window.location.pathname,
     isRouteActive(route) {
         return this.currentRoute.startsWith(route);
@@ -12,13 +12,11 @@
         currentRoute = window.location.pathname;
     });
 ">
-    <label for="my-drawer" class="drawer-overlay"></label>
-    <!-- sidebar menu -->
-    <nav
-        class="flex flex-col h-[100dvh] w-64 bg-base-100 absolute inset-y-0 sm:static sm:h-full overflow-y-auto p-4">
+    <label for="my-drawer" class="drawer-overlay" aria-label="Close sidebar"></label>
+    <nav class="flex flex-col h-[100dvh] w-64 bg-base-100 absolute inset-y-0 sm:static sm:h-full overflow-y-auto p-4" role="navigation">
         {{/* Header */}}
         <div class="flex-none p-4">
-            <a href="/" class="flex items-center gap-2 font-black text-2xl">
+            <a href="/" class="flex items-center gap-2 font-black text-2xl" aria-label="BirdNET-Go Home">
                 BirdNET-Go
                 <img src="/assets/images/logo.png" alt="BirdNET-Go Logo" class="absolute h-10 w-10 right-5 mr-2">
             </a>
@@ -26,27 +24,22 @@
 
         {{/* Scrollable menu section */}}
         <div class="flex-1 overflow-y-auto px-4">
-            <ul class="menu menu-md">
-                <li>
-                    <a href="/" :class="['flex items-center gap-2', { 'active': isExactRouteActive('/') }]">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
-                            <path fill-rule="evenodd"
-                                d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"
-                                clip-rule="evenodd" />
+            <ul class="menu menu-md" role="menubar">
+                <li role="none">
+                    <a href="/" :class="['flex items-center gap-2', { 'active': isExactRouteActive('/') }]" role="menuitem">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clip-rule="evenodd" />
                         </svg>
-                        Dashboard
+                        <span>Dashboard</span>
                     </a>
                 </li>
-                {{/* Other menu items */}}
-                <li>
-                    <a href="/stats" :class="{ 'active': isRouteActive('/stats') }">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
-                            <path
-                                d="M12 9a1 1 0 0 1-1-1V3c0-.552.45-1.007.997-.93a7.004 7.004 0 0 1 5.933 5.933c.078.547-.378.997-.93.997h-5Z" />
-                            <path
-                                d="M8.003 4.07C8.55 3.994 9 4.449 9 5v5a1 1 0 0 0 1 1h5c.552 0 1.008.45.93.997A7.001 7.001 0 0 1 2 11a7.002 7.002 0 0 1 6.003-6.93Z" />
+                <li role="none">
+                    <a href="/stats" :class="{ 'active': isRouteActive('/stats') }" role="menuitem">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5" aria-hidden="true">
+                            <path d="M12 9a1 1 0 0 1-1-1V3c0-.552.45-1.007.997-.93a7.004 7.004 0 0 1 5.933 5.933c.078.547-.378.997-.93.997h-5Z" />
+                            <path d="M8.003 4.07C8.55 3.994 9 4.449 9 5v5a1 1 0 0 0 1 1h5c.552 0 1.008.45.93.997A7.001 7.001 0 0 1 2 11a7.002 7.002 0 0 1 6.003-6.93Z" />
                         </svg>
-                        Stats
+                        <span>Stats</span>
                     </a>
                 </li>
 
@@ -60,35 +53,21 @@
             </li>-->
 
                 {{if or (not .Security.Enabled) .Security.AccessAllowed}}
-                <li>
-                    <details :open="isRouteActive('/settings')">
-                        <summary class="flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-                                class="w-5 h-5">
-                                <path
-                                    d="M17 2.75a.75.75 0 0 0-1.5 0v5.5a.75.75 0 0 0 1.5 0v-5.5ZM17 15.75a.75.75 0 0 0-1.5 0v1.5a.75.75 0 0 0 1.5 0v-1.5ZM3.75 15a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5a.75.75 0 0 1 .75-.75ZM4.5 2.75a.75.75 0 0 0-1.5 0v5.5a.75.75 0 0 0 1.5 0v-5.5ZM10 11a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5A.75.75 0 0 1 10 11ZM10.75 2.75a.75.75 0 0 0-1.5 0v1.5a.75.75 0 0 0 1.5 0v-1.5ZM10 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM3.75 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM16.25 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" />
+                <li role="none">
+                    <details :open="isRouteActive('/settings')" role="group">
+                        <summary class="flex items-center gap-2" role="menuitem" aria-haspopup="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5" aria-hidden="true">
+                                <path d="M17 2.75a.75.75 0 0 0-1.5 0v5.5a.75.75 0 0 0 1.5 0v-5.5ZM17 15.75a.75.75 0 0 0-1.5 0v1.5a.75.75 0 0 0 1.5 0v-1.5ZM3.75 15a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5a.75.75 0 0 1 .75-.75ZM4.5 2.75a.75.75 0 0 0-1.5 0v5.5a.75.75 0 0 0 1.5 0v-5.5ZM10 11a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5A.75.75 0 0 1 10 11ZM10.75 2.75a.75.75 0 0 0-1.5 0v1.5a.75.75 0 0 0 1.5 0v-1.5ZM10 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM3.75 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM16.25 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" />
                             </svg>
-                            Settings
+                            <span>Settings</span>
                         </summary>
-                        <ul>
-                            <li><a href="/settings/main"
-                                    :class="{ 'active': isExactRouteActive('/settings/main') }">Main</a></li>
-                            <li><a href="/settings/audio"
-                                    :class="{ 'active': isExactRouteActive('/settings/audio') }">Audio
-                                    Capture</a></li>
-                            <li><a href="/settings/detectionfilters"
-                                    :class="{ 'active': isRouteActive('/settings/detectionfilters') }">Detection
-                                    Filters</a>
-                            </li>
-                            <li><a href="/settings/integrations"
-                                    :class="{ 'active': isExactRouteActive('/settings/integrations') }">Integrations</a>
-                            </li>
-                            <li><a href="/settings/security"
-                                    :class="{ 'active': isExactRouteActive('/settings/security') }">Security</a>
-                            </li>
-                            <li><a href="/settings/species"
-                                    :class="{ 'active': isExactRouteActive('/settings/species') }">Species</a>
-                            </li>
+                        <ul role="menu" aria-label="Settings submenu">
+                            <li role="none"><a href="/settings/main" :class="{ 'active': isExactRouteActive('/settings/main') }" role="menuitem">Main</a></li>
+                            <li role="none"><a href="/settings/audio" :class="{ 'active': isExactRouteActive('/settings/audio') }" role="menuitem">Audio Capture</a></li>
+                            <li role="none"><a href="/settings/detectionfilters" :class="{ 'active': isRouteActive('/settings/detectionfilters') }" role="menuitem">Detection Filters</a></li>
+                            <li role="none"><a href="/settings/integrations" :class="{ 'active': isExactRouteActive('/settings/integrations') }" role="menuitem">Integrations</a></li>
+                            <li role="none"><a href="/settings/security" :class="{ 'active': isExactRouteActive('/settings/security') }" role="menuitem">Security</a></li>
+                            <li role="none"><a href="/settings/species" :class="{ 'active': isExactRouteActive('/settings/species') }" role="menuitem">Species</a></li>
                         </ul>
                     </details>
                 </li>
@@ -103,28 +82,28 @@
                 {{if .Security.AccessAllowed}}
                 {{/* Logout section */}}
                 <div class="flex flex-col gap-2">
-                    <button onclick="logout()" class="btn btn-sm justify-center w-full">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                            stroke="currentColor" class="size-6">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                    <button onclick="logout()" class="btn btn-sm justify-center w-full" aria-label="Logout">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
                         </svg>
-                        Logout
+                        <span>Logout</span>
                     </button>
                     {{if .Security.IsCloudflare}}
-                    <span class="text-sm italic text-gray-500 text-center">Signed in via Cloudflare</span>
+                    <span class="text-sm italic text-gray-500 text-center" role="status">Signed in via Cloudflare</span>
                     {{end}}
                 </div>
                 {{else}}
                 {{/* Login section */}}
-                <button class="btn btn-sm justify-center w-full" hx-trigger="click" hx-get="/login"
-                    hx-target="#loginModal" onclick="loginModal.showModal()">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                        stroke="currentColor" class="size-6">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                <button class="btn btn-sm justify-center w-full" 
+                        hx-trigger="click" 
+                        hx-get="/login" 
+                        hx-target="#loginModal" 
+                        onclick="loginModal.showModal()"
+                        aria-label="Open login modal">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
                     </svg>
-                    Login
+                    <span>Login</span>
                 </button>
                 {{end}}
                 {{end}}

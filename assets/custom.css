@@ -359,3 +359,171 @@ thead.sticky-header {
   background: linear-gradient(135deg, var(--heatmap-color-9) 66%, var(--heatmap-color-8) 110%);
   color: var(--heatmap-text-9, #fff);
 }
+
+/* Tooltip styling */
+.tooltip {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+  border-radius: 0.375rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  z-index: 50;
+  background-color: var(--surface-200);
+  border: 1px solid var(--border-100);
+  max-width: 36rem;
+  white-space: normal;
+}
+
+/* Add overflow handling for tooltip container */
+.form-control.relative {
+  overflow: visible;
+}
+
+.collapse-content {
+  overflow: visible !important;
+}
+
+/* List item styling */
+.settings-list-item {
+  background-color: var(--surface-300);
+  border: 1px solid var(--border-100);
+  border-radius: 0.375rem;
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.settings-list-item:hover {
+  background-color: var(--surface-400);
+}
+
+/* Settings Page Styling */
+.settings-section-header {
+    font-size: 1.25rem;
+    font-weight: 500;
+}
+
+.settings-section-description {
+    font-size: 0.875rem;
+    color: rgb(107, 114, 128);
+}
+
+.settings-changed-badge {
+    margin-left: 0.5rem;
+}
+
+.settings-changed-badge span.badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.settings-changed-badge span.badge span {
+    font-size: 0.75rem;
+    margin-bottom: 0.125rem;
+}
+
+.settings-form-group {
+    position: relative;
+    margin-top: 1rem;
+}
+
+.settings-form-group label {
+    display: block;
+    font-size: 0.875rem;
+}
+
+.help-icon {
+    margin-left: 0.5rem;  /* ml-2 */
+    font-size: 0.875rem;  /* text-sm */
+    color: rgb(107, 114, 128);  /* text-gray-500 */
+    cursor: help;
+}
+
+.settings-input-group {
+  display: flex;
+  align-items: center;
+  margin-top: 0.5rem;  /* mt-2 */
+}
+
+.settings-input-group input[type="text"] {
+  flex: 1;  /* w-full */
+  min-width: 0;  /* prevents flex item from overflowing */
+  height: 2rem;  /* input-sm height */
+  padding-left: 0.75rem;  /* input-sm padding */
+  padding-right: 0.75rem;  /* input-sm padding */
+  font-size: 0.875rem;  /* input-sm font size */
+  line-height: 2rem;  /* input-sm line-height */
+  border-radius: var(--rounded-btn, 0.5rem);  /* DaisyUI input border-radius */
+  border: 1px solid var(--fallback-bc,oklch(var(--bc)/0.2));  /* input-bordered */
+  background-color: var(--fallback-b1,oklch(var(--b1)/var(--tw-bg-opacity)));  /* DaisyUI input background */
+}
+
+.settings-input-group input[type="text"]:focus-visible {
+  outline: 1px solid transparent;
+  outline-offset: 0px;
+  box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
+}
+
+.settings-input-group button {
+  flex-shrink: 0;  /* prevent button from shrinking */
+  width: 5rem;  /* w-20 */
+  height: 2rem;  /* btn-sm height */
+  min-height: 2rem;  /* DaisyUI btn-sm min-height */
+  margin-left: 0.5rem;  /* ml-2 */
+  margin-right: 0.5rem;  /* mr-2 */
+  padding-left: 0.75rem;  /* btn-sm padding */
+  padding-right: 0.75rem;  /* btn-sm padding */
+  font-size: 0.875rem;  /* btn-sm font size */
+  line-height: 1.25rem;  /* btn-sm line-height */
+  font-weight: 600;  /* DaisyUI button default */
+  border-radius: var(--rounded-btn, 0.5rem);  /* DaisyUI button border-radius */
+  background-color: var(--fallback-p,oklch(var(--p)/1));  /* btn-primary */
+  color: var(--fallback-pc,oklch(var(--pc)/1));  /* btn-primary text color */
+  border: none;
+  cursor: pointer;
+}
+
+.settings-input-group button:hover {
+  background-color: color-mix(in oklab, var(--fallback-p,oklch(var(--p)/1)) 90%, black);  /* DaisyUI primary button hover */
+}
+
+.settings-modal-section {
+    margin-bottom: 1rem;
+}
+
+.settings-modal-section label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.settings-modal-section input,
+.settings-modal-section select {
+    width: 100%;
+    margin-top: 0.25rem;
+}
+
+.settings-modal-section .help-text {
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+/* Theme toggle */
+.swap-rotate {
+    transition: transform 0.2s ease-in-out;
+}
+
+/* Style date input calendar icon for dark mode */
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
+/* For Firefox */
+[data-theme="dark"] input[type="date"] {
+  color-scheme: dark;
+}
