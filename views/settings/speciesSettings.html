@@ -327,7 +327,7 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
                 <template x-for="(config, species) in speciesSettings.Config" :key="species">
                     <div class="settings-list-item">
                         <div class="flex-grow text-sm pl-2" x-text="species"></div>
-                        <div class="w-24 text-sm px-3" x-text="config.Threshold.toFixed(2)"></div>
+                        <div class="w-24 text-sm px-6" x-text="config.Threshold.toFixed(2)"></div>
                         <div class="w-20 text-center">
                             <button type="button" 
                                     @click.prevent="openActionsModal(species)" 
