@@ -50,22 +50,21 @@ x-data="{
 }" 
 x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });">
     <input type="checkbox" id="speciesSettingsOpen" x-on:change="speciesSettingsOpen = !speciesSettingsOpen" />
-    <div class="collapse-title text-xl font-medium">
+    <div class="collapse-title settings-section-header">
         <div class="flex items-center">
             <label for="speciesSettingsOpen" class="cursor-pointer">Always Include Species</label>
-            <div class="ml-2" x-show="hasChanges" x-cloak>
-                <span class="badge badge-primary badge-sm changed-badge">
-                    <span class="text-xs mb-0.5">changed</span>
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
+                <span class="badge">
+                    <span>changed</span>
                 </span>
             </div>
         </div>
-        <!-- short descripton of this section -->
-        <p class="text-sm text-gray-500">Species in this list will always be included in range of detected species</p>
+        <p class="settings-section-description">Species in this list will always be included in range of detected species</p>
     </div>
 
     <div class="collapse-content">
         
-        <div class="form-control relative">
+        <div class="settings-form-group">
 
             <!-- Include species list -->
             <div class="space-y-2">
@@ -83,19 +82,18 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
             </div>
 
             <!-- Include species input -->
-            <div class="flex items-center mt-2">
+            <div class="settings-input-group">
                 <input type="text" 
                        x-model="newIncludeSpecies" 
                        @input="updatePredictions(newIncludeSpecies, 'Include')" 
                        list="include-species-suggestions"
-                       placeholder="Add species to include" 
-                       class="input input-bordered input-sm w-full" />
+                       placeholder="Add species to include">
                 <datalist id="include-species-suggestions">
                     <template x-for="species in predictions" :key="species">
                         <option :value="species"></option>
                     </template>
                 </datalist>
-                <button type="button" @click="addSpecies('Include')" class="btn btn-sm btn-primary ml-2 mr-2 w-20">Add</button>
+                <button type="button" @click="addSpecies('Include')">Add</button>
             </div>
         </div>
         <input type="hidden" name="realtime.species.include" :value="JSON.stringify(speciesSettings.Include)">
@@ -180,19 +178,18 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
             </div>
 
             <!-- Exclude species input -->
-            <div class="flex items-center mt-2">
+            <div class="settings-input-group">
                 <input type="text" 
                        x-model="newExcludeSpecies" 
                        @input="updatePredictions(newExcludeSpecies, 'Exclude')" 
                        list="exclude-species-suggestions"
-                       placeholder="Add species to exclude" 
-                       class="input input-bordered input-sm w-full" />
+                       placeholder="Add species to exclude">
                 <datalist id="exclude-species-suggestions">
                     <template x-for="species in predictions" :key="species">
                         <option :value="species"></option>
                     </template>
                 </datalist>
-                <button type="button" @click="addSpecies('Exclude')" class="btn btn-sm btn-primary ml-2 mr-2 w-20">Add</button>
+                <button type="button" @click="addSpecies('Exclude')">Add</button>
             </div>
         </div>
         <input type="hidden" name="realtime.species.exclude" :value="JSON.stringify(speciesSettings.Exclude)">
@@ -325,13 +322,6 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
 
             <!-- Custom configuration list -->
             <div class="space-y-2">
-                <!-- Header -->
-                <div class="flex bg-base-100 p-2 rounded-md">
-                    <div class="flex-grow text-sm font-medium">Species</div>
-                    <div class="w-24 text-sm font-medium">Threshold</div>
-                    <div class="w-20 text-sm font-medium text-center">Actions</div>
-                    <div class="w-20 text-sm font-medium text-center"></div>
-                </div>
                 
                 <!-- List items -->
                 <template x-for="(config, species) in speciesSettings.Config" :key="species">
@@ -389,37 +379,37 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
             <div class="modal-box bg-base-100 max-h-[90vh] overflow-y-auto">
                 <h3 class="text-lg font-bold mb-4" x-text="'Actions for ' + currentSpecies"></h3>
                 
-                <div class="mb-4">
-                    <label class="block text-sm font-medium">Action Type</label>
+                <div class="settings-modal-section">
+                    <label>Action Type</label>
                     <select x-model="currentAction.type" 
-                            class="select select-bordered w-full mt-1" 
+                            class="select select-bordered" 
                             disabled>
                         <option value="ExecuteCommand">Execute Command</option>
                     </select>
                 </div>
                 
-                <div class="mb-4">
-                    <label class="block text-sm font-medium">Command</label>
+                <div class="settings-modal-section">
+                    <label>Command</label>
                     <input type="text" 
                            x-model="currentAction.command" 
-                           class="input input-bordered w-full mt-1" 
+                           class="input input-bordered" 
                            placeholder="/path/to/your/command">
-                    <p class="text-sm text-base-content mt-1">Provide the full path to the command you want to execute</p>
+                    <p class="help-text">Provide the full path to the command you want to execute</p>
                 </div>
 
-                <div class="mb-4">
-                    <label class="block text-sm font-medium">Parameters</label>
+                <div class="settings-modal-section">
+                    <label>Parameters</label>
                     <input type="text" 
                            x-model="currentAction.parameters" 
-                           class="input input-bordered w-full mt-1" 
+                           class="input input-bordered" 
                            placeholder="Parameters will appear here"
                            readonly>
-                    <p class="text-sm text-base-content mt-1">Click parameters below to add them to your command</p>
+                    <p class="help-text">Click parameters below to add them to your command</p>
                 </div>
 
-                <div class="mb-4">
-                    <label class="block text-sm font-medium">Available Parameters</label>
-                    <p class="text-sm text-base-content mb-2">Click to add parameters to your script:</p>
+                <div class="settings-modal-section">
+                    <label>Available Parameters</label>
+                    <p class="help-text mb-2">Click to add parameters to your script:</p>
                     <div class="flex flex-wrap gap-2">
                         <button type="button" 
                                 @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',CommonName' : 'CommonName'" 
@@ -442,7 +432,7 @@ x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true });"
                                 @click.prevent="currentAction.parameters = ''" 
                                 class="btn btn-xs btn-warning">Clear Parameters</button>
                     </div>
-                    <p class="text-sm text-base-content mt-2">Parameters will be passed to your script in the order they are added</p>
+                    <p class="help-text mt-2">Parameters will be passed to your script in the order they are added</p>
                 </div>
                 
                 <div class="modal-action">

@@ -100,17 +100,16 @@ x-init="
     <!-- control collapse element open state and label visibility -->
     <input type="checkbox" id="audioCaptureSettingsOpen" x-on:change="audioCaptureSettingsOpen = !audioCaptureSettingsOpen" />
 
-    <div class="collapse-title text-xl font-medium">
+    <div class="collapse-title settings-section-header">
         <div class="flex items-center">
             <label for="audioCaptureSettingsOpen" class="cursor-pointer">Audio Capture</label>
-            <div x-show="hasChanges" x-cloak class="ml-2">
-                <span class="badge badge-primary badge-sm changed-badge">
-                    <span class="text-xs mb-0.5">changed</span>
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
+                <span class="badge">
+                    <span>changed</span>
                 </span>
             </div>
         </div>
-        <!-- short descripton of this section -->
-        <p class="text-sm text-gray-500">Set audio capture source, sound card or RTSP stream</p>
+        <p class="settings-section-description">Set audio capture source, sound card or RTSP stream</p>
     </div>
 
     <div class="collapse-content">
@@ -120,13 +119,12 @@ x-init="
         <div class="form-control relative">
             <label class="label justify-start" for="audioSource">
                 <span class="label-text">Audio Source</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'audioSource'" @mouseleave="showTooltip = null">ⓘ</span>
+                <span class="help-icon" @mouseenter="showTooltip = 'audioSource'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <!--<input type="text" id="audioSource" name="realtime.audio.source" x-model="audioCapture.source" class="input input-bordered input-sm w-full" :disabled="audioCapture.rtsp.urls.length > 0">-->
             <select x-model="audioCapture.source"
-            name="realtime.audio.source"
-            class="select select-bordered select-sm w-full"
-            :disabled="audioCapture.rtsp.urls.length > 0">
+                    name="realtime.audio.source"
+                    class="select select-bordered select-sm w-full"
+                    :disabled="audioCapture.rtsp.urls.length > 0">
                 <option value="">Select an audio source</option>
                 <template x-for="device in audioDevices" :key="device.Index">
                     <option :value="device.Name" 
@@ -145,7 +143,7 @@ x-init="
         <div class="form-control relative">
             <label class="label justify-start" for="rtspTransport">
                 <span class="label-text">RTSP Transport Protocol</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'rtspTransport'" @mouseleave="showTooltip = null">ⓘ</span>
+                <span class="help-icon" @mouseenter="showTooltip = 'rtspTransport'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
             <select id="rtspTransport" name="realtime.rtsp.transport" x-model="audioCapture.rtsp.transport" class="select select-bordered select-sm w-full">
                 <option value="tcp">TCP</option>
@@ -160,7 +158,7 @@ x-init="
         <div class="form-control relative">
             <label class="label justify-start" for="rtspUrls">
                 <span class="label-text mt-2">RTSP Stream URLs</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'rtspUrls'" @mouseleave="showTooltip = null">ⓘ</span>
+                <span class="help-icon" @mouseenter="showTooltip = 'rtspUrls'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
         
             <template x-for="(url, index) in audioCapture.rtsp.urls" :key="index">
@@ -175,9 +173,9 @@ x-init="
             </div>
 
             <!-- Add new RTSP URL button -->
-            <div class="flex items-center mt-2">
-                <input type="text" x-model="newUrl" class="input input-bordered input-sm w-full mr-2" placeholder="Enter RTSP URL (rtsp://user:password@example.com/stream1)">
-                <button type="button" class="btn btn-primary btn-sm" @click="addUrl">Add</button>
+            <div class="settings-input-group">
+                <input type="text" x-model="newUrl" placeholder="Enter RTSP URL (rtsp://user:password@example.com/stream1)">
+                <button type="button" @click="addUrl">Add</button>
             </div>
 
             <!-- Hidden input to always submit the RTSP URLs, even when empty -->
@@ -193,7 +191,7 @@ x-init="
                 <input type="checkbox" id="audioFiltersEnabled" name="realtime.audio.equalizer.enabled" x-model="audioCapture.equalizer.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
                 <input type="hidden" name="realtime.audio.equalizer.enabled" value="false">
                 <span class="label-text">Enable Audio Equalizer</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'audioEqualizerEnabled'" @mouseleave="showTooltip = null">ⓘ</span>
+                <span class="help-icon" @mouseenter="showTooltip = 'audioEqualizerEnabled'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
             <div x-show="showTooltip === 'audioEqualizerEnabled'" x-cloak class="tooltip">
                 Enable or disable audio equalizer.
@@ -217,7 +215,7 @@ x-init="
                             <div class="flex flex-col items-end">
                                 <label class="label pt-0">
                                     <span class="label-text-alt" x-text="param.Label + (param.Unit ? ' (' + param.Unit + ')' : '')"></span>
-                                    <span class="ml-2 text-sm text-gray-500 cursor-help"
+                                    <span class="help-icon"
                                           @mouseenter="showTooltip = param.Tooltip"
                                           @mouseleave="showTooltip = null">ⓘ</span>
                                 </label>
@@ -279,7 +277,7 @@ x-init="
                             <div class="flex flex-col">
                                 <label class="label">
                                     <span class="label-text" x-text="param.Label + (param.Unit ? ' (' + param.Unit + ')' : '')"></span>
-                                    <span class="ml-2 text-sm text-gray-500 cursor-help"
+                                    <span class="help-icon"
                                           @mouseenter="showTooltip = param.Tooltip"
                                           @mouseleave="showTooltip = null">ⓘ</span>
                                 </label>
@@ -352,17 +350,16 @@ x-init="
          }
      ">
     <input type="checkbox" id="audioExportSettingsOpen" x-on:change="audioExportSettingsOpen = !audioExportSettingsOpen" />
-    <div class="collapse-title text-xl font-medium">
+    <div class="collapse-title settings-section-header">
         <div class="flex items-center">
             <label for="audioExportSettingsOpen" class="cursor-pointer">Audio Export</label>
-            <div x-show="hasChanges" x-cloak class="ml-2">
-                <span class="badge badge-primary badge-sm changed-badge">
-                    <span class="text-xs mb-0.5">changed</span>
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
+                <span class="badge">
+                    <span>changed</span>
                 </span>
             </div>
         </div>
-        <!-- short descripton of this section -->
-        <p class="text-sm text-gray-500">Configure audio clip saving for identified bird calls</p>
+        <p class="settings-section-description">Configure audio clip saving for identified bird calls</p>
     </div>
 
     <div class="collapse-content">
@@ -371,7 +368,7 @@ x-init="
                 <input type="checkbox" id="audioExportEnabled" name="realtime.audio.export.enabled" x-model="audioExport.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
                 <input type="hidden" name="realtime.audio.export.enabled" value="false">
                 <span class="label-text">Enable Audio Export</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'audioExportEnabled'" @mouseleave="showTooltip = null">ⓘ</span>
+                <span class="help-icon" @mouseenter="showTooltip = 'audioExportEnabled'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
             <div x-show="showTooltip === 'audioExportEnabled'" x-cloak class="tooltip">
                 Enable or disable audio export for identified bird calls.
@@ -384,7 +381,7 @@ x-init="
                     <input type="checkbox" id="audioExportDebug" name="realtime.audio.export.debug" x-model="audioExport.debug" class="checkbox checkbox-primary checkbox-xs mr-2">
                     <input type="hidden" name="realtime.audio.export.debug" value="false">
                     <span class="label-text">Enable Debug Mode</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'audioExportDebug'" @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'audioExportDebug'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <div x-show="showTooltip === 'audioExportDebug'" x-cloak class="tooltip">
                     Enable debug mode for audio export.
@@ -395,7 +392,7 @@ x-init="
                 <div class="form-control relative">
                     <label class="label justify-start" for="audioExportPath">
                         <span class="label-text">Export Path</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'audioExportPath'" @mouseleave="showTooltip = null">ⓘ</span>
+                        <span class="help-icon" @mouseenter="showTooltip = 'audioExportPath'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>
                     <input type="text" id="audioExportPath" name="realtime.audio.export.path" x-model="audioExport.path" class="input input-bordered input-sm w-full">
                     <div x-show="showTooltip === 'audioExportPath'" x-cloak class="tooltip">
@@ -403,10 +400,11 @@ x-init="
                     </div>
                 </div>
 
+                <!-- Export Type -->
                 <div class="form-control relative">
                     <label class="label justify-start" for="audioExportType">
                         <span class="label-text">Export Type</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'audioExportType'" @mouseleave="showTooltip = null">ⓘ</span>
+                        <span class="help-icon" @mouseenter="showTooltip = 'audioExportType'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>                  
                     <select id="audioExportType" name="realtime.audio.export.type" 
                             x-model="audioExport.type" 
@@ -423,10 +421,11 @@ x-init="
                     </div>
                 </div>
 
+                <!-- Bitrate -->
                 <div class="form-control relative">
                     <label class="label justify-start" for="audioExportBitrate">
                         <span class="label-text">Bitrate</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'audioExportBitrate'" @mouseleave="showTooltip = null">ⓘ</span>
+                        <span class="help-icon" @mouseenter="showTooltip = 'audioExportBitrate'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>
                     <input type="text" id="audioExportBitrate" name="realtime.audio.export.bitrate" 
                            x-model="audioExport.bitrate.endsWith('k') ? audioExport.bitrate : audioExport.bitrate + 'k'" 
@@ -466,27 +465,28 @@ x-init="
          $watch('audioRetention', (value) => { hasChanges = true }, { deep: true });
      ">
     <input type="checkbox" id="audioRetentionSettingsOpen" x-on:change="audioRetentionSettingsOpen = !audioRetentionSettingsOpen" />
-    <div class="collapse-title text-xl font-medium">
+    <div class="collapse-title settings-section-header">
         <div class="flex items-center">
             <label for="audioRetentionSettingsOpen" class="cursor-pointer">Audio Clip Retention</label>
-            <div x-show="hasChanges" x-cloak class="ml-2">
-                <span class="badge badge-primary badge-sm changed-badge">
-                    <span class="text-xs mb-0.5">changed</span>
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
+                <span class="badge">
+                    <span>changed</span>
                 </span>
             </div>
         </div>
-        <!-- short descripton of this section -->
-        <p class="text-sm text-gray-500">Configure audio clip cleanup</p>
+        <p class="settings-section-description">Configure audio clip cleanup</p>
     </div>
 
     <div class="collapse-content">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Retention Policy -->
             <div class="form-control relative">
                 <label class="label justify-start" for="audioRetentionPolicy">
                     <span class="label-text">Retention Policy</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'audioRetentionPolicy'" @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'audioRetentionPolicy'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
-                <select id="audioRetentionPolicy" name="realtime.audio.export.retention.policy" x-model="audioRetention.policy" class="select select-bordered select-sm w-full">
+                <select id="audioRetentionPolicy" name="realtime.audio.export.retention.policy" 
+                        x-model="audioRetention.policy" class="select select-bordered select-sm w-full">
                     <option value="none">None</option>
                     <option value="age">Age</option>
                     <option value="usage">Usage</option>
@@ -496,10 +496,11 @@ x-init="
                 </div>
             </div>
 
+            <!-- Max Age -->
             <div class="form-control relative" x-show="audioRetention.policy === 'age'">
                 <label class="label justify-start" for="audioRetentionMaxAge">
                     <span class="label-text">Max Age (h for hours, d for days, w for weeks, m for months, y for years)</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'audioRetentionMaxAge'" @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'audioRetentionMaxAge'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="text" id="audioRetentionMaxAge" name="realtime.audio.export.retention.maxage" x-model="audioRetention.maxage" class="input input-bordered input-sm w-full">
                 <div x-show="showTooltip === 'audioRetentionMaxAge'" x-cloak class="tooltip">
@@ -507,10 +508,11 @@ x-init="
                 </div>
             </div>
 
+            <!-- Max Usage -->
             <div class="form-control relative" x-show="audioRetention.policy === 'usage'">
                 <label class="label justify-start" for="audioRetentionMaxUsage">
                     <span class="label-text">Max Usage (percentage)</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'audioRetentionMaxUsage'" @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'audioRetentionMaxUsage'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="text" id="audioRetentionMaxUsage" name="realtime.audio.export.retention.maxusage" x-model="audioRetention.maxusage"
                 @input="if (!audioRetention.maxusage.endsWith('%') && !isNaN(audioRetention.maxusage)) audioRetention.maxusage += '%'"
@@ -521,10 +523,11 @@ x-init="
                 </div>
             </div>
 
+            <!-- Minimum Clips -->
             <div class="form-control relative" x-show="audioRetention.policy !== 'none'">
                 <label class="label justify-start" for="audioRetentionMinClips">
                     <span class="label-text">Minimum Clips</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'audioRetentionMinClips'" @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'audioRetentionMinClips'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="number" id="audioRetentionMinClips" name="realtime.audio.export.retention.minclips" x-model="audioRetention.minclips" min="1" class="input input-bordered input-sm w-full">
                 <div x-show="showTooltip === 'audioRetentionMinClips'" x-cloak class="tooltip">

@@ -29,17 +29,16 @@
     <input type="checkbox" id="birdweatherSettingsOpen"
         x-on:change="birdweatherSettingsOpen = !birdweatherSettingsOpen" />
 
-    <div class="collapse-title text-xl font-medium">
+    <div class="collapse-title settings-section-header">
         <div class="flex items-center">
             <label for="mainSettingsOpen" class="cursor-pointer">BirdWeather</label>
-            <div x-show="hasChanges" x-cloak class="ml-2">
-                <span class="badge badge-primary badge-sm changed-badge">
-                    <span class="text-xs mb-0.5">changed</span>
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
+                <span class="badge">
+                    <span>changed</span>
                 </span>
             </div>
         </div>
-        <!-- short descripton of this section -->
-        <p class="text-sm text-gray-500">Upload detections to BirdWeather</p>
+        <p class="settings-section-description">Upload detections to BirdWeather</p>
     </div>
 
     <!-- disabled for now
@@ -56,7 +55,7 @@
                     x-model="birdweather.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
                 <input type="hidden" name="realtime.birdweather.enabled" value="false">
                 <span class="label-text">Enable BirdWeather Uploads</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'birdweatherEnabled'"
+                <span class="help-icon" @mouseenter="showTooltip = 'birdweatherEnabled'"
                     @mouseleave="showTooltip = null">ⓘ</span>
             </label>
             <div x-show="showTooltip === 'birdweatherEnabled'" x-cloak class="tooltip">
@@ -72,7 +71,7 @@
                         x-model="birdweather.debug" class="checkbox checkbox-primary checkbox-xs mr-2">
                     <input type="hidden" name="realtime.birdweather.debug" value="false">
                     <span class="label-text">Debug Mode</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'birdweatherDebug'"
+                    <span class="help-icon" @mouseenter="showTooltip = 'birdweatherDebug'"
                         @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <div x-show="showTooltip === 'birdweatherDebug'" x-cloak class="tooltip">
@@ -81,17 +80,6 @@
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- div class="form-control relative">
-                    <label class="label justify-start" for="birdweatherId">
-                        <span class="label-text">BirdWeather token</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'birdweatherId'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <input type="password" id="birdweatherId" name="realtime.birdweather.id" x-model="birdweather.id" class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'birdweatherId'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                        Your unique BirdWeather token.
-                    </div>
-                </div -->
-
                 {{template "passwordField" dict
                 "id" "birdweatherId"
                 "model" "birdweather.id"
@@ -103,7 +91,7 @@
                 <div class="form-control relative">
                     <label class="label justify-start" for="birdweatherThreshold">
                         <span class="label-text">Upload Threshold</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help"
+                        <span class="help-icon"
                             @mouseenter="showTooltip = 'birdweatherThreshold'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>
                     <input type="number" id="birdweatherThreshold" name="realtime.birdweather.threshold"
@@ -142,17 +130,16 @@
     <!-- control collapse element open state and label visibility -->
     <input type="checkbox" id="mqttSettingsOpen" x-on:change="mqttSettingsOpen = !mqttSettingsOpen" />
 
-    <div class="collapse-title text-xl font-medium">
+    <div class="collapse-title settings-section-header">
         <div class="flex items-center">
             <label for="mqttSettingsOpen" class="cursor-pointer">MQTT</label>
-            <div x-show="hasChanges" x-cloak class="ml-2">
-                <span class="badge badge-primary badge-sm changed-badge">
-                    <span class="text-xs mb-0.5">changed</span>
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
+                <span class="badge">
+                    <span>changed</span>
                 </span>
             </div>
         </div>
-        <!-- short descripton of this section -->
-        <p class="text-sm text-gray-500">Push detections to a MQTT broker</p>
+        <p class="settings-section-description">Configure MQTT broker connection</p>
     </div>
 
     <!-- disabled for now
@@ -169,7 +156,7 @@
                     class="checkbox checkbox-primary checkbox-xs mr-2">
                 <input type="hidden" name="realtime.mqtt.enabled" value="false">
                 <span class="label-text">Enable MQTT Integration</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mqttEnabled'"
+                <span class="help-icon" @mouseenter="showTooltip = 'mqttEnabled'"
                     @mouseleave="showTooltip = null">ⓘ</span>
             </label>
             <div x-show="showTooltip === 'mqttEnabled'" x-cloak class="tooltip">
@@ -179,68 +166,62 @@
 
         <div x-show="mqtt.enabled">
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-                <div class="form-control relative">
-                    <label class="label justify-start" for="mqttBroker">
-                        <span class="label-text">Broker</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mqttBroker'"
-                            @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <input type="text" id="mqttBroker" name="realtime.mqtt.broker" x-model="mqtt.broker"
-                        class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'mqttBroker'" x-cloak class="tooltip">
-                        The MQTT broker URL (e.g., tcp://localhost:1883).
-                    </div>
+            <div class="settings-form-group">
+                <label class="justify-start" for="mqttBroker">
+                    <span class="label-text">MQTT Broker</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'mqttBroker'" @mouseleave="showTooltip = null">ⓘ</span>
+                </label>
+                <input type="text" id="mqttBroker" name="mqtt.broker" x-model="mqtt.broker" 
+                       class="input input-sm input-bordered w-full" placeholder="mqtt://localhost:1883">
+                <div x-show="showTooltip === 'mqttBroker'" x-cloak class="tooltip">
+                    MQTT broker URL (e.g., mqtt://localhost:1883)
                 </div>
-
-                <div class="form-control relative">
-                    <label class="label justify-start" for="mqttTopic">
-                        <span class="label-text">Topic</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mqttTopic'"
-                            @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <input type="text" id="mqttTopic" name="realtime.mqtt.topic" x-model="mqtt.topic"
-                        class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'mqttTopic'" x-cloak class="tooltip">
-                        The MQTT topic to publish messages to.
-                    </div>
-                </div>
-
-                <div class="form-control relative">
-                    <label class="label justify-start" for="mqttUsername">
-                        <span class="label-text">Username</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mqttUsername'"
-                            @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <input type="text" id="mqttUsername" name="realtime.mqtt.username" x-model="mqtt.username"
-                        class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'mqttUsername'" x-cloak class="tooltip">
-                        The MQTT username.
-                    </div>
-                </div>
-
-                <!--div class="form-control relative">
-                    <label class="label justify-start" for="mqttPassword">
-                        <span class="label-text">Password</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mqttPassword'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <input type="password" id="mqttPassword" name="realtime.mqtt.password" x-model="mqtt.password" class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'mqttPassword'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                        The MQTT password.
-                    </div>
-                </div -->
-
-                {{template "passwordField" dict
-                    "id" "mqttPassword"
-                    "model" "mqtt.password"
-                    "name" "realtime.mqtt.password"
-                    "label" "Password"
-                    "placeholder" ""
-                    "tooltip" "The MQTT password."
-                    }}
-
             </div>
+
+            <div class="settings-form-group">
+                <label class="justify-start" for="mqttTopic">
+                    <span class="label-text">MQTT Topic</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'mqttTopic'" @mouseleave="showTooltip = null">ⓘ</span>
+                </label>
+                <input type="text" id="mqttTopic" name="mqtt.topic" x-model="mqtt.topic" 
+                       class="input input-sm input-bordered w-full" placeholder="birdnet/detections">
+                <div x-show="showTooltip === 'mqttTopic'" x-cloak class="tooltip">
+                    MQTT topic to publish detections to
+                </div>
+            </div>
+
+            <div class="form-control relative">
+                <label class="label justify-start" for="mqttUsername">
+                    <span class="label-text">Username</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'mqttUsername'"
+                        @mouseleave="showTooltip = null">ⓘ</span>
+                </label>
+                <input type="text" id="mqttUsername" name="realtime.mqtt.username" x-model="mqtt.username"
+                    class="input input-bordered input-sm w-full">
+                <div x-show="showTooltip === 'mqttUsername'" x-cloak class="tooltip">
+                    The MQTT username.
+                </div>
+            </div>
+
+            <!--div class="form-control relative">
+                <label class="label justify-start" for="mqttPassword">
+                    <span class="label-text">Password</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'mqttPassword'" @mouseleave="showTooltip = null">ⓘ</span>
+                </label>
+                <input type="password" id="mqttPassword" name="realtime.mqtt.password" x-model="mqtt.password" class="input input-bordered input-sm w-full">
+                <div x-show="showTooltip === 'mqttPassword'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    The MQTT password.
+                </div>
+            </div -->
+
+            {{template "passwordField" dict
+                "id" "mqttPassword"
+                "model" "mqtt.password"
+                "name" "realtime.mqtt.password"
+                "label" "Password"
+                "placeholder" ""
+                "tooltip" "The MQTT password."
+                }}
 
         </div>
     </div>
@@ -266,17 +247,16 @@
     <!-- control collapse element open state and label visibility -->
     <input type="checkbox" id="telemetrySettingsOpen" x-on:change="telemetrySettingsOpen = !telemetrySettingsOpen" />
 
-    <div class="collapse-title text-xl font-medium">
+    <div class="collapse-title settings-section-header">
         <div class="flex items-center">
             <label for="telemetrySettingsOpen" class="cursor-pointer">Telemetry</label>
-            <div x-show="hasChanges" x-cloak class="ml-2">
-                <span class="badge badge-primary badge-sm changed-badge">
-                    <span class="text-xs mb-0.5">changed</span>
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
+                <span class="badge">
+                    <span>changed</span>
                 </span>
             </div>
         </div>
-        <!-- short descripton of this section -->
-        <p class="text-sm text-gray-500">Monitor BirdNET-Go's performance and bird detection metrics through
+        <p class="settings-section-description">Monitor BirdNET-Go's performance and bird detection metrics through
             Prometheus-compatible endpoint</p>
     </div>
 
@@ -294,7 +274,7 @@
                     x-model="telemetry.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
                 <input type="hidden" name="realtime.telemetry.enabled" value="false">
                 <span class="label-text">Enable Telemetry Integration</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'telemetryEnabled'"
+                <span class="help-icon" @mouseenter="showTooltip = 'telemetryEnabled'"
                     @mouseleave="showTooltip = null">ⓘ</span>
             </label>
             <div x-show="showTooltip === 'telemetryEnabled'" x-cloak class="tooltip">
@@ -309,7 +289,7 @@
                 <div class="form-control relative">
                     <label class="label justify-start" for="telemetryListen">
                         <span class="label-text">Listen Address</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help"
+                        <span class="help-icon"
                             @mouseenter="showTooltip = 'telemetryListen'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>
                     <input type="text" id="telemetryListen" name="realtime.telemetry.listen" x-model="telemetry.listen"
@@ -352,17 +332,16 @@
     <!-- control collapse element open state and label visibility -->
     <input type="checkbox" id="weatherSettingsOpen" x-on:change="weatherSettingsOpen = !weatherSettingsOpen" />
 
-    <div class="collapse-title text-xl font-medium">
+    <div class="collapse-title settings-section-header">
         <div class="flex items-center">
             <label for="weatherSettingsOpen" class="cursor-pointer">Weather</label>
-            <div x-show="hasChanges" x-cloak class="ml-2">
-                <span class="badge badge-primary badge-sm changed-badge">
-                    <span class="text-xs mb-0.5">changed</span>
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
+                <span class="badge">
+                    <span>changed</span>
                 </span>
             </div>
         </div>
-        <!-- short description of this section -->
-        <p class="text-sm text-gray-500">Configure weather data collection</p>
+        <p class="settings-section-description">Configure weather data collection</p>
     </div>
 
     <div class="collapse-content">
@@ -370,7 +349,7 @@
         <div class="form-control relative">
             <label class="label justify-start" for="weatherProvider">
                 <span class="label-text">Weather Provider</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'weatherProvider'" @mouseleave="showTooltip = null">ⓘ</span>
+                <span class="help-icon" @mouseenter="showTooltip = 'weatherProvider'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
             <select id="weatherProvider" name="realtime.weather.provider" x-model="weather.provider" class="select select-bordered select-sm w-full">
                 <option value="none">None</option>
@@ -418,7 +397,7 @@
                 <div class="form-control relative">
                     <label class="label justify-start" for="openWeatherEndpoint">
                         <span class="label-text">API Endpoint</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherEndpoint'" @mouseleave="showTooltip = null">ⓘ</span>
+                        <span class="help-icon" @mouseenter="showTooltip = 'openWeatherEndpoint'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>
                     <input type="text" id="openWeatherEndpoint" name="realtime.weather.openweather.endpoint" x-model="weather.openWeather.endpoint" class="input input-bordered input-sm w-full">
                     <div x-show="showTooltip === 'openWeatherEndpoint'" x-cloak class="tooltip">
@@ -429,7 +408,7 @@
                 <div class="form-control relative">
                     <label class="label justify-start" for="openWeatherUnits">
                         <span class="label-text">Units of Measurement</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherUnits'" @mouseleave="showTooltip = null">ⓘ</span>
+                        <span class="help-icon" @mouseenter="showTooltip = 'openWeatherUnits'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>
                     <select id="openWeatherUnits" name="realtime.weather.openweather.units" x-model="weather.openWeather.units" class="select select-bordered select-sm w-full">
                         <option value="standard">Standard</option>
@@ -444,7 +423,7 @@
                 <div class="form-control relative">
                     <label class="label justify-start" for="openWeatherLanguage">
                         <span class="label-text">Language</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'openWeatherLanguage'" @mouseleave="showTooltip = null">ⓘ</span>
+                        <span class="help-icon" @mouseenter="showTooltip = 'openWeatherLanguage'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>
                     <input type="text" id="openWeatherLanguage" name="realtime.weather.openweather.language" x-model="weather.openWeather.language" class="input input-bordered input-sm w-full">
                     <div x-show="showTooltip === 'openWeatherLanguage'" x-cloak class="tooltip">
