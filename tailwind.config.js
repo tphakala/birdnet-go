@@ -50,6 +50,7 @@ module.exports = {
           "success": "#22c55e",          // Success green
           "warning": "#f59e0b",          // Warning yellow
           "error": "#ef4444",            // Error red
+          "error-content": "#ffffff",    // White text for error buttons
           
           "--rounded-box": "0.5rem",     // Border radius for cards
           "--rounded-btn": "0.3rem",     // Border radius for buttons
@@ -64,7 +65,7 @@ module.exports = {
         },
         dark: {
           "primary": "#3b82f6",          // Bright blue for primary actions
-          "primary-content": "#000000",  // Pure white text for primary buttons
+          "primary-content": "#020617",  // Pure white text for primary buttons
           "secondary": "#6b7280",        // Medium gray for secondary elements
           "accent": "#0369a1",           // Darker sky blue for accents
           "neutral": "#d1d5db",          // Light gray for neutral text
@@ -84,6 +85,7 @@ module.exports = {
           "success": "#16a34a",          // Success green
           "warning": "#d97706",          // Warning yellow
           "error": "#dc2626",            // Error red
+          "error-content": "#020617",    // White text for error buttons
           
           "--rounded-box": "0.5rem",     // Border radius for cards
           "--rounded-btn": "0.3rem",     // Border radius for buttons
