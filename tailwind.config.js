@@ -30,6 +30,7 @@ module.exports = {
       {
         light: {
           "primary": "#2563eb",          // Blue for primary actions
+          "primary-content": "#ffffff",  // Pure white text for primary buttons
           "secondary": "#4b5563",        // Gray for secondary elements
           "accent": "#0284c7",           // Sky blue for accents
           "neutral": "#1f2937",          // Dark gray for neutral text
@@ -63,6 +64,7 @@ module.exports = {
         },
         dark: {
           "primary": "#3b82f6",          // Bright blue for primary actions
+          "primary-content": "#000000",  // Pure white text for primary buttons
           "secondary": "#6b7280",        // Medium gray for secondary elements
           "accent": "#0369a1",           // Darker sky blue for accents
           "neutral": "#d1d5db",          // Light gray for neutral text
@@ -77,7 +79,7 @@ module.exports = {
           "--border-100": "#334155",      // Primary border color
           "--border-200": "#475569",      // Secondary border color
           "--hover-overlay": "rgba(255,255,255,0.05)",  // Hover state overlay
-          
+
           "info": "#0284c7",             // Info blue
           "success": "#16a34a",          // Success green
           "warning": "#d97706",          // Warning yellow
