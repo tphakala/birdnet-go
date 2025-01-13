@@ -5,78 +5,91 @@
 
 <!-- First div - Include Species -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
-x-data="{
-    speciesSettings: {
-        Include: {{if .Settings.Realtime.Species.Include}}{{.Settings.Realtime.Species.Include | toJSON}}{{else}}[]{{end}},
-    },
-    newIncludeSpecies: '',
-    showTooltip: null,
-    hasChanges: false,
-    predictions: [],
-    allSpecies: {{getAllSpecies | toJSON}},
-    speciesSettingsOpen: false,
-    showActionsModal: false,
-    currentSpecies: '',
-    resetChanges() {
-        this.hasChanges = false;
-    },
-    addSpecies(list) {
-        const newSpecies = this['new' + list + 'Species'].trim();
-        if (newSpecies && !this.speciesSettings[list].includes(newSpecies)) {
-            this.speciesSettings[list].push(newSpecies);
-            this['new' + list + 'Species'] = '';
+    role="region" 
+    aria-label="Include Species Settings"
+    x-data="{
+        speciesSettings: {
+            Include: {{if .Settings.Realtime.Species.Include}}{{.Settings.Realtime.Species.Include | toJSON}}{{else}}[]{{end}},
+        },
+        newIncludeSpecies: '',
+        showTooltip: null,
+        hasChanges: false,
+        predictions: [],
+        allSpecies: {{getAllSpecies | toJSON}},
+        speciesSettingsOpen: false,
+        showActionsModal: false,
+        currentSpecies: '',
+        resetChanges() {
+            this.hasChanges = false;
+        },
+        addSpecies(list) {
+            const newSpecies = this['new' + list + 'Species'].trim();
+            if (newSpecies && !this.speciesSettings[list].includes(newSpecies)) {
+                this.speciesSettings[list].push(newSpecies);
+                this['new' + list + 'Species'] = '';
+                this.hasChanges = true;
+            }
+        },
+        removeSpecies(list, species) {
+            this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== species);
             this.hasChanges = true;
-        }
-    },
-    removeSpecies(list, species) {
-        this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== species);
-        this.hasChanges = true;
-    },
-    updatePredictions(input, listType) {
-        if (!input) {
-            this.predictions = [];
-            return;
-        }
+        },
+        updatePredictions(input, listType) {
+            if (!input) {
+                this.predictions = [];
+                return;
+            }
+            
+            // Use different species list based on whether we're including or excluding
+            const sourceList = this.allSpecies;
+            
+            this.predictions = sourceList
+                .filter(species => 
+                    species.toLowerCase().includes(input.toLowerCase())
+                )
+                .slice(0, 5);
+        },
+    }" 
+    x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
+    x-cloak>
+    
+    <input type="checkbox" 
+        id="includeSpeciesSettingsOpen" 
+        x-on:change="speciesSettingsOpen = !speciesSettingsOpen"
+        aria-expanded="true" />
         
-        // Use different species list based on whether we're including or excluding
-        const sourceList = this.allSpecies;
-        
-        this.predictions = sourceList
-            .filter(species => 
-                species.toLowerCase().includes(input.toLowerCase())
-            )
-            .slice(0, 5);
-    },
-}" 
-x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
-x-cloak>
-    <input type="checkbox" id="speciesSettingsOpen" x-on:change="speciesSettingsOpen = !speciesSettingsOpen" />
     <div class="collapse-title settings-section-header">
         <div class="flex items-center">
-            <label for="speciesSettingsOpen" class="cursor-pointer">Always Include Species</label>
-            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
+            <label for="includeSpeciesSettingsOpen" class="cursor-pointer">Always Include Species</label>
+            <div x-show="hasChanges" 
+                x-cloak 
+                class="settings-changed-badge"
+                role="status" 
+                aria-live="polite">
                 <span class="badge">
                     <span>changed</span>
                 </span>
             </div>
         </div>
-        <p class="settings-section-description">Species in this list will always be included in range of detected species</p>
+        <p class="settings-section-description" id="include-species-description">
+            Species in this list will always be included in range of detected species
+        </p>
     </div>
 
-    <div class="collapse-content">
-        
+    <div class="collapse-content" aria-describedby="include-species-description">
         <div class="settings-form-group">
-
             <!-- Include species list -->
-            <div class="space-y-2">
+            <div class="space-y-2" role="list" aria-label="Included species">
                 <template x-for="(species, index) in speciesSettings.Include" :key="index">
-                    <div class="settings-list-item">
+                    <div class="settings-list-item" role="listitem">
                         <div class="flex-grow">
                             <span x-text="species" class="text-sm"></span>
                         </div>
                         <div class="flex-shrink-0">
-                            <button type="button" @click="removeSpecies('Include', species)" 
-                                    class="btn btn-xs">Remove</button>
+                            <button type="button" 
+                                @click="removeSpecies('Include', species)" 
+                                class="btn btn-xs"
+                                aria-label="Remove species from include list">Remove</button>
                         </div>
                     </div>
                 </template>
@@ -84,17 +97,23 @@ x-cloak>
 
             <!-- Include species input -->
             <div class="settings-input-group">
+                <label for="includeSpeciesInput" class="sr-only">Add species to include list</label>
                 <input type="text" 
-                       x-model="newIncludeSpecies" 
-                       @input="updatePredictions(newIncludeSpecies, 'Include')" 
-                       list="include-species-suggestions"
-                       placeholder="Add species to include">
+                    id="includeSpeciesInput"
+                    x-model="newIncludeSpecies" 
+                    @input="updatePredictions(newIncludeSpecies, 'Include')" 
+                    list="include-species-suggestions"
+                    placeholder="Add species to include"
+                    aria-label="Enter species name to include"
+                    aria-describedby="include-species-suggestions">
                 <datalist id="include-species-suggestions">
                     <template x-for="species in predictions" :key="species">
                         <option :value="species"></option>
                     </template>
                 </datalist>
-                <button type="button" @click="addSpecies('Include')">Add</button>
+                <button type="button" 
+                    @click="addSpecies('Include')"
+                    aria-label="Add species to include list">Add</button>
             </div>
         </div>
         <input type="hidden" name="realtime.species.include" :value="JSON.stringify(speciesSettings.Include)">
@@ -103,60 +122,70 @@ x-cloak>
 
 <!-- Second div - Exclude Species -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
-x-data="{ 
-    speciesSettings: {
-        Exclude: {{if .Settings.Realtime.Species.Exclude}}{{.Settings.Realtime.Species.Exclude | toJSON}}{{else}}[]{{end}},
-    },
-    newExcludeSpecies: '',
-    showTooltip: null,
-    hasChanges: false,
-    predictions: [],
-    filteredSpecies: {{getIncludedSpecies | toJSON}},
-    resetChanges() {
-        this.hasChanges = false;
-    },
-    addSpecies(list) {
-        const newSpecies = this['new' + list + 'Species'].trim();
-        if (newSpecies && !this.speciesSettings[list].includes(newSpecies)) {
-            this.speciesSettings[list].push(newSpecies);
-            this['new' + list + 'Species'] = '';
+    role="region" 
+    aria-label="Exclude Species Settings"
+    x-data="{ 
+        speciesSettings: {
+            Exclude: {{if .Settings.Realtime.Species.Exclude}}{{.Settings.Realtime.Species.Exclude | toJSON}}{{else}}[]{{end}},
+        },
+        newExcludeSpecies: '',
+        showTooltip: null,
+        hasChanges: false,
+        predictions: [],
+        filteredSpecies: {{getIncludedSpecies | toJSON}},
+        resetChanges() {
+            this.hasChanges = false;
+        },
+        addSpecies(list) {
+            const newSpecies = this['new' + list + 'Species'].trim();
+            if (newSpecies && !this.speciesSettings[list].includes(newSpecies)) {
+                this.speciesSettings[list].push(newSpecies);
+                this['new' + list + 'Species'] = '';
+                this.hasChanges = true;
+            }
+        },
+        removeSpecies(list, species) {
+            this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== species);
             this.hasChanges = true;
-        }
-    },
-    removeSpecies(list, species) {
-        this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== species);
-        this.hasChanges = true;
-    },
-    updatePredictions(input, listType) {
-        if (!input) {
-            this.predictions = [];
-            return;
-        }
+        },
+        updatePredictions(input, listType) {
+            if (!input) {
+                this.predictions = [];
+                return;
+            }
+            
+            // For exclude list, always use filteredSpecies
+            const sourceList = this.filteredSpecies;
+            
+            this.predictions = sourceList
+                .filter(species => 
+                    species.toLowerCase().includes(input.toLowerCase())
+                )
+                .slice(0, 5);
+        },
+    }" 
+    x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
+    x-cloak>
+    
+    <input type="checkbox" 
+        id="excludeSpeciesSettingsOpen" 
+        x-on:change="speciesSettingsOpen = !speciesSettingsOpen"
+        aria-expanded="true" />
         
-        // For exclude list, always use filteredSpecies
-        const sourceList = this.filteredSpecies;
-        
-        this.predictions = sourceList
-            .filter(species => 
-                species.toLowerCase().includes(input.toLowerCase())
-            )
-            .slice(0, 5);
-    },
-}" 
-x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
-x-cloak>
-    <input type="checkbox" id="speciesSettingsOpen" x-on:change="speciesSettingsOpen = !speciesSettingsOpen" />
     <div class="collapse-title text-xl font-medium">
         <div class="flex items-center">
-            <label for="speciesSettingsOpen" class="cursor-pointer">Always Exclude Species</label>
-            <div class="ml-2" x-show="hasChanges" x-cloak>
+            <label for="excludeSpeciesSettingsOpen" class="cursor-pointer">Always Exclude Species</label>
+            <div class="ml-2" 
+                x-show="hasChanges" 
+                x-cloak
+                role="status" 
+                aria-live="polite">
                 <span class="badge badge-primary badge-sm changed-badge">
                     <span class="text-xs mb-0.5">changed</span>
                 </span>
             </div>
         </div>
-        <!-- short descripton of this section -->
-        <p class="text-sm text-gray-500">Species in this list will be excuded from detection</p>
+        <p class="text-sm text-gray-500" id="exclude-species-description">Species in this list will be excluded from detection</p>
     </div>
 
     <div class="collapse-content">
@@ -200,123 +229,133 @@ x-cloak>
 
 <!-- Third div - Custom Configuration -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
-x-data="{ 
-    speciesSettings: {
-        Config: {{if .Settings.Realtime.Species.Config}}{{.Settings.Realtime.Species.Config | toJSON}}{{else}}{}{{end}},
-    },
-    newSpeciesConfig: '',
-    newThreshold: 0.5,
-    showTooltip: null,
-    hasChanges: false,
-    predictions: [],
-    allSpecies: {{getAllSpecies | toJSON}},
-    filteredSpecies: {{getIncludedSpecies | toJSON}},
-    speciesSettingsOpen: false,
-    showActionsModal: false,
-    currentSpecies: '',
-    currentActionIndex: null,
-    currentAction: { type: 'ExecuteCommand', command: '', parameters: '' },
-    resetChanges() {
-        this.hasChanges = false;
-    },
-    addSpecies(list) {
-        const newSpecies = this['new' + list + 'Species'].trim();
-        if (newSpecies && !this.speciesSettings[list].includes(newSpecies)) {
-            this.speciesSettings[list].push(newSpecies);
-            this['new' + list + 'Species'] = '';
+    role="region" 
+    aria-label="Custom Species Configuration"
+    x-data="{ 
+        speciesSettings: {
+            Config: {{if .Settings.Realtime.Species.Config}}{{.Settings.Realtime.Species.Config | toJSON}}{{else}}{}{{end}},
+        },
+        newSpeciesConfig: '',
+        newThreshold: 0.5,
+        showTooltip: null,
+        hasChanges: false,
+        predictions: [],
+        allSpecies: {{getAllSpecies | toJSON}},
+        filteredSpecies: {{getIncludedSpecies | toJSON}},
+        speciesSettingsOpen: false,
+        showActionsModal: false,
+        currentSpecies: '',
+        currentActionIndex: null,
+        currentAction: { type: 'ExecuteCommand', command: '', parameters: '' },
+        resetChanges() {
+            this.hasChanges = false;
+        },
+        addSpecies(list) {
+            const newSpecies = this['new' + list + 'Species'].trim();
+            if (newSpecies && !this.speciesSettings[list].includes(newSpecies)) {
+                this.speciesSettings[list].push(newSpecies);
+                this['new' + list + 'Species'] = '';
+                this.hasChanges = true;
+            }
+        },
+        removeSpecies(list, species) {
+            this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== species);
             this.hasChanges = true;
-        }
-    },
-    removeSpecies(list, species) {
-        this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== species);
-        this.hasChanges = true;
-    },
-    addConfig() {
-        if (this.newSpeciesConfig && !this.speciesSettings.Config[this.newSpeciesConfig]) {
-            this.speciesSettings.Config[this.newSpeciesConfig] = {
-                Threshold: this.newThreshold,
-                Actions: []
-            };
-            this.newSpeciesConfig = '';
-            this.newThreshold = 0.5;
+        },
+        addConfig() {
+            if (this.newSpeciesConfig && !this.speciesSettings.Config[this.newSpeciesConfig]) {
+                this.speciesSettings.Config[this.newSpeciesConfig] = {
+                    Threshold: this.newThreshold,
+                    Actions: []
+                };
+                this.newSpeciesConfig = '';
+                this.newThreshold = 0.5;
+                this.hasChanges = true;
+            }
+        },
+        removeConfig(species) {
+            delete this.speciesSettings.Config[species];
             this.hasChanges = true;
-        }
-    },
-    removeConfig(species) {
-        delete this.speciesSettings.Config[species];
-        this.hasChanges = true;
-    },
-    openActionsModal(species) {
-        this.currentSpecies = species;
-        
-        // Get existing action if any
-        const existingAction = this.speciesSettings.Config[species]?.Actions?.[0];
-        
-        // Set default or existing action
-        const defaultAction = { Type: 'ExecuteCommand', Command: '', Parameters: [] };
-        const action = existingAction || defaultAction;
-        
-        this.currentAction = {
-            type: action.Type,
-            command: action.Command,
-            parameters: Array.isArray(action.Parameters) ? action.Parameters.join(',') : ''
-        };
-        
-        this.showActionsModal = true;
-    },
-    saveAction() {
-        if (!this.speciesSettings.Config[this.currentSpecies]) {
-            this.speciesSettings.Config[this.currentSpecies] = {
-                Threshold: 0.5,
-                Actions: []
+        },
+        openActionsModal(species) {
+            this.currentSpecies = species;
+            
+            // Get existing action if any
+            const existingAction = this.speciesSettings.Config[species]?.Actions?.[0];
+            
+            // Set default or existing action
+            const defaultAction = { Type: 'ExecuteCommand', Command: '', Parameters: [] };
+            const action = existingAction || defaultAction;
+            
+            this.currentAction = {
+                type: action.Type,
+                command: action.Command,
+                parameters: Array.isArray(action.Parameters) ? action.Parameters.join(',') : ''
             };
-        }
+            
+            this.showActionsModal = true;
+        },
+        saveAction() {
+            if (!this.speciesSettings.Config[this.currentSpecies]) {
+                this.speciesSettings.Config[this.currentSpecies] = {
+                    Threshold: 0.5,
+                    Actions: []
+                };
+            }
+            
+            const newAction = {
+                Type: this.currentAction.type,
+                Command: this.currentAction.command,
+                Parameters: this.currentAction.parameters.split(',').map(p => p.trim()).filter(p => p)
+            };
+            
+            // Always replace/set the single action
+            this.speciesSettings.Config[this.currentSpecies].Actions = [newAction];
+            
+            this.hasChanges = true;
+            this.closeActionsModal();
+        },
+        closeActionsModal() {
+            this.showActionsModal = false;
+        },
+        updatePredictions(input, listType) {
+            if (!input) {
+                this.predictions = [];
+                return;
+            }
+            
+            // Use different species list based on whether we're including or excluding
+            const sourceList = listType === 'Include' ? this.allSpecies : this.filteredSpecies;
+            
+            this.predictions = sourceList
+                .filter(species => 
+                    species.toLowerCase().includes(input.toLowerCase())
+                )
+                .slice(0, 5);
+        },
+    }" 
+    x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
+    x-cloak>
+    
+    <input type="checkbox" 
+        id="speciesSettingsOpen" 
+        x-on:change="speciesSettingsOpen = !speciesSettingsOpen"
+        aria-expanded="true" />
         
-        const newAction = {
-            Type: this.currentAction.type,
-            Command: this.currentAction.command,
-            Parameters: this.currentAction.parameters.split(',').map(p => p.trim()).filter(p => p)
-        };
-        
-        // Always replace/set the single action
-        this.speciesSettings.Config[this.currentSpecies].Actions = [newAction];
-        
-        this.hasChanges = true;
-        this.closeActionsModal();
-    },
-    closeActionsModal() {
-        this.showActionsModal = false;
-    },
-    updatePredictions(input, listType) {
-        if (!input) {
-            this.predictions = [];
-            return;
-        }
-        
-        // Use different species list based on whether we're including or excluding
-        const sourceList = listType === 'Include' ? this.allSpecies : this.filteredSpecies;
-        
-        this.predictions = sourceList
-            .filter(species => 
-                species.toLowerCase().includes(input.toLowerCase())
-            )
-            .slice(0, 5);
-    },
-}" 
-x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
-x-cloak>
-    <input type="checkbox" id="speciesSettingsOpen" x-on:change="speciesSettingsOpen = !speciesSettingsOpen" />
     <div class="collapse-title text-xl font-medium">
         <div class="flex items-center">
             <label for="speciesSettingsOpen" class="cursor-pointer">Custom Species Configuration</label>
-            <div class="ml-2" x-show="hasChanges" x-cloak>
+            <div class="ml-2" 
+                x-show="hasChanges" 
+                x-cloak
+                role="status" 
+                aria-live="polite">
                 <span class="badge badge-primary badge-sm changed-badge">
                     <span class="text-xs mb-0.5">changed</span>
                 </span>
             </div>
         </div>
-        <!-- short descripton of this section -->
-        <p class="text-sm text-gray-500">Species specific threshold values and actions</p>
+        <p class="text-sm text-gray-500" id="species-configuration-description">Species specific threshold values and actions</p>
     </div>    
 
     <div class="collapse-content">
@@ -350,64 +389,86 @@ x-cloak>
             <!-- Custom configuration input -->
             <div class="flex items-center mt-2">
                 <input type="text" 
-                       x-model="newSpeciesConfig" 
-                       @input="updatePredictions(newSpeciesConfig)" 
-                       list="species-suggestions"
-                       placeholder="Species" 
-                       class="input input-bordered input-sm flex-grow" />
+                    id="speciesConfigInput"
+                    x-model="newSpeciesConfig" 
+                    @input="updatePredictions(newSpeciesConfig)" 
+                    list="species-suggestions"
+                    placeholder="Species" 
+                    class="input input-bordered input-sm flex-grow" 
+                    aria-label="Enter species name"
+                    aria-describedby="species-suggestions" />
                 <datalist id="species-suggestions">
                     <template x-for="species in predictions" :key="species">
                         <option :value="species"></option>
                     </template>
                 </datalist>
                 <input type="number" 
-                       x-model.number="newThreshold" 
-                       class="input input-bordered input-sm w-24 ml-2" 
-                       min="0" 
-                       max="1" 
-                       step="0.01" 
-                       placeholder="Threshold" />
+                    id="thresholdInput"
+                    x-model.number="newThreshold" 
+                    class="input input-bordered input-sm w-24 ml-2" 
+                    min="0" 
+                    max="1" 
+                    step="0.01" 
+                    placeholder="Threshold"
+                    aria-label="Enter threshold value"
+                    aria-describedby="threshold-help" />
                 
-                <button type="button" @click="openActionsModal(newSpeciesConfig)" 
-                        class="btn btn-sm ml-2">Actions</button>
-                <button type="button" @click="addConfig()" class="btn btn-sm btn-primary ml-2 w-20">Add</button>
+                <button type="button" 
+                    @click="openActionsModal(newSpeciesConfig)" 
+                    class="btn btn-sm ml-2"
+                    aria-label="Add action for selected species">Actions</button>
+                <button type="button" 
+                    @click="addConfig()" 
+                    class="btn btn-sm btn-primary ml-2 w-20"
+                    aria-label="Add new species configuration">Add</button>
             </div>
         </div>
 
         <!-- Actions Modal -->
         <div x-show="showActionsModal" 
-             class="modal modal-open" 
-             x-cloak
-             @keydown.escape.window="closeActionsModal()">
+            class="modal modal-open" 
+            x-cloak
+            @keydown.escape.window="closeActionsModal()"
+            role="dialog"
+            aria-labelledby="modal-title"
+            aria-modal="true">
             <div class="modal-box bg-base-100 max-h-[90vh] overflow-y-auto">
-                <h3 class="text-lg font-bold mb-4" x-text="'Actions for ' + currentSpecies"></h3>
+                <h3 id="modal-title" class="text-lg font-bold mb-4" x-text="'Actions for ' + currentSpecies"></h3>
                 
                 <div class="settings-modal-section">
-                    <label>Action Type</label>
-                    <select x-model="currentAction.type" 
-                            class="select select-bordered" 
-                            disabled>
+                    <label for="actionType">Action Type</label>
+                    <select id="actionType"
+                        x-model="currentAction.type" 
+                        class="select select-bordered" 
+                        disabled
+                        aria-label="Select action type">
                         <option value="ExecuteCommand">Execute Command</option>
                     </select>
                 </div>
                 
                 <div class="settings-modal-section">
-                    <label>Command</label>
+                    <label for="commandInput">Command</label>
                     <input type="text" 
-                           x-model="currentAction.command" 
-                           class="input input-bordered" 
-                           placeholder="/path/to/your/command">
-                    <p class="help-text">Provide the full path to the command you want to execute</p>
+                        id="commandInput"
+                        x-model="currentAction.command" 
+                        class="input input-bordered" 
+                        placeholder="/path/to/your/command"
+                        aria-label="Enter command path"
+                        aria-describedby="command-help" />
+                    <p class="help-text" id="command-help">Provide the full path to the command you want to execute</p>
                 </div>
 
                 <div class="settings-modal-section">
-                    <label>Parameters</label>
+                    <label for="parametersInput">Parameters</label>
                     <input type="text" 
-                           x-model="currentAction.parameters" 
-                           class="input input-bordered" 
-                           placeholder="Parameters will appear here"
-                           readonly>
-                    <p class="help-text">Click parameters below to add them to your command</p>
+                        id="parametersInput"
+                        x-model="currentAction.parameters" 
+                        class="input input-bordered" 
+                        placeholder="Parameters will appear here"
+                        readonly
+                        aria-label="Selected parameters"
+                        aria-describedby="parameters-help" />
+                    <p class="help-text" id="parameters-help">Click parameters below to add them to your command</p>
                 </div>
 
                 <div class="settings-modal-section">
@@ -415,39 +476,43 @@ x-cloak>
                     <p class="help-text mb-2">Click to add parameters to your script:</p>
                     <div class="flex flex-wrap gap-2">
                         <button type="button" 
-                                @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',CommonName' : 'CommonName'" 
-                                class="btn btn-xs">CommonName</button>
+                            @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',CommonName' : 'CommonName'" 
+                            class="btn btn-xs">CommonName</button>
                         <button type="button" 
-                                @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',ScientificName' : 'ScientificName'" 
-                                class="btn btn-xs">ScientificName</button>
+                            @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',ScientificName' : 'ScientificName'" 
+                            class="btn btn-xs">ScientificName</button>
                         <button type="button" 
-                                @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',Confidence' : 'Confidence'" 
-                                class="btn btn-xs">Confidence</button>
+                            @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',Confidence' : 'Confidence'" 
+                            class="btn btn-xs">Confidence</button>
                         <button type="button" 
-                                @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',Time' : 'Time'" 
-                                class="btn btn-xs">Time</button>
+                            @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',Time' : 'Time'" 
+                            class="btn btn-xs">Time</button>
                         <button type="button" 
-                                @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',Source' : 'Source'" 
-                                class="btn btn-xs">Source</button>
+                            @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',Source' : 'Source'" 
+                            class="btn btn-xs">Source</button>
                     </div>
                     <div class="mt-2">
                         <button type="button" 
-                                @click.prevent="currentAction.parameters = ''" 
-                                class="btn btn-xs btn-warning">Clear Parameters</button>
+                            @click.prevent="currentAction.parameters = ''" 
+                            class="btn btn-xs btn-warning">Clear Parameters</button>
                     </div>
                     <p class="help-text mt-2">Parameters will be passed to your script in the order they are added</p>
                 </div>
                 
                 <div class="modal-action">
                     <button type="button" 
-                            @click.prevent="saveAction()" 
-                            class="btn btn-primary">Save</button>
+                        @click.prevent="saveAction()" 
+                        class="btn btn-primary"
+                        aria-label="Save action configuration">Save</button>
                     <button type="button" 
-                            @click.prevent="closeActionsModal()" 
-                            class="btn">Cancel</button>
+                        @click.prevent="closeActionsModal()" 
+                        class="btn"
+                        aria-label="Cancel and close modal">Cancel</button>
                 </div>
             </div>
-            <div class="modal-backdrop bg-black/50" @click="closeActionsModal()"></div>
+            <div class="modal-backdrop bg-black/50" 
+                @click="closeActionsModal()"
+                role="presentation"></div>
         </div>
 
         <!-- Hidden inputs -->

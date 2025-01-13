@@ -1,11 +1,13 @@
 {{define "audioSettings"}}
 
 <!-- Hidden input to always submit the template name -->
-<input type="hidden" name="templateName" value="{{.TemplateName}}">
+<input type="hidden" name="templateName" value="{{.TemplateName}}" aria-hidden="true">
 
 <!-- Audio Capture Settings start -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3"
-x-data="{ 
+     role="region"
+     aria-labelledby="audioCaptureHeader"
+     x-data="{ 
     audioCapture: {
         source: '{{.Settings.Realtime.Audio.Source}}',
         rtsp: {
@@ -98,13 +100,16 @@ x-init="
 ">
 
     <!-- control collapse element open state and label visibility -->
-    <input type="checkbox" id="audioCaptureSettingsOpen" x-on:change="audioCaptureSettingsOpen = !audioCaptureSettingsOpen" />
+    <input type="checkbox" 
+           id="audioCaptureSettingsOpen" 
+           aria-controls="audioCaptureContent"
+           x-on:change="audioCaptureSettingsOpen = !audioCaptureSettingsOpen" />
 
-    <div class="collapse-title settings-section-header">
+    <div class="collapse-title settings-section-header" id="audioCaptureHeader">
         <div class="flex items-center">
             <label for="audioCaptureSettingsOpen" class="cursor-pointer">Audio Capture</label>
-            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
-                <span class="badge">
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge" aria-live="polite">
+                <span class="badge" role="status">
                     <span>changed</span>
                 </span>
             </div>
@@ -112,14 +117,18 @@ x-init="
         <p class="settings-section-description">Set audio capture source, sound card or RTSP stream</p>
     </div>
 
-    <div class="collapse-content">
+    <div class="collapse-content" id="audioCaptureContent">
 
         <div class="text-lg font-medium pb-2">Sound Card Source</div>
 
         <div class="form-control relative">
             <label class="label justify-start" for="audioSource">
                 <span class="label-text">Audio Source</span>
-                <span class="help-icon" @mouseenter="showTooltip = 'audioSource'" @mouseleave="showTooltip = null">ⓘ</span>
+                <span class="help-icon" 
+                      role="button"
+                      aria-label="Show help for audio source"
+                      @mouseenter="showTooltip = 'audioSource'" 
+                      @mouseleave="showTooltip = null">ⓘ</span>
             </label>
             <select x-model="audioCapture.source"
                     name="realtime.audio.source"
@@ -132,7 +141,11 @@ x-init="
                             x-text="device.Name"></option>
                 </template>
             </select>
-            <div x-show="showTooltip === 'audioSource'" x-cloak class="tooltip">
+            <div x-show="showTooltip === 'audioSource'" 
+                 x-cloak 
+                 class="tooltip" 
+                 role="tooltip"
+                 aria-live="polite">
                 Audio source to use for analysis (e.g., 'sysdefault'). This setting is disabled if RTSP URLs are configured.
             </div>
         </div>
@@ -164,7 +177,7 @@ x-init="
             <template x-for="(url, index) in audioCapture.rtsp.urls" :key="index">
                 <div class="flex items-center mb-2">
                     <input type="text" :name="'realtime.rtsp.urls[' + index + ']'" x-model="audioCapture.rtsp.urls[index]" class="input input-bordered input-sm w-full mr-2">
-                    <button type="button" @click="removeUrl(index)" class="btn btn-error btn-xs">Remove</button>
+                    <button type="button" @click="removeUrl(index)" class="btn btn-error btn-xs" aria-label="Remove RTSP URL">Remove</button>
                 </div>
             </template>
 
@@ -174,7 +187,7 @@ x-init="
 
             <!-- Add new RTSP URL button -->
             <div class="settings-input-group">
-                <input type="text" x-model="newUrl" placeholder="Enter RTSP URL (rtsp://user:password@example.com/stream1)">
+                <input type="text" x-model="newUrl" aria-label="New RTSP URL" placeholder="Enter RTSP URL (rtsp://user:password@example.com/stream1)">
                 <button type="button" @click="addUrl">Add</button>
             </div>
 
@@ -327,6 +340,8 @@ x-init="
 
 <!-- Audio Export Settings start -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3"
+     role="region"
+     aria-labelledby="audioExportHeader"
      x-data="{ 
          audioExport: {
              enabled: {{.Settings.Realtime.Audio.Export.Enabled}},
@@ -350,11 +365,11 @@ x-init="
          }
      ">
     <input type="checkbox" id="audioExportSettingsOpen" x-on:change="audioExportSettingsOpen = !audioExportSettingsOpen" />
-    <div class="collapse-title settings-section-header">
+    <div class="collapse-title settings-section-header" id="audioExportHeader">
         <div class="flex items-center">
             <label for="audioExportSettingsOpen" class="cursor-pointer">Audio Export</label>
-            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
-                <span class="badge">
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge" aria-live="polite">
+                <span class="badge" role="status">
                     <span>changed</span>
                 </span>
             </div>
@@ -447,6 +462,8 @@ x-init="
 
 <!-- Audio Retention Settings start -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3"
+     role="region"
+     aria-labelledby="audioRetentionHeader"
      x-data="{ 
          audioRetention: {
              policy: '{{.Settings.Realtime.Audio.Export.Retention.Policy}}',
@@ -465,11 +482,11 @@ x-init="
          $watch('audioRetention', (value) => { hasChanges = true }, { deep: true });
      ">
     <input type="checkbox" id="audioRetentionSettingsOpen" x-on:change="audioRetentionSettingsOpen = !audioRetentionSettingsOpen" />
-    <div class="collapse-title settings-section-header">
+    <div class="collapse-title settings-section-header" id="audioRetentionHeader">
         <div class="flex items-center">
             <label for="audioRetentionSettingsOpen" class="cursor-pointer">Audio Clip Retention</label>
-            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
-                <span class="badge">
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge" aria-live="polite">
+                <span class="badge" role="status">
                     <span>changed</span>
                 </span>
             </div>

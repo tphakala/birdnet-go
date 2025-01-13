@@ -204,17 +204,23 @@
         });
     }
 }" x-init="init()" x-bind:class="$store.pageLoaded.loaded ? 'page-loaded' : ''">
-    <form id="settingsForm" @submit.prevent="saveSettings()">
+    <form id="settingsForm" @submit.prevent="saveSettings()" aria-label="Settings Form">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             <!-- Settings content rendered here -->
             {{renderSettingsContent .C}}
         </div>
-        <button @click.prevent="saveSettings()" class="btn btn-primary mt-6" :disabled="saving">
+        <button @click.prevent="saveSettings()" 
+                class="btn btn-primary mt-6" 
+                :disabled="saving"
+                aria-busy="saving"
+                :aria-label="saving ? 'Saving changes...' : 'Save Changes'">
             Save Changes
         </button>
     </form>
 
-    <div class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2">
+    <div class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2" 
+         role="alert" 
+         aria-live="polite">
         <template x-for="notification in notifications" :key="notification.id">
             <div x-show="!notification.removing" 
                  x-transition:enter="transition ease-out duration-300"
@@ -228,20 +234,37 @@
                     'alert-error': notification.type === 'error',
                     'alert-info': notification.type === 'info'
                  }" 
-                 class="alert shadow-lg">
+                 class="alert shadow-lg"
+                 :role="notification.type === 'error' ? 'alert' : 'status'"
+                 :aria-label="notification.type.charAt(0).toUpperCase() + notification.type.slice(1) + ' notification'">
                 <div class="flex items-start">
                     <template x-if="notification.type === 'success'">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24">
+                        <svg xmlns="http://www.w3.org/2000/svg" 
+                             class="stroke-current flex-shrink-0 h-6 w-6 mr-2" 
+                             fill="none" 
+                             viewBox="0 0 24 24"
+                             role="img"
+                             aria-label="Success icon">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                     </template>
                     <template x-if="notification.type === 'error'">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24">
+                        <svg xmlns="http://www.w3.org/2000/svg" 
+                             class="stroke-current flex-shrink-0 h-6 w-6 mr-2" 
+                             fill="none" 
+                             viewBox="0 0 24 24"
+                             role="img"
+                             aria-label="Error icon">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                     </template>
                     <template x-if="notification.type === 'info'">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24">
+                        <svg xmlns="http://www.w3.org/2000/svg" 
+                             class="stroke-current flex-shrink-0 h-6 w-6 mr-2" 
+                             fill="none" 
+                             viewBox="0 0 24 24"
+                             role="img"
+                             aria-label="Information icon">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                     </template>

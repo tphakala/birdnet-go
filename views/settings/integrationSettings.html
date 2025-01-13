@@ -4,7 +4,10 @@
 <input type="hidden" name="templateName" value="{{.TemplateName}}">
 
 <!-- BirdWeather Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+     role="region" 
+     aria-labelledby="birdweatherHeader"
+     x-data="{ 
     birdweather: {
         enabled: {{.Settings.Realtime.Birdweather.Enabled}},
         debug: {{.Settings.Realtime.Birdweather.Debug}},
@@ -29,16 +32,16 @@
     <input type="checkbox" id="birdweatherSettingsOpen"
         x-on:change="birdweatherSettingsOpen = !birdweatherSettingsOpen" />
 
-    <div class="collapse-title settings-section-header">
+    <div class="collapse-title settings-section-header" id="birdweatherHeader">
         <div class="flex items-center">
-            <label for="mainSettingsOpen" class="cursor-pointer">BirdWeather</label>
-            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
+            <label for="birdweatherSettingsOpen" class="cursor-pointer" aria-label="BirdWeather Settings">BirdWeather</label>
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge" role="status" aria-label="Settings changed">
                 <span class="badge">
                     <span>changed</span>
                 </span>
             </div>
         </div>
-        <p class="settings-section-description">Upload detections to BirdWeather</p>
+        <p class="settings-section-description" id="birdweatherDescription">Upload detections to BirdWeather</p>
     </div>
 
     <!-- disabled for now
@@ -48,17 +51,22 @@
         </label>
     </div>-->
 
-    <div class="collapse-content">
+    <div class="collapse-content" role="group" aria-labelledby="birdweatherDescription">
         <div class="form-control relative">
             <label class="label cursor-pointer justify-start" for="birdweatherEnabled">
                 <input type="checkbox" id="birdweatherEnabled" name="realtime.birdweather.enabled"
-                    x-model="birdweather.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
+                    x-model="birdweather.enabled" class="checkbox checkbox-primary checkbox-xs mr-2"
+                    aria-describedby="birdweatherEnabledTooltip">
                 <input type="hidden" name="realtime.birdweather.enabled" value="false">
                 <span class="label-text">Enable BirdWeather Uploads</span>
-                <span class="help-icon" @mouseenter="showTooltip = 'birdweatherEnabled'"
-                    @mouseleave="showTooltip = null">ⓘ</span>
+                <span class="help-icon" 
+                    @mouseenter="showTooltip = 'birdweatherEnabled'" 
+                    @mouseleave="showTooltip = null"
+                    role="button"
+                    aria-label="Show help"
+                    tabindex="0">ⓘ</span>
             </label>
-            <div x-show="showTooltip === 'birdweatherEnabled'" x-cloak class="tooltip">
+            <div x-show="showTooltip === 'birdweatherEnabled'" x-cloak class="tooltip" id="birdweatherEnabledTooltip" role="tooltip">
                 Enable or disable uploads to BirdWeather service.
             </div>
         </div>
@@ -109,7 +117,10 @@
 <!-- BirdWeather Settings end -->
 
 <!-- MQTT Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+     role="region" 
+     aria-labelledby="mqttHeader"
+     x-data="{ 
     mqtt: {
         enabled: {{.Settings.Realtime.MQTT.Enabled}},
         broker: '{{.Settings.Realtime.MQTT.Broker}}',
@@ -130,16 +141,16 @@
     <!-- control collapse element open state and label visibility -->
     <input type="checkbox" id="mqttSettingsOpen" x-on:change="mqttSettingsOpen = !mqttSettingsOpen" />
 
-    <div class="collapse-title settings-section-header">
+    <div class="collapse-title settings-section-header" id="mqttHeader">
         <div class="flex items-center">
-            <label for="mqttSettingsOpen" class="cursor-pointer">MQTT</label>
-            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
+            <label for="mqttSettingsOpen" class="cursor-pointer" aria-label="MQTT Settings">MQTT</label>
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge" role="status" aria-label="Settings changed">
                 <span class="badge">
                     <span>changed</span>
                 </span>
             </div>
         </div>
-        <p class="settings-section-description">Configure MQTT broker connection</p>
+        <p class="settings-section-description" id="mqttDescription">Configure MQTT broker connection</p>
     </div>
 
     <!-- disabled for now
@@ -149,7 +160,7 @@
         </label>
     </div>-->
 
-    <div class="collapse-content">
+    <div class="collapse-content" role="group" aria-labelledby="mqttDescription">
         <div class="form-control relative">
             <label class="label cursor-pointer justify-start" for="mqttEnabled">
                 <input type="checkbox" id="mqttEnabled" name="realtime.mqtt.enabled" x-model="mqtt.enabled"

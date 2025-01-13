@@ -4,7 +4,10 @@
 <input type="hidden" name="templateName" value="{{.TemplateName}}">
 
 <!-- Node Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+    role="region" 
+    aria-label="Node Settings Section"
+    x-data="{
     debug: {{.Settings.Debug}},
     main: {
         name: '{{.Settings.Main.Name}}',
@@ -25,7 +28,9 @@
 ">
 
     <!-- control collapse element open state and label visibility -->
-    <input type="checkbox" id="mainSettingsOpen" x-on:change="mainSettingsOpen = ! mainSettingsOpen" />
+    <input type="checkbox" id="mainSettingsOpen" 
+        x-on:change="mainSettingsOpen = ! mainSettingsOpen"
+        aria-expanded="true" />
 
     <div class="collapse-title settings-section-header">
         <div class="flex items-center">
@@ -45,12 +50,20 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="nodeName">
                     <span class="label-text">Node Name</span>
-                    <span class="help-icon" @mouseenter="showTooltip = 'nodeName'" @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" 
+                        role="button"
+                        aria-label="Show help text for node name"
+                        @mouseenter="showTooltip = 'nodeName'" 
+                        @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="text" id="nodeName" name="main.name" x-model="main.name"
                     class="input input-sm input-bordered" placeholder="Enter node name">
                 <!-- Node Name tooltip -->
-                <div x-show="showTooltip === 'nodeName'" x-cloak class="tooltip">
+                <div x-show="showTooltip === 'nodeName'" 
+                    x-cloak 
+                    class="tooltip"
+                    role="tooltip"
+                    aria-live="polite">
                     Node name is used to identify source system in multi node setup, also used as identifier for MQTT messages.
                 </div>
             </div>
@@ -138,7 +151,10 @@
 </div>
 
 <!-- BirdNET Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+    role="region" 
+    aria-label="BirdNET Settings Section"
+    x-data="{ 
     birdnet: {
         sensitivity: {{.Settings.BirdNET.Sensitivity}},
         threshold: {{.Settings.BirdNET.Threshold}},
@@ -171,7 +187,9 @@
 ">
 
     <!-- control collapse element open state and label visibility -->
-    <input type="checkbox" id="birdnetSettingsOpen" x-on:change="birdnetSettingsOpen = ! birdnetSettingsOpen" />
+    <input type="checkbox" id="birdnetSettingsOpen" 
+        x-on:change="birdnetSettingsOpen = ! birdnetSettingsOpen"
+        aria-expanded="true" />
 
     <div class="collapse-title settings-section-header">
         <div class="flex items-center">
@@ -190,14 +208,27 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
             <div class="form-control relative">
-                <label class="label justify-start" for="birdnetSensitivity">
+                <label class="label justify-start" for="birdnetSensitivity" id="sensitivityLabel">
                     <span class="label-text">Sensitivity</span>
-                    <span class="help-icon" @mouseenter="showTooltip = 'sensitivity'" @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" 
+                        role="button"
+                        aria-label="Show help text for sensitivity setting"
+                        @mouseenter="showTooltip = 'sensitivity'" 
+                        @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
-                <input type="number" id="birdnetSensitivity" name="birdnet.sensitivity" x-model="birdnet.sensitivity"
-                    step="0.1" min="0.1" max="1.5" class="input input-bordered input-sm w-full">
-                <!-- BirdNET Settings tooltips -->
-                <div x-show="showTooltip === 'sensitivity'" x-cloak class="tooltip">
+                <input type="number" 
+                    id="birdnetSensitivity" 
+                    name="birdnet.sensitivity" 
+                    x-model="birdnet.sensitivity"
+                    aria-labelledby="sensitivityLabel"
+                    aria-describedby="sensitivityTooltip"
+                    class="input input-bordered input-sm w-full">
+                <div x-show="showTooltip === 'sensitivity'" 
+                    id="sensitivityTooltip"
+                    x-cloak 
+                    class="tooltip"
+                    role="tooltip"
+                    aria-live="polite">
                     Detection sensitivity. Higher values result in higher sensitivity. Values in 0.5, 1.5.
                 </div>
             </div>
@@ -366,7 +397,15 @@
                 <div x-show="showTooltip === 'locationMap'" x-cloak class="tooltip">
                     Station location, used to limit bird species to those propable in the region.
                 </div>
-                <div id="locationMap" style="height: 300px;"></div>
+                <div id="locationMap" 
+                    role="application"
+                    aria-label="Map for selecting station location"
+                    style="height: 300px;">
+                    <!-- Add screen reader instructions -->
+                    <span class="sr-only">
+                        Use arrow keys to navigate map. Press Enter to set location.
+                    </span>
+                </div>
             </div>
 
             <!-- Range Filter Settings -->
@@ -488,7 +527,10 @@
 </script>
 
 <!-- Database Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+    role="region" 
+    aria-label="Database Settings Section"
+    x-data="{ 
     outputType: '{{if .Settings.Output.SQLite.Enabled}}sqlite{{else}}mysql{{end}}',
     sqlite: {
         path: '{{.Settings.Output.SQLite.Path}}'
@@ -510,7 +552,9 @@
     $watch('mysql', () => hasChanges = true, { deep: true });
 ">
     <!-- control collapse element open state and label visibility -->
-    <input type="checkbox" id="outputSettingsOpen" x-on:change="outputSettingsOpen = !outputSettingsOpen" />
+    <input type="checkbox" id="outputSettingsOpen" 
+        x-on:change="outputSettingsOpen = !outputSettingsOpen"
+        aria-expanded="true" />
 
     <div class="collapse-title settings-section-header">
         <div class="flex items-center">
@@ -528,16 +572,31 @@
 
         <!-- Database Type -->
         <div class="settings-form-group">
-            <label class="justify-start" for="databaseType">
+            <label class="justify-start" 
+                for="databaseType" 
+                id="databaseTypeLabel">
                 <span class="label-text">Select Database Type</span>
-                <span class="help-icon" @mouseenter="showTooltip = 'databaseType'" @mouseleave="showTooltip = null">ⓘ</span>
+                <span class="help-icon" 
+                    role="button"
+                    aria-label="Show help text for database type"
+                    @mouseenter="showTooltip = 'databaseType'" 
+                    @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <select id="databaseType" x-model="outputType" name="output.type"
+            <select id="databaseType" 
+                x-model="outputType" 
+                name="output.type"
+                aria-labelledby="databaseTypeLabel"
+                aria-describedby="databaseTypeTooltip"
                 class="select select-sm select-bordered w-full">
                 <option value="sqlite">SQLite</option>
                 <option value="mysql">MySQL</option>
             </select>
-            <div x-show="showTooltip === 'databaseType'" x-cloak class="tooltip">
+            <div x-show="showTooltip === 'databaseType'" 
+                id="databaseTypeTooltip"
+                x-cloak 
+                class="tooltip"
+                role="tooltip"
+                aria-live="polite">
                 Database type for storing detections: SQLite or MySQL
             </div>
         </div>
@@ -611,7 +670,9 @@
                     <input :type="showPassword ? 'text' : 'password'" id="mysqlOutputPassword" x-model="mysql.password"
                         name="output.mysql.password" class="input input-sm input-bordered w-full"
                         placeholder="Enter MySQL password">
-                    <button type="button" @click="showPassword = !showPassword"
+                    <button type="button" 
+                        @click="showPassword = !showPassword"
+                        aria-label="Toggle password visibility"
                         class="absolute inset-y-0 right-0 pr-3 flex items-center">
                         <svg x-show="!showPassword" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400"
                             viewBox="0 0 20 20" fill="currentColor" role="img" aria-label="Show password">
@@ -655,7 +716,10 @@
 </div>
 
 <!-- User Interface Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+    role="region" 
+    aria-label="User Interface Settings Section"
+    x-data="{ 
     dashboard: {
         thumbnails: {
             summary: {{.Settings.Realtime.Dashboard.Thumbnails.Summary}},
@@ -673,7 +737,9 @@
 ">
 
     <!-- control collapse element open state and label visibility -->
-    <input type="checkbox" id="uiSettingsOpen" x-on:change="uiSettingsOpen = !uiSettingsOpen" />
+    <input type="checkbox" id="uiSettingsOpen" 
+        x-on:change="uiSettingsOpen = !uiSettingsOpen"
+        aria-expanded="true" />
 
     <div class="collapse-title settings-section-header">
         <div class="flex items-center">
@@ -695,14 +761,31 @@
 
             <!-- Daily Summary Species Limit -->
             <div class="settings-form-group">
-                <label class="justify-start" for="dashboardSummaryLimit">
+                <label class="justify-start" 
+                    for="dashboardSummaryLimit" 
+                    id="summaryLimitLabel">
                     <span class="label-text">Max Number of Species on Daily Summary Table</span>
-                    <span class="help-icon" @mouseenter="showTooltip = 'dashboardSummaryLimit'" @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" 
+                        role="button"
+                        aria-label="Show help text for summary limit"
+                        @mouseenter="showTooltip = 'dashboardSummaryLimit'" 
+                        @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
-                <input type="number" id="dashboardSummaryLimit" name="realtime.dashboard.summarylimit"
-                    x-model="dashboard.summarylimit" class="input input-sm input-bordered w-full"
-                    placeholder="Enter limit" min="10" max="1000">
-                <div x-show="showTooltip === 'dashboardSummaryLimit'" x-cloak class="tooltip">
+                <input type="number" 
+                    id="dashboardSummaryLimit" 
+                    name="realtime.dashboard.summarylimit"
+                    x-model="dashboard.summarylimit" 
+                    aria-labelledby="summaryLimitLabel"
+                    aria-describedby="summaryLimitTooltip"
+                    class="input input-sm input-bordered w-full"
+                    min="10" 
+                    max="1000">
+                <div x-show="showTooltip === 'dashboardSummaryLimit'" 
+                    id="summaryLimitTooltip"
+                    x-cloak 
+                    class="tooltip"
+                    role="tooltip"
+                    aria-live="polite">
                     Max number of species shown in the daily summary table (Value between 10 and 1000)
                 </div>
             </div>
@@ -711,16 +794,17 @@
 
         <!-- Daily Summary Thumbnails -->
         <div class="form-control relative">
-            <label class="label cursor-pointer justify-start" for="dashboardThumbnailsSummary">
-                <input type="checkbox" id="dashboardThumbnailsSummary" name="realtime.dashboard.thumbnails.summary"
-                    x-model="dashboard.thumbnails.summary" class="checkbox checkbox-primary checkbox-xs mr-2">
-                <input type="hidden" name="realtime.dashboard.thumbnails.summary" value="false">
+            <label class="label cursor-pointer justify-start" 
+                for="dashboardThumbnailsSummary"
+                id="thumbnailsSummaryLabel">
+                <input type="checkbox" 
+                    id="dashboardThumbnailsSummary" 
+                    name="realtime.dashboard.thumbnails.summary"
+                    x-model="dashboard.thumbnails.summary" 
+                    aria-labelledby="thumbnailsSummaryLabel"
+                    class="checkbox checkbox-primary checkbox-xs mr-2">
                 <span class="label-text">Show Thumbnails on Daily Summary table</span>
-                <span class="help-icon" @mouseenter="showTooltip = 'dashboardThumbnailsSummary'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <div x-show="showTooltip === 'dashboardThumbnailsSummary'" x-cloak class="tooltip">
-                Enable to show thumbnails of detected species on the daily summary table
-            </div>
         </div>
 
         <!-- Recent Detections Thumbnails -->
