@@ -34,13 +34,26 @@ function initializeDatePicker() {
 
 	// Try to get date from URL hash first, then use current date
 	const hashDate = window.location.hash.substring(1);
-	const today = new Date().toLocaleDateString('sv'); // 'sv' locale gives YYYY-MM-DD format
+
+	// Helper to ensure a zero-padded YYYY-MM-DD date string consistently across browsers
+	function getIsoDateString(date) {
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, '0');
+		const day = String(date.getDate()).padStart(2, '0');
+		return `${year}-${month}-${day}`;
+	}
+
+	const today = getIsoDateString(new Date()); // ensures consistent 'YYYY-MM-DD' format
 	
-	// Only set value and trigger change if the value is actually different
-	if (picker.value !== (hashDate || today)) {
-		picker.value = hashDate || today;
+	// Set the value first
+	const newValue = hashDate || today;
+	
+	// Only trigger change if the picker is invisible (first load)
+	// or if the value has actually changed
+	if (picker.classList.contains('invisible') || picker.value !== newValue) {
+		picker.value = newValue;
 		picker.classList.remove('invisible'); // Make picker visible
-		picker.dispatchEvent(new Event('change'));
+		htmx.trigger(picker, 'change');
 	} else {
 		picker.classList.remove('invisible'); // Make picker visible
 	}
