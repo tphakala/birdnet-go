@@ -12,13 +12,13 @@
         <input type="hidden" :name="name" value="false">
 
         <span class="label-text">{{.label}}</span>
-        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = '{{.id}}'"
+        <span class="help-icon" @mouseenter="showTooltip = '{{.id}}'"
             @mouseleave="showTooltip = null">ⓘ</span>
     </label>
 
     <!-- Tooltip -->
     <div x-show="showTooltip === '{{.id}}'" x-cloak
-        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+        class="tooltip">
         {{.tooltip}}
     </div>
 </div>

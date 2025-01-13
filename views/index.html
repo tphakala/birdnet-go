@@ -6,6 +6,17 @@
 <head>
 	<meta charset="utf-8" />
 	<title>BirdNET-Go {{ .Title }}</title>
+	<script>
+		// Immediately set the theme before any content loads
+		if (localStorage.getItem('theme') === 'dark') {
+			document.documentElement.setAttribute('data-theme', 'dark');
+			// Pre-set the checkbox state
+			document.documentElement.setAttribute('data-theme-controller', 'dark');
+		} else {
+			document.documentElement.setAttribute('data-theme', 'light');
+			document.documentElement.setAttribute('data-theme-controller', 'light');
+		}
+	</script>
 	<meta name="viewport"
 		content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 	<link rel="icon" type="image/png" sizes="32x32" href="/assets/images/favicon-32x32.png">
@@ -57,25 +68,12 @@
 	<!-- Login form in a DaisyUI modal -->
 	<dialog id="loginModal" class="modal modal-bottom sm:modal-middle"></dialog>
 	<script>
-		// Initialize date picker with either the date from URL hash or today's date
-		document.addEventListener('htmx:afterSettle', function () {
-			var datePicker = document.getElementById('datePicker');
-
-			if (datePicker && isLocationDashboard()) {
-				var dateInHash = window.location.hash.substring(1);
-				var date = dateInHash ? dateInHash : new Date().toLocaleDateString('sv');
-				if (datePicker.value !== date) {
-					datePicker.value = date;
-					datePicker.classList.remove('invisible');
-					htmx.trigger(datePicker, 'change');
-				}
-			}
-		}); // ensure the DOM is fully loaded
 
 		// Function to set theme
 		function setTheme(themeName) {
 			localStorage.setItem('theme', themeName);
 			document.documentElement.setAttribute('data-theme', themeName);
+			document.documentElement.setAttribute('data-theme-controller', themeName);
 		}
 
 		// Function to toggle theme
@@ -86,17 +84,6 @@
 				setTheme('dark');
 			}
 		}
-
-		// Immediately invoked function to set the theme on initial load
-		(function () {
-			if (localStorage.getItem('theme') === 'dark') {
-				setTheme('dark');
-				document.querySelector('.theme-controller').checked = true;
-			} else {
-				setTheme('light');
-				document.querySelector('.theme-controller').checked = false;
-			}
-		})();
 
 		// Event listener for theme toggle
 		document.querySelector('.theme-controller').addEventListener('change', function () {

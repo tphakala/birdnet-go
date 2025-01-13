@@ -4,7 +4,10 @@
 <input type="hidden" name="templateName" value="{{.TemplateName}}">
 
 <!-- Node Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+    role="region" 
+    aria-label="Node Settings Section"
+    x-data="{
     debug: {{.Settings.Debug}},
     main: {
         name: '{{.Settings.Main.Name}}',
@@ -25,17 +28,20 @@
 ">
 
     <!-- control collapse element open state and label visibility -->
-    <input type="checkbox" id="mainSettingsOpen" x-on:change="mainSettingsOpen = ! mainSettingsOpen" />
+    <input type="checkbox" id="mainSettingsOpen" 
+        x-on:change="mainSettingsOpen = ! mainSettingsOpen"
+        aria-expanded="true" />
 
-    <div class="collapse-title text-xl font-medium">
+    <div class="collapse-title settings-section-header">
         <div class="flex items-center">
             <label for="mainSettingsOpen" class="cursor-pointer">Node Settings</label>
-            <div x-show="hasChanges" x-cloak class="ml-2">
-                <span class="badge badge-primary badge-sm changed-badge">
-                    <span class="text-xs mb-0.5">changed</span>
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
+                <span class="badge">
+                    <span>changed</span>
                 </span>
             </div>
         </div>
+        <p class="settings-section-description">Configure node specific settings</p>
     </div>
 
     <div class="collapse-content">
@@ -44,15 +50,21 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="nodeName">
                     <span class="label-text">Node Name</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'nodeName'"
+                    <span class="help-icon" 
+                        role="button"
+                        aria-label="Show help text for node name"
+                        @mouseenter="showTooltip = 'nodeName'" 
                         @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="text" id="nodeName" name="main.name" x-model="main.name"
                     class="input input-sm input-bordered" placeholder="Enter node name">
-                <div x-show="showTooltip === 'nodeName'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md w-96">
-                    Node name is used to identify source system in multi node setup, also used as identifier for MQTT
-                    messages.
+                <!-- Node Name tooltip -->
+                <div x-show="showTooltip === 'nodeName'" 
+                    x-cloak 
+                    class="tooltip"
+                    role="tooltip"
+                    aria-live="polite">
+                    Node name is used to identify source system in multi node setup, also used as identifier for MQTT messages.
                 </div>
             </div>
         </div>
@@ -139,7 +151,10 @@
 </div>
 
 <!-- BirdNET Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+    role="region" 
+    aria-label="BirdNET Settings Section"
+    x-data="{ 
     birdnet: {
         sensitivity: {{.Settings.BirdNET.Sensitivity}},
         threshold: {{.Settings.BirdNET.Threshold}},
@@ -172,19 +187,20 @@
 ">
 
     <!-- control collapse element open state and label visibility -->
-    <input type="checkbox" id="birdnetSettingsOpen" x-on:change="birdnetSettingsOpen = ! birdnetSettingsOpen" />
+    <input type="checkbox" id="birdnetSettingsOpen" 
+        x-on:change="birdnetSettingsOpen = ! birdnetSettingsOpen"
+        aria-expanded="true" />
 
-    <div class="collapse-title text-xl font-medium">
+    <div class="collapse-title settings-section-header">
         <div class="flex items-center">
-            <label for="mainSettingsOpen" class="cursor-pointer">BirdNET Settings</label>
-            <div x-show="hasChanges" x-cloak class="ml-2">
-                <span class="badge badge-primary badge-sm changed-badge">
-                    <span class="text-xs mb-0.5">changed</span>
+            <label for="birdnetSettingsOpen" class="cursor-pointer">BirdNET Settings</label>
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
+                <span class="badge">
+                    <span>changed</span>
                 </span>
             </div>
         </div>
-        <!-- short descripton of this section -->
-        <p class="text-sm text-gray-500">Configure BirdNET AI model specific settings</p>
+        <p class="settings-section-description">Configure BirdNET AI model specific settings</p>
     </div>
 
     <div class="collapse-content">
@@ -192,15 +208,27 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
             <div class="form-control relative">
-                <label class="label justify-start" for="birdnetSensitivity">
+                <label class="label justify-start" for="birdnetSensitivity" id="sensitivityLabel">
                     <span class="label-text">Sensitivity</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'sensitivity'"
+                    <span class="help-icon" 
+                        role="button"
+                        aria-label="Show help text for sensitivity setting"
+                        @mouseenter="showTooltip = 'sensitivity'" 
                         @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
-                <input type="number" id="birdnetSensitivity" name="birdnet.sensitivity" x-model="birdnet.sensitivity"
-                    step="0.1" min="0.1" max="1.5" class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'sensitivity'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <input type="number" 
+                    id="birdnetSensitivity" 
+                    name="birdnet.sensitivity" 
+                    x-model="birdnet.sensitivity"
+                    aria-labelledby="sensitivityLabel"
+                    aria-describedby="sensitivityTooltip"
+                    class="input input-bordered input-sm w-full">
+                <div x-show="showTooltip === 'sensitivity'" 
+                    id="sensitivityTooltip"
+                    x-cloak 
+                    class="tooltip"
+                    role="tooltip"
+                    aria-live="polite">
                     Detection sensitivity. Higher values result in higher sensitivity. Values in 0.5, 1.5.
                 </div>
             </div>
@@ -208,13 +236,11 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="birdnetThreshold">
                     <span class="label-text">Threshold</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'threshold'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'threshold'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="number" id="birdnetThreshold" name="birdnet.threshold" x-model="birdnet.threshold"
                     step="0.01" min="0" max="1" class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'threshold'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'threshold'" x-cloak class="tooltip">
                     Minimum confidence threshold. Values in 0.01, 0.99.
                 </div>
             </div>
@@ -222,13 +248,11 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="birdnetOverlap">
                     <span class="label-text">Overlap</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'overlap'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'overlap'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="number" id="birdnetOverlap" name="birdnet.overlap" x-model="birdnet.overlap" step="0.1"
                     min="0" max="2.9" class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'overlap'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'overlap'" x-cloak class="tooltip">
                     Overlap of prediction segments. Values in 0.0, 2.9.
                 </div>
             </div>
@@ -236,8 +260,7 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="birdnetLocale">
                     <span class="label-text">Locale</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'locale'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'locale'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <select id="birdnetLocale" name="birdnet.locale" x-model="birdnet.locale"
                     class="select select-bordered select-sm w-full">
@@ -246,8 +269,7 @@
                     {{end}}
                     <!--<option value="{{.Code}}" {{if eq .Code $.Settings.BirdNET.Locale}}selected{{end}}>{{.Name}} ({{.Code}})</option>-->
                 </select>
-                <div x-show="showTooltip === 'locale'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'locale'" x-cloak class="tooltip">
                     Locale for translated species common names.
                 </div>
             </div>
@@ -255,13 +277,11 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="birdnetThreads">
                     <span class="label-text">TensorFlow CPU Threads</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'threads'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'threads'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="number" id="birdnetThreads" name="birdnet.threads" x-model="birdnet.threads" step="1"
                     min="0" max="32" class="input input-bordered input-sm w-full" />
-                <div x-show="showTooltip === 'threads'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'threads'" x-cloak class="tooltip">
                     Number of CPU threads. Set to 0 to use all available threads.
                 </div>
             </div>
@@ -275,13 +295,11 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="birdnetModelPath">
                     <span class="label-text">Model Path (Requires restart to apply)</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'modelPath'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'modelPath'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="text" id="birdnetModelPath" name="birdnet.modelpath" x-model="birdnet.modelPath"
                     class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'modelPath'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'modelPath'" x-cloak class="tooltip">
                     Path to external BirdNET model file. Enter absolute or relative path to birdnet-go binary. Leave
                     empty to use the default embedded model.
                 </div>
@@ -290,13 +308,11 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="birdnetLabelPath">
                     <span class="label-text">Label Path (Requires restart to apply)</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'labelPath'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'labelPath'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="text" id="birdnetLabelPath" name="birdnet.labelpath" x-model="birdnet.labelPath"
                     class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'labelPath'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'labelPath'" x-cloak class="tooltip">
                     Path to external model labels file, .zip or .txt file. Enter absolute or relative path to birdnet-go
                     binary. Leave empty to use the default embedded labels.
                 </div>
@@ -313,11 +329,9 @@
                     x-model="dynamicThreshold.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
                 <input type="hidden" name="realtime.dynamicthreshold.enabled" value="false">
                 <span class="label-text">Enable Dynamic Threshold (BirdNET-Go specific feature)</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'dynamicThreshold'"
-                    @mouseleave="showTooltip = null">ⓘ</span>
+                <span class="help-icon" @mouseenter="showTooltip = 'dynamicThreshold'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <div x-show="showTooltip === 'dynamicThreshold'" x-cloak
-                class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+            <div x-show="showTooltip === 'dynamicThreshold'" x-cloak class="tooltip">
                 Enables dynamic confidence threshold feature for more adaptive bird call detection.
             </div>
         </div>
@@ -328,13 +342,11 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="dynamicThresholdTrigger">
                     <span class="label-text">Trigger Threshold</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'trigger'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'trigger'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="number" id="dynamicThresholdTrigger" name="realtime.dynamicthreshold.trigger"
                     x-model="dynamicThreshold.trigger" step="0.01" class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'trigger'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'trigger'" x-cloak class="tooltip">
                     The confidence level at which the dynamic threshold is activated. If a bird call is detected with
                     confidence over this value, the threshold for positive matches of that species will be lowered for
                     subsequent calls.
@@ -345,13 +357,11 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="dynamicThresholdMin">
                     <span class="label-text">Minimum Dynamic Threshold</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'min'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'min'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="number" id="dynamicThresholdMin" name="realtime.dynamicthreshold.min"
                     x-model="dynamicThreshold.min" step="0.01" class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'min'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'min'" x-cloak class="tooltip">
                     The minimum value to which the dynamic threshold can be lowered. This ensures that the threshold
                     does not drop below an unwanted level.
                 </div>
@@ -361,13 +371,11 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="dynamicThresholdValidHours">
                     <span class="label-text">Dynamic Threshold Expire Time (Hours)</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'validHours'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'validHours'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="number" id="dynamicThresholdValidHours" name="realtime.dynamicthreshold.validhours"
                     x-model="dynamicThreshold.validHours" class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'validHours'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'validHours'" x-cloak class="tooltip">
                     The number of hours during which the dynamic threshold adjustments remain valid. After this period,
                     the dynamic threshold is reset.
                 </div>
@@ -384,14 +392,20 @@
             <div class="form-control relative col-span-1 md:col-span-2">
                 <label class="label justify-start" for="locationMap">
                     <span class="label-text">Station Location</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'locationMap'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'locationMap'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
-                <div x-show="showTooltip === 'locationMap'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'locationMap'" x-cloak class="tooltip">
                     Station location, used to limit bird species to those propable in the region.
                 </div>
-                <div id="locationMap" style="height: 300px;"></div>
+                <div id="locationMap" 
+                    role="application"
+                    aria-label="Map for selecting station location"
+                    style="height: 300px;">
+                    <!-- Add screen reader instructions -->
+                    <span class="sr-only">
+                        Use arrow keys to navigate map. Press Enter to set location.
+                    </span>
+                </div>
             </div>
 
             <!-- Range Filter Settings -->
@@ -401,13 +415,11 @@
                 <div class="form-control relative">
                     <label class="label justify-start" for="birdnetLatitude">
                         <span class="label-text">Latitude</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'latitude'"
-                            @mouseleave="showTooltip = null">ⓘ</span>
+                        <span class="help-icon" @mouseenter="showTooltip = 'latitude'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>
                     <input type="number" id="birdnetLatitude" name="birdnet.latitude" x-model="birdnet.latitude"
                         step="0.001" class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'latitude'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'latitude'" x-cloak class="tooltip">
                         Station location latitude, used to limit bird species to those propable in the region.
                     </div>
                 </div>
@@ -416,13 +428,11 @@
                 <div class="form-control relative">
                     <label class="label justify-start" for="birdnetLongitude">
                         <span class="label-text">Longitude</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'longitude'"
-                            @mouseleave="showTooltip = null">ⓘ</span>
+                        <span class="help-icon" @mouseenter="showTooltip = 'longitude'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>
                     <input type="number" id="birdnetLongitude" name="birdnet.longitude" x-model="birdnet.longitude"
                         step="0.001" class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'longitude'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'longitude'" x-cloak class="tooltip">
                         Station location longitude, used to limit bird species to those propable in the region.
                     </div>
                 </div>
@@ -431,16 +441,14 @@
                 <div class="form-control relative">
                     <label class="label justify-start" for="birdnetRangeFilterModel">
                         <span class="label-text">Range Filter Model</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help"
-                            @mouseenter="showTooltip = 'rangeFilterModel'" @mouseleave="showTooltip = null">ⓘ</span>
+                        <span class="help-icon" @mouseenter="showTooltip = 'rangeFilterModel'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>
                     <select id="birdnetRangeFilterModel" name="birdnet.rangefilter.model" x-model="rangeFilter.model"
                         class="select select-bordered select-sm w-full">
                         <option value="legacy">legacy</option>
                         <option value="latest">latest</option>
                     </select>
-                    <div x-show="showTooltip === 'rangeFilterModel'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'rangeFilterModel'" x-cloak class="tooltip">
                         BirdNET range filter model version: latest or legacy.
                     </div>
                 </div>
@@ -449,14 +457,12 @@
                 <div class="form-control relative">
                     <label class="label justify-start" for="birdnetRangeFilterThreshold">
                         <span class="label-text">Threshold</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help"
-                            @mouseenter="showTooltip = 'rangeFilterThreshold'" @mouseleave="showTooltip = null">ⓘ</span>
+                        <span class="help-icon" @mouseenter="showTooltip = 'rangeFilterThreshold'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>
                     <input type="number" id="birdnetRangeFilterThreshold" name="birdnet.rangefilter.threshold"
                         x-model="rangeFilter.threshold" step="0.01" min="0" max="1"
                         class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'rangeFilterThreshold'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'rangeFilterThreshold'" x-cloak class="tooltip">
                         Confidence level determining which identifications are considered valid, e.g. a threshold of 0.7
                         means only detections with higher than 70% confidence score are accepted.
                     </div>
@@ -521,7 +527,10 @@
 </script>
 
 <!-- Database Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+    role="region" 
+    aria-label="Database Settings Section"
+    x-data="{ 
     outputType: '{{if .Settings.Output.SQLite.Enabled}}sqlite{{else}}mysql{{end}}',
     sqlite: {
         path: '{{.Settings.Output.SQLite.Path}}'
@@ -543,40 +552,52 @@
     $watch('mysql', () => hasChanges = true, { deep: true });
 ">
     <!-- control collapse element open state and label visibility -->
-    <input type="checkbox" id="outputSettingsOpen" x-on:change="outputSettingsOpen = !outputSettingsOpen" />
+    <input type="checkbox" id="outputSettingsOpen" 
+        x-on:change="outputSettingsOpen = !outputSettingsOpen"
+        aria-expanded="true" />
 
-    <div class="collapse-title text-xl font-medium">
+    <div class="collapse-title settings-section-header">
         <div class="flex items-center">
             <label for="outputSettingsOpen" class="cursor-pointer">Database Settings</label>
-            <div x-show="hasChanges" x-cloak class="ml-2">
-                <span class="badge badge-primary badge-sm changed-badge">
-                    <span class="text-xs mb-0.5">changed</span>
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
+                <span class="badge">
+                    <span>changed</span>
                 </span>
             </div>
         </div>
-        <!-- short descripton of this section -->
-        <p class="text-sm text-gray-500">Detections database settings</p>
+        <p class="settings-section-description">Detections database settings</p>
     </div>
 
     <div class="collapse-content">
 
         <!-- Database Type -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="form-control relative">
-                <label class="label justify-start" for="databaseType">
-                    <span class="label-text">Select Database Type</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'databaseType'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
-                </label>
-                <select id="databaseType" x-model="outputType" name="output.type"
-                    class="select select-sm select-bordered w-full">
-                    <option value="sqlite">SQLite</option>
-                    <option value="mysql">MySQL</option>
-                </select>
-                <div x-show="showTooltip === 'databaseType'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                    Database type for storing detections: SQLite or MySQL
-                </div>
+        <div class="settings-form-group">
+            <label class="justify-start" 
+                for="databaseType" 
+                id="databaseTypeLabel">
+                <span class="label-text">Select Database Type</span>
+                <span class="help-icon" 
+                    role="button"
+                    aria-label="Show help text for database type"
+                    @mouseenter="showTooltip = 'databaseType'" 
+                    @mouseleave="showTooltip = null">ⓘ</span>
+            </label>
+            <select id="databaseType" 
+                x-model="outputType" 
+                name="output.type"
+                aria-labelledby="databaseTypeLabel"
+                aria-describedby="databaseTypeTooltip"
+                class="select select-sm select-bordered w-full">
+                <option value="sqlite">SQLite</option>
+                <option value="mysql">MySQL</option>
+            </select>
+            <div x-show="showTooltip === 'databaseType'" 
+                id="databaseTypeTooltip"
+                x-cloak 
+                class="tooltip"
+                role="tooltip"
+                aria-live="polite">
+                Database type for storing detections: SQLite or MySQL
             </div>
         </div>
 
@@ -585,14 +606,12 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="sqlitePath">
                     <span class="label-text">SQLite Database Path</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'sqlitePath'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'sqlitePath'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <div class="flex">
                     <input type="text" id="sqlitePath" x-model="sqlite.path" name="output.sqlite.path"
                         class="input input-sm input-bordered flex-grow" placeholder="Enter SQLite database path">
-                    <div x-show="showTooltip === 'sqlitePath'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'sqlitePath'" x-cloak class="tooltip">
                         SQLite database file path relative to the application directory
                     </div>
                 </div>
@@ -606,13 +625,11 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="mysqlHost">
                     <span class="label-text">MySQL Host</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mysqlHost'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'mysqlHost'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="text" id="mysqlHost" x-model="mysql.host" name="output.mysql.host"
                     class="input input-sm input-bordered" placeholder="Enter MySQL host">
-                <div x-show="showTooltip === 'mysqlHost'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'mysqlHost'" x-cloak class="tooltip">
                     MySQL database host (IP or hostname)
                 </div>
             </div>
@@ -621,13 +638,11 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="mysqlPort">
                     <span class="label-text">MySQL Port</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mysqlPort'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'mysqlPort'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="text" id="mysqlPort" x-model="mysql.port" name="output.mysql.port"
                     class="input input-sm input-bordered" placeholder="Enter MySQL port">
-                <div x-show="showTooltip === 'mysqlPort'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'mysqlPort'" x-cloak class="tooltip">
                     MySQL database port (default 3306/TCP)
                 </div>
             </div>
@@ -636,13 +651,11 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="mysqlUsername">
                     <span class="label-text">MySQL Username</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mysqlUsername'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'mysqlUsername'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <input type="text" id="mysqlUsername" x-model="mysql.username" name="output.mysql.username"
                     class="input input-sm input-bordered" placeholder="Enter MySQL username">
-                <div x-show="showTooltip === 'mysqlUsername'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'mysqlUsername'" x-cloak class="tooltip">
                     MySQL database username
                 </div>
             </div>
@@ -651,14 +664,15 @@
             <div class="form-control relative">
                 <label class="label justify-start" for="mysqlPassword">
                     <span class="label-text">MySQL Password</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mysqlPassword'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" @mouseenter="showTooltip = 'mysqlPassword'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
                 <div class="relative">
                     <input :type="showPassword ? 'text' : 'password'" id="mysqlOutputPassword" x-model="mysql.password"
                         name="output.mysql.password" class="input input-sm input-bordered w-full"
                         placeholder="Enter MySQL password">
-                    <button type="button" @click="showPassword = !showPassword"
+                    <button type="button" 
+                        @click="showPassword = !showPassword"
+                        aria-label="Toggle password visibility"
                         class="absolute inset-y-0 right-0 pr-3 flex items-center">
                         <svg x-show="!showPassword" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400"
                             viewBox="0 0 20 20" fill="currentColor" role="img" aria-label="Show password">
@@ -677,8 +691,7 @@
                         </svg>
                     </button>
                 </div>
-                <div x-show="showTooltip === 'mysqlPassword'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <div x-show="showTooltip === 'mysqlPassword'" x-cloak class="tooltip">
                     MySQL database password
                 </div>
             </div>
@@ -688,13 +701,11 @@
                 <div class="form-control relative w-full md:w-[calc(50%-0.75rem)]">
                     <label class="label justify-start" for="mysqlDatabase">
                         <span class="label-text">MySQL Database</span>
-                        <span class="ml-2 text-sm text-gray-500 cursor-help" @mouseenter="showTooltip = 'mysqlDatabase'"
-                            @mouseleave="showTooltip = null">ⓘ</span>
+                        <span class="help-icon" @mouseenter="showTooltip = 'mysqlDatabase'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>
                     <input type="text" id="mysqlDatabase" x-model="mysql.database" name="output.mysql.database"
                         class="input input-sm input-bordered w-full" placeholder="Enter MySQL database name">
-                    <div x-show="showTooltip === 'mysqlDatabase'" x-cloak
-                        class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                    <div x-show="showTooltip === 'mysqlDatabase'" x-cloak class="tooltip">
                         MySQL database name
                     </div>
                 </div>
@@ -705,7 +716,10 @@
 </div>
 
 <!-- User Interface Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+    role="region" 
+    aria-label="User Interface Settings Section"
+    x-data="{ 
     dashboard: {
         thumbnails: {
             summary: {{.Settings.Realtime.Dashboard.Thumbnails.Summary}},
@@ -723,19 +737,20 @@
 ">
 
     <!-- control collapse element open state and label visibility -->
-    <input type="checkbox" id="uiSettingsOpen" x-on:change="uiSettingsOpen = !uiSettingsOpen" />
+    <input type="checkbox" id="uiSettingsOpen" 
+        x-on:change="uiSettingsOpen = !uiSettingsOpen"
+        aria-expanded="true" />
 
-    <div class="collapse-title text-xl font-medium">
+    <div class="collapse-title settings-section-header">
         <div class="flex items-center">
             <label for="uiSettingsOpen" class="cursor-pointer">User Interface Settings</label>
-            <div x-show="hasChanges" x-cloak class="ml-2">
-                <span class="badge badge-primary badge-sm changed-badge">
-                    <span class="text-xs mb-0.5">changed</span>
+            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
+                <span class="badge">
+                    <span>changed</span>
                 </span>
             </div>
         </div>
-        <!-- short descripton of this section -->
-        <p class="text-sm text-gray-500">Customize user interface</p>
+        <p class="settings-section-description">Customize user interface</p>
     </div>
 
     <div class="collapse-content">
@@ -745,17 +760,32 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
             <!-- Daily Summary Species Limit -->
-            <div class="form-control relative">
-                <label class="label justify-start" for="dashboardSummaryLimit">
+            <div class="settings-form-group">
+                <label class="justify-start" 
+                    for="dashboardSummaryLimit" 
+                    id="summaryLimitLabel">
                     <span class="label-text">Max Number of Species on Daily Summary Table</span>
-                    <span class="ml-2 text-sm text-gray-500 cursor-help"
-                        @mouseenter="showTooltip = 'dashboardSummaryLimit'" @mouseleave="showTooltip = null">ⓘ</span>
+                    <span class="help-icon" 
+                        role="button"
+                        aria-label="Show help text for summary limit"
+                        @mouseenter="showTooltip = 'dashboardSummaryLimit'" 
+                        @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
-                <input type="number" id="dashboardSummaryLimit" name="realtime.dashboard.summarylimit"
-                    x-model="dashboard.summarylimit" class="input input-sm input-bordered mb-2 w-full"
-                    placeholder="Enter limit" min="10" max="1000">
-                <div x-show="showTooltip === 'dashboardSummaryLimit'" x-cloak
-                    class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+                <input type="number" 
+                    id="dashboardSummaryLimit" 
+                    name="realtime.dashboard.summarylimit"
+                    x-model="dashboard.summarylimit" 
+                    aria-labelledby="summaryLimitLabel"
+                    aria-describedby="summaryLimitTooltip"
+                    class="input input-sm input-bordered w-full"
+                    min="10" 
+                    max="1000">
+                <div x-show="showTooltip === 'dashboardSummaryLimit'" 
+                    id="summaryLimitTooltip"
+                    x-cloak 
+                    class="tooltip"
+                    role="tooltip"
+                    aria-live="polite">
                     Max number of species shown in the daily summary table (Value between 10 and 1000)
                 </div>
             </div>
@@ -764,18 +794,17 @@
 
         <!-- Daily Summary Thumbnails -->
         <div class="form-control relative">
-            <label class="label cursor-pointer justify-start" for="dashboardThumbnailsSummary">
-                <input type="checkbox" id="dashboardThumbnailsSummary" name="realtime.dashboard.thumbnails.summary"
-                    x-model="dashboard.thumbnails.summary" class="checkbox checkbox-primary checkbox-xs mr-2">
-                <input type="hidden" name="realtime.dashboard.thumbnails.summary" value="false">
+            <label class="label cursor-pointer justify-start" 
+                for="dashboardThumbnailsSummary"
+                id="thumbnailsSummaryLabel">
+                <input type="checkbox" 
+                    id="dashboardThumbnailsSummary" 
+                    name="realtime.dashboard.thumbnails.summary"
+                    x-model="dashboard.thumbnails.summary" 
+                    aria-labelledby="thumbnailsSummaryLabel"
+                    class="checkbox checkbox-primary checkbox-xs mr-2">
                 <span class="label-text">Show Thumbnails on Daily Summary table</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help"
-                    @mouseenter="showTooltip = 'dashboardThumbnailsSummary'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <div x-show="showTooltip === 'dashboardThumbnailsSummary'" x-cloak
-                class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                Enable to show thumbnails of detected species on the daily summary table
-            </div>
         </div>
 
         <!-- Recent Detections Thumbnails -->
@@ -785,11 +814,9 @@
                     x-model="dashboard.thumbnails.recent" class="checkbox checkbox-primary checkbox-xs mr-2">
                 <input type="hidden" name="realtime.dashboard.thumbnails.recent" value="false">
                 <span class="label-text">Show Thumbnails on Recent Detections list</span>
-                <span class="ml-2 text-sm text-gray-500 cursor-help"
-                    @mouseenter="showTooltip = 'dashboardThumbnailsRecent'" @mouseleave="showTooltip = null">ⓘ</span>
+                <span class="help-icon" @mouseenter="showTooltip = 'dashboardThumbnailsRecent'" @mouseleave="showTooltip = null">ⓘ</span>
             </label>
-            <div x-show="showTooltip === 'dashboardThumbnailsRecent'" x-cloak
-                class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
+            <div x-show="showTooltip === 'dashboardThumbnailsRecent'" x-cloak class="tooltip">
                 Enable to show thumbnails of detected species on the recent detections list
             </div>
         </div>
