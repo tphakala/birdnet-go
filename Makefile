@@ -4,7 +4,9 @@ TFLITE_VERSION := v2.17.1
 
 # Common flags
 CGO_FLAGS := CGO_ENABLED=1 CGO_CFLAGS="-I$(HOME)/src/tensorflow"
-LDFLAGS := -ldflags "-s -w -X 'main.buildDate=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)'"
+LDFLAGS := -ldflags "-s -w \
+    -X 'main.buildDate=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)' \
+    -X 'main.version=$(shell git describe --tags --always)'"
 
 # Detect host OS and architecture
 UNAME_S := $(shell uname -s)

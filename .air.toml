@@ -26,8 +26,11 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
     export CGO_CFLAGS="-I${HOME}/src/tensorflow"
     export CGO_LDFLAGS="-L/usr/lib -ltensorflowlite_c"
     
-    # Build the Go application
-    go build -v -x -ldflags "-s -w -X main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o ./tmp/main .
+    # Build the Go application with version and build date
+    go build -v -x -ldflags "-s -w \
+      -X 'main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)' \
+      -X 'main.version=$(git describe --tags --always)'" \
+      -o ./tmp/main .
   """
   
   bin = "./tmp/main"  # Path to the compiled binary
