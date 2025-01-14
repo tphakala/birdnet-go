@@ -1,0 +1,58 @@
+name: Update Licenses
+
+on:
+  push:
+    paths:
+      - 'go.mod'
+      - 'go.sum'
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  update-licenses:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Install go-licenses
+        run: go install github.com/google/go-licenses@latest
+
+      - name: Generate LICENSES.md
+        run: |
+          echo "# Licenses" > LICENSES.md
+          echo "" >> LICENSES.md
+          echo "## BirdNET-Go" >> LICENSES.md
+          echo "" >> LICENSES.md
+          echo "Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International" >> LICENSES.md
+          echo "https://creativecommons.org/licenses/by-nc-sa/4.0/" >> LICENSES.md
+          echo "" >> LICENSES.md
+          echo "## Dependencies" >> LICENSES.md
+          echo "" >> LICENSES.md
+          go-licenses csv github.com/tphakala/birdnet-go | while IFS=, read -r package license source; do
+            echo "### $package" >> LICENSES.md
+            echo "" >> LICENSES.md
+            echo "License: $license" >> LICENSES.md
+            echo "Source: $source" >> LICENSES.md
+            echo "" >> LICENSES.md
+          done
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: 'docs: update dependency licenses'
+          title: 'Update dependency licenses'
+          body: |
+            Automatically updated LICENSES.md with current dependency licenses.
+            
+            This PR was created automatically by the update-licenses workflow.
+          branch: update-licenses
+          delete-branch: true 
