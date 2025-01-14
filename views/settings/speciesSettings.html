@@ -13,15 +13,58 @@
         },
         newIncludeSpecies: '',
         showTooltip: null,
-        hasChanges: false,
-        predictions: [],
-        allSpecies: [],
-        async init() {
-            this.allSpecies = {{getAllSpecies | toJSON}};
-        },
+        hasChanges: false,       
         speciesSettingsOpen: false,
         showActionsModal: false,
         currentSpecies: '',
+        predictions: [],
+        allSpecies: [],
+        filteredSpecies: [],
+        async init() {
+            this.allSpecies = [];
+            this.filteredSpecies = [];
+            // Use app version for cache busting
+            const appVersion = '{{.Settings.Version}}';
+            const cached = localStorage.getItem('allSpecies');
+            const cachedFiltered = localStorage.getItem('filteredSpecies');
+            const cachedVersion = localStorage.getItem('allSpeciesVersion');
+            
+            if (cached && cachedVersion === appVersion) {
+                this.allSpecies = JSON.parse(cached);
+            }
+            if (cachedFiltered && cachedVersion === appVersion) {
+                this.filteredSpecies = JSON.parse(cachedFiltered);
+            }
+        },
+        async loadSpeciesData() {
+            if (this.allSpecies.length === 0) {
+                this.allSpecies = {{getAllSpecies | toJSON}};
+                // Cache with app version
+                localStorage.setItem('allSpecies', JSON.stringify(this.allSpecies));
+                localStorage.setItem('allSpeciesVersion', '{{.Settings.Version}}');
+            }
+            if (this.filteredSpecies.length === 0) {
+                this.filteredSpecies = {{getIncludedSpecies | toJSON}};
+                // Cache filtered species
+                localStorage.setItem('filteredSpecies', JSON.stringify(this.filteredSpecies));
+            }
+        },
+        async updatePredictions(input, listType) {
+            if (!input) {
+                this.predictions = [];
+                return;
+            }
+            
+            await this.loadSpeciesData();
+            
+            const sourceList = listType === 'Include' ? this.allSpecies : this.filteredSpecies;
+            
+            this.predictions = sourceList
+                .filter(species => 
+                    species.toLowerCase().includes(input.toLowerCase())
+                )
+                .slice(0, 5);
+        },
         resetChanges() {
             this.hasChanges = false;
         },
@@ -36,21 +79,6 @@
         removeSpecies(list, species) {
             this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== species);
             this.hasChanges = true;
-        },
-        updatePredictions(input, listType) {
-            if (!input) {
-                this.predictions = [];
-                return;
-            }
-            
-            // Use different species list based on whether we're including or excluding
-            const sourceList = this.allSpecies;
-            
-            this.predictions = sourceList
-                .filter(species => 
-                    species.toLowerCase().includes(input.toLowerCase())
-                )
-                .slice(0, 5);
         },
     }" 
     x-init="init(); $watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
@@ -137,7 +165,19 @@
         predictions: [],
         filteredSpecies: [],
         async init() {
-            this.filteredSpecies = {{getIncludedSpecies | toJSON}};
+            // Use app version for cache busting
+            const appVersion = '{{.Settings.Version}}';
+            const cachedFiltered = localStorage.getItem('filteredSpecies');
+            const cachedVersion = localStorage.getItem('allSpeciesVersion');
+            
+            if (cachedFiltered && cachedVersion === appVersion) {
+                this.filteredSpecies = JSON.parse(cachedFiltered);
+            } else {
+                this.filteredSpecies = {{getIncludedSpecies | toJSON}};
+                // Cache filtered species
+                localStorage.setItem('filteredSpecies', JSON.stringify(this.filteredSpecies));
+                localStorage.setItem('allSpeciesVersion', '{{.Settings.Version}}');
+            }
         },
         resetChanges() {
             this.hasChanges = false;
@@ -249,8 +289,19 @@
         allSpecies: [],
         filteredSpecies: [],
         async init() {
-            this.allSpecies = {{getAllSpecies | toJSON}};
-            this.filteredSpecies = {{getIncludedSpecies | toJSON}};
+            // Use app version for cache busting
+            const appVersion = '{{.Settings.Version}}';
+            const cachedFiltered = localStorage.getItem('filteredSpecies');
+            const cachedVersion = localStorage.getItem('allSpeciesVersion');
+            
+            if (cachedFiltered && cachedVersion === appVersion) {
+                this.filteredSpecies = JSON.parse(cachedFiltered);
+            } else {
+                this.filteredSpecies = {{getIncludedSpecies | toJSON}};
+                // Cache filtered species
+                localStorage.setItem('filteredSpecies', JSON.stringify(this.filteredSpecies));
+                localStorage.setItem('allSpeciesVersion', '{{.Settings.Version}}');
+            }
         },
         speciesSettingsOpen: false,
         showActionsModal: false,
