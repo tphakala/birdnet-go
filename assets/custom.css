@@ -1,3 +1,8 @@
+/* Add at the top of the file */
+[x-cloak=""] {
+    display: none !important;
+}
+
 /* Force page scrolling behavior */
 html, body {
   height: 100%;
@@ -548,4 +553,23 @@ thead.sticky-header {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Settings Base Styles */
+.input {
+    border-radius: 0.3rem;
+}
+
+.select {
+    border-radius: 0.3rem;
+}
+
+.badge.badge-primary.badge-sm.changed-badge {
+    opacity: 1;
+    transition: opacity 0.3s ease-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.125rem;
+    height: 1rem;
 }
