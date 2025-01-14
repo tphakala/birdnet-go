@@ -37,7 +37,19 @@ jobs:
           echo "" >> LICENSES.md
           echo "## Dependencies" >> LICENSES.md
           echo "" >> LICENSES.md
-          go-licenses csv github.com/tphakala/birdnet-go | while IFS=, read -r package license source; do
+          
+          # Get licenses excluding internal packages unless they have a LICENSE file
+          go-licenses csv github.com/tphakala/birdnet-go/... | while IFS=, read -r package license source; do
+            # Skip internal packages unless they contain a LICENSE file
+            if [[ $package == *"/internal/"* ]] && ! [[ -f "${source}/LICENSE" ]]; then
+              continue
+            fi
+            
+            # Skip the main module
+            if [[ $package == "github.com/tphakala/birdnet-go" ]]; then
+              continue
+            fi
+            
             echo "### $package" >> LICENSES.md
             echo "" >> LICENSES.md
             echo "License: $license" >> LICENSES.md
@@ -48,11 +60,16 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: 'docs: update dependency licenses'
           title: 'Update dependency licenses'
           body: |
             Automatically updated LICENSES.md with current dependency licenses.
             
             This PR was created automatically by the update-licenses workflow.
+            
+            Changes:
+            - Excluded internal packages without LICENSE files
+            - Updated dependency licenses based on go.mod changes
           branch: update-licenses
           delete-branch: true 
