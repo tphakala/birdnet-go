@@ -280,6 +280,10 @@ type Security struct {
 type Settings struct {
 	Debug bool // true to enable debug mode
 
+	// Runtime values, not stored in config file
+	Version   string `yaml:"-"` // Version from build
+	BuildDate string `yaml:"-"` // Build date from build
+
 	Main struct {
 		Name      string    // name of BirdNET-Go node, can be used to identify source of notes
 		TimeAs24h bool      // true 24-hour time format, false 12-hour time format
@@ -493,7 +497,7 @@ func SaveSettings() error {
 	return nil
 }
 
-// Settings returns the current settings instance, initializing it if necessary
+// Setting returns the current settings instance, initializing it if necessary
 func Setting() *Settings {
 	once.Do(func() {
 		if settingsInstance == nil {
