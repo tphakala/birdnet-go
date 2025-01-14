@@ -1,6 +1,8 @@
 package httpcontroller
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -22,23 +24,25 @@ func (s *Server) configureMiddleware() {
 	s.Echo.Use(VaryHeaderMiddleware())
 }
 
-// CacheControlMiddleware applies cache control headers for specified routes.
 func CacheControlMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			path := c.Request().URL.Path
 
 			switch {
-			case strings.HasPrefix(path, "/assets/"):
-				// Static assets (1 week)
-				c.Response().Header().Set("Cache-Control", "public, max-age=604800")
-			case strings.HasPrefix(path, "/clips/") ||
-				(path == "/media/spectrogram" && strings.Contains(c.QueryParam("clip"), "clips/")):
-				// Clips and their spectrograms are immutable (1 month)
+			case strings.HasSuffix(path, ".css"), strings.HasSuffix(path, ".js"), strings.HasSuffix(path, ".html"):
+				// CSS and JS files - shorter cache with validation
+				c.Response().Header().Set("Cache-Control", "public, max-age=3600, must-revalidate")
+				c.Response().Header().Set("ETag", generateETag(path))
+			case strings.HasSuffix(path, ".png"), strings.HasSuffix(path, ".jpg"),
+				strings.HasSuffix(path, ".ico"), strings.HasSuffix(path, ".svg"):
+				// Images can be cached longer
+				c.Response().Header().Set("Cache-Control", "public, max-age=604800, immutable")
+			case strings.HasPrefix(path, "/clips/"):
 				c.Response().Header().Set("Cache-Control", "public, max-age=2592000, immutable")
 			default:
 				// Dynamic content
-				c.Response().Header().Set("Cache-Control", "private, max-age=0, must-revalidate")
+				c.Response().Header().Set("Cache-Control", "private, no-cache, must-revalidate")
 			}
 			return next(c)
 		}
@@ -88,4 +92,11 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 }
 func isProtectedRoute(path string) bool {
 	return strings.HasPrefix(path, "/settings/")
+}
+
+// generateETag creates a simple hash-based ETag for a given path
+func generateETag(path string) string {
+	h := sha256.New()
+	h.Write([]byte(path))
+	return fmt.Sprintf(`"%x"`, h.Sum(nil)[:8])
 }
