@@ -8,15 +8,18 @@ on:
     - cron: '0 0 1 * *'  # Monthly
   workflow_dispatch:  # Manual trigger
 
+permissions:  # Add explicit permissions block at workflow level
+  contents: write
+  pull-requests: write
+
 jobs:
   update-authors:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
     
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}  # Explicitly set the token
       
       - name: Update AUTHORS file
         env:
@@ -51,6 +54,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}  # Explicitly set the token
           commit-message: 'docs: update AUTHORS file with current contributors'
           title: 'Update AUTHORS file'
           body: |
