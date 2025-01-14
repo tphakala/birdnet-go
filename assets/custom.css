@@ -73,7 +73,8 @@ thead.sticky-header {
   position: sticky;
   top: 0;
   z-index: 10;
-  background-image: linear-gradient(to bottom, white 70%, transparent 100%);
+  height: 2rem;
+  background-color: var(--fallback-b1,oklch(var(--b1)/1));
 }
 
 [data-theme=dark] thead.sticky-header {
@@ -105,8 +106,10 @@ thead.sticky-header {
 }
 
 .hour-data a {
-  height: 100%;
-  width: 100%;
+  height: 2rem;
+  min-height: 2rem;
+  max-height: 2rem;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -518,12 +521,50 @@ thead.sticky-header {
     transition: transform 0.2s ease-in-out;
 }
 
-/* Style date input calendar icon for dark mode */
-[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1);
+/* Style date input calendar icon for light mode */
+[data-theme="light"] input[type="date"] {
+  color-scheme: light;
 }
 
-/* For Firefox */
+/* Style date input calendar icon for dark mode */
 [data-theme="dark"] input[type="date"] {
   color-scheme: dark;
+}
+
+/* Ensure table cells have consistent height and prevent content overflow */
+.hour-data {
+  height: 2rem;
+  min-height: 2rem;
+  max-height: 2rem;
+  line-height: 2rem;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+/* Fix table row height consistency */
+.table tr {
+  height: 2rem;
+  min-height: 2rem;
+  max-height: 2rem;
+}
+
+/* Ensure table cells maintain their dimensions */
+.table td, 
+.table th {
+  box-sizing: border-box;
+  height: 2rem;
+  min-height: 2rem;
+  max-height: 2rem;
+  vertical-align: middle;
+}
+
+/* Fix flex alignment in cells with links */
+.hour-data a {
+  height: 2rem;
+  min-height: 2rem;
+  max-height: 2rem;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
