@@ -15,7 +15,10 @@
         showTooltip: null,
         hasChanges: false,
         predictions: [],
-        allSpecies: {{getAllSpecies | toJSON}},
+        allSpecies: [],
+        async init() {
+            this.allSpecies = {{getAllSpecies | toJSON}};
+        },
         speciesSettingsOpen: false,
         showActionsModal: false,
         currentSpecies: '',
@@ -50,7 +53,7 @@
                 .slice(0, 5);
         },
     }" 
-    x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
+    x-init="init(); $watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
     x-cloak>
     
     <input type="checkbox" 
@@ -132,7 +135,10 @@
         showTooltip: null,
         hasChanges: false,
         predictions: [],
-        filteredSpecies: {{getIncludedSpecies | toJSON}},
+        filteredSpecies: [],
+        async init() {
+            this.filteredSpecies = {{getIncludedSpecies | toJSON}};
+        },
         resetChanges() {
             this.hasChanges = false;
         },
@@ -164,7 +170,7 @@
                 .slice(0, 5);
         },
     }" 
-    x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
+    x-init="init(); $watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
     x-cloak>
     
     <input type="checkbox" 
@@ -240,8 +246,12 @@
         showTooltip: null,
         hasChanges: false,
         predictions: [],
-        allSpecies: {{getAllSpecies | toJSON}},
-        filteredSpecies: {{getIncludedSpecies | toJSON}},
+        allSpecies: [],
+        filteredSpecies: [],
+        async init() {
+            this.allSpecies = {{getAllSpecies | toJSON}};
+            this.filteredSpecies = {{getIncludedSpecies | toJSON}};
+        },
         speciesSettingsOpen: false,
         showActionsModal: false,
         currentSpecies: '',
@@ -334,7 +344,7 @@
                 .slice(0, 5);
         },
     }" 
-    x-init="$watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
+    x-init="init(); $watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
     x-cloak>
     
     <input type="checkbox" 
