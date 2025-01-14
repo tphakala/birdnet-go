@@ -40,8 +40,8 @@ jobs:
           
           # Get licenses excluding internal packages unless they have a LICENSE file
           go-licenses csv github.com/tphakala/birdnet-go/... | while IFS=, read -r package license source; do
-            # Skip internal packages unless they contain a LICENSE file
-            if [[ $package == *"/internal/"* ]] && ! [[ -f "${source}/LICENSE" ]]; then
+            # Skip internal packages and cmd packages unless they contain a LICENSE file
+            if [[ $package == *"/internal/"* || $package == *"/cmd/"* ]] && ! [[ -f "${source}/LICENSE" ]]; then
               continue
             fi
             
