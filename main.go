@@ -16,6 +16,9 @@ import (
 // buildTime is the time when the binary was built.
 var buildDate string
 
+// version holds the Git version tag
+var version string
+
 //go:embed assets/*
 var assetsFs embed.FS
 
@@ -55,7 +58,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("🐦 \033[37mBirdNET-Go build date: %s, using config file: %s\033[0m\n", buildDate, viper.ConfigFileUsed())
+	// Set runtime values
+	settings.Version = version
+	settings.BuildDate = buildDate
+
+	fmt.Printf("🐦 \033[37mBirdNET-Go v%s (built: %s), using config file: %s\033[0m\n",
+		settings.Version, settings.BuildDate, viper.ConfigFileUsed())
 
 	// Execute the root command
 	rootCmd := cmd.RootCommand(settings)
