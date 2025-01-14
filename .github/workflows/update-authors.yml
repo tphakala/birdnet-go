@@ -1,0 +1,61 @@
+name: Update AUTHORS file
+
+on:
+  # Run on push to main branch and monthly
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 1 * *'  # Monthly
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  update-authors:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Update AUTHORS file
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Fetch all contributors using GitHub CLI
+          contributors=$(gh api repos/tphakala/birdnet-go/contributors --jq '.[].login')
+          
+          # Create new AUTHORS file
+          cat > AUTHORS << EOL
+          BirdNET-Go is work of
+          
+          Tomi P. Hakala
+          
+          Contributors:
+          $(echo "$contributors" | grep -v "tphakala" | sed 's/^/@/')
+          
+          Please let me know if you are missing from contributors list!
+          
+          BirdNET model by the K. Lisa Yang Center for Conservation Bioacoustics
+          at the Cornell Lab of Ornithology in collaboration with Chemnitz
+          University of Technology. Stefan Kahl, Connor Wood, Maximilian Eibl,
+          Holger Klinck.
+          https://github.com/kahst/BirdNET-Analyzer
+          
+          BirdNET label translations by Patrick Levin for BirdNET-Pi project by
+          Patrick McGuire.
+          https://github.com/patlevin
+          https://github.com/mcguirepr89/BirdNET-Pi
+          EOL
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: 'docs: update AUTHORS file with current contributors'
+          title: 'Update AUTHORS file'
+          body: |
+            Automatically updated AUTHORS file with current GitHub contributors.
+            
+            This PR was created automatically by the update-authors workflow.
+          branch: update-authors
+          delete-branch: true 
