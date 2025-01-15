@@ -3,6 +3,7 @@ name: BirdNET-Go Release Build
 on:
   release:
     types: [created, edited]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -11,7 +12,7 @@ permissions:
 jobs:
   build:
     if: ${{ !contains(github.ref, 'nightly') }}
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -31,7 +32,7 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         goos: ${{ matrix.goos }}
         goarch: ${{ matrix.goarch }}
-        goversion: "https://dl.google.com/go/go1.22.1.linux-amd64.tar.gz"
+        goversion: "https://dl.google.com/go/go1.23.4.linux-amd64.tar.gz"
         md5sum: false
         sha256sum: false
         compress_assets: auto
@@ -42,7 +43,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
     - name: Login to GitHub Container Registry
-      uses: docker/login-action@v3.0.0
+      uses: docker/login-action@v3
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
@@ -54,7 +55,7 @@ jobs:
 
     - name: Extract metadata (tags, labels) for Docker
       id: meta
-      uses: docker/metadata-action@v5.5.1
+      uses: docker/metadata-action@v5
       with:
         images: ghcr.io/${{ env.REPO }}
         tags: |
