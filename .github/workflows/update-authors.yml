@@ -1,9 +1,7 @@
 name: Update AUTHORS file
 
 on:
-  # Run on push to main branch and monthly
-  push:
-    branches: [ main ]
+  # Run monthly
   schedule:
     - cron: '0 0 1 * *'  # Monthly
   workflow_dispatch:  # Manual trigger
@@ -28,8 +26,7 @@ jobs:
           # Fetch all contributors using GitHub CLI and filter out bots and owner
           contributors=$(gh api repos/tphakala/birdnet-go/contributors --jq '.[].login' | \
             grep -v "tphakala" | \
-            grep -v "dependabot\[bot\]" | \
-            grep -v "^bot-" | \
+            grep -v "\[bot\]" | \
             sort)
           
           # Create new AUTHORS file
