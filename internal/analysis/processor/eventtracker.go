@@ -71,14 +71,24 @@ type EventTracker struct {
 	Mutex    sync.Mutex                  // Mutex to ensure thread-safe access
 }
 
-// NewEventTracker initializes a new EventTracker with default event handlers.
-func NewEventTracker() *EventTracker {
+// Add this new struct to hold configuration
+type EventTrackerConfig struct {
+	DatabaseSaveInterval      time.Duration
+	LogToFileInterval         time.Duration
+	NotificationInterval      time.Duration
+	BirdWeatherSubmitInterval time.Duration
+	MQTTPublishInterval       time.Duration
+}
+
+// Modify NewEventTracker to accept configuration
+func NewEventTracker(interval time.Duration) *EventTracker {
 	return &EventTracker{
 		Handlers: map[EventType]*EventHandler{
-			DatabaseSave:      NewEventHandler(15*time.Second, StandardEventBehavior),
-			LogToFile:         NewEventHandler(15*time.Second, StandardEventBehavior),
-			SendNotification:  NewEventHandler(60*time.Minute, StandardEventBehavior),
-			BirdWeatherSubmit: NewEventHandler(15*time.Second, StandardEventBehavior),
+			DatabaseSave:      NewEventHandler(interval, StandardEventBehavior),
+			LogToFile:         NewEventHandler(interval, StandardEventBehavior),
+			SendNotification:  NewEventHandler(interval, StandardEventBehavior),
+			BirdWeatherSubmit: NewEventHandler(interval, StandardEventBehavior),
+			MQTTPublish:       NewEventHandler(interval, StandardEventBehavior),
 		},
 	}
 }

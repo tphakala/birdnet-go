@@ -82,7 +82,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		Ds:                  ds,
 		Bn:                  bn,
 		BirdImageCache:      birdImageCache,
-		EventTracker:        NewEventTracker(),
+		EventTracker:        NewEventTracker(time.Duration(settings.Realtime.Interval) * time.Second),
 		Metrics:             metrics,
 		LastDogDetection:    make(map[string]time.Time),
 		LastHumanDetection:  make(map[string]time.Time),
