@@ -73,16 +73,17 @@ func (a LogAction) Execute(data interface{}) error {
 	species := strings.ToLower(a.Note.CommonName)
 
 	// Check if the event should be handled for this species
-	if a.EventTracker.TrackEvent(species, LogToFile) {
-		if err := observation.LogNoteToFile(a.Settings, a.Note); err != nil {
-			// If an error occurs when logging to a file, wrap and return the error.
-			log.Printf("Failed to log note to file: %v", err)
-		}
-		fmt.Printf("%s %s %.2f\n", a.Note.Time, a.Note.CommonName, a.Note.Confidence)
+	if !a.EventTracker.TrackEvent(species, LogToFile) {
 		return nil
 	}
 
-	//log.Printf("Log action throttled for species: %s", species)
+	// Log note to file
+	if err := observation.LogNoteToFile(a.Settings, a.Note); err != nil {
+		// If an error occurs when logging to a file, wrap and return the error.
+		log.Printf("Failed to log note to file: %v", err)
+	}
+	fmt.Printf("%s %s %.2f\n", a.Note.Time, a.Note.CommonName, a.Note.Confidence)
+
 	return nil
 }
 
@@ -90,45 +91,44 @@ func (a LogAction) Execute(data interface{}) error {
 func (a DatabaseAction) Execute(data interface{}) error {
 	species := strings.ToLower(a.Note.CommonName)
 
-	// Check if the event should be handled for this species
-	if a.EventTracker.TrackEvent(species, DatabaseSave) {
-		// Save note to database
-		if err := a.Ds.Save(&a.Note, a.Results); err != nil {
-			log.Printf("Failed to save note and results to database: %v", err)
-			return err
-		}
-
-		// Save audio clip to file if enabled
-		if a.Settings.Realtime.Audio.Export.Enabled {
-			// export audio clip from capture buffer
-			pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source, a.Note.BeginTime, 15)
-			if err != nil {
-				log.Printf("Failed to read audio segment from buffer: %v", err)
-				return err
-			}
-
-			// Create a SaveAudioAction and execute it
-			saveAudioAction := SaveAudioAction{
-				Settings: a.Settings,
-				ClipName: a.Note.ClipName,
-				pcmData:  pcmData,
-			}
-
-			if err := saveAudioAction.Execute(nil); err != nil {
-				log.Printf("Failed to save audio clip: %v", err)
-				return err
-			}
-
-			if a.Settings.Debug {
-				log.Printf("Saved audio clip to %s\n", a.Note.ClipName)
-				log.Printf("detection time %v, begin time %v, end time %v\n", a.Note.Time, a.Note.BeginTime, time.Now())
-			}
-		}
-
+	// Check event frequency
+	if !a.EventTracker.TrackEvent(species, DatabaseSave) {
 		return nil
 	}
 
-	//log.Printf("Database save action throttled for species: %s", species)
+	// Save note to database
+	if err := a.Ds.Save(&a.Note, a.Results); err != nil {
+		log.Printf("Failed to save note and results to database: %v", err)
+		return err
+	}
+
+	// Save audio clip to file if enabled
+	if a.Settings.Realtime.Audio.Export.Enabled {
+		// export audio clip from capture buffer
+		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source, a.Note.BeginTime, 15)
+		if err != nil {
+			log.Printf("Failed to read audio segment from buffer: %v", err)
+			return err
+		}
+
+		// Create a SaveAudioAction and execute it
+		saveAudioAction := SaveAudioAction{
+			Settings: a.Settings,
+			ClipName: a.Note.ClipName,
+			pcmData:  pcmData,
+		}
+
+		if err := saveAudioAction.Execute(nil); err != nil {
+			log.Printf("Failed to save audio clip: %v", err)
+			return err
+		}
+
+		if a.Settings.Debug {
+			log.Printf("Saved audio clip to %s\n", a.Note.ClipName)
+			log.Printf("detection time %v, begin time %v, end time %v\n", a.Note.Time, a.Note.BeginTime, time.Now())
+		}
+	}
+
 	return nil
 }
 
@@ -170,30 +170,31 @@ func (a SaveAudioAction) Execute(data interface{}) error {
 func (a BirdWeatherAction) Execute(data interface{}) error {
 	species := strings.ToLower(a.Note.CommonName)
 
-	if a.EventTracker.TrackEvent(species, BirdWeatherSubmit) {
-		// Add threshold check here
-		if a.Note.Confidence < float64(a.Settings.Realtime.Birdweather.Threshold) {
-			if a.Settings.Debug {
-				log.Printf("Skipping BirdWeather upload for %s: confidence %.2f below threshold %.2f\n",
-					species, a.Note.Confidence, a.Settings.Realtime.Birdweather.Threshold)
-			}
-			return nil
-		}
+	// Check event frequency
+	if !a.EventTracker.TrackEvent(species, BirdWeatherSubmit) {
+		return nil
+	}
 
-		if a.BwClient == nil {
-			return fmt.Errorf("BirdWeather client is not initialized")
-		}
-
-		if err := a.BwClient.Publish(a.Note, a.pcmData); err != nil {
-			log.Printf("error uploading to BirdWeather: %s\n", err)
-			return err
-		} else if a.Settings.Debug {
-			log.Printf("Uploaded %s to Birdweather\n", a.Note.ClipName)
+	// Add threshold check here
+	if a.Note.Confidence < float64(a.Settings.Realtime.Birdweather.Threshold) {
+		if a.Settings.Debug {
+			log.Printf("Skipping BirdWeather upload for %s: confidence %.2f below threshold %.2f\n",
+				species, a.Note.Confidence, a.Settings.Realtime.Birdweather.Threshold)
 		}
 		return nil
 	}
-	//log.Printf("BirdWeather Submit action throttled for species: %s", species)
-	return nil // return an error if the action fails
+
+	if a.BwClient == nil {
+		return fmt.Errorf("BirdWeather client is not initialized")
+	}
+
+	if err := a.BwClient.Publish(a.Note, a.pcmData); err != nil {
+		log.Printf("error uploading to BirdWeather: %s\n", err)
+		return err
+	} else if a.Settings.Debug {
+		log.Printf("Uploaded %s to Birdweather\n", a.Note.ClipName)
+	}
+	return nil
 }
 
 type NoteWithBirdImage struct {
@@ -203,6 +204,13 @@ type NoteWithBirdImage struct {
 
 // Execute sends the note to the MQTT broker
 func (a MqttAction) Execute(data interface{}) error {
+	species := strings.ToLower(a.Note.CommonName)
+
+	// Check event frequency
+	if !a.EventTracker.TrackEvent(species, MQTTPublish) {
+		return nil
+	}
+
 	// First, check if the MQTT client is connected
 	if !a.MqttClient.IsConnected() {
 		log.Println("MQTT client is not connected, skipping publish")
