@@ -134,3 +134,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          platforms: ${{ matrix.platform }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          build-args: |
+            TARGETPLATFORM=${{ matrix.platform }}
+            BUILDPLATFORM=${{ matrix.platform }}
