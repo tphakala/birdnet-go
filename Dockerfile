@@ -1,6 +1,6 @@
 ARG TFLITE_LIB_DIR=/usr/lib
 
-FROM --platform=$BUILDPLATFORM golang:1.23.2-bookworm AS buildenv
+FROM --platform=$BUILDPLATFORM golang:1.23.4-bookworm AS buildenv
 
 # Install zip utility along with other dependencies
 RUN apt-get update && apt-get install -y \
@@ -32,7 +32,9 @@ RUN make check-tensorflow
 # Download and configure precompiled TensorFlow Lite C library
 ARG TARGETPLATFORM
 ARG TFLITE_LIB_DIR
-RUN TFLITE_LIB_ARCH=$(echo ${TARGETPLATFORM} | tr '/' '_').tar.gz \
+RUN TFLITE_LIB_ARCH=$(echo ${TARGETPLATFORM} | tr '/' '_').tar.gz && \
+    echo "Building for platform: ${TARGETPLATFORM}" && \
+    echo "Using library archive: ${TFLITE_LIB_ARCH}" && \
     make download-tflite
 
 FROM --platform=$BUILDPLATFORM buildenv AS build
