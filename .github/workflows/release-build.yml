@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   build:
-    if: ${{ !contains(github.ref, 'nightly') }}
+    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -93,6 +93,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   docker:
+    if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-22.04
     needs: build
     strategy:
