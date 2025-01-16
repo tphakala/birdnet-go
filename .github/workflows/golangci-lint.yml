@@ -1,20 +1,32 @@
 name: golangci-lint
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
       - main
   pull_request:
-  workflow_call:  # This is used when the workflow is called from another workflow (e.g. docker-build.yml)
+  workflow_call:
 
 permissions:
   contents: read
-  # Optional: allow read access to pull request. Use with `only-new-issues` option.
   #pull-requests: read
 
 jobs:
+  wait-for-quiet-period:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for quiet period
+        run: sleep 900  # Wait for 15 minutes
+
   golangci:
+    needs: [wait-for-quiet-period]
     name: lint
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -36,4 +48,4 @@ jobs:
           # Require: The version of golangci-lint to use.
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
-          version: v1.61
+          version: v1.63
