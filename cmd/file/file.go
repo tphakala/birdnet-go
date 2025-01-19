@@ -3,7 +3,6 @@ package file
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -34,7 +33,7 @@ func Command(settings *conf.Settings) *cobra.Command {
 			go func() {
 				sig := <-sigChan
 				fmt.Print("\n") // Add newline before the interrupt message
-				log.Printf("Received signal %v, initiating graceful shutdown...", sig)
+				fmt.Printf("Received signal %v, initiating graceful shutdown...", sig)
 				cancel()
 			}()
 

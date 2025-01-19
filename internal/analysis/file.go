@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,31 +35,21 @@ func FileAnalysis(settings *conf.Settings, ctx context.Context) error {
 		return fmt.Errorf("error getting audio info: %w", err)
 	}
 
-	// Check for context cancellation
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-	}
-
 	notes, err := processAudioFile(settings, &audioInfo, ctx)
 	if err != nil {
-		// If we have partial results, write them before returning the error
+		// Handle cancellation first
+		if errors.Is(err, ErrAnalysisCanceled) {
+			return nil
+		}
+
+		// For other errors with partial results, write them
 		if len(notes) > 0 {
 			fmt.Printf("\n\033[33m⚠️  Writing partial results before exiting due to error\033[0m\n")
 			if writeErr := writeResults(settings, notes); writeErr != nil {
-				// Changed to use %w for error wrapping
 				return fmt.Errorf("analysis error: %w; failed to write partial results: %w", err, writeErr)
 			}
 		}
 		return err
-	}
-
-	// Check for context cancellation before writing results
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
 	}
 
 	return writeResults(settings, notes)
@@ -153,17 +144,35 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 
 	var allNotes []datastore.Note
 
+	// Create a single cancel function to coordinate shutdown
+	var doneChanClosed sync.Once
+	shutdown := func() {
+		doneChanClosed.Do(func() {
+			close(doneChan)
+		})
+	}
+	defer shutdown()
+
 	// Start worker goroutines for BirdNET analysis
 	for i := 0; i < numWorkers; i++ {
 		go func(workerID int) {
 			if settings.Debug {
 				fmt.Printf("DEBUG: Worker %d started\n", workerID)
 			}
+			defer func() {
+				if settings.Debug {
+					fmt.Printf("DEBUG: Worker %d finished\n", workerID)
+				}
+			}()
+
 			for chunk := range chunkChan {
-				// Check for context cancellation
 				select {
 				case <-ctx.Done():
-					errorChan <- ctx.Err()
+					select {
+					case errorChan <- ctx.Err():
+					default:
+						// Another goroutine already sent the error
+					}
 					return
 				default:
 				}
@@ -173,7 +182,11 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 					if settings.Debug {
 						fmt.Printf("DEBUG: Worker %d encountered error: %v\n", workerID, err)
 					}
-					errorChan <- err
+					select {
+					case errorChan <- err:
+					default:
+						// Another goroutine already sent an error
+					}
 					return
 				}
 
@@ -185,13 +198,15 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 					}
 				}
 
-				if settings.Debug {
-					fmt.Printf("DEBUG: Worker %d sending results\n", workerID)
+				select {
+				case <-ctx.Done():
+					select {
+					case errorChan <- ctx.Err():
+					default:
+					}
+					return
+				case resultChan <- filteredNotes:
 				}
-				resultChan <- filteredNotes
-			}
-			if settings.Debug {
-				fmt.Printf("DEBUG: Worker %d finished\n", workerID)
 			}
 		}(i)
 	}
@@ -201,14 +216,13 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
 
-		for range ticker.C {
+		for {
 			select {
 			case <-ctx.Done():
-				close(doneChan)
 				return
 			case <-doneChan:
 				return
-			default:
+			case <-ticker.C:
 				currentTime := time.Now()
 				timeSinceLastUpdate := currentTime.Sub(lastProgressUpdate)
 
@@ -256,13 +270,14 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 		if settings.Debug {
 			fmt.Println("DEBUG: Result collector started")
 		}
+		defer shutdown()
+
 		for i := 1; i <= totalChunks; i++ {
 			select {
 			case <-ctx.Done():
 				processingErrorMutex.Lock()
 				processingError = ctx.Err()
 				processingErrorMutex.Unlock()
-				close(doneChan)
 				return
 			case notes := <-resultChan:
 				if settings.Debug {
@@ -270,6 +285,9 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 				}
 				allNotes = append(allNotes, notes...)
 				chunkCount++
+				if chunkCount > totalChunks {
+					return
+				}
 			case err := <-errorChan:
 				if settings.Debug {
 					fmt.Printf("DEBUG: Collector received error: %v\n", err)
@@ -277,7 +295,6 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 				processingErrorMutex.Lock()
 				processingError = err
 				processingErrorMutex.Unlock()
-				close(doneChan)
 				return
 			case <-time.After(5 * time.Second):
 				if settings.Debug {
@@ -286,14 +303,12 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 				processingErrorMutex.Lock()
 				processingError = fmt.Errorf("timeout waiting for analysis results (processed %d/%d chunks)", chunkCount, totalChunks)
 				processingErrorMutex.Unlock()
-				close(doneChan)
 				return
 			}
 		}
 		if settings.Debug {
-			fmt.Println("DEBUG: Collector finished")
+			fmt.Println("DEBUG: Collector finished normally")
 		}
-		close(doneChan)
 	}()
 
 	// Initialize filePosition before the loop
@@ -317,7 +332,10 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 			processingErrorMutex.Lock()
 			err := processingError
 			processingErrorMutex.Unlock()
-			return err
+			if err != nil {
+				return err
+			}
+			return ctx.Err() // Return context error if no processing error
 		case <-time.After(5 * time.Second):
 			return fmt.Errorf("timeout sending chunk to processing")
 		}
@@ -333,9 +351,13 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 	}
 	<-doneChan // Wait for processing to complete
 
+	// Handle errors and return results
 	if err != nil {
 		if settings.Debug {
 			fmt.Printf("DEBUG: File processing error: %v\n", err)
+		}
+		if errors.Is(err, context.Canceled) {
+			return allNotes, ErrAnalysisCanceled
 		}
 		return nil, fmt.Errorf("error processing audio: %w", err)
 	}
@@ -346,6 +368,9 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 	if err != nil {
 		if settings.Debug {
 			fmt.Printf("DEBUG: Processing error encountered: %v\n", err)
+		}
+		if errors.Is(err, context.Canceled) {
+			return allNotes, ErrAnalysisCanceled
 		}
 		return allNotes, err
 	}
