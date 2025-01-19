@@ -3,6 +3,7 @@ package analysis
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
@@ -383,9 +384,9 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 		}
 
 		if analysisErr != nil {
-			if analysisErr == context.Canceled {
+			if errors.Is(analysisErr, context.Canceled) {
 				log.Printf("Analysis of file '%s' was interrupted", path)
-				return false, nil
+				return false, ErrAnalysisCanceled
 			}
 			return false, fmt.Errorf("error analyzing file '%s': %w", path, analysisErr)
 		}

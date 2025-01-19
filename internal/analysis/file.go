@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/birdnet"
@@ -249,6 +250,8 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 
 	// Start result collector goroutine
 	var processingError error
+	var processingErrorMutex sync.Mutex
+
 	go func() {
 		if settings.Debug {
 			fmt.Println("DEBUG: Result collector started")
@@ -256,7 +259,9 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 		for i := 1; i <= totalChunks; i++ {
 			select {
 			case <-ctx.Done():
+				processingErrorMutex.Lock()
 				processingError = ctx.Err()
+				processingErrorMutex.Unlock()
 				close(doneChan)
 				return
 			case notes := <-resultChan:
@@ -269,14 +274,18 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 				if settings.Debug {
 					fmt.Printf("DEBUG: Collector received error: %v\n", err)
 				}
+				processingErrorMutex.Lock()
 				processingError = err
+				processingErrorMutex.Unlock()
 				close(doneChan)
 				return
 			case <-time.After(5 * time.Second):
 				if settings.Debug {
 					fmt.Printf("DEBUG: Timeout waiting for chunk %d results\n", i)
 				}
+				processingErrorMutex.Lock()
 				processingError = fmt.Errorf("timeout waiting for analysis results (processed %d/%d chunks)", chunkCount, totalChunks)
+				processingErrorMutex.Unlock()
 				close(doneChan)
 				return
 			}
@@ -305,7 +314,10 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 			filePosition = filePosition.Add(time.Duration((3.0 - bn.Settings.BirdNET.Overlap) * float64(time.Second)))
 			return nil
 		case <-doneChan:
-			return processingError
+			processingErrorMutex.Lock()
+			err := processingError
+			processingErrorMutex.Unlock()
+			return err
 		case <-time.After(5 * time.Second):
 			return fmt.Errorf("timeout sending chunk to processing")
 		}
@@ -328,11 +340,14 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 		return nil, fmt.Errorf("error processing audio: %w", err)
 	}
 
-	if processingError != nil {
+	processingErrorMutex.Lock()
+	err = processingError
+	processingErrorMutex.Unlock()
+	if err != nil {
 		if settings.Debug {
-			fmt.Printf("DEBUG: Processing error encountered: %v\n", processingError)
+			fmt.Printf("DEBUG: Processing error encountered: %v\n", err)
 		}
-		return allNotes, processingError
+		return allNotes, err
 	}
 
 	if settings.Debug {
