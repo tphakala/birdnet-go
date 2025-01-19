@@ -31,7 +31,7 @@ func setDefaultConfig() {
 	viper.SetDefault("birdnet.longitude", 0.000)
 	viper.SetDefault("birdnet.modelpath", "")
 	viper.SetDefault("birdnet.labelpath", "")
-	viper.SetDefault("birdnet.usexnnpack", false)
+	viper.SetDefault("birdnet.usexnnpack", true)
 
 	// Range filter configuration
 	viper.SetDefault("birdnet.rangefilter.debug", false)

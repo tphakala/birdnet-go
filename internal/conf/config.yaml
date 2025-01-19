@@ -27,7 +27,7 @@ birdnet:
       threshold: 0.01     # rangefilter species occurrence threshold
   modelpath: ""           # path to external model file (empty for embedded)
   labelpath: ""           # path to external label file (empty for embedded)
-  usexnnpack: false       # true to use XNNPACK delegate for inference acceleration
+  usexnnpack: true        # true to use XNNPACK delegate for inference acceleration
 
 # Realtime processing settings
 realtime:
