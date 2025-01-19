@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/cpuspec"
 	"github.com/tphakala/go-tflite"
 	"github.com/tphakala/go-tflite/delegates/xnnpack"
 )
@@ -129,7 +130,22 @@ func (bn *BirdNET) initializeModel() error {
 		modelVersion = bn.Settings.BirdNET.ModelPath
 	}
 
-	fmt.Printf("%s model initialized, using %v threads of available %v CPUs\n", modelVersion, threads, runtime.NumCPU())
+	// Get CPU information for detailed message
+	var initMessage string
+	if bn.Settings.BirdNET.Threads == 0 {
+		spec := cpuspec.GetCPUSpec()
+		if spec.PerformanceCores > 0 {
+			initMessage = fmt.Sprintf("%s model initialized, optimized to use %v threads on %v P-cores (system has %v total CPUs)",
+				modelVersion, threads, spec.PerformanceCores, runtime.NumCPU())
+		} else {
+			initMessage = fmt.Sprintf("%s model initialized, using %v threads of available %v CPUs",
+				modelVersion, threads, runtime.NumCPU())
+		}
+	} else {
+		initMessage = fmt.Sprintf("%s model initialized, using configured %v threads of available %v CPUs",
+			modelVersion, threads, runtime.NumCPU())
+	}
+	fmt.Println(initMessage)
 	return nil
 }
 
@@ -173,9 +189,24 @@ func (bn *BirdNET) initializeMetaModel() error {
 // determineThreadCount calculates the appropriate number of threads to use based on settings and system capabilities.
 func (bn *BirdNET) determineThreadCount(configuredThreads int) int {
 	systemCpuCount := runtime.NumCPU()
-	if configuredThreads <= 0 || configuredThreads > systemCpuCount {
+
+	// If threads are configured to 0, try to get optimal count from cpuspec
+	if configuredThreads == 0 {
+		spec := cpuspec.GetCPUSpec()
+		optimalThreads := spec.GetOptimalThreadCount()
+		if optimalThreads > 0 {
+			return min(optimalThreads, systemCpuCount)
+		}
+
+		// If cpuspec doesn't know the CPU, use all available cores
 		return systemCpuCount
 	}
+
+	// If threads are configured but exceed system CPU count, limit to system CPU count
+	if configuredThreads > systemCpuCount {
+		return systemCpuCount
+	}
+
 	return configuredThreads
 }
 
