@@ -45,8 +45,7 @@ $(strip \
     $(if $(filter linux%,$1), \
         libtensorflowlite_c.so.$(patsubst v%,%,$(TFLITE_VERSION)), \
     $(if $(filter darwin%,$1), \
-        libtensorflowlite_c.$(patsubst v%,%,$(TFLITE_VERSION)).dylib, \
-        libtensorflowlite_c.so.$(patsubst v%,%,$(TFLITE_VERSION)) \
+        libtensorflowlite_c.dylib, \
     ))))
 endef
 
