@@ -1,8 +1,12 @@
 package file
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -18,11 +22,36 @@ func Command(settings *conf.Settings) *cobra.Command {
 		Long:  `Analyze a single audio file for bird calls and songs.`,
 		Args:  cobra.ExactArgs(1), // the command expects exactly one argument
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Create a context that can be cancelled
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			// Set up signal handling
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+
+			// Handle shutdown in a separate goroutine
+			go func() {
+				sig := <-sigChan
+				fmt.Print("\n") // Add newline before the interrupt message
+				log.Printf("Received signal %v, initiating graceful shutdown...", sig)
+				cancel()
+			}()
+
 			// Input file path is the first argument
 			settings.Input.Path = args[0]
-			return analysis.FileAnalysis(settings)
+			err := analysis.FileAnalysis(settings, ctx)
+			if err == context.Canceled {
+				// Return nil for user-initiated cancellation
+				return nil
+			}
+			return err
 		},
 	}
+
+	// Disable printing usage on error
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
 
 	// Set up flags specific to the 'file' command
 	if err := setupFlags(cmd, settings); err != nil {

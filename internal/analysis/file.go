@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,7 +17,7 @@ import (
 
 // FileAnalysis conducts an analysis of an audio file and outputs the results.
 // It reads an audio file, analyzes it for bird sounds, and prints the results based on the provided configuration.
-func FileAnalysis(settings *conf.Settings) error {
+func FileAnalysis(settings *conf.Settings, ctx context.Context) error {
 	// Initialize BirdNET interpreter
 	if err := initializeBirdNET(settings); err != nil {
 		return err
@@ -32,7 +33,14 @@ func FileAnalysis(settings *conf.Settings) error {
 		return fmt.Errorf("error getting audio info: %w", err)
 	}
 
-	notes, err := processAudioFile(settings, &audioInfo)
+	// Check for context cancellation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	notes, err := processAudioFile(settings, &audioInfo, ctx)
 	if err != nil {
 		// If we have partial results, write them before returning the error
 		if len(notes) > 0 {
@@ -43,6 +51,13 @@ func FileAnalysis(settings *conf.Settings) error {
 			}
 		}
 		return err
+	}
+
+	// Check for context cancellation before writing results
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
 	}
 
 	return writeResults(settings, notes)
@@ -93,7 +108,7 @@ func validateAudioFile(filePath string) error {
 }
 
 // processAudioFile processes the audio file and returns the notes.
-func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]datastore.Note, error) {
+func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx context.Context) ([]datastore.Note, error) {
 	// Calculate total chunks
 	totalChunks := myaudio.GetTotalChunks(
 		audioInfo.SampleRate,
@@ -144,6 +159,14 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 				fmt.Printf("DEBUG: Worker %d started\n", workerID)
 			}
 			for chunk := range chunkChan {
+				// Check for context cancellation
+				select {
+				case <-ctx.Done():
+					errorChan <- ctx.Err()
+					return
+				default:
+				}
+
 				notes, err := bn.ProcessChunk(chunk.Data, chunk.FilePosition)
 				if err != nil {
 					if settings.Debug {
@@ -179,6 +202,9 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 
 		for range ticker.C {
 			select {
+			case <-ctx.Done():
+				close(doneChan)
+				return
 			case <-doneChan:
 				return
 			default:
@@ -229,6 +255,10 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 		}
 		for i := 1; i <= totalChunks; i++ {
 			select {
+			case <-ctx.Done():
+				processingError = ctx.Err()
+				close(doneChan)
+				return
 			case notes := <-resultChan:
 				if settings.Debug {
 					fmt.Printf("DEBUG: Received results for chunk #%d\n", chunkCount)
@@ -268,6 +298,8 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 		}
 
 		select {
+		case <-ctx.Done():
+			return ctx.Err()
 		case chunkChan <- chunk:
 			// Update predStart for next chunk
 			filePosition = filePosition.Add(time.Duration((3.0 - bn.Settings.BirdNET.Overlap) * float64(time.Second)))
