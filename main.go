@@ -68,6 +68,10 @@ func main() {
 	// Execute the root command
 	rootCmd := cmd.RootCommand(settings)
 	if err := rootCmd.Execute(); err != nil {
+		if err.Error() == "error processing audio: context canceled" {
+			// Clean exit for user-initiated cancellation
+			os.Exit(0)
+		}
 		fmt.Fprintf(os.Stderr, "Command execution error: %v\n", err)
 		os.Exit(1)
 	}

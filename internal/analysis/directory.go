@@ -2,12 +2,14 @@ package analysis
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"log"
 	"math/rand"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -97,12 +99,30 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 
 	// Function to check if file is locked (being written to)
 	isFileLocked := func(path string) bool {
-		file, err := os.OpenFile(path, os.O_RDWR, 0666)
+		// Try to open file with shared read access
+		var flag int
+		if runtime.GOOS == "windows" {
+			flag = os.O_RDONLY
+		} else {
+			flag = os.O_RDONLY | syscall.O_NONBLOCK
+		}
+
+		file, err := os.OpenFile(path, flag, 0666)
 		if err != nil {
 			// File is probably locked by another process
 			return true
 		}
 		file.Close()
+
+		// On Windows, also try write access to be sure
+		if runtime.GOOS == "windows" {
+			file, err = os.OpenFile(path, os.O_WRONLY, 0666)
+			if err != nil {
+				return true
+			}
+			file.Close()
+		}
+
 		return false
 	}
 
@@ -130,32 +150,46 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 
 		// Check if it's a WAV file (case insensitive)
 		if strings.EqualFold(string(header), "RIFF") {
-			// Read rest of WAV header
-			wavHeader := make([]byte, 40) // 44 - 4 already read
-			n, err := file.Read(wavHeader)
-			if err != nil || n != 40 {
-				return false, "", fmt.Errorf("failed to read WAV header: %v", err)
+			// WAV header structure:
+			// Offset  Size  Name        Description
+			// 0-3     4    ChunkID     Contains "RIFF" (already read)
+			// 4-7     4    ChunkSize   File size - 8
+			// 8-11    4    Format      Contains "WAVE"
+			// ... subchunks follow
+
+			// Read chunk size (4 bytes, little-endian)
+			var chunkSize uint32
+			if err := binary.Read(file, binary.LittleEndian, &chunkSize); err != nil {
+				return false, "", fmt.Errorf("failed to read WAV chunk size: %v", err)
 			}
 
-			if !strings.EqualFold(string(wavHeader[4:8]), "WAVE") {
+			// Read format (4 bytes)
+			format := make([]byte, 4)
+			if n, err := file.Read(format); err != nil || n != 4 {
+				return false, "", fmt.Errorf("failed to read WAV format: %v", err)
+			}
+
+			if !strings.EqualFold(string(format), "WAVE") {
 				return false, "invalid WAV format", nil
 			}
 
-			// Get expected file size from header (RIFF chunk size is at bytes 4-7 of the original header)
-			// Since we've already read the first 4 bytes, we need to use the first 4 bytes of wavHeader
-			expectedSize := int64(wavHeader[0]) | int64(wavHeader[1])<<8 | int64(wavHeader[2])<<16 | int64(wavHeader[3])<<24
-			expectedSize += 8 // Add 8 bytes for RIFF header
+			// Calculate expected file size
+			// ChunkSize is file size - 8 bytes (as per WAV spec)
+			expectedSize := uint64(chunkSize) + 8
+
+			// Convert actual size to uint64 for comparison
+			actualSizeU64 := uint64(actualSize)
 
 			// If file is smaller than header indicates, it's definitely incomplete
-			if actualSize < expectedSize {
-				return false, fmt.Sprintf("incomplete WAV file: expected %d bytes, got %d", expectedSize, actualSize), nil
+			if actualSizeU64 < expectedSize {
+				return false, fmt.Sprintf("incomplete WAV file: expected %d bytes, got %d", expectedSize, actualSizeU64), nil
 			}
 
 			// Allow for small differences (up to 1KB) due to block sizes
-			sizeDiff := actualSize - expectedSize
+			sizeDiff := actualSizeU64 - expectedSize
 			if sizeDiff > 1024 {
 				return false, fmt.Sprintf("WAV file size mismatch: expected %d bytes, got %d (difference too large: %d bytes)",
-					expectedSize, actualSize, sizeDiff), nil
+					expectedSize, actualSizeU64, sizeDiff), nil
 			}
 		} else if strings.EqualFold(string(header), "fLaC") {
 			// FLAC format:
@@ -167,23 +201,32 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 			// - METADATA_BLOCK_DATA (variable size)
 
 			// Read METADATA_BLOCK_HEADER
-			metaHeader := make([]byte, 4)
-			n, err := file.Read(metaHeader)
-			if err != nil || n != 4 {
-				return false, "failed to read FLAC metadata header", nil
+			var metaHeader struct {
+				Flags  uint8  // Last-metadata-block flag (1 bit) + BLOCK_TYPE (7 bits)
+				Length uint32 // 24-bit length, will read into 32-bit uint
 			}
 
-			// Get length of STREAMINFO block (should be 34 bytes)
-			streamInfoLength := int64(metaHeader[1])<<16 | int64(metaHeader[2])<<8 | int64(metaHeader[3])
+			// Read flags byte
+			if err := binary.Read(file, binary.BigEndian, &metaHeader.Flags); err != nil {
+				return false, "", fmt.Errorf("failed to read FLAC metadata flags: %v", err)
+			}
 
-			if streamInfoLength != 34 {
-				return false, fmt.Sprintf("invalid FLAC STREAMINFO block size: %d", streamInfoLength), nil
+			// Read 24-bit length (3 bytes)
+			lengthBytes := make([]byte, 3)
+			if n, err := file.Read(lengthBytes); err != nil || n != 3 {
+				return false, "", fmt.Errorf("failed to read FLAC metadata length: %v", err)
+			}
+			// Convert 3 bytes to uint32 (FLAC uses big-endian)
+			metaHeader.Length = uint32(lengthBytes[0])<<16 | uint32(lengthBytes[1])<<8 | uint32(lengthBytes[2])
+
+			if metaHeader.Length != 34 {
+				return false, fmt.Sprintf("invalid FLAC STREAMINFO block size: %d", metaHeader.Length), nil
 			}
 
 			// Read STREAMINFO block
-			streamInfo := make([]byte, streamInfoLength)
-			n, err = file.Read(streamInfo)
-			if err != nil || int64(n) != streamInfoLength {
+			streamInfo := make([]byte, metaHeader.Length)
+			n, err := file.Read(streamInfo)
+			if err != nil || uint32(n) != metaHeader.Length {
 				return false, "failed to read FLAC STREAMINFO block", nil
 			}
 
@@ -231,8 +274,7 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 		// First verify the audio file headers and size
 		valid, reason, err := verifyAudioFile(path)
 		if err != nil {
-			log.Printf("Error verifying audio file %s: %v", filepath.Base(path), err)
-			return false, nil
+			return false, fmt.Errorf("error verifying audio file %s: %w", filepath.Base(path), err)
 		}
 		if !valid {
 			log.Printf("File %s is not ready: %s", filepath.Base(path), reason)
@@ -248,7 +290,7 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 		// Check modification time
 		info, err := os.Stat(path)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("error checking modification time for %s: %w", filepath.Base(path), err)
 		}
 		if time.Since(info.ModTime()) < 30*time.Second {
 			log.Printf("File %s was modified too recently, waiting...", filepath.Base(path))
@@ -257,15 +299,19 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 
 		// Check file size stability
 		stable, err := isFileSizeStable(path)
-		if err != nil || !stable {
-			return false, err
+		if err != nil {
+			return false, fmt.Errorf("error checking file size stability for %s: %w", filepath.Base(path), err)
+		}
+		if !stable {
+			log.Printf("File %s size is not stable yet", filepath.Base(path))
+			return false, nil
 		}
 
 		return true, nil
 	}
 
 	// Function to process a single file
-	processFile := func(path string) (bool, error) {
+	processFile := func(path string, ctx context.Context) (bool, error) {
 		if isProcessed(path) {
 			return false, nil // File was already processed
 		}
@@ -273,11 +319,17 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 		// Check if file is ready for processing
 		ready, err := isFileReadyForProcessing(path)
 		if err != nil {
-			log.Printf("Error checking file readiness for %s: %v", filepath.Base(path), err)
-			return false, nil
+			return false, fmt.Errorf("error checking file readiness: %w", err)
 		}
 		if !ready {
 			return false, nil
+		}
+
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		default:
 		}
 
 		// Create processing lock file
@@ -301,15 +353,41 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 		// Save the original path and restore it after processing
 		origPath := settings.Input.Path
 		settings.Input.Path = path
-		err = FileAnalysis(settings)
+
+		// Create a new context with cancellation for FileAnalysis
+		analysisCtx, cancelAnalysis := context.WithCancel(ctx)
+		defer cancelAnalysis()
+
+		// Run FileAnalysis in a goroutine so we can handle interruption
+		analysisDone := make(chan error)
+		go func() {
+			analysisDone <- FileAnalysis(settings, analysisCtx)
+		}()
+
+		// Wait for either completion or interruption
+		var analysisErr error
+		select {
+		case analysisErr = <-analysisDone:
+			// Analysis completed normally
+		case <-ctx.Done():
+			// Cancellation requested
+			cancelAnalysis()             // Signal FileAnalysis to stop
+			analysisErr = <-analysisDone // Wait for FileAnalysis to clean up
+		}
+
 		settings.Input.Path = origPath
 
 		// Remove lock file regardless of processing result
-		os.Remove(lockFile)
+		if removeErr := os.Remove(lockFile); removeErr != nil {
+			log.Printf("Warning: failed to remove lock file %s: %v", lockFile, removeErr)
+		}
 
-		if err != nil {
-			log.Printf("Error analyzing file '%s': %v", path, err)
-			return false, nil
+		if analysisErr != nil {
+			if analysisErr == context.Canceled {
+				log.Printf("Analysis of file '%s' was interrupted", path)
+				return false, nil
+			}
+			return false, fmt.Errorf("error analyzing file '%s': %w", path, analysisErr)
 		}
 
 		// Mark as processed
@@ -318,14 +396,21 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 	}
 
 	// Function to scan directory for files
-	scanDir := func() error {
+	scanDir := func(ctx context.Context) error {
 		log.Printf("Scanning directory: %s", watchDir)
 		startTime := time.Now()
 		filesAnalyzed := 0
 
 		err := filepath.WalkDir(watchDir, func(path string, d os.DirEntry, err error) error {
+			// Check for context cancellation
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
 			if err != nil {
-				return err
+				return fmt.Errorf("error accessing path %s: %w", path, err)
 			}
 
 			if d.IsDir() {
@@ -339,9 +424,14 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 			// Check for both .wav and .flac files (case-insensitive)
 			ext := strings.ToLower(filepath.Ext(d.Name()))
 			if ext == ".wav" || ext == ".flac" {
-				wasProcessed, err := processFile(path)
+				wasProcessed, err := processFile(path, ctx)
 				if err != nil {
-					return err
+					if err == context.Canceled {
+						return err // Propagate cancellation
+					}
+					// Log other errors but continue processing other files
+					log.Printf("Error processing file '%s': %v", path, err)
+					return nil
 				}
 				if wasProcessed {
 					filesAnalyzed++
@@ -350,13 +440,22 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 			return nil
 		})
 
+		if err == context.Canceled {
+			log.Printf("Directory scan interrupted")
+			return nil
+		}
+
+		if err != nil {
+			return fmt.Errorf("error walking directory: %w", err)
+		}
+
 		if filesAnalyzed > 0 {
 			scanDuration := time.Since(startTime)
 			log.Printf("Directory analysis completed, processed %d new file(s) in %v", filesAnalyzed, scanDuration)
 		} else {
 			log.Printf("Directory scan completed, no new files to analyze")
 		}
-		return err
+		return nil
 	}
 
 	// Ensure output directory exists if specified
@@ -372,7 +471,7 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 
 	// Do initial scan before starting watch mode
 	log.Printf("Performing initial directory scan...")
-	if err := scanDir(); err != nil {
+	if err := scanDir(context.Background()); err != nil {
 		log.Printf("Initial scan failed: %v", err)
 		return err
 	}
@@ -388,28 +487,40 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 
 	// Set up signal handling
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	// Handle shutdown in a separate goroutine
 	go func() {
 		sig := <-sigChan
+		fmt.Print("\n") // Add newline before the interrupt message
 		log.Printf("Received signal %v, initiating graceful shutdown...", sig)
 		cleanupProcessingFiles()
 		cancel()
+	}()
+
+	// Ensure cleanup happens even on panic or early return
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovering from panic: %v", r)
+			cleanupProcessingFiles()
+			panic(r) // re-panic after cleanup
+		}
+		// Cancel context if not already done
+		cancel()
+		// Clean up any remaining processing files
+		cleanupProcessingFiles()
 	}()
 
 	// Watch mode - continuously scan with random intervals
 	log.Printf("Starting directory watch on %s (Press Ctrl+C to stop)", watchDir)
 	watchStartTime := time.Now()
 
-	// Ensure cleanup happens even on panic
-	defer cleanupProcessingFiles()
-
 	for {
 		select {
 		case <-ctx.Done():
 			watchDuration := time.Since(watchStartTime)
 			log.Printf("Directory watch stopped after %v", watchDuration)
+			cleanupProcessingFiles() // One final cleanup before returning
 			return nil
 		default:
 			// Random sleep between 30-45 seconds
@@ -422,9 +533,10 @@ func DirectoryAnalysis(settings *conf.Settings) error {
 				timer.Stop()
 				watchDuration := time.Since(watchStartTime)
 				log.Printf("Directory watch stopped after %v", watchDuration)
+				cleanupProcessingFiles() // One final cleanup before returning
 				return nil
 			case <-timer.C:
-				if err := scanDir(); err != nil {
+				if err := scanDir(ctx); err != nil {
 					log.Printf("Directory scan error: %v", err)
 					// Don't exit on scan errors, just log them
 				}
