@@ -129,11 +129,14 @@ jobs:
 
       - name: Build BirdNET-Go
         run: |
+          # Create lib directory if it doesn't exist
+          sudo mkdir -p /opt/homebrew/lib
+          
           # Build the application
           if [ "${{ matrix.goarch }}" = "amd64" ]; then
-            CGO_FLAGS="CGO_ENABLED=1 CGO_CFLAGS=\"-I${HOME}/src/tensorflow -target x86_64-apple-darwin\"" make darwin_amd64
+            make darwin_amd64 CGO_FLAGS="CGO_ENABLED=1 CGO_CFLAGS=\"-I${HOME}/src/tensorflow -target x86_64-apple-darwin\" CGO_LDFLAGS=\"-L/opt/homebrew/lib -ltensorflowlite_c -Wl,-rpath,/opt/homebrew/lib\""
           else
-            CGO_FLAGS="CGO_ENABLED=1 CGO_CFLAGS=\"-I${HOME}/src/tensorflow -target arm64-apple-darwin\"" make darwin_arm64
+            make darwin_arm64 CGO_FLAGS="CGO_ENABLED=1 CGO_CFLAGS=\"-I${HOME}/src/tensorflow -target arm64-apple-darwin\" CGO_LDFLAGS=\"-L/opt/homebrew/lib -ltensorflowlite_c -Wl,-rpath,/opt/homebrew/lib\""
           fi
         env:
           GOOS: darwin
