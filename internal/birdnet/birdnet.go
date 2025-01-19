@@ -98,7 +98,10 @@ func (bn *BirdNET) initializeModel() error {
 	if bn.Settings.BirdNET.UseXNNPACK {
 		delegate := xnnpack.New(xnnpack.DelegateOptions{NumThreads: int32(max(1, threads-1))})
 		if delegate == nil {
-			fmt.Println("⚠️ Failed to create XNNPACK delegate, falling back to default CPU execution")
+			fmt.Println("⚠️ Failed to create XNNPACK delegate, falling back to default CPU")
+			fmt.Println("Please download updated tensorflow lite C API library from:")
+			fmt.Println("https://github.com/tphakala/tflite_c/releases/tag/v2.17.1")
+			fmt.Println("and install it to enable use of XNNPACK delegate")
 			options.SetNumThread(threads)
 		} else {
 			options.AddDelegate(delegate)
