@@ -2,6 +2,7 @@ package file
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -40,7 +41,7 @@ func Command(settings *conf.Settings) *cobra.Command {
 			// Input file path is the first argument
 			settings.Input.Path = args[0]
 			err := analysis.FileAnalysis(settings, ctx)
-			if err == context.Canceled {
+			if errors.Is(err, context.Canceled) {
 				// Return nil for user-initiated cancellation
 				return nil
 			}

@@ -2,6 +2,7 @@ package directory
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -46,7 +47,7 @@ func Command(settings *conf.Settings) *cobra.Command {
 			settings.Input.Path = args[0]
 			err := analysis.DirectoryAnalysis(settings, ctx)
 			if err != nil {
-				if err == context.Canceled {
+				if errors.Is(err, context.Canceled) {
 					return nil
 				}
 				return err
