@@ -14,7 +14,7 @@ permissions:
   packages: write
 
 jobs:
-  nightly-linux-windows:
+  nightly:
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -38,7 +38,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64 clang
+          sudo apt-get install -y build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
 
       - name: Build BirdNET-Go
         run: |
@@ -111,75 +111,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  nightly-darwin:
-    runs-on: macos-14
-    strategy:
-      fail-fast: false
-      matrix:
-        goarch: [arm64]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
-          check-latest: true
-
-      - name: Build BirdNET-Go
-        run: |
-          # Create lib directory if it doesn't exist
-          sudo mkdir -p /opt/homebrew/lib
-          
-          # Build the application
-          if [ "${{ matrix.goarch }}" = "amd64" ]; then
-            make darwin_amd64 CGO_FLAGS="CGO_ENABLED=1 CGO_CFLAGS=\"-I${HOME}/src/tensorflow -target x86_64-apple-darwin\" CGO_LDFLAGS=\"-L/opt/homebrew/lib -ltensorflowlite_c -Wl,-rpath,/opt/homebrew/lib\""
-          else
-            make darwin_arm64 CGO_FLAGS="CGO_ENABLED=1 CGO_CFLAGS=\"-I${HOME}/src/tensorflow -target arm64-apple-darwin\" CGO_LDFLAGS=\"-L/opt/homebrew/lib -ltensorflowlite_c -Wl,-rpath,/opt/homebrew/lib\""
-          fi
-        env:
-          GOOS: darwin
-          GOARCH: ${{ matrix.goarch }}
-
-      - name: Create Release Artifacts
-        run: |
-          # Create artifacts directory
-          mkdir -p artifacts
-          
-          # Copy binary
-          cp bin/birdnet-go artifacts/
-          
-          # Create tarball
-          cd artifacts
-          tar czf ../birdnet-go-darwin-${{ matrix.goarch }}.tar.gz *
-
-      - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: birdnet-go-darwin-${{ matrix.goarch }}
-          path: birdnet-go-darwin-${{ matrix.goarch }}.tar.gz
-
-      - name: Create Release
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          DATE=$(date +'%Y%m%d')
-          echo "RELEASE_DATE=$DATE" >> $GITHUB_ENV
-        
-      - name: Create GitHub Release
-        if: github.event_name == 'workflow_dispatch'
-        uses: softprops/action-gh-release@v1
-        with:
-          files: birdnet-go-darwin-${{ matrix.goarch }}.tar.gz
-          tag_name: nightly-${{ env.RELEASE_DATE }}
-          name: "Nightly Build ${{ env.RELEASE_DATE }}"
-          prerelease: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   docker:
     runs-on: ubuntu-22.04
-    needs: [nightly-linux-windows, nightly-darwin]
+    needs: nightly
     strategy:
       matrix:
         platform: [linux/amd64, linux/arm64]

@@ -45,7 +45,8 @@ $(strip \
     $(if $(filter linux%,$1), \
         libtensorflowlite_c.so.$(patsubst v%,%,$(TFLITE_VERSION)), \
     $(if $(filter darwin%,$1), \
-        libtensorflowlite_c.dylib, \
+        libtensorflowlite_c.$(patsubst v%,%,$(TFLITE_VERSION)).dylib, \
+        libtensorflowlite_c.so.$(patsubst v%,%,$(TFLITE_VERSION)) \
     ))))
 endef
 
@@ -54,9 +55,6 @@ define get_cgo_flags
 $(strip \
     CGO_ENABLED=1 \
     CGO_CFLAGS="-I$(HOME)/src/tensorflow" \
-    $(if $(filter darwin%,$1), \
-        CGO_LDFLAGS="-L$(TFLITE_LIB_DIR) -ltensorflowlite_c -Wl,-rpath,$(TFLITE_LIB_DIR)" \
-    ) \
     $(if $(filter linux_arm64,$1), \
         $(if $(filter x86_64,$(UNAME_M)), \
             CC=aarch64-linux-gnu-gcc \
@@ -72,12 +70,7 @@ ifeq ($(UNAME_S),Linux)
     TFLITE_LIB_EXT := .so
 else ifeq ($(UNAME_S),Darwin)
     NATIVE_TARGET := darwin_$(if $(filter x86_64,$(UNAME_M)),amd64,arm64)
-    # Try Homebrew location first, fall back to HOME directory
-    ifeq ($(wildcard /opt/homebrew/lib),)
-        TFLITE_LIB_DIR := $(HOME)/lib
-    else
-        TFLITE_LIB_DIR := /opt/homebrew/lib
-    endif
+    TFLITE_LIB_DIR := /usr/local/lib
     TFLITE_LIB_EXT := .dylib
 else
     $(error Build is supported only on Linux and macOS)
@@ -144,21 +137,11 @@ download-tflite:
 			sudo mv ./tensorflowlite_c-$(patsubst v%,%,$(TFLITE_VERSION)).dll $(TFLITE_LIB_DIR)/; \
 			rm -f tensorflowlite_c-$(patsubst v%,%,$(TFLITE_VERSION)).dll; \
 		else \
-			echo "Extracting $(TFLITE_C_FILE)..."; \
 			tar -xzf $(TFLITE_C_FILE) -C .; \
-			if [ "$(UNAME_S)" = "Darwin" ]; then \
-				if [ -f "$(TFLITE_LIB_DIR)/libtensorflowlite_c.dylib" ]; then \
-					sudo mv "$(TFLITE_LIB_DIR)/libtensorflowlite_c.dylib" "$(TFLITE_LIB_DIR)/libtensorflowlite_c.dylib.old"; \
-				fi; \
-				echo "Moving libtensorflowlite_c.dylib to $(TFLITE_LIB_DIR)"; \
-				sudo mv libtensorflowlite_c.dylib $(TFLITE_LIB_DIR)/; \
-			else \
-				if [ -f "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so" ]; then \
-					sudo mv "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so" "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so.old"; \
-				fi; \
-				echo "Moving libtensorflowlite_c.so to $(TFLITE_LIB_DIR)"; \
-				sudo mv libtensorflowlite_c.so.$(patsubst v%,%,$(TFLITE_VERSION)) $(TFLITE_LIB_DIR)/; \
+			if [ -f "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so" ]; then \
+				sudo mv "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so" "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so.old"; \
 			fi; \
+			sudo mv libtensorflowlite_c.so.$(patsubst v%,%,$(TFLITE_VERSION)) $(TFLITE_LIB_DIR)/; \
 		fi; \
 		rm -f $(TFLITE_C_FILE); \
 	else \
