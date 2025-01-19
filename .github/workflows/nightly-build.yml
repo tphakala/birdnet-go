@@ -116,7 +116,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        goarch: [amd64, arm64]
+        goarch: [arm64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
