@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"errors"
 	"fmt"
 	"os"
 	"runtime/pprof"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/cmd"
+	"github.com/tphakala/birdnet-go/internal/analysis"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 )
@@ -68,6 +70,10 @@ func main() {
 	// Execute the root command
 	rootCmd := cmd.RootCommand(settings)
 	if err := rootCmd.Execute(); err != nil {
+		if errors.Is(err, analysis.ErrAnalysisCanceled) {
+			// Clean exit for user-initiated cancellation
+			os.Exit(0)
+		}
 		fmt.Fprintf(os.Stderr, "Command execution error: %v\n", err)
 		os.Exit(1)
 	}

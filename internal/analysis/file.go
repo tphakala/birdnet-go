@@ -1,9 +1,13 @@
 package analysis
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/term"
@@ -17,7 +21,7 @@ import (
 
 // FileAnalysis conducts an analysis of an audio file and outputs the results.
 // It reads an audio file, analyzes it for bird sounds, and prints the results based on the provided configuration.
-func FileAnalysis(settings *conf.Settings) error {
+func FileAnalysis(settings *conf.Settings, ctx context.Context) error {
 	// Initialize BirdNET interpreter
 	if err := initializeBirdNET(settings); err != nil {
 		return err
@@ -33,13 +37,17 @@ func FileAnalysis(settings *conf.Settings) error {
 		return fmt.Errorf("error getting audio info: %w", err)
 	}
 
-	notes, err := processAudioFile(settings, &audioInfo)
+	notes, err := processAudioFile(settings, &audioInfo, ctx)
 	if err != nil {
-		// If we have partial results, write them before returning the error
+		// Handle cancellation first
+		if errors.Is(err, ErrAnalysisCanceled) {
+			return nil
+		}
+
+		// For other errors with partial results, write them
 		if len(notes) > 0 {
 			fmt.Printf("\n\033[33m⚠️  Writing partial results before exiting due to error\033[0m\n")
 			if writeErr := writeResults(settings, notes); writeErr != nil {
-				// Changed to use %w for error wrapping
 				return fmt.Errorf("analysis error: %w; failed to write partial results: %w", err, writeErr)
 			}
 		}
@@ -66,7 +74,13 @@ func validateAudioFile(filePath string) error {
 		return fmt.Errorf("\033[31m❌ File %s is empty (0 bytes)\033[0m", filepath.Base(filePath))
 	}
 
-	// Open the file to check if it's a valid FLAC file
+	// Check file extension (case-insensitive)
+	ext := strings.ToLower(filepath.Ext(filePath))
+	if ext != ".wav" && ext != ".flac" {
+		return fmt.Errorf("\033[31m❌ Invalid audio file %s: unsupported audio format: %s\033[0m", filepath.Base(filePath), filepath.Ext(filePath))
+	}
+
+	// Open the file to check if it's a valid audio file
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("\033[31m❌ Error opening file %s: %w\033[0m", filepath.Base(filePath), err)
@@ -128,7 +142,7 @@ func formatProgressLine(filename string, duration time.Duration, chunkCount, tot
 }
 
 // processAudioFile processes the audio file and returns the notes.
-func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]datastore.Note, error) {
+func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx context.Context) ([]datastore.Note, error) {
 	// Calculate total chunks
 	totalChunks := myaudio.GetTotalChunks(
 		audioInfo.SampleRate,
@@ -172,19 +186,49 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 
 	var allNotes []datastore.Note
 
+	// Create a single cancel function to coordinate shutdown
+	var doneChanClosed sync.Once
+	shutdown := func() {
+		doneChanClosed.Do(func() {
+			close(doneChan)
+		})
+	}
+	defer shutdown()
+
 	// Start worker goroutines for BirdNET analysis
 	for i := 0; i < numWorkers; i++ {
 		go func(workerID int) {
 			if settings.Debug {
 				fmt.Printf("DEBUG: Worker %d started\n", workerID)
 			}
+			defer func() {
+				if settings.Debug {
+					fmt.Printf("DEBUG: Worker %d finished\n", workerID)
+				}
+			}()
+
 			for chunk := range chunkChan {
+				select {
+				case <-ctx.Done():
+					select {
+					case errorChan <- ctx.Err():
+					default:
+						// Another goroutine already sent the error
+					}
+					return
+				default:
+				}
+
 				notes, err := bn.ProcessChunk(chunk.Data, chunk.FilePosition)
 				if err != nil {
 					if settings.Debug {
 						fmt.Printf("DEBUG: Worker %d encountered error: %v\n", workerID, err)
 					}
-					errorChan <- err
+					select {
+					case errorChan <- err:
+					default:
+						// Another goroutine already sent an error
+					}
 					return
 				}
 
@@ -196,13 +240,15 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 					}
 				}
 
-				if settings.Debug {
-					fmt.Printf("DEBUG: Worker %d sending results\n", workerID)
+				select {
+				case <-ctx.Done():
+					select {
+					case errorChan <- ctx.Err():
+					default:
+					}
+					return
+				case resultChan <- filteredNotes:
 				}
-				resultChan <- filteredNotes
-			}
-			if settings.Debug {
-				fmt.Printf("DEBUG: Worker %d finished\n", workerID)
 			}
 		}(i)
 	}
@@ -212,11 +258,13 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
 
-		for range ticker.C {
+		for {
 			select {
+			case <-ctx.Done():
+				return
 			case <-doneChan:
 				return
-			default:
+			case <-ticker.C:
 				currentTime := time.Now()
 				timeSinceLastUpdate := currentTime.Sub(lastProgressUpdate)
 
@@ -267,38 +315,51 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 
 	// Start result collector goroutine
 	var processingError error
+	var processingErrorMutex sync.Mutex
+
 	go func() {
 		if settings.Debug {
 			fmt.Println("DEBUG: Result collector started")
 		}
+		defer shutdown()
+
 		for i := 1; i <= totalChunks; i++ {
 			select {
+			case <-ctx.Done():
+				processingErrorMutex.Lock()
+				processingError = ctx.Err()
+				processingErrorMutex.Unlock()
+				return
 			case notes := <-resultChan:
 				if settings.Debug {
 					fmt.Printf("DEBUG: Received results for chunk #%d\n", chunkCount)
 				}
 				allNotes = append(allNotes, notes...)
 				chunkCount++
+				if chunkCount > totalChunks {
+					return
+				}
 			case err := <-errorChan:
 				if settings.Debug {
 					fmt.Printf("DEBUG: Collector received error: %v\n", err)
 				}
+				processingErrorMutex.Lock()
 				processingError = err
-				close(doneChan)
+				processingErrorMutex.Unlock()
 				return
 			case <-time.After(5 * time.Second):
 				if settings.Debug {
 					fmt.Printf("DEBUG: Timeout waiting for chunk %d results\n", i)
 				}
+				processingErrorMutex.Lock()
 				processingError = fmt.Errorf("timeout waiting for analysis results (processed %d/%d chunks)", chunkCount, totalChunks)
-				close(doneChan)
+				processingErrorMutex.Unlock()
 				return
 			}
 		}
 		if settings.Debug {
-			fmt.Println("DEBUG: Collector finished")
+			fmt.Println("DEBUG: Collector finished normally")
 		}
-		close(doneChan)
 	}()
 
 	// Initialize filePosition before the loop
@@ -312,12 +373,20 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 		}
 
 		select {
+		case <-ctx.Done():
+			return ctx.Err()
 		case chunkChan <- chunk:
 			// Update predStart for next chunk
 			filePosition = filePosition.Add(time.Duration((3.0 - bn.Settings.BirdNET.Overlap) * float64(time.Second)))
 			return nil
 		case <-doneChan:
-			return processingError
+			processingErrorMutex.Lock()
+			err := processingError
+			processingErrorMutex.Unlock()
+			if err != nil {
+				return err
+			}
+			return ctx.Err() // Return context error if no processing error
 		case <-time.After(5 * time.Second):
 			return fmt.Errorf("timeout sending chunk to processing")
 		}
@@ -333,18 +402,28 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 	}
 	<-doneChan // Wait for processing to complete
 
+	// Handle errors and return results
 	if err != nil {
 		if settings.Debug {
 			fmt.Printf("DEBUG: File processing error: %v\n", err)
 		}
+		if errors.Is(err, context.Canceled) {
+			return allNotes, ErrAnalysisCanceled
+		}
 		return nil, fmt.Errorf("error processing audio: %w", err)
 	}
 
-	if processingError != nil {
+	processingErrorMutex.Lock()
+	err = processingError
+	processingErrorMutex.Unlock()
+	if err != nil {
 		if settings.Debug {
-			fmt.Printf("DEBUG: Processing error encountered: %v\n", processingError)
+			fmt.Printf("DEBUG: Processing error encountered: %v\n", err)
 		}
-		return allNotes, processingError
+		if errors.Is(err, context.Canceled) {
+			return allNotes, ErrAnalysisCanceled
+		}
+		return allNotes, err
 	}
 
 	if settings.Debug {

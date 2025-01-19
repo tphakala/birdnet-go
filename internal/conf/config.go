@@ -195,6 +195,7 @@ type ActionConfig struct {
 type InputConfig struct {
 	Path      string `yaml:"-"` // path to input file or directory
 	Recursive bool   `yaml:"-"` // true for recursive directory analysis
+	Watch     bool   `yaml:"-"` // true to watch directory for new files
 }
 
 type BirdNETConfig struct {
