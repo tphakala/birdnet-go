@@ -28,6 +28,7 @@ require (
 	github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e
 	golang.org/x/crypto v0.32.0
 	golang.org/x/net v0.34.0
+	golang.org/x/term v0.28.0
 	golang.org/x/text v0.21.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.5.6

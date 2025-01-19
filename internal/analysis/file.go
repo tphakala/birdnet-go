@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -85,6 +87,46 @@ func validateAudioFile(filePath string) error {
 	return nil
 }
 
+// truncateString truncates a string to fit within maxLen, adding "..." if truncated
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+	return s[:maxLen-3] + "..."
+}
+
+// formatProgressLine formats the progress line to fit within the terminal width
+func formatProgressLine(filename string, duration time.Duration, chunkCount, totalChunks int, avgRate float64, timeRemaining string, termWidth int) string {
+	// Base format without filename (to calculate remaining space)
+	baseFormat := fmt.Sprintf(" [%s] | \033[33m🔍 Analyzing chunk %d/%d\033[0m | \033[36m%.1f chunks/sec\033[0m %s",
+		duration.Round(time.Second),
+		chunkCount,
+		totalChunks,
+		avgRate,
+		timeRemaining)
+
+	// Calculate available space for filename
+	// Account for emoji (📄) and color codes
+	const colorCodesLen = 45 // Approximate length of all color codes
+	availableSpace := termWidth - len(baseFormat) - colorCodesLen
+
+	// Ensure minimum width
+	if availableSpace < 10 {
+		availableSpace = 10
+	}
+
+	// Truncate filename if needed
+	truncatedFilename := truncateString(filename, availableSpace)
+
+	// Return the complete formatted line
+	return fmt.Sprintf("\r\033[K\033[37m📄 %s%s",
+		truncatedFilename,
+		baseFormat)
+}
+
 // processAudioFile processes the audio file and returns the notes.
 func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]datastore.Note, error) {
 	// Calculate total chunks
@@ -104,7 +146,7 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 	duration := time.Duration(float64(audioInfo.TotalSamples) / float64(audioInfo.SampleRate) * float64(time.Second))
 
 	// Get filename and truncate if necessary
-	filename := truncateFilename(settings.Input.Path)
+	filename := filepath.Base(settings.Input.Path)
 
 	startTime := time.Now()
 	chunkCount := 1
@@ -203,13 +245,22 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 				lastChunkCount = chunkCount
 				lastProgressUpdate = currentTime
 
-				fmt.Printf("\r\033[K\033[37m📄 %s [%s]\033[0m | \033[33m🔍 Analyzing chunk %d/%d\033[0m | \033[36m%.1f chunks/sec\033[0m %s",
+				// Get terminal width
+				width, _, err := term.GetSize(int(os.Stdout.Fd()))
+				if err != nil {
+					width = 80 // Default to 80 columns if we can't get terminal width
+				}
+
+				// Format and print the progress line
+				fmt.Print(formatProgressLine(
 					filename,
-					duration.Round(time.Second),
+					duration,
 					chunkCount,
 					totalChunks,
 					avgRate,
-					birdnet.EstimateTimeRemaining(startTime, chunkCount, totalChunks))
+					birdnet.EstimateTimeRemaining(startTime, chunkCount, totalChunks),
+					width,
+				))
 			}
 		}
 	}()
@@ -303,11 +354,23 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo) ([]
 	totalTime := time.Since(startTime)
 	avgChunksPerSec := float64(totalChunks) / totalTime.Seconds()
 
-	fmt.Printf("\r\033[K\033[37m📄 %s [%s]\033[0m | \033[32m✅ Analysis completed in %s\033[0m | \033[36m%.1f chunks/sec avg\033[0m\n",
+	// Get terminal width for final status line
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		width = 80 // Default to 80 columns if we can't get terminal width
+	}
+
+	// Format and print the final status line
+	fmt.Print(formatProgressLine(
 		filename,
-		duration.Round(time.Second),
-		birdnet.FormatDuration(totalTime),
-		avgChunksPerSec)
+		duration,
+		totalChunks,
+		totalChunks,
+		avgChunksPerSec,
+		fmt.Sprintf("in %s", birdnet.FormatDuration(totalTime)),
+		width,
+	))
+	fmt.Println() // Add newline after completion
 
 	return allNotes, nil
 }
