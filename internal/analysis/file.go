@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/birdnet"
@@ -64,7 +65,13 @@ func validateAudioFile(filePath string) error {
 		return fmt.Errorf("\033[31m❌ File %s is empty (0 bytes)\033[0m", filepath.Base(filePath))
 	}
 
-	// Open the file to check if it's a valid FLAC file
+	// Check file extension (case-insensitive)
+	ext := strings.ToLower(filepath.Ext(filePath))
+	if ext != ".wav" && ext != ".flac" {
+		return fmt.Errorf("\033[31m❌ Invalid audio file %s: unsupported audio format: %s\033[0m", filepath.Base(filePath), filepath.Ext(filePath))
+	}
+
+	// Open the file to check if it's a valid audio file
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("\033[31m❌ Error opening file %s: %w\033[0m", filepath.Base(filePath), err)

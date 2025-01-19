@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -40,7 +41,7 @@ func GetAudioInfo(filePath string) (AudioInfo, error) {
 	}
 	defer file.Close()
 
-	ext := filepath.Ext(filePath)
+	ext := strings.ToLower(filepath.Ext(filePath))
 
 	switch ext {
 	case ".wav":
@@ -60,7 +61,7 @@ func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback)
 	}
 	defer file.Close()
 
-	ext := filepath.Ext(settings.Input.Path)
+	ext := strings.ToLower(filepath.Ext(settings.Input.Path))
 
 	switch ext {
 	case ".wav":

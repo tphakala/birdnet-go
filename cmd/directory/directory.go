@@ -36,6 +36,7 @@ func Command(settings *conf.Settings) *cobra.Command {
 // setupDirectoryFlags defines flags specific to the directory command.
 func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
 	cmd.Flags().BoolVarP(&settings.Input.Recursive, "recursive", "r", false, "Recursively analyze subdirectories")
+	cmd.Flags().BoolVarP(&settings.Input.Watch, "watch", "w", false, "Watch directory for new files")
 	cmd.Flags().StringVarP(&settings.Output.File.Path, "output", "o", viper.GetString("output.file.path"), "Path to output directory")
 	cmd.Flags().StringVar(&settings.Output.File.Type, "type", viper.GetString("output.file.type"), "Output type: table, csv")
 
