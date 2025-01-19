@@ -137,10 +137,17 @@ download-tflite:
 			rm -f tensorflowlite_c-$(patsubst v%,%,$(TFLITE_VERSION)).dll; \
 		else \
 			tar -xzf $(TFLITE_C_FILE) -C .; \
-			if [ -f "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so" ]; then \
-				sudo mv "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so" "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so.old"; \
+			if [ "$(UNAME_S)" = "Darwin" ]; then \
+				if [ -f "$(TFLITE_LIB_DIR)/libtensorflowlite_c.dylib" ]; then \
+					sudo mv "$(TFLITE_LIB_DIR)/libtensorflowlite_c.dylib" "$(TFLITE_LIB_DIR)/libtensorflowlite_c.dylib.old"; \
+				fi; \
+				sudo mv libtensorflowlite_c.dylib $(TFLITE_LIB_DIR)/; \
+			else \
+				if [ -f "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so" ]; then \
+					sudo mv "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so" "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so.old"; \
+				fi; \
+				sudo mv libtensorflowlite_c.so.$(patsubst v%,%,$(TFLITE_VERSION)) $(TFLITE_LIB_DIR)/; \
 			fi; \
-			sudo mv libtensorflowlite_c.so.$(patsubst v%,%,$(TFLITE_VERSION)) $(TFLITE_LIB_DIR)/; \
 		fi; \
 		rm -f $(TFLITE_C_FILE); \
 	else \
