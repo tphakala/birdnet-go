@@ -55,7 +55,7 @@ $(strip \
     CGO_ENABLED=1 \
     CGO_CFLAGS="-I$(HOME)/src/tensorflow" \
     $(if $(filter darwin%,$1), \
-        CGO_LDFLAGS="-L$(TFLITE_LIB_DIR)" \
+        CGO_LDFLAGS="-L$(TFLITE_LIB_DIR) -ltensorflowlite_c -Wl,-rpath,$(TFLITE_LIB_DIR)" \
     ) \
     $(if $(filter linux_arm64,$1), \
         $(if $(filter x86_64,$(UNAME_M)), \
