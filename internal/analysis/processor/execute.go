@@ -76,7 +76,7 @@ func validateCommandPath(command string) (string, error) {
 
 	// Check file permissions
 	if runtime.GOOS != "windows" {
-		if info.Mode()&0111 == 0 {
+		if info.Mode()&0o111 == 0 {
 			return "", fmt.Errorf("command is not executable: %s", command)
 		}
 	}
@@ -111,7 +111,7 @@ func buildSafeArguments(params map[string]interface{}, note datastore.Note) ([]s
 			// Escape any existing quotes in the value
 			strValue = strings.ReplaceAll(strValue, `"`, `\"`)
 			// Wrap the value in quotes
-			strValue = fmt.Sprintf(`"%s"`, strValue)
+			strValue = fmt.Sprintf(`"%q"`, strValue)
 		}
 
 		arg := fmt.Sprintf("--%s=%s", key, strValue)

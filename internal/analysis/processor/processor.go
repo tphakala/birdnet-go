@@ -462,9 +462,8 @@ func (p *Processor) pendingDetectionsFlusher() {
 
 // Helper function to check if a slice contains a string (case-insensitive)
 func contains(slice []string, item string) bool {
-	item = strings.ToLower(item)
 	for _, s := range slice {
-		if strings.ToLower(s) == item {
+		if strings.EqualFold(s, item) {
 			return true
 		}
 	}
