@@ -260,7 +260,7 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 		// Create a NoteWithWeather object
 		noteWithWeather := NoteWithWeather{
 			Note:      note,
-			TimeOfDay: h.CalculateTimeOfDay(noteTime, sunEvents),
+			TimeOfDay: h.CalculateTimeOfDay(noteTime, &sunEvents),
 			Weather:   nil, // Initialize Weather as nil
 		}
 

@@ -30,7 +30,7 @@ func (h *Handlers) GetSunPositionIconFunc() func(timeOfDay weather.TimeOfDay) te
 }
 
 // CalculateTimeOfDay determines the time of day based on the note time and sun events
-func (h *Handlers) CalculateTimeOfDay(noteTime time.Time, sunEvents suncalc.SunEventTimes) weather.TimeOfDay {
+func (h *Handlers) CalculateTimeOfDay(noteTime time.Time, sunEvents *suncalc.SunEventTimes) weather.TimeOfDay {
 	return weather.CalculateTimeOfDay(noteTime, sunEvents)
 }
 
