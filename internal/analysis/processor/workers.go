@@ -91,7 +91,7 @@ func (p *Processor) getActionsForItem(detection Detections) []Action {
 func parseCommandParams(params []string, detection Detections) map[string]interface{} {
 	commandParams := make(map[string]interface{})
 	for _, param := range params {
-		value := getNoteValueByName(detection.Note, param)
+		value := getNoteValueByName(&detection.Note, param)
 		// Check if the parameter is confidence and normalize it
 		if param == "confidence" {
 			if confidence, ok := value.(float64); ok {
