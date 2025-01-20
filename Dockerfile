@@ -40,16 +40,16 @@ RUN TFLITE_LIB_ARCH=$(echo ${TARGETPLATFORM} | tr '/' '_').tar.gz && \
 FROM --platform=$BUILDPLATFORM buildenv AS build
 WORKDIR /home/dev-user/src/BirdNET-Go
 
+# Download latest versions of Leaflet, htmx, Alpine.js and Tailwind CSS
+RUN make download-assets
+RUN make generate-tailwindcss
+
 # Compile BirdNET-Go
 COPY --chown=dev-user . ./
 ARG TARGETPLATFORM
 RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
     make $(echo ${TARGETPLATFORM} | tr '/' '_')
-
-# Download latest versions of Leaflet, htmx, Alpine.js and Tailwind CSS
-RUN make download-assets
-RUN make generate-tailwindcss
 
 # Create final image using a multi-platform base image
 FROM debian:bookworm-slim

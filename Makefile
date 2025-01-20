@@ -4,9 +4,10 @@ TFLITE_VERSION := v2.17.1
 
 # Common flags
 CGO_FLAGS := CGO_ENABLED=1 CGO_CFLAGS="-I$(HOME)/src/tensorflow"
-LDFLAGS := -ldflags "-s -w \
+LDFLAGS = -ldflags "-s -w \
     -X 'main.buildDate=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)' \
-    -X 'main.version=$(shell git describe --tags --always)'"
+    -X 'main.version=$(shell git describe --tags --always)' \
+    $(call get_extra_ldflags,$(TARGET))"
 
 # Detect host OS and architecture
 UNAME_S := $(shell uname -s)
@@ -15,6 +16,14 @@ UNAME_M := $(shell uname -m)
 # Tailwind CSS
 TAILWIND_INPUT := tailwind.input.css
 TAILWIND_OUTPUT := assets/tailwind.css
+
+# Function to determine additional linker flags based on target
+define get_extra_ldflags
+$(strip \
+    $(if $(filter darwin%,$1), \
+        -r $(call get_lib_path,$1), \
+    ))
+endef
 
 # Function to determine library path based on target and host architecture
 define get_lib_path
@@ -32,7 +41,7 @@ $(strip \
     $(if $(filter windows_amd64,$1), \
         /usr/x86_64-w64-mingw32/lib, \
     $(if $(filter darwin%,$1), \
-        /usr/local/lib, \
+        /opt/homebrew/lib, \
         /usr/lib \
     )))))
 endef
@@ -46,7 +55,6 @@ $(strip \
         libtensorflowlite_c.so.$(patsubst v%,%,$(TFLITE_VERSION)), \
     $(if $(filter darwin%,$1), \
         libtensorflowlite_c.$(patsubst v%,%,$(TFLITE_VERSION)).dylib, \
-        libtensorflowlite_c.so.$(patsubst v%,%,$(TFLITE_VERSION)) \
     ))))
 endef
 
@@ -70,7 +78,7 @@ ifeq ($(UNAME_S),Linux)
     TFLITE_LIB_EXT := .so
 else ifeq ($(UNAME_S),Darwin)
     NATIVE_TARGET := darwin_$(if $(filter x86_64,$(UNAME_M)),amd64,arm64)
-    TFLITE_LIB_DIR := /usr/local/lib
+    TFLITE_LIB_DIR := /opt/homebrew/lib
     TFLITE_LIB_EXT := .dylib
 else
     $(error Build is supported only on Linux and macOS)
@@ -88,6 +96,7 @@ check-tools:
 	@which go >/dev/null || { echo "go not found. Please download Go 1.22 or newer from https://go.dev/dl/ and follow the installation instructions."; exit 1; }
 	@which unzip >/dev/null || { echo "unzip not found. Please install it using 'brew install unzip' on macOS or 'sudo apt-get install -y unzip' on Linux."; exit 1; }
 	@which git >/dev/null || { echo "git not found. Please install it using 'brew install git' on macOS or 'sudo apt-get install -y git' on Linux."; exit 1; }
+	@which wget >/dev/null || { echo "wget not found. Please install it using 'brew install wget' on macOS or 'sudo apt-get install -y wget' on Linux."; exit 1; }
 
 # Check and clone TensorFlow if not exists
 check-tensorflow:
@@ -121,6 +130,10 @@ define ensure_tflite_symlinks
 		sudo ln -sf $(2) libtensorflowlite_c.so.2 && \
 		sudo ln -sf libtensorflowlite_c.so.2 libtensorflowlite_c.so && \
 		sudo ldconfig; \
+	elif [ "$(UNAME_S)" = "Darwin" ] && [ ! -f "$(1)/libtensorflowlite_c.dylib" ]; then \
+		echo "Creating symbolic links for macOS library..."; \
+		cd $(1) && \
+		ln -sf $(2) libtensorflowlite_c.dylib; \
 	fi
 endef
 
@@ -134,14 +147,16 @@ download-tflite:
 		wget -q https://github.com/tphakala/tflite_c/releases/download/$(TFLITE_VERSION)/$(TFLITE_C_FILE) -P ./; \
 		if [ $(suffix $(TFLITE_C_FILE)) = .zip ]; then \
 			unzip -o $(TFLITE_C_FILE) -d .; \
-			sudo mv ./tensorflowlite_c-$(patsubst v%,%,$(TFLITE_VERSION)).dll $(TFLITE_LIB_DIR)/; \
-			rm -f tensorflowlite_c-$(patsubst v%,%,$(TFLITE_VERSION)).dll; \
+			echo "Moving $(call get_lib_filename,$(TARGET)) to $(TFLITE_LIB_DIR)/"; \
+			sudo mv $(call get_lib_filename,$(TARGET)) $(TFLITE_LIB_DIR)/; \
+			rm -f $(call get_lib_filename,$(TARGET)); \
 		else \
 			tar -xzf $(TFLITE_C_FILE) -C .; \
 			if [ -f "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so" ]; then \
 				sudo mv "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so" "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so.old"; \
 			fi; \
-			sudo mv libtensorflowlite_c.so.$(patsubst v%,%,$(TFLITE_VERSION)) $(TFLITE_LIB_DIR)/; \
+			echo "Moving $(call get_lib_filename,$(TARGET)) to $(TFLITE_LIB_DIR)/"; \
+			sudo mv $(call get_lib_filename,$(TARGET)) $(TFLITE_LIB_DIR)/; \
 		fi; \
 		rm -f $(TFLITE_C_FILE); \
 	else \
