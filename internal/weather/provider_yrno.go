@@ -54,7 +54,7 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 		Timeout: RequestTimeout,
 	}
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
@@ -76,9 +76,9 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 			time.Sleep(RetryDelay)
 			continue
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
 			if i == MaxRetries-1 {
 				return nil, fmt.Errorf("received non-200 response: %d", resp.StatusCode)
 			}
@@ -87,6 +87,7 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 		}
 
 		if resp.StatusCode == http.StatusNotModified {
+			resp.Body.Close()
 			return nil, fmt.Errorf("no new data available")
 		}
 
@@ -99,13 +100,17 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 		if resp.Header.Get("Content-Encoding") == "gzip" {
 			gzReader, err := gzip.NewReader(resp.Body)
 			if err != nil {
+				resp.Body.Close()
 				return nil, fmt.Errorf("error creating gzip reader: %w", err)
 			}
-			defer gzReader.Close()
 			reader = gzReader
 		}
 
 		body, err := io.ReadAll(reader)
+		if resp.Header.Get("Content-Encoding") == "gzip" {
+			reader.(*gzip.Reader).Close()
+		}
+		resp.Body.Close()
 		if err != nil {
 			return nil, fmt.Errorf("error reading response body: %w", err)
 		}

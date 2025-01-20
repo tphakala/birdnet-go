@@ -66,7 +66,7 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 		Timeout: RequestTimeout,
 	}
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
@@ -83,9 +83,9 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 			time.Sleep(RetryDelay)
 			continue
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
 			if i == MaxRetries-1 {
 				return nil, fmt.Errorf("received non-200 response: %d", resp.StatusCode)
 			}
@@ -94,6 +94,7 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 		}
 
 		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		if err != nil {
 			return nil, fmt.Errorf("error reading response body: %w", err)
 		}

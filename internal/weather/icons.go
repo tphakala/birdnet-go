@@ -94,7 +94,7 @@ func GetTimeOfDayIcon(timeOfDay TimeOfDay) template.HTML {
 }
 
 // CalculateTimeOfDay determines the time of Day based on the note time and sun events
-func CalculateTimeOfDay(noteTime time.Time, sunEvents suncalc.SunEventTimes) TimeOfDay {
+func CalculateTimeOfDay(noteTime time.Time, sunEvents *suncalc.SunEventTimes) TimeOfDay {
 	switch {
 	case noteTime.Before(sunEvents.CivilDawn):
 		return Night
