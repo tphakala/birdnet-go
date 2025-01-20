@@ -8,7 +8,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/observation"
-	"github.com/tphakala/go-tflite"
+	tflite "github.com/tphakala/go-tflite"
 )
 
 // Filter structure is used for filtering predictions based on certain criteria.
