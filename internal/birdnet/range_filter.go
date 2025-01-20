@@ -15,7 +15,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/observation"
-	"github.com/tphakala/go-tflite"
+	tflite "github.com/tphakala/go-tflite"
 )
 
 // SpeciesScore holds a species label and its associated score.
