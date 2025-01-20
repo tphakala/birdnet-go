@@ -35,7 +35,7 @@ func (a ExecuteCommandAction) Execute(data interface{}) error {
 	}
 
 	// Building the command line arguments with validation
-	args, err := buildSafeArguments(a.Params, detection.Note)
+	args, err := buildSafeArguments(a.Params, &detection.Note)
 	if err != nil {
 		return fmt.Errorf("error building arguments: %w", err)
 	}
@@ -85,7 +85,7 @@ func validateCommandPath(command string) (string, error) {
 }
 
 // buildSafeArguments creates a sanitized list of command arguments
-func buildSafeArguments(params map[string]interface{}, note datastore.Note) ([]string, error) {
+func buildSafeArguments(params map[string]interface{}, note *datastore.Note) ([]string, error) {
 	var args []string
 
 	for key, value := range params {
@@ -167,8 +167,8 @@ func getCleanEnvironment() []string {
 	return env
 }
 
-func getNoteValueByName(note datastore.Note, paramName string) interface{} {
-	val := reflect.ValueOf(note)
+func getNoteValueByName(note *datastore.Note, paramName string) interface{} {
+	val := reflect.ValueOf(*note)
 	fieldVal := val.FieldByName(paramName)
 
 	// Check if the field is valid (exists in the struct) and can be interfaced
