@@ -154,72 +154,42 @@ func (p *Processor) processDetections(item queue.Results) {
 	// processResults() returns a slice of detections, we iterate through each and process them
 	// detections are put into pendingDetections map where they are held until flush deadline is reached
 	// once deadline is reached detections are delivered to workers for actions (save to db etc) processing
-	for _, detection := range p.processResults(item) {
+	detectionResults := p.processResults(item)
+	for i := 0; i < len(detectionResults); i++ {
+		detection := detectionResults[i]
 		commonName := strings.ToLower(detection.Note.CommonName)
 		confidence := detection.Note.Confidence
 
 		// Lock the mutex to ensure thread-safe access to shared resources
 		p.pendingMutex.Lock()
 
-		// Check if this species is already in the pending detections
-		pendingDetection, exists := p.pendingDetections[commonName]
-
-		if exists {
+		if existing, exists := p.pendingDetections[commonName]; exists {
 			// Update the existing detection if it's already in pendingDetections map
-			p.updateExistingDetection(&pendingDetection, detection, item, confidence)
+			if confidence > existing.Confidence {
+				existing.Detection = detection
+				existing.Confidence = confidence
+				existing.Source = item.Source
+				existing.LastUpdated = time.Now()
+			}
+			existing.Count++
+			p.pendingDetections[commonName] = existing
 		} else {
 			// Create a new pending detection if it doesn't exist
-			p.createNewDetection(&pendingDetection, detection, item, confidence, delay)
+			p.pendingDetections[commonName] = PendingDetection{
+				Detection:     detection,
+				Confidence:    confidence,
+				Source:        item.Source,
+				FirstDetected: item.StartTime,
+				FlushDeadline: item.StartTime.Add(delay),
+				Count:         1,
+			}
 		}
-
-		// Update detection count for this species
-		pendingDetection.Count++
-		// DEBUG
-		//log.Printf("debug: increasing count for %s to %d\n", commonName, pendingDetection.Count)
-
-		// Update the detection in the map with the modified or new pending detection
-		p.pendingDetections[commonName] = pendingDetection
 
 		// Update the dynamic threshold for this species if enabled
 		p.updateDynamicThreshold(commonName, confidence)
 
 		// Unlock the mutex to allow other goroutines to access shared resources
 		p.pendingMutex.Unlock()
-	}
-}
-
-// updateExistingDetection updates an existing detection if the new confidence is higher
-// and adjusts the FlushDeadline if necessary.
-func (p *Processor) updateExistingDetection(pendingDetection *PendingDetection, detection Detections, item queue.Results, confidence float64) {
-	// Only update detection details if new confidence is higher
-	if confidence > pendingDetection.Confidence {
-		log.Printf("Updating detection: %s with confidence: %.2f, source: %v, count: %d\n", detection.Note.CommonName, confidence, item.Source, pendingDetection.Count+1)
-		pendingDetection.Detection = detection
-		pendingDetection.Confidence = confidence
-		pendingDetection.Source = item.Source
-		pendingDetection.LastUpdated = time.Now()
-	}
-
-	// Keep the original FirstDetected
-	// Update FlushDeadline only if it has passed
-	/*if time.Now().After(pendingDetection.FlushDeadline) {
-		log.Printf("Updating FlushDeadline for %s to %v\n", detection.Note.CommonName, time.Now().Add(15*time.Second))
-		pendingDetection.FlushDeadline = time.Now().Add(15 * time.Second)
-	}*/
-}
-
-// createNewDetection initializes a new PendingDetection struct with the given detection information.
-func (p *Processor) createNewDetection(pendingDetection *PendingDetection, detection Detections, item queue.Results, confidence float64, delay time.Duration) {
-	log.Printf("New detection: %s with confidence: %.2f, source: %v\n", detection.Note.CommonName, confidence, item.Source)
-
-	firstDetected := item.StartTime
-	*pendingDetection = PendingDetection{
-		Detection:     detection,
-		Confidence:    confidence,
-		Source:        item.Source,
-		FirstDetected: firstDetected,
-		FlushDeadline: firstDetected.Add(delay),
-		Count:         0, // Will be incremented to 1 in the main function
 	}
 }
 
