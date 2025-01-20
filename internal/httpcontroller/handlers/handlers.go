@@ -114,16 +114,16 @@ func (h *Handlers) HandleError(err error, c echo.Context) error {
 	var he *HandlerError
 	var echoHTTPError *echo.HTTPError
 
-	// Check if it's an Echo HTTP error
-	if errors.As(err, &echoHTTPError) {
+	switch {
+	case errors.As(err, &echoHTTPError):
 		he = &HandlerError{
 			Err:     echoHTTPError,
 			Message: fmt.Sprintf("%v", echoHTTPError.Message),
 			Code:    echoHTTPError.Code,
 		}
-	} else if errors.As(err, &he) {
+	case errors.As(err, &he):
 		// It's already a HandlerError, use it as is
-	} else {
+	default:
 		// For any other error, treat it as an internal server error
 		he = &HandlerError{
 			Err:     err,
@@ -217,7 +217,7 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 			}
 
 			// Write SSE formatted data
-			if _, err := c.Response().Write([]byte(fmt.Sprintf("data: %s\n\n", jsonData))); err != nil {
+			if _, err := fmt.Fprintf(c.Response(), "data: %s\n\n", jsonData); err != nil {
 				return err
 			}
 
