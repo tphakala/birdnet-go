@@ -24,9 +24,7 @@ func (h *Handlers) GetWeatherIconFunc() func(weatherCode string, timeOfDay weath
 
 // GetSunPositionIconFunc returns a function that returns an SVG icon for a given time of day
 func (h *Handlers) GetSunPositionIconFunc() func(timeOfDay weather.TimeOfDay) template.HTML {
-	return func(timeOfDay weather.TimeOfDay) template.HTML {
-		return weather.GetTimeOfDayIcon(timeOfDay)
-	}
+	return weather.GetTimeOfDayIcon
 }
 
 // CalculateTimeOfDay determines the time of day based on the note time and sun events
