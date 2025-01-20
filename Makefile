@@ -88,6 +88,7 @@ check-tools:
 	@which go >/dev/null || { echo "go not found. Please download Go 1.22 or newer from https://go.dev/dl/ and follow the installation instructions."; exit 1; }
 	@which unzip >/dev/null || { echo "unzip not found. Please install it using 'brew install unzip' on macOS or 'sudo apt-get install -y unzip' on Linux."; exit 1; }
 	@which git >/dev/null || { echo "git not found. Please install it using 'brew install git' on macOS or 'sudo apt-get install -y git' on Linux."; exit 1; }
+	@which wget >/dev/null || { echo "wget not found. Please install it using 'brew install wget' on macOS or 'sudo apt-get install -y wget' on Linux."; exit 1; }
 
 # Check and clone TensorFlow if not exists
 check-tensorflow:
