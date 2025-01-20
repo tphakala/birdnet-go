@@ -4,9 +4,10 @@ TFLITE_VERSION := v2.17.1
 
 # Common flags
 CGO_FLAGS := CGO_ENABLED=1 CGO_CFLAGS="-I$(HOME)/src/tensorflow"
-LDFLAGS := -ldflags "-s -w \
+LDFLAGS = -ldflags "-s -w \
     -X 'main.buildDate=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)' \
-    -X 'main.version=$(shell git describe --tags --always)'"
+    -X 'main.version=$(shell git describe --tags --always)' \
+    $(call get_extra_ldflags,$(TARGET))"
 
 # Detect host OS and architecture
 UNAME_S := $(shell uname -s)
@@ -15,6 +16,14 @@ UNAME_M := $(shell uname -m)
 # Tailwind CSS
 TAILWIND_INPUT := tailwind.input.css
 TAILWIND_OUTPUT := assets/tailwind.css
+
+# Function to determine additional linker flags based on target
+define get_extra_ldflags
+$(strip \
+    $(if $(filter darwin%,$1), \
+        -r $(call get_lib_path,$1), \
+    ))
+endef
 
 # Function to determine library path based on target and host architecture
 define get_lib_path
@@ -121,6 +130,10 @@ define ensure_tflite_symlinks
 		sudo ln -sf $(2) libtensorflowlite_c.so.2 && \
 		sudo ln -sf libtensorflowlite_c.so.2 libtensorflowlite_c.so && \
 		sudo ldconfig; \
+	elif [ "$(UNAME_S)" = "Darwin" ] && [ ! -f "$(1)/libtensorflowlite_c.dylib" ]; then \
+		echo "Creating symbolic links for macOS library..."; \
+		cd $(1) && \
+		ln -sf $(2) libtensorflowlite_c.dylib; \
 	fi
 endef
 
@@ -134,14 +147,16 @@ download-tflite:
 		wget -q https://github.com/tphakala/tflite_c/releases/download/$(TFLITE_VERSION)/$(TFLITE_C_FILE) -P ./; \
 		if [ $(suffix $(TFLITE_C_FILE)) = .zip ]; then \
 			unzip -o $(TFLITE_C_FILE) -d .; \
-			sudo mv ./tensorflowlite_c-$(patsubst v%,%,$(TFLITE_VERSION)).dll $(TFLITE_LIB_DIR)/; \
-			rm -f tensorflowlite_c-$(patsubst v%,%,$(TFLITE_VERSION)).dll; \
+			echo "Moving $(call get_lib_filename,$(TARGET)) to $(TFLITE_LIB_DIR)/"; \
+			sudo mv $(call get_lib_filename,$(TARGET)) $(TFLITE_LIB_DIR)/; \
+			rm -f $(call get_lib_filename,$(TARGET)); \
 		else \
 			tar -xzf $(TFLITE_C_FILE) -C .; \
 			if [ -f "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so" ]; then \
 				sudo mv "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so" "$(TFLITE_LIB_DIR)/libtensorflowlite_c.so.old"; \
 			fi; \
-			sudo mv libtensorflowlite_c.so.$(patsubst v%,%,$(TFLITE_VERSION)) $(TFLITE_LIB_DIR)/; \
+			echo "Moving $(call get_lib_filename,$(TARGET)) to $(TFLITE_LIB_DIR)/"; \
+			sudo mv $(call get_lib_filename,$(TARGET)) $(TFLITE_LIB_DIR)/; \
 		fi; \
 		rm -f $(TFLITE_C_FILE); \
 	else \
