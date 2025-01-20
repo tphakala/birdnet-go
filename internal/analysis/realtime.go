@@ -110,7 +110,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Initialize Prometheus metrics manager
 	metrics, err := telemetry.NewMetrics()
 	if err != nil {
-		log.Fatalf("Error initializing metrics: %v", err)
+		return fmt.Errorf("error initializing metrics: %w", err)
 	}
 
 	var birdImageCache *imageprovider.BirdImageCache
@@ -182,7 +182,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 }
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
-func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan chan struct{}, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData) {
+func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData) {
 	// waitgroup is managed within CaptureAudio
 	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, audioLevelChan)
 }
