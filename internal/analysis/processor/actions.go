@@ -78,7 +78,7 @@ func (a LogAction) Execute(data interface{}) error {
 	}
 
 	// Log note to file
-	if err := observation.LogNoteToFile(a.Settings, a.Note); err != nil {
+	if err := observation.LogNoteToFile(a.Settings, &a.Note); err != nil {
 		// If an error occurs when logging to a file, wrap and return the error.
 		log.Printf("Failed to log note to file: %v", err)
 	}
