@@ -11,7 +11,7 @@ import (
 )
 
 // LogNoteToFile saves the Note to a log file.
-func LogNoteToFile(settings *conf.Settings, note datastore.Note) error {
+func LogNoteToFile(settings *conf.Settings, note *datastore.Note) error {
 	// Separate the directory and file name from the log path
 	dir, fileName := filepath.Split(settings.Realtime.Log.Path)
 
@@ -22,7 +22,7 @@ func LogNoteToFile(settings *conf.Settings, note datastore.Note) error {
 	absoluteFilePath := filepath.Join(basePath, fileName)
 
 	// Open the log file for appending, creating it if it doesn't exist
-	file, err := os.OpenFile(absoluteFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(absoluteFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		fmt.Printf("failed to open file '%s': %v\n", absoluteFilePath, err)
 		return fmt.Errorf("failed to open file '%s': %w", absoluteFilePath, err)

@@ -14,21 +14,23 @@ import (
 )
 
 // ParseSpeciesString extracts the scientific name, common name, and species code from the species string.
-func ParseSpeciesString(species string) (string, string, string) {
+func ParseSpeciesString(species string) (scientificName, commonName, speciesCode string) {
 	parts := strings.SplitN(species, "_", 3) // Split into 3 parts at most: scientificName, commonName, speciesCode
 	if len(parts) == 3 {
 		// Return scientificName (parts[0]), commonName (parts[1]), and speciesCode (parts[2])
-		return parts[0], parts[1], parts[2]
+		scientificName, commonName, speciesCode = parts[0], parts[1], parts[2]
+		return
 	}
 	// Log this to see what is being returned
 	fmt.Printf("Species string has an unexpected format: %s\n", species)
 	// Return the original species string for all parts if the format doesn't match the expected
-	return species, species, ""
+	scientificName, commonName, speciesCode = species, species, ""
+	return
 }
 
 // New creates and returns a new Note with the provided parameters and current date and time.
 // It uses the configuration and parsing functions to set the appropriate fields.
-func New(settings *conf.Settings, beginTime, endTime time.Time, species string, confidence float64, source string, clipName string, elapsedTime time.Duration) datastore.Note {
+func New(settings *conf.Settings, beginTime, endTime time.Time, species string, confidence float64, source, clipName string, elapsedTime time.Duration) datastore.Note {
 	// Parse the species string to get the scientific name, common name, and species code.
 	scientificName, commonName, speciesCode := ParseSpeciesString(species)
 
@@ -103,14 +105,15 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 	// Pre-declare err outside the loop to avoid re-declaration
 	var err error
 
-	for i, note := range notes {
-		if note.Confidence <= settings.BirdNET.Threshold {
+	for i := range notes {
+		if notes[i].Confidence <= settings.BirdNET.Threshold {
 			continue // Skip the current iteration as the note doesn't meet the threshold
 		}
 
 		// Prepare the line for notes above the threshold, assuming note.BeginTime and note.EndTime are of type time.Time
 		line := fmt.Sprintf("%d\tSpectrogram 1\t1\t%s\t%s\t%s\t0\t15000\t%s\t%s\t%.4f\n",
-			i+1, note.Source, note.BeginTime.Format("15:04:05"), note.EndTime.Format("15:04:05"), note.SpeciesCode, note.CommonName, note.Confidence)
+			i+1, notes[i].Source, notes[i].BeginTime.Format("15:04:05"), notes[i].EndTime.Format("15:04:05"),
+			notes[i].SpeciesCode, notes[i].CommonName, notes[i].Confidence)
 
 		// Attempt to write the note
 		if _, err = w.Write([]byte(line)); err != nil {
@@ -164,15 +167,15 @@ func WriteNotesCsv(settings *conf.Settings, notes []datastore.Note, filename str
 	// Pre-declare err outside the loop to avoid re-declaration
 	var err error
 
-	for _, note := range notes {
-		if note.Confidence <= settings.BirdNET.Threshold {
+	for i := range notes {
+		if notes[i].Confidence <= settings.BirdNET.Threshold {
 			continue // Skip the current iteration as the note doesn't meet the threshold
 		}
 
 		line := fmt.Sprintf("%s,%s,%s,%s,%.4f\n",
-			note.BeginTime.Format("2006-01-02 15:04:05"), // Formats BeginTime
-			note.EndTime.Format("2006-01-02 15:04:05"),   // Formats EndTime
-			note.ScientificName, note.CommonName, note.Confidence)
+			notes[i].BeginTime.Format("2006-01-02 15:04:05"),
+			notes[i].EndTime.Format("2006-01-02 15:04:05"),
+			notes[i].ScientificName, notes[i].CommonName, notes[i].Confidence)
 
 		if _, err = w.Write([]byte(line)); err != nil {
 			// Break out of the loop at the first sign of an error
