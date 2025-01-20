@@ -139,14 +139,16 @@ func FormatDuration(d time.Duration) string {
 	seconds := int(d.Seconds()) % 60
 	milliseconds := int(d.Milliseconds()) % 1000
 
-	if hours > 0 {
+	switch {
+	case hours > 0:
 		return fmt.Sprintf("%dh %dm %ds", hours, minutes, seconds)
-	} else if minutes > 0 {
+	case minutes > 0:
 		return fmt.Sprintf("%dm %ds", minutes, seconds)
-	} else if seconds > 0 {
+	case seconds > 0:
 		return fmt.Sprintf("%d.%03ds", seconds, milliseconds)
+	default:
+		return fmt.Sprintf("%dms", milliseconds)
 	}
-	return fmt.Sprintf("%dms", milliseconds)
 }
 
 // Update EstimateTimeRemaining to use the new format
