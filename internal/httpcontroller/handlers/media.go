@@ -151,7 +151,7 @@ func (h *Handlers) getSpectrogramPath(audioFileName string, width int) (string, 
 	spectrogramPath := filepath.Join(dir, spectrogramFileName)
 
 	// Convert to web-friendly path
-	webFriendlyPath := strings.Replace(spectrogramPath, string(os.PathSeparator), "/", -1)
+	webFriendlyPath := strings.ReplaceAll(spectrogramPath, string(os.PathSeparator), "/")
 
 	// Check if the spectrogram already exists
 	if spectrogramExists, err := fileExists(spectrogramPath); err != nil {
