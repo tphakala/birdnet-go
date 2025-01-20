@@ -32,7 +32,7 @@ $(strip \
     $(if $(filter windows_amd64,$1), \
         /usr/x86_64-w64-mingw32/lib, \
     $(if $(filter darwin%,$1), \
-        /usr/local/lib, \
+        /opt/homebrew/lib, \
         /usr/lib \
     )))))
 endef
@@ -46,7 +46,6 @@ $(strip \
         libtensorflowlite_c.so.$(patsubst v%,%,$(TFLITE_VERSION)), \
     $(if $(filter darwin%,$1), \
         libtensorflowlite_c.$(patsubst v%,%,$(TFLITE_VERSION)).dylib, \
-        libtensorflowlite_c.so.$(patsubst v%,%,$(TFLITE_VERSION)) \
     ))))
 endef
 
@@ -70,7 +69,7 @@ ifeq ($(UNAME_S),Linux)
     TFLITE_LIB_EXT := .so
 else ifeq ($(UNAME_S),Darwin)
     NATIVE_TARGET := darwin_$(if $(filter x86_64,$(UNAME_M)),amd64,arm64)
-    TFLITE_LIB_DIR := /usr/local/lib
+    TFLITE_LIB_DIR := /opt/homebrew/lib
     TFLITE_LIB_EXT := .dylib
 else
     $(error Build is supported only on Linux and macOS)
