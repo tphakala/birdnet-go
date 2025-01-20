@@ -142,7 +142,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 	// start cleanup of clips
 	if conf.Setting().Realtime.Audio.Export.Retention.Policy != "none" {
-		startClipCleanupMonitor(&wg, settings, dataStore, quitChan)
+		startClipCleanupMonitor(&wg, dataStore, quitChan)
 	}
 
 	// start weather polling
@@ -188,7 +188,7 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 }
 
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
-func startClipCleanupMonitor(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, quitChan chan struct{}) {
+func startClipCleanupMonitor(wg *sync.WaitGroup, dataStore datastore.Interface, quitChan chan struct{}) {
 	wg.Add(1)
 	go clipCleanupMonitor(wg, dataStore, quitChan)
 }
