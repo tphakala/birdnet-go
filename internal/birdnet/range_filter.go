@@ -57,7 +57,7 @@ func BuildRangeFilter(bn *BirdNET) error {
 		for _, species := range includedSpecies {
 			content += species + "\n"
 		}
-		if err := os.WriteFile(debugFile, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(debugFile, []byte(content), 0o644); err != nil {
 			log.Printf("❌ [range_filter/rebuild] Warning: Failed to write included species file: %v\n", err)
 		}
 	}
@@ -162,8 +162,7 @@ func isSpeciesExcluded(label string, excludeList []string) bool {
 // matchesSpecies checks if a label matches a species name (either common or scientific)
 func matchesSpecies(label, speciesName string) bool {
 	scientificName, commonName, _ := observation.ParseSpeciesString(label)
-	speciesName = strings.ToLower(speciesName)
-	return strings.ToLower(scientificName) == speciesName || strings.ToLower(commonName) == speciesName
+	return strings.EqualFold(scientificName, speciesName) || strings.EqualFold(commonName, speciesName)
 }
 
 // predictFilter applies a TensorFlow Lite model to predict species based on the context.
