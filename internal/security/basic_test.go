@@ -20,7 +20,7 @@ import (
 // Correct client_id and redirect_uri result in redirection with auth code
 func TestHandleBasicAuthorizeSuccess(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/?client_id=validClientID&redirect_uri=http://valid.redirect", nil)
+	req := httptest.NewRequest(http.MethodGet, "/?client_id=validClientID&redirect_uri=http://valid.redirect", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -56,7 +56,7 @@ func TestHandleBasicAuthorizeSuccess(t *testing.T) {
 func TestHandleBasicAuthorizeInvalidClientID(t *testing.T) {
 	e := echo.New()
 	// Use an explicitly invalid client ID
-	req := httptest.NewRequest(http.MethodGet, "/?client_id=invalidClientID&redirect_uri=http://valid.redirect", nil)
+	req := httptest.NewRequest(http.MethodGet, "/?client_id=invalidClientID&redirect_uri=http://valid.redirect", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -93,7 +93,7 @@ func TestHandleBasicAuthorizeInvalidClientID(t *testing.T) {
 // Auth code generation succeeds without errors
 func TestHandleBasicAuthorizeAuthCodeGeneration(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/?client_id=validClientID&redirect_uri=http://valid.redirect", nil)
+	req := httptest.NewRequest(http.MethodGet, "/?client_id=validClientID&redirect_uri=http://valid.redirect", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -128,7 +128,7 @@ func TestHandleBasicAuthorizeAuthCodeGeneration(t *testing.T) {
 // Valid client_id and redirect_uri parameters are correctly parsed from query
 func TestHandleBasicAuthorizeValidParameters(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/?client_id=validClientID&redirect_uri=http://valid.redirect", nil)
+	req := httptest.NewRequest(http.MethodGet, "/?client_id=validClientID&redirect_uri=http://valid.redirect", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -216,7 +216,7 @@ func TestHandleBasicAuthTokenSuccess(t *testing.T) {
 // Handle missing grant_type, code, or redirect_uri fields gracefully
 func TestHandleBasicAuthTokenMissingFields(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
 	req.Header.Set(echo.HeaderAuthorization, "Basic "+base64.StdEncoding.EncodeToString([]byte("validClientID:validClientSecret")))
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
