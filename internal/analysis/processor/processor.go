@@ -242,8 +242,8 @@ func (p *Processor) processResults(item queue.Results) []Detections {
 
 		// Handle dog and human detection, this sets LastDogDetection and LastHumanDetection which is
 		// later used to discard detection if privacy filter or dog bark filters are enabled in settings.
-		p.handleDogDetection(item, speciesLowercase, result)
-		p.handleHumanDetection(item, speciesLowercase, result)
+		p.handleDogDetection(&item, speciesLowercase, result)
+		p.handleHumanDetection(&item, speciesLowercase, result)
 
 		// Determine base confidence threshold
 		baseThreshold := p.getBaseConfidenceThreshold(speciesLowercase)
@@ -302,7 +302,7 @@ func (p *Processor) processResults(item queue.Results) []Detections {
 }
 
 // handleDogDetection handles the detection of dog barks and updates the last detection timestamp.
-func (p *Processor) handleDogDetection(item queue.Results, speciesLowercase string, result datastore.Results) {
+func (p *Processor) handleDogDetection(item *queue.Results, speciesLowercase string, result datastore.Results) {
 	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, "dog") &&
 		result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
 		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, item.Source)
@@ -311,7 +311,7 @@ func (p *Processor) handleDogDetection(item queue.Results, speciesLowercase stri
 }
 
 // handleHumanDetection handles the detection of human vocalizations and updates the last detection timestamp.
-func (p *Processor) handleHumanDetection(item queue.Results, speciesLowercase string, result datastore.Results) {
+func (p *Processor) handleHumanDetection(item *queue.Results, speciesLowercase string, result datastore.Results) {
 	// only check this if privacy filter is enabled
 	if p.Settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human ") &&
 		result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
