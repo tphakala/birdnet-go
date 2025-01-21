@@ -1,6 +1,8 @@
 ARG TFLITE_LIB_DIR=/usr/lib
+ARG TENSORFLOW_VERSION=2.17.1
+ARG TARGETPLATFORM=linux/amd64  # Default to linux/amd64 for local builds
 
-FROM --platform=$BUILDPLATFORM golang:1.23.5-bookworm AS buildenv
+FROM --platform=$TARGETPLATFORM golang:1.23.5-bookworm AS buildenv
 
 # Install zip utility along with other dependencies
 RUN apt-get update && apt-get install -y \
@@ -26,19 +28,15 @@ COPY --chown=dev-user ./Makefile ./
 COPY --chown=dev-user ./reset_auth.sh ./
 
 # Download TensorFlow headers
-ARG TENSORFLOW_VERSION
 RUN make check-tensorflow
 
 # Download and configure precompiled TensorFlow Lite C library
-ARG TARGETPLATFORM
-ARG TFLITE_LIB_DIR
-RUN TFLITE_LIB_ARCH=$(echo ${TARGETPLATFORM} | tr '/' '_').tar.gz && \
-    TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
+RUN PLATFORM=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
     echo "Building for platform: ${TARGETPLATFORM}" && \
-    echo "Using library archive: ${TFLITE_LIB_ARCH}" && \
-    make download-tflite TARGET=${TARGET}
+    echo "Using library archive: tflite_c_v${TENSORFLOW_VERSION}_${PLATFORM}.tar.gz" && \
+    make download-tflite TARGET=${PLATFORM}
 
-FROM --platform=$BUILDPLATFORM buildenv AS build
+FROM --platform=$TARGETPLATFORM buildenv AS build
 WORKDIR /home/dev-user/src/BirdNET-Go
 
 # First copy all source files
