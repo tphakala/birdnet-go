@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -134,7 +136,14 @@ func (a DatabaseAction) Execute(data interface{}) error {
 
 // Execute saves the audio clip to a file
 func (a SaveAudioAction) Execute(data interface{}) error {
-	outputPath := a.ClipName
+	// Get the full path by joining the export path with the relative clip name
+	outputPath := filepath.Join(a.Settings.Realtime.Audio.Export.Path, a.ClipName)
+
+	// Ensure the directory exists
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+		log.Printf("error creating directory for audio clip: %s\n", err)
+		return err
+	}
 
 	if a.Settings.Realtime.Audio.Export.Type == "wav" {
 		if err := myaudio.SavePCMDataToWAV(outputPath, a.pcmData); err != nil {
@@ -147,8 +156,6 @@ func (a SaveAudioAction) Execute(data interface{}) error {
 			return err
 		}
 	}
-
-	log.Printf("Saved audio clip to %s\n", outputPath)
 
 	if a.Settings.Debug {
 		log.Printf("Saved audio clip to %s\n", outputPath)

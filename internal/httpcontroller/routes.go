@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -91,14 +92,16 @@ func (s *Server) initRoutes() {
 		"/top-birds":          {Path: "/top-birds", TemplateName: "birdsTableHTML", Title: "Top Birds", Handler: h.WithErrorHandling(h.TopBirds)},
 		"/notes":              {Path: "/notes", TemplateName: "notes", Title: "All Notes", Handler: h.WithErrorHandling(h.GetAllNotes)},
 		"/media/spectrogram":  {Path: "/media/spectrogram", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.ServeSpectrogram)},
+		"/media/audio":        {Path: "/media/audio", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.ServeAudioClip)},
 		"/login":              {Path: "/login", TemplateName: "login", Title: "Login", Handler: h.WithErrorHandling(s.handleLoginPage)},
 	}
 
 	// Set up partial routes
 	for _, route := range s.partialRoutes {
 		s.Echo.GET(route.Path, func(c echo.Context) error {
-			// If the request is a hx-request or spectrogram, call the partial route handler
-			if c.Request().Header.Get("HX-Request") != "" || c.Request().URL.Path == "/media/spectrogram" {
+			// If the request is a hx-request or media request, call the partial route handler
+			if c.Request().Header.Get("HX-Request") != "" ||
+				strings.HasPrefix(c.Request().URL.Path, "/media/") {
 				return route.Handler(c)
 			} else {
 				// Call the full page route handler
@@ -187,5 +190,4 @@ func (s *Server) setupStaticFileServing() {
 		s.Echo.Logger.Fatal(err)
 	}
 	s.Echo.StaticFS("/assets", echo.MustSubFS(assetsFS, ""))
-	s.Echo.Static("/clips", "clips")
 }
