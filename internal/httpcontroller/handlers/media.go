@@ -443,6 +443,29 @@ func createSpectrogramWithFFmpeg(audioClipPath, spectrogramPath string, width in
 	return nil
 }
 
+// sanitizeContentDispositionFilename sanitizes a filename for use in Content-Disposition header
+func sanitizeContentDispositionFilename(filename string) string {
+	// Remove any characters that could cause issues in headers
+	// Replace quotes with single quotes, remove control characters, and escape special characters
+	sanitized := strings.Map(func(r rune) rune {
+		switch {
+		case r == '"':
+			return '\''
+		case r < 32: // Control characters
+			return -1
+		case r == '\\' || r == '/' || r == ':' || r == '*' || r == '?' || r == '<' || r == '>' || r == '|':
+			return '_'
+		default:
+			return r
+		}
+	}, filename)
+
+	// URL encode the filename to handle non-ASCII characters
+	encoded := url.QueryEscape(sanitized)
+
+	return encoded
+}
+
 // ServeAudioClip serves an audio clip file
 func (h *Handlers) ServeAudioClip(c echo.Context) error {
 	h.Debug("ServeAudioClip: Starting to handle request for path: %s", c.Request().URL.String())
@@ -494,7 +517,8 @@ func (h *Handlers) ServeAudioClip(c echo.Context) error {
 
 	// Get the filename for Content-Disposition
 	filename := filepath.Base(sanitizedClipName)
-	h.Debug("ServeAudioClip: Using filename for disposition: %s", filename)
+	safeFilename := sanitizeContentDispositionFilename(filename)
+	h.Debug("ServeAudioClip: Using filename for disposition: %s (safe: %s)", filename, safeFilename)
 
 	// Get MIME type
 	mimeType := getAudioMimeType(fullPath)
@@ -504,7 +528,11 @@ func (h *Handlers) ServeAudioClip(c echo.Context) error {
 	c.Response().Header().Set(echo.HeaderContentType, mimeType)
 	c.Response().Header().Set("Content-Transfer-Encoding", "binary")
 	c.Response().Header().Set("Content-Description", "File Transfer")
-	c.Response().Header().Set(echo.HeaderContentDisposition, fmt.Sprintf(`attachment; filename="%s"`, filename))
+	// Set both ASCII and UTF-8 versions of the filename for better browser compatibility
+	c.Response().Header().Set(echo.HeaderContentDisposition,
+		fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`,
+			safeFilename,
+			safeFilename))
 
 	h.Debug("ServeAudioClip: Set headers - Content-Type: %s, Content-Disposition: %s",
 		c.Response().Header().Get(echo.HeaderContentType),
