@@ -43,16 +43,11 @@ jobs:
           go-version: '1.23'
           check-latest: true
 
-      - name: Install system dependencies
+      - name: Install Linux system dependencies
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
-
-      - name: Install macOS dependencies
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew install pkg-config
 
       - name: Build BirdNET-Go
         run: |
@@ -128,11 +123,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   docker:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.runner }}
     needs: nightly
     strategy:
       matrix:
-        platform: [linux/amd64, linux/arm64]
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm64
     
     steps:
       - name: Checkout code
@@ -166,5 +165,6 @@ jobs:
         with:
           context: .
           push: true
+          platforms: ${{ matrix.platform }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
