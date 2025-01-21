@@ -7,6 +7,7 @@ import (
 	"html"
 	"html/template"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -33,8 +34,8 @@ var (
 	ErrPathTraversal     = errors.New("path traversal attempt detected")
 )
 
-// sanitizeClipName performs sanity checks on the clip name
-func sanitizeClipName(clipName string) (string, error) {
+// sanitizeClipName performs sanity checks on the clip name and ensures it's a relative path
+func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 	// Check if the clip name is empty
 	if clipName == "" {
 		return "", ErrEmptyClipName
@@ -45,6 +46,7 @@ func sanitizeClipName(clipName string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error decoding clip name: %w", err)
 	}
+	h.Debug("sanitizeClipName: Decoded clip name: %s", decodedClipName)
 
 	// Check the length of the decoded clip name
 	if len(decodedClipName) > MaxClipNameLength {
@@ -53,16 +55,64 @@ func sanitizeClipName(clipName string) (string, error) {
 
 	// Check for allowed characters
 	if !regexp.MustCompile(AllowedCharacters).MatchString(decodedClipName) {
+		h.Debug("sanitizeClipName: Invalid characters in clip name: %s", decodedClipName)
 		return "", ErrInvalidCharacters
 	}
 
-	// Check for potential path traversal attempts
+	// Clean the path and ensure it's relative
 	cleanPath := filepath.Clean(decodedClipName)
+	h.Debug("sanitizeClipName: Cleaned path: %s", cleanPath)
+
 	if strings.Contains(cleanPath, "..") {
+		h.Debug("sanitizeClipName: Path traversal attempt detected: %s", cleanPath)
 		return "", ErrPathTraversal
 	}
 
+	// Remove 'clips/' prefix if present
+	cleanPath = strings.TrimPrefix(cleanPath, "clips/")
+	h.Debug("sanitizeClipName: Path after removing clips prefix: %s", cleanPath)
+
+	// If the path is absolute, make it relative to the export path
+	if filepath.IsAbs(cleanPath) {
+		h.Debug("sanitizeClipName: Found absolute path: %s", cleanPath)
+		exportPath := conf.Setting().Realtime.Audio.Export.Path
+		h.Debug("sanitizeClipName: Export path from settings: %s", exportPath)
+
+		if strings.HasPrefix(cleanPath, exportPath) {
+			// Remove the export path prefix to make it relative
+			cleanPath = strings.TrimPrefix(cleanPath, exportPath)
+			cleanPath = strings.TrimPrefix(cleanPath, string(os.PathSeparator))
+			h.Debug("sanitizeClipName: Converted to relative path: %s", cleanPath)
+		} else {
+			h.Debug("sanitizeClipName: Absolute path not under export directory: %s", cleanPath)
+			return "", fmt.Errorf("invalid path: absolute path not under export directory")
+		}
+	}
+
+	// Convert to forward slashes for web URLs
+	cleanPath = filepath.ToSlash(cleanPath)
+	h.Debug("sanitizeClipName: Final path with forward slashes: %s", cleanPath)
+
 	return cleanPath, nil
+}
+
+// getFullPath returns the full filesystem path for a relative clip path
+func getFullPath(relativePath string) string {
+	exportPath := conf.Setting().Realtime.Audio.Export.Path
+	return filepath.Join(exportPath, relativePath)
+}
+
+// getWebPath converts a filesystem path to a web-safe path
+func getWebPath(path string) string {
+	// Convert absolute path to relative path if it starts with the export path
+	exportPath := conf.Setting().Realtime.Audio.Export.Path
+	if strings.HasPrefix(path, exportPath) {
+		path = strings.TrimPrefix(path, exportPath)
+		path = strings.TrimPrefix(path, string(os.PathSeparator))
+	}
+
+	// Convert path separators to forward slashes for web URLs
+	return filepath.ToSlash(path)
 }
 
 // Thumbnail returns the URL of a given bird's thumbnail image.
@@ -125,16 +175,19 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	clipName := c.QueryParam("clip")
 
 	// Sanitize the clip name
-	sanitizedClipName, err := sanitizeClipName(clipName)
+	sanitizedClipName, err := h.sanitizeClipName(clipName)
 	if err != nil {
-		log.Printf("Error sanitizing clip name: %v", err)
+		h.Debug("Error sanitizing clip name: %v", err)
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 
+	// Get the full path to the audio file
+	fullPath := getFullPath(sanitizedClipName)
+
 	// Construct the path to the spectrogram image
-	spectrogramPath, err := h.getSpectrogramPath(sanitizedClipName, 400) // Assuming 400px width
+	spectrogramPath, err := h.getSpectrogramPath(fullPath, 400) // Assuming 400px width
 	if err != nil {
-		log.Printf("Error getting spectrogram path: %v", err)
+		h.Debug("Error getting spectrogram path: %v", err)
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 
@@ -388,4 +441,127 @@ func createSpectrogramWithFFmpeg(audioClipPath, spectrogramPath string, width in
 	}
 
 	return nil
+}
+
+// sanitizeContentDispositionFilename sanitizes a filename for use in Content-Disposition header
+func sanitizeContentDispositionFilename(filename string) string {
+	// Remove any characters that could cause issues in headers
+	// Replace quotes with single quotes, remove control characters, and escape special characters
+	sanitized := strings.Map(func(r rune) rune {
+		switch {
+		case r == '"':
+			return '\''
+		case r < 32: // Control characters
+			return -1
+		case r == '\\' || r == '/' || r == ':' || r == '*' || r == '?' || r == '<' || r == '>' || r == '|':
+			return '_'
+		default:
+			return r
+		}
+	}, filename)
+
+	// URL encode the filename to handle non-ASCII characters
+	encoded := url.QueryEscape(sanitized)
+
+	return encoded
+}
+
+// ServeAudioClip serves an audio clip file
+func (h *Handlers) ServeAudioClip(c echo.Context) error {
+	h.Debug("ServeAudioClip: Starting to handle request for path: %s", c.Request().URL.String())
+
+	// Extract clip name from the query parameters
+	clipName := c.QueryParam("clip")
+	h.Debug("ServeAudioClip: Raw clip name from query: %s", clipName)
+
+	// Sanitize the clip name
+	sanitizedClipName, err := h.sanitizeClipName(clipName)
+	if err != nil {
+		h.Debug("ServeAudioClip: Error sanitizing clip name: %v", err)
+		c.Response().Header().Set(echo.HeaderContentType, "text/plain")
+		return c.String(http.StatusNotFound, "Audio file not found")
+	}
+	h.Debug("ServeAudioClip: Sanitized clip name: %s", sanitizedClipName)
+
+	// Get the full path to the audio file
+	fullPath := getFullPath(sanitizedClipName)
+	h.Debug("ServeAudioClip: Full path: %s", fullPath)
+
+	// Verify that the full path is within the export directory
+	absFullPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		h.Debug("ServeAudioClip: Error obtaining absolute path: %v", err)
+		return c.String(http.StatusInternalServerError, "Internal server error")
+	}
+	absExportPath, err := filepath.Abs(conf.Setting().Realtime.Audio.Export.Path)
+	if err != nil {
+		h.Debug("ServeAudioClip: Error obtaining absolute export path: %v", err)
+		return c.String(http.StatusInternalServerError, "Internal server error")
+	}
+	if !strings.HasPrefix(absFullPath, absExportPath) {
+		h.Debug("ServeAudioClip: Resolved path outside export directory: %s", absFullPath)
+		return c.String(http.StatusForbidden, "Forbidden")
+	}
+
+	// Check if the file exists
+	if _, err := os.Stat(fullPath); err != nil {
+		if os.IsNotExist(err) {
+			h.Debug("ServeAudioClip: Audio file not found: %s", fullPath)
+		} else {
+			h.Debug("ServeAudioClip: Error checking audio file: %v", err)
+		}
+		c.Response().Header().Set(echo.HeaderContentType, "text/plain")
+		return c.String(http.StatusNotFound, "Audio file not found")
+	}
+	h.Debug("ServeAudioClip: File exists at path: %s", fullPath)
+
+	// Get the filename for Content-Disposition
+	filename := filepath.Base(sanitizedClipName)
+	safeFilename := sanitizeContentDispositionFilename(filename)
+	h.Debug("ServeAudioClip: Using filename for disposition: %s (safe: %s)", filename, safeFilename)
+
+	// Get MIME type
+	mimeType := getAudioMimeType(fullPath)
+	h.Debug("ServeAudioClip: MIME type for file: %s", mimeType)
+
+	// Set response headers
+	c.Response().Header().Set(echo.HeaderContentType, mimeType)
+	c.Response().Header().Set("Content-Transfer-Encoding", "binary")
+	c.Response().Header().Set("Content-Description", "File Transfer")
+	// Set both ASCII and UTF-8 versions of the filename for better browser compatibility
+	c.Response().Header().Set(echo.HeaderContentDisposition,
+		fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`,
+			safeFilename,
+			safeFilename))
+
+	h.Debug("ServeAudioClip: Set headers - Content-Type: %s, Content-Disposition: %s",
+		c.Response().Header().Get(echo.HeaderContentType),
+		c.Response().Header().Get(echo.HeaderContentDisposition))
+
+	// Serve the file
+	h.Debug("ServeAudioClip: Attempting to serve file: %s", fullPath)
+	return c.File(fullPath)
+}
+
+// getAudioMimeType returns the MIME type for an audio file based on its extension
+func getAudioMimeType(filename string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".mp3":
+		return "audio/mpeg"
+	case ".ogg", ".opus":
+		return "audio/ogg"
+	case ".wav":
+		return "audio/wav"
+	case ".flac":
+		return "audio/flac"
+	case ".aac":
+		return "audio/aac"
+	case ".m4a":
+		return "audio/mp4"
+	case ".alac":
+		return "audio/x-alac"
+	default:
+		return "application/octet-stream"
+	}
 }

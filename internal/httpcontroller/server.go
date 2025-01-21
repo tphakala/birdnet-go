@@ -218,3 +218,14 @@ func (s *Server) initLogger() {
 		},
 	}))
 }
+
+// Debug logs debug messages if debug mode is enabled
+func (s *Server) Debug(format string, v ...interface{}) {
+	if s.Settings.WebServer.Debug {
+		if len(v) == 0 {
+			log.Print(format)
+		} else {
+			log.Printf(format, v...)
+		}
+	}
+}

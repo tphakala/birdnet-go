@@ -308,9 +308,6 @@ func (p *Processor) getBaseConfidenceThreshold(speciesLowercase string) float32 
 
 // generateClipName generates a clip name for the given scientific name and confidence.
 func (p *Processor) generateClipName(scientificName string, confidence float32) string {
-	// Get the base path from the configuration
-	basePath := p.Settings.Realtime.Audio.Export.Path
-
 	// Replace whitespaces with underscores and convert to lowercase
 	formattedName := strings.ToLower(strings.ReplaceAll(scientificName, " ", "_"))
 
@@ -332,8 +329,8 @@ func (p *Processor) generateClipName(scientificName string, confidence float32) 
 	fileType := myaudio.GetFileExtension(p.Settings.Realtime.Audio.Export.Type)
 
 	// Construct the clip name with the new pattern, including year and month subdirectories
-	// Use filepath.ToSlash to convert the path to a forward slash on Windows to avoid issues with URL encoding
-	clipName := filepath.ToSlash(filepath.Join(basePath, year, month, fmt.Sprintf("%s_%s_%s.%s", formattedName, formattedConfidence, timestamp, fileType)))
+	// Use filepath.ToSlash to convert the path to a forward slash for web URLs
+	clipName := filepath.ToSlash(filepath.Join(year, month, fmt.Sprintf("%s_%s_%s.%s", formattedName, formattedConfidence, timestamp, fileType)))
 
 	return clipName
 }
