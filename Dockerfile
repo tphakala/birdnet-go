@@ -33,9 +33,10 @@ RUN make check-tensorflow
 ARG TARGETPLATFORM
 ARG TFLITE_LIB_DIR
 RUN TFLITE_LIB_ARCH=$(echo ${TARGETPLATFORM} | tr '/' '_').tar.gz && \
+    TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
     echo "Building for platform: ${TARGETPLATFORM}" && \
     echo "Using library archive: ${TFLITE_LIB_ARCH}" && \
-    make download-tflite
+    make download-tflite TARGET=${TARGET}
 
 FROM --platform=$BUILDPLATFORM buildenv AS build
 WORKDIR /home/dev-user/src/BirdNET-Go
@@ -51,7 +52,8 @@ RUN make generate-tailwindcss
 ARG TARGETPLATFORM
 RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
-    make $(echo ${TARGETPLATFORM} | tr '/' '_')
+    TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
+    make ${TARGET}
 
 # Create final image using a multi-platform base image
 FROM debian:bookworm-slim
