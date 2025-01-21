@@ -222,14 +222,14 @@ darwin_amd64: TFLITE_LIB_ARCH=darwin_amd64.tar.gz
 darwin_amd64: TARGET=darwin_amd64
 darwin_amd64: $(LABELS_ZIP) check-tools check-tensorflow
 	@$(MAKE) download-tflite TFLITE_LIB_DIR=$(TFLITE_LIB_DIR) TFLITE_LIB_ARCH=$(TFLITE_LIB_ARCH) TARGET=$(TARGET)
-	$(CGO_FLAGS) GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
+	$(CGO_FLAGS) GOOS=darwin GOARCH=amd64 CGO_LDFLAGS="-L/opt/homebrew/lib -ltensorflowlite_c" go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
 # macOS ARM build
 darwin_arm64: TFLITE_LIB_ARCH=darwin_arm64.tar.gz
 darwin_arm64: TARGET=darwin_arm64
 darwin_arm64: $(LABELS_ZIP) check-tools check-tensorflow
 	@$(MAKE) download-tflite TFLITE_LIB_DIR=$(TFLITE_LIB_DIR) TFLITE_LIB_ARCH=$(TFLITE_LIB_ARCH) TARGET=$(TARGET)
-	$(CGO_FLAGS) GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
+	$(CGO_FLAGS) GOOS=darwin GOARCH=arm64 CGO_LDFLAGS="-L/opt/homebrew/lib -ltensorflowlite_c" go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
 dev_server: REALTIME_ARGS=""
 dev_server:
