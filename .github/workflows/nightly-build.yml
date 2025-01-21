@@ -163,7 +163,5 @@ jobs:
           platforms: ${{ matrix.platform }}
           build-args: |
             TARGETPLATFORM=${{ matrix.platform }}
-            BUILDPLATFORM=linux/amd64
-            TENSORFLOW_VERSION=2.17.1
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
