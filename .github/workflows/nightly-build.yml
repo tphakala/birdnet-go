@@ -15,15 +15,23 @@ permissions:
 
 jobs:
   nightly:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        goos: [linux, windows]
-        goarch: [amd64, arm64]
-        exclude:
-          - goarch: arm64
-            goos: windows
+        include:
+          - goos: linux
+            goarch: amd64
+            os: ubuntu-22.04
+          - goos: linux
+            goarch: arm64
+            os: ubuntu-22.04
+          - goos: windows
+            goarch: amd64
+            os: ubuntu-22.04
+          - goos: darwin
+            goarch: arm64
+            os: macos-latest
 
     steps:
       - name: Checkout code
@@ -36,9 +44,15 @@ jobs:
           check-latest: true
 
       - name: Install system dependencies
+        if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
+
+      - name: Install macOS dependencies
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install pkg-config
 
       - name: Build BirdNET-Go
         run: |
@@ -72,6 +86,8 @@ jobs:
             fi
           elif [ "${{ matrix.goos }}" = "windows" ]; then
             cp /usr/x86_64-w64-mingw32/lib/tensorflowlite_c.dll artifacts/
+          elif [ "${{ matrix.goos }}" = "darwin" ]; then
+            cp /opt/homebrew/lib/libtensorflowlite_c.dylib artifacts/
           fi
           
           # Create tarball
