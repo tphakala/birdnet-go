@@ -1,6 +1,6 @@
 ARG TFLITE_LIB_DIR=/usr/lib
 
-FROM --platform=$BUILDPLATFORM golang:1.23.4-bookworm AS buildenv
+FROM --platform=$BUILDPLATFORM golang:1.23.5-bookworm AS buildenv
 
 # Install zip utility along with other dependencies
 RUN apt-get update && apt-get install -y \
@@ -40,12 +40,14 @@ RUN TFLITE_LIB_ARCH=$(echo ${TARGETPLATFORM} | tr '/' '_').tar.gz && \
 FROM --platform=$BUILDPLATFORM buildenv AS build
 WORKDIR /home/dev-user/src/BirdNET-Go
 
-# Download latest versions of Leaflet, htmx, Alpine.js and Tailwind CSS
+# First copy all source files
+COPY --chown=dev-user . ./
+
+# Then download assets and generate CSS with the input file available
 RUN make download-assets
 RUN make generate-tailwindcss
 
 # Compile BirdNET-Go
-COPY --chown=dev-user . ./
 ARG TARGETPLATFORM
 RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
