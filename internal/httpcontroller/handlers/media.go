@@ -464,6 +464,22 @@ func (h *Handlers) ServeAudioClip(c echo.Context) error {
 	fullPath := getFullPath(sanitizedClipName)
 	h.Debug("ServeAudioClip: Full path: %s", fullPath)
 
+	// Verify that the full path is within the export directory
+	absFullPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		h.Debug("ServeAudioClip: Error obtaining absolute path: %v", err)
+		return c.String(http.StatusInternalServerError, "Internal server error")
+	}
+	absExportPath, err := filepath.Abs(conf.Setting().Realtime.Audio.Export.Path)
+	if err != nil {
+		h.Debug("ServeAudioClip: Error obtaining absolute export path: %v", err)
+		return c.String(http.StatusInternalServerError, "Internal server error")
+	}
+	if !strings.HasPrefix(absFullPath, absExportPath) {
+		h.Debug("ServeAudioClip: Resolved path outside export directory: %s", absFullPath)
+		return c.String(http.StatusForbidden, "Forbidden")
+	}
+
 	// Check if the file exists
 	if _, err := os.Stat(fullPath); err != nil {
 		if os.IsNotExist(err) {
