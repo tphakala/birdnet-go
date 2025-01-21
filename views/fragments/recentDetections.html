@@ -56,7 +56,7 @@
       <td class="py-1 px-2 sm:pl-1 sm:py-1 font-normal">
         <div class="audio-player-container relative min-w-[50px] max-w-[400px]">
           <!-- Spectrogram Image -->
-          <img loading="lazy" width="400" src="/media/spectrogram?clip={{urlsafe .ClipName}}" alt="Spectrogram Image"
+          <img loading="lazy" width="400" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram Image"
             class="max-w-full h-auto rounded-md">
 
           <!-- Play position indicator -->
@@ -66,7 +66,7 @@
           <!-- Audio player overlay - Full version -->
           <div
             class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 opacity-0 group-hover:opacity-100 hidden md:block">
-            <audio id="audio-{{.ID}}" src="/{{urlsafe .ClipName}}" preload="metadata" class="hidden"></audio>
+            <audio id="audio-{{.ID}}" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
             <div class="flex items-center justify-between">
               <button id="playPause-{{.ID}}"
                 class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
@@ -83,7 +83,7 @@
                 <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
               </div>
               <span id="currentTime-{{.ID}}" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-              <a href="{{urlsafe .ClipName}}" download
+              <a href="/media/audio?clip={{.ClipName}}" download
                 class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
                   xmlns="http://www.w3.org/2000/svg">
@@ -158,7 +158,7 @@
     <!-- Audio player -->
     <div class="audio-player-container relative">
       <!-- Spectrogram Image -->
-      <img loading="lazy" src="/media/spectrogram?clip={{urlsafe .ClipName}}" alt="Spectrogram"
+      <img loading="lazy" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram"
         class="w-full h-auto rounded-md shadow-sm">
 
       <!-- Play position indicator -->
@@ -168,7 +168,7 @@
       <!-- Audio player overlay - Full version -->
       <div
         class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 group-hover:opacity-100 sm:block">
-        <audio id="audio-{{.ID}}b" src="/{{urlsafe .ClipName}}" preload="metadata" class="hidden"></audio>
+        <audio id="audio-{{.ID}}b" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
         <div class="flex items-center justify-between">
           <button id="playPause-{{.ID}}b"
             class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
@@ -185,7 +185,7 @@
             <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
           </div>
           <span id="currentTime-{{.ID}}b" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-          <a href="{{urlsafe .ClipName}}" download
+          <a href="/media/audio?clip={{.ClipName}}" download
             class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
               xmlns="http://www.w3.org/2000/svg">
