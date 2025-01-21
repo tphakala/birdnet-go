@@ -25,7 +25,6 @@ USER dev-user
 WORKDIR /home/dev-user/src/BirdNET-Go
 
 COPY --chown=dev-user ./Makefile ./
-COPY --chown=dev-user ./reset_auth.sh ./
 
 # Download TensorFlow headers
 RUN make check-tensorflow
@@ -72,9 +71,8 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
 COPY --from=build ${TFLITE_LIB_DIR}/libtensorflowlite_c.so ${TFLITE_LIB_DIR}/
 RUN ldconfig
 
-# Include reset_auth tool from build stage
-COPY --from=build /home/dev-user/src/BirdNET-Go/reset_auth.sh /usr/bin/
-RUN chmod +x /usr/bin/reset_auth.sh
+# Include reset_auth tool
+COPY ./reset_auth.sh /usr/bin/
 
 # Add symlink to /config directory where configs can be stored
 VOLUME /config
