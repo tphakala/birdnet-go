@@ -44,7 +44,7 @@ func (s *Server) CacheControlMiddleware() echo.MiddlewareFunc {
 				s.Debug("CacheControlMiddleware: Set cache headers for image: %s", path)
 			case strings.HasPrefix(path, "/media/audio"):
 				// Audio files - set proper headers for downloads
-				c.Response().Header().Set("Cache-Control", "private, no-cache")
+				c.Response().Header().Set("Cache-Control", "private, no-store")
 				c.Response().Header().Set("X-Content-Type-Options", "nosniff")
 				s.Debug("CacheControlMiddleware: Set headers for audio file: %s", path)
 				s.Debug("CacheControlMiddleware: Headers after setting - Cache-Control: %s, X-Content-Type-Options: %s",
