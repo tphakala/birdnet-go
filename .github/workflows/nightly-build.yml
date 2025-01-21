@@ -126,7 +126,11 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        platform: [linux/amd64, linux/arm64]
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm64
     
     steps:
       - name: Checkout code
