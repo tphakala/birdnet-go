@@ -20,31 +20,51 @@ func (s *Server) configureMiddleware() {
 		MinLength: 2048,
 	}))
 	// Apply the Cache Control Middleware
-	s.Echo.Use(CacheControlMiddleware())
+	s.Echo.Use(s.CacheControlMiddleware())
 	s.Echo.Use(VaryHeaderMiddleware())
 }
 
-func CacheControlMiddleware() echo.MiddlewareFunc {
+// CacheControlMiddleware sets appropriate cache control headers based on the request path
+func (s *Server) CacheControlMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			path := c.Request().URL.Path
+			s.Debug("CacheControlMiddleware: Processing request for path: %s", path)
 
 			switch {
 			case strings.HasSuffix(path, ".css"), strings.HasSuffix(path, ".js"), strings.HasSuffix(path, ".html"):
 				// CSS and JS files - shorter cache with validation
 				c.Response().Header().Set("Cache-Control", "public, max-age=3600, must-revalidate")
 				c.Response().Header().Set("ETag", generateETag(path))
+				s.Debug("CacheControlMiddleware: Set cache headers for static file: %s", path)
 			case strings.HasSuffix(path, ".png"), strings.HasSuffix(path, ".jpg"),
 				strings.HasSuffix(path, ".ico"), strings.HasSuffix(path, ".svg"):
 				// Images can be cached longer
 				c.Response().Header().Set("Cache-Control", "public, max-age=604800, immutable")
-			case strings.HasPrefix(path, "/clips/"):
+				s.Debug("CacheControlMiddleware: Set cache headers for image: %s", path)
+			case strings.HasPrefix(path, "/media/audio"):
+				// Audio files - set proper headers for downloads
+				c.Response().Header().Set("Cache-Control", "private, no-cache")
+				c.Response().Header().Set("X-Content-Type-Options", "nosniff")
+				s.Debug("CacheControlMiddleware: Set headers for audio file: %s", path)
+				s.Debug("CacheControlMiddleware: Headers after setting - Cache-Control: %s, X-Content-Type-Options: %s",
+					c.Response().Header().Get("Cache-Control"),
+					c.Response().Header().Get("X-Content-Type-Options"))
+			case strings.HasPrefix(path, "/media/spectrogram"):
+				// Spectrograms can be cached
 				c.Response().Header().Set("Cache-Control", "public, max-age=2592000, immutable")
+				s.Debug("CacheControlMiddleware: Set cache headers for spectrogram: %s", path)
 			default:
 				// Dynamic content
 				c.Response().Header().Set("Cache-Control", "private, no-cache, must-revalidate")
+				s.Debug("CacheControlMiddleware: Set default cache headers for: %s", path)
 			}
-			return next(c)
+
+			err := next(c)
+			if err != nil {
+				s.Debug("CacheControlMiddleware: Error processing request: %v", err)
+			}
+			return err
 		}
 	}
 }
