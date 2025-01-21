@@ -30,12 +30,6 @@ COPY --chown=dev-user ./reset_auth.sh ./
 # Download TensorFlow headers
 RUN make check-tensorflow
 
-# Download and configure precompiled TensorFlow Lite C library
-RUN PLATFORM=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
-    echo "Building for platform: ${TARGETPLATFORM}" && \
-    echo "Using library archive: tflite_c_v${TENSORFLOW_VERSION}_${PLATFORM}.tar.gz" && \
-    make download-tflite TARGET=${PLATFORM}
-
 FROM --platform=$TARGETPLATFORM buildenv AS build
 WORKDIR /home/dev-user/src/BirdNET-Go
 
@@ -64,8 +58,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sox \
     && rm -rf /var/lib/apt/lists/*
 
+# Set TFLITE_LIB_DIR based on architecture
+ARG TARGETPLATFORM
 ARG TFLITE_LIB_DIR
-COPY --from=build ${TFLITE_LIB_DIR}/libtensorflowlite_c.so ${TFLITE_LIB_DIR}
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
+        export TFLITE_LIB_DIR=/usr/aarch64-linux-gnu/lib; \
+    else \
+        export TFLITE_LIB_DIR=/usr/lib; \
+    fi && \
+    echo "Using TFLITE_LIB_DIR=$TFLITE_LIB_DIR"
+
+# Use the TFLITE_LIB_DIR for the library copy
+COPY --from=build ${TFLITE_LIB_DIR}/libtensorflowlite_c.so ${TFLITE_LIB_DIR}/
 RUN ldconfig
 
 # Include reset_auth tool from build stage

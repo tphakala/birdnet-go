@@ -73,8 +73,13 @@ $(strip \
 endef
 
 ifeq ($(UNAME_S),Linux)
-    NATIVE_TARGET := linux_$(if $(filter x86_64,$(UNAME_M)),amd64,arm64)
-    TFLITE_LIB_DIR := /usr/lib
+    ifeq ($(UNAME_M),x86_64)
+        NATIVE_TARGET := linux_amd64
+        TFLITE_LIB_DIR := /usr/lib
+    else ifeq ($(UNAME_M),aarch64)
+        NATIVE_TARGET := linux_arm64
+        TFLITE_LIB_DIR := /usr/aarch64-linux-gnu/lib
+    endif
     TFLITE_LIB_EXT := .so
 else ifeq ($(UNAME_S),Darwin)
     NATIVE_TARGET := darwin_$(if $(filter x86_64,$(UNAME_M)),amd64,arm64)
@@ -123,16 +128,20 @@ check-tensorflow:
 define ensure_tflite_symlinks
 	@if [ "$(suffix $(2))" = ".dll" ] && [ ! -f "$(1)/tensorflowlite_c.dll" ]; then \
 		echo "Creating symbolic link for Windows DLL..."; \
+		echo "Linking $(2) to tensorflowlite_c.dll"; \
 		sudo ln -sf "$(1)/tensorflowlite_c-$(patsubst v%,%,$(TFLITE_VERSION)).dll" "$(1)/tensorflowlite_c.dll"; \
 	elif [ "$(UNAME_S)" = "Linux" ] && [ ! -f "$(1)/libtensorflowlite_c.so" ]; then \
 		echo "Creating symbolic links for Linux library..."; \
 		cd $(1) && \
+		echo "Linking $(2) to libtensorflowlite_c.so.2"; \
 		sudo ln -sf $(2) libtensorflowlite_c.so.2 && \
+		echo "Linking libtensorflowlite_c.so.2 to libtensorflowlite_c.so"; \
 		sudo ln -sf libtensorflowlite_c.so.2 libtensorflowlite_c.so && \
 		sudo ldconfig; \
 	elif [ "$(UNAME_S)" = "Darwin" ] && [ ! -f "$(1)/libtensorflowlite_c.dylib" ]; then \
 		echo "Creating symbolic links for macOS library..."; \
 		cd $(1) && \
+		echo "Linking $(2) to libtensorflowlite_c.dylib"; \
 		ln -sf $(2) libtensorflowlite_c.dylib; \
 	fi
 endef
