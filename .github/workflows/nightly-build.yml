@@ -152,8 +152,10 @@ jobs:
         with:
           images: ghcr.io/${{ env.REPO }}
           tags: |
-            type=raw,value=nightly
             type=raw,value=nightly-{{date 'YYYYMMDD'}}
+            type=raw,value=nightly
+          flavor: |
+            latest=false
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
