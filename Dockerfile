@@ -1,10 +1,11 @@
 ARG TFLITE_LIB_DIR=/usr/lib
 ARG TENSORFLOW_VERSION=2.17.1
 ARG TARGETPLATFORM=linux/amd64  # Default to linux/amd64 for local builds
+ARG VERSION=unknown
 
-FROM --platform=$TARGETPLATFORM golang:1.23.5-bookworm AS buildenv
+FROM --platform=$TARGETPLATFORM golang:1.23.5-bookworm AS build
 
-# Install zip utility along with other dependencies
+# Install Task and other dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     git \
@@ -12,40 +13,36 @@ RUN apt-get update && apt-get install -y \
     zip \
     npm \
     gcc-aarch64-linux-gnu \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
 # Create dev-user for building and devcontainer usage
-RUN groupadd --gid 10001 dev-user; \
-    useradd --uid 10001 --gid dev-user --shell /bin/bash --create-home dev-user; \
-    usermod -aG sudo dev-user; \
-    usermod -aG audio dev-user; \
-    echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+RUN groupadd --gid 10001 dev-user && \
+    useradd --uid 10001 --gid dev-user --shell /bin/bash --create-home dev-user && \
+    usermod -aG sudo dev-user && \
+    usermod -aG audio dev-user && \
+    echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
+    mkdir -p /home/dev-user/src && \
+    mkdir -p /home/dev-user/lib && \
+    chown -R dev-user:dev-user /home/dev-user
+
 USER dev-user
-
 WORKDIR /home/dev-user/src/BirdNET-Go
 
-COPY --chown=dev-user ./Makefile ./
-COPY --chown=dev-user ./reset_auth.sh ./
-
-# Download TensorFlow headers
-RUN make check-tensorflow
-
-FROM --platform=$TARGETPLATFORM buildenv AS build
-WORKDIR /home/dev-user/src/BirdNET-Go
-
-# First copy all source files
+# Copy all source files first to have Git information available
 COPY --chown=dev-user . ./
 
-# Then download assets and generate CSS with the input file available
-RUN make download-assets
-RUN make generate-tailwindcss
+# Now run the tasks with VERSION env var
+RUN VERSION=${VERSION} task check-tensorflow && \
+    VERSION=${VERSION} task download-assets && \
+    VERSION=${VERSION} task generate-tailwindcss
 
 # Compile BirdNET-Go
 ARG TARGETPLATFORM
 RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
     TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
-    make ${TARGET}
+    DOCKER_LIB_DIR=/home/dev-user/lib task ${TARGET}
 
 # Create final image using a multi-platform base image
 FROM debian:bookworm-slim
@@ -68,8 +65,8 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
     fi && \
     echo "Using TFLITE_LIB_DIR=$TFLITE_LIB_DIR"
 
-# Use the TFLITE_LIB_DIR for the library copy
-COPY --from=build ${TFLITE_LIB_DIR}/libtensorflowlite_c.so ${TFLITE_LIB_DIR}/
+# Copy TensorFlow Lite library from build stage
+COPY --from=build /home/dev-user/lib/libtensorflowlite_c.so* ${TFLITE_LIB_DIR}/
 RUN ldconfig
 
 # Include reset_auth tool from build stage
