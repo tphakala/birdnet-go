@@ -167,5 +167,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           build-args: |
             TARGETPLATFORM=${{ matrix.platform }}
+            VERSION=nightly-$(date +'%Y%m%d')
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
