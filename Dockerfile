@@ -1,6 +1,6 @@
 ARG TFLITE_LIB_DIR=/usr/lib
 ARG TENSORFLOW_VERSION=2.17.1
-ARG TARGETPLATFORM=linux/amd64  # Default to linux/amd64 for local builds
+ARG TARGETPLATFORM
 ARG VERSION=unknown
 
 FROM --platform=$TARGETPLATFORM golang:1.23.5-bookworm AS build
