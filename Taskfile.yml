@@ -11,11 +11,17 @@ vars:
   BUILD_DATE:
     sh: date -u +%Y-%m-%dT%H:%M:%SZ
   VERSION:
-    sh: git describe --tags --always
+    sh: git describe --tags --always 2>/dev/null || echo "unknown"
   UNAME_S:
     sh: uname -s
   UNAME_M:
     sh: uname -m
+  # Common build flags
+  CGO_FLAGS: CGO_ENABLED=1 CGO_CFLAGS="-I$HOME/src/tensorflow"
+  BUILD_FLAGS: -ldflags "-s -w -X 'main.buildDate={{.BUILD_DATE}}' -X 'main.version={{.VERSION}}'"
+  # System paths
+  SYSTEM_LIB_DIR_AMD64: /usr/lib
+  SYSTEM_LIB_DIR_ARM64: /usr/aarch64-linux-gnu/lib
 
 tasks:
   default:
@@ -55,19 +61,16 @@ tasks:
       - |
         if [ ! -f "$HOME/src/tensorflow/tensorflow/lite/c/c_api.h" ]; then
           echo "TensorFlow Lite C API header not found. Cloning TensorFlow source..."
-          mkdir -p $HOME/src
-          git clone --branch {{.TFLITE_VERSION}} --filter=blob:none --depth 1 --no-checkout https://github.com/tensorflow/tensorflow.git $HOME/src/tensorflow
+          mkdir -vp $HOME/src
+          echo "Cloning TensorFlow source..."
+          git clone --branch {{.TFLITE_VERSION}} --filter=blob:none --depth 1 https://github.com/tensorflow/tensorflow.git $HOME/src/tensorflow
+          echo "Setting up sparse checkout..."
           git -C $HOME/src/tensorflow config core.sparseCheckout true
           echo "**/*.h" >> $HOME/src/tensorflow/.git/info/sparse-checkout
+          echo "Checking out TensorFlow source..."
           git -C $HOME/src/tensorflow checkout
         else
-          echo "Checking TensorFlow version..."
-          current_version=$(git -C $HOME/src/tensorflow describe --tags)
-          if [ "$current_version" != "{{.TFLITE_VERSION}}" ]; then
-            echo "Switching TensorFlow source to version {{.TFLITE_VERSION}}..."
-            git -C $HOME/src/tensorflow fetch --depth 1 origin {{.TFLITE_VERSION}}
-            git -C $HOME/src/tensorflow checkout {{.TFLITE_VERSION}}
-          fi
+          echo "TensorFlow headers already exist at version {{.TFLITE_VERSION}}"
         fi
 
   download-assets:
@@ -94,42 +97,45 @@ tasks:
     generates:
       - "{{.LABELS_ZIP}}"
 
+  dev_server:
+    cmds:
+      - air realtime
+
+  clean:
+    cmds:
+      - go clean
+      - rm -rf {{.BINARY_DIR}}/* tflite_c *.tar.gz *.zip
+
   linux_amd64:
     deps: [labels-zip, check-tools, check-tensorflow]
     vars:
-      TFLITE_LIB_DIR: /usr/lib
+      TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR_AMD64}}'
       TFLITE_LIB_ARCH: linux_amd64.tar.gz
       TARGET: linux_amd64
     cmds:
       - task: download-tflite
-        vars:
-          TFLITE_LIB_DIR: '{{.TFLITE_LIB_DIR}}'
-          TFLITE_LIB_ARCH: '{{.TFLITE_LIB_ARCH}}'
-          TARGET: '{{.TARGET}}'
+        vars: {TFLITE_LIB_DIR: '{{.TFLITE_LIB_DIR}}', TFLITE_LIB_ARCH: '{{.TFLITE_LIB_ARCH}}', TARGET: '{{.TARGET}}'}
       - |
-        GOOS=linux GOARCH=amd64 CGO_ENABLED=1 CGO_CFLAGS="-I$HOME/src/tensorflow" \
-        go build -ldflags "-s -w -X 'main.buildDate={{.BUILD_DATE}}' -X 'main.version={{.VERSION}}'" \
-        -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
+        mkdir -p {{.TFLITE_LIB_DIR}}
+        GOOS=linux GOARCH=amd64 {{.CGO_FLAGS}} \
+        CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
+        go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   linux_arm64:
     deps: [labels-zip, check-tools, check-tensorflow]
     vars:
-      TFLITE_LIB_DIR: /usr/aarch64-linux-gnu/lib
+      TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR_ARM64}}'
       TFLITE_LIB_ARCH: linux_arm64.tar.gz
       TARGET: linux_arm64
     cmds:
       - task: download-tflite
-        vars:
-          TFLITE_LIB_DIR: '{{.TFLITE_LIB_DIR}}'
-          TFLITE_LIB_ARCH: '{{.TFLITE_LIB_ARCH}}'
-          TARGET: '{{.TARGET}}'
+        vars: {TFLITE_LIB_DIR: '{{.TFLITE_LIB_DIR}}', TFLITE_LIB_ARCH: '{{.TFLITE_LIB_ARCH}}', TARGET: '{{.TARGET}}'}
       - |
-        GOOS=linux GOARCH=arm64 CGO_ENABLED=1 \
+        mkdir -p {{.TFLITE_LIB_DIR}}
+        GOOS=linux GOARCH=arm64 {{.CGO_FLAGS}} \
         CC=aarch64-linux-gnu-gcc \
-        CGO_CFLAGS="-I$HOME/src/tensorflow" \
         CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
-        go build -ldflags "-s -w -X 'main.buildDate={{.BUILD_DATE}}' -X 'main.version={{.VERSION}}'" \
-        -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
+        go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   windows_amd64:
     deps: [labels-zip, check-tools, check-tensorflow]
@@ -139,47 +145,40 @@ tasks:
       TARGET: windows_amd64
     cmds:
       - task: download-tflite
-        vars:
-          TFLITE_LIB_DIR: '{{.TFLITE_LIB_DIR}}'
-          TFLITE_LIB_ARCH: '{{.TFLITE_LIB_ARCH}}'
-          TARGET: '{{.TARGET}}'
+        vars: {TFLITE_LIB_DIR: '{{.TFLITE_LIB_DIR}}', TFLITE_LIB_ARCH: '{{.TFLITE_LIB_ARCH}}', TARGET: '{{.TARGET}}'}
       - |
-        GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
+        GOOS=windows GOARCH=amd64 {{.CGO_FLAGS}} \
         CC=x86_64-w64-mingw32-gcc \
-        CGO_CFLAGS="-I$HOME/src/tensorflow" \
         CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
-        go build -ldflags "-s -w -X 'main.buildDate={{.BUILD_DATE}}' -X 'main.version={{.VERSION}}'" \
-        -o {{.BINARY_DIR}}/{{.BINARY_NAME}}.exe
+        go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}.exe
 
   darwin_amd64:
     deps: [labels-zip, check-tools, check-tensorflow]
     vars:
       TFLITE_LIB_DIR: /opt/homebrew/lib
       TFLITE_LIB_ARCH: darwin_amd64.tar.gz
+      TARGET: darwin_amd64
     cmds:
       - task: download-tflite
-        vars:
-          TARGET: darwin_amd64
+        vars: {TFLITE_LIB_DIR: '{{.TFLITE_LIB_DIR}}', TFLITE_LIB_ARCH: '{{.TFLITE_LIB_ARCH}}', TARGET: '{{.TARGET}}'}
       - |
-        GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CGO_CFLAGS="-I$HOME/src/tensorflow" \
-        CGO_LDFLAGS="-L/opt/homebrew/lib -ltensorflowlite_c" \
-        go build -ldflags "-s -w -X 'main.buildDate={{.BUILD_DATE}}' -X 'main.version={{.VERSION}}'" \
-        -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
+        GOOS=darwin GOARCH=amd64 {{.CGO_FLAGS}} \
+        CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
+        go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   darwin_arm64:
     deps: [labels-zip, check-tools, check-tensorflow]
     vars:
       TFLITE_LIB_DIR: /opt/homebrew/lib
       TFLITE_LIB_ARCH: darwin_arm64.tar.gz
+      TARGET: darwin_arm64
     cmds:
       - task: download-tflite
-        vars:
-          TARGET: darwin_arm64
+        vars: {TFLITE_LIB_DIR: '{{.TFLITE_LIB_DIR}}', TFLITE_LIB_ARCH: '{{.TFLITE_LIB_ARCH}}', TARGET: '{{.TARGET}}'}
       - |
-        GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CGO_CFLAGS="-I$HOME/src/tensorflow" \
-        CGO_LDFLAGS="-L/opt/homebrew/lib -ltensorflowlite_c" \
-        go build -ldflags "-s -w -X 'main.buildDate={{.BUILD_DATE}}' -X 'main.version={{.VERSION}}'" \
-        -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
+        GOOS=darwin GOARCH=arm64 {{.CGO_FLAGS}} \
+        CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
+        go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   download-tflite:
     internal: true
@@ -195,46 +194,35 @@ tasks:
       - |
         if [ ! -f "{{.TFLITE_LIB_DIR}}/{{.LIB_FILENAME}}" ]; then
           echo "TensorFlow Lite C library not found. Downloading..."
-          echo "Target: {{.TARGET}}"
-          echo "Lib Dir: {{.TFLITE_LIB_DIR}}"
-          echo "Arch: {{.TFLITE_LIB_ARCH}}"
           wget -q "https://github.com/tphakala/tflite_c/releases/download/{{.TFLITE_VERSION}}/tflite_c_{{.TFLITE_VERSION}}_{{.TFLITE_LIB_ARCH}}" -P ./
           
+          mkdir -p "{{.TFLITE_LIB_DIR}}"
           if [[ "{{.TFLITE_LIB_ARCH}}" == *.zip ]]; then
             unzip -o "tflite_c_{{.TFLITE_VERSION}}_{{.TFLITE_LIB_ARCH}}"
-            sudo mv "{{.LIB_FILENAME}}" "{{.TFLITE_LIB_DIR}}/"
+            mv "{{.LIB_FILENAME}}" "{{.TFLITE_LIB_DIR}}/"
           else
             tar -xzf "tflite_c_{{.TFLITE_VERSION}}_{{.TFLITE_LIB_ARCH}}"
-            sudo mv "{{.LIB_FILENAME}}" "{{.TFLITE_LIB_DIR}}/"
+            mv "{{.LIB_FILENAME}}" "{{.TFLITE_LIB_DIR}}/"
           fi
           
           rm -f "tflite_c_{{.TFLITE_VERSION}}_{{.TFLITE_LIB_ARCH}}"
         fi
       - task: ensure-tflite-symlinks
-        vars:
-          LIB_DIR: '{{.TFLITE_LIB_DIR}}'
-          LIB_FILENAME: '{{.LIB_FILENAME}}'
+        vars: {LIB_DIR: '{{.TFLITE_LIB_DIR}}', LIB_FILENAME: '{{.LIB_FILENAME}}'}
 
   ensure-tflite-symlinks:
+    internal: true
     cmds:
+      - mkdir -p "{{.LIB_DIR}}"
       - |
         if [[ "{{.LIB_FILENAME}}" == *.dll ]] && [ ! -f "{{.LIB_DIR}}/tensorflowlite_c.dll" ]; then
-          sudo ln -sf "{{.LIB_DIR}}/{{.LIB_FILENAME}}" "{{.LIB_DIR}}/tensorflowlite_c.dll"
+          ln -sf "{{.LIB_DIR}}/{{.LIB_FILENAME}}" "{{.LIB_DIR}}/tensorflowlite_c.dll"
         elif [ "{{.UNAME_S}}" = "Linux" ] && [ ! -f "{{.LIB_DIR}}/libtensorflowlite_c.so" ]; then
           cd {{.LIB_DIR}} && \
-          sudo ln -sf {{.LIB_FILENAME}} libtensorflowlite_c.so.2 && \
-          sudo ln -sf libtensorflowlite_c.so.2 libtensorflowlite_c.so && \
-          sudo ldconfig
+          ln -sf {{.LIB_FILENAME}} libtensorflowlite_c.so.2 && \
+          ln -sf libtensorflowlite_c.so.2 libtensorflowlite_c.so
         elif [ "{{.UNAME_S}}" = "Darwin" ] && [ ! -f "{{.LIB_DIR}}/libtensorflowlite_c.dylib" ]; then
           cd {{.LIB_DIR}} && \
           ln -sf {{.LIB_FILENAME}} libtensorflowlite_c.dylib
-        fi
-
-  dev_server:
-    cmds:
-      - CGO_ENABLED=1 CGO_CFLAGS="-I$HOME/src/tensorflow" air realtime {{.CLI_ARGS}}
-
-  clean:
-    cmds:
-      - go clean
-      - rm -rf {{.BINARY_DIR}}/* tflite_c *.tar.gz *.zip 
+        fi 
+      
