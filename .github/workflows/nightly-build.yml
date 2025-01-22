@@ -168,6 +168,9 @@ jobs:
           build-args: |
             TARGETPLATFORM=${{ matrix.platform }}
             VERSION=nightly-$(date +'%Y%m%d')
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ghcr.io/${{ env.REPO }}:nightly
+            ghcr.io/${{ env.REPO }}:nightly-${{ github.run_number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           provenance: false
