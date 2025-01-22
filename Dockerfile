@@ -37,16 +37,16 @@ WORKDIR /home/dev-user/src/BirdNET-Go
 COPY --chown=dev-user . ./
 
 # Now run the tasks with VERSION env var
-RUN VERSION=${VERSION} task check-tensorflow && \
-    VERSION=${VERSION} task download-assets && \
-    VERSION=${VERSION} task generate-tailwindcss
+RUN task check-tensorflow && \
+    task download-assets && \
+    task generate-tailwindcss
 
 # Compile BirdNET-Go
 ARG TARGETPLATFORM
 RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
     TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
-    DOCKER_LIB_DIR=/home/dev-user/lib task ${TARGET}
+    DOCKER_LIB_DIR=/home/dev-user/lib VERSION=${VERSION} task ${TARGET}
 
 # Create final image using a multi-platform base image
 FROM debian:bookworm-slim
