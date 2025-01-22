@@ -5,6 +5,10 @@ ARG VERSION=unknown
 
 FROM --platform=$TARGETPLATFORM golang:1.23.5-bookworm AS build
 
+# Pass VERSION through to the build stage
+ARG VERSION
+ENV VERSION=$VERSION
+
 # Install Task and other dependencies
 RUN apt-get update && apt-get install -y \
     curl \
