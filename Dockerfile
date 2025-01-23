@@ -58,12 +58,14 @@ RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
 FROM debian:bookworm-slim
 
 # Install ALSA library and SOX
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     ca-certificates \
     libasound2 \
     ffmpeg \
-    sox \
-    && rm -rf /var/lib/apt/lists/*
+    sox
+
+# Clean up apt cache
+RUN rm -rf /var/lib/apt/lists/*
 
 # Set TFLITE_LIB_DIR based on architecture
 ARG TARGETPLATFORM
