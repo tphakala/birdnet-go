@@ -137,7 +137,7 @@ x-init="
                 <option value="">Select an audio source</option>
                 <template x-for="device in audioDevices" :key="device.Index">
                     <option :value="device.Name" 
-                            :selected="device.Name === audioCapture.source" 
+                            :selected="device.Name.toLowerCase().includes(audioCapture.source.toLowerCase()) || device.Name === audioCapture.source" 
                             x-text="device.Name"></option>
                 </template>
             </select>
@@ -443,12 +443,23 @@ x-init="
                         <span class="help-icon" @mouseenter="showTooltip = 'audioExportBitrate'" @mouseleave="showTooltip = null">ⓘ</span>
                     </label>
                     <input type="text" id="audioExportBitrate" name="realtime.audio.export.bitrate" 
-                           x-model="audioExport.bitrate.endsWith('k') ? audioExport.bitrate : audioExport.bitrate + 'k'" 
+                           x-model="audioExport.bitrate" 
                            class="input input-bordered input-sm w-full" 
                            placeholder="Bitrate (e.g. 128k)"
                            :disabled="!ffmpegAvailable || !['aac', 'opus', 'mp3'].includes(audioExport.type)"
                            :class="{'opacity-50 cursor-not-allowed': !ffmpegAvailable || !['aac', 'opus', 'mp3'].includes(audioExport.type)}"
-                           @input="if (!$event.target.value.endsWith('k')) $event.target.value += 'k'">
+                           @input="
+                               let value = $event.target.value.replace(/[^0-9k]/g, '');
+                               if (!value.endsWith('k')) {
+                                   value = value.replace('k', '') + 'k';
+                               }
+                               let numValue = parseInt(value);
+                               if (!isNaN(numValue) && numValue >= 32 && numValue <= 320) {
+                                   audioExport.bitrate = value;
+                               } else if (value === 'k') {
+                                   audioExport.bitrate = '128k';
+                               }
+                           ">
                     <div x-show="showTooltip === 'audioExportBitrate'" x-cloak class="tooltip">
                         Bitrate for compressed audio export in kbps. Only applicable for AAC, Opus, and MP3 formats when FFmpeg is available.
                     </div>
