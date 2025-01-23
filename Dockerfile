@@ -17,6 +17,9 @@ RUN apt-get update -q && apt-get install -q -y \
     zip \
     gcc-aarch64-linux-gnu
 
+# Install python3-six
+RUN apt-get install -q -y python3-six --no-install-recommends
+
 # Install npm
 RUN apt-get install -q -y npm --no-install-recommends
 
