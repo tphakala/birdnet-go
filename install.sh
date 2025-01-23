@@ -410,8 +410,9 @@ configure_audio_input() {
     while true; do
         print_message "\n🎤 Audio Capture Configuration" "$GREEN"
         print_message "1) Use sound card" 
-        print_message "2) Use RTSP stream" 
-        print_message "❓ Select audio input method (1/2): " "$YELLOW" "nonewline"
+        print_message "2) Use RTSP stream"
+        print_message "3) Configure later in BirdNET-Go web interface"
+        print_message "❓ Select audio input method (1/2/3): " "$YELLOW" "nonewline"
         read -r audio_choice
 
         case $audio_choice in
@@ -424,6 +425,11 @@ configure_audio_input() {
                 if configure_rtsp_stream; then
                     break
                 fi
+                ;;
+            3)
+                print_message "⚠️ Skipping audio input configuration" "$YELLOW"
+                print_message "⚠️ You can configure audio input later in BirdNET-Go web interface at Audio Capture Settings" "$YELLOW"
+                break
                 ;;
             *)
                 print_message "❌ Invalid selection. Please try again." "$RED"
@@ -553,12 +559,6 @@ configure_sound_card() {
             ALSA_CARD="$friendly_name"
             print_message "✅ Selected capture device: " "$GREEN" "nonewline"
             print_message "$ALSA_CARD"
-
-            # validate audio device using ALSA hw format
-            if ! validate_audio_device "$alsa_hw"; then
-                print_message "❌ Failed to validate audio device" "$RED"
-                return 1                
-            fi
 
             # Update config file with the friendly name
             sed -i "s/source: \"sysdefault\"/source: \"${ALSA_CARD}\"/" "$CONFIG_FILE"
