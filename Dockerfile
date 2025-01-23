@@ -10,15 +10,21 @@ ARG VERSION
 ENV VERSION=$VERSION
 
 # Install Task and other dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update -q && apt-get install -q -y \
     curl \
     git \
     sudo \
     zip \
-    npm \
-    gcc-aarch64-linux-gnu \
-    && rm -rf /var/lib/apt/lists/* \
-    && sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+    gcc-aarch64-linux-gnu
+
+# Install npm
+RUN apt-get install -q -y npm --no-install-recommends
+
+# Clean up apt cache
+RUN rm -rf /var/lib/apt/lists/*
+
+# Install Task
+RUN sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
 # Create dev-user for building and devcontainer usage
 RUN groupadd --gid 10001 dev-user && \
