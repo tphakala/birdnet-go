@@ -67,9 +67,23 @@ func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 	cleanPath = strings.ReplaceAll(cleanPath, "//", "/")
 	h.Debug("sanitizeClipName: Cleaned path: %s", cleanPath)
 
-	// Check for path traversal attempts
-	if strings.Contains(cleanPath, "../") || strings.Contains(cleanPath, "..\\") {
-		h.Debug("sanitizeClipName: Path traversal attempt detected: %s", cleanPath)
+	// Get absolute paths for comparison
+	exportPath := conf.Setting().Realtime.Audio.Export.Path
+	absExportPath, err := filepath.Abs(exportPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve export path: %w", err)
+	}
+
+	// Join with export path and get absolute path
+	fullPath := filepath.Join(exportPath, cleanPath)
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve full path: %w", err)
+	}
+
+	// Check if the resolved path is within the export directory
+	if !strings.HasPrefix(absPath, absExportPath) {
+		h.Debug("sanitizeClipName: Path traversal attempt detected - path resolves outside export directory: %s", absPath)
 		return "", ErrPathTraversal
 	}
 
@@ -108,7 +122,7 @@ func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 	}
 
 	// Check final path length including the export path
-	fullPath := filepath.Join(conf.Setting().Realtime.Audio.Export.Path, cleanPath)
+	fullPath = filepath.Join(conf.Setting().Realtime.Audio.Export.Path, cleanPath)
 	if len(fullPath) > 250 { // Safe limit for most OS
 		return "", fmt.Errorf("final path length exceeds system limits")
 	}
