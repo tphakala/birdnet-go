@@ -84,7 +84,7 @@ tasks:
   generate-tailwindcss:
     cmds:
       - npm -D install daisyui
-      - npx --yes tailwindcss@latest -i {{.TAILWIND_INPUT}} -o {{.TAILWIND_OUTPUT}} --minify
+      - npx --yes tailwindcss@3.4.17 -i {{.TAILWIND_INPUT}} -o {{.TAILWIND_OUTPUT}} --minify
 
   labels-zip:
     vars:
@@ -132,8 +132,10 @@ tasks:
         vars: {TFLITE_LIB_DIR: '{{.TFLITE_LIB_DIR}}', TFLITE_LIB_ARCH: '{{.TFLITE_LIB_ARCH}}', TARGET: '{{.TARGET}}'}
       - |
         mkdir -p {{.TFLITE_LIB_DIR}}
+        if [ "$(uname -m)" != "aarch64" ]; then
+          export CC=aarch64-linux-gnu-gcc
+        fi
         GOOS=linux GOARCH=arm64 {{.CGO_FLAGS}} \
-        CC=aarch64-linux-gnu-gcc \
         CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
         go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
