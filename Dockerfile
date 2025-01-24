@@ -1,24 +1,24 @@
 ARG TFLITE_LIB_DIR=/usr/lib
 ARG TENSORFLOW_VERSION=2.17.1
-ARG TARGETPLATFORM=linux/amd64  # Default to linux/amd64 for local builds
-ARG VERSION=unknown
 
-FROM --platform=$TARGETPLATFORM golang:1.23.5-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.23.5-bookworm AS buildenv
 
 # Pass VERSION through to the build stage
 ARG VERSION
 ENV VERSION=$VERSION
 
 # Install Task and other dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update -q && apt-get install -q -y \
     curl \
     git \
     sudo \
     zip \
     npm \
-    gcc-aarch64-linux-gnu \
-    && rm -rf /var/lib/apt/lists/* \
-    && sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+    gcc-aarch64-linux-gnu && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Task
+RUN sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
 # Create dev-user for building and devcontainer usage
 RUN groupadd --gid 10001 dev-user && \
@@ -36,28 +36,32 @@ WORKDIR /home/dev-user/src/BirdNET-Go
 # Copy all source files first to have Git information available
 COPY --chown=dev-user . ./
 
-# Now run the tasks with VERSION env var
-RUN task check-tensorflow && \
-    task download-assets && \
-    task generate-tailwindcss
+# Enter Build stage
+FROM --platform=$BUILDPLATFORM buildenv AS build
 
-# Compile BirdNET-Go
 ARG TARGETPLATFORM
+
+# Build assets and compile BirdNET-Go
 RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
+    task check-tensorflow && \
+    task download-assets && \
+    task generate-tailwindcss && \
     TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
     DOCKER_LIB_DIR=/home/dev-user/lib VERSION=${VERSION} task ${TARGET}
 
 # Create final image using a multi-platform base image
-FROM debian:bookworm-slim
+FROM --platform=$TARGETPLATFORM debian:bookworm-slim
 
 # Install ALSA library and SOX
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     ca-certificates \
     libasound2 \
     ffmpeg \
-    sox \
-    && rm -rf /var/lib/apt/lists/*
+    sox
+
+# Clean up apt cache
+RUN rm -rf /var/lib/apt/lists/*
 
 # Set TFLITE_LIB_DIR based on architecture
 ARG TARGETPLATFORM
