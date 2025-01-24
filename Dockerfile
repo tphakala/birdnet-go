@@ -1,10 +1,7 @@
 ARG TFLITE_LIB_DIR=/usr/lib
 ARG TENSORFLOW_VERSION=2.17.1
-ARG TARGETPLATFORM
-ARG BUILDPLATFORM
-ARG VERSION=unknown
 
-FROM --platform=$TARGETPLATFORM golang:1.23.5-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.23.5-bookworm AS buildenv
 
 # Pass VERSION through to the build stage
 ARG VERSION
@@ -16,16 +13,9 @@ RUN apt-get update -q && apt-get install -q -y \
     git \
     sudo \
     zip \
-    gcc-aarch64-linux-gnu
-
-# Install python3-six
-RUN apt-get install -q -y python3-six --no-install-recommends
-
-# Install npm
-RUN apt-get install -q -y npm --no-install-recommends
-
-# Clean up apt cache
-RUN rm -rf /var/lib/apt/lists/*
+    npm \
+    gcc-aarch64-linux-gnu && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install Task
 RUN sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
@@ -46,20 +36,22 @@ WORKDIR /home/dev-user/src/BirdNET-Go
 # Copy all source files first to have Git information available
 COPY --chown=dev-user . ./
 
-# Now run the tasks with VERSION env var
-RUN task check-tensorflow && \
-    task download-assets && \
-    task generate-tailwindcss
+# Enter Build stage
+FROM --platform=$BUILDPLATFORM buildenv AS build
 
-# Compile BirdNET-Go
 ARG TARGETPLATFORM
+
+# Build assets and compile BirdNET-Go
 RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
+    task check-tensorflow && \
+    task download-assets && \
+    task generate-tailwindcss && \
     TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
     DOCKER_LIB_DIR=/home/dev-user/lib VERSION=${VERSION} task ${TARGET}
 
 # Create final image using a multi-platform base image
-FROM debian:bookworm-slim
+FROM --platform=$TARGETPLATFORM debian:bookworm-slim
 
 # Install ALSA library and SOX
 RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
