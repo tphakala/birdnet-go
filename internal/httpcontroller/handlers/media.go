@@ -61,15 +61,23 @@ func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 
 	// Clean the path and ensure it's relative
 	cleanPath := filepath.Clean(decodedClipName)
+
+	// Convert to forward slashes and normalize multiple separators
+	cleanPath = strings.ReplaceAll(cleanPath, "\\", "/")
+	cleanPath = strings.ReplaceAll(cleanPath, "//", "/")
 	h.Debug("sanitizeClipName: Cleaned path: %s", cleanPath)
 
-	if strings.Contains(cleanPath, "..") {
+	// Check for path traversal attempts
+	if strings.Contains(cleanPath, "../") || strings.Contains(cleanPath, "..\\") {
 		h.Debug("sanitizeClipName: Path traversal attempt detected: %s", cleanPath)
 		return "", ErrPathTraversal
 	}
 
-	// Remove 'clips/' prefix if present
-	cleanPath = strings.TrimPrefix(cleanPath, "clips/")
+	// Remove 'clips/' prefix if present (case-insensitive for Windows compatibility)
+	prefixLower := strings.ToLower(cleanPath)
+	if strings.HasPrefix(prefixLower, "clips/") {
+		cleanPath = cleanPath[6:] // Remove "clips/" (6 characters)
+	}
 	h.Debug("sanitizeClipName: Path after removing clips prefix: %s", cleanPath)
 
 	// If the path is absolute, make it relative to the export path
@@ -78,15 +86,31 @@ func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 		exportPath := conf.Setting().Realtime.Audio.Export.Path
 		h.Debug("sanitizeClipName: Export path from settings: %s", exportPath)
 
-		if strings.HasPrefix(cleanPath, exportPath) {
-			// Remove the export path prefix to make it relative
-			cleanPath = strings.TrimPrefix(cleanPath, exportPath)
-			cleanPath = strings.TrimPrefix(cleanPath, string(os.PathSeparator))
-			h.Debug("sanitizeClipName: Converted to relative path: %s", cleanPath)
+		// Case-insensitive check for Windows compatibility
+		if runtime.GOOS == "windows" {
+			cleanPathLower := strings.ToLower(cleanPath)
+			exportPathLower := strings.ToLower(exportPath)
+			if strings.HasPrefix(cleanPathLower, exportPathLower) {
+				cleanPath = cleanPath[len(exportPath):]
+				cleanPath = strings.TrimPrefix(cleanPath, string(os.PathSeparator))
+			} else {
+				return "", fmt.Errorf("invalid path: absolute path not under export directory")
+			}
 		} else {
-			h.Debug("sanitizeClipName: Absolute path not under export directory: %s", cleanPath)
-			return "", fmt.Errorf("invalid path: absolute path not under export directory")
+			if strings.HasPrefix(cleanPath, exportPath) {
+				cleanPath = strings.TrimPrefix(cleanPath, exportPath)
+				cleanPath = strings.TrimPrefix(cleanPath, string(os.PathSeparator))
+			} else {
+				return "", fmt.Errorf("invalid path: absolute path not under export directory")
+			}
 		}
+		h.Debug("sanitizeClipName: Converted to relative path: %s", cleanPath)
+	}
+
+	// Check final path length including the export path
+	fullPath := filepath.Join(conf.Setting().Realtime.Audio.Export.Path, cleanPath)
+	if len(fullPath) > 250 { // Safe limit for most OS
+		return "", fmt.Errorf("final path length exceeds system limits")
 	}
 
 	// Convert to forward slashes for web URLs
@@ -98,8 +122,20 @@ func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 
 // getFullPath returns the full filesystem path for a relative clip path
 func getFullPath(relativePath string) string {
+	// Clean the relative path first
+	relativePath = filepath.Clean(relativePath)
+
+	// Get the export path
 	exportPath := conf.Setting().Realtime.Audio.Export.Path
-	return filepath.Join(exportPath, relativePath)
+
+	// If relativePath already starts with the export path, return it cleaned
+	if strings.HasPrefix(strings.ToLower(relativePath), strings.ToLower(exportPath)) {
+		return relativePath
+	}
+
+	// Join and clean the paths
+	fullPath := filepath.Join(exportPath, relativePath)
+	return filepath.Clean(fullPath)
 }
 
 // getWebPath converts a filesystem path to a web-safe path
@@ -171,64 +207,131 @@ func (h *Handlers) ThumbnailAttribution(scientificName string) template.HTML {
 
 // ServeSpectrogram serves or generates a spectrogram for a given clip.
 func (h *Handlers) ServeSpectrogram(c echo.Context) error {
+	h.Debug("ServeSpectrogram: Handler called with URL: %s", c.Request().URL.String())
+
 	// Extract clip name from the query parameters
 	clipName := c.QueryParam("clip")
+	h.Debug("ServeSpectrogram: Raw clip name from query: %s", clipName)
 
 	// Sanitize the clip name
 	sanitizedClipName, err := h.sanitizeClipName(clipName)
 	if err != nil {
-		h.Debug("Error sanitizing clip name: %v", err)
+		h.Debug("ServeSpectrogram: Error sanitizing clip name: %v", err)
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
+	h.Debug("ServeSpectrogram: Sanitized clip name: %s", sanitizedClipName)
 
-	// Get the full path to the audio file
+	// Get the full path to the audio file using consistent path handling
 	fullPath := getFullPath(sanitizedClipName)
+	h.Debug("ServeSpectrogram: Full audio path: %s", fullPath)
+
+	// Verify that the audio file exists
+	exists, err := fileExists(fullPath)
+	if err != nil {
+		h.Debug("ServeSpectrogram: Error checking audio file: %v", err)
+		return c.File("assets/images/spectrogram-placeholder.svg")
+	}
+	if !exists {
+		h.Debug("ServeSpectrogram: Audio file not found: %s", fullPath)
+		return c.File("assets/images/spectrogram-placeholder.svg")
+	}
+	h.Debug("ServeSpectrogram: Audio file exists at: %s", fullPath)
 
 	// Construct the path to the spectrogram image
 	spectrogramPath, err := h.getSpectrogramPath(fullPath, 400) // Assuming 400px width
 	if err != nil {
-		h.Debug("Error getting spectrogram path: %v", err)
+		h.Debug("ServeSpectrogram: Error getting spectrogram path: %v", err)
+		return c.File("assets/images/spectrogram-placeholder.svg")
+	}
+	h.Debug("ServeSpectrogram: Final spectrogram path: %s", spectrogramPath)
+
+	// Verify the spectrogram exists
+	exists, err = fileExists(spectrogramPath)
+	if err != nil {
+		h.Debug("ServeSpectrogram: Error checking spectrogram file: %v", err)
+		return c.File("assets/images/spectrogram-placeholder.svg")
+	}
+	if !exists {
+		h.Debug("ServeSpectrogram: Spectrogram file not found, attempting to create it")
+		// Try to create the spectrogram
+		if err := createSpectrogramWithSoX(fullPath, spectrogramPath, 400); err != nil {
+			h.Debug("ServeSpectrogram: Failed to create spectrogram: %v", err)
+			return c.File("assets/images/spectrogram-placeholder.svg")
+		}
+		h.Debug("ServeSpectrogram: Successfully created spectrogram at: %s", spectrogramPath)
+	}
+
+	// Final check if the spectrogram exists after potential creation
+	exists, _ = fileExists(spectrogramPath)
+	if !exists {
+		h.Debug("ServeSpectrogram: Spectrogram still not found after creation attempt: %s", spectrogramPath)
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 
-	// Serve the spectrogram image file
+	h.Debug("ServeSpectrogram: Serving spectrogram file: %s", spectrogramPath)
 	return c.File(spectrogramPath)
 }
 
 // getSpectrogramPath generates the path to the spectrogram image file for a given audio file
 func (h *Handlers) getSpectrogramPath(audioFileName string, width int) (string, error) {
-	// Generate file paths
-	dir := filepath.Dir(audioFileName)
-	baseNameWithoutExt := strings.TrimSuffix(filepath.Base(audioFileName), filepath.Ext(audioFileName))
-	spectrogramFileName := fmt.Sprintf("%s_%dpx.png", baseNameWithoutExt, width)
-	spectrogramPath := filepath.Join(dir, spectrogramFileName)
+	// Clean the audio file path first
+	audioFileName = filepath.Clean(audioFileName)
+	h.Debug("getSpectrogramPath: Input audio path: %s", audioFileName)
 
-	// Convert to web-friendly path
-	webFriendlyPath := strings.ReplaceAll(spectrogramPath, string(os.PathSeparator), "/")
+	// Get the export path
+	exportPath := conf.Setting().Realtime.Audio.Export.Path
+	h.Debug("getSpectrogramPath: Export path: %s", exportPath)
+
+	// Convert both paths to forward slashes for consistent comparison
+	audioFileNameSlash := strings.ReplaceAll(audioFileName, "\\", "/")
+	exportPathSlash := strings.ReplaceAll(exportPath, "\\", "/")
+
+	// Ensure we're working with the correct base directory
+	if !strings.HasPrefix(strings.ToLower(audioFileNameSlash), strings.ToLower(exportPathSlash)) {
+		// If the path doesn't already include the export path, add it
+		audioFileName = filepath.Clean(filepath.Join(exportPath, audioFileName))
+	}
+	h.Debug("getSpectrogramPath: Full audio path: %s", audioFileName)
+
+	// Generate file paths using the same directory as the audio file
+	dir := filepath.Dir(audioFileName)
+	h.Debug("getSpectrogramPath: Directory path: %s", dir)
+
+	baseNameWithoutExt := strings.TrimSuffix(filepath.Base(audioFileName), filepath.Ext(audioFileName))
+	h.Debug("getSpectrogramPath: Base name without extension: %s", baseNameWithoutExt)
+
+	spectrogramFileName := fmt.Sprintf("%s_%dpx.png", baseNameWithoutExt, width)
+	h.Debug("getSpectrogramPath: Spectrogram filename: %s", spectrogramFileName)
+
+	// Join paths using OS-specific separators and clean the result
+	spectrogramPath := filepath.Clean(filepath.Join(dir, spectrogramFileName))
+	h.Debug("getSpectrogramPath: Final spectrogram path: %s", spectrogramPath)
 
 	// Check if the spectrogram already exists
-	if spectrogramExists, err := fileExists(spectrogramPath); err != nil {
+	exists, err := fileExists(spectrogramPath)
+	if err != nil {
+		h.Debug("getSpectrogramPath: Error checking spectrogram existence: %v", err)
 		return "", fmt.Errorf("error checking spectrogram file: %w", err)
-	} else if spectrogramExists {
-		return webFriendlyPath, nil
 	}
+	if exists {
+		h.Debug("getSpectrogramPath: Existing spectrogram found at: %s", spectrogramPath)
+		return spectrogramPath, nil
+	}
+	h.Debug("getSpectrogramPath: No existing spectrogram found at: %s", spectrogramPath)
 
 	// Check if the original audio file exists
-	if audioExists, err := fileExists(audioFileName); err != nil {
-		log.Printf("error checking audio file: %s", err)
+	exists, err = fileExists(audioFileName)
+	if err != nil {
+		h.Debug("getSpectrogramPath: Error checking audio file: %v", err)
 		return "", fmt.Errorf("error checking audio file: %w", err)
-	} else if !audioExists {
-		log.Printf("audio file does not exist: %s", audioFileName)
+	}
+	if !exists {
+		h.Debug("getSpectrogramPath: Audio file does not exist at: %s", audioFileName)
 		return "", fmt.Errorf("audio file does not exist: %s", audioFileName)
 	}
+	h.Debug("getSpectrogramPath: Audio file exists at: %s", audioFileName)
 
-	// Create the spectrogram
-	if err := createSpectrogramWithSoX(audioFileName, spectrogramPath, width); err != nil {
-		log.Printf("error creating spectrogram: %s", err)
-		return "", fmt.Errorf("error creating spectrogram: %w", err)
-	}
-
-	return webFriendlyPath, nil
+	return spectrogramPath, nil
 }
 
 // fileExists checks if a file exists and is not a directory
