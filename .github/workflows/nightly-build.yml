@@ -126,12 +126,8 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-24.04
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm64
-
+        platform: [linux/amd64, linux/arm64]
+        
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -168,8 +164,6 @@ jobs:
           push: true
           platforms: ${{ matrix.platform }}
           build-args: |
-            TARGETPLATFORM=${{ matrix.platform }}
-            BUILDPLATFORM=${{ matrix.platform }}
             VERSION=nightly-$(date +'%Y%m%d')
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
