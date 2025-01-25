@@ -167,6 +167,7 @@ func getCleanEnvironment() []string {
 	return env
 }
 
+// getNoteValueByName retrieves a value from a Note by field name using reflection
 func getNoteValueByName(note *datastore.Note, paramName string) interface{} {
 	val := reflect.ValueOf(*note)
 	fieldVal := val.FieldByName(paramName)
