@@ -258,7 +258,7 @@ type ClipForRemoval struct {
 
 // GetClipsQualifyingForRemoval returns the list of clips that qualify for removal based on retention policy.
 // It checks each clip's age and count of recordings per scientific name, filtering out clips based on provided minimum hours and clip count criteria.
-func (ds *DataStore) GetClipsQualifyingForRemoval(minHours int, minClips int) ([]ClipForRemoval, error) {
+func (ds *DataStore) GetClipsQualifyingForRemoval(minHours, minClips int) ([]ClipForRemoval, error) {
 	// Validate input parameters
 	if minHours <= 0 || minClips <= 0 {
 		return nil, fmt.Errorf("invalid parameters: minHours and minClips must be greater than 0")
@@ -331,7 +331,7 @@ func (ds *DataStore) GetHourlyOccurrences(date, commonName string, minConfidence
 }
 
 // SpeciesDetections retrieves bird species detections for a specific date and time period.
-func (ds *DataStore) SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit int, offset int) ([]Note, error) {
+func (ds *DataStore) SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit, offset int) ([]Note, error) {
 	sortOrder := sortAscendingString(sortAscending)
 
 	query := ds.DB.Where("common_name = ? AND date = ?", species, date)
@@ -378,7 +378,7 @@ func (ds *DataStore) GetAllDetectedSpecies() ([]Note, error) {
 }
 
 // SearchNotes performs a search on notes with optional sorting, pagination, and limits.
-func (ds *DataStore) SearchNotes(query string, sortAscending bool, limit int, offset int) ([]Note, error) {
+func (ds *DataStore) SearchNotes(query string, sortAscending bool, limit, offset int) ([]Note, error) {
 	var notes []Note
 	sortOrder := sortAscendingString(sortAscending)
 
@@ -500,7 +500,7 @@ func createGormLogger() logger.Interface {
 }
 
 // GetHourlyDetections retrieves bird detections for a specific date and hour.
-func (ds *DataStore) GetHourlyDetections(date string, hour string, duration int) ([]Note, error) {
+func (ds *DataStore) GetHourlyDetections(date, hour string, duration int) ([]Note, error) {
 	var detections []Note
 
 	startTime, endTime := getHourRange(hour, duration)
@@ -543,10 +543,10 @@ func (ds *DataStore) CountSearchResults(query string) (int64, error) {
 	return count, nil
 }
 
-func getHourRange(hour string, duration int) (string, string) {
+func getHourRange(hour string, duration int) (startTime, endTime string) {
 	startHour, _ := strconv.Atoi(hour)
 	endHour := (startHour + duration) % 24
-	startTime := fmt.Sprintf("%02d:00:00", startHour)
-	endTime := fmt.Sprintf("%02d:00:00", endHour)
+	startTime = fmt.Sprintf("%02d:00:00", startHour)
+	endTime = fmt.Sprintf("%02d:00:00", endHour)
 	return startTime, endTime
 }
