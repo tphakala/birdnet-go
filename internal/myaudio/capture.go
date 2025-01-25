@@ -256,7 +256,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan, re
 		color.New(color.FgHiYellow).Fprintln(os.Stderr, "context init failed:", err)
 		return
 	}
-	defer malgoCtx.Uninit()
+	defer malgoCtx.Uninit() //nolint:errcheck // This is a defer, avoid warning about error return value
 
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	deviceConfig.Capture.Format = malgo.FormatS16
@@ -362,7 +362,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan, re
 		color.New(color.FgHiYellow).Fprintln(os.Stderr, "Device start failed:", err)
 		return
 	}
-	defer device.Stop()
+	defer device.Stop() //nolint:errcheck // This is a defer, avoid warning about error return value
 
 	if settings.Debug {
 		fmt.Println("Device started")
