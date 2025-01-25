@@ -16,7 +16,7 @@ type MySQLStore struct {
 	Settings *conf.Settings
 }
 
-func validateMySQLConfig(settings *conf.Settings) error {
+func validateMySQLConfig() error {
 	// Add validation logic for MySQL configuration
 	// Return an error if the configuration is invalid
 	return nil
@@ -24,7 +24,7 @@ func validateMySQLConfig(settings *conf.Settings) error {
 
 // InitializeDatabase sets up the MySQL database connection
 func (store *MySQLStore) Open() error {
-	if err := validateMySQLConfig(store.Settings); err != nil {
+	if err := validateMySQLConfig(); err != nil {
 		return err // validateMySQLConfig returns a properly formatted error
 	}
 
