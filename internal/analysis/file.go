@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/term"
@@ -143,9 +144,9 @@ func formatProgressLine(filename string, duration time.Duration, chunkCount, tot
 
 // monitorProgress starts a goroutine to monitor and display analysis progress
 func monitorProgress(ctx context.Context, doneChan chan struct{}, filename string, duration time.Duration,
-	totalChunks int, chunkCount *int, startTime time.Time) {
+	totalChunks int, chunkCount *int64, startTime time.Time) {
 
-	lastChunkCount := 0
+	lastChunkCount := int64(0)
 	lastProgressUpdate := startTime
 
 	// Moving average window for chunks/sec calculation
@@ -165,8 +166,11 @@ func monitorProgress(ctx context.Context, doneChan chan struct{}, filename strin
 			currentTime := time.Now()
 			timeSinceLastUpdate := currentTime.Sub(lastProgressUpdate)
 
+			// Get current chunk count atomically
+			currentCount := atomic.LoadInt64(chunkCount)
+
 			// Calculate current chunk rate
-			chunksProcessed := *chunkCount - lastChunkCount
+			chunksProcessed := currentCount - lastChunkCount
 			currentRate := float64(chunksProcessed) / timeSinceLastUpdate.Seconds()
 
 			// Update moving average
@@ -187,7 +191,7 @@ func monitorProgress(ctx context.Context, doneChan chan struct{}, filename strin
 			}
 
 			// Update counters for next iteration
-			lastChunkCount = *chunkCount
+			lastChunkCount = currentCount
 			lastProgressUpdate = currentTime
 
 			// Get terminal width
@@ -200,10 +204,10 @@ func monitorProgress(ctx context.Context, doneChan chan struct{}, filename strin
 			fmt.Print(formatProgressLine(
 				filename,
 				duration,
-				*chunkCount,
+				int(currentCount),
 				totalChunks,
 				avgRate,
-				birdnet.EstimateTimeRemaining(startTime, *chunkCount, totalChunks),
+				birdnet.EstimateTimeRemaining(startTime, int(currentCount), totalChunks),
 				width,
 			))
 		}
@@ -216,9 +220,13 @@ func processChunk(ctx context.Context, chunk audioChunk, settings *conf.Settings
 
 	notes, err := bn.ProcessChunk(chunk.Data, chunk.FilePosition)
 	if err != nil {
+		// Block until we can send the error or context is cancelled
 		select {
 		case errorChan <- err:
-		default:
+			// Error successfully sent
+		case <-ctx.Done():
+			// If context is done while trying to send error, prioritize context error
+			return ctx.Err()
 		}
 		return err
 	}
@@ -231,12 +239,9 @@ func processChunk(ctx context.Context, chunk audioChunk, settings *conf.Settings
 		}
 	}
 
+	// Block until we can send results or context is cancelled
 	select {
 	case <-ctx.Done():
-		select {
-		case errorChan <- ctx.Err():
-		default:
-		}
 		return ctx.Err()
 	case resultChan <- filteredNotes:
 		return nil
@@ -301,7 +306,7 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 	filename := filepath.Base(settings.Input.Path)
 
 	startTime := time.Now()
-	chunkCount := 1
+	var chunkCount int64 = 1
 
 	// Set number of workers to 1
 	numWorkers := 1
@@ -352,11 +357,11 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 				return
 			case notes := <-resultChan:
 				if settings.Debug {
-					fmt.Printf("DEBUG: Received results for chunk #%d\n", chunkCount)
+					fmt.Printf("DEBUG: Received results for chunk #%d\n", atomic.LoadInt64(&chunkCount))
 				}
 				allNotes = append(allNotes, notes...)
-				chunkCount++
-				if chunkCount > totalChunks {
+				atomic.AddInt64(&chunkCount, 1)
+				if atomic.LoadInt64(&chunkCount) > int64(totalChunks) {
 					return
 				}
 			case err := <-errorChan:
@@ -372,7 +377,8 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 					fmt.Printf("DEBUG: Timeout waiting for chunk %d results\n", i)
 				}
 				processingErrorMutex.Lock()
-				processingError = fmt.Errorf("timeout waiting for analysis results (processed %d/%d chunks)", chunkCount, totalChunks)
+				currentCount := atomic.LoadInt64(&chunkCount)
+				processingError = fmt.Errorf("timeout waiting for analysis results (processed %d/%d chunks)", currentCount, totalChunks)
 				processingErrorMutex.Unlock()
 				return
 			}
