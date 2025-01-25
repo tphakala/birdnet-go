@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/birdnet"
@@ -30,6 +31,7 @@ type LogAction struct {
 	Settings     *conf.Settings
 	Note         datastore.Note
 	EventTracker *EventTracker
+	mu           sync.Mutex // Protect concurrent access to Note
 }
 
 type DatabaseAction struct {
@@ -38,8 +40,7 @@ type DatabaseAction struct {
 	Note         datastore.Note
 	Results      []datastore.Results
 	EventTracker *EventTracker
-	//AudioBuffer  *myaudio.AudioBuffer
-	//AudioBuffers *map[string]*myaudio.AudioBuffer
+	mu           sync.Mutex // Protect concurrent access to Note and Results
 }
 
 type SaveAudioAction struct {
@@ -47,6 +48,7 @@ type SaveAudioAction struct {
 	ClipName     string
 	pcmData      []byte
 	EventTracker *EventTracker
+	mu           sync.Mutex // Protect concurrent access to pcmData
 }
 
 type BirdWeatherAction struct {
@@ -55,6 +57,7 @@ type BirdWeatherAction struct {
 	pcmData      []byte
 	BwClient     *birdweather.BwClient
 	EventTracker *EventTracker
+	mu           sync.Mutex // Protect concurrent access to Note and pcmData
 }
 
 type MqttAction struct {
@@ -63,15 +66,20 @@ type MqttAction struct {
 	BirdImageCache *imageprovider.BirdImageCache
 	MqttClient     mqtt.Client
 	EventTracker   *EventTracker
+	mu             sync.Mutex // Protect concurrent access to Note
 }
 
 type UpdateRangeFilterAction struct {
 	Bn       *birdnet.BirdNET
 	Settings *conf.Settings
+	mu       sync.Mutex // Protect concurrent access to Settings
 }
 
 // Execute logs the note to the chag log file
-func (a LogAction) Execute(data interface{}) error {
+func (a *LogAction) Execute(data interface{}) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	species := strings.ToLower(a.Note.CommonName)
 
 	// Check if the event should be handled for this species
@@ -90,7 +98,10 @@ func (a LogAction) Execute(data interface{}) error {
 }
 
 // Execute saves the note to the database
-func (a DatabaseAction) Execute(data interface{}) error {
+func (a *DatabaseAction) Execute(data interface{}) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	species := strings.ToLower(a.Note.CommonName)
 
 	// Check event frequency
@@ -114,7 +125,7 @@ func (a DatabaseAction) Execute(data interface{}) error {
 		}
 
 		// Create a SaveAudioAction and execute it
-		saveAudioAction := SaveAudioAction{
+		saveAudioAction := &SaveAudioAction{
 			Settings: a.Settings,
 			ClipName: a.Note.ClipName,
 			pcmData:  pcmData,
@@ -135,12 +146,15 @@ func (a DatabaseAction) Execute(data interface{}) error {
 }
 
 // Execute saves the audio clip to a file
-func (a SaveAudioAction) Execute(data interface{}) error {
+func (a *SaveAudioAction) Execute(data interface{}) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	// Get the full path by joining the export path with the relative clip name
 	outputPath := filepath.Join(a.Settings.Realtime.Audio.Export.Path, a.ClipName)
 
 	// Ensure the directory exists
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		log.Printf("error creating directory for audio clip: %s\n", err)
 		return err
 	}
@@ -174,7 +188,10 @@ func (a SaveAudioAction) Execute(data interface{}) error {
 }*/
 
 // Execute sends the note to the BirdWeather API
-func (a BirdWeatherAction) Execute(data interface{}) error {
+func (a *BirdWeatherAction) Execute(data interface{}) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	species := strings.ToLower(a.Note.CommonName)
 
 	// Check event frequency
@@ -210,7 +227,10 @@ type NoteWithBirdImage struct {
 }
 
 // Execute sends the note to the MQTT broker
-func (a MqttAction) Execute(data interface{}) error {
+func (a *MqttAction) Execute(data interface{}) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	species := strings.ToLower(a.Note.CommonName)
 
 	// Check event frequency
@@ -259,7 +279,10 @@ func (a MqttAction) Execute(data interface{}) error {
 }
 
 // Execute updates the range filter species list, this is run every day
-func (a UpdateRangeFilterAction) Execute(data interface{}) error {
+func (a *UpdateRangeFilterAction) Execute(data interface{}) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	today := time.Now().Truncate(24 * time.Hour)
 	if today.After(a.Settings.BirdNET.RangeFilter.LastUpdated) {
 		// Update location based species list
