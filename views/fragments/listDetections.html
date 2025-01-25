@@ -63,6 +63,9 @@
 
                     <!-- Recording Column -->
                     <th scope="col" class="py-2 px-4" style="width: 30%">Recording</th>
+
+                    <!-- Action Menu Column -->
+                    <th scope="col" class="hidden sm:table-cell py-2 px-4" style="width: 5%"></th>
                 </tr>
             </thead>
             <tbody>
@@ -200,6 +203,11 @@
                                 </div>
                             </div>
                         </div>
+                    </td>
+
+                    <!-- Action Menu Column -->
+                    <td class="hidden sm:table-cell py-1 px-4 font-normal">
+                        {{template "actionMenu" .}}
                     </td>
                 </tr>
                 {{end}}

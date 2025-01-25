@@ -11,6 +11,7 @@
       {{end}}
       <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:13%;">Confidence</th>
       <th scope="col" class="py-2 px-2 sm:pl-1 sm:py-1" style="width:22%;">Recording</th>
+      <th scope="col" class="hidden sm:table-cell py-2 px-2 sm:px-1 sm:py-1" style="width:5%;"></th>
     </tr>
   </thead>
   <tbody>
@@ -111,6 +112,11 @@
           </div>
         </div>
 
+      </td>
+
+      <!-- Action Menu Column -->
+      <td class="hidden sm:table-cell py-1 px-2 sm:px-1 sm:py-1">
+        {{template "actionMenu" .}}
       </td>
     </tr>
     {{end}}
