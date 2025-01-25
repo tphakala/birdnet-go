@@ -66,7 +66,7 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 	}
 
 	// Check if BirdNET settings have changed
-	if birdnetSettingsChanged(oldSettings, *settings) {
+	if birdnetSettingsChanged(&oldSettings, settings) {
 		h.SSE.SendNotification(Notification{
 			Message: "Reloading BirdNET model...",
 			Type:    "info",
@@ -76,7 +76,7 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 	}
 
 	// Check if range filter related settings have changed
-	if rangeFilterSettingsChanged(oldSettings, *settings) {
+	if rangeFilterSettingsChanged(&oldSettings, settings) {
 		h.SSE.SendNotification(Notification{
 			Message: "Rebuilding range filter...",
 			Type:    "info",
@@ -576,7 +576,7 @@ func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) b
 }
 
 // rangeFilterSettingsChanged checks if any settings that require a range filter reload have changed
-func rangeFilterSettingsChanged(oldSettings, currentSettings conf.Settings) bool {
+func rangeFilterSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	// Check for changes in species include/exclude lists
 	if !reflect.DeepEqual(oldSettings.Realtime.Species.Include, currentSettings.Realtime.Species.Include) {
 		return true
@@ -598,7 +598,7 @@ func rangeFilterSettingsChanged(oldSettings, currentSettings conf.Settings) bool
 	return false
 }
 
-func birdnetSettingsChanged(oldSettings, currentSettings conf.Settings) bool {
+func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	// Check for changes in BirdNET locale
 	if oldSettings.BirdNET.Locale != currentSettings.BirdNET.Locale {
 		return true
