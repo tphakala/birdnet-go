@@ -141,7 +141,9 @@ func readFromBuffer(stream string) []byte {
 	}
 
 	// Join with previous data to ensure we're processing chunkSize bytes
-	fullData := append(prevData[stream], data...)
+	var fullData []byte
+	prevData[stream] = append(prevData[stream], data...)
+	fullData = prevData[stream]
 	if len(fullData) > conf.BufferSize {
 		// Update prevData for the next iteration
 		prevData[stream] = fullData[readSize:]
