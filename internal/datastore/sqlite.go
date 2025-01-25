@@ -16,7 +16,7 @@ type SQLiteStore struct {
 	Settings *conf.Settings
 }
 
-func validateSQLiteConfig(settings *conf.Settings) error {
+func validateSQLiteConfig() error {
 	// Add validation logic for SQLite configuration
 	// Return an error if the configuration is invalid
 	return nil
@@ -24,7 +24,7 @@ func validateSQLiteConfig(settings *conf.Settings) error {
 
 // InitializeDatabase sets up the SQLite database connection
 func (store *SQLiteStore) Open() error {
-	if err := validateSQLiteConfig(store.Settings); err != nil {
+	if err := validateSQLiteConfig(); err != nil {
 		return err // validateSQLiteConfig returns a properly formatted error
 	}
 

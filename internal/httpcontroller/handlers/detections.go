@@ -244,9 +244,9 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 	weatherCache := make(map[string][]datastore.HourlyWeather)
 
 	// Process notes in their original order
-	for i, note := range notes {
+	for i := range notes {
 		// Parse the note's date and time into a time.Time object
-		noteTime, err := time.ParseInLocation("2006-01-02 15:04:05", note.Date+" "+note.Time, localLoc)
+		noteTime, err := time.ParseInLocation("2006-01-02 15:04:05", notes[i].Date+" "+notes[i].Time, localLoc)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse note time: %w", err)
 		}
@@ -254,12 +254,12 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 		// Get sun events for the note's date (SunCalc will use its internal cache)
 		sunEvents, err := h.SunCalc.GetSunEventTimes(noteTime)
 		if err != nil {
-			log.Printf("Failed to get sun events for date %s: %v", note.Date, err)
+			log.Printf("Failed to get sun events for date %s: %v", notes[i].Date, err)
 		}
 
 		// Create a NoteWithWeather object
 		noteWithWeather := NoteWithWeather{
-			Note:      note,
+			Note:      notes[i],
 			TimeOfDay: h.CalculateTimeOfDay(noteTime, &sunEvents),
 			Weather:   nil, // Initialize Weather as nil
 		}
@@ -267,17 +267,17 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 		// Check if we need to fetch weather data for this date
 		if weatherEnabled {
 			// If weather data for this date is not in cache, fetch it
-			if _, exists := weatherCache[note.Date]; !exists {
-				hourlyWeather, err := h.DS.GetHourlyWeather(note.Date)
+			if _, exists := weatherCache[notes[i].Date]; !exists {
+				hourlyWeather, err := h.DS.GetHourlyWeather(notes[i].Date)
 				if err != nil {
-					log.Printf("Failed to fetch hourly weather for date %s: %v", note.Date, err)
+					log.Printf("Failed to fetch hourly weather for date %s: %v", notes[i].Date, err)
 				}
-				weatherCache[note.Date] = hourlyWeather
+				weatherCache[notes[i].Date] = hourlyWeather
 			}
 
 			// If we have weather data for this date, find the closest weather data point
-			if len(weatherCache[note.Date]) > 0 {
-				noteWithWeather.Weather = findClosestWeather(noteTime, weatherCache[note.Date])
+			if len(weatherCache[notes[i].Date]) > 0 {
+				noteWithWeather.Weather = findClosestWeather(noteTime, weatherCache[notes[i].Date])
 			}
 		}
 

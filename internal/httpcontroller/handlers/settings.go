@@ -66,7 +66,7 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 	}
 
 	// Check if BirdNET settings have changed
-	if birdnetSettingsChanged(oldSettings, *settings) {
+	if birdnetSettingsChanged(&oldSettings, settings) {
 		h.SSE.SendNotification(Notification{
 			Message: "Reloading BirdNET model...",
 			Type:    "info",
@@ -76,7 +76,7 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 	}
 
 	// Check if range filter related settings have changed
-	if rangeFilterSettingsChanged(oldSettings, *settings) {
+	if rangeFilterSettingsChanged(&oldSettings, settings) {
 		h.SSE.SendNotification(Notification{
 			Message: "Rebuilding range filter...",
 			Type:    "info",
@@ -188,7 +188,7 @@ func updateSettingsFromForm(settings *conf.Settings, formValues map[string][]str
 }
 
 // updateStructFromForm recursively updates a struct's fields from form values
-func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefix string) error {
+func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefix string) error { //nolint:gocognit // ignore gocognit warning for this function, maybe refactor later
 	t := v.Type()
 
 	// Iterate through all fields of the struct
@@ -213,7 +213,7 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 		// Handle struct fields
 		if field.Kind() == reflect.Struct {
 			// Special handling for Audio Equalizer field
-			if fieldType.Type == reflect.TypeOf(conf.AudioSettings{}.Equalizer) {
+			if fieldType.Type == reflect.TypeOf(conf.AudioSettings{}.Equalizer) { //nolint:gocritic // ignore gocritic warning for this if statement, maybe refactor later
 				// Only update equalizer if related form values exist
 				if hasEqualizerFormValues(formValues, fullName) {
 					if err := updateEqualizerFromForm(field, formValues, fullName); err != nil {
@@ -576,7 +576,7 @@ func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) b
 }
 
 // rangeFilterSettingsChanged checks if any settings that require a range filter reload have changed
-func rangeFilterSettingsChanged(oldSettings, currentSettings conf.Settings) bool {
+func rangeFilterSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	// Check for changes in species include/exclude lists
 	if !reflect.DeepEqual(oldSettings.Realtime.Species.Include, currentSettings.Realtime.Species.Include) {
 		return true
@@ -598,7 +598,7 @@ func rangeFilterSettingsChanged(oldSettings, currentSettings conf.Settings) bool
 	return false
 }
 
-func birdnetSettingsChanged(oldSettings, currentSettings conf.Settings) bool {
+func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	// Check for changes in BirdNET locale
 	if oldSettings.BirdNET.Locale != currentSettings.BirdNET.Locale {
 		return true

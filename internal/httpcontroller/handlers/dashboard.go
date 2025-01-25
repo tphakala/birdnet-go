@@ -115,25 +115,19 @@ func closestHour(t time.Time) int {
 func (h *Handlers) ProcessNotes(notes []datastore.Note, selectedDate string, minConfidenceNormalized float64) ([]NoteWithIndex, error) {
 	startTime := time.Now()
 	notesWithIndex := make([]NoteWithIndex, 0, len(notes))
-	for _, note := range notes {
-		//noteStartTime := time.Now() // Start timing for this note
-
-		hourlyCounts, err := h.DS.GetHourlyOccurrences(selectedDate, note.CommonName, minConfidenceNormalized)
+	for i := range notes {
+		hourlyCounts, err := h.DS.GetHourlyOccurrences(selectedDate, notes[i].CommonName, minConfidenceNormalized)
 		if err != nil {
 			return nil, err // Return error to be handled by the caller
 		}
 
-		//log.Printf("Time to fetch hourly occurrences for note %s: %v", note.CommonName, time.Since(noteStartTime)) // Print the time taken for this part
-
-		totalDetections := sumHourlyCounts(hourlyCounts)
+		totalDetections := sumHourlyCounts(&hourlyCounts)
 
 		notesWithIndex = append(notesWithIndex, NoteWithIndex{
-			Note:            note,
+			Note:            notes[i],
 			HourlyCounts:    hourlyCounts,
 			TotalDetections: totalDetections,
 		})
-		//log.Printf("Total time for processing note %s: %v", note.CommonName, time.Since(noteStartTime)) // Print the total time for this note
-
 	}
 	log.Printf("Total time for processing all notes: %v", time.Since(startTime)) // Print the total time for the function
 

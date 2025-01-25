@@ -106,7 +106,7 @@ func (c *client) Connect(ctx context.Context) error {
 }
 
 // Publish sends a message to the specified topic on the MQTT broker.
-func (c *client) Publish(ctx context.Context, topic string, payload string) error {
+func (c *client) Publish(ctx context.Context, topic, payload string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

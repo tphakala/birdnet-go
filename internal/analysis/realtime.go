@@ -142,7 +142,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 	// start cleanup of clips
 	if conf.Setting().Realtime.Audio.Export.Retention.Policy != "none" {
-		startClipCleanupMonitor(&wg, dataStore, quitChan)
+		startClipCleanupMonitor(&wg, quitChan)
 	}
 
 	// start weather polling
@@ -188,9 +188,9 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 }
 
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
-func startClipCleanupMonitor(wg *sync.WaitGroup, dataStore datastore.Interface, quitChan chan struct{}) {
+func startClipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}) {
 	wg.Add(1)
-	go clipCleanupMonitor(wg, dataStore, quitChan)
+	go clipCleanupMonitor(wg, quitChan)
 }
 
 // startWeatherPolling initializes and starts the weather polling routine in a new goroutine.
@@ -247,7 +247,7 @@ func closeDataStore(store datastore.Interface) {
 }
 
 // ClipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
-func clipCleanupMonitor(wg *sync.WaitGroup, dataStore datastore.Interface, quitChan chan struct{}) {
+func clipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}) {
 	defer wg.Done() // Ensure that the WaitGroup is marked as done after the function exits
 
 	// Create a ticker that triggers every five minutes to perform cleanup
@@ -302,7 +302,7 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 		// Use a WaitGroup to wait for all goroutines to complete
 		var wg sync.WaitGroup
 
-		for _, species := range speciesList {
+		for i := range speciesList {
 			wg.Add(1)
 
 			// Launch a goroutine to fetch the image for each species
@@ -316,7 +316,7 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 				} else {
 					//log.Printf("Successfully fetched image for species %s\n", speciesName)
 				}*/
-			}(species.ScientificName)
+			}(speciesList[i].ScientificName)
 		}
 
 		// Wait for all goroutines to complete

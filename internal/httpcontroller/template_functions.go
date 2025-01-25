@@ -228,7 +228,7 @@ func seqFunc(start, end int) []int {
 //
 //	A map containing the hour metadata with keys:
 //	"Class", "Length", "HourIndex", "Date", "Sunrise", "Sunset"
-func getHourlyHeaderData(hourIndex int, class string, length int, date string, sunrise int, sunset int) map[string]interface{} {
+func getHourlyHeaderData(hourIndex int, class string, length int, date string, sunrise, sunset int) map[string]interface{} {
 	baseData := map[string]interface{}{
 		"Class":     class,
 		"Length":    length,
@@ -248,7 +248,7 @@ func getHourlyHeaderData(hourIndex int, class string, length int, date string, s
 // Returns:
 //
 //	map[string]interface{} with HourIndex and species Name
-func getHourlyCounts(element handlers.NoteWithIndex, hourIndex int) map[string]interface{} {
+func getHourlyCounts(element *handlers.NoteWithIndex, hourIndex int) map[string]interface{} {
 	baseData := map[string]interface{}{
 		"HourIndex": hourIndex,
 		"Name":      element.Note.CommonName,
@@ -266,7 +266,7 @@ func getHourlyCounts(element handlers.NoteWithIndex, hourIndex int) map[string]i
 // Returns:
 //
 //	Sum of counts within specified range
-func sumHourlyCountsRange(counts [24]int, start, length int) int {
+func sumHourlyCountsRange(counts *[24]int, start, length int) int {
 	sum := 0
 	for i := start; i < start+length; i++ {
 		sum += counts[i%24]

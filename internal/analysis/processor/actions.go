@@ -212,7 +212,7 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 		return fmt.Errorf("BirdWeather client is not initialized")
 	}
 
-	if err := a.BwClient.Publish(a.Note, a.pcmData); err != nil {
+	if err := a.BwClient.Publish(&a.Note, a.pcmData); err != nil {
 		log.Printf("error uploading to BirdWeather: %s\n", err)
 		return err
 	} else if a.Settings.Debug {

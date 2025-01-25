@@ -72,7 +72,7 @@ func CaptureSystemInfo(errorMessage string) string {
 		debugFilePath := filepath.Join(filepath.Dir(configPath), debugFileName)
 
 		// Write the debug info to the file
-		err = os.WriteFile(debugFilePath, []byte(info.String()), 0644)
+		err = os.WriteFile(debugFilePath, []byte(info.String()), 0o644)
 		if err != nil {
 			log.Printf("Error writing debug file: %v", err)
 		} else {

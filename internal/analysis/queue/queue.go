@@ -20,7 +20,7 @@ type Results struct {
 // This is needed because the data in the struct is a pointer to the original data
 // and if we don't make a deep copy, the original data will be overwritten when the
 // struct is reused for another detection.
-func (r Results) Copy() Results {
+func (r Results) Copy() Results { //nolint:gocritic // This is a copy function, avoid warning about heavy parameters
 	// Create a new Results struct with simple field copies
 	newCopy := Results{
 		StartTime:   r.StartTime,
