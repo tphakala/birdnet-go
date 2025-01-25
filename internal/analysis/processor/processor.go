@@ -41,6 +41,7 @@ type Processor struct {
 	pendingMutex        sync.Mutex // Mutex to protect access to pendingDetections
 	lastDogDetectionLog map[string]time.Time
 	dogDetectionMutex   sync.Mutex
+	detectionMutex      sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
 	controlChan         chan string
 }
 
@@ -139,14 +140,15 @@ func (p *Processor) startDetectionProcessor() {
 	go func() {
 		// ResultsQueue is fed by myaudio.ProcessData()
 		for item := range queue.ResultsQueue {
-			p.processDetections(item)
+			itemCopy := item
+			p.processDetections(&itemCopy)
 		}
 	}()
 }
 
 // processDetections examines each detection from the queue, updating held detections
 // with new or higher-confidence instances and setting an appropriate flush deadline.
-func (p *Processor) processDetections(item queue.Results) {
+func (p *Processor) processDetections(item *queue.Results) {
 	// Delay before a detection is considered final and is flushed.
 	// TODO: make this configurable
 	const delay = 15 * time.Second
@@ -194,7 +196,7 @@ func (p *Processor) processDetections(item queue.Results) {
 }
 
 // processResults processes the results from the BirdNET prediction and returns a list of detections.
-func (p *Processor) processResults(item queue.Results) []Detections {
+func (p *Processor) processResults(item *queue.Results) []Detections {
 	var detections []Detections
 
 	// Collect processing time metric
@@ -212,8 +214,8 @@ func (p *Processor) processResults(item queue.Results) []Detections {
 
 		// Handle dog and human detection, this sets LastDogDetection and LastHumanDetection which is
 		// later used to discard detection if privacy filter or dog bark filters are enabled in settings.
-		p.handleDogDetection(&item, speciesLowercase, result)
-		p.handleHumanDetection(&item, speciesLowercase, result)
+		p.handleDogDetection(item, speciesLowercase, result)
+		p.handleHumanDetection(item, speciesLowercase, result)
 
 		// Determine base confidence threshold
 		baseThreshold := p.getBaseConfidenceThreshold(speciesLowercase)
@@ -276,7 +278,9 @@ func (p *Processor) handleDogDetection(item *queue.Results, speciesLowercase str
 	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, "dog") &&
 		result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
 		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, item.Source)
+		p.detectionMutex.Lock()
 		p.LastDogDetection[item.Source] = item.StartTime
+		p.detectionMutex.Unlock()
 	}
 }
 
@@ -288,7 +292,9 @@ func (p *Processor) handleHumanDetection(item *queue.Results, speciesLowercase s
 		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, item.Source)
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
 		// bird detections if a human vocalization is detected after the first detection
+		p.detectionMutex.Lock()
 		p.LastHumanDetection[item.Source] = item.StartTime
+		p.detectionMutex.Unlock()
 	}
 }
 
@@ -335,93 +341,91 @@ func (p *Processor) generateClipName(scientificName string, confidence float32) 
 	return clipName
 }
 
+// shouldDiscardDetection checks if a detection should be discarded based on various criteria
+func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections int) (shouldDiscard bool, reason string) {
+	// Check minimum detection count
+	if item.Count < minDetections {
+		return true, fmt.Sprintf("false positive, matched %d/%d times", item.Count, minDetections)
+	}
+
+	// Check privacy filter
+	if p.Settings.Realtime.PrivacyFilter.Enabled {
+		p.detectionMutex.RLock()
+		lastHumanDetection, exists := p.LastHumanDetection[item.Source]
+		p.detectionMutex.RUnlock()
+		if exists && lastHumanDetection.After(item.FirstDetected) {
+			return true, "privacy filter"
+		}
+	}
+
+	// Check dog bark filter
+	if p.Settings.Realtime.DogBarkFilter.Enabled {
+		if p.Settings.Realtime.DogBarkFilter.Debug {
+			p.detectionMutex.RLock()
+			log.Printf("Last dog detection: %s\n", p.LastDogDetection)
+			p.detectionMutex.RUnlock()
+		}
+		p.detectionMutex.RLock()
+		lastDogDetection := p.LastDogDetection[item.Source]
+		p.detectionMutex.RUnlock()
+		if p.CheckDogBarkFilter(item.Detection.Note.CommonName, lastDogDetection) ||
+			p.CheckDogBarkFilter(item.Detection.Note.ScientificName, lastDogDetection) {
+			return true, "recent dog bark"
+		}
+	}
+
+	return false, ""
+}
+
+// processApprovedDetection handles an approved detection by sending it to the worker queue
+func (p *Processor) processApprovedDetection(item *PendingDetection, species string) {
+	log.Printf("Approving detection of %s from source %s, matched %d times\n",
+		species, item.Source, item.Count)
+
+	item.Detection.Note.BeginTime = item.FirstDetected
+	actionList := p.getActionsForItem(&item.Detection)
+	for _, action := range actionList {
+		workerQueue <- Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
+	}
+
+	// Update BirdNET metrics detection counter if enabled
+	if p.Settings.Realtime.Telemetry.Enabled && p.Metrics != nil && p.Metrics.BirdNET != nil {
+		p.Metrics.BirdNET.IncrementDetectionCounter(item.Detection.Note.CommonName)
+	}
+}
+
 // pendingDetectionsFlusher runs a goroutine that periodically checks the pending detections
 // and flushes them to the worker queue if their deadline has passed.
 func (p *Processor) pendingDetectionsFlusher() {
-	// Determine minDetections based on Settings.BirdNET.Overlap
-	var minDetections int
-
-	// Calculate segment length based on overlap setting, minimum 0.1 seconds
+	// Calculate minimum detections based on overlap setting
 	segmentLength := math.Max(0.1, 3.0-p.Settings.BirdNET.Overlap)
-	// Calculate minimum detections needed based on segment length, at least 1
-	minDetections = int(math.Max(1, 3/segmentLength))
+	minDetections := int(math.Max(1, 3/segmentLength))
 
 	go func() {
-		// Create a ticker that ticks every second to frequently check for flush deadlines.
 		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop() // Ensure the ticker is stopped to avoid leaking resources.
+		defer ticker.Stop()
 
 		for {
-			<-ticker.C // Wait for the ticker to tick.
+			<-ticker.C
 			now := time.Now()
 
-			// Lock the mutex to ensure thread-safe access to the PendingDetections map.
 			p.pendingMutex.Lock()
-
-			// Iterate through the pending detections map
-			for species, item := range p.pendingDetections {
-				// If the current time is past the flush deadline, process the detection.
+			for species := range p.pendingDetections {
+				item := p.pendingDetections[species]
 				if now.After(item.FlushDeadline) {
-					// check if count is less than minDetections, if so discard the detection
-					if item.Count < minDetections {
-						log.Printf("Discarding detection of %s from source %s as false positive, matched %d/%d times\n", species, item.Source, item.Count, minDetections)
+					if shouldDiscard, reason := p.shouldDiscardDetection(&item, minDetections); shouldDiscard {
+						log.Printf("Discarding detection of %s from source %s due to %s\n",
+							species, item.Source, reason)
 						delete(p.pendingDetections, species)
 						continue
 					}
 
-					// Check if human was detected after the first detection and discard if so
-					if p.Settings.Realtime.PrivacyFilter.Enabled {
-						lastHumanDetection, exists := p.LastHumanDetection[item.Source]
-						if exists && lastHumanDetection.After(item.FirstDetected) {
-							log.Printf("Discarding detection of %s from source %s due to privacy filter\n", species, item.Source)
-							delete(p.pendingDetections, species)
-							continue
-						}
-					}
-
-					// Check dog bark filter
-					if p.Settings.Realtime.DogBarkFilter.Enabled {
-						if p.Settings.Realtime.DogBarkFilter.Debug {
-							log.Printf("Last dog detection: %s\n", p.LastDogDetection)
-						}
-						// Check against common name
-						if p.CheckDogBarkFilter(item.Detection.Note.CommonName, p.LastDogDetection[item.Source]) {
-							log.Printf("Discarding detection of %s from source %s due to recent dog bark\n", item.Detection.Note.CommonName, item.Source)
-							delete(p.pendingDetections, species)
-							continue
-						}
-						// Check against scientific name
-						if p.CheckDogBarkFilter(item.Detection.Note.ScientificName, p.LastDogDetection[item.Source]) {
-							log.Printf("Discarding detection of %s from source %s due to recent dog bark\n", item.Detection.Note.CommonName, item.Source)
-							delete(p.pendingDetections, species)
-							continue
-						}
-					}
-
-					log.Printf("Approving detection of %s from source %s, matched %d/%d times\n", species, item.Source, item.Count, minDetections)
-
-					// Set the detection's begin time to the time it was first detected, this is
-					// where we start audio export for the detection.
-					item.Detection.Note.BeginTime = item.FirstDetected
-
-					// Retrieve and execute actions based on the held detection.
-					actionList := p.getActionsForItem(item.Detection)
-					for _, action := range actionList {
-						workerQueue <- Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
-					}
-
-					// Detection is now processed, remove it from pending detections map.
+					p.processApprovedDetection(&item, species)
 					delete(p.pendingDetections, species)
-
-					// Update BirdNET metrics detection counter
-					if p.Settings.Realtime.Telemetry.Enabled && p.Metrics != nil && p.Metrics.BirdNET != nil {
-						p.Metrics.BirdNET.IncrementDetectionCounter(item.Detection.Note.CommonName)
-					}
 				}
 			}
 			p.pendingMutex.Unlock()
 
-			// Perform cleanup of stale dynamic thresholds
 			p.cleanUpDynamicThresholds()
 		}
 	}()
@@ -435,4 +439,111 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// getActionsForItem determines the actions to be taken for a given detection.
+func (p *Processor) getActionsForItem(detection *Detections) []Action {
+	speciesName := strings.ToLower(detection.Note.CommonName)
+
+	// Check if species has custom configuration
+	if speciesConfig, exists := p.Settings.Realtime.Species.Config[speciesName]; exists {
+		if p.Settings.Debug {
+			log.Println("Species config exists for custom actions")
+		}
+
+		var actions []Action
+
+		// Add custom actions from the new structure
+		for _, actionConfig := range speciesConfig.Actions {
+			switch actionConfig.Type {
+			case "ExecuteCommand":
+				if len(actionConfig.Parameters) > 0 {
+					actions = append(actions, &ExecuteCommandAction{
+						Command: actionConfig.Command,
+						Params:  parseCommandParams(actionConfig.Parameters, detection),
+					})
+				}
+			case "SendNotification":
+				// Add notification action handling
+				// ... implementation ...
+			}
+		}
+
+		// If there are custom actions, return only those
+		if len(actions) > 0 {
+			return actions
+		}
+	}
+
+	// Fall back to default actions if no custom actions or if custom actions should be combined
+	return p.getDefaultActions(detection)
+}
+
+// Helper function to parse command parameters
+func parseCommandParams(params []string, detection *Detections) map[string]interface{} {
+	commandParams := make(map[string]interface{})
+	for _, param := range params {
+		value := getNoteValueByName(&detection.Note, param)
+		// Check if the parameter is confidence and normalize it
+		if param == "confidence" {
+			if confidence, ok := value.(float64); ok {
+				value = confidence * 100
+			}
+		}
+		commandParams[param] = value
+	}
+	return commandParams
+}
+
+// getDefaultActions returns the default actions to be taken for a given detection.
+func (p *Processor) getDefaultActions(detection *Detections) []Action {
+	var actions []Action
+
+	// Append various default actions based on the application settings
+	if p.Settings.Realtime.Log.Enabled {
+		actions = append(actions, &LogAction{Settings: p.Settings, EventTracker: p.EventTracker, Note: detection.Note})
+	}
+
+	if p.Settings.Output.SQLite.Enabled || p.Settings.Output.MySQL.Enabled {
+		actions = append(actions, &DatabaseAction{
+			Settings:     p.Settings,
+			EventTracker: p.EventTracker,
+			Note:         detection.Note,
+			Results:      detection.Results,
+			Ds:           p.Ds})
+	}
+
+	// Add BirdWeatherAction if enabled and client is initialized
+	if p.Settings.Realtime.Birdweather.Enabled && p.BwClient != nil {
+		actions = append(actions, &BirdWeatherAction{
+			Settings:     p.Settings,
+			EventTracker: p.EventTracker,
+			BwClient:     p.BwClient,
+			Note:         detection.Note,
+			pcmData:      detection.pcmData3s})
+	}
+
+	// Add MQTT action if enabled
+	if p.Settings.Realtime.MQTT.Enabled && p.MqttClient != nil {
+		actions = append(actions, &MqttAction{
+			Settings:       p.Settings,
+			MqttClient:     p.MqttClient,
+			EventTracker:   p.EventTracker,
+			Note:           detection.Note,
+			BirdImageCache: p.BirdImageCache,
+		})
+	}
+
+	// Check if UpdateRangeFilterAction needs to be executed for the day
+	today := time.Now().Truncate(24 * time.Hour) // Current date with time set to midnight
+	if p.Settings.BirdNET.RangeFilter.LastUpdated.Before(today) {
+		fmt.Println("Updating species range filter")
+		// Add UpdateRangeFilterAction if it hasn't been executed today
+		actions = append(actions, &UpdateRangeFilterAction{
+			Bn:       p.Bn,
+			Settings: p.Settings,
+		})
+	}
+
+	return actions
 }
