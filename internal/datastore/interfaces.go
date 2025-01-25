@@ -84,50 +84,54 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 			continue
 		}
 
-		// Roll back the transaction if a panic occurs
-		defer func() {
-			if r := recover(); r != nil {
-				tx.Rollback()
-			}
-		}()
+		err := func() error {
+			defer func() {
+				if r := recover(); r != nil {
+					tx.Rollback()
+				}
+			}()
 
-		// Save the note and its associated results within the transaction
-		if err := tx.Create(note).Error; err != nil {
-			tx.Rollback()
-			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
-				delay := baseDelay * time.Duration(attempt+1)
-				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
-				time.Sleep(delay)
-				continue
-			}
-			return fmt.Errorf("saving note: %w", err)
-		}
-
-		// Assign the note ID to each result and save them
-		for _, result := range results {
-			result.NoteID = note.ID
-			if err := tx.Create(&result).Error; err != nil {
+			// Save the note and its associated results within the transaction
+			if err := tx.Create(note).Error; err != nil {
 				tx.Rollback()
 				if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
-					delay := baseDelay * time.Duration(attempt+1)
-					log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
-					time.Sleep(delay)
-					continue
+					return err
 				}
-				lastErr = fmt.Errorf("saving result: %w", err)
-				return lastErr
+				return fmt.Errorf("saving note: %w", err)
 			}
-		}
 
-		// Commit the transaction
-		if err := tx.Commit().Error; err != nil {
+			// Assign the note ID to each result and save them
+			for _, result := range results {
+				result.NoteID = note.ID
+				if err := tx.Create(&result).Error; err != nil {
+					tx.Rollback()
+					if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
+						return err
+					}
+					return fmt.Errorf("saving result: %w", err)
+				}
+			}
+
+			// Commit the transaction
+			if err := tx.Commit().Error; err != nil {
+				if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
+					return err
+				}
+				return fmt.Errorf("committing transaction: %w", err)
+			}
+
+			return nil
+		}()
+
+		if err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
 				delay := baseDelay * time.Duration(attempt+1)
 				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
 				time.Sleep(delay)
+				lastErr = err
 				continue
 			}
-			return fmt.Errorf("committing transaction: %w", err)
+			return err
 		}
 
 		// Log if retry count is not 0 and transaction was successful
