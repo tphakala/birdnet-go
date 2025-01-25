@@ -134,11 +134,11 @@ func (s *Server) handleBasicAuthLogin(c echo.Context) error {
 // handleLogout logs the user out from all providers
 func (s *Server) handleLogout(c echo.Context) error {
 	// Logout from all providers
-	gothic.StoreInSession("userId", "", c.Request(), c.Response())       //nolint:errcheck
-	gothic.StoreInSession("access_token", "", c.Request(), c.Response()) //nolint:errcheck
+	gothic.StoreInSession("userId", "", c.Request(), c.Response())       //nolint:errcheck // session errors during logout can be ignored
+	gothic.StoreInSession("access_token", "", c.Request(), c.Response()) //nolint:errcheck // session errors during logout can be ignored
 
 	// Logout from gothic session
-	gothic.Logout(c.Response(), c.Request()) //nolint:errcheck
+	gothic.Logout(c.Response(), c.Request()) //nolint:errcheck // gothic logout errors can be ignored during cleanup
 
 	// Handle Cloudflare logout if enabled
 	if s.CloudflareAccess.IsEnabled(c) {
