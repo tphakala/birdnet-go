@@ -37,9 +37,9 @@ func CollectDiagnostics() (string, error) {
 	case "linux":
 		err = collectLinuxDiagnostics(tmpDir)
 	case "windows":
-		err = collectWindowsDiagnostics(tmpDir)
+		err = collectWindowsDiagnostics()
 	case "darwin":
-		err = collectMacOSDiagnostics(tmpDir)
+		err = collectMacOSDiagnostics()
 	default:
 		err = fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
@@ -137,7 +137,7 @@ func collectLegacyLogs(tmpDir string) error {
 					fmt.Printf("Notice: Failed to tail %s: %v\n", file, err)
 					continue
 				}
-				if _, err := f.WriteString(fmt.Sprintf("=== %s ===\n", file)); err != nil {
+				if _, err := fmt.Fprintf(f, "=== %s ===\n", file); err != nil {
 					return fmt.Errorf("failed to write file header: %w", err)
 				}
 				if _, err := f.Write(tailOutput); err != nil {
@@ -186,7 +186,7 @@ func collectHardwareInfo(tmpDir string) error {
 }
 
 // collectWindowsDiagnostics gathers Windows-specific diagnostic information
-func collectWindowsDiagnostics(tmpDir string) error {
+func collectWindowsDiagnostics() error {
 	// TODO: Implement Windows-specific diagnostics collection
 	// This function should gather information such as:
 	// - System information (using 'systeminfo' command)
@@ -200,7 +200,7 @@ func collectWindowsDiagnostics(tmpDir string) error {
 }
 
 // collectMacOSDiagnostics gathers macOS-specific diagnostic information
-func collectMacOSDiagnostics(tmpDir string) error {
+func collectMacOSDiagnostics() error {
 	// TODO: Implement macOS-specific diagnostics collection
 	// This function should gather information such as:
 	// - System information (using 'system_profiler' command)
@@ -311,7 +311,7 @@ func runCommand(command string, args []string, outputFile string) error {
 
 	// Write the command output to the specified file
 	// 0644 sets read/write permissions for owner, and read-only for others
-	return os.WriteFile(outputFile, output, 0644)
+	return os.WriteFile(outputFile, output, 0o644)
 }
 
 // zipDirectory compresses the contents of a source directory into a zip file
@@ -413,7 +413,7 @@ func collectConfigFile(tmpDir string) error {
 
 	// Write the masked config to the temporary directory
 	outputPath := filepath.Join(tmpDir, "config.yaml")
-	err = os.WriteFile(outputPath, []byte(maskedContent), 0644)
+	err = os.WriteFile(outputPath, []byte(maskedContent), 0o644)
 	if err != nil {
 		return fmt.Errorf("error writing masked config file: %w", err)
 	}
@@ -466,7 +466,7 @@ func maskValue(value string) string {
 // isIPOrURL checks if a string is an IP address or URL
 func isIPOrURL(value string) bool {
 	ipRegex := regexp.MustCompile(`^(\d{1,3}\.){3}\d{1,3}(:\d+)?$`)
-	urlRegex := regexp.MustCompile(`^(http|https|rtsp):\/\/`)
+	urlRegex := regexp.MustCompile(`^(http|https|rtsp)://`)
 	return ipRegex.MatchString(value) || urlRegex.MatchString(value)
 }
 

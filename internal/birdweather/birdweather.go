@@ -61,7 +61,7 @@ func New(settings *conf.Settings) (*BwClient, error) {
 // RandomizeLocation adds a random offset to the given latitude and longitude to fuzz the location
 // within a specified radius in meters for privacy, truncating the result to 4 decimal places.
 // radiusMeters - the maximum radius in meters to adjust the coordinates
-func (b *BwClient) RandomizeLocation(radiusMeters float64) (float64, float64) {
+func (b *BwClient) RandomizeLocation(radiusMeters float64) (latitude, longitude float64) {
 	// Create a new local random generator seeded with current Unix time
 	src := rand.NewSource(time.Now().UnixNano())
 	rnd := rand.New(src)
@@ -74,10 +74,10 @@ func (b *BwClient) RandomizeLocation(radiusMeters float64) (float64, float64) {
 	lonOffset := (rnd.Float64() - 0.5) * 2 * degreeOffset
 
 	// Apply the offsets to the original coordinates and truncate to 4 decimal places
-	newLatitude := math.Floor((b.Latitude+latOffset)*10000) / 10000
-	newLongitude := math.Floor((b.Longitude+lonOffset)*10000) / 10000
+	latitude = math.Floor((b.Latitude+latOffset)*10000) / 10000
+	longitude = math.Floor((b.Longitude+lonOffset)*10000) / 10000
 
-	return newLatitude, newLongitude
+	return latitude, longitude
 }
 
 // handleNetworkError handles network errors and returns a more specific error message.
@@ -257,7 +257,7 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 
 // Upload function handles the uploading of detected clips and their details to Birdweather.
 // It first parses the timestamp from the note, then uploads the soundscape, and finally posts the detection.
-func (b *BwClient) Publish(note datastore.Note, pcmData []byte) error {
+func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) error {
 	// Add check for empty pcmData
 	if len(pcmData) == 0 {
 		return fmt.Errorf("pcmData is empty")

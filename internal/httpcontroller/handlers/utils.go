@@ -23,7 +23,7 @@ func getCurrentDate() string {
 }
 
 // sumHourlyCounts calculates the total counts from hourly counts.
-func sumHourlyCounts(hourlyCounts [24]int) int {
+func sumHourlyCounts(hourlyCounts *[24]int) int {
 	total := 0
 	for _, count := range hourlyCounts {
 		total += count

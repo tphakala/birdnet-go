@@ -94,7 +94,7 @@ func GetBasePath(path string) string {
 	// Check if the directory exists.
 	if _, err := os.Stat(basePath); os.IsNotExist(err) {
 		// Attempt to create the directory if it doesn't exist.
-		if err := os.MkdirAll(basePath, 0755); err != nil {
+		if err := os.MkdirAll(basePath, 0o755); err != nil {
 			fmt.Printf("failed to create directory '%s': %v\n", basePath, err)
 			// Note: In a robust application, you might want to handle this error more gracefully.
 		}
@@ -222,7 +222,7 @@ func ParsePercentage(percentage string) (float64, error) {
 
 // ParseRetentionPeriod converts a string like "24h", "7d", "1w", "3m", "1y" to hours.
 func ParseRetentionPeriod(retention string) (int, error) {
-	if len(retention) == 0 {
+	if retention == "" {
 		return 0, fmt.Errorf("retention period cannot be empty")
 	}
 
@@ -325,7 +325,7 @@ func IsFfmpegAvailable() bool {
 
 // IsSoxAvailable checks if SoX is available in the system PATH and returns its supported audio formats.
 // It returns a boolean indicating if SoX is available and a slice of supported audio format strings.
-func IsSoxAvailable() (bool, []string) {
+func IsSoxAvailable() (isAvailable bool, formats []string) {
 	// Look for the SoX binary in the system PATH
 	soxPath, err := exec.LookPath(GetSoxBinaryName())
 	if err != nil {

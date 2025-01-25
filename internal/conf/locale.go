@@ -82,7 +82,7 @@ func NormalizeLocale(inputLocale string) (string, error) {
 	}
 
 	for code, fullName := range LocaleCodes {
-		if strings.ToLower(fullName) == inputLocale {
+		if strings.EqualFold(fullName, inputLocale) {
 			return code, nil
 		}
 	}

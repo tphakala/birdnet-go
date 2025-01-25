@@ -28,6 +28,11 @@ var assetsFs embed.FS
 var viewsFs embed.FS
 
 func main() {
+	exitCode := mainWithExitCode()
+	os.Exit(exitCode)
+}
+
+func mainWithExitCode() int {
 	// Check if profiling is enabled
 	if os.Getenv("BIRDNET_GO_PROFILE") == "1" {
 		fmt.Println("Profiling enabled")
@@ -38,13 +43,13 @@ func main() {
 		f, err := os.Create(profilePath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating profile file: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		defer f.Close()
 
 		if err := pprof.StartCPUProfile(f); err != nil {
 			fmt.Fprintf(os.Stderr, "Error starting CPU profile: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		defer pprof.StopCPUProfile()
 	}
@@ -57,7 +62,7 @@ func main() {
 	settings := conf.Setting()
 	if settings == nil {
 		fmt.Fprintf(os.Stderr, "Error loading configuration\n")
-		os.Exit(1)
+		return 1
 	}
 
 	// Set runtime values
@@ -72,9 +77,11 @@ func main() {
 	if err := rootCmd.Execute(); err != nil {
 		if errors.Is(err, analysis.ErrAnalysisCanceled) {
 			// Clean exit for user-initiated cancellation
-			os.Exit(0)
+			return 0
 		}
 		fmt.Fprintf(os.Stderr, "Command execution error: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
+
+	return 0
 }
