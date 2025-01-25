@@ -5,16 +5,8 @@
      hx-get="/detections/recent" 
      hx-target="this"
      hx-swap="innerHTML"
-     hx-indicator="#refresh-indicator"
+     hx-indicator="#global-loading-indicator"
      hx-preserve="true">
-
-  <!-- Add a loading indicator -->
-  <div id="refresh-indicator" class="htmx-indicator opacity-50">
-    <div class="flex justify-center items-center p-4">
-      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      <span class="ml-2">Updating list...</span>
-    </div>
-  </div>
 
   <table class="hidden sm:table table w-full text-sm text-left">
     <thead class="text-xs">

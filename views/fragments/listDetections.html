@@ -1,6 +1,10 @@
 {{define "listDetections"}}
 
-<section class="card col-span-12 overflow-x-auto bg-base-100 shadow-sm">
+<section class="card col-span-12 overflow-x-auto bg-base-100 shadow-sm" 
+         hx-trigger="refreshSpeciesList from:body" 
+         hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{.Offset}}" 
+         hx-target="#mainContent"
+         hx-swap="innerHTML">
     <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
         <div class="flex justify-between">
             <!-- Title -->
