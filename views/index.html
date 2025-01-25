@@ -67,6 +67,16 @@
 
 	<!-- Login form in a DaisyUI modal -->
 	<dialog id="loginModal" class="modal modal-bottom sm:modal-middle"></dialog>
+
+	<!-- Global Loading Indicator -->
+	<div id="global-loading-indicator" 
+		 class="htmx-indicator fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+		<div class="bg-base-100 rounded-lg p-4 flex items-center space-x-3 shadow-lg pointer-events-auto">
+			<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+			<span class="text-base-content">Loading...</span>
+		</div>
+	</div>
+
 	<script>
 
 		// Function to set theme

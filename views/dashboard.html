@@ -50,6 +50,7 @@
 			<select id="numDetections" name="numDetections" 
 					hx-get="/detections/recent" 
 					hx-target="#recentDetections-wrapper"
+					hx-indicator="#global-loading-indicator"
 					hx-trigger="change" 
 					class="select select-sm focus-visible:outline-none">
 				<option value="5" selected>5</option>
@@ -64,6 +65,7 @@
 	<div id="recentDetections-wrapper" 
 		 hx-get="/detections/recent" 
 		 hx-trigger="load refreshList"
+		 hx-indicator="#global-loading-indicator"
 		 hx-swap="innerHTML">
 	</div>
 </section>
