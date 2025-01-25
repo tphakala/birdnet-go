@@ -141,6 +141,75 @@ func formatProgressLine(filename string, duration time.Duration, chunkCount, tot
 		baseFormat)
 }
 
+// monitorProgress starts a goroutine to monitor and display analysis progress
+func monitorProgress(ctx context.Context, doneChan chan struct{}, filename string, duration time.Duration,
+	totalChunks int, chunkCount *int, startTime time.Time) {
+
+	lastChunkCount := 0
+	lastProgressUpdate := startTime
+
+	// Moving average window for chunks/sec calculation
+	const windowSize = 10 // Number of samples to average
+	chunkRates := make([]float64, 0, windowSize)
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-doneChan:
+			return
+		case <-ticker.C:
+			currentTime := time.Now()
+			timeSinceLastUpdate := currentTime.Sub(lastProgressUpdate)
+
+			// Calculate current chunk rate
+			chunksProcessed := *chunkCount - lastChunkCount
+			currentRate := float64(chunksProcessed) / timeSinceLastUpdate.Seconds()
+
+			// Update moving average
+			if len(chunkRates) >= windowSize {
+				// Remove oldest value
+				chunkRates = chunkRates[1:]
+			}
+			chunkRates = append(chunkRates, currentRate)
+
+			// Calculate average rate
+			var avgRate float64
+			if len(chunkRates) > 0 {
+				sum := 0.0
+				for _, rate := range chunkRates {
+					sum += rate
+				}
+				avgRate = sum / float64(len(chunkRates))
+			}
+
+			// Update counters for next iteration
+			lastChunkCount = *chunkCount
+			lastProgressUpdate = currentTime
+
+			// Get terminal width
+			width, _, err := term.GetSize(int(os.Stdout.Fd()))
+			if err != nil {
+				width = 80 // Default to 80 columns if we can't get terminal width
+			}
+
+			// Format and print the progress line
+			fmt.Print(formatProgressLine(
+				filename,
+				duration,
+				*chunkCount,
+				totalChunks,
+				avgRate,
+				birdnet.EstimateTimeRemaining(startTime, *chunkCount, totalChunks),
+				width,
+			))
+		}
+	}
+}
+
 // processAudioFile processes the audio file and returns the notes.
 func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx context.Context) ([]datastore.Note, error) {
 	// Calculate total chunks
@@ -164,12 +233,6 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 
 	startTime := time.Now()
 	chunkCount := 1
-	lastChunkCount := 0
-	lastProgressUpdate := startTime
-
-	// Moving average window for chunks/sec calculation
-	const windowSize = 10 // Number of samples to average
-	chunkRates := make([]float64, 0, windowSize)
 
 	// Set number of workers to 1
 	numWorkers := 1
@@ -254,64 +317,7 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 	}
 
 	// Start progress monitoring goroutine
-	go func() {
-		ticker := time.NewTicker(100 * time.Millisecond)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-doneChan:
-				return
-			case <-ticker.C:
-				currentTime := time.Now()
-				timeSinceLastUpdate := currentTime.Sub(lastProgressUpdate)
-
-				// Calculate current chunk rate
-				chunksProcessed := chunkCount - lastChunkCount
-				currentRate := float64(chunksProcessed) / timeSinceLastUpdate.Seconds()
-
-				// Update moving average
-				if len(chunkRates) >= windowSize {
-					// Remove oldest value
-					chunkRates = chunkRates[1:]
-				}
-				chunkRates = append(chunkRates, currentRate)
-
-				// Calculate average rate
-				var avgRate float64
-				if len(chunkRates) > 0 {
-					sum := 0.0
-					for _, rate := range chunkRates {
-						sum += rate
-					}
-					avgRate = sum / float64(len(chunkRates))
-				}
-
-				// Update counters for next iteration
-				lastChunkCount = chunkCount
-				lastProgressUpdate = currentTime
-
-				// Get terminal width
-				width, _, err := term.GetSize(int(os.Stdout.Fd()))
-				if err != nil {
-					width = 80 // Default to 80 columns if we can't get terminal width
-				}
-
-				// Format and print the progress line
-				fmt.Print(formatProgressLine(
-					filename,
-					duration,
-					chunkCount,
-					totalChunks,
-					avgRate,
-					birdnet.EstimateTimeRemaining(startTime, chunkCount, totalChunks),
-					width,
-				))
-			}
-		}
-	}()
+	go monitorProgress(ctx, doneChan, filename, duration, totalChunks, &chunkCount, startTime)
 
 	// Start result collector goroutine
 	var processingError error
