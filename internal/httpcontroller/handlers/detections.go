@@ -38,6 +38,7 @@ type NoteWithWeather struct {
 // DeleteDetection handles the deletion of a detection and its associated files
 func (h *Handlers) DeleteDetection(c echo.Context) error {
 	id := c.QueryParam("id")
+
 	if id == "" {
 		h.SSE.SendNotification(Notification{
 			Message: "Missing detection ID",
@@ -46,9 +47,10 @@ func (h *Handlers) DeleteDetection(c echo.Context) error {
 		return h.NewHandlerError(fmt.Errorf("no ID provided"), "Missing detection ID", http.StatusBadRequest)
 	}
 
-	// Get the clip path before starting async deletion
+	// Get the clip path before deletion
 	clipPath, err := h.DS.GetNoteClipPath(id)
 	if err != nil {
+		h.Debug("Failed to get clip path: %v", err)
 		h.SSE.SendNotification(Notification{
 			Message: fmt.Sprintf("Failed to get clip path: %v", err),
 			Type:    "error",
@@ -56,45 +58,43 @@ func (h *Handlers) DeleteDetection(c echo.Context) error {
 		return h.NewHandlerError(err, "Failed to get clip path", http.StatusInternalServerError)
 	}
 
-	// Start async deletion
-	go func() {
-		// Delete the note from the database
-		if err := h.DS.Delete(id); err != nil {
-			h.SSE.SendNotification(Notification{
-				Message: fmt.Sprintf("Failed to delete note: %v", err),
-				Type:    "error",
-			})
-			h.logger.Printf("Error deleting note %s: %v", id, err)
-			return
-		}
-
-		// If there was a clip associated, delete the audio file and spectrogram
-		if clipPath != "" {
-			// Delete audio file
-			audioPath := fmt.Sprintf("%s/%s", h.Settings.Realtime.Audio.Export.Path, clipPath)
-			if err := os.Remove(audioPath); err != nil && !os.IsNotExist(err) {
-				h.logger.Printf("Warning: Failed to delete audio file %s: %v", audioPath, err)
-			}
-
-			// Delete spectrogram file - stored in same directory with .png extension
-			spectrogramPath := fmt.Sprintf("%s/%s.png", h.Settings.Realtime.Audio.Export.Path, strings.TrimSuffix(clipPath, ".wav"))
-			if err := os.Remove(spectrogramPath); err != nil && !os.IsNotExist(err) {
-				h.logger.Printf("Warning: Failed to delete spectrogram file %s: %v", spectrogramPath, err)
-			}
-		}
-
-		// Log the successful deletion
-		h.logger.Printf("Deleted detection %s", id)
-
-		// Send success notification
+	// Delete the note from the database
+	if err := h.DS.Delete(id); err != nil {
+		h.Debug("Failed to delete note %s: %v", id, err)
 		h.SSE.SendNotification(Notification{
-			Message: "Detection deleted successfully",
-			Type:    "success",
+			Message: fmt.Sprintf("Failed to delete note: %v", err),
+			Type:    "error",
 		})
-	}()
+		return h.NewHandlerError(err, "Failed to delete note", http.StatusInternalServerError)
+	}
 
-	// Return immediate success response
-	return c.NoContent(http.StatusAccepted)
+	// If there was a clip associated, delete the audio file and spectrogram
+	if clipPath != "" {
+		// Delete audio file
+		audioPath := fmt.Sprintf("%s/%s", h.Settings.Realtime.Audio.Export.Path, clipPath)
+		if err := os.Remove(audioPath); err != nil && !os.IsNotExist(err) {
+			h.Debug("Failed to delete audio file %s: %v", audioPath, err)
+		}
+
+		// Delete spectrogram file
+		spectrogramPath := fmt.Sprintf("%s/%s.png", h.Settings.Realtime.Audio.Export.Path, strings.TrimSuffix(clipPath, ".wav"))
+		if err := os.Remove(spectrogramPath); err != nil && !os.IsNotExist(err) {
+			h.Debug("Failed to delete spectrogram file %s: %v", spectrogramPath, err)
+		}
+	}
+
+	// Log the successful deletion
+	h.Debug("Successfully deleted detection %s", id)
+
+	// Send success notification
+	h.SSE.SendNotification(Notification{
+		Message: "Detection deleted successfully",
+		Type:    "success",
+	})
+
+	// Set response headers
+	c.Response().Header().Set("HX-Trigger", "refreshList")
+	return c.NoContent(http.StatusOK)
 }
 
 // ListDetections handles requests for hourly, species-specific, and search detections
@@ -258,34 +258,36 @@ func (h *Handlers) DetectionDetails(c echo.Context) error {
 }
 
 // RecentDetections handles requests for the latest detections.
-// It retrieves the last set of detections based on the specified count and view type.
 func (h *Handlers) RecentDetections(c echo.Context) error {
-	numDetections := parseNumDetections(c.QueryParam("numDetections"), 10) // Default value is 10
+	h.Debug("RecentDetections: Starting handler")
 
-	var data interface{}
-	var templateName string
+	numDetections := parseNumDetections(c.QueryParam("numDetections"), 10)
+	h.Debug("RecentDetections: Fetching %d detections", numDetections)
 
-	// Use the existing detailed view
 	notes, err := h.DS.GetLastDetections(numDetections)
 	if err != nil {
+		h.Debug("RecentDetections: Error fetching detections: %v", err)
 		return h.NewHandlerError(err, "Failed to fetch recent detections", http.StatusInternalServerError)
 	}
 
-	data = struct {
+	h.Debug("RecentDetections: Found %d detections", len(notes))
+
+	data := struct {
 		Notes             []datastore.Note
 		DashboardSettings conf.Dashboard
 	}{
 		Notes:             notes,
 		DashboardSettings: *h.DashboardSettings,
 	}
-	templateName = "recentDetections"
 
-	// Render the appropriate template with the data
-	err = c.Render(http.StatusOK, templateName, data)
+	h.Debug("RecentDetections: Rendering template")
+	err = c.Render(http.StatusOK, "recentDetections", data)
 	if err != nil {
-		log.Printf("Failed to render %s template: %v", templateName, err)
+		h.Debug("RecentDetections: Error rendering template: %v", err)
 		return h.NewHandlerError(err, "Failed to render template", http.StatusInternalServerError)
 	}
+
+	h.Debug("RecentDetections: Successfully completed")
 	return nil
 }
 
@@ -354,4 +356,46 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 	}
 
 	return notesWithWeather, nil
+}
+
+// ReviewDetection handles the verification of a detection as either correct or false positive
+func (h *Handlers) ReviewDetection(c echo.Context) error {
+	id := c.FormValue("id")
+	if id == "" {
+		return h.NewHandlerError(fmt.Errorf("no ID provided"), "Missing detection ID", http.StatusBadRequest)
+	}
+
+	verified := c.FormValue("verified")
+	if verified != "correct" && verified != "false_positive" {
+		return h.NewHandlerError(fmt.Errorf("invalid verification status"), "Invalid verification status", http.StatusBadRequest)
+	}
+
+	comment := c.FormValue("comment")
+
+	// Verify that the note exists
+	if _, err := h.DS.Get(id); err != nil {
+		return h.NewHandlerError(err, "Failed to retrieve note", http.StatusInternalServerError)
+	}
+
+	// Update only the verification status and comment
+	if err := h.DS.UpdateNote(id, map[string]interface{}{
+		"verified": verified,
+		"comment":  comment,
+	}); err != nil {
+		h.SSE.SendNotification(Notification{
+			Message: fmt.Sprintf("Failed to save review: %v", err),
+			Type:    "error",
+		})
+		return h.NewHandlerError(err, "Failed to save note", http.StatusInternalServerError)
+	}
+
+	// Send success notification
+	h.SSE.SendNotification(Notification{
+		Message: "Detection review saved successfully",
+		Type:    "success",
+	})
+
+	// Set HTMX response headers
+	c.Response().Header().Set("HX-Refresh", "true")
+	return c.NoContent(http.StatusOK)
 }
