@@ -28,6 +28,11 @@ func (s *Server) configureMiddleware() {
 func (s *Server) CacheControlMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			// Skip cache control for HTMX requests
+			if c.Request().Header.Get("HX-Request") != "" {
+				return next(c)
+			}
+
 			path := c.Request().URL.Path
 			s.Debug("CacheControlMiddleware: Processing request for path: %s", path)
 
@@ -73,10 +78,16 @@ func (s *Server) CacheControlMiddleware() echo.MiddlewareFunc {
 func VaryHeaderMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			// Always set Vary header for HTMX requests
+			c.Response().Header().Set("Vary", "HX-Request")
+
+			// Ensure HTMX headers are preserved
 			if c.Request().Header.Get("HX-Request") != "" {
-				c.Response().Header().Set("Vary", "HX-Request")
+				c.Response().Header().Set("Cache-Control", "no-store")
 			}
-			return next(c)
+
+			err := next(c)
+			return err
 		}
 	}
 }
