@@ -336,94 +336,84 @@ func (p *Processor) generateClipName(scientificName string, confidence float32) 
 	return clipName
 }
 
+// shouldDiscardDetection checks if a detection should be discarded based on various criteria
+func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections int) (shouldDiscard bool, reason string) {
+	// Check minimum detection count
+	if item.Count < minDetections {
+		return true, fmt.Sprintf("false positive, matched %d/%d times", item.Count, minDetections)
+	}
+
+	// Check privacy filter
+	if p.Settings.Realtime.PrivacyFilter.Enabled {
+		lastHumanDetection, exists := p.LastHumanDetection[item.Source]
+		if exists && lastHumanDetection.After(item.FirstDetected) {
+			return true, "privacy filter"
+		}
+	}
+
+	// Check dog bark filter
+	if p.Settings.Realtime.DogBarkFilter.Enabled {
+		if p.Settings.Realtime.DogBarkFilter.Debug {
+			log.Printf("Last dog detection: %s\n", p.LastDogDetection)
+		}
+		if p.CheckDogBarkFilter(item.Detection.Note.CommonName, p.LastDogDetection[item.Source]) ||
+			p.CheckDogBarkFilter(item.Detection.Note.ScientificName, p.LastDogDetection[item.Source]) {
+			return true, "recent dog bark"
+		}
+	}
+
+	return false, ""
+}
+
+// processApprovedDetection handles an approved detection by sending it to the worker queue
+func (p *Processor) processApprovedDetection(item *PendingDetection, species string) {
+	log.Printf("Approving detection of %s from source %s, matched %d times\n",
+		species, item.Source, item.Count)
+
+	item.Detection.Note.BeginTime = item.FirstDetected
+	actionList := p.getActionsForItem(&item.Detection)
+	for _, action := range actionList {
+		workerQueue <- Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
+	}
+
+	// Update BirdNET metrics detection counter if enabled
+	if p.Settings.Realtime.Telemetry.Enabled && p.Metrics != nil && p.Metrics.BirdNET != nil {
+		p.Metrics.BirdNET.IncrementDetectionCounter(item.Detection.Note.CommonName)
+	}
+}
+
 // pendingDetectionsFlusher runs a goroutine that periodically checks the pending detections
 // and flushes them to the worker queue if their deadline has passed.
 func (p *Processor) pendingDetectionsFlusher() {
-	// Determine minDetections based on Settings.BirdNET.Overlap
-	var minDetections int
-
-	// Calculate segment length based on overlap setting, minimum 0.1 seconds
+	// Calculate minimum detections based on overlap setting
 	segmentLength := math.Max(0.1, 3.0-p.Settings.BirdNET.Overlap)
-	// Calculate minimum detections needed based on segment length, at least 1
-	minDetections = int(math.Max(1, 3/segmentLength))
+	minDetections := int(math.Max(1, 3/segmentLength))
 
 	go func() {
-		// Create a ticker that ticks every second to frequently check for flush deadlines.
 		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop() // Ensure the ticker is stopped to avoid leaking resources.
+		defer ticker.Stop()
 
 		for {
-			<-ticker.C // Wait for the ticker to tick.
+			<-ticker.C
 			now := time.Now()
 
-			// Lock the mutex to ensure thread-safe access to the PendingDetections map.
 			p.pendingMutex.Lock()
-
-			// Iterate through the pending detections map
 			for species := range p.pendingDetections {
 				item := p.pendingDetections[species]
-				// If the current time is past the flush deadline, process the detection.
 				if now.After(item.FlushDeadline) {
-					// check if count is less than minDetections, if so discard the detection
-					if item.Count < minDetections {
-						log.Printf("Discarding detection of %s from source %s as false positive, matched %d/%d times\n", species, item.Source, item.Count, minDetections)
+					if shouldDiscard, reason := p.shouldDiscardDetection(&item, minDetections); shouldDiscard {
+						log.Printf("Discarding detection of %s from source %s due to %s\n",
+							species, item.Source, reason)
 						delete(p.pendingDetections, species)
 						continue
 					}
 
-					// Check if human was detected after the first detection and discard if so
-					if p.Settings.Realtime.PrivacyFilter.Enabled {
-						lastHumanDetection, exists := p.LastHumanDetection[item.Source]
-						if exists && lastHumanDetection.After(item.FirstDetected) {
-							log.Printf("Discarding detection of %s from source %s due to privacy filter\n", species, item.Source)
-							delete(p.pendingDetections, species)
-							continue
-						}
-					}
-
-					// Check dog bark filter
-					if p.Settings.Realtime.DogBarkFilter.Enabled {
-						if p.Settings.Realtime.DogBarkFilter.Debug {
-							log.Printf("Last dog detection: %s\n", p.LastDogDetection)
-						}
-						// Check against common name
-						if p.CheckDogBarkFilter(item.Detection.Note.CommonName, p.LastDogDetection[item.Source]) {
-							log.Printf("Discarding detection of %s from source %s due to recent dog bark\n", item.Detection.Note.CommonName, item.Source)
-							delete(p.pendingDetections, species)
-							continue
-						}
-						// Check against scientific name
-						if p.CheckDogBarkFilter(item.Detection.Note.ScientificName, p.LastDogDetection[item.Source]) {
-							log.Printf("Discarding detection of %s from source %s due to recent dog bark\n", item.Detection.Note.CommonName, item.Source)
-							delete(p.pendingDetections, species)
-							continue
-						}
-					}
-
-					log.Printf("Approving detection of %s from source %s, matched %d/%d times\n", species, item.Source, item.Count, minDetections)
-
-					// Set the detection's begin time to the time it was first detected, this is
-					// where we start audio export for the detection.
-					item.Detection.Note.BeginTime = item.FirstDetected
-
-					// Retrieve and execute actions based on the held detection.
-					actionList := p.getActionsForItem(&item.Detection)
-					for _, action := range actionList {
-						workerQueue <- Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
-					}
-
-					// Detection is now processed, remove it from pending detections map.
+					p.processApprovedDetection(&item, species)
 					delete(p.pendingDetections, species)
-
-					// Update BirdNET metrics detection counter
-					if p.Settings.Realtime.Telemetry.Enabled && p.Metrics != nil && p.Metrics.BirdNET != nil {
-						p.Metrics.BirdNET.IncrementDetectionCounter(item.Detection.Note.CommonName)
-					}
 				}
 			}
 			p.pendingMutex.Unlock()
 
-			// Perform cleanup of stale dynamic thresholds
 			p.cleanUpDynamicThresholds()
 		}
 	}()
