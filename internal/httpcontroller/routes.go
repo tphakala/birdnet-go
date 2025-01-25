@@ -125,6 +125,9 @@ func (s *Server) initRoutes() {
 	// Add POST method for ignoring species
 	s.Echo.POST("/detections/ignore", h.WithErrorHandling(h.IgnoreSpecies))
 
+	// Add POST method for reviewing detections
+	s.Echo.POST("/detections/review", h.WithErrorHandling(h.ReviewDetection))
+
 	// Setup Error handler
 	s.Echo.HTTPErrorHandler = func(err error, c echo.Context) {
 		if handleErr := s.Handlers.HandleError(err, c); handleErr != nil {
