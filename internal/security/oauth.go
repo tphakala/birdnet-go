@@ -113,7 +113,7 @@ func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 	return false
 }
 
-func isValidUserId(configuredIds string, providedId string) bool {
+func isValidUserId(configuredIds, providedId string) bool {
 	if configuredIds == "" || providedId == "" {
 		return false
 	}
