@@ -63,9 +63,9 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 	var devices []AudioDeviceInfo
 
 	// Iterate through the list of devices
-	for i, info := range infos {
+	for i := range infos {
 		// Decode the device ID from hexadecimal to ASCII
-		decodedID, err := hexToASCII(info.ID.String())
+		decodedID, err := hexToASCII(infos[i].ID.String())
 		if err != nil {
 			log.Printf("Error decoding ID for device %d: %v\n", i, err)
 			continue
@@ -74,7 +74,7 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 		// Add the device information to the devices slice
 		devices = append(devices, AudioDeviceInfo{
 			Index: i,
-			Name:  info.Name(),
+			Name:  infos[i].Name(),
 			ID:    decodedID,
 		})
 	}
@@ -106,16 +106,16 @@ func SetAudioDevice(deviceName string) (string, error) {
 
 	// Find the index of the device that matches the provided device name
 	var index int
-	for i, info := range infos {
+	for i := range infos {
 		// Decode the device ID from hex to ASCII
-		decodedID, err := hexToASCII(info.ID.String())
+		decodedID, err := hexToASCII(infos[i].ID.String())
 		if err != nil {
 			log.Printf("Error decoding ID for device %d: %v\n", i, err)
 			continue
 		}
 
 		// Check if the current device matches the specified settings
-		if matchesDeviceSettings(decodedID, info, deviceName) {
+		if matchesDeviceSettings(decodedID, &infos[i], deviceName) {
 			index = i
 			break
 		}
@@ -144,7 +144,7 @@ func SetAudioDevice(deviceName string) (string, error) {
 	return infos[index].Name(), nil
 }
 
-func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
 	if len(settings.Realtime.RTSP.URLs) > 0 {
 		// RTSP audio capture for each URL
 		for _, url := range settings.Realtime.RTSP.URLs {
@@ -166,26 +166,26 @@ func selectCaptureSource(settings *conf.Settings, infos []malgo.DeviceInfo) (cap
 	var selectedSource captureSource
 	var deviceFound bool
 
-	for i, info := range infos {
-		// Decode the device ID from hex to ASCII
-		decodedID, err := hexToASCII(info.ID.String())
+	for i := range infos {
+		// Decode the device ID from hexadecimal to ASCII
+		decodedID, err := hexToASCII(infos[i].ID.String())
 		if err != nil {
 			fmt.Printf("Error decoding ID for device %d: %v\n", i, err)
 			continue
 		}
 
 		// Prepare the output string for listing available devices
-		output := fmt.Sprintf("  %d: %s", i, info.Name())
+		output := fmt.Sprintf("  %d: %s", i, infos[i].Name())
 		if runtime.GOOS == "linux" {
 			output = fmt.Sprintf("%s, %s", output, decodedID) // Include decoded ID in the output for Linux
 		}
 
 		// Determine if the current device matches the specified settings
-		if matchesDeviceSettings(decodedID, info, settings.Realtime.Audio.Source) {
+		if matchesDeviceSettings(decodedID, &infos[i], settings.Realtime.Audio.Source) {
 			selectedSource = captureSource{
-				Name:    info.Name(),
+				Name:    infos[i].Name(),
 				ID:      decodedID,
-				Pointer: info.ID.Pointer(),
+				Pointer: infos[i].ID.Pointer(),
 			}
 			deviceFound = true
 		}
@@ -210,7 +210,7 @@ func selectCaptureSource(settings *conf.Settings, infos []malgo.DeviceInfo) (cap
 }
 
 // matchesDeviceSettings checks if the device matches the settings specified by the user.
-func matchesDeviceSettings(decodedID string, info malgo.DeviceInfo, audioSource string) bool {
+func matchesDeviceSettings(decodedID string, info *malgo.DeviceInfo, audioSource string) bool {
 	if runtime.GOOS == "windows" && audioSource == "sysdefault" {
 		// On Windows, there is no "sysdefault" device. Use miniaudio's default device instead.
 		return info.IsDefault == 1
@@ -228,7 +228,7 @@ func hexToASCII(hexStr string) (string, error) {
 	return string(bytes), nil
 }
 
-func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan chan struct{}, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
 	defer wg.Done() // Ensure this is called when the goroutine exits
 	var device *malgo.Device
 
@@ -238,11 +238,12 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 
 	// if Linux set malgo.BackendAlsa, else set nil for auto select
 	var backend malgo.Backend
-	if runtime.GOOS == "linux" {
+	switch runtime.GOOS {
+	case "linux":
 		backend = malgo.BackendAlsa
-	} else if runtime.GOOS == "windows" {
+	case "windows":
 		backend = malgo.BackendWasapi
-	} else if runtime.GOOS == "darwin" {
+	case "darwin":
 		backend = malgo.BackendCoreaudio
 	}
 
@@ -253,8 +254,9 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 	})
 	if err != nil {
 		color.New(color.FgHiYellow).Fprintln(os.Stderr, "context init failed:", err)
+		return
 	}
-	defer malgoCtx.Uninit() //nolint:errcheck
+	defer malgoCtx.Uninit()
 
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	deviceConfig.Capture.Format = malgo.FormatS16
@@ -268,14 +270,14 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 	infos, err = malgoCtx.Devices(malgo.Capture)
 	if err != nil {
 		color.New(color.FgHiYellow).Fprintln(os.Stderr, "Error getting capture devices:", err)
-		os.Exit(1)
+		return
 	}
 
 	// Select the capture source based on the settings
 	captureSource, err := selectCaptureSource(settings, infos)
 	if err != nil {
 		color.New(color.FgHiYellow).Fprintln(os.Stderr, "Error selecting capture source:", err)
-		os.Exit(1)
+		return
 	}
 	deviceConfig.Capture.DeviceID = captureSource.Pointer
 
@@ -349,7 +351,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 	if err != nil {
 		color.New(color.FgHiYellow).Fprintln(os.Stderr, "Device initialization failed:", err)
 		conf.PrintUserInfo()
-		os.Exit(1)
+		return
 	}
 
 	if settings.Debug {
@@ -358,9 +360,9 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan cha
 	err = device.Start()
 	if err != nil {
 		color.New(color.FgHiYellow).Fprintln(os.Stderr, "Device start failed:", err)
-		os.Exit(1)
+		return
 	}
-	defer device.Stop() //nolint:errcheck
+	defer device.Stop()
 
 	if settings.Debug {
 		fmt.Println("Device started")
