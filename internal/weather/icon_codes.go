@@ -57,7 +57,7 @@ var IconDescription = map[IconCode]string{
 }
 
 // GetStandardIconCode converts provider-specific weather codes to our standard icon codes
-func GetStandardIconCode(code string, provider string) IconCode {
+func GetStandardIconCode(code, provider string) IconCode {
 	switch provider {
 	case "yrno":
 		if iconCode, ok := YrNoSymbolToIcon[code]; ok {
