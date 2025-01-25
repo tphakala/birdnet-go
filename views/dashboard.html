@@ -47,9 +47,11 @@
 		<div class="flex justify-between items-center">
 			<span class="card-title grow text-base sm:text-xl">Recent Detections</span>
 			<label for="numDetections" class="label-text">Show:</label>
-			<!-- Dropdown for selecting number of detections -->
-			<select id="numDetections" name="numDetections" hx-get="/detections/recent" hx-target="#recentDetections"
-				hx-trigger="load, change" class="select select-sm focus-visible:outline-none">
+			<select id="numDetections" name="numDetections" 
+					hx-get="/detections/recent" 
+					hx-target="#recentDetections-wrapper"
+					hx-trigger="change" 
+					class="select select-sm focus-visible:outline-none">
 				<option value="5" selected>5</option>
 				<option value="10">10</option>
 				<option value="25">25</option>
@@ -58,9 +60,11 @@
 		</div>
 	</div>
 
-	<!-- daisyUI card for latest detections -->
-	<div class="overflow-x-auto" id="recentDetections">
-		<!-- last detections list will be loaded here -->
+	<!-- Wrapper for recent detections -->
+	<div id="recentDetections-wrapper" 
+		 hx-get="/detections/recent" 
+		 hx-trigger="load refreshList"
+		 hx-swap="innerHTML">
 	</div>
 </section>
 
