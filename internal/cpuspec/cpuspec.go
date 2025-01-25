@@ -101,7 +101,7 @@ func determinePerformanceCores(brandName string) int {
 			model := matches[3]
 			switch {
 			case series == "9":
-				switch model {
+				switch model { //nolint:gocritic // ignore gocritic warning for this switch statement
 				case "285":
 					return 8 // Core Ultra 9 285(K): 8 P-cores (not 16 - that was E-cores)
 				}
