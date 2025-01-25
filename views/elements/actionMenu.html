@@ -1,0 +1,52 @@
+{{define "actionMenu"}}
+<div class="dropdown dropdown-end" 
+     x-data="{ 
+       open: false, 
+       isExcluded: {{if isSpeciesExcluded .CommonName}}true{{else}}false{{end}},
+       init() {
+         console.log('Menu initialized for {{.CommonName}}, isExcluded:', this.isExcluded);
+         document.body.addEventListener('species-excluded-{{.CommonName}}', () => {
+           console.log('Received exclude event for {{.CommonName}}');
+           this.isExcluded = true;
+         });
+         document.body.addEventListener('species-included-{{.CommonName}}', () => {
+           console.log('Received include event for {{.CommonName}}');
+           this.isExcluded = false;
+         });
+       }
+     }"
+     x-init="init()">
+  <button @click="open = !open; console.log('Menu opened for {{.CommonName}}, isExcluded:', isExcluded)" class="btn btn-ghost btn-xs">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+    </svg>
+  </button>
+  <ul x-show="open" @click.away="open = false" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 border border-base-300">
+    <li><a href="#" class="text-sm">Review detection</a></li>
+    <li>
+      <a href="#" 
+         class="text-sm"
+         hx-post="/detections/ignore?common_name={{.CommonName}}"
+         hx-confirm="Are you sure you want to ignore future detections of {{.CommonName}}? This will only affect new detections - existing detections will remain in the database."
+         @htmx:after-request="
+           if ($event.detail.successful) {
+             const eventName = isExcluded ? 'species-included-{{.CommonName}}' : 'species-excluded-{{.CommonName}}';
+             document.body.dispatchEvent(new Event(eventName));
+           }"
+         @click="open = false"
+         x-text="isExcluded ? 'Show species' : 'Ignore species'">
+      </a>
+    </li>
+    <li>
+      <a href="#" 
+         class="text-sm text-error"
+         hx-delete="/detections/delete?id={{.ID}}"
+         hx-confirm="Are you sure you want to delete this detection? This action cannot be undone."
+         hx-target="closest tr"
+         hx-swap="outerHTML swap:1s">
+        Delete detection
+      </a>
+    </li>
+  </ul>
+</div>
+{{end}} 
