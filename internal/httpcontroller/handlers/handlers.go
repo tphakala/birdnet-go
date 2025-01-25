@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"sync"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -17,6 +18,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
+
+var settingsMutex sync.RWMutex
 
 // Handlers embeds baseHandler and includes all the dependencies needed for the application handlers.
 type Handlers struct {
