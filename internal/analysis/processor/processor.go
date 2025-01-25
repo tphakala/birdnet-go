@@ -139,14 +139,15 @@ func (p *Processor) startDetectionProcessor() {
 	go func() {
 		// ResultsQueue is fed by myaudio.ProcessData()
 		for item := range queue.ResultsQueue {
-			p.processDetections(item)
+			itemCopy := item
+			p.processDetections(&itemCopy)
 		}
 	}()
 }
 
 // processDetections examines each detection from the queue, updating held detections
 // with new or higher-confidence instances and setting an appropriate flush deadline.
-func (p *Processor) processDetections(item queue.Results) {
+func (p *Processor) processDetections(item *queue.Results) {
 	// Delay before a detection is considered final and is flushed.
 	// TODO: make this configurable
 	const delay = 15 * time.Second
@@ -194,7 +195,7 @@ func (p *Processor) processDetections(item queue.Results) {
 }
 
 // processResults processes the results from the BirdNET prediction and returns a list of detections.
-func (p *Processor) processResults(item queue.Results) []Detections {
+func (p *Processor) processResults(item *queue.Results) []Detections {
 	var detections []Detections
 
 	// Collect processing time metric
@@ -212,8 +213,8 @@ func (p *Processor) processResults(item queue.Results) []Detections {
 
 		// Handle dog and human detection, this sets LastDogDetection and LastHumanDetection which is
 		// later used to discard detection if privacy filter or dog bark filters are enabled in settings.
-		p.handleDogDetection(&item, speciesLowercase, result)
-		p.handleHumanDetection(&item, speciesLowercase, result)
+		p.handleDogDetection(item, speciesLowercase, result)
+		p.handleHumanDetection(item, speciesLowercase, result)
 
 		// Determine base confidence threshold
 		baseThreshold := p.getBaseConfidenceThreshold(speciesLowercase)
@@ -359,7 +360,8 @@ func (p *Processor) pendingDetectionsFlusher() {
 			p.pendingMutex.Lock()
 
 			// Iterate through the pending detections map
-			for species, item := range p.pendingDetections {
+			for species := range p.pendingDetections {
+				item := p.pendingDetections[species]
 				// If the current time is past the flush deadline, process the detection.
 				if now.After(item.FlushDeadline) {
 					// check if count is less than minDetections, if so discard the detection
@@ -405,7 +407,7 @@ func (p *Processor) pendingDetectionsFlusher() {
 					item.Detection.Note.BeginTime = item.FirstDetected
 
 					// Retrieve and execute actions based on the held detection.
-					actionList := p.getActionsForItem(item.Detection)
+					actionList := p.getActionsForItem(&item.Detection)
 					for _, action := range actionList {
 						workerQueue <- Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
 					}
@@ -438,7 +440,7 @@ func contains(slice []string, item string) bool {
 }
 
 // getActionsForItem determines the actions to be taken for a given detection.
-func (p *Processor) getActionsForItem(detection Detections) []Action {
+func (p *Processor) getActionsForItem(detection *Detections) []Action {
 	speciesName := strings.ToLower(detection.Note.CommonName)
 
 	// Check if species has custom configuration
@@ -476,7 +478,7 @@ func (p *Processor) getActionsForItem(detection Detections) []Action {
 }
 
 // Helper function to parse command parameters
-func parseCommandParams(params []string, detection Detections) map[string]interface{} {
+func parseCommandParams(params []string, detection *Detections) map[string]interface{} {
 	commandParams := make(map[string]interface{})
 	for _, param := range params {
 		value := getNoteValueByName(&detection.Note, param)
@@ -492,7 +494,7 @@ func parseCommandParams(params []string, detection Detections) map[string]interf
 }
 
 // getDefaultActions returns the default actions to be taken for a given detection.
-func (p *Processor) getDefaultActions(detection Detections) []Action {
+func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	var actions []Action
 
 	// Append various default actions based on the application settings
