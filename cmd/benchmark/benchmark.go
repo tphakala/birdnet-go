@@ -130,7 +130,7 @@ func runInferenceBenchmark(settings *conf.Settings, results *benchmarkResults) e
 	return nil
 }
 
-func getPerformanceRating(inferenceTime float64) (string, string) {
+func getPerformanceRating(inferenceTime float64) (rating, description string) {
 	switch {
 	case inferenceTime > 3000:
 		return "❌ Failed", "System is too slow for BirdNET-Go real-time detection"
