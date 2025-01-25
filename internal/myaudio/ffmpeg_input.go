@@ -78,7 +78,7 @@ func (b *BoundedBuffer) Write(p []byte) (n int, err error) {
 
 	if b.buffer.Len()+len(p) > b.size {
 		// If the new data would exceed the buffer size, trim the existing data
-		b.buffer.Truncate(0)
+		b.buffer.Reset()
 		if len(p) > b.size {
 			// If the new data is larger than the buffer size, only keep the last 'size' bytes
 			p = p[len(p)-b.size:]
@@ -452,7 +452,7 @@ func getExitCode(err error) int {
 }
 
 // CaptureAudioRTSP is the main function for capturing audio from an RTSP stream
-func CaptureAudioRTSP(url string, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
 	// Ensure the WaitGroup is decremented when the function exits
 	defer wg.Done()
 
