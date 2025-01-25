@@ -33,6 +33,7 @@ type Interface interface {
 	GetNoteClipPath(noteID string) (string, error)
 	DeleteNoteClipPath(noteID string) error
 	GetClipsQualifyingForRemoval(minHours int, minClips int) ([]ClipForRemoval, error)
+	UpdateNote(id string, updates map[string]interface{}) error
 	// weather data
 	SaveDailyEvents(dailyEvents *DailyEvents) error
 	GetDailyEvents(date string) (DailyEvents, error)
@@ -549,4 +550,9 @@ func getHourRange(hour string, duration int) (startTime, endTime string) {
 	startTime = fmt.Sprintf("%02d:00:00", startHour)
 	endTime = fmt.Sprintf("%02d:00:00", endHour)
 	return startTime, endTime
+}
+
+// UpdateNote updates specific fields of a note
+func (ds *DataStore) UpdateNote(id string, updates map[string]interface{}) error {
+	return ds.DB.Model(&Note{}).Where("id = ?", id).Updates(updates).Error
 }
