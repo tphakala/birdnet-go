@@ -210,6 +210,39 @@ func monitorProgress(ctx context.Context, doneChan chan struct{}, filename strin
 	}
 }
 
+// processChunk handles the processing of a single audio chunk
+func processChunk(ctx context.Context, chunk audioChunk, settings *conf.Settings,
+	resultChan chan<- []datastore.Note, errorChan chan<- error) error {
+
+	notes, err := bn.ProcessChunk(chunk.Data, chunk.FilePosition)
+	if err != nil {
+		select {
+		case errorChan <- err:
+		default:
+		}
+		return err
+	}
+
+	// Filter notes based on included species list
+	var filteredNotes []datastore.Note
+	for i := range notes {
+		if settings.IsSpeciesIncluded(notes[i].ScientificName) {
+			filteredNotes = append(filteredNotes, notes[i])
+		}
+	}
+
+	select {
+	case <-ctx.Done():
+		select {
+		case errorChan <- ctx.Err():
+		default:
+		}
+		return ctx.Err()
+	case resultChan <- filteredNotes:
+		return nil
+	}
+}
+
 // startWorkers initializes and starts the worker goroutines for audio analysis
 func startWorkers(ctx context.Context, numWorkers int, chunkChan chan audioChunk,
 	resultChan chan []datastore.Note, errorChan chan error, settings *conf.Settings) {
@@ -231,41 +264,16 @@ func startWorkers(ctx context.Context, numWorkers int, chunkChan chan audioChunk
 					select {
 					case errorChan <- ctx.Err():
 					default:
-						// Another goroutine already sent the error
 					}
 					return
 				default:
 				}
 
-				notes, err := bn.ProcessChunk(chunk.Data, chunk.FilePosition)
-				if err != nil {
+				if err := processChunk(ctx, chunk, settings, resultChan, errorChan); err != nil {
 					if settings.Debug {
 						fmt.Printf("DEBUG: Worker %d encountered error: %v\n", workerID, err)
 					}
-					select {
-					case errorChan <- err:
-					default:
-						// Another goroutine already sent an error
-					}
 					return
-				}
-
-				// Filter notes based on included species list
-				var filteredNotes []datastore.Note
-				for i := range notes {
-					if settings.IsSpeciesIncluded(notes[i].ScientificName) {
-						filteredNotes = append(filteredNotes, notes[i])
-					}
-				}
-
-				select {
-				case <-ctx.Done():
-					select {
-					case errorChan <- ctx.Err():
-					default:
-					}
-					return
-				case resultChan <- filteredNotes:
 				}
 			}
 		}(i)
