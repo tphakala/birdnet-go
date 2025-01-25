@@ -82,7 +82,7 @@ func (f *DefaultFileHandler) Open(filename string) error {
 	if f.needsRotation(0) {
 		return f.rotateFile()
 	}
-	f.file, err = os.OpenFile(f.filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	f.file, err = os.OpenFile(f.filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
 	return err
 }
 
@@ -141,7 +141,7 @@ func (f *DefaultFileHandler) rotateFile() error {
 	}
 
 	var err error
-	f.file, err = os.OpenFile(f.filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	f.file, err = os.OpenFile(f.filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
 	if err != nil {
 		return err
 	}
