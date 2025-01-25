@@ -210,55 +210,10 @@ func monitorProgress(ctx context.Context, doneChan chan struct{}, filename strin
 	}
 }
 
-// processAudioFile processes the audio file and returns the notes.
-func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx context.Context) ([]datastore.Note, error) {
-	// Calculate total chunks
-	totalChunks := myaudio.GetTotalChunks(
-		audioInfo.SampleRate,
-		audioInfo.TotalSamples,
-		settings.BirdNET.Overlap,
-	)
+// startWorkers initializes and starts the worker goroutines for audio analysis
+func startWorkers(ctx context.Context, numWorkers int, chunkChan chan audioChunk,
+	resultChan chan []datastore.Note, errorChan chan error, settings *conf.Settings) {
 
-	// Define a type for audio chunks with file position
-	type audioChunk struct {
-		Data         []float32
-		FilePosition time.Time
-	}
-
-	// Calculate audio duration
-	duration := time.Duration(float64(audioInfo.TotalSamples) / float64(audioInfo.SampleRate) * float64(time.Second))
-
-	// Get filename and truncate if necessary
-	filename := filepath.Base(settings.Input.Path)
-
-	startTime := time.Now()
-	chunkCount := 1
-
-	// Set number of workers to 1
-	numWorkers := 1
-
-	if settings.Debug {
-		fmt.Printf("DEBUG: Starting analysis with %d total chunks and %d workers\n", totalChunks, numWorkers)
-	}
-
-	// Create buffered channels for processing
-	chunkChan := make(chan audioChunk, 4)
-	resultChan := make(chan []datastore.Note, 4)
-	errorChan := make(chan error, 1)
-	doneChan := make(chan struct{})
-
-	var allNotes []datastore.Note
-
-	// Create a single cancel function to coordinate shutdown
-	var doneChanClosed sync.Once
-	shutdown := func() {
-		doneChanClosed.Do(func() {
-			close(doneChan)
-		})
-	}
-	defer shutdown()
-
-	// Start worker goroutines for BirdNET analysis
 	for i := 0; i < numWorkers; i++ {
 		go func(workerID int) {
 			if settings.Debug {
@@ -297,9 +252,9 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 
 				// Filter notes based on included species list
 				var filteredNotes []datastore.Note
-				for _, note := range notes {
-					if settings.IsSpeciesIncluded(note.ScientificName) {
-						filteredNotes = append(filteredNotes, note)
+				for i := range notes {
+					if settings.IsSpeciesIncluded(notes[i].ScientificName) {
+						filteredNotes = append(filteredNotes, notes[i])
 					}
 				}
 
@@ -315,6 +270,57 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 			}
 		}(i)
 	}
+}
+
+// Define audioChunk type at package level since it's used by multiple functions
+type audioChunk struct {
+	Data         []float32
+	FilePosition time.Time
+}
+
+func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx context.Context) ([]datastore.Note, error) {
+	// Calculate total chunks
+	totalChunks := myaudio.GetTotalChunks(
+		audioInfo.SampleRate,
+		audioInfo.TotalSamples,
+		settings.BirdNET.Overlap,
+	)
+
+	// Calculate audio duration
+	duration := time.Duration(float64(audioInfo.TotalSamples) / float64(audioInfo.SampleRate) * float64(time.Second))
+
+	// Get filename and truncate if necessary
+	filename := filepath.Base(settings.Input.Path)
+
+	startTime := time.Now()
+	chunkCount := 1
+
+	// Set number of workers to 1
+	numWorkers := 1
+
+	if settings.Debug {
+		fmt.Printf("DEBUG: Starting analysis with %d total chunks and %d workers\n", totalChunks, numWorkers)
+	}
+
+	// Create buffered channels for processing
+	chunkChan := make(chan audioChunk, 4)
+	resultChan := make(chan []datastore.Note, 4)
+	errorChan := make(chan error, 1)
+	doneChan := make(chan struct{})
+
+	var allNotes []datastore.Note
+
+	// Create a single cancel function to coordinate shutdown
+	var doneChanClosed sync.Once
+	shutdown := func() {
+		doneChanClosed.Do(func() {
+			close(doneChan)
+		})
+	}
+	defer shutdown()
+
+	// Start worker goroutines
+	startWorkers(ctx, numWorkers, chunkChan, resultChan, errorChan, settings)
 
 	// Start progress monitoring goroutine
 	go monitorProgress(ctx, doneChan, filename, duration, totalChunks, &chunkCount, startTime)
