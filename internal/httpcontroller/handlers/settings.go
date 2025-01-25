@@ -188,7 +188,7 @@ func updateSettingsFromForm(settings *conf.Settings, formValues map[string][]str
 }
 
 // updateStructFromForm recursively updates a struct's fields from form values
-func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefix string) error {
+func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefix string) error { //nolint:gocognit // ignore gocognit warning for this function, maybe refactor later
 	t := v.Type()
 
 	// Iterate through all fields of the struct
@@ -213,7 +213,7 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 		// Handle struct fields
 		if field.Kind() == reflect.Struct {
 			// Special handling for Audio Equalizer field
-			if fieldType.Type == reflect.TypeOf(conf.AudioSettings{}.Equalizer) {
+			if fieldType.Type == reflect.TypeOf(conf.AudioSettings{}.Equalizer) { //nolint:gocritic // ignore gocritic warning for this if statement, maybe refactor later
 				// Only update equalizer if related form values exist
 				if hasEqualizerFormValues(formValues, fullName) {
 					if err := updateEqualizerFromForm(field, formValues, fullName); err != nil {
