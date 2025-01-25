@@ -41,6 +41,7 @@ type Processor struct {
 	pendingMutex        sync.Mutex // Mutex to protect access to pendingDetections
 	lastDogDetectionLog map[string]time.Time
 	dogDetectionMutex   sync.Mutex
+	detectionMutex      sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
 	controlChan         chan string
 }
 
@@ -277,7 +278,9 @@ func (p *Processor) handleDogDetection(item *queue.Results, speciesLowercase str
 	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, "dog") &&
 		result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
 		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, item.Source)
+		p.detectionMutex.Lock()
 		p.LastDogDetection[item.Source] = item.StartTime
+		p.detectionMutex.Unlock()
 	}
 }
 
@@ -289,7 +292,9 @@ func (p *Processor) handleHumanDetection(item *queue.Results, speciesLowercase s
 		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, item.Source)
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
 		// bird detections if a human vocalization is detected after the first detection
+		p.detectionMutex.Lock()
 		p.LastHumanDetection[item.Source] = item.StartTime
+		p.detectionMutex.Unlock()
 	}
 }
 
@@ -345,7 +350,9 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 
 	// Check privacy filter
 	if p.Settings.Realtime.PrivacyFilter.Enabled {
+		p.detectionMutex.RLock()
 		lastHumanDetection, exists := p.LastHumanDetection[item.Source]
+		p.detectionMutex.RUnlock()
 		if exists && lastHumanDetection.After(item.FirstDetected) {
 			return true, "privacy filter"
 		}
@@ -354,10 +361,15 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 	// Check dog bark filter
 	if p.Settings.Realtime.DogBarkFilter.Enabled {
 		if p.Settings.Realtime.DogBarkFilter.Debug {
+			p.detectionMutex.RLock()
 			log.Printf("Last dog detection: %s\n", p.LastDogDetection)
+			p.detectionMutex.RUnlock()
 		}
-		if p.CheckDogBarkFilter(item.Detection.Note.CommonName, p.LastDogDetection[item.Source]) ||
-			p.CheckDogBarkFilter(item.Detection.Note.ScientificName, p.LastDogDetection[item.Source]) {
+		p.detectionMutex.RLock()
+		lastDogDetection := p.LastDogDetection[item.Source]
+		p.detectionMutex.RUnlock()
+		if p.CheckDogBarkFilter(item.Detection.Note.CommonName, lastDogDetection) ||
+			p.CheckDogBarkFilter(item.Detection.Note.ScientificName, lastDogDetection) {
 			return true, "recent dog bark"
 		}
 	}
