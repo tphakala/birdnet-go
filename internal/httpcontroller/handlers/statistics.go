@@ -58,15 +58,15 @@ func (h *Handlers) createBirdVocalizationChart(startDate, endDate time.Time) *ch
 
 	// Process the notes to get daily counts
 	dailyCounts := make(map[string]int)
-	for _, note := range notes {
-		noteDate, err := time.Parse("2006-01-02", note.Date)
+	for i := range notes {
+		noteDate, err := time.Parse("2006-01-02", notes[i].Date)
 		if err != nil {
 			continue
 		}
 		if noteDate.Before(startDate) || noteDate.After(endDate) {
 			continue
 		}
-		dailyCounts[note.Date]++
+		dailyCounts[noteDate.Format("2006-01-02")]++
 	}
 
 	// Prepare data for the chart
