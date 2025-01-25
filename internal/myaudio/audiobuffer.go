@@ -27,7 +27,7 @@ type AudioBuffer struct {
 // map to store audio buffers for each audio source
 var audioBuffers map[string]*AudioBuffer
 
-func InitAudioBuffers(durationSeconds int, sampleRate, bytesPerSample int, sources []string) {
+func InitAudioBuffers(durationSeconds, sampleRate, bytesPerSample int, sources []string) {
 	audioBuffers = make(map[string]*AudioBuffer)
 	for _, source := range sources {
 		audioBuffers[source] = NewAudioBuffer(durationSeconds, sampleRate, bytesPerSample)
@@ -35,7 +35,7 @@ func InitAudioBuffers(durationSeconds int, sampleRate, bytesPerSample int, sourc
 }
 
 // NewAudioBuffer initializes a new AudioBuffer with timestamp tracking
-func NewAudioBuffer(durationSeconds int, sampleRate, bytesPerSample int) *AudioBuffer {
+func NewAudioBuffer(durationSeconds, sampleRate, bytesPerSample int) *AudioBuffer {
 	bufferSize := durationSeconds * sampleRate * bytesPerSample
 	alignedBufferSize := ((bufferSize + 2047) / 2048) * 2048 // Round up to the nearest multiple of 2048
 	ab := &AudioBuffer{
@@ -116,8 +116,8 @@ func (ab *AudioBuffer) ReadSegment(requestedStartTime time.Time, duration int) (
 		startIndex := int(startOffset.Seconds()) * ab.sampleRate * ab.bytesPerSample
 		endIndex := int(endOffset.Seconds()) * ab.sampleRate * ab.bytesPerSample
 
-		startIndex = startIndex % ab.bufferSize
-		endIndex = endIndex % ab.bufferSize
+		startIndex %= ab.bufferSize
+		endIndex %= ab.bufferSize
 
 		if startOffset < 0 {
 			if ab.writeIndex == 0 || ab.writeIndex+int(startOffset.Seconds())*ab.sampleRate*ab.bytesPerSample > ab.bufferSize {

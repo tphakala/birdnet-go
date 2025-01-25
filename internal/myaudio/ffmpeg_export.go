@@ -34,7 +34,7 @@ func ExportAudioWithFFmpeg(pcmData []byte, outputPath string, settings *conf.Aud
 	}
 
 	// Finalize the output by renaming the temporary file to the final audio file
-	return finalizeOutput(tempFilePath, outputPath, settings)
+	return finalizeOutput(tempFilePath)
 }
 
 // createTempFile creates a temporary file path for FFmpeg output
@@ -48,7 +48,7 @@ func createTempFile(outputPath string) (string, error) {
 }
 
 // finalizeOutput path removes tempExt from the file name completing atomic file operation
-func finalizeOutput(tempFilePath string, outputPath string, settings *conf.AudioSettings) error {
+func finalizeOutput(tempFilePath string) error {
 	// strip tempExt from the end of the path
 	finalOutputPath := tempFilePath[:len(tempFilePath)-len(tempExt)]
 
