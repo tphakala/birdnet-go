@@ -436,3 +436,110 @@ func contains(slice []string, item string) bool {
 	}
 	return false
 }
+
+// getActionsForItem determines the actions to be taken for a given detection.
+func (p *Processor) getActionsForItem(detection Detections) []Action {
+	speciesName := strings.ToLower(detection.Note.CommonName)
+
+	// Check if species has custom configuration
+	if speciesConfig, exists := p.Settings.Realtime.Species.Config[speciesName]; exists {
+		if p.Settings.Debug {
+			log.Println("Species config exists for custom actions")
+		}
+
+		var actions []Action
+
+		// Add custom actions from the new structure
+		for _, actionConfig := range speciesConfig.Actions {
+			switch actionConfig.Type {
+			case "ExecuteCommand":
+				if len(actionConfig.Parameters) > 0 {
+					actions = append(actions, &ExecuteCommandAction{
+						Command: actionConfig.Command,
+						Params:  parseCommandParams(actionConfig.Parameters, detection),
+					})
+				}
+			case "SendNotification":
+				// Add notification action handling
+				// ... implementation ...
+			}
+		}
+
+		// If there are custom actions, return only those
+		if len(actions) > 0 {
+			return actions
+		}
+	}
+
+	// Fall back to default actions if no custom actions or if custom actions should be combined
+	return p.getDefaultActions(detection)
+}
+
+// Helper function to parse command parameters
+func parseCommandParams(params []string, detection Detections) map[string]interface{} {
+	commandParams := make(map[string]interface{})
+	for _, param := range params {
+		value := getNoteValueByName(&detection.Note, param)
+		// Check if the parameter is confidence and normalize it
+		if param == "confidence" {
+			if confidence, ok := value.(float64); ok {
+				value = confidence * 100
+			}
+		}
+		commandParams[param] = value
+	}
+	return commandParams
+}
+
+// getDefaultActions returns the default actions to be taken for a given detection.
+func (p *Processor) getDefaultActions(detection Detections) []Action {
+	var actions []Action
+
+	// Append various default actions based on the application settings
+	if p.Settings.Realtime.Log.Enabled {
+		actions = append(actions, &LogAction{Settings: p.Settings, EventTracker: p.EventTracker, Note: detection.Note})
+	}
+
+	if p.Settings.Output.SQLite.Enabled || p.Settings.Output.MySQL.Enabled {
+		actions = append(actions, &DatabaseAction{
+			Settings:     p.Settings,
+			EventTracker: p.EventTracker,
+			Note:         detection.Note,
+			Results:      detection.Results,
+			Ds:           p.Ds})
+	}
+
+	// Add BirdWeatherAction if enabled and client is initialized
+	if p.Settings.Realtime.Birdweather.Enabled && p.BwClient != nil {
+		actions = append(actions, &BirdWeatherAction{
+			Settings:     p.Settings,
+			EventTracker: p.EventTracker,
+			BwClient:     p.BwClient,
+			Note:         detection.Note,
+			pcmData:      detection.pcmData3s})
+	}
+
+	// Add MQTT action if enabled
+	if p.Settings.Realtime.MQTT.Enabled && p.MqttClient != nil {
+		actions = append(actions, &MqttAction{
+			Settings:       p.Settings,
+			MqttClient:     p.MqttClient,
+			EventTracker:   p.EventTracker,
+			Note:           detection.Note,
+			BirdImageCache: p.BirdImageCache,
+		})
+	}
+
+	// Check if UpdateRangeFilterAction needs to be executed for the day
+	today := time.Now().Truncate(24 * time.Hour) // Current date with time set to midnight
+	if p.Settings.BirdNET.RangeFilter.LastUpdated.Before(today) {
+		fmt.Println("Updating species range filter")
+		// Add UpdateRangeFilterAction if it hasn't been executed today
+		actions = append(actions, &UpdateRangeFilterAction{
+			Bn:       p.Bn,
+			Settings: p.Settings,
+		})
+	}
+
+	return actions
+}
