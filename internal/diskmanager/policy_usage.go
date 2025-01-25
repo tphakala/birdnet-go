@@ -67,10 +67,8 @@ func UsageBasedCleanup(quitChan chan struct{}) error {
 
 		// Perform the cleanup
 		return performCleanup(files, baseDir, threshold, minClipsPerSpecies, speciesMonthCount, debug, quitChan)
-	} else {
-		if debug {
-			log.Printf("Disk usage %.1f%% is below the %.1f%% threshold. No cleanup needed.", diskUsage, threshold)
-		}
+	} else if debug {
+		log.Printf("Disk usage %.1f%% is below the %.1f%% threshold. No cleanup needed.", diskUsage, threshold)
 	}
 
 	return nil
