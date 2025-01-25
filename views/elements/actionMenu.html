@@ -4,49 +4,114 @@
        open: false, 
        isExcluded: {{if isSpeciesExcluded .CommonName}}true{{else}}false{{end}},
        init() {
-         console.log('Menu initialized for {{.CommonName}}, isExcluded:', this.isExcluded);
+         //console.log('Menu initialized for {{.CommonName}}, isExcluded:', this.isExcluded);
          document.body.addEventListener('species-excluded-{{.CommonName}}', () => {
-           console.log('Received exclude event for {{.CommonName}}');
+           //console.log('Received exclude event for {{.CommonName}}');
            this.isExcluded = true;
          });
          document.body.addEventListener('species-included-{{.CommonName}}', () => {
-           console.log('Received include event for {{.CommonName}}');
+           //console.log('Received include event for {{.CommonName}}');
            this.isExcluded = false;
          });
        }
      }"
      x-init="init()">
-  <button @click="open = !open; console.log('Menu opened for {{.CommonName}}, isExcluded:', isExcluded)" class="btn btn-ghost btn-xs">
+  <button @click="open = !open" class="btn btn-ghost btn-xs">
     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
     </svg>
   </button>
   <ul x-show="open" @click.away="open = false" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 border border-base-300">
-    <li><a href="#" class="text-sm">Review detection</a></li>
     <li>
       <a href="#" 
          class="text-sm"
-         hx-post="/detections/ignore?common_name={{.CommonName}}"
-         hx-confirm="Are you sure you want to ignore future detections of {{.CommonName}}? This will only affect new detections - existing detections will remain in the database."
-         @htmx:after-request="
-           if ($event.detail.successful) {
-             const eventName = isExcluded ? 'species-included-{{.CommonName}}' : 'species-excluded-{{.CommonName}}';
-             document.body.dispatchEvent(new Event(eventName));
-           }"
-         @click="open = false"
+         @click="open = false; const modal = document.getElementById('reviewModal{{.ID}}'); modal.showModal(); htmx.process(modal);">
+        <div class="flex items-center gap-2">
+          <span>Review detection</span>
+          {{if .Verified}}
+            {{if eq .Verified "correct"}}
+              <span class="badge badge-success badge-sm">✓</span>
+            {{else if eq .Verified "false_positive"}}
+              <span class="badge badge-error badge-sm">✗</span>
+            {{end}}
+          {{end}}
+        </div>
+      </a>
+    </li>
+    <li>
+      <a href="#" 
+         class="text-sm"
+         @click="
+           open = false;
+           const modal = document.getElementById('confirmModal{{.ID}}');
+           document.getElementById('confirmTitle{{.ID}}').textContent = isExcluded ? 'Show Species' : 'Ignore Species';
+           document.getElementById('confirmMessage{{.ID}}').textContent = isExcluded 
+             ? 'Are you sure you want to show future detections of {{.CommonName}}?' 
+             : 'Are you sure you want to ignore future detections of {{.CommonName}}? This will only affect new detections - existing detections will remain in the database.';
+           document.getElementById('confirmButton{{.ID}}').onclick = () => {
+             htmx.ajax('POST', '/detections/ignore?common_name={{.CommonName}}', {
+               target: 'body',
+               swap: 'none',
+               handler: (success) => {
+                 if (success) {
+                   const eventName = isExcluded ? 'species-included-{{.CommonName}}' : 'species-excluded-{{.CommonName}}';
+                   document.body.dispatchEvent(new Event(eventName));
+                   modal.close();
+                 }
+               }
+             });
+           };
+           modal.showModal();"
          x-text="isExcluded ? 'Show species' : 'Ignore species'">
       </a>
     </li>
     <li>
       <a href="#" 
          class="text-sm text-error"
-         hx-delete="/detections/delete?id={{.ID}}"
-         hx-confirm="Are you sure you want to delete this detection? This action cannot be undone."
-         hx-target="closest tr"
-         hx-swap="outerHTML swap:1s">
+         @click="
+           open = false;
+           const modal = document.getElementById('confirmModal{{.ID}}');
+           document.getElementById('confirmTitle{{.ID}}').textContent = 'Delete Detection';
+           document.getElementById('confirmMessage{{.ID}}').textContent = 'Are you sure you want to delete this detection? This action cannot be undone.';
+           document.getElementById('confirmButton{{.ID}}').onclick = () => {
+             console.log('[DEBUG] Delete: Starting delete request for ID {{.ID}}');
+             htmx.ajax('DELETE', '/detections/delete?id={{.ID}}', {
+               target: '#recentDetections-wrapper',
+               swap: 'none',
+               handler: (success) => {
+                 if (success) {
+                   console.log('[DEBUG] Delete: Success response received for ID {{.ID}}');
+                   modal.close();
+                   console.log('[DEBUG] Delete: Modal closed');
+                   htmx.trigger('#recentDetections-wrapper', 'refreshList');
+                   console.log('[DEBUG] Delete: Triggered list refresh');
+                 } else {
+                   console.log('[DEBUG] Delete: Failed response for ID {{.ID}}');
+                 }
+               }
+             });
+           };
+           modal.showModal();">
         Delete detection
       </a>
     </li>
   </ul>
+
+  <!-- Include Review Modal Component -->
+  {{template "reviewModal" .}}
+  
+  <!-- Include Confirm Modal Component -->
+  {{template "confirmModal" .}}
+
+  <!-- Add event listeners for SSE events -->
+  <script>
+  document.body.addEventListener('closeModal', function(evt) {
+      const modal = document.getElementById('confirmModal{{.ID}}');
+      if (modal) {
+          modal.close();
+          console.log('[DEBUG] Delete: Modal closed via SSE');
+      }
+  });
+  </script>
 </div>
 {{end}} 
