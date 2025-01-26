@@ -1,13 +1,5 @@
 {{define "recentDetections"}}
 
-<div class="overflow-x-auto"
-     hx-trigger="refreshList from:body" 
-     hx-get="/detections/recent" 
-     hx-target="#recentDetections-wrapper"
-     hx-swap="innerHTML"
-     hx-indicator="#global-loading-indicator"
-     hx-preserve="true">
-
   <table class="hidden sm:table table w-full text-sm text-left">
     <thead class="text-xs">
       <tr>
