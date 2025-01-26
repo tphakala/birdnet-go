@@ -52,10 +52,12 @@
 					hx-get="{{.PreloadFragment}}" 
 					hx-target="#loginModal"
 					hx-on::after-request="loginModal.showModal()" 
-				{{else if .PreloadFragment}} hx-trigger="load"
+				{{else if .PreloadFragment}}
+				 	hx-trigger="load"
 					hx-get="{{.PreloadFragment}}" 
 					hx-target="this"
 				{{end}}>
+				
 				{{ RenderContent . }}
 			</div>
 			<!-- Placeholder for dynamic notifications -->
@@ -67,6 +69,16 @@
 
 	<!-- Login form in a DaisyUI modal -->
 	<dialog id="loginModal" class="modal modal-bottom sm:modal-middle"></dialog>
+
+	<!-- Global Loading Indicator -->
+	<div id="global-loading-indicator" 
+		 class="htmx-indicator fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+		<div class="bg-base-100 rounded-lg p-4 flex items-center space-x-3 shadow-lg pointer-events-auto">
+			<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+			<span class="text-base-content">Loading...</span>
+		</div>
+	</div>
+
 	<script>
 
 		// Function to set theme
@@ -91,7 +103,7 @@
 			this.checked = localStorage.getItem('theme') === 'dark';
 		});
 
-		{{ if .Settings.Security.RedirectToHTTPS}}
+		{{ if .Settings.Security.RedirectToHTTPS }}
 		// Check for HTTPS redirect
 		(function () {
 			if (window.location.protocol !== 'https:' &&
@@ -101,6 +113,7 @@
 			}
 		})();
 		{{ end }}
+
 	</script>
 </body>
 

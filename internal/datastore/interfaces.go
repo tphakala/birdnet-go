@@ -33,6 +33,7 @@ type Interface interface {
 	GetNoteClipPath(noteID string) (string, error)
 	DeleteNoteClipPath(noteID string) error
 	GetClipsQualifyingForRemoval(minHours int, minClips int) ([]ClipForRemoval, error)
+	UpdateNote(id string, updates map[string]interface{}) error
 	// weather data
 	SaveDailyEvents(dailyEvents *DailyEvents) error
 	GetDailyEvents(date string) (DailyEvents, error)
@@ -549,4 +550,25 @@ func getHourRange(hour string, duration int) (startTime, endTime string) {
 	startTime = fmt.Sprintf("%02d:00:00", startHour)
 	endTime = fmt.Sprintf("%02d:00:00", endHour)
 	return startTime, endTime
+}
+
+// UpdateNote updates specific fields of a note. It validates the input parameters
+// and returns appropriate errors if the note doesn't exist or if the update fails.
+func (ds *DataStore) UpdateNote(id string, updates map[string]interface{}) error {
+	if id == "" {
+		return fmt.Errorf("invalid id: must not be empty")
+	}
+	if len(updates) == 0 {
+		return fmt.Errorf("no updates provided")
+	}
+
+	result := ds.DB.Model(&Note{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return fmt.Errorf("failed to update note: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("note with id %s not found", id)
+	}
+
+	return nil
 }

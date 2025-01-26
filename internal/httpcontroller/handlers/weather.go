@@ -3,8 +3,10 @@ package handlers
 
 import (
 	"html/template"
+	"math"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
@@ -47,4 +49,56 @@ func (h *Handlers) GetWeatherDescriptionFunc() func(weatherCode string) string {
 		iconCode := weather.IconCode(weatherCode)
 		return weather.GetIconDescription(iconCode)
 	}
+}
+
+// getSunEvents calculates sun events for a given date
+func (h *Handlers) getSunEvents(date string, loc *time.Location) (suncalc.SunEventTimes, error) {
+	// Parse the input date string into a time.Time object using the provided location
+	dateTime, err := time.ParseInLocation("2006-01-02", date, loc)
+	if err != nil {
+		// If parsing fails, return an empty SunEventTimes and the error
+		return suncalc.SunEventTimes{}, err
+	}
+
+	// Attempt to get sun event times using the SunCalc
+	sunEvents, err := h.SunCalc.GetSunEventTimes(dateTime)
+	if err != nil {
+		// If sun events are not available, use default values
+		return suncalc.SunEventTimes{
+			CivilDawn: dateTime.Add(5 * time.Hour),  // Set civil dawn to 5:00 AM
+			Sunrise:   dateTime.Add(6 * time.Hour),  // Set sunrise to 6:00 AM
+			Sunset:    dateTime.Add(18 * time.Hour), // Set sunset to 6:00 PM
+			CivilDusk: dateTime.Add(19 * time.Hour), // Set civil dusk to 7:00 PM
+		}, nil
+	}
+
+	// Return the calculated sun events
+	return sunEvents, nil
+}
+
+// findClosestWeather finds the closest hourly weather data to the given time
+func findClosestWeather(noteTime time.Time, hourlyWeather []datastore.HourlyWeather) *datastore.HourlyWeather {
+	// If there's no weather data, return nil
+	if len(hourlyWeather) == 0 {
+		return nil
+	}
+
+	// Initialize variables to track the closest weather data
+	var closestWeather *datastore.HourlyWeather
+	minDiff := time.Duration(math.MaxInt64)
+
+	// Iterate through all hourly weather data
+	for i := range hourlyWeather {
+		// Calculate the absolute time difference between the note time and weather time
+		diff := noteTime.Sub(hourlyWeather[i].Time).Abs()
+
+		// If this difference is smaller than the current minimum, update the closest weather
+		if diff < minDiff {
+			minDiff = diff
+			closestWeather = &hourlyWeather[i]
+		}
+	}
+
+	// Return the weather data closest to the note time
+	return closestWeather
 }

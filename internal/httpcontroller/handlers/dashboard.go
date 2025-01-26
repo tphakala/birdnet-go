@@ -2,10 +2,8 @@
 package handlers
 
 import (
-	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"sort"
 	"strconv"
 	"time"
@@ -144,37 +142,4 @@ func (h *Handlers) GetAllNotes(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, notes)
-}
-
-// deleteNoteHandler deletes note object from database and its associated audio file
-func (h *Handlers) DeleteNote(c echo.Context) error {
-	noteID := c.QueryParam("id")
-	if noteID == "" {
-		return h.NewHandlerError(fmt.Errorf("empty note ID"), "Note ID is required", http.StatusBadRequest)
-	}
-
-	// Retrieve the path to the audio file before deleting the note
-	clipPath, err := h.DS.GetNoteClipPath(noteID)
-	if err != nil {
-		return h.NewHandlerError(err, "Failed to retrieve audio clip path", http.StatusInternalServerError)
-	}
-
-	// Delete the note from the database
-	err = h.DS.Delete(noteID)
-	if err != nil {
-		return h.NewHandlerError(err, "Failed to delete note", http.StatusInternalServerError)
-	}
-
-	// If there's an associated clip, delete the file
-	if clipPath != "" {
-		err = os.Remove(clipPath)
-		if err != nil {
-			h.logError(&HandlerError{Err: err, Message: "Failed to delete audio clip", Code: http.StatusInternalServerError})
-		} else {
-			h.logInfo(fmt.Sprintf("Deleted audio clip: %s", clipPath))
-		}
-	}
-
-	// Pass this struct to the template or return a success message
-	return c.HTML(http.StatusOK, `<div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 3000)" class="notification-class">Delete successful!</div>`)
 }

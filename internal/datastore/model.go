@@ -22,6 +22,7 @@ type Note struct {
 	Threshold      float64
 	Sensitivity    float64
 	ClipName       string
+	Verified       string `gorm:"type:enum('unverified','correct','false_positive');default:'unverified'"`
 	Comment        string `gorm:"type:text"`
 	ProcessingTime time.Duration
 	Results        []Results `gorm:"foreignKey:NoteID"`

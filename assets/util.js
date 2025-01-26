@@ -58,17 +58,23 @@ function initializeDatePicker() {
 }
 
 htmx.on('htmx:afterSettle', function (event) {
-	if (event.detail.target.id.endsWith('-content')) {
-		// Find all chart containers in the newly loaded content and render them
-		event.detail.target.querySelectorAll('[id$="-chart"]').forEach(function (chartContainer) {
-			renderChart(chartContainer.id, chartContainer.dataset.chartOptions);
-		});
-	}
-	
-	// Initialize date picker if we're on the dashboard
-	if (isLocationDashboard()) {
-		initializeDatePicker();
-	}
+    // Skip if target or id is not available
+    if (!event.detail?.target) return;
+    
+    // Get the target id, ensuring it's a string
+    const targetId = String(event.detail.target?.id || '');
+    
+    if (targetId.endsWith('-content')) {
+        // Find all chart containers in the newly loaded content and render them
+        event.detail.target.querySelectorAll('[id$="-chart"]').forEach(function (chartContainer) {
+            renderChart(chartContainer.id, chartContainer.dataset.chartOptions);
+        });
+    }
+    
+    // Initialize date picker if we're on the dashboard
+    if (isLocationDashboard()) {
+        initializeDatePicker();
+    }
 });
 
 // Add document ready listener to handle initial page load
