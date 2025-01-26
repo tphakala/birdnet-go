@@ -4,13 +4,10 @@
        open: false, 
        isExcluded: {{if isSpeciesExcluded .CommonName}}true{{else}}false{{end}},
        init() {
-         //console.log('Menu initialized for {{.ID}}, isExcluded:', this.isExcluded);
          document.body.addEventListener('species-excluded-{{.ID}}', () => {
-           //console.log('Received exclude event for {{.ID}}');
            this.isExcluded = true;
          });
          document.body.addEventListener('species-included-{{.ID}}', () => {
-           //console.log('Received include event for {{.ID}}');
            this.isExcluded = false;
          });
        }
@@ -44,7 +41,7 @@
          @click="
            open = false;
            const modal = document.getElementById('confirmModal{{.ID}}');
-           document.getElementById('confirmTitle{{.ID}}').textContent = isExcluded ? 'Show Species' : 'Ignore Species';
+           document.getElementById('confirmTitle{{.ID}}').textContent = isExcluded ? 'Show Species {{.CommonName | js}}' : 'Ignore Species {{.CommonName | js}}';
            document.getElementById('confirmMessage{{.ID}}').textContent = isExcluded 
              ? `Are you sure you want to show future detections of {{.CommonName | js}}?`
              : `Are you sure you want to ignore future detections of {{.CommonName | js}}? This will only affect new detections - existing detections will remain in the database.`;
@@ -67,31 +64,29 @@
     </li>
     <li>
       <a href="#" 
-         class="text-sm text-error"
-         @click="
-           open = false;
-           const modal = document.getElementById('confirmModal{{.ID}}');
-           document.getElementById('confirmTitle{{.ID}}').textContent = 'Delete Detection of {{.CommonName | js}}';
-           document.getElementById('confirmMessage{{.ID}}').textContent = 'Are you sure you want to delete detection of {{.CommonName | js}}? This action cannot be undone.';
-           document.getElementById('confirmButton{{.ID}}').onclick = () => {
-             console.log('[DEBUG] Delete: Starting delete request for ID {{.ID}}');
-             htmx.ajax('DELETE', '/detections/delete?id={{.ID}}', {
-               target: '#recentDetections-wrapper',
-               swap: 'none',
-               handler: (success) => {
-                 if (success) {
-                   console.log('[DEBUG] Delete: Success response received for ID {{.ID}}');
-                   modal.close();
-                   console.log('[DEBUG] Delete: Modal closed');
-                   htmx.trigger('#recentDetections-wrapper', 'refreshList');
-                   console.log('[DEBUG] Delete: Triggered list refresh');
-                 } else {
-                   console.log('[DEBUG] Delete: Failed response for ID {{.ID}}');
-                 }
-               }
-             });
-           };
-           modal.showModal();">
+        class="text-sm text-error"
+        @click="
+          open = false;
+          const modal = document.getElementById('confirmModal{{.ID}}');
+          document.getElementById('confirmTitle{{.ID}}').textContent = 'Delete Detection of {{.CommonName | js}}';
+          document.getElementById('confirmMessage{{.ID}}').textContent = 'Are you sure you want to delete detection of {{.CommonName | js}}? This action cannot be undone.';
+          document.getElementById('confirmButton{{.ID}}').onclick = () => {
+            htmx.ajax('DELETE', '/detections/delete?id={{.ID}}', {
+            handler: (success) => {
+              if (success) {
+                const list = htmx.find('[hx-trigger*=\'refreshListEvent\']');
+                if (list) {
+                  htmx.trigger(list, 'refreshListEvent');
+                } else {
+                  // Fallback: reload the current view
+                  window.location.reload();
+                }
+                modal.close();
+              }
+            }
+          });
+        };
+        modal.showModal();">
         Delete detection
       </a>
     </li>
@@ -103,15 +98,5 @@
   <!-- Include Confirm Modal Component -->
   {{template "confirmModal" .}}
 
-  <!-- Add event listeners for SSE events -->
-  <script>
-  document.body.addEventListener('closeModal', function(evt) {
-      const modal = document.getElementById('confirmModal{{.ID}}');
-      if (modal) {
-          modal.close();
-          console.log('[DEBUG] Delete: Modal closed via SSE');
-      }
-  });
-  </script>
 </div>
 {{end}} 
