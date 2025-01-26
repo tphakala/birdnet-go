@@ -1,9 +1,9 @@
 {{define "reviewModal"}}
 <dialog id="reviewModal{{.ID}}" class="modal modal-bottom sm:modal-middle">
   <div class="modal-box max-w-3xl">
-    <h3 class="font-bold text-lg mb-1">Review Detection: {{.CommonName}}</h3>
+    <h3 class="font-bold text-lg mb-1">Review Detection: {{.CommonName | js}}</h3>
     <div class="flex items-center gap-2 mb-4">
-      <p class="text-sm text-base-content/70">{{.ScientificName}}</p>
+      <p class="text-sm text-base-content/70">{{.ScientificName | js}}</p>
       {{if .Verified}}
         {{if eq .Verified "correct"}}
           <span class="badge badge-success gap-1">
@@ -45,19 +45,16 @@
     <form hx-post="/detections/review" 
           hx-target="this"
           hx-swap="none"
-          @htmx:after-request="
-            if (event.detail.successful) {
-              this.closest('dialog').close();
-              // Trigger a refresh on the parent list
-              const list = htmx.find('[hx-trigger=\'refreshContent\']');
-              if (list) {
-                htmx.trigger(list, 'refreshContent');
-              } else {
-                // Fallback: reload the current view
-                window.location.reload();
-              }
+          id="reviewForm{{.ID}}"
+          @htmx:after-request="(() => {
+          if (event.detail.successful) {
+            const modal = document.getElementById('reviewModal{{.ID}}');
+            if (modal) {
+              modal.close();
             }
-          ">
+          }
+          })()"
+    >
       <input type="hidden" name="id" value="{{.ID}}">
       
       <div class="form-control mb-4">
