@@ -48,8 +48,17 @@
 
         <!-- Confidence indicator -->
         <td class="py-1 px-2 sm:px-1 sm:py-1">
-          <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
-            {{ confidence .Confidence}}
+          <div class="confidence-container">
+            <div class="confidence-badge {{confidenceColor .Confidence}} text-white font-medium">
+              {{ confidence .Confidence}}
+            </div>
+            {{if .Verified}}
+              {{if eq .Verified "correct"}}
+                <div class="review-badge correct" title="Verified correct">✓</div>
+              {{else if eq .Verified "false_positive"}}
+                <div class="review-badge false_positive" title="Marked as false positive">✗</div>
+              {{end}}
+            {{end}}
           </div>
         </td>
 
@@ -138,25 +147,21 @@
           {{title .CommonName}}
         </a>
 
-        <!-- Confidence indicator -->
-        <div class="justify-center inline-flex flex-grow py-1">
-          <div class="font-medium text-xs px-2 py-1">
-            <span class="hidden xs:block">Confid.</span>
-          </div>
-          <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium text-xs px-2 py-1 rounded">
-            {{confidence .Confidence}}
+        <!-- Mobile view confidence -->
+        <div class="flex items-center gap-2 ml-auto">
+          <div class="confidence-container">
+            <div class="confidence-badge {{confidenceColor .Confidence}} text-white font-medium">
+              {{confidence .Confidence}}
+            </div>
+            {{if .Verified}}
+              {{if eq .Verified "correct"}}
+                <div class="review-badge correct" title="Verified correct">✓</div>
+              {{else if eq .Verified "false_positive"}}
+                <div class="review-badge false_positive" title="Marked as false positive">✗</div>
+              {{end}}
+            {{end}}
           </div>
         </div>
-
-        <!-- Thumbnail -->
-        {{if $.DashboardSettings.Thumbnails.Recent}}
-        <div class="thumbnail-container w-20 ml-2">
-          <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
-            hx-trigger="click" hx-push-url="true" class="text-sm font-normal flex-grow">
-            <img loading="lazy" src="{{thumbnail .ScientificName}}" class="rounded-md">
-          </a>
-        </div>
-        {{end}}
       </div>
 
       <!-- Second row: Spectrogram -->
