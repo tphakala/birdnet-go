@@ -372,13 +372,70 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 	}
 
 	comment := c.FormValue("comment")
+	ignoreSpecies := c.FormValue("ignore_species")
 
-	// Verify that the note exists
-	if _, err := h.DS.Get(id); err != nil {
+	// Verify that the note exists and get its data
+	note, err := h.DS.Get(id)
+	if err != nil {
 		return h.NewHandlerError(err, "Failed to retrieve note", http.StatusInternalServerError)
 	}
 
-	// Update only the verification status and comment
+	// Handle ignore species if it's set and the detection is marked as false positive
+	if verified == "false_positive" && ignoreSpecies != "" {
+		// Get settings instance
+		settings := conf.Setting()
+
+		// Check if species is already in the excluded list
+		isExcluded := false
+		for _, s := range settings.Realtime.Species.Exclude {
+			if s == ignoreSpecies {
+				isExcluded = true
+				break
+			}
+		}
+
+		// Add to excluded list if not already there
+		if !isExcluded {
+			settings.Realtime.Species.Exclude = append(settings.Realtime.Species.Exclude, ignoreSpecies)
+
+			// Save the settings
+			if err := conf.SaveSettings(); err != nil {
+				h.SSE.SendNotification(Notification{
+					Message: fmt.Sprintf("Failed to update ignore list: %v", err),
+					Type:    "error",
+				})
+				return h.NewHandlerError(err, "Failed to save settings", http.StatusInternalServerError)
+			}
+
+			h.SSE.SendNotification(Notification{
+				Message: fmt.Sprintf("%s added to ignore list", ignoreSpecies),
+				Type:    "success",
+			})
+		}
+	} else if verified == "correct" && note.Verified == "false_positive" {
+		// If changing from false positive to correct, check if species is in ignore list
+		settings := conf.Setting()
+
+		// Check if species is in the excluded list
+		isExcluded := false
+		for _, s := range settings.Realtime.Species.Exclude {
+			if s == note.CommonName {
+				isExcluded = true
+				break
+			}
+		}
+
+		// If species is in exclude list, ask user if they want to remove it
+		if isExcluded {
+			// Send notification to inform user
+			h.SSE.SendNotification(Notification{
+				Message: fmt.Sprintf("%s is currently in ignore list. You may want to remove it from Settings.", note.CommonName),
+				Type:    "warning",
+			})
+		}
+	}
+
+	// Update the verification status and comment
 	if err := h.DS.UpdateNote(id, map[string]interface{}{
 		"verified": verified,
 		"comment":  comment,
