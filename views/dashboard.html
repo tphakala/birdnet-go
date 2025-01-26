@@ -49,8 +49,7 @@
 			<label for="numDetections" class="label-text">Show:</label>
 			<select id="numDetections" name="numDetections" 
 					hx-get="/detections/recent" 
-					hx-target="#recentDetections-wrapper"
-					hx-indicator="#global-loading-indicator"
+					hx-target="#recentDetections"
 					hx-trigger="change" 
 					class="select select-sm focus-visible:outline-none">
 				<option value="5" selected>5</option>
@@ -62,10 +61,9 @@
 	</div>
 
 	<!-- Wrapper for recent detections -->
-	<div id="recentDetections-wrapper" 
+	<div id="recentDetections" 
 		 hx-get="/detections/recent" 
-		 hx-trigger="load"
-		 hx-indicator="#global-loading-indicator">
+		 hx-trigger="load, refreshListEvent from:body">
 	</div>
 </section>
 
