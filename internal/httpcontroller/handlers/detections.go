@@ -35,68 +35,6 @@ type NoteWithWeather struct {
 	TimeOfDay weather.TimeOfDay
 }
 
-// DeleteDetection handles the deletion of a detection and its associated files
-func (h *Handlers) DeleteDetection(c echo.Context) error {
-	id := c.QueryParam("id")
-
-	if id == "" {
-		h.SSE.SendNotification(Notification{
-			Message: "Missing detection ID",
-			Type:    "error",
-		})
-		return h.NewHandlerError(fmt.Errorf("no ID provided"), "Missing detection ID", http.StatusBadRequest)
-	}
-
-	// Get the clip path before deletion
-	clipPath, err := h.DS.GetNoteClipPath(id)
-	if err != nil {
-		h.Debug("Failed to get clip path: %v", err)
-		h.SSE.SendNotification(Notification{
-			Message: fmt.Sprintf("Failed to get clip path: %v", err),
-			Type:    "error",
-		})
-		return h.NewHandlerError(err, "Failed to get clip path", http.StatusInternalServerError)
-	}
-
-	// Delete the note from the database
-	if err := h.DS.Delete(id); err != nil {
-		h.Debug("Failed to delete note %s: %v", id, err)
-		h.SSE.SendNotification(Notification{
-			Message: fmt.Sprintf("Failed to delete note: %v", err),
-			Type:    "error",
-		})
-		return h.NewHandlerError(err, "Failed to delete note", http.StatusInternalServerError)
-	}
-
-	// If there was a clip associated, delete the audio file and spectrogram
-	if clipPath != "" {
-		// Delete audio file
-		audioPath := fmt.Sprintf("%s/%s", h.Settings.Realtime.Audio.Export.Path, clipPath)
-		if err := os.Remove(audioPath); err != nil && !os.IsNotExist(err) {
-			h.Debug("Failed to delete audio file %s: %v", audioPath, err)
-		}
-
-		// Delete spectrogram file
-		spectrogramPath := fmt.Sprintf("%s/%s.png", h.Settings.Realtime.Audio.Export.Path, strings.TrimSuffix(clipPath, ".wav"))
-		if err := os.Remove(spectrogramPath); err != nil && !os.IsNotExist(err) {
-			h.Debug("Failed to delete spectrogram file %s: %v", spectrogramPath, err)
-		}
-	}
-
-	// Log the successful deletion
-	h.Debug("Successfully deleted detection %s", id)
-
-	// Send success notification
-	h.SSE.SendNotification(Notification{
-		Message: "Detection deleted successfully",
-		Type:    "success",
-	})
-
-	// Set response headers
-	c.Response().Header().Set("HX-Trigger", "refreshList")
-	return c.NoContent(http.StatusOK)
-}
-
 // ListDetections handles requests for hourly, species-specific, and search detections
 func (h *Handlers) Detections(c echo.Context) error {
 	req := new(DetectionRequest)
@@ -358,6 +296,69 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 	return notesWithWeather, nil
 }
 
+// DeleteDetection handles the deletion of a detection and its associated files
+func (h *Handlers) DeleteDetection(c echo.Context) error {
+	id := c.QueryParam("id")
+
+	if id == "" {
+		h.SSE.SendNotification(Notification{
+			Message: "Missing detection ID",
+			Type:    "error",
+		})
+		return h.NewHandlerError(fmt.Errorf("no ID provided"), "Missing detection ID", http.StatusBadRequest)
+	}
+
+	// Get the clip path before deletion
+	clipPath, err := h.DS.GetNoteClipPath(id)
+	if err != nil {
+		h.Debug("Failed to get clip path: %v", err)
+		h.SSE.SendNotification(Notification{
+			Message: fmt.Sprintf("Failed to get clip path: %v", err),
+			Type:    "error",
+		})
+		return h.NewHandlerError(err, "Failed to get clip path", http.StatusInternalServerError)
+	}
+
+	// Delete the note from the database
+	if err := h.DS.Delete(id); err != nil {
+		h.Debug("Failed to delete note %s: %v", id, err)
+		h.SSE.SendNotification(Notification{
+			Message: fmt.Sprintf("Failed to delete note: %v", err),
+			Type:    "error",
+		})
+		return h.NewHandlerError(err, "Failed to delete note", http.StatusInternalServerError)
+	}
+
+	// If there was a clip associated, delete the audio file and spectrogram
+	if clipPath != "" {
+		// Delete audio file
+		audioPath := fmt.Sprintf("%s/%s", h.Settings.Realtime.Audio.Export.Path, clipPath)
+		if err := os.Remove(audioPath); err != nil && !os.IsNotExist(err) {
+			h.Debug("Failed to delete audio file %s: %v", audioPath, err)
+		}
+
+		// Delete spectrogram file
+		spectrogramPath := fmt.Sprintf("%s/%s.png", h.Settings.Realtime.Audio.Export.Path, strings.TrimSuffix(clipPath, ".wav"))
+		if err := os.Remove(spectrogramPath); err != nil && !os.IsNotExist(err) {
+			h.Debug("Failed to delete spectrogram file %s: %v", spectrogramPath, err)
+		}
+	}
+
+	// Log the successful deletion
+	h.Debug("Successfully deleted detection %s", id)
+
+	// Send success notification
+	h.SSE.SendNotification(Notification{
+		Message: "Detection deleted successfully",
+		Type:    "success",
+	})
+
+	// Set response header to refresh list
+	c.Response().Header().Set("HX-Trigger", "refreshListEvent")
+
+	return c.NoContent(http.StatusOK)
+}
+
 // ReviewDetection handles the verification of a detection as either correct or false positive
 func (h *Handlers) ReviewDetection(c echo.Context) error {
 	id := c.FormValue("id")
@@ -395,7 +396,8 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 		Type:    "success",
 	})
 
-	// Set HTMX response headers
-	c.Response().Header().Set("HX-Refresh", "true")
+	// Set response header to refresh list
+	c.Response().Header().Set("HX-Trigger", "refreshListEvent")
+
 	return c.NoContent(http.StatusOK)
 }
