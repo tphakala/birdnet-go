@@ -78,7 +78,7 @@ tasks:
       - mkdir -p assets
       - curl -sL https://unpkg.com/leaflet/dist/leaflet.js -o assets/leaflet.js
       - curl -sL https://unpkg.com/leaflet/dist/leaflet.css -o assets/leaflet.css
-      - curl -sL https://unpkg.com/htmx.org -o assets/htmx.min.js
+      - curl -sL https://unpkg.com/htmx.org@2.0 -o assets/htmx.min.js
       - curl -sL https://unpkg.com/alpinejs -o assets/alpinejs.min.js
 
   generate-tailwindcss:
