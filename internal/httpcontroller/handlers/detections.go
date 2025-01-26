@@ -5,13 +5,14 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
 
@@ -195,34 +196,36 @@ func (h *Handlers) DetectionDetails(c echo.Context) error {
 }
 
 // RecentDetections handles requests for the latest detections.
-// It retrieves the last set of detections based on the specified count and view type.
 func (h *Handlers) RecentDetections(c echo.Context) error {
-	numDetections := parseNumDetections(c.QueryParam("numDetections"), 10) // Default value is 10
+	h.Debug("RecentDetections: Starting handler")
 
-	var data interface{}
-	var templateName string
+	numDetections := parseNumDetections(c.QueryParam("numDetections"), 10)
+	h.Debug("RecentDetections: Fetching %d detections", numDetections)
 
-	// Use the existing detailed view
 	notes, err := h.DS.GetLastDetections(numDetections)
 	if err != nil {
+		h.Debug("RecentDetections: Error fetching detections: %v", err)
 		return h.NewHandlerError(err, "Failed to fetch recent detections", http.StatusInternalServerError)
 	}
 
-	data = struct {
+	h.Debug("RecentDetections: Found %d detections", len(notes))
+
+	data := struct {
 		Notes             []datastore.Note
 		DashboardSettings conf.Dashboard
 	}{
 		Notes:             notes,
 		DashboardSettings: *h.DashboardSettings,
 	}
-	templateName = "recentDetections"
 
-	// Render the appropriate template with the data
-	err = c.Render(http.StatusOK, templateName, data)
+	h.Debug("RecentDetections: Rendering template")
+	err = c.Render(http.StatusOK, "recentDetections", data)
 	if err != nil {
-		log.Printf("Failed to render %s template: %v", templateName, err)
+		h.Debug("RecentDetections: Error rendering template: %v", err)
 		return h.NewHandlerError(err, "Failed to render template", http.StatusInternalServerError)
 	}
+
+	h.Debug("RecentDetections: Successfully completed")
 	return nil
 }
 
@@ -293,54 +296,165 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 	return notesWithWeather, nil
 }
 
-// getSunEvents calculates sun events for a given date
-func (h *Handlers) getSunEvents(date string, loc *time.Location) (suncalc.SunEventTimes, error) {
-	// Parse the input date string into a time.Time object using the provided location
-	dateTime, err := time.ParseInLocation("2006-01-02", date, loc)
+// DeleteDetection handles the deletion of a detection and its associated files
+func (h *Handlers) DeleteDetection(c echo.Context) error {
+	id := c.QueryParam("id")
+
+	if id == "" {
+		h.SSE.SendNotification(Notification{
+			Message: "Missing detection ID",
+			Type:    "error",
+		})
+		return h.NewHandlerError(fmt.Errorf("no ID provided"), "Missing detection ID", http.StatusBadRequest)
+	}
+
+	// Get the clip path before deletion
+	clipPath, err := h.DS.GetNoteClipPath(id)
 	if err != nil {
-		// If parsing fails, return an empty SunEventTimes and the error
-		return suncalc.SunEventTimes{}, err
+		h.Debug("Failed to get clip path: %v", err)
+		h.SSE.SendNotification(Notification{
+			Message: fmt.Sprintf("Failed to get clip path: %v", err),
+			Type:    "error",
+		})
+		return h.NewHandlerError(err, "Failed to get clip path", http.StatusInternalServerError)
 	}
 
-	// Attempt to get sun event times using the SunCalc
-	sunEvents, err := h.SunCalc.GetSunEventTimes(dateTime)
-	if err != nil {
-		// If sun events are not available, use default values
-		return suncalc.SunEventTimes{
-			CivilDawn: dateTime.Add(5 * time.Hour),  // Set civil dawn to 5:00 AM
-			Sunrise:   dateTime.Add(6 * time.Hour),  // Set sunrise to 6:00 AM
-			Sunset:    dateTime.Add(18 * time.Hour), // Set sunset to 6:00 PM
-			CivilDusk: dateTime.Add(19 * time.Hour), // Set civil dusk to 7:00 PM
-		}, nil
+	// Delete the note from the database
+	if err := h.DS.Delete(id); err != nil {
+		h.Debug("Failed to delete note %s: %v", id, err)
+		h.SSE.SendNotification(Notification{
+			Message: fmt.Sprintf("Failed to delete note: %v", err),
+			Type:    "error",
+		})
+		return h.NewHandlerError(err, "Failed to delete note", http.StatusInternalServerError)
 	}
 
-	// Return the calculated sun events
-	return sunEvents, nil
-}
+	// If there was a clip associated, delete the audio file and spectrogram
+	if clipPath != "" {
+		// Delete audio file
+		audioPath := fmt.Sprintf("%s/%s", h.Settings.Realtime.Audio.Export.Path, clipPath)
+		if err := os.Remove(audioPath); err != nil && !os.IsNotExist(err) {
+			h.Debug("Failed to delete audio file %s: %v", audioPath, err)
+		}
 
-// findClosestWeather finds the closest hourly weather data to the given time
-func findClosestWeather(noteTime time.Time, hourlyWeather []datastore.HourlyWeather) *datastore.HourlyWeather {
-	// If there's no weather data, return nil
-	if len(hourlyWeather) == 0 {
-		return nil
-	}
-
-	// Initialize variables to track the closest weather data
-	var closestWeather *datastore.HourlyWeather
-	minDiff := time.Duration(math.MaxInt64)
-
-	// Iterate through all hourly weather data
-	for i := range hourlyWeather {
-		// Calculate the absolute time difference between the note time and weather time
-		diff := noteTime.Sub(hourlyWeather[i].Time).Abs()
-
-		// If this difference is smaller than the current minimum, update the closest weather
-		if diff < minDiff {
-			minDiff = diff
-			closestWeather = &hourlyWeather[i]
+		// Delete spectrogram file
+		spectrogramPath := fmt.Sprintf("%s/%s.png", h.Settings.Realtime.Audio.Export.Path, strings.TrimSuffix(clipPath, ".wav"))
+		if err := os.Remove(spectrogramPath); err != nil && !os.IsNotExist(err) {
+			h.Debug("Failed to delete spectrogram file %s: %v", spectrogramPath, err)
 		}
 	}
 
-	// Return the weather data closest to the note time
-	return closestWeather
+	// Log the successful deletion
+	h.Debug("Successfully deleted detection %s", id)
+
+	// Send success notification
+	h.SSE.SendNotification(Notification{
+		Message: "Detection deleted successfully",
+		Type:    "success",
+	})
+
+	// Set response header to refresh list
+	c.Response().Header().Set("HX-Trigger", "refreshListEvent")
+
+	return c.NoContent(http.StatusOK)
+}
+
+// ReviewDetection handles the verification of a detection as either correct or false positive
+func (h *Handlers) ReviewDetection(c echo.Context) error {
+	id := c.FormValue("id")
+	if id == "" {
+		return h.NewHandlerError(fmt.Errorf("no ID provided"), "Missing detection ID", http.StatusBadRequest)
+	}
+
+	verified := c.FormValue("verified")
+	if verified != "correct" && verified != "false_positive" {
+		return h.NewHandlerError(fmt.Errorf("invalid verification status"), "Invalid verification status", http.StatusBadRequest)
+	}
+
+	comment := c.FormValue("comment")
+	ignoreSpecies := c.FormValue("ignore_species")
+
+	// Verify that the note exists and get its data
+	note, err := h.DS.Get(id)
+	if err != nil {
+		return h.NewHandlerError(err, "Failed to retrieve note", http.StatusInternalServerError)
+	}
+
+	// Handle ignore species if it's set and the detection is marked as false positive
+	if verified == "false_positive" && ignoreSpecies != "" {
+		// Get settings instance
+		settings := conf.Setting()
+
+		// Check if species is already in the excluded list
+		isExcluded := false
+		for _, s := range settings.Realtime.Species.Exclude {
+			if s == ignoreSpecies {
+				isExcluded = true
+				break
+			}
+		}
+
+		// Add to excluded list if not already there
+		if !isExcluded {
+			settings.Realtime.Species.Exclude = append(settings.Realtime.Species.Exclude, ignoreSpecies)
+
+			// Save the settings
+			if err := conf.SaveSettings(); err != nil {
+				h.SSE.SendNotification(Notification{
+					Message: fmt.Sprintf("Failed to update ignore list: %v", err),
+					Type:    "error",
+				})
+				return h.NewHandlerError(err, "Failed to save settings", http.StatusInternalServerError)
+			}
+
+			h.SSE.SendNotification(Notification{
+				Message: fmt.Sprintf("%s added to ignore list", ignoreSpecies),
+				Type:    "success",
+			})
+		}
+	} else if verified == "correct" && note.Verified == "false_positive" {
+		// If changing from false positive to correct, check if species is in ignore list
+		settings := conf.Setting()
+
+		// Check if species is in the excluded list
+		isExcluded := false
+		for _, s := range settings.Realtime.Species.Exclude {
+			if s == note.CommonName {
+				isExcluded = true
+				break
+			}
+		}
+
+		// If species is in exclude list, ask user if they want to remove it
+		if isExcluded {
+			// Send notification to inform user
+			h.SSE.SendNotification(Notification{
+				Message: fmt.Sprintf("%s is currently in ignore list. You may want to remove it from Settings.", note.CommonName),
+				Type:    "warning",
+			})
+		}
+	}
+
+	// Update the verification status and comment
+	if err := h.DS.UpdateNote(id, map[string]interface{}{
+		"verified": verified,
+		"comment":  comment,
+	}); err != nil {
+		h.SSE.SendNotification(Notification{
+			Message: fmt.Sprintf("Failed to save review: %v", err),
+			Type:    "error",
+		})
+		return h.NewHandlerError(err, "Failed to save note", http.StatusInternalServerError)
+	}
+
+	// Send success notification
+	h.SSE.SendNotification(Notification{
+		Message: "Detection review saved successfully",
+		Type:    "success",
+	})
+
+	// Set response header to refresh list
+	c.Response().Header().Set("HX-Trigger", "refreshListEvent")
+
+	return c.NoContent(http.StatusOK)
 }

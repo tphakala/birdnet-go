@@ -14,7 +14,13 @@ html, body {
   height: 25px;
 }
 
-.confidence-ball {
+.confidence-container {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.confidence-badge {
   width: 54px;
   height: 25px;
   display: flex;
@@ -24,11 +30,37 @@ html, body {
   font-size: 0.75rem;
 }
 
+.review-badge {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: white;
+}
+
+.review-badge.correct {
+  background-color: hsl(142, 76%, 36%);
+}
+
+.review-badge.false_positive {
+  background-color: hsl(0, 74%, 42%);
+}
+
 @media (max-width: 1024px) {
-  .confidence-ball {
+  .confidence-badge {
     width: 40px;
     height: 20px;
     font-size: 0.65rem;
+  }
+
+  .review-badge {
+    width: 26px;
+    height: 26px;
+    font-size: 0.75rem;
   }
 }
 

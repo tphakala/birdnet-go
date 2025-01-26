@@ -1,0 +1,99 @@
+{{define "reviewModal"}}
+<dialog id="reviewModal{{.ID}}" class="modal modal-bottom sm:modal-middle">
+  <div class="modal-box max-w-3xl">
+    <h3 class="font-bold text-lg mb-1">Review Detection: {{.CommonName | js}}</h3>
+    <div class="flex items-center gap-2 mb-4">
+      <p class="text-sm text-base-content/70">{{.ScientificName | js}}</p>
+      {{if .Verified}}
+        {{if eq .Verified "correct"}}
+          <span class="badge badge-success gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+            Verified Correct
+          </span>
+        {{else if eq .Verified "false_positive"}}
+          <span class="badge badge-error gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            False Positive
+          </span>
+        {{end}}
+      {{else}}
+        <span class="badge badge-ghost">Not Reviewed</span>
+      {{end}}
+    </div>
+
+    <!-- Audio and Spectrogram Section -->
+    <div class="mb-6">
+      {{if .ClipName}}
+      <div class="relative">
+        <!-- Spectrogram Image -->
+        <img loading="lazy" src="/media/spectrogram?clip={{.ClipName}}"
+             alt="Spectrogram" class="w-full h-auto rounded-md shadow-sm">
+      </div>
+      {{else}}
+      <div class="alert">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-info shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        <span>No audio recording available for this detection.</span>
+      </div>
+      {{end}}
+    </div>
+
+    <!-- Review Form -->
+    <form hx-post="/detections/review" 
+          hx-target="this"
+          hx-swap="none"
+          id="reviewForm{{.ID}}"
+          @htmx:after-request="(() => {
+          if (event.detail.successful) {
+            const modal = document.getElementById('reviewModal{{.ID}}');
+            if (modal) {
+              modal.close();
+            }
+          }
+          })()"
+    >
+      <input type="hidden" name="id" value="{{.ID}}">
+      
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-4">
+          <input type="radio" name="verified" value="correct" class="radio radio-primary radio-xs" required {{if eq .Verified "correct"}}checked{{end}} onchange="document.getElementById('ignoreSpeciesSection{{.ID}}').style.display = 'none'">
+          <span class="label-text">Correct Detection</span>
+        </label>
+        <label class="label cursor-pointer justify-start gap-4">
+          <input type="radio" name="verified" value="false_positive" class="radio radio-primary radio-xs" required {{if eq .Verified "false_positive"}}checked{{end}} onchange="document.getElementById('ignoreSpeciesSection{{.ID}}').style.display = 'block'">
+          <span class="label-text">False Positive</span>
+        </label>
+      </div>
+
+      <!-- Ignore Species Section -->
+      <div id="ignoreSpeciesSection{{.ID}}" class="form-control mb-4" style="display: {{if eq .Verified "false_positive"}}block{{else}}none{{end}}">
+        <label class="label cursor-pointer justify-start gap-4 mb-2">
+          <input type="checkbox" name="ignore_species" class="checkbox checkbox-primary checkbox-xs" value="{{.CommonName}}" {{if isSpeciesExcluded .CommonName}}checked{{end}}>
+          <span class="label-text">Ignore this species</span>
+        </label>
+        <div class="">
+          <span>Ignoring this species will prevent future detections of species. This will not remove existing detections.</span>
+       </div>
+      </div>
+
+      <div class="form-control mb-4">
+        <label class="label">
+          <span class="label-text">Comment (optional)</span>
+        </label>
+        <textarea name="comment" class="textarea textarea-bordered h-24" placeholder="Add any notes about this detection">{{.Comment}}</textarea>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Review</button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+{{end}} 

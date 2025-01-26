@@ -1,204 +1,215 @@
 {{define "recentDetections"}}
 
-<table class="hidden sm:table table w-full text-sm text-left">
-  <thead class="text-xs">
-    <tr>
-      <th scope="col" class="py-2 px-2 sm:pr-1 sm:py-1" style="width:15%;">Date</th>
-      <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:15%;">Time</th>
-      <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:20%;">Common Name</th>
-      {{if .DashboardSettings.Thumbnails.Recent}}
-      <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:15%;">Thumbnail</th>
-      {{end}}
-      <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:13%;">Confidence</th>
-      <th scope="col" class="py-2 px-2 sm:pl-1 sm:py-1" style="width:22%;">Recording</th>
-    </tr>
-  </thead>
-  <tbody>
-    {{range .Notes}}
-    <tr class="">
-      <!-- Date -->
-      <td class="py-1 px-2 sm:pr-1 sm:py-1 font-normal">{{.Date}}</td>
+  <table class="hidden sm:table table w-full text-sm text-left">
+    <thead class="text-xs">
+      <tr>
+        <th scope="col" class="py-2 px-2 sm:pr-1 sm:py-1" style="width:15%;">Date</th>
+        <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:15%;">Time</th>
+        <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:20%;">Common Name</th>
+        {{if .DashboardSettings.Thumbnails.Recent}}
+        <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:15%;">Thumbnail</th>
+        {{end}}
+        <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:13%;">Confidence</th>
+        <th scope="col" class="py-2 px-2 sm:pl-1 sm:py-1" style="width:22%;">Recording</th>
+        <th scope="col" class="hidden sm:table-cell py-2 px-2 sm:px-1 sm:py-1" style="width:5%;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Notes}}
+      <tr class="">
+        <!-- Date -->
+        <td class="py-1 px-2 sm:pr-1 sm:py-1 font-normal">{{.Date}}</td>
 
-      <!-- Time -->
-      <td class="py-1 px-2 sm:px-1 sm:py-1 font-normal">{{.Time}}</td>
+        <!-- Time -->
+        <td class="py-1 px-2 sm:px-1 sm:py-1 font-normal">{{.Time}}</td>
 
-      <!-- Bird species -->
-      <td class="py-1 px-2 sm:px-1 sm:py-1 font-normal">
-        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
-          hx-trigger="click" hx-push-url="true">
-          {{ .CommonName}}
-        </a>
-      </td>
-
-      <!-- Bird thumbnail  -->
-      {{if $.DashboardSettings.Thumbnails.Recent}}
-      <td class="py-1 px-2 sm:px-1 sm:py-1 relative">
-        <div class="thumbnail-container">
+        <!-- Bird species -->
+        <td class="py-1 px-2 sm:px-1 sm:py-1 font-normal">
           <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
             hx-trigger="click" hx-push-url="true">
-            <img loading="lazy" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
+            {{ .CommonName}}
           </a>
-          <div class="thumbnail-tooltip hidden">
-            {{thumbnailAttribution .ScientificName}}
+        </td>
+
+        <!-- Bird thumbnail  -->
+        {{if $.DashboardSettings.Thumbnails.Recent}}
+        <td class="py-1 px-2 sm:px-1 sm:py-1 relative">
+          <div class="thumbnail-container">
+            <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
+              hx-trigger="click" hx-push-url="true">
+              <img loading="lazy" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
+            </a>
+            <div class="thumbnail-tooltip hidden">
+              {{thumbnailAttribution .ScientificName}}
+            </div>
           </div>
-        </div>
-      </td>
-      {{end}}
+        </td>
+        {{end}}
 
-      <!-- Confidence indicator -->
-      <td class="py-1 px-2 sm:px-1 sm:py-1">
-        <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
-          {{ confidence .Confidence}}
-        </div>
-      </td>
+        <!-- Confidence indicator -->
+        <td class="py-1 px-2 sm:px-1 sm:py-1">
+          <div class="confidence-container">
+            <div class="confidence-badge {{confidenceColor .Confidence}} text-white font-medium">
+              {{ confidence .Confidence}}
+            </div>
+            {{if .Verified}}
+              {{if eq .Verified "correct"}}
+                <div class="review-badge correct" title="Verified correct">✓</div>
+              {{else if eq .Verified "false_positive"}}
+                <div class="review-badge false_positive" title="Marked as false positive">✗</div>
+              {{end}}
+            {{end}}
+          </div>
+        </td>
 
-      <!-- Recording Column -->
-      <td class="py-1 px-2 sm:pl-1 sm:py-1 font-normal">
-        <div class="audio-player-container relative min-w-[50px] max-w-[400px]">
-          <!-- Spectrogram Image -->
-          <img loading="lazy" width="400" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram Image"
-            class="max-w-full h-auto rounded-md">
+        <!-- Recording Column -->
+        <td class="py-1 px-2 sm:pl-1 sm:py-1 font-normal">
+          <div class="audio-player-container relative min-w-[50px] max-w-[400px]">
+            <!-- Spectrogram Image -->
+            <img loading="lazy" width="400" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram Image"
+              class="max-w-full h-auto rounded-md">
 
-          <!-- Play position indicator -->
-          <div id="position-indicator-{{.ID}}" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
-            style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
+            <!-- Play position indicator -->
+            <div id="position-indicator-{{.ID}}" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
+              style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
 
-          <!-- Audio player overlay - Full version -->
-          <div
-            class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 opacity-0 group-hover:opacity-100 hidden md:block">
-            <audio id="audio-{{.ID}}" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
-            <div class="flex items-center justify-between">
-              <button id="playPause-{{.ID}}"
-                class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-                  </path>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-              </button>
-              <div id="progress-{{.ID}}" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
-                <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
+            <!-- Audio player overlay - Full version -->
+            <div
+              class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 opacity-0 group-hover:opacity-100 hidden md:block">
+              <audio id="audio-{{.ID}}" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
+              <div class="flex items-center justify-between">
+                <button id="playPause-{{.ID}}"
+                  class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                      d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+                    </path>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                      d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                </button>
+                <div id="progress-{{.ID}}" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
+                  <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
+                </div>
+                <span id="currentTime-{{.ID}}" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
+                <a href="/media/audio?clip={{.ClipName}}" download
+                  class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                  </svg>
+                </a>
               </div>
-              <span id="currentTime-{{.ID}}" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-              <a href="/media/audio?clip={{.ClipName}}" download
-                class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                </svg>
-              </a>
+            </div>
+
+            <!-- Audio player overlay - Compact version -->
+            <div class="absolute inset-0 flex items-center justify-center md:hidden" style="--player-opacity: 0.7;">
+              <div class="w-full h-full flex items-center justify-center">
+                <button id="playPause-compact-{{.ID}}"
+                  class="w-6 h-6 flex items-center justify-center text-white hover:text-blue-200 bg-black bg-opacity-25 rounded-full"
+                  style="opacity: var(--player-opacity);">
+                  <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3"
+                      d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+                    </path>
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
 
-          <!-- Audio player overlay - Compact version -->
-          <div class="absolute inset-0 flex items-center justify-center md:hidden" style="--player-opacity: 0.7;">
-            <div class="w-full h-full flex items-center justify-center">
-              <button id="playPause-compact-{{.ID}}"
-                class="w-6 h-6 flex items-center justify-center text-white hover:text-blue-200 bg-black bg-opacity-25 rounded-full"
-                style="opacity: var(--player-opacity);">
-                <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3"
-                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-                  </path>
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
+        </td>
 
-      </td>
-    </tr>
-    {{end}}
-  </tbody>
-</table>
-
-<!-- Responsive layout for small screens -->
-<div class="sm:hidden">
-  {{range .Notes}}
-  <div class="shadow-md rounded-lg p-4 mb-4">
-    <!-- First row: timestamp, bird species, thumbnail, and confidence -->
-    <div class="flex items-center mb-3">
-      <!-- Timestamp -->
-      <span class="text-sm font-normal mr-2">{{.Time}}</span>
-
-      <!-- Bird species -->
-      <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
-        hx-trigger="click" hx-push-url="true" class="text-sm font-normal">
-        {{title .CommonName}}
-      </a>
-
-      <!-- Confidence indicator -->
-      <div class="justify-center inline-flex flex-grow py-1">
-        <div class="font-medium text-xs px-2 py-1">
-          <span class="hidden xs:block">Confid.</span>
-        </div>
-        <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium text-xs px-2 py-1 rounded">
-          {{confidence .Confidence}}
-        </div>
-      </div>
-
-      <!-- Thumbnail -->
-      {{if $.DashboardSettings.Thumbnails.Recent}}
-      <div class="thumbnail-container w-20 ml-2">
-        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
-          hx-trigger="click" hx-push-url="true" class="text-sm font-normal flex-grow">
-          <img loading="lazy" src="{{thumbnail .ScientificName}}" class="rounded-md">
-        </a>
-      </div>
+        <!-- Action Menu Column -->
+        <td class="hidden sm:table-cell py-1 px-2 sm:px-1 sm:py-1">
+          {{template "actionMenu" .}}
+        </td>
+      </tr>
       {{end}}
-    </div>
+    </tbody>
+  </table>
 
-    <!-- Second row: Spectrogram -->
+  <!-- Responsive layout for small screens -->
+  <div class="sm:hidden">
+    {{range .Notes}}
+    <div class="shadow-md rounded-lg p-4 mb-4">
+      <!-- First row: timestamp, bird species, thumbnail, and confidence -->
+      <div class="flex items-center mb-3">
+        <!-- Timestamp -->
+        <span class="text-sm font-normal mr-2">{{.Time}}</span>
 
-    <!-- Audio player -->
-    <div class="audio-player-container relative">
-      <!-- Spectrogram Image -->
-      <img loading="lazy" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram"
-        class="w-full h-auto rounded-md shadow-sm">
+        <!-- Bird species -->
+        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
+          hx-trigger="click" hx-push-url="true" class="text-sm font-normal">
+          {{title .CommonName}}
+        </a>
 
-      <!-- Play position indicator -->
-      <div id="position-indicator-{{.ID}}b" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
-        style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
-
-      <!-- Audio player overlay - Full version -->
-      <div
-        class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 group-hover:opacity-100 sm:block">
-        <audio id="audio-{{.ID}}b" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
-        <div class="flex items-center justify-between">
-          <button id="playPause-{{.ID}}b"
-            class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-              </path>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
-              </path>
-            </svg>
-          </button>
-          <div id="progress-{{.ID}}b" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
-            <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
+        <!-- Mobile view confidence -->
+        <div class="flex items-center gap-2 ml-auto">
+          <div class="confidence-container">
+            <div class="confidence-badge {{confidenceColor .Confidence}} text-white font-medium">
+              {{confidence .Confidence}}
+            </div>
+            {{if .Verified}}
+              {{if eq .Verified "correct"}}
+                <div class="review-badge correct" title="Verified correct">✓</div>
+              {{else if eq .Verified "false_positive"}}
+                <div class="review-badge false_positive" title="Marked as false positive">✗</div>
+              {{end}}
+            {{end}}
           </div>
-          <span id="currentTime-{{.ID}}b" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-          <a href="/media/audio?clip={{.ClipName}}" download
-            class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-            </svg>
-          </a>
         </div>
       </div>
 
+      <!-- Second row: Spectrogram -->
+
+      <!-- Audio player -->
+      <div class="audio-player-container relative">
+        <!-- Spectrogram Image -->
+        <img loading="lazy" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram"
+          class="w-full h-auto rounded-md shadow-sm">
+
+        <!-- Play position indicator -->
+        <div id="position-indicator-{{.ID}}b" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
+          style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
+
+        <!-- Audio player overlay - Full version -->
+        <div
+          class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 group-hover:opacity-100 sm:block">
+          <audio id="audio-{{.ID}}b" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
+          <div class="flex items-center justify-between">
+            <button id="playPause-{{.ID}}b"
+              class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                  d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+                </path>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
+                </path>
+              </svg>
+            </button>
+            <div id="progress-{{.ID}}b" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
+              <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
+            </div>
+            <span id="currentTime-{{.ID}}b" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
+            <a href="/media/audio?clip={{.ClipName}}" download
+              class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+              </svg>
+            </a>
+          </div>
+        </div>
+
+      </div>
     </div>
+    {{end}}
   </div>
-  {{end}}
-</div>
 
 {{end}}

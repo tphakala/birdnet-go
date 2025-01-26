@@ -1,0 +1,17 @@
+{{define "confirmModal"}}
+<dialog id="confirmModal{{.ID}}" class="modal modal-bottom sm:modal-middle">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-4" id="confirmTitle{{.ID}}"></h3>
+    <p class="py-4" id="confirmMessage{{.ID}}"></p>
+    <div class="modal-action">
+      <form method="dialog">
+        <button class="btn">Cancel</button>
+      </form>
+      <button id="confirmButton{{.ID}}" class="btn btn-error">Confirm</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+{{end}} 

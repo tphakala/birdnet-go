@@ -69,3 +69,10 @@ func (store *MySQLStore) Close() error {
 
 	return nil
 }
+
+// UpdateNote updates specific fields of a note in MySQL
+func (m *MySQLStore) UpdateNote(id string, updates map[string]interface{}) error {
+	return m.DB.Model(&Note{}).Where("id = ?", id).Updates(updates).Error
+}
+
+// Save stores a note and its associated results as a single transaction in the database.

@@ -54,6 +54,15 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"weatherDescription":    s.Handlers.GetWeatherDescriptionFunc(),
 		"getAllSpecies":         s.GetAllSpecies,
 		"getIncludedSpecies":    s.GetIncludedSpecies,
+		"isSpeciesExcluded": func(commonName string) bool {
+			settings := conf.Setting()
+			for _, s := range settings.Realtime.Species.Exclude {
+				if s == commonName {
+					return true
+				}
+			}
+			return false
+		},
 	}
 }
 

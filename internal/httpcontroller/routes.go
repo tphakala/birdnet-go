@@ -116,9 +116,17 @@ func (s *Server) initRoutes() {
 	// Special routes
 	s.Echo.GET("/sse", s.Handlers.SSE.ServeSSE)
 	s.Echo.GET("/audio-level", s.Handlers.WithErrorHandling(s.Handlers.AudioLevelSSE))
-	s.Echo.DELETE("/note", h.WithErrorHandling(h.DeleteNote))
 	s.Echo.POST("/settings/save", h.WithErrorHandling(h.SaveSettings), s.AuthMiddleware)
 	s.Echo.GET("/settings/audio/get", h.WithErrorHandling(h.GetAudioDevices), s.AuthMiddleware)
+
+	// Add DELETE method for detection deletion
+	s.Echo.DELETE("/detections/delete", h.WithErrorHandling(h.DeleteDetection))
+
+	// Add POST method for ignoring species
+	s.Echo.POST("/detections/ignore", h.WithErrorHandling(h.IgnoreSpecies))
+
+	// Add POST method for reviewing detections
+	s.Echo.POST("/detections/review", h.WithErrorHandling(h.ReviewDetection))
 
 	// Setup Error handler
 	s.Echo.HTTPErrorHandler = func(err error, c echo.Context) {

@@ -1,65 +1,69 @@
 {{define "detectionDetails"}}
 
-<!-- Enhanced daisyUI card -->
-<section class="card col-span-12 overflow-hidden bg-base-100 shadow-sm xl:col-span-12">
-	<div class="card-body p-4">
-		<div class="flex justify-between items-center mb-4">
-			<h2 class="card-title text-xl font-semibold text-gray-800">
-				Detection Details for {{.Note.CommonName}} on {{.Note.Date}} at {{.Note.Time}}
+<!-- Enhanced daisyUI card with better theme support -->
+<section class="card col-span-12 overflow-hidden bg-base-100 shadow-sm xl:col-span-12 border border-base-200">
+	<div class="card-body p-6">
+		<!-- Header with improved contrast -->
+		<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+			<h2 class="card-title text-xl font-semibold text-base-content">
+				<span class="text-primary">{{.Note.CommonName}}</span>
+				<span class="text-base-content/70 text-lg">
+					on {{.Note.Date}} at {{.Note.Time}}
+				</span>
 			</h2>
 		</div>
   
-  		<!-- Confidence Level -->
-  		<div class="flex items-center justify-between p-3 mb-4">
-    		<span class="text-gray-700 font-medium">Confidence Level:</span>
-    		<div class="confidence-ball {{confidenceColor .Note.Confidence}} text-white font-medium p-2 rounded-full">
-      			{{confidence .Note.Confidence}}
-    		</div>
-  		</div>
+		<!-- Confidence Level with improved visibility -->
+		<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 mb-6 bg-base-200 rounded-lg">
+			<span class="text-base-content font-medium mb-2 sm:mb-0">Confidence Level</span>
+			<div class="confidence-badge {{confidenceColor .Note.Confidence}} text-white font-medium px-4 py-2 rounded-full shadow-sm">
+				{{confidence .Note.Confidence}}
+			</div>
+		</div>
   
-  		<!-- Audio player -->
-		  <div class="audio-player-container group relative min-w-[50px]">
+		<!-- Audio player container - preserved as is -->
+		<div class="audio-player-container group relative min-w-[50px]">
 			<!-- Spectrogram Image -->
 			<img loading="lazy" src="/media/spectrogram?clip={{.Note.ClipName}}" alt="Spectrogram"
-			  class="w-full h-auto rounded-md shadow-sm">
+				class="w-full h-auto rounded-lg shadow-sm">
 	  
 			<!-- Play position indicator -->
 			<div id="position-indicator-0" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
-			  style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
+				style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
 	  
 			<!-- Audio player overlay - Full version -->
 			<div
-			  class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-3 rounded-b-md transition-opacity duration-300 group-hover:opacity-100 sm:block">
-			  <audio id="audio-0" src="/media/audio?clip={{.Note.ClipName}}" preload="metadata" class="hidden"></audio>
-			  <div class="flex items-center justify-between">
-				<button id="playPause-0"
-				  class="text-white p-3 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
-				  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-					xmlns="http://www.w3.org/2000/svg">
-					<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-					  d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-					</path>
-					<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
-					</path>
-				  </svg>
-				</button>
-				<div id="progress-0" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
-				  <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
+				class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-3 rounded-b-md transition-opacity duration-300 group-hover:opacity-100 sm:block">
+				<audio id="audio-0" src="/media/audio?clip={{.Note.ClipName}}" preload="metadata" class="hidden"></audio>
+				<div class="flex items-center justify-between">
+					<button id="playPause-0"
+						class="text-white p-3 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
+						<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+							xmlns="http://www.w3.org/2000/svg">
+							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+								d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+							</path>
+							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+								d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
+							</path>
+						</svg>
+					</button>
+					<div id="progress-0" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
+						<div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
+					</div>
+					<span id="currentTime-0" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
+					<a href="/media/audio?clip={{.Note.ClipName}}" download
+						class="text-white p-3 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
+						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+							xmlns="http://www.w3.org/2000/svg">
+							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+								d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+						</svg>
+					</a>
 				</div>
-				<span id="currentTime-0" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-				<a href="/media/audio?clip={{.Note.ClipName}}" download
-				  class="text-white p-3 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
-				  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-					xmlns="http://www.w3.org/2000/svg">
-					<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-					  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-				  </svg>
-				</a>
-			  </div>
 			</div>
-		  </div>
 		</div>
-      <br>
+	</div>
 </section>
 
 {{end}}

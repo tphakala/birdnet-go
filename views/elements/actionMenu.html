@@ -1,0 +1,102 @@
+{{define "actionMenu"}}
+<div class="dropdown dropdown-end" 
+     x-data="{ 
+       open: false, 
+       isExcluded: {{if isSpeciesExcluded .CommonName}}true{{else}}false{{end}},
+       init() {
+         document.body.addEventListener('species-excluded-{{.ID}}', () => {
+           this.isExcluded = true;
+         });
+         document.body.addEventListener('species-included-{{.ID}}', () => {
+           this.isExcluded = false;
+         });
+       }
+     }"
+     x-init="init()">
+  <button @click="open = !open" class="btn btn-ghost btn-xs">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+    </svg>
+  </button>
+  <ul x-show="open" @click.away="open = false" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 border border-base-300">
+    <li>
+      <a href="#" 
+         class="text-sm"
+         @click="open = false; const modal = document.getElementById('reviewModal{{.ID}}'); modal.showModal(); htmx.process(modal);">
+        <div class="flex items-center gap-2">
+          <span>Review detection</span>
+          {{if .Verified}}
+            {{if eq .Verified "correct"}}
+              <span class="badge badge-success badge-sm">✓</span>
+            {{else if eq .Verified "false_positive"}}
+              <span class="badge badge-error badge-sm">✗</span>
+            {{end}}
+          {{end}}
+        </div>
+      </a>
+    </li>
+    <li>
+      <a href="#" 
+         class="text-sm"
+         @click="
+           open = false;
+           const modal = document.getElementById('confirmModal{{.ID}}');
+           document.getElementById('confirmTitle{{.ID}}').textContent = isExcluded ? 'Show Species {{.CommonName | js}}' : 'Ignore Species {{.CommonName | js}}';
+           document.getElementById('confirmMessage{{.ID}}').textContent = isExcluded 
+             ? `Are you sure you want to show future detections of {{.CommonName | js}}?`
+             : `Are you sure you want to ignore future detections of {{.CommonName | js}}? This will only affect new detections - existing detections will remain in the database.`;
+           document.getElementById('confirmButton{{.ID}}').onclick = () => {
+             htmx.ajax('POST', '/detections/ignore?common_name=' + encodeURIComponent('{{.CommonName | js}}'), {
+               target: 'body',
+               swap: 'none',
+               handler: (success) => {
+                 if (success) {
+                   const eventName = isExcluded ? 'species-included-' + {{.ID}} : 'species-excluded-' + {{.ID}};
+                   document.body.dispatchEvent(new Event(eventName));
+                   modal.close();
+                 }
+               }
+             });
+           };
+           modal.showModal();"
+         x-text="isExcluded ? 'Show species' : 'Ignore species'">
+      </a>
+    </li>
+    <li>
+      <a href="#" 
+        class="text-sm text-error"
+        @click="
+          open = false;
+          const modal = document.getElementById('confirmModal{{.ID}}');
+          document.getElementById('confirmTitle{{.ID}}').textContent = 'Delete Detection of {{.CommonName | js}}';
+          document.getElementById('confirmMessage{{.ID}}').textContent = 'Are you sure you want to delete detection of {{.CommonName | js}}? This action cannot be undone.';
+          document.getElementById('confirmButton{{.ID}}').onclick = () => {
+            htmx.ajax('DELETE', '/detections/delete?id={{.ID}}', {
+            handler: (success) => {
+              if (success) {
+                const list = htmx.find('[hx-trigger*=\'refreshListEvent\']');
+                if (list) {
+                  htmx.trigger(list, 'refreshListEvent');
+                } else {
+                  // Fallback: reload the current view
+                  window.location.reload();
+                }
+                modal.close();
+              }
+            }
+          });
+        };
+        modal.showModal();">
+        Delete detection
+      </a>
+    </li>
+  </ul>
+
+  <!-- Include Review Modal Component -->
+  {{template "reviewModal" .}}
+  
+  <!-- Include Confirm Modal Component -->
+  {{template "confirmModal" .}}
+
+</div>
+{{end}} 

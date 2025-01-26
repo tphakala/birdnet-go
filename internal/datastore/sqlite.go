@@ -86,3 +86,10 @@ func (store *SQLiteStore) Close() error {
 
 	return nil
 }
+
+// UpdateNote updates specific fields of a note in SQLite
+func (s *SQLiteStore) UpdateNote(id string, updates map[string]interface{}) error {
+	return s.DB.Model(&Note{}).Where("id = ?", id).Updates(updates).Error
+}
+
+// Save stores a note and its associated results as a single transaction in the database.
