@@ -1,30 +1,33 @@
 {{define "listDetections"}}
 
-<section class="card col-span-12 overflow-x-auto bg-base-100 shadow-sm" 
-         hx-trigger="refreshSpeciesList from:body" 
-         hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{.Offset}}" 
-         hx-target="#mainContent"
-         hx-swap="innerHTML">
-    <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
-        <div class="flex justify-between">
-            <!-- Title -->
-            <span class="card-title grow text-base sm:text-xl">
-                {{if eq .QueryType "hourly"}}
-                    {{if gt .Duration 1}}
-                        Hourly Results from {{.Hour}}:00 to {{add .Hour .Duration}}:00 on {{.Date}}
+<section class="card col-span-12 overflow-x-auto bg-base-100 shadow-sm">
+
+    <div id="listDetections"
+     hx-trigger="refreshListEvent from:body" 
+     hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{.Offset}}" 
+     hx-target="#listDetections"
+     hx-swap="innerHTML">
+    
+        <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
+            <div class="flex justify-between">
+                <!-- Title -->
+                <span class="card-title grow text-base sm:text-xl">
+                    {{if eq .QueryType "hourly"}}
+                        {{if gt .Duration 1}}
+                            Hourly Results from {{.Hour}}:00 to {{add .Hour .Duration}}:00 on {{.Date}}
+                        {{else}}
+                            Hourly Results for {{.Hour}}:00 on {{.Date}}
+                        {{end}}
+                    {{else if eq .QueryType "species"}}
+                    Results for {{.Species}} on {{.Date}}
+                    {{else if eq .QueryType "search"}}
+                    Search Results for "{{.Search}}"
                     {{else}}
-                        Hourly Results for {{.Hour}}:00 on {{.Date}}
+                    All Detections for {{.Date}}
                     {{end}}
-                {{else if eq .QueryType "species"}}
-                Results for {{.Species}} on {{.Date}}
-                {{else if eq .QueryType "search"}}
-                Search Results for "{{.Search}}"
-                {{else}}
-                All Detections for {{.Date}}
-                {{end}}
-            </span>
+                </span>
+            </div>
         </div>
-    </div>
 
         <table class="table w-full text-left">
             <thead class="text-xs">
@@ -110,10 +113,19 @@
                     <!-- Common Name Column -->
                     {{if ne $.QueryType "species"}}
                     <td class="py-1 px-4 font-normal">
-                        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
-                            hx-trigger="click" hx-push-url="true">
-                            {{.CommonName}}
-                        </a>
+                        <div class="flex items-center gap-2">
+                            <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
+                                hx-trigger="click" hx-push-url="true">
+                                {{.CommonName}}
+                            </a>
+                            {{if .Verified}}
+                                {{if eq .Verified "correct"}}
+                                    <span class="badge badge-success badge-sm" title="Verified correct">✓</span>
+                                {{else if eq .Verified "false_positive"}}
+                                    <span class="badge badge-error badge-sm" title="Marked as false positive">✗</span>
+                                {{end}}
+                            {{end}}
+                        </div>
                     </td>
                     {{end}}
                     
@@ -135,11 +147,20 @@
 
                     <!-- Confidence Column -->
                     <td class="py-1 px-4 font-normal">
-                        <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium">
-                            <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent"
-                                hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
-                                {{confidence .Confidence}}
-                            </a>
+                        <div class="confidence-container">
+                            <div class="confidence-badge {{confidenceColor .Confidence}} text-white font-medium">
+                                <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent"
+                                    hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
+                                    {{confidence .Confidence}}
+                                </a>
+                            </div>
+                            {{if .Verified}}
+                                {{if eq .Verified "correct"}}
+                                    <div class="review-badge correct" title="Verified correct">✓</div>
+                                {{else if eq .Verified "false_positive"}}
+                                    <div class="review-badge false_positive" title="Marked as false positive">✗</div>
+                                {{end}}
+                            {{end}}
                         </div>
                     </td>
 
@@ -227,7 +248,7 @@
                                 {{if gt .CurrentPage 1}}
                                     <button
                                         hx-get="?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
-                                        hx-target="#mainContent" class="btn btn-sm btn-primary">
+                                        hx-target="#listDetections-wrapper" class="btn btn-sm btn-primary">
                                         Previous
                                     </button>
                                 {{else}}
@@ -238,7 +259,7 @@
                                 {{if lt .CurrentPage .TotalPages}}
                                 <button
                                     hx-get="?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
-                                    hx-target="#mainContent" class="btn btn-sm btn-primary">
+                                    hx-target="#listDetections-wrapper" class="btn btn-sm btn-primary">
                                     Next
                                 </button>
                                 {{else}}
@@ -255,5 +276,7 @@
             </tbody>
         </table>
 
+    </div>
 </section>
+
 {{end}}
