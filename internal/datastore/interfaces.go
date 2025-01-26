@@ -552,7 +552,23 @@ func getHourRange(hour string, duration int) (startTime, endTime string) {
 	return startTime, endTime
 }
 
-// UpdateNote updates specific fields of a note
+// UpdateNote updates specific fields of a note. It validates the input parameters
+// and returns appropriate errors if the note doesn't exist or if the update fails.
 func (ds *DataStore) UpdateNote(id string, updates map[string]interface{}) error {
-	return ds.DB.Model(&Note{}).Where("id = ?", id).Updates(updates).Error
+	if id == "" {
+		return fmt.Errorf("invalid id: must not be empty")
+	}
+	if len(updates) == 0 {
+		return fmt.Errorf("no updates provided")
+	}
+
+	result := ds.DB.Model(&Note{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return fmt.Errorf("failed to update note: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("note with id %s not found", id)
+	}
+
+	return nil
 }
