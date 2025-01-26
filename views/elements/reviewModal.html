@@ -57,15 +57,26 @@
     >
       <input type="hidden" name="id" value="{{.ID}}">
       
-      <div class="form-control mb-4">
+      <div class="form-control">
         <label class="label cursor-pointer justify-start gap-4">
-          <input type="radio" name="verified" value="correct" class="radio radio-primary" required {{if eq .Verified "correct"}}checked{{end}}>
+          <input type="radio" name="verified" value="correct" class="radio radio-primary radio-xs" required {{if eq .Verified "correct"}}checked{{end}} onchange="document.getElementById('ignoreSpeciesSection{{.ID}}').style.display = 'none'">
           <span class="label-text">Correct Detection</span>
         </label>
         <label class="label cursor-pointer justify-start gap-4">
-          <input type="radio" name="verified" value="false_positive" class="radio radio-primary" required {{if eq .Verified "false_positive"}}checked{{end}}>
+          <input type="radio" name="verified" value="false_positive" class="radio radio-primary radio-xs" required {{if eq .Verified "false_positive"}}checked{{end}} onchange="document.getElementById('ignoreSpeciesSection{{.ID}}').style.display = 'block'">
           <span class="label-text">False Positive</span>
         </label>
+      </div>
+
+      <!-- Ignore Species Section -->
+      <div id="ignoreSpeciesSection{{.ID}}" class="form-control mb-4" style="display: {{if eq .Verified "false_positive"}}block{{else}}none{{end}}">
+        <label class="label cursor-pointer justify-start gap-4 mb-2">
+          <input type="checkbox" name="ignore_species" class="checkbox checkbox-primary checkbox-xs" value="{{.CommonName}}" {{if isSpeciesExcluded .CommonName}}checked{{end}}>
+          <span class="label-text">Ignore this species</span>
+        </label>
+        <div class="">
+          <span>Ignoring this species will prevent future detections of species. This will not remove existing detections.</span>
+       </div>
       </div>
 
       <div class="form-control mb-4">
