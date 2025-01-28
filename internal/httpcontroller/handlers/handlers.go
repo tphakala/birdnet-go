@@ -21,7 +21,7 @@ import (
 
 var settingsMutex sync.RWMutex
 
-// Handlers embeds baseHandler and includes all the dependencies needed for the application handlers.
+// Handlers contains all the handler functions and their dependencies
 type Handlers struct {
 	baseHandler
 	DS                datastore.Interface
@@ -34,6 +34,8 @@ type Handlers struct {
 	OAuth2Server      *security.OAuth2Server
 	controlChan       chan string
 	notificationChan  chan Notification
+	CloudflareAccess  *security.CloudflareAccess
+	debug             bool
 }
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.
@@ -96,6 +98,8 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		OAuth2Server:      oauth2Server,
 		controlChan:       controlChan,
 		notificationChan:  notificationChan,
+		CloudflareAccess:  security.NewCloudflareAccess(),
+		debug:             settings.Debug,
 	}
 }
 
