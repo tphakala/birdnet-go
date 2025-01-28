@@ -125,7 +125,7 @@
 
         <!-- Action Menu Column -->
         <td class="hidden sm:table-cell py-1 px-2 sm:px-1 sm:py-1">
-          {{template "actionMenu" .}}
+          {{template "actionMenu" dict "Note" . "Security" $.Security}}
         </td>
       </tr>
       {{end}}
