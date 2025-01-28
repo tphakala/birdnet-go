@@ -232,7 +232,7 @@
 
                     <!-- Action Menu Column -->
                     <td class="hidden sm:table-cell py-1 px-4 font-normal">
-                        {{template "actionMenu" .}}
+                        {{template "actionMenu" dict "Note" . "Security" $.Security}}
                     </td>
                 </tr>
                 {{end}}
