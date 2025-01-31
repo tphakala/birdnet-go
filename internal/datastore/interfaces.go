@@ -627,6 +627,18 @@ func (ds *DataStore) GetNoteComments(noteID string) ([]NoteComment, error) {
 
 // SaveNoteComment saves a new comment for a note
 func (ds *DataStore) SaveNoteComment(comment *NoteComment) error {
+	// Validate input
+	if comment == nil {
+		return fmt.Errorf("comment cannot be nil")
+	}
+	if comment.NoteID == 0 {
+		return fmt.Errorf("note ID cannot be zero")
+	}
+	// Entry can be empty as comments are optional, but if provided, check length
+	if len(comment.Entry) > 1000 {
+		return fmt.Errorf("comment entry exceeds maximum length of 1000 characters")
+	}
+
 	if err := ds.DB.Create(comment).Error; err != nil {
 		return fmt.Errorf("failed to save note comment: %w", err)
 	}
@@ -688,5 +700,8 @@ func sortAscendingString(asc bool) string {
 
 // Transaction executes a function within a transaction.
 func (ds *DataStore) Transaction(fc func(tx *gorm.DB) error) error {
+	if fc == nil {
+		return fmt.Errorf("transaction function cannot be nil")
+	}
 	return ds.DB.Transaction(fc)
 }
