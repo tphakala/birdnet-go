@@ -121,6 +121,7 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 
 }
+
 func isProtectedRoute(path string) bool {
 	return strings.HasPrefix(path, "/settings/")
 }
