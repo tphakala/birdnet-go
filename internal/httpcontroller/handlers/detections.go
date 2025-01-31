@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -362,6 +361,43 @@ func (h *Handlers) DeleteDetection(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
+// handleSpeciesExclusion handles the logic for managing species in the exclusion list
+func (h *Handlers) handleSpeciesExclusion(note *datastore.Note, verified string, ignoreSpecies string) error {
+	settings := conf.Setting()
+
+	if verified == "false_positive" && ignoreSpecies != "" {
+		// Check if species is already excluded
+		for _, s := range settings.Realtime.Species.Exclude {
+			if s == ignoreSpecies {
+				return nil
+			}
+		}
+
+		// Add to excluded list
+		settings.Realtime.Species.Exclude = append(settings.Realtime.Species.Exclude, ignoreSpecies)
+		if err := conf.SaveSettings(); err != nil {
+			return fmt.Errorf("failed to save settings: %w", err)
+		}
+
+		h.SSE.SendNotification(Notification{
+			Message: fmt.Sprintf("%s added to ignore list", ignoreSpecies),
+			Type:    "success",
+		})
+	} else if verified == "correct" {
+		// Check if species is in exclude list
+		for _, s := range settings.Realtime.Species.Exclude {
+			if s == note.CommonName {
+				h.SSE.SendNotification(Notification{
+					Message: fmt.Sprintf("%s is currently in ignore list. You may want to remove it from Settings.", note.CommonName),
+					Type:    "warning",
+				})
+				break
+			}
+		}
+	}
+	return nil
+}
+
 // ReviewDetection handles the verification of a detection as either correct or false positive
 func (h *Handlers) ReviewDetection(c echo.Context) error {
 	id := c.FormValue("id")
@@ -442,100 +478,52 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 
 	// Handle review status if provided
 	if verified != "" {
+		// Validate review status first
 		if verified != "correct" && verified != "false_positive" {
 			return h.NewHandlerError(fmt.Errorf("invalid verification status"), "Invalid verification status", http.StatusBadRequest)
 		}
 
-		// Verify that the note exists and get its data
-		note, err := h.DS.Get(id)
+		err := h.DS.Transaction(func(tx *gorm.DB) error {
+			// Get note and existing review in a transaction
+			note, err := h.DS.Get(id)
+			if err != nil {
+				return fmt.Errorf("failed to retrieve note: %w", err)
+			}
+
+			// Handle species exclusion
+			if err := h.handleSpeciesExclusion(&note, verified, c.FormValue("ignore_species")); err != nil {
+				return err
+			}
+
+			// Create or update the review
+			review := &datastore.NoteReview{
+				NoteID:    uint(noteID),
+				Verified:  verified,
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+			}
+
+			if err := tx.Save(review).Error; err != nil {
+				return fmt.Errorf("failed to save review: %w", err)
+			}
+
+			return nil
+		})
+
 		if err != nil {
-			return h.NewHandlerError(err, "Failed to retrieve note", http.StatusInternalServerError)
-		}
-
-		// Get existing review if any
-		existingReview, err := h.DS.GetNoteReview(id)
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return h.NewHandlerError(err, "Failed to check existing review", http.StatusInternalServerError)
-		}
-
-		// Handle ignore species if provided
-		ignoreSpecies := c.FormValue("ignore_species")
-		if verified == "false_positive" && ignoreSpecies != "" {
-			// Get settings instance
-			settings := conf.Setting()
-
-			// Check if species is already in the excluded list
-			isExcluded := false
-			for _, s := range settings.Realtime.Species.Exclude {
-				if s == ignoreSpecies {
-					isExcluded = true
-					break
-				}
-			}
-
-			// Add to excluded list if not already there
-			if !isExcluded {
-				settings.Realtime.Species.Exclude = append(settings.Realtime.Species.Exclude, ignoreSpecies)
-
-				// Save the settings
-				if err := conf.SaveSettings(); err != nil {
-					h.SSE.SendNotification(Notification{
-						Message: fmt.Sprintf("Failed to update ignore list: %v", err),
-						Type:    "error",
-					})
-					return h.NewHandlerError(err, "Failed to save settings", http.StatusInternalServerError)
-				}
-
-				h.SSE.SendNotification(Notification{
-					Message: fmt.Sprintf("%s added to ignore list", ignoreSpecies),
-					Type:    "success",
-				})
-			}
-		} else if verified == "correct" && existingReview != nil && existingReview.Verified == "false_positive" {
-			// If changing from false positive to correct, check if species is in ignore list
-			settings := conf.Setting()
-
-			// Check if species is in the excluded list
-			isExcluded := false
-			for _, s := range settings.Realtime.Species.Exclude {
-				if s == note.CommonName {
-					isExcluded = true
-					break
-				}
-			}
-
-			// If species is in exclude list, ask user if they want to remove it
-			if isExcluded {
-				// Send notification to inform user
-				h.SSE.SendNotification(Notification{
-					Message: fmt.Sprintf("%s is currently in ignore list. You may want to remove it from Settings.", note.CommonName),
-					Type:    "warning",
-				})
-			}
-		}
-
-		// Create or update the review
-		review := &datastore.NoteReview{
-			NoteID:    uint(noteID),
-			Verified:  verified,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
-
-		if err := h.DS.SaveNoteReview(review); err != nil {
 			h.SSE.SendNotification(Notification{
-				Message: fmt.Sprintf("Failed to save review: %v", err),
+				Message: fmt.Sprintf("Failed to process review: %v", err),
 				Type:    "error",
 			})
-			return h.NewHandlerError(err, "Failed to save review", http.StatusInternalServerError)
+			return h.NewHandlerError(err, "Failed to process review", http.StatusInternalServerError)
 		}
-	}
 
-	// Send success notification
-	h.SSE.SendNotification(Notification{
-		Message: "Detection review saved successfully",
-		Type:    "success",
-	})
+		// Send success notification
+		h.SSE.SendNotification(Notification{
+			Message: "Review saved successfully",
+			Type:    "success",
+		})
+	}
 
 	// Set response header to refresh list
 	c.Response().Header().Set("HX-Trigger", "refreshListEvent")
