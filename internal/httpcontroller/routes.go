@@ -110,8 +110,8 @@ func (s *Server) initRoutes() {
 		})
 	}
 
-	s.Echo.POST("/login", s.handleBasicAuthLogin)
-	s.Echo.GET("/logout", s.handleLogout)
+	// s.Echo.POST("/login", s.handleBasicAuthLogin)
+	// s.Echo.GET("/logout", s.handleLogout)
 
 	// Special routes
 	s.Echo.GET("/sse", s.Handlers.SSE.ServeSSE)
@@ -120,13 +120,13 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/settings/audio/get", h.WithErrorHandling(h.GetAudioDevices), s.AuthMiddleware)
 
 	// Add DELETE method for detection deletion
-	s.Echo.DELETE("/detections/delete", h.WithErrorHandling(h.DeleteDetection))
+	s.Echo.DELETE("/detections/delete", h.WithErrorHandling(h.DeleteDetection), s.AuthMiddleware)
 
 	// Add POST method for ignoring species
-	s.Echo.POST("/detections/ignore", h.WithErrorHandling(h.IgnoreSpecies))
+	s.Echo.POST("/detections/ignore", h.WithErrorHandling(h.IgnoreSpecies), s.AuthMiddleware)
 
 	// Add POST method for reviewing detections
-	s.Echo.POST("/detections/review", h.WithErrorHandling(h.ReviewDetection))
+	s.Echo.POST("/detections/review", h.WithErrorHandling(h.ReviewDetection), s.AuthMiddleware)
 
 	// Setup Error handler
 	s.Echo.HTTPErrorHandler = func(err error, c echo.Context) {

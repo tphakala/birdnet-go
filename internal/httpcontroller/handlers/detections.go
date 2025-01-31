@@ -127,6 +127,7 @@ func (h *Handlers) Detections(c echo.Context) error {
 		ShowingTo         int
 		ItemsPerPage      int
 		WeatherEnabled    bool
+		Security          map[string]interface{}
 	}{
 		Date:              req.Date,
 		Hour:              req.Hour,
@@ -145,6 +146,11 @@ func (h *Handlers) Detections(c echo.Context) error {
 		ShowingTo:         showingTo,
 		ItemsPerPage:      itemsPerPage,
 		WeatherEnabled:    weatherEnabled,
+		Security: map[string]interface{}{
+			"Enabled":       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
+			"AccessAllowed": h.Server.IsAccessAllowed(c),
+			"IsCloudflare":  h.CloudflareAccess.IsEnabled(c),
+		},
 	}
 
 	// Render the list detections template with the data
@@ -215,9 +221,15 @@ func (h *Handlers) RecentDetections(c echo.Context) error {
 	data := struct {
 		Notes             []datastore.Note
 		DashboardSettings conf.Dashboard
+		Security          map[string]interface{}
 	}{
 		Notes:             notes,
 		DashboardSettings: *h.DashboardSettings,
+		Security: map[string]interface{}{
+			"Enabled":       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
+			"AccessAllowed": h.Server.IsAccessAllowed(c),
+			"IsCloudflare":  h.CloudflareAccess.IsEnabled(c),
+		},
 	}
 
 	h.Debug("RecentDetections: Rendering template")

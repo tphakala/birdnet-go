@@ -21,7 +21,7 @@ import (
 
 var settingsMutex sync.RWMutex
 
-// Handlers embeds baseHandler and includes all the dependencies needed for the application handlers.
+// Handlers contains all the handler functions and their dependencies
 type Handlers struct {
 	baseHandler
 	DS                datastore.Interface
@@ -34,6 +34,9 @@ type Handlers struct {
 	OAuth2Server      *security.OAuth2Server
 	controlChan       chan string
 	notificationChan  chan Notification
+	CloudflareAccess  *security.CloudflareAccess
+	debug             bool
+	Server            interface{ IsAccessAllowed(c echo.Context) bool }
 }
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.
@@ -76,7 +79,7 @@ func (bh *baseHandler) logInfo(message string) {
 }
 
 // New creates a new Handlers instance with the given dependencies.
-func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server, controlChan chan string, notificationChan chan Notification) *Handlers {
+func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server, controlChan chan string, notificationChan chan Notification, server interface{ IsAccessAllowed(c echo.Context) bool }) *Handlers {
 	if logger == nil {
 		logger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
@@ -96,6 +99,9 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		OAuth2Server:      oauth2Server,
 		controlChan:       controlChan,
 		notificationChan:  notificationChan,
+		CloudflareAccess:  security.NewCloudflareAccess(),
+		debug:             settings.Debug,
+		Server:            server,
 	}
 }
 
@@ -233,4 +239,20 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 // GetLabels returns the list of all available species labels
 func (h *Handlers) GetLabels() []string {
 	return h.Settings.BirdNET.Labels
+}
+
+// Security represents the authentication and access control state
+type Security struct {
+	Enabled       bool
+	AccessAllowed bool
+	IsCloudflare  bool
+}
+
+// GetSecurity returns the current security state for the context
+func (h *Handlers) GetSecurity(c echo.Context) *Security {
+	return &Security{
+		Enabled:       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
+		AccessAllowed: h.Server.IsAccessAllowed(c),
+		IsCloudflare:  h.CloudflareAccess.IsEnabled(c),
+	}
 }
