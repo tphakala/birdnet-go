@@ -79,13 +79,11 @@ func (s *Server) handleLoginPage(c echo.Context) error {
 
 		// Validate the redirect parameter
 		if !isValidRedirect(redirect) {
-			//redirect = "/settings/main"
 			redirect = "/"
 		}
 
-		// If no redirect is provided, redirect to the main settings page
+		// If no redirect is provided, redirect to the dashboard
 		if redirect == "" {
-			//redirect = "/settings/main"
 			redirect = "/"
 		}
 
