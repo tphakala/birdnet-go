@@ -369,7 +369,11 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 		return h.NewHandlerError(fmt.Errorf("no ID provided"), "Missing detection ID", http.StatusBadRequest)
 	}
 
-	noteID, _ := strconv.ParseUint(id, 10, 32)
+	noteID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return h.NewHandlerError(err, "Invalid detection ID format", http.StatusBadRequest)
+	}
+
 	comment := c.FormValue("comment")
 	verified := c.FormValue("verified")
 
