@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -33,8 +32,12 @@ type Interface interface {
 	GetNoteClipPath(noteID string) (string, error)
 	DeleteNoteClipPath(noteID string) error
 	GetClipsQualifyingForRemoval(minHours int, minClips int) ([]ClipForRemoval, error)
-	UpdateNote(id string, updates map[string]interface{}) error
-	// weather data
+	GetNoteReview(noteID string) (*NoteReview, error)
+	SaveNoteReview(review *NoteReview) error
+	GetNoteComments(noteID string) ([]NoteComment, error)
+	SaveNoteComment(comment *NoteComment) error
+	UpdateNoteComment(commentID string, entry string) error
+	DeleteNoteComment(commentID string) error
 	SaveDailyEvents(dailyEvents *DailyEvents) error
 	GetDailyEvents(date string) (DailyEvents, error)
 	SaveHourlyWeather(hourlyWeather *HourlyWeather) error
@@ -43,6 +46,7 @@ type Interface interface {
 	GetHourlyDetections(date, hour string, duration int) ([]Note, error)
 	CountSpeciesDetections(species, date, hour string, duration int) (int64, error)
 	CountSearchResults(query string) (int64, error)
+	Transaction(fc func(tx *gorm.DB) error) error
 }
 
 // DataStore implements StoreInterface using a GORM database.
@@ -157,10 +161,18 @@ func (ds *DataStore) Get(id string) (Note, error) {
 	}
 
 	var note Note
-	// Retrieve the note by its ID
-	if err := ds.DB.First(&note, noteID).Error; err != nil {
+	// Retrieve the note by its ID with Review and Comments preloaded
+	if err := ds.DB.Preload("Review").Preload("Comments", func(db *gorm.DB) *gorm.DB {
+		return db.Order("created_at DESC") // Order comments by creation time, newest first
+	}).First(&note, noteID).Error; err != nil {
 		return Note{}, fmt.Errorf("getting note with ID %d: %w", noteID, err)
 	}
+
+	// Populate virtual Verified field
+	if note.Review != nil {
+		note.Verified = note.Review.Verified
+	}
+
 	return note, nil
 }
 
@@ -335,7 +347,9 @@ func (ds *DataStore) GetHourlyOccurrences(date, commonName string, minConfidence
 func (ds *DataStore) SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit, offset int) ([]Note, error) {
 	sortOrder := sortAscendingString(sortAscending)
 
-	query := ds.DB.Where("common_name = ? AND date = ?", species, date)
+	query := ds.DB.Preload("Review").Preload("Comments", func(db *gorm.DB) *gorm.DB {
+		return db.Order("created_at DESC") // Order comments by creation time, newest first
+	}).Where("common_name = ? AND date = ?", species, date)
 	if hour != "" {
 		startTime, endTime := getHourRange(hour, duration)
 		query = query.Where("time >= ? AND time < ?", startTime, endTime)
@@ -347,6 +361,14 @@ func (ds *DataStore) SpeciesDetections(species, date, hour string, duration int,
 
 	var detections []Note
 	err := query.Find(&detections).Error
+
+	// Populate virtual Verified field
+	for i := range detections {
+		if detections[i].Review != nil {
+			detections[i].Verified = detections[i].Review.Verified
+		}
+	}
+
 	return detections, err
 }
 
@@ -356,8 +378,17 @@ func (ds *DataStore) GetLastDetections(numDetections int) ([]Note, error) {
 	now := time.Now()
 
 	// Retrieve the most recent detections based on the ID in descending order
-	if result := ds.DB.Order("id DESC").Limit(numDetections).Find(&notes); result.Error != nil {
+	if result := ds.DB.Preload("Review").Preload("Comments", func(db *gorm.DB) *gorm.DB {
+		return db.Order("created_at DESC") // Order comments by creation time, newest first
+	}).Order("id DESC").Limit(numDetections).Find(&notes); result.Error != nil {
 		return nil, fmt.Errorf("error getting last detections: %w", result.Error)
+	}
+
+	// Populate virtual Verified field
+	for i := range notes {
+		if notes[i].Review != nil {
+			notes[i].Verified = notes[i].Review.Verified
+		}
 	}
 
 	elapsed := time.Since(now)
@@ -383,29 +414,25 @@ func (ds *DataStore) SearchNotes(query string, sortAscending bool, limit, offset
 	var notes []Note
 	sortOrder := sortAscendingString(sortAscending)
 
-	err := ds.DB.Where("common_name LIKE ? OR scientific_name LIKE ?", "%"+query+"%", "%"+query+"%").
+	err := ds.DB.Preload("Review").Preload("Comments", func(db *gorm.DB) *gorm.DB {
+		return db.Order("created_at DESC") // Order comments by creation time, newest first
+	}).Where("common_name LIKE ? OR scientific_name LIKE ?", "%"+query+"%", "%"+query+"%").
 		Order("id " + sortOrder).
 		Limit(limit).
 		Offset(offset).
 		Find(&notes).Error
 
+	// Populate virtual Verified field
+	for i := range notes {
+		if notes[i].Review != nil {
+			notes[i].Verified = notes[i].Review.Verified
+		}
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("error searching notes: %w", err)
 	}
 	return notes, nil
-}
-
-// performAutoMigration automates database migrations with error handling.
-func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string) error {
-	if err := db.AutoMigrate(&Note{}, &Results{}, &DailyEvents{}, &HourlyWeather{}); err != nil {
-		return fmt.Errorf("failed to auto-migrate %s database: %w", dbType, err)
-	}
-
-	if debug {
-		log.Printf("%s database connection initialized: %s", dbType, connectionInfo)
-	}
-
-	return nil
 }
 
 // SaveDailyEvents saves daily events data to the database.
@@ -480,26 +507,6 @@ func (ds *DataStore) LatestHourlyWeather() (*HourlyWeather, error) {
 	return &weather, nil
 }
 
-// sortOrderAscendingString returns "ASC" or "DESC" based on the boolean input.
-func sortAscendingString(asc bool) string {
-	if asc {
-		return "ASC"
-	}
-	return "DESC"
-}
-
-// createGormLogger configures and returns a new GORM logger instance.
-func createGormLogger() logger.Interface {
-	return logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags),
-		logger.Config{
-			SlowThreshold: 200 * time.Millisecond,
-			LogLevel:      logger.Warn,
-			Colorful:      true,
-		},
-	)
-}
-
 // GetHourlyDetections retrieves bird detections for a specific date and hour.
 func (ds *DataStore) GetHourlyDetections(date, hour string, duration int) ([]Note, error) {
 	var detections []Note
@@ -544,14 +551,6 @@ func (ds *DataStore) CountSearchResults(query string) (int64, error) {
 	return count, nil
 }
 
-func getHourRange(hour string, duration int) (startTime, endTime string) {
-	startHour, _ := strconv.Atoi(hour)
-	endHour := (startHour + duration) % 24
-	startTime = fmt.Sprintf("%02d:00:00", startHour)
-	endTime = fmt.Sprintf("%02d:00:00", endHour)
-	return startTime, endTime
-}
-
 // UpdateNote updates specific fields of a note. It validates the input parameters
 // and returns appropriate errors if the note doesn't exist or if the update fails.
 func (ds *DataStore) UpdateNote(id string, updates map[string]interface{}) error {
@@ -571,4 +570,138 @@ func (ds *DataStore) UpdateNote(id string, updates map[string]interface{}) error
 	}
 
 	return nil
+}
+
+// GetNoteReview retrieves the review status for a note
+func (ds *DataStore) GetNoteReview(noteID string) (*NoteReview, error) {
+	var review NoteReview
+	id, err := strconv.ParseUint(noteID, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid note ID: %w", err)
+	}
+
+	// Use Session to temporarily modify logger config for this query
+	err = ds.DB.Session(&gorm.Session{
+		Logger: ds.DB.Logger.LogMode(logger.Silent),
+	}).Where("note_id = ?", id).First(&review).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil // Return nil if no review exists
+		}
+		return nil, fmt.Errorf("error getting note review: %w", err)
+	}
+
+	return &review, nil
+}
+
+// SaveNoteReview saves or updates a note review
+func (ds *DataStore) SaveNoteReview(review *NoteReview) error {
+	// Use upsert operation to either create or update the review
+	result := ds.DB.Where("note_id = ?", review.NoteID).
+		Assign(*review).
+		FirstOrCreate(review)
+
+	if result.Error != nil {
+		return fmt.Errorf("failed to save note review: %w", result.Error)
+	}
+
+	return nil
+}
+
+// GetNoteComments retrieves all comments for a note
+func (ds *DataStore) GetNoteComments(noteID string) ([]NoteComment, error) {
+	var comments []NoteComment
+	id, err := strconv.ParseUint(noteID, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid note ID: %w", err)
+	}
+
+	err = ds.DB.Where("note_id = ?", id).Order("created_at DESC").Find(&comments).Error
+	if err != nil {
+		return nil, fmt.Errorf("error getting note comments: %w", err)
+	}
+
+	return comments, nil
+}
+
+// SaveNoteComment saves a new comment for a note
+func (ds *DataStore) SaveNoteComment(comment *NoteComment) error {
+	// Validate input
+	if comment == nil {
+		return fmt.Errorf("comment cannot be nil")
+	}
+	if comment.NoteID == 0 {
+		return fmt.Errorf("note ID cannot be zero")
+	}
+	// Entry can be empty as comments are optional, but if provided, check length
+	if len(comment.Entry) > 1000 {
+		return fmt.Errorf("comment entry exceeds maximum length of 1000 characters")
+	}
+
+	if err := ds.DB.Create(comment).Error; err != nil {
+		return fmt.Errorf("failed to save note comment: %w", err)
+	}
+	return nil
+}
+
+// DeleteNoteComment deletes a comment
+func (ds *DataStore) DeleteNoteComment(commentID string) error {
+	id, err := strconv.ParseUint(commentID, 10, 32)
+	if err != nil {
+		return fmt.Errorf("invalid comment ID: %w", err)
+	}
+
+	if err := ds.DB.Delete(&NoteComment{}, id).Error; err != nil {
+		return fmt.Errorf("failed to delete note comment: %w", err)
+	}
+	return nil
+}
+
+// UpdateNoteComment updates an existing comment's entry
+func (ds *DataStore) UpdateNoteComment(commentID string, entry string) error {
+	id, err := strconv.ParseUint(commentID, 10, 32)
+	if err != nil {
+		return fmt.Errorf("invalid comment ID: %w", err)
+	}
+
+	result := ds.DB.Model(&NoteComment{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"entry":      entry,
+		"updated_at": time.Now(),
+	})
+
+	if result.Error != nil {
+		return fmt.Errorf("failed to update note comment: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("comment with ID %s not found", commentID)
+	}
+
+	return nil
+}
+
+// getHourRange returns the start and end times for a given hour and duration.
+func getHourRange(hour string, duration int) (startTime, endTime string) {
+	startHour, _ := strconv.Atoi(hour)
+	endHour := (startHour + duration) % 24
+	startTime = fmt.Sprintf("%02d:00:00", startHour)
+	endTime = fmt.Sprintf("%02d:00:00", endHour)
+	return startTime, endTime
+}
+
+// sortOrderAscendingString returns "ASC" or "DESC" based on the boolean input.
+func sortAscendingString(asc bool) string {
+	if asc {
+		return "ASC"
+	}
+	return "DESC"
+}
+
+// Transaction executes a function within a transaction.
+func (ds *DataStore) Transaction(fc func(tx *gorm.DB) error) error {
+	if fc == nil {
+		return fmt.Errorf("transaction function cannot be nil")
+	}
+	return ds.DB.Transaction(fc)
 }

@@ -22,10 +22,13 @@ type Note struct {
 	Threshold      float64
 	Sensitivity    float64
 	ClipName       string
-	Verified       string `gorm:"type:enum('unverified','correct','false_positive');default:'unverified'"`
-	Comment        string `gorm:"type:text"`
 	ProcessingTime time.Duration
-	Results        []Results `gorm:"foreignKey:NoteID"`
+	Results        []Results     `gorm:"foreignKey:NoteID"`
+	Review         *NoteReview   `gorm:"foreignKey:NoteID"` // One-to-one relationship
+	Comments       []NoteComment `gorm:"foreignKey:NoteID"` // One-to-many relationship
+
+	// Virtual field to maintain compatibility with templates
+	Verified string `gorm:"-"` // This will be populated from Review.Verified
 }
 
 // Result represents the identification result with a species name and its confidence level, linked to a Note.
@@ -44,6 +47,26 @@ func (r Results) Copy() Results {
 		Species:    r.Species,
 		Confidence: r.Confidence,
 	}
+}
+
+// NoteReview represents the review status of a Note
+// GORM will automatically create table name as 'note_reviews'
+type NoteReview struct {
+	ID        uint      `gorm:"primaryKey"`
+	NoteID    uint      `gorm:"uniqueIndex"`      // Foreign key to associate with Note, unique to ensure one review per note
+	Verified  string    `gorm:"type:varchar(20)"` // Values: "correct", "false_positive"
+	CreatedAt time.Time `gorm:"index"`            // When the review was created
+	UpdatedAt time.Time // When the review was last updated
+}
+
+// NoteComment represents user comments on a detection
+// GORM will automatically create table name as 'note_comments'
+type NoteComment struct {
+	ID        uint      `gorm:"primaryKey"`
+	NoteID    uint      `gorm:"index"`     // Foreign key to associate with Note
+	Entry     string    `gorm:"type:text"` // The actual comment text
+	CreatedAt time.Time `gorm:"index"`     // When the comment was created
+	UpdatedAt time.Time // When the comment was last updated
 }
 
 // DailyEvents represents the daily weather data that doesn't change throughout the day
