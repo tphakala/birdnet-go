@@ -1,13 +1,77 @@
 package security
 
 import (
+	"net"
 	"net/http"
 	"strings"
 
+	"github.com/gorilla/sessions"
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth/gothic"
 )
 
+// isInLocalSubnet checks if the given IP is in the same subnet as any local network interface
+func isInLocalSubnet(clientIP net.IP) bool {
+	if clientIP == nil {
+		return false
+	}
+
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return false
+	}
+
+	// Get the client's /24 subnet
+	clientSubnet := getIPv4Subnet(clientIP)
+	if clientSubnet == nil {
+		return false
+	}
+
+	// Check each network interface
+	for _, addr := range addrs {
+		ipnet, ok := addr.(*net.IPNet)
+		if !ok || ipnet.IP.IsLoopback() {
+			continue
+		}
+
+		serverSubnet := getIPv4Subnet(ipnet.IP)
+		if serverSubnet != nil && clientSubnet.Equal(serverSubnet) {
+			return true
+		}
+	}
+	return false
+}
+
+// getIPv4Subnet converts an IP address to its /24 subnet address
+func getIPv4Subnet(ip net.IP) net.IP {
+	if ip == nil {
+		return nil
+	}
+
+	// Convert to IPv4 if possible
+	ipv4 := ip.To4()
+	if ipv4 == nil {
+		return nil
+	}
+
+	// Get the /24 subnet
+	return ipv4.Mask(net.CIDRMask(24, 32))
+}
+
+// configureLocalNetworkCookieStore configures the cookie store for local network access
+func configureLocalNetworkCookieStore() {
+	store := gothic.Store.(*sessions.CookieStore)
+	store.Options = &sessions.Options{
+		Path: "/",
+		// Allow cookies to be sent over HTTP, this is for development purposes only
+		// and is allowed only for local LAN access
+		Secure:   false,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
+// HandleBasicAuthorize handles the basic authorization flow
 func (s *OAuth2Server) HandleBasicAuthorize(c echo.Context) error {
 	clientID := c.QueryParam("client_id")
 	redirectURI := c.QueryParam("redirect_uri")
@@ -27,19 +91,25 @@ func (s *OAuth2Server) HandleBasicAuthorize(c echo.Context) error {
 	}
 
 	return c.Redirect(http.StatusFound, redirectURI+"?code="+authCode)
-
 }
 
+// HandleBasicAuthToken handles the basic authorization token flow
 func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
-	grantType := c.FormValue("grant_type")
-	code := c.FormValue("code")
-	redirectURI := c.FormValue("redirect_uri")
-
 	// Verify client credentials from Authorization header
 	clientID, clientSecret, ok := c.Request().BasicAuth()
 	if !ok || clientID != s.Settings.Security.BasicAuth.ClientID || clientSecret != s.Settings.Security.BasicAuth.ClientSecret {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid client id or secret"})
 	}
+
+	// Check if client is in local subnet and configure cookie store accordingly
+	if clientIP := net.ParseIP(c.RealIP()); isInLocalSubnet(clientIP) {
+		// For clients in the local subnet, allow non-HTTPS cookies
+		configureLocalNetworkCookieStore()
+	}
+
+	grantType := c.FormValue("grant_type")
+	code := c.FormValue("code")
+	redirectURI := c.FormValue("redirect_uri")
 
 	// Check for required fields
 	if grantType == "" || code == "" || redirectURI == "" {
@@ -75,6 +145,7 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	})
 }
 
+// HandleBasicAuthCallback handles the basic authorization callback flow
 func (s *OAuth2Server) HandleBasicAuthCallback(c echo.Context) error {
 	code := c.QueryParam("code")
 	redirect := c.QueryParam("redirect")
