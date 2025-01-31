@@ -379,42 +379,64 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 
 	// Handle comment first (this doesn't require review status)
 	if comment != "" {
-		// Get existing comments
-		comments, err := h.DS.GetNoteComments(id)
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		// Validate comment
+		if len(comment) > 1000 { // adjust max length as needed
 			h.SSE.SendNotification(Notification{
-				Message: fmt.Sprintf("Failed to check existing comments: %v", err),
+				Message: "Comment exceeds maximum length of 1000 characters",
 				Type:    "error",
 			})
-			return h.NewHandlerError(err, "Failed to check existing comments", http.StatusInternalServerError)
+			return h.NewHandlerError(
+				fmt.Errorf("comment too long"),
+				"Comment exceeds maximum length",
+				http.StatusBadRequest,
+			)
 		}
 
-		if len(comments) > 0 {
-			// Update existing comment
-			existingComment := comments[0]
-			if err := h.DS.UpdateNoteComment(strconv.FormatUint(uint64(existingComment.ID), 10), comment); err != nil {
+		// Use transaction to prevent race conditions
+		err := h.DS.Transaction(func(tx *gorm.DB) error {
+			// Get existing comments
+			var existingComments []datastore.NoteComment
+			if err := tx.Where("note_id = ?", noteID).Find(&existingComments).Error; err != nil {
 				h.SSE.SendNotification(Notification{
-					Message: fmt.Sprintf("Failed to update comment: %v", err),
+					Message: fmt.Sprintf("Failed to check existing comments: %v", err),
 					Type:    "error",
 				})
-				return h.NewHandlerError(err, "Failed to update comment", http.StatusInternalServerError)
-			}
-		} else {
-			// Create new comment
-			noteComment := &datastore.NoteComment{
-				NoteID:    uint(noteID),
-				Entry:     comment,
-				CreatedAt: time.Now(),
-				UpdatedAt: time.Now(),
+				return fmt.Errorf("failed to check existing comments: %w", err)
 			}
 
-			if err := h.DS.SaveNoteComment(noteComment); err != nil {
-				h.SSE.SendNotification(Notification{
-					Message: fmt.Sprintf("Failed to save comment: %v", err),
-					Type:    "error",
-				})
-				return h.NewHandlerError(err, "Failed to save comment", http.StatusInternalServerError)
+			// If we found existing comments, update the first one
+			if len(existingComments) > 0 {
+				existingComment := existingComments[0]
+				existingComment.Entry = comment
+				existingComment.UpdatedAt = time.Now()
+				if err := tx.Save(&existingComment).Error; err != nil {
+					h.SSE.SendNotification(Notification{
+						Message: fmt.Sprintf("Failed to update comment: %v", err),
+						Type:    "error",
+					})
+					return fmt.Errorf("failed to update comment: %w", err)
+				}
+			} else {
+				// Create new comment if none exists
+				noteComment := &datastore.NoteComment{
+					NoteID:    uint(noteID),
+					Entry:     comment,
+					CreatedAt: time.Now(),
+					UpdatedAt: time.Now(),
+				}
+
+				if err := tx.Create(noteComment).Error; err != nil {
+					h.SSE.SendNotification(Notification{
+						Message: fmt.Sprintf("Failed to save comment: %v", err),
+						Type:    "error",
+					})
+					return fmt.Errorf("failed to save comment: %w", err)
+				}
 			}
+			return nil
+		})
+		if err != nil {
+			return h.NewHandlerError(err, "Failed to handle comment", http.StatusInternalServerError)
 		}
 	}
 
