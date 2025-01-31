@@ -18,25 +18,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Security represents the security context for templates
-type Security struct {
-	Enabled       bool
-	AccessAllowed bool
-	IsCloudflare  bool
-}
-
-// IsAccessAllowed checks if the current request has access allowed
-func (h *Handlers) IsAccessAllowed(c echo.Context) bool {
-	// If security is not enabled, access is allowed
-	if !h.Settings.Security.BasicAuth.Enabled && !h.Settings.Security.GoogleAuth.Enabled && !h.Settings.Security.GithubAuth.Enabled {
-		return true
-	}
-
-	// Check if user is authenticated
-	user := c.Get("user")
-	return user != nil
-}
-
 // DetectionRequest represents the common parameters for detection requests
 type DetectionRequest struct {
 	Date       string `query:"date"`
@@ -146,7 +127,7 @@ func (h *Handlers) Detections(c echo.Context) error {
 		ShowingTo         int
 		ItemsPerPage      int
 		WeatherEnabled    bool
-		Security          *Security
+		Security          map[string]interface{}
 	}{
 		Date:              req.Date,
 		Hour:              req.Hour,
@@ -165,10 +146,10 @@ func (h *Handlers) Detections(c echo.Context) error {
 		ShowingTo:         showingTo,
 		ItemsPerPage:      itemsPerPage,
 		WeatherEnabled:    weatherEnabled,
-		Security: &Security{
-			Enabled:       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
-			AccessAllowed: h.IsAccessAllowed(c),
-			IsCloudflare:  h.CloudflareAccess.IsEnabled(c),
+		Security: map[string]interface{}{
+			"Enabled":       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
+			"AccessAllowed": h.Server.IsAccessAllowed(c),
+			"IsCloudflare":  h.CloudflareAccess.IsEnabled(c),
 		},
 	}
 
@@ -240,14 +221,14 @@ func (h *Handlers) RecentDetections(c echo.Context) error {
 	data := struct {
 		Notes             []datastore.Note
 		DashboardSettings conf.Dashboard
-		Security          *Security
+		Security          map[string]interface{}
 	}{
 		Notes:             notes,
 		DashboardSettings: *h.DashboardSettings,
-		Security: &Security{
-			Enabled:       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
-			AccessAllowed: h.IsAccessAllowed(c),
-			IsCloudflare:  h.CloudflareAccess.IsEnabled(c),
+		Security: map[string]interface{}{
+			"Enabled":       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
+			"AccessAllowed": h.Server.IsAccessAllowed(c),
+			"IsCloudflare":  h.CloudflareAccess.IsEnabled(c),
 		},
 	}
 
