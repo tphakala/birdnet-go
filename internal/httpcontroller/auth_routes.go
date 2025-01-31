@@ -79,12 +79,14 @@ func (s *Server) handleLoginPage(c echo.Context) error {
 
 		// Validate the redirect parameter
 		if !isValidRedirect(redirect) {
-			redirect = "/settings/main"
+			//redirect = "/settings/main"
+			redirect = "/"
 		}
 
 		// If no redirect is provided, redirect to the main settings page
 		if redirect == "" {
-			redirect = "/settings/main"
+			//redirect = "/settings/main"
+			redirect = "/"
 		}
 
 		return c.Render(http.StatusOK, "login", map[string]interface{}{

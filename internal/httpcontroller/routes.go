@@ -110,8 +110,8 @@ func (s *Server) initRoutes() {
 		})
 	}
 
-	s.Echo.POST("/login", s.handleBasicAuthLogin)
-	s.Echo.GET("/logout", s.handleLogout)
+	// s.Echo.POST("/login", s.handleBasicAuthLogin)
+	// s.Echo.GET("/logout", s.handleLogout)
 
 	// Special routes
 	s.Echo.GET("/sse", s.Handlers.SSE.ServeSSE)
