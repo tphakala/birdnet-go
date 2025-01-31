@@ -46,6 +46,7 @@ type Interface interface {
 	GetHourlyDetections(date, hour string, duration int) ([]Note, error)
 	CountSpeciesDetections(species, date, hour string, duration int) (int64, error)
 	CountSearchResults(query string) (int64, error)
+	Transaction(fc func(tx *gorm.DB) error) error
 }
 
 // DataStore implements StoreInterface using a GORM database.
@@ -683,4 +684,9 @@ func sortAscendingString(asc bool) string {
 		return "ASC"
 	}
 	return "DESC"
+}
+
+// Transaction executes a function within a transaction.
+func (ds *DataStore) Transaction(fc func(tx *gorm.DB) error) error {
+	return ds.DB.Transaction(fc)
 }
