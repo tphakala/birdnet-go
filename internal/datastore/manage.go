@@ -29,7 +29,7 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 	}
 
 	if debug {
-		log.Printf("%s database connection initialized: %s", dbType, connectionInfo)
+		log.Printf("%s database initialized successfully", dbType)
 	}
 
 	return nil
