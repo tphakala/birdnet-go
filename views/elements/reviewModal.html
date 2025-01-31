@@ -81,9 +81,9 @@
 
       <div class="form-control mb-4">
         <label class="label">
-          <span class="label-text">Comment (optional)</span>
+          <span class="label-text">Comment</span>
         </label>
-        <textarea name="comment" class="textarea textarea-bordered h-24" placeholder="Add any notes about this detection">{{.Comment}}</textarea>
+        <textarea name="comment" class="textarea textarea-bordered h-24" placeholder="Add a comment">{{if .Comments}}{{(index .Comments 0).Entry}}{{end}}</textarea>
       </div>
 
       <div class="modal-action">
