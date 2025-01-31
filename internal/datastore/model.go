@@ -22,7 +22,6 @@ type Note struct {
 	Threshold      float64
 	Sensitivity    float64
 	ClipName       string
-	Verified       string `gorm:"type:enum('unverified','correct','false_positive');default:'unverified'"`
 	Comment        string `gorm:"type:text"`
 	ProcessingTime time.Duration
 	Results        []Results `gorm:"foreignKey:NoteID"`
@@ -44,6 +43,16 @@ func (r Results) Copy() Results {
 		Species:    r.Species,
 		Confidence: r.Confidence,
 	}
+}
+
+// Review represents the review status of a Note
+type Review struct {
+	ID        uint      `gorm:"primaryKey"`
+	NoteID    uint      `gorm:"uniqueIndex"`      // Foreign key to associate with Note, unique to ensure one review per note
+	Verified  string    `gorm:"type:varchar(20)"` // Values: "correct", "false_positive"
+	Comment   string    `gorm:"type:text"`
+	CreatedAt time.Time `gorm:"index"` // When the review was created
+	UpdatedAt time.Time // When the review was last updated
 }
 
 // DailyEvents represents the daily weather data that doesn't change throughout the day
