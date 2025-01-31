@@ -26,8 +26,6 @@ func createGormLogger() logger.Interface {
 func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string) error {
 	if err := db.AutoMigrate(&Note{}, &Results{}, &NoteReview{}, &NoteComment{}, &DailyEvents{}, &HourlyWeather{}); err != nil {
 		return fmt.Errorf("failed to auto-migrate %s database: %w", dbType, err)
-	} else {
-		log.Printf("Database schema for %s database is up to date", dbType)
 	}
 
 	if debug {
