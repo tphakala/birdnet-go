@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/weather"
+	"gorm.io/gorm"
 )
 
 // Security represents the security context for templates
@@ -390,6 +392,43 @@ func (h *Handlers) DeleteDetection(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
+// handleSpeciesExclusion handles the logic for managing species in the exclusion list
+func (h *Handlers) handleSpeciesExclusion(note *datastore.Note, verified string, ignoreSpecies string) error {
+	settings := conf.Setting()
+
+	if verified == "false_positive" && ignoreSpecies != "" {
+		// Check if species is already excluded
+		for _, s := range settings.Realtime.Species.Exclude {
+			if s == ignoreSpecies {
+				return nil
+			}
+		}
+
+		// Add to excluded list
+		settings.Realtime.Species.Exclude = append(settings.Realtime.Species.Exclude, ignoreSpecies)
+		if err := conf.SaveSettings(); err != nil {
+			return fmt.Errorf("failed to save settings: %w", err)
+		}
+
+		h.SSE.SendNotification(Notification{
+			Message: fmt.Sprintf("%s added to ignore list", ignoreSpecies),
+			Type:    "success",
+		})
+	} else if verified == "correct" {
+		// Check if species is in exclude list
+		for _, s := range settings.Realtime.Species.Exclude {
+			if s == note.CommonName {
+				h.SSE.SendNotification(Notification{
+					Message: fmt.Sprintf("%s is currently in ignore list. You may want to remove it from Settings.", note.CommonName),
+					Type:    "warning",
+				})
+				break
+			}
+		}
+	}
+	return nil
+}
+
 // ReviewDetection handles the verification of a detection as either correct or false positive
 func (h *Handlers) ReviewDetection(c echo.Context) error {
 	id := c.FormValue("id")
@@ -397,92 +436,125 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 		return h.NewHandlerError(fmt.Errorf("no ID provided"), "Missing detection ID", http.StatusBadRequest)
 	}
 
-	verified := c.FormValue("verified")
-	if verified != "correct" && verified != "false_positive" {
-		return h.NewHandlerError(fmt.Errorf("invalid verification status"), "Invalid verification status", http.StatusBadRequest)
+	noteID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return h.NewHandlerError(err, "Invalid detection ID format", http.StatusBadRequest)
 	}
 
 	comment := c.FormValue("comment")
-	ignoreSpecies := c.FormValue("ignore_species")
+	verified := c.FormValue("verified")
 
-	// Verify that the note exists and get its data
-	note, err := h.DS.Get(id)
-	if err != nil {
-		return h.NewHandlerError(err, "Failed to retrieve note", http.StatusInternalServerError)
-	}
-
-	// Handle ignore species if it's set and the detection is marked as false positive
-	if verified == "false_positive" && ignoreSpecies != "" {
-		// Get settings instance
-		settings := conf.Setting()
-
-		// Check if species is already in the excluded list
-		isExcluded := false
-		for _, s := range settings.Realtime.Species.Exclude {
-			if s == ignoreSpecies {
-				isExcluded = true
-				break
-			}
+	// Handle comment first (this doesn't require review status)
+	if comment != "" {
+		// Validate comment
+		if len(comment) > 1000 { // adjust max length as needed
+			h.SSE.SendNotification(Notification{
+				Message: "Comment exceeds maximum length of 1000 characters",
+				Type:    "error",
+			})
+			return h.NewHandlerError(
+				fmt.Errorf("comment too long"),
+				"Comment exceeds maximum length",
+				http.StatusBadRequest,
+			)
 		}
 
-		// Add to excluded list if not already there
-		if !isExcluded {
-			settings.Realtime.Species.Exclude = append(settings.Realtime.Species.Exclude, ignoreSpecies)
-
-			// Save the settings
-			if err := conf.SaveSettings(); err != nil {
+		// Use transaction to prevent race conditions
+		err := h.DS.Transaction(func(tx *gorm.DB) error {
+			// Get existing comments
+			var existingComments []datastore.NoteComment
+			if err := tx.Where("note_id = ?", noteID).Find(&existingComments).Error; err != nil {
 				h.SSE.SendNotification(Notification{
-					Message: fmt.Sprintf("Failed to update ignore list: %v", err),
+					Message: fmt.Sprintf("Failed to check existing comments: %v", err),
 					Type:    "error",
 				})
-				return h.NewHandlerError(err, "Failed to save settings", http.StatusInternalServerError)
+				return fmt.Errorf("failed to check existing comments: %w", err)
 			}
 
-			h.SSE.SendNotification(Notification{
-				Message: fmt.Sprintf("%s added to ignore list", ignoreSpecies),
-				Type:    "success",
-			})
-		}
-	} else if verified == "correct" && note.Verified == "false_positive" {
-		// If changing from false positive to correct, check if species is in ignore list
-		settings := conf.Setting()
+			// If we found existing comments, update the first one
+			if len(existingComments) > 0 {
+				existingComment := existingComments[0]
+				existingComment.Entry = comment
+				existingComment.UpdatedAt = time.Now()
+				if err := tx.Save(&existingComment).Error; err != nil {
+					h.SSE.SendNotification(Notification{
+						Message: fmt.Sprintf("Failed to update comment: %v", err),
+						Type:    "error",
+					})
+					return fmt.Errorf("failed to update comment: %w", err)
+				}
+			} else {
+				// Create new comment if none exists
+				noteComment := &datastore.NoteComment{
+					NoteID:    uint(noteID),
+					Entry:     comment,
+					CreatedAt: time.Now(),
+					UpdatedAt: time.Now(),
+				}
 
-		// Check if species is in the excluded list
-		isExcluded := false
-		for _, s := range settings.Realtime.Species.Exclude {
-			if s == note.CommonName {
-				isExcluded = true
-				break
+				if err := tx.Create(noteComment).Error; err != nil {
+					h.SSE.SendNotification(Notification{
+						Message: fmt.Sprintf("Failed to save comment: %v", err),
+						Type:    "error",
+					})
+					return fmt.Errorf("failed to save comment: %w", err)
+				}
 			}
-		}
-
-		// If species is in exclude list, ask user if they want to remove it
-		if isExcluded {
-			// Send notification to inform user
-			h.SSE.SendNotification(Notification{
-				Message: fmt.Sprintf("%s is currently in ignore list. You may want to remove it from Settings.", note.CommonName),
-				Type:    "warning",
-			})
-		}
-	}
-
-	// Update the verification status and comment
-	if err := h.DS.UpdateNote(id, map[string]interface{}{
-		"verified": verified,
-		"comment":  comment,
-	}); err != nil {
-		h.SSE.SendNotification(Notification{
-			Message: fmt.Sprintf("Failed to save review: %v", err),
-			Type:    "error",
+			return nil
 		})
-		return h.NewHandlerError(err, "Failed to save note", http.StatusInternalServerError)
+		if err != nil {
+			return h.NewHandlerError(err, "Failed to handle comment", http.StatusInternalServerError)
+		}
 	}
 
-	// Send success notification
-	h.SSE.SendNotification(Notification{
-		Message: "Detection review saved successfully",
-		Type:    "success",
-	})
+	// Handle review status if provided
+	if verified != "" {
+		// Validate review status first
+		if verified != "correct" && verified != "false_positive" {
+			return h.NewHandlerError(fmt.Errorf("invalid verification status"), "Invalid verification status", http.StatusBadRequest)
+		}
+
+		err := h.DS.Transaction(func(tx *gorm.DB) error {
+			// Get note and existing review in a transaction
+			note, err := h.DS.Get(id)
+			if err != nil {
+				return fmt.Errorf("failed to retrieve note: %w", err)
+			}
+
+			// Handle species exclusion
+			if err := h.handleSpeciesExclusion(&note, verified, c.FormValue("ignore_species")); err != nil {
+				return err
+			}
+
+			// Create or update the review
+			review := &datastore.NoteReview{
+				NoteID:    uint(noteID),
+				Verified:  verified,
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+			}
+
+			if err := tx.Save(review).Error; err != nil {
+				return fmt.Errorf("failed to save review: %w", err)
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			h.SSE.SendNotification(Notification{
+				Message: fmt.Sprintf("Failed to process review: %v", err),
+				Type:    "error",
+			})
+			return h.NewHandlerError(err, "Failed to process review", http.StatusInternalServerError)
+		}
+
+		// Send success notification
+		h.SSE.SendNotification(Notification{
+			Message: "Review saved successfully",
+			Type:    "success",
+		})
+	}
 
 	// Set response header to refresh list
 	c.Response().Header().Set("HX-Trigger", "refreshListEvent")
