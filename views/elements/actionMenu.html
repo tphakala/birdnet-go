@@ -1,14 +1,13 @@
 {{define "actionMenu"}}
-{{if or (not .Security.Enabled) .Security.AccessAllowed}}
 <div class="dropdown dropdown-end" 
      x-data="{ 
        open: false, 
-       isExcluded: {{if isSpeciesExcluded .Note.CommonName}}true{{else}}false{{end}},
+       isExcluded: {{if isSpeciesExcluded .CommonName}}true{{else}}false{{end}},
        init() {
-         document.body.addEventListener('species-excluded-{{.Note.ID}}', () => {
+         document.body.addEventListener('species-excluded-{{.ID}}', () => {
            this.isExcluded = true;
          });
-         document.body.addEventListener('species-included-{{.Note.ID}}', () => {
+         document.body.addEventListener('species-included-{{.ID}}', () => {
            this.isExcluded = false;
          });
        }
@@ -23,13 +22,13 @@
     <li>
       <a href="#" 
          class="text-sm"
-         @click="open = false; const modal = document.getElementById('reviewModal{{.Note.ID}}'); modal.showModal(); htmx.process(modal);">
+         @click="open = false; const modal = document.getElementById('reviewModal{{.ID}}'); modal.showModal(); htmx.process(modal);">
         <div class="flex items-center gap-2">
           <span>Review detection</span>
-          {{if .Note.Verified}}
-            {{if eq .Note.Verified "correct"}}
+          {{if .Verified}}
+            {{if eq .Verified "correct"}}
               <span class="badge badge-success badge-sm">✓</span>
-            {{else if eq .Note.Verified "false_positive"}}
+            {{else if eq .Verified "false_positive"}}
               <span class="badge badge-error badge-sm">✗</span>
             {{end}}
           {{end}}
@@ -41,18 +40,18 @@
          class="text-sm"
          @click="
            open = false;
-           const modal = document.getElementById('confirmModal{{.Note.ID}}');
-           document.getElementById('confirmTitle{{.Note.ID}}').textContent = isExcluded ? 'Show Species {{.Note.CommonName | js}}' : 'Ignore Species {{.Note.CommonName | js}}';
-           document.getElementById('confirmMessage{{.Note.ID}}').textContent = isExcluded 
-             ? `Are you sure you want to show future detections of {{.Note.CommonName | js}}?`
-             : `Are you sure you want to ignore future detections of {{.Note.CommonName | js}}? This will only affect new detections - existing detections will remain in the database.`;
-           document.getElementById('confirmButton{{.Note.ID}}').onclick = () => {
-             htmx.ajax('POST', '/detections/ignore?common_name=' + encodeURIComponent('{{.Note.CommonName | js}}'), {
+           const modal = document.getElementById('confirmModal{{.ID}}');
+           document.getElementById('confirmTitle{{.ID}}').textContent = isExcluded ? 'Show Species {{.CommonName | js}}' : 'Ignore Species {{.CommonName | js}}';
+           document.getElementById('confirmMessage{{.ID}}').textContent = isExcluded 
+             ? `Are you sure you want to show future detections of {{.CommonName | js}}?`
+             : `Are you sure you want to ignore future detections of {{.CommonName | js}}? This will only affect new detections - existing detections will remain in the database.`;
+           document.getElementById('confirmButton{{.ID}}').onclick = () => {
+             htmx.ajax('POST', '/detections/ignore?common_name=' + encodeURIComponent('{{.CommonName | js}}'), {
                target: 'body',
                swap: 'none',
                handler: (success) => {
                  if (success) {
-                   const eventName = isExcluded ? 'species-included-' + {{.Note.ID}} : 'species-excluded-' + {{.Note.ID}};
+                   const eventName = isExcluded ? 'species-included-' + {{.ID}} : 'species-excluded-' + {{.ID}};
                    document.body.dispatchEvent(new Event(eventName));
                    modal.close();
                  }
@@ -68,11 +67,11 @@
         class="text-sm text-error"
         @click="
           open = false;
-          const modal = document.getElementById('confirmModal{{.Note.ID}}');
-          document.getElementById('confirmTitle{{.Note.ID}}').textContent = 'Delete Detection of {{.Note.CommonName | js}}';
-          document.getElementById('confirmMessage{{.Note.ID}}').textContent = 'Are you sure you want to delete detection of {{.Note.CommonName | js}}? This action cannot be undone.';
-          document.getElementById('confirmButton{{.Note.ID}}').onclick = () => {
-            htmx.ajax('DELETE', '/detections/delete?id={{.Note.ID}}', {
+          const modal = document.getElementById('confirmModal{{.ID}}');
+          document.getElementById('confirmTitle{{.ID}}').textContent = 'Delete Detection of {{.CommonName | js}}';
+          document.getElementById('confirmMessage{{.ID}}').textContent = 'Are you sure you want to delete detection of {{.CommonName | js}}? This action cannot be undone.';
+          document.getElementById('confirmButton{{.ID}}').onclick = () => {
+            htmx.ajax('DELETE', '/detections/delete?id={{.ID}}', {
             handler: (success) => {
               if (success) {
                 const list = htmx.find('[hx-trigger*=\'refreshListEvent\']');
@@ -94,11 +93,10 @@
   </ul>
 
   <!-- Include Review Modal Component -->
-  {{template "reviewModal" .Note}}
+  {{template "reviewModal" .}}
   
   <!-- Include Confirm Modal Component -->
-  {{template "confirmModal" .Note}}
+  {{template "confirmModal" .}}
 
 </div>
-{{end}}
 {{end}} 
