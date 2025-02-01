@@ -48,6 +48,7 @@
           id="reviewForm{{.ID}}"
           x-data="{ 
             isLocked: {{if .Locked}}true{{else}}false{{end}},
+            reviewStatus: '{{.Verified}}',
             init() {
               document.body.addEventListener('detection-locked-{{.ID}}', () => {
                 this.isLocked = true;
@@ -71,25 +72,31 @@
       
       <div class="form-control">
         <label class="label cursor-pointer justify-start gap-4">
-          <input type="radio" name="verified" value="correct" class="radio radio-primary radio-xs" required {{if eq .Verified "correct"}}checked{{end}} onchange="document.getElementById('ignoreSpeciesSection{{.ID}}').style.display = 'none'; document.getElementById('lockDetectionSection{{.ID}}').style.display = 'block'">
+          <input type="radio" name="verified" value="correct" class="radio radio-primary radio-xs" required 
+                 {{if eq .Verified "correct"}}checked{{end}} 
+                 :disabled="isLocked"
+                 x-model="reviewStatus">
           <span class="label-text">Correct Detection</span>
         </label>
         <label class="label justify-start gap-4" :class="{ 'cursor-not-allowed opacity-50': isLocked, 'cursor-pointer': !isLocked }">
-          <input type="radio" name="verified" value="false_positive" class="radio radio-primary radio-xs" required {{if eq .Verified "false_positive"}}checked{{end}} :disabled="isLocked" onchange="document.getElementById('ignoreSpeciesSection{{.ID}}').style.display = 'block'; document.getElementById('lockDetectionSection{{.ID}}').style.display = 'none'">
+          <input type="radio" name="verified" value="false_positive" class="radio radio-primary radio-xs" required 
+                 {{if eq .Verified "false_positive"}}checked{{end}} 
+                 :disabled="isLocked"
+                 x-model="reviewStatus">
           <span class="label-text">False Positive</span>
         </label>
         <template x-if="isLocked">
-        <div class="text-sm text-warning mt-2">
+        <div class="text-sm text-base-content mt-2">
           <svg xmlns="http://www.w3.org/2000/svg" class="inline-block w-4 h-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
           </svg>
-          This detection is locked. You must unlock it first before marking it as a false positive.
+          This detection is locked. You must unlock it first to change its review status.
         </div>
         </template>
       </div>
 
       <!-- Lock Detection Section -->
-      <div id="lockDetectionSection{{.ID}}" class="form-control mb-4" x-bind:style="{ display: '{{if eq .Verified "correct"}}block{{else}}none{{end}}' }">
+      <div class="form-control mb-4" x-show="reviewStatus === 'correct'">
         <label class="label cursor-pointer justify-start gap-4 mb-2">
           <input type="checkbox" name="lock_detection" class="checkbox checkbox-primary checkbox-xs" value="true" :checked="isLocked"
                  @click="$el.form.querySelector('input[name=lock_detection][type=hidden]').value = $el.checked ? 'true' : 'false'">
@@ -102,7 +109,7 @@
       </div>
 
       <!-- Ignore Species Section -->
-      <div id="ignoreSpeciesSection{{.ID}}" class="form-control mb-4" x-bind:style="{ display: '{{if eq .Verified "false_positive"}}block{{else}}none{{end}}' }">
+      <div class="form-control mb-4" x-show="!isLocked && reviewStatus === 'false_positive'">
         <label class="label cursor-pointer justify-start gap-4 mb-2">
           <input type="checkbox" name="ignore_species" class="checkbox checkbox-primary checkbox-xs" value="{{.CommonName}}" {{if isSpeciesExcluded .CommonName}}checked{{end}}>
           <span class="label-text">Ignore this species</span>
