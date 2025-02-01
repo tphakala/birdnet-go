@@ -47,6 +47,11 @@ type Interface interface {
 	CountSpeciesDetections(species, date, hour string, duration int) (int64, error)
 	CountSearchResults(query string) (int64, error)
 	Transaction(fc func(tx *gorm.DB) error) error
+	// Lock management methods
+	LockNote(noteID string, description string, lockedBy string) error
+	UnlockNote(noteID string) error
+	GetNoteLock(noteID string) (*NoteLock, error)
+	IsNoteLocked(noteID string) (bool, error)
 }
 
 // DataStore implements StoreInterface using a GORM database.
@@ -161,8 +166,8 @@ func (ds *DataStore) Get(id string) (Note, error) {
 	}
 
 	var note Note
-	// Retrieve the note by its ID with Review and Comments preloaded
-	if err := ds.DB.Preload("Review").Preload("Comments", func(db *gorm.DB) *gorm.DB {
+	// Retrieve the note by its ID with Review, Lock, and Comments preloaded
+	if err := ds.DB.Preload("Review").Preload("Lock").Preload("Comments", func(db *gorm.DB) *gorm.DB {
 		return db.Order("created_at DESC") // Order comments by creation time, newest first
 	}).First(&note, noteID).Error; err != nil {
 		return Note{}, fmt.Errorf("getting note with ID %d: %w", noteID, err)
@@ -173,6 +178,9 @@ func (ds *DataStore) Get(id string) (Note, error) {
 		note.Verified = note.Review.Verified
 	}
 
+	// Populate virtual Locked field
+	note.Locked = note.Lock != nil
+
 	return note, nil
 }
 
@@ -182,6 +190,15 @@ func (ds *DataStore) Delete(id string) error {
 	noteID, err := strconv.ParseUint(id, 10, 32)
 	if err != nil {
 		return fmt.Errorf("converting ID to integer: %w", err)
+	}
+
+	// Check if the note is locked
+	isLocked, err := ds.IsNoteLocked(id)
+	if err != nil {
+		return fmt.Errorf("checking note lock status: %w", err)
+	}
+	if isLocked {
+		return fmt.Errorf("cannot delete note: note is locked")
 	}
 
 	// Perform the deletion within a transaction
@@ -281,7 +298,11 @@ func (ds *DataStore) GetClipsQualifyingForRemoval(minHours, minClips int) ([]Cli
 
 	// Define a subquery to count the number of recordings per scientific name
 	subquery := ds.DB.Model(&Note{}).Select("ID, scientific_name, ROW_NUMBER() OVER (PARTITION BY scientific_name) as num_recordings").
-		Where("clip_name != ''")
+		Where("clip_name != ''").
+		// Exclude notes that have a lock
+		Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id").
+		Where("note_locks.id IS NULL")
+
 	if err := subquery.Error; err != nil {
 		return nil, fmt.Errorf("error creating subquery: %w", err)
 	}
@@ -290,6 +311,9 @@ func (ds *DataStore) GetClipsQualifyingForRemoval(minHours, minClips int) ([]Cli
 	err := ds.DB.Table("(?) AS n", ds.DB.Model(&Note{})).
 		Select("n.ID, n.scientific_name, n.clip_name, sub.num_recordings").
 		Joins("INNER JOIN (?) AS sub ON n.ID = sub.ID", subquery).
+		// Exclude notes that have a lock
+		Joins("LEFT JOIN note_locks ON n.id = note_locks.note_id").
+		Where("note_locks.id IS NULL").
 		Where("strftime('%s', 'now') - strftime('%s', begin_time) > ?", minHours*3600). // Convert hours to seconds for comparison
 		Where("sub.num_recordings > ?", minClips).
 		Scan(&results).Error
@@ -347,7 +371,7 @@ func (ds *DataStore) GetHourlyOccurrences(date, commonName string, minConfidence
 func (ds *DataStore) SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit, offset int) ([]Note, error) {
 	sortOrder := sortAscendingString(sortAscending)
 
-	query := ds.DB.Preload("Review").Preload("Comments", func(db *gorm.DB) *gorm.DB {
+	query := ds.DB.Preload("Review").Preload("Lock").Preload("Comments", func(db *gorm.DB) *gorm.DB {
 		return db.Order("created_at DESC") // Order comments by creation time, newest first
 	}).Where("common_name = ? AND date = ?", species, date)
 	if hour != "" {
@@ -362,11 +386,12 @@ func (ds *DataStore) SpeciesDetections(species, date, hour string, duration int,
 	var detections []Note
 	err := query.Find(&detections).Error
 
-	// Populate virtual Verified field
+	// Populate virtual fields
 	for i := range detections {
 		if detections[i].Review != nil {
 			detections[i].Verified = detections[i].Review.Verified
 		}
+		detections[i].Locked = detections[i].Lock != nil
 	}
 
 	return detections, err
@@ -378,17 +403,18 @@ func (ds *DataStore) GetLastDetections(numDetections int) ([]Note, error) {
 	now := time.Now()
 
 	// Retrieve the most recent detections based on the ID in descending order
-	if result := ds.DB.Preload("Review").Preload("Comments", func(db *gorm.DB) *gorm.DB {
+	if result := ds.DB.Preload("Review").Preload("Lock").Preload("Comments", func(db *gorm.DB) *gorm.DB {
 		return db.Order("created_at DESC") // Order comments by creation time, newest first
 	}).Order("id DESC").Limit(numDetections).Find(&notes); result.Error != nil {
 		return nil, fmt.Errorf("error getting last detections: %w", result.Error)
 	}
 
-	// Populate virtual Verified field
+	// Populate virtual fields
 	for i := range notes {
 		if notes[i].Review != nil {
 			notes[i].Verified = notes[i].Review.Verified
 		}
+		notes[i].Locked = notes[i].Lock != nil
 	}
 
 	elapsed := time.Since(now)
@@ -704,4 +730,73 @@ func (ds *DataStore) Transaction(fc func(tx *gorm.DB) error) error {
 		return fmt.Errorf("transaction function cannot be nil")
 	}
 	return ds.DB.Transaction(fc)
+}
+
+// LockNote creates or updates a lock for a note
+func (ds *DataStore) LockNote(noteID, description, lockedBy string) error {
+	id, err := strconv.ParseUint(noteID, 10, 32)
+	if err != nil {
+		return fmt.Errorf("invalid note ID: %w", err)
+	}
+
+	lock := &NoteLock{
+		NoteID:      uint(id),
+		LockedAt:    time.Now(),
+		Description: description,
+		LockedBy:    lockedBy,
+	}
+
+	// Use upsert operation to either create or update the lock
+	result := ds.DB.Where("note_id = ?", id).
+		Assign(*lock).
+		FirstOrCreate(lock)
+
+	if result.Error != nil {
+		return fmt.Errorf("failed to lock note: %w", result.Error)
+	}
+
+	return nil
+}
+
+// UnlockNote removes a lock from a note
+func (ds *DataStore) UnlockNote(noteID string) error {
+	id, err := strconv.ParseUint(noteID, 10, 32)
+	if err != nil {
+		return fmt.Errorf("invalid note ID: %w", err)
+	}
+
+	result := ds.DB.Where("note_id = ?", id).Delete(&NoteLock{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to unlock note: %w", result.Error)
+	}
+
+	return nil
+}
+
+// GetNoteLock retrieves the lock status for a note
+func (ds *DataStore) GetNoteLock(noteID string) (*NoteLock, error) {
+	id, err := strconv.ParseUint(noteID, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid note ID: %w", err)
+	}
+
+	var lock NoteLock
+	err = ds.DB.Where("note_id = ?", id).First(&lock).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil // Return nil if no lock exists
+		}
+		return nil, fmt.Errorf("error getting note lock: %w", err)
+	}
+
+	return &lock, nil
+}
+
+// IsNoteLocked checks if a note is locked
+func (ds *DataStore) IsNoteLocked(noteID string) (bool, error) {
+	lock, err := ds.GetNoteLock(noteID)
+	if err != nil {
+		return false, err
+	}
+	return lock != nil, nil
 }
