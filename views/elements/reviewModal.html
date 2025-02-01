@@ -59,13 +59,24 @@
       
       <div class="form-control">
         <label class="label cursor-pointer justify-start gap-4">
-          <input type="radio" name="verified" value="correct" class="radio radio-primary radio-xs" required {{if eq .Verified "correct"}}checked{{end}} onchange="document.getElementById('ignoreSpeciesSection{{.ID}}').style.display = 'none'">
+          <input type="radio" name="verified" value="correct" class="radio radio-primary radio-xs" required {{if eq .Verified "correct"}}checked{{end}} onchange="document.getElementById('ignoreSpeciesSection{{.ID}}').style.display = 'none'; document.getElementById('lockDetectionSection{{.ID}}').style.display = 'block'">
           <span class="label-text">Correct Detection</span>
         </label>
         <label class="label cursor-pointer justify-start gap-4">
-          <input type="radio" name="verified" value="false_positive" class="radio radio-primary radio-xs" required {{if eq .Verified "false_positive"}}checked{{end}} onchange="document.getElementById('ignoreSpeciesSection{{.ID}}').style.display = 'block'">
+          <input type="radio" name="verified" value="false_positive" class="radio radio-primary radio-xs" required {{if eq .Verified "false_positive"}}checked{{end}} onchange="document.getElementById('ignoreSpeciesSection{{.ID}}').style.display = 'block'; document.getElementById('lockDetectionSection{{.ID}}').style.display = 'none'">
           <span class="label-text">False Positive</span>
         </label>
+      </div>
+
+      <!-- Lock Detection Section -->
+      <div id="lockDetectionSection{{.ID}}" class="form-control mb-4" style="display: {{if eq .Verified "correct"}}block{{else}}none{{end}}">
+        <label class="label cursor-pointer justify-start gap-4 mb-2">
+          <input type="checkbox" name="lock_detection" class="checkbox checkbox-primary checkbox-xs" value="true" {{if .Locked}}checked{{end}}>
+          <span class="label-text">Lock this detection</span>
+        </label>
+        <div class="">
+          <span>Locking this detection will prevent it from being deleted during regular cleanup.</span>
+        </div>
       </div>
 
       <!-- Ignore Species Section -->
