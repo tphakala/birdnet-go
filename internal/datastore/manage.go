@@ -24,7 +24,7 @@ func createGormLogger() logger.Interface {
 
 // performAutoMigration automates database migrations with error handling.
 func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string) error {
-	if err := db.AutoMigrate(&Note{}, &Results{}, &NoteReview{}, &NoteComment{}, &DailyEvents{}, &HourlyWeather{}); err != nil {
+	if err := db.AutoMigrate(&Note{}, &Results{}, &NoteReview{}, &NoteComment{}, &DailyEvents{}, &HourlyWeather{}, &NoteLock{}); err != nil {
 		return fmt.Errorf("failed to auto-migrate %s database: %w", dbType, err)
 	}
 
