@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/url"
 	"sync"
@@ -15,6 +14,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"github.com/tphakala/birdnet-go/internal/telemetry/metrics"
+)
+
+const (
+	// defaultQoS is the default Quality of Service level for MQTT messages
+	defaultQoS = 1 // QoS 1 ensures at least once delivery
 )
 
 // client implements the Client interface.
@@ -30,23 +34,26 @@ type client struct {
 
 // NewClient creates a new MQTT client with the provided configuration.
 func NewClient(settings *conf.Settings, metrics *telemetry.Metrics) (Client, error) {
+	config := DefaultConfig()
+	config.Broker = settings.Realtime.MQTT.Broker
+	config.ClientID = settings.Main.Name
+	config.Username = settings.Realtime.MQTT.Username
+	config.Password = settings.Realtime.MQTT.Password
+
 	return &client{
-		config: Config{
-			Broker:            settings.Realtime.MQTT.Broker,
-			ClientID:          settings.Main.Name,
-			Username:          settings.Realtime.MQTT.Username,
-			Password:          settings.Realtime.MQTT.Password,
-			ReconnectCooldown: 5 * time.Second,
-			ReconnectDelay:    1 * time.Second,
-		},
+		config:        config,
 		reconnectStop: make(chan struct{}),
 		metrics:       metrics.MQTT,
 	}, nil
 }
 
 // Connect attempts to establish a connection to the MQTT broker.
-// It first resolves the broker's hostname and then attempts to connect.
 func (c *client) Connect(ctx context.Context) error {
+	// Check context before acquiring lock
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -61,56 +68,97 @@ func (c *client) Connect(ctx context.Context) error {
 		return fmt.Errorf("invalid broker URL: %w", err)
 	}
 
-	host := u.Hostname()
+	// Create a child context with timeout for DNS resolution
+	dnsCtx, dnsCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer dnsCancel()
 
-	// Check if the host is an IP address
+	host := u.Hostname()
 	if net.ParseIP(host) == nil {
-		// It's not an IP address, so attempt to resolve it
-		_, err := net.DefaultResolver.LookupHost(ctx, host)
+		_, err := net.DefaultResolver.LookupHost(dnsCtx, host)
 		if err != nil {
 			var dnsErr *net.DNSError
 			if errors.As(err, &dnsErr) {
-				// If it's a DNS error, return it directly
 				return dnsErr
 			}
-			// For other errors, wrap it
 			return fmt.Errorf("failed to resolve hostname %s: %w", host, err)
 		}
 	}
 
+	// Clean up any existing client
+	if c.internalClient != nil && c.internalClient.IsConnected() {
+		c.internalClient.Disconnect(uint(c.config.DisconnectTimeout.Milliseconds()))
+	}
+
+	// Create connection options
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(c.config.Broker)
 	opts.SetClientID(c.config.ClientID)
 	opts.SetUsername(c.config.Username)
 	opts.SetPassword(c.config.Password)
 	opts.SetCleanSession(true)
-	opts.SetAutoReconnect(true)
+	opts.SetAutoReconnect(false) // We'll handle reconnection ourselves
 	opts.SetOnConnectHandler(c.onConnect)
 	opts.SetConnectionLostHandler(c.onConnectionLost)
-	opts.SetConnectRetry(true)
+	opts.SetConnectRetry(false) // We'll handle retries ourselves
+	opts.SetKeepAlive(30 * time.Second)
+	opts.SetPingTimeout(10 * time.Second)
+	opts.SetWriteTimeout(10 * time.Second)
+	opts.SetConnectTimeout(c.config.ConnectTimeout)
 
 	c.internalClient = mqtt.NewClient(opts)
 
-	token := c.internalClient.Connect()
-	if !token.WaitTimeout(30 * time.Second) {
-		return fmt.Errorf("connection timeout")
-	}
-	if err := token.Error(); err != nil {
-		return fmt.Errorf("connection error: %w", err)
+	// Create a channel to handle connection timeout
+	done := make(chan error, 1)
+	connectStarted := make(chan struct{})
+
+	go func() {
+		close(connectStarted)
+		token := c.internalClient.Connect()
+		if !token.WaitTimeout(c.config.ConnectTimeout) {
+			done <- fmt.Errorf("connection timeout after %v", c.config.ConnectTimeout)
+			return
+		}
+		done <- token.Error()
+	}()
+
+	// Wait for connection attempt to start
+	<-connectStarted
+
+	// Wait for either context cancellation or connection completion
+	select {
+	case <-ctx.Done():
+		// Cleanup on context cancellation
+		if c.internalClient != nil {
+			c.internalClient.Disconnect(uint(c.config.DisconnectTimeout.Milliseconds()))
+		}
+		return ctx.Err()
+	case err := <-done:
+		if err != nil {
+			c.metrics.UpdateConnectionStatus(false)
+			c.metrics.IncrementErrors()
+			return fmt.Errorf("connection error: %w", err)
+		}
 	}
 
-	// Update connection status metric
+	// Verify connection was successful
+	if !c.internalClient.IsConnected() {
+		c.metrics.UpdateConnectionStatus(false)
+		return fmt.Errorf("connection failed: client reports as disconnected")
+	}
+
 	c.metrics.UpdateConnectionStatus(true)
-
 	return nil
 }
 
 // Publish sends a message to the specified topic on the MQTT broker.
 func (c *client) Publish(ctx context.Context, topic, payload string) error {
+	// Check context before acquiring lock
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	log.Printf("Publishing to topic %s\n", topic)
 
 	if !c.IsConnected() {
 		return fmt.Errorf("not connected to MQTT broker")
@@ -119,16 +167,37 @@ func (c *client) Publish(ctx context.Context, topic, payload string) error {
 	timer := c.metrics.StartPublishTimer()
 	defer timer.ObserveDuration()
 
-	token := c.internalClient.Publish(topic, 0, false, payload)
-	if !token.WaitTimeout(10 * time.Second) {
-		log.Printf("Publish timeout for topic %s\n", topic)
-		return fmt.Errorf("publish timeout")
+	// Create a channel to handle publish timeout
+	done := make(chan error, 1)
+	publishStarted := make(chan struct{})
+
+	go func() {
+		close(publishStarted)
+		token := c.internalClient.Publish(topic, defaultQoS, false, payload)
+		if !token.WaitTimeout(c.config.PublishTimeout) {
+			done <- fmt.Errorf("publish timeout after %v", c.config.PublishTimeout)
+			return
+		}
+		done <- token.Error()
+	}()
+
+	// Wait for publish attempt to start
+	<-publishStarted
+
+	// Wait for either context cancellation or publish completion
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-done:
+		if err != nil {
+			c.metrics.IncrementErrors()
+			return fmt.Errorf("publish error: %w", err)
+		}
 	}
 
 	c.metrics.IncrementMessagesDelivered()
 	c.metrics.ObserveMessageSize(float64(len(payload)))
-
-	return token.Error()
+	return nil
 }
 
 // IsConnected returns true if the client is currently connected to the MQTT broker.
@@ -138,14 +207,18 @@ func (c *client) IsConnected() bool {
 
 // Disconnect closes the connection to the MQTT broker.
 func (c *client) Disconnect() {
-	if c.internalClient != nil && c.internalClient.IsConnected() {
-		c.internalClient.Disconnect(250)
-		c.metrics.UpdateConnectionStatus(false)
-	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	close(c.reconnectStop)
 	if c.reconnectTimer != nil {
 		c.reconnectTimer.Stop()
 	}
-	close(c.reconnectStop)
+
+	if c.internalClient != nil && c.internalClient.IsConnected() {
+		c.internalClient.Disconnect(uint(c.config.DisconnectTimeout.Milliseconds()))
+		c.metrics.UpdateConnectionStatus(false)
+	}
 }
 
 func (c *client) onConnect(client mqtt.Client) {
@@ -172,33 +245,39 @@ func (c *client) startReconnectTimer() {
 }
 
 func (c *client) reconnectWithBackoff() {
-	backoff := time.Second
+	backoff := c.config.ReconnectDelay
 	maxBackoff := 5 * time.Minute
 
 	for {
-		c.metrics.IncrementReconnectAttempts()
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		err := c.Connect(ctx)
-		cancel()
-
-		if err == nil {
-			fmt.Println("Successfully reconnected to MQTT broker")
-			return
-		}
-
-		c.metrics.IncrementErrors()
-
-		fmt.Printf("Failed to reconnect to MQTT broker: %s\n", err)
-		fmt.Printf("Retrying in %v\n", backoff)
-
 		select {
-		case <-time.After(backoff):
-			backoff *= 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
-			}
 		case <-c.reconnectStop:
 			return
+		default:
+			c.metrics.IncrementReconnectAttempts()
+			ctx, cancel := context.WithTimeout(context.Background(), c.config.ConnectTimeout)
+			err := c.Connect(ctx)
+			cancel()
+
+			if err == nil {
+				fmt.Println("Successfully reconnected to MQTT broker")
+				return
+			}
+
+			c.metrics.IncrementErrors()
+			fmt.Printf("Failed to reconnect to MQTT broker: %s\n", err)
+			fmt.Printf("Retrying in %v\n", backoff)
+
+			timer := time.NewTimer(backoff)
+			select {
+			case <-timer.C:
+				backoff *= 2
+				if backoff > maxBackoff {
+					backoff = maxBackoff
+				}
+			case <-c.reconnectStop:
+				timer.Stop()
+				return
+			}
 		}
 	}
 }
