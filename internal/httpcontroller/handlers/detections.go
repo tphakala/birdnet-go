@@ -410,7 +410,145 @@ func (h *Handlers) handleSpeciesExclusion(note *datastore.Note, verified, ignore
 	return nil
 }
 
-// ReviewDetection handles the verification of a detection as either correct or false positive
+// processComment handles saving or updating a comment for a note
+func (h *Handlers) processComment(noteID uint, comment string, maxRetries int, baseDelay time.Duration) error {
+	if comment == "" {
+		return nil
+	}
+
+	// Validate comment
+	if len(comment) > 1000 {
+		h.SSE.SendNotification(Notification{
+			Message: "Comment exceeds maximum length of 1000 characters",
+			Type:    "error",
+		})
+		return fmt.Errorf("comment too long")
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		err := h.DS.Transaction(func(tx *gorm.DB) error {
+			// Get existing comments
+			var existingComments []datastore.NoteComment
+			if err := tx.Where("note_id = ?", noteID).Find(&existingComments).Error; err != nil {
+				return fmt.Errorf("failed to check existing comments: %w", err)
+			}
+
+			// If there are existing comments, update the first one
+			if len(existingComments) > 0 {
+				existingComments[0].Entry = comment
+				existingComments[0].UpdatedAt = time.Now()
+				if err := tx.Save(&existingComments[0]).Error; err != nil {
+					return fmt.Errorf("failed to update comment: %w", err)
+				}
+			} else {
+				// Create new comment
+				newComment := &datastore.NoteComment{
+					NoteID:    noteID,
+					Entry:     comment,
+					CreatedAt: time.Now(),
+					UpdatedAt: time.Now(),
+				}
+				if err := tx.Create(newComment).Error; err != nil {
+					return fmt.Errorf("failed to save comment: %w", err)
+				}
+			}
+			return nil
+		})
+
+		if err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
+				delay := baseDelay * time.Duration(attempt+1)
+				h.Debug("Database locked during comment save, retrying in %v (attempt %d/%d)", delay, attempt+1, maxRetries)
+				time.Sleep(delay)
+				lastErr = err
+				continue
+			}
+			return err
+		}
+
+		// If we get here, the transaction was successful
+		return nil
+	}
+
+	return lastErr
+}
+
+// processReview handles the review status update and related operations
+func (h *Handlers) processReview(noteID uint, verified string, lockDetection bool, username string, maxRetries int, baseDelay time.Duration) error {
+	if verified == "" {
+		return nil
+	}
+
+	// Validate review status
+	if verified != "correct" && verified != "false_positive" {
+		return fmt.Errorf("invalid verification status")
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		err := h.DS.Transaction(func(tx *gorm.DB) error {
+			// Get note and existing review in a transaction
+			note, err := h.DS.Get(strconv.FormatUint(uint64(noteID), 10))
+			if err != nil {
+				return fmt.Errorf("failed to retrieve note: %w", err)
+			}
+
+			// Handle species exclusion
+			if err := h.handleSpeciesExclusion(&note, verified, ""); err != nil {
+				return err
+			}
+
+			// Create or update the review
+			review := &datastore.NoteReview{
+				NoteID:    noteID,
+				Verified:  verified,
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+			}
+
+			if err := tx.Save(review).Error; err != nil {
+				return fmt.Errorf("failed to save review: %w", err)
+			}
+
+			// Handle lock detection if the detection is marked as correct
+			if verified == "correct" && lockDetection {
+				lock := &datastore.NoteLock{
+					NoteID:      noteID,
+					LockedAt:    time.Now(),
+					Description: "Locked during review verification",
+					LockedBy:    username,
+				}
+
+				// Use upsert operation within the same transaction
+				if err := tx.Where("note_id = ?", noteID).
+					Assign(*lock).
+					FirstOrCreate(lock).Error; err != nil {
+					return fmt.Errorf("failed to lock note: %w", err)
+				}
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
+				delay := baseDelay * time.Duration(attempt+1)
+				h.Debug("Database locked during review, retrying in %v (attempt %d/%d)", delay, attempt+1, maxRetries)
+				time.Sleep(delay)
+				lastErr = err
+				continue
+			}
+			return err
+		}
+
+		// If we get here, the transaction was successful
+		return nil
+	}
+
+	return lastErr
+}
+
 func (h *Handlers) ReviewDetection(c echo.Context) error {
 	id := c.FormValue("id")
 	if id == "" {
@@ -424,118 +562,132 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 
 	comment := c.FormValue("comment")
 	verified := c.FormValue("verified")
+	lockDetection := c.FormValue("lock_detection") == "true"
+	ignoreSpecies := c.FormValue("ignore_species")
+
+	// Retry configuration for SQLite locking
+	maxRetries := 5
+	baseDelay := 100 * time.Millisecond
 
 	// Handle comment first (this doesn't require review status)
-	if comment != "" {
-		// Validate comment
-		if len(comment) > 1000 { // adjust max length as needed
+	if err := h.processComment(uint(noteID), comment, maxRetries, baseDelay); err != nil {
+		h.SSE.SendNotification(Notification{
+			Message: fmt.Sprintf("Failed to process comment: %v", err),
+			Type:    "error",
+		})
+		return h.NewHandlerError(err, "Failed to process comment", http.StatusInternalServerError)
+	}
+
+	// Get username for lock if needed
+	username := "web-user"
+	if user := c.Get("user"); user != nil {
+		if u, ok := user.(string); ok {
+			username = u
+		}
+	}
+
+	// Handle species exclusion if provided
+	if verified == "false_positive" && ignoreSpecies != "" {
+		if err := h.handleSpeciesExclusion(nil, verified, ignoreSpecies); err != nil {
 			h.SSE.SendNotification(Notification{
-				Message: "Comment exceeds maximum length of 1000 characters",
+				Message: fmt.Sprintf("Failed to handle species exclusion: %v", err),
 				Type:    "error",
 			})
-			return h.NewHandlerError(
-				fmt.Errorf("comment too long"),
-				"Comment exceeds maximum length",
-				http.StatusBadRequest,
-			)
-		}
-
-		// Use transaction to prevent race conditions
-		err := h.DS.Transaction(func(tx *gorm.DB) error {
-			// Get existing comments
-			var existingComments []datastore.NoteComment
-			if err := tx.Where("note_id = ?", noteID).Find(&existingComments).Error; err != nil {
-				h.SSE.SendNotification(Notification{
-					Message: fmt.Sprintf("Failed to check existing comments: %v", err),
-					Type:    "error",
-				})
-				return fmt.Errorf("failed to check existing comments: %w", err)
-			}
-
-			// If we found existing comments, update the first one
-			if len(existingComments) > 0 {
-				existingComment := existingComments[0]
-				existingComment.Entry = comment
-				existingComment.UpdatedAt = time.Now()
-				if err := tx.Save(&existingComment).Error; err != nil {
-					h.SSE.SendNotification(Notification{
-						Message: fmt.Sprintf("Failed to update comment: %v", err),
-						Type:    "error",
-					})
-					return fmt.Errorf("failed to update comment: %w", err)
-				}
-			} else {
-				// Create new comment if none exists
-				noteComment := &datastore.NoteComment{
-					NoteID:    uint(noteID),
-					Entry:     comment,
-					CreatedAt: time.Now(),
-					UpdatedAt: time.Now(),
-				}
-
-				if err := tx.Create(noteComment).Error; err != nil {
-					h.SSE.SendNotification(Notification{
-						Message: fmt.Sprintf("Failed to save comment: %v", err),
-						Type:    "error",
-					})
-					return fmt.Errorf("failed to save comment: %w", err)
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return h.NewHandlerError(err, "Failed to handle comment", http.StatusInternalServerError)
+			return h.NewHandlerError(err, "Failed to handle species exclusion", http.StatusInternalServerError)
 		}
 	}
 
 	// Handle review status if provided
-	if verified != "" {
-		// Validate review status first
-		if verified != "correct" && verified != "false_positive" {
-			return h.NewHandlerError(fmt.Errorf("invalid verification status"), "Invalid verification status", http.StatusBadRequest)
-		}
-
-		err := h.DS.Transaction(func(tx *gorm.DB) error {
-			// Get note and existing review in a transaction
-			note, err := h.DS.Get(id)
-			if err != nil {
-				return fmt.Errorf("failed to retrieve note: %w", err)
-			}
-
-			// Handle species exclusion
-			if err := h.handleSpeciesExclusion(&note, verified, c.FormValue("ignore_species")); err != nil {
-				return err
-			}
-
-			// Create or update the review
-			review := &datastore.NoteReview{
-				NoteID:    uint(noteID),
-				Verified:  verified,
-				CreatedAt: time.Now(),
-				UpdatedAt: time.Now(),
-			}
-
-			if err := tx.Save(review).Error; err != nil {
-				return fmt.Errorf("failed to save review: %w", err)
-			}
-
-			return nil
+	if err := h.processReview(uint(noteID), verified, lockDetection, username, maxRetries, baseDelay); err != nil {
+		h.SSE.SendNotification(Notification{
+			Message: fmt.Sprintf("Failed to process review: %v", err),
+			Type:    "error",
 		})
+		return h.NewHandlerError(err, "Failed to process review", http.StatusInternalServerError)
+	}
 
-		if err != nil {
-			h.SSE.SendNotification(Notification{
-				Message: fmt.Sprintf("Failed to process review: %v", err),
-				Type:    "error",
-			})
-			return h.NewHandlerError(err, "Failed to process review", http.StatusInternalServerError)
-		}
-
+	if verified != "" {
 		// Send success notification
 		h.SSE.SendNotification(Notification{
 			Message: "Review saved successfully",
 			Type:    "success",
 		})
 	}
+
+	// Set response header to refresh list
+	c.Response().Header().Set("HX-Trigger", "refreshListEvent")
+
+	return c.NoContent(http.StatusOK)
+}
+
+// LockDetection handles the locking and unlocking of detections
+func (h *Handlers) LockDetection(c echo.Context) error {
+	id := c.QueryParam("id")
+	if id == "" {
+		h.SSE.SendNotification(Notification{
+			Message: "Missing detection ID",
+			Type:    "error",
+		})
+		return h.NewHandlerError(fmt.Errorf("no ID provided"), "Missing detection ID", http.StatusBadRequest)
+	}
+
+	// Get the current note to check its lock status
+	note, err := h.DS.Get(id)
+	if err != nil {
+		h.SSE.SendNotification(Notification{
+			Message: fmt.Sprintf("Failed to get detection: %v", err),
+			Type:    "error",
+		})
+		return h.NewHandlerError(err, "Failed to get detection", http.StatusInternalServerError)
+	}
+
+	// Check current lock status
+	isLocked, err := h.DS.IsNoteLocked(id)
+	if err != nil {
+		h.SSE.SendNotification(Notification{
+			Message: fmt.Sprintf("Failed to check lock status: %v", err),
+			Type:    "error",
+		})
+		return h.NewHandlerError(err, "Failed to check lock status", http.StatusInternalServerError)
+	}
+
+	var message string
+	if isLocked {
+		// Unlock the detection
+		if err := h.DS.UnlockNote(id); err != nil {
+			h.SSE.SendNotification(Notification{
+				Message: fmt.Sprintf("Failed to unlock detection: %v", err),
+				Type:    "error",
+			})
+			return h.NewHandlerError(err, "Failed to unlock detection", http.StatusInternalServerError)
+		}
+		message = fmt.Sprintf("Detection of %s unlocked successfully", note.CommonName)
+	} else {
+		// Lock the detection
+		description := "Locked by user via web interface"
+		// Get username from context if available, otherwise use "web-user"
+		username := "web-user"
+		if user := c.Get("user"); user != nil {
+			if u, ok := user.(string); ok {
+				username = u
+			}
+		}
+
+		if err := h.DS.LockNote(id, description, username); err != nil {
+			h.SSE.SendNotification(Notification{
+				Message: fmt.Sprintf("Failed to lock detection: %v", err),
+				Type:    "error",
+			})
+			return h.NewHandlerError(err, "Failed to lock detection", http.StatusInternalServerError)
+		}
+		message = fmt.Sprintf("Detection of %s locked successfully", note.CommonName)
+	}
+
+	// Send success notification
+	h.SSE.SendNotification(Notification{
+		Message: message,
+		Type:    "success",
+	})
 
 	// Set response header to refresh list
 	c.Response().Header().Set("HX-Trigger", "refreshListEvent")

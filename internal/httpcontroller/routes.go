@@ -128,6 +128,9 @@ func (s *Server) initRoutes() {
 	// Add POST method for reviewing detections
 	s.Echo.POST("/detections/review", h.WithErrorHandling(h.ReviewDetection), s.AuthMiddleware)
 
+	// Add POST method for locking/unlocking detections
+	s.Echo.POST("/detections/lock", h.WithErrorHandling(h.LockDetection), s.AuthMiddleware)
+
 	// Setup Error handler
 	s.Echo.HTTPErrorHandler = func(err error, c echo.Context) {
 		if handleErr := s.Handlers.HandleError(err, c); handleErr != nil {
