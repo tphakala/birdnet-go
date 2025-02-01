@@ -68,6 +68,11 @@
                         <span class="sm:hidden">Confid.</span>
                     </th>
 
+                    <!-- Status Column -->
+                    <th scope="col" class="py-2 px-4" style="width: auto">
+                        <span>Status</span>
+                    </th>
+
                     <!-- Recording Column -->
                     <th scope="col" class="py-2 px-4" style="width: 30%">Recording</th>
 
@@ -156,12 +161,40 @@
                                     {{confidence .Confidence}}
                                 </a>
                             </div>
-                            {{if .Verified}}
-                                {{if eq .Verified "correct"}}
-                                    <div class="review-badge correct" title="Verified correct">✓</div>
-                                {{else if eq .Verified "false_positive"}}
-                                    <div class="review-badge false_positive" title="Marked as false positive">✗</div>
+                        </div>
+                    </td>
+
+                    <!-- Status Column -->
+                    <td class="py-1 px-4 font-normal">
+                        <div class="flex flex-wrap gap-1">
+                            {{if .Review}}
+                                {{if eq .Review.Verified "correct"}}
+                                    <div class="text-success" title="Verified correct">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd" />
+                                        </svg>
+                                    </div>
+                                {{else if eq .Review.Verified "false_positive"}}
+                                    <div class="text-error" title="Marked as false positive">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z" clip-rule="evenodd" />
+                                        </svg>
+                                    </div>
                                 {{end}}
+                            {{end}}
+                            {{if .Lock}}
+                                <div class="text-warning" title="Detection is locked">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+                                        <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" />
+                                    </svg>
+                                </div>
+                            {{end}}
+                            {{if .Comments}}
+                                <div class="text-info" title="Has comments">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+                                        <path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z" clip-rule="evenodd" />
+                                    </svg>
+                                </div>
                             {{end}}
                         </div>
                     </td>
