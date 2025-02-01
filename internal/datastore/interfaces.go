@@ -659,7 +659,7 @@ func (ds *DataStore) DeleteNoteComment(commentID string) error {
 }
 
 // UpdateNoteComment updates an existing comment's entry
-func (ds *DataStore) UpdateNoteComment(commentID string, entry string) error {
+func (ds *DataStore) UpdateNoteComment(commentID, entry string) error {
 	id, err := strconv.ParseUint(commentID, 10, 32)
 	if err != nil {
 		return fmt.Errorf("invalid comment ID: %w", err)
