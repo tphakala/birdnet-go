@@ -1,5 +1,11 @@
 {{define "recentDetections"}}
 
+  <div id="recentDetections"
+       hx-trigger="refreshListEvent from:body" 
+       hx-get="/detections/recent" 
+       hx-target="#recentDetections"
+       hx-swap="outerHTML">
+
   <table class="hidden sm:table table w-full text-sm text-left">
     <thead class="text-xs">
       <tr>
@@ -263,4 +269,5 @@
     {{end}}
   </div>
 
+  </div>
 {{end}}
