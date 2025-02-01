@@ -26,9 +26,11 @@ type Note struct {
 	Results        []Results     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
 	Review         *NoteReview   `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-one relationship with cascade delete
 	Comments       []NoteComment `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-many relationship with cascade delete
+	Lock           *NoteLock     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-one relationship with cascade delete
 
-	// Virtual field to maintain compatibility with templates
+	// Virtual fields to maintain compatibility with templates
 	Verified string `gorm:"-"` // This will be populated from Review.Verified
+	Locked   bool   `gorm:"-"` // This will be populated from Lock presence
 }
 
 // Result represents the identification result with a species name and its confidence level, linked to a Note.
@@ -67,6 +69,16 @@ type NoteComment struct {
 	Entry     string    `gorm:"type:text"`                                                                                   // The actual comment text
 	CreatedAt time.Time `gorm:"index"`                                                                                       // When the comment was created
 	UpdatedAt time.Time // When the comment was last updated
+}
+
+// NoteLock represents the lock status of a Note
+// GORM will automatically create table name as 'note_locks'
+type NoteLock struct {
+	ID          uint      `gorm:"primaryKey"`
+	NoteID      uint      `gorm:"uniqueIndex;not null;constraint:OnDelete:CASCADE,OnUpdate:CASCADE;foreignKey:NoteID;references:ID"` // Foreign key to associate with Note
+	LockedAt    time.Time `gorm:"index;not null"`                                                                                    // When the note was locked
+	Description string    `gorm:"type:text"`                                                                                         // Optional description of why the note was locked
+	LockedBy    string    `gorm:"type:varchar(255)"`                                                                                 // Who locked the note (can be username or system)
 }
 
 // DailyEvents represents the daily weather data that doesn't change throughout the day
