@@ -23,9 +23,9 @@ type Note struct {
 	Sensitivity    float64
 	ClipName       string
 	ProcessingTime time.Duration
-	Results        []Results     `gorm:"foreignKey:NoteID"`
-	Review         *NoteReview   `gorm:"foreignKey:NoteID"` // One-to-one relationship
-	Comments       []NoteComment `gorm:"foreignKey:NoteID"` // One-to-many relationship
+	Results        []Results     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
+	Review         *NoteReview   `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-one relationship with cascade delete
+	Comments       []NoteComment `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-many relationship with cascade delete
 
 	// Virtual field to maintain compatibility with templates
 	Verified string `gorm:"-"` // This will be populated from Review.Verified
@@ -34,7 +34,7 @@ type Note struct {
 // Result represents the identification result with a species name and its confidence level, linked to a Note.
 type Results struct {
 	ID         uint `gorm:"primaryKey"`
-	NoteID     uint // Foreign key to associate with Note
+	NoteID     uint `gorm:"index;not null;constraint:OnDelete:CASCADE,OnUpdate:CASCADE;foreignKey:NoteID;references:ID"` // Foreign key to associate with Note
 	Species    string
 	Confidence float32
 }
@@ -53,9 +53,9 @@ func (r Results) Copy() Results {
 // GORM will automatically create table name as 'note_reviews'
 type NoteReview struct {
 	ID        uint      `gorm:"primaryKey"`
-	NoteID    uint      `gorm:"uniqueIndex"`      // Foreign key to associate with Note, unique to ensure one review per note
-	Verified  string    `gorm:"type:varchar(20)"` // Values: "correct", "false_positive"
-	CreatedAt time.Time `gorm:"index"`            // When the review was created
+	NoteID    uint      `gorm:"uniqueIndex;not null;constraint:OnDelete:CASCADE,OnUpdate:CASCADE;foreignKey:NoteID;references:ID"` // Foreign key to associate with Note
+	Verified  string    `gorm:"type:varchar(20)"`                                                                                  // Values: "correct", "false_positive"
+	CreatedAt time.Time `gorm:"index"`                                                                                             // When the review was created
 	UpdatedAt time.Time // When the review was last updated
 }
 
@@ -63,9 +63,9 @@ type NoteReview struct {
 // GORM will automatically create table name as 'note_comments'
 type NoteComment struct {
 	ID        uint      `gorm:"primaryKey"`
-	NoteID    uint      `gorm:"index"`     // Foreign key to associate with Note
-	Entry     string    `gorm:"type:text"` // The actual comment text
-	CreatedAt time.Time `gorm:"index"`     // When the comment was created
+	NoteID    uint      `gorm:"index;not null;constraint:OnDelete:CASCADE,OnUpdate:CASCADE;foreignKey:NoteID;references:ID"` // Foreign key to associate with Note
+	Entry     string    `gorm:"type:text"`                                                                                   // The actual comment text
+	CreatedAt time.Time `gorm:"index"`                                                                                       // When the comment was created
 	UpdatedAt time.Time // When the comment was last updated
 }
 
