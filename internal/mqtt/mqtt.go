@@ -31,4 +31,19 @@ type Config struct {
 	Password          string
 	ReconnectCooldown time.Duration
 	ReconnectDelay    time.Duration
+	// Connection timeouts
+	ConnectTimeout    time.Duration
+	PublishTimeout    time.Duration
+	DisconnectTimeout time.Duration
+}
+
+// DefaultConfig returns a Config with reasonable default values
+func DefaultConfig() Config {
+	return Config{
+		ReconnectCooldown: 5 * time.Second,
+		ReconnectDelay:    1 * time.Second,
+		ConnectTimeout:    30 * time.Second,
+		PublishTimeout:    10 * time.Second,
+		DisconnectTimeout: 250 * time.Millisecond,
+	}
 }
