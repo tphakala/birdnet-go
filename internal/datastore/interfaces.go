@@ -732,6 +732,46 @@ func (ds *DataStore) Transaction(fc func(tx *gorm.DB) error) error {
 	return ds.DB.Transaction(fc)
 }
 
+// GetNoteLock retrieves the lock status for a note
+func (ds *DataStore) GetNoteLock(noteID string) (*NoteLock, error) {
+	id, err := strconv.ParseUint(noteID, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid note ID: %w", err)
+	}
+
+	var lock NoteLock
+	// Check if the lock exists and get its details in one query
+	err = ds.DB.Where("note_id = ?", id).First(&lock).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil // Return nil if no lock exists
+		}
+		return nil, fmt.Errorf("error getting lock details: %w", err)
+	}
+
+	return &lock, nil
+}
+
+// IsNoteLocked checks if a note is locked
+func (ds *DataStore) IsNoteLocked(noteID string) (bool, error) {
+	id, err := strconv.ParseUint(noteID, 10, 32)
+	if err != nil {
+		return false, fmt.Errorf("invalid note ID: %w", err)
+	}
+
+	var count int64
+	err = ds.DB.Model(&NoteLock{}).
+		Where("note_id = ?", id).
+		Count(&count).
+		Error
+
+	if err != nil {
+		return false, fmt.Errorf("error checking lock status: %w", err)
+	}
+
+	return count > 0, nil
+}
+
 // LockNote creates or updates a lock for a note
 func (ds *DataStore) LockNote(noteID string) error {
 	id, err := strconv.ParseUint(noteID, 10, 32)
@@ -748,12 +788,12 @@ func (ds *DataStore) LockNote(noteID string) error {
 
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Use upsert operation to either create or update the lock
 		lock := &NoteLock{
 			NoteID:   uint(id),
 			LockedAt: time.Now(),
 		}
 
-		// Use upsert operation to either create or update the lock
 		result := ds.DB.Where("note_id = ?", id).
 			Assign(*lock).
 			FirstOrCreate(lock)
@@ -769,11 +809,10 @@ func (ds *DataStore) LockNote(noteID string) error {
 			return fmt.Errorf("failed to lock note: %w", result.Error)
 		}
 
-		// Log if retry count is not 0 and transaction was successful
+		// If we get here, the transaction was successful
 		if attempt > 0 {
 			log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
 		}
-
 		return nil
 	}
 
@@ -796,8 +835,17 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		result := ds.DB.Where("note_id = ?", id).Delete(&NoteLock{})
+		// First check if the lock exists
+		exists, err := ds.IsNoteLocked(noteID)
+		if err != nil {
+			return fmt.Errorf("failed to check lock existence: %w", err)
+		}
+		if !exists {
+			// Lock doesn't exist, nothing to unlock
+			return nil
+		}
 
+		result := ds.DB.Where("note_id = ?", id).Delete(&NoteLock{})
 		if result.Error != nil {
 			if strings.Contains(strings.ToLower(result.Error.Error()), "database is locked") {
 				delay := baseDelay * time.Duration(attempt+1)
@@ -809,41 +857,12 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 			return fmt.Errorf("failed to unlock note: %w", result.Error)
 		}
 
-		// Log if retry count is not 0 and transaction was successful
+		// If we get here, the transaction was successful
 		if attempt > 0 {
 			log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
 		}
-
 		return nil
 	}
 
 	return fmt.Errorf("[%s] failed after %d attempts: %w", txID, maxRetries, lastErr)
-}
-
-// GetNoteLock retrieves the lock status for a note
-func (ds *DataStore) GetNoteLock(noteID string) (*NoteLock, error) {
-	id, err := strconv.ParseUint(noteID, 10, 32)
-	if err != nil {
-		return nil, fmt.Errorf("invalid note ID: %w", err)
-	}
-
-	var lock NoteLock
-	err = ds.DB.Where("note_id = ?", id).First(&lock).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil // Return nil if no lock exists
-		}
-		return nil, fmt.Errorf("error getting note lock: %w", err)
-	}
-
-	return &lock, nil
-}
-
-// IsNoteLocked checks if a note is locked
-func (ds *DataStore) IsNoteLocked(noteID string) (bool, error) {
-	lock, err := ds.GetNoteLock(noteID)
-	if err != nil {
-		return false, err
-	}
-	return lock != nil, nil
 }
