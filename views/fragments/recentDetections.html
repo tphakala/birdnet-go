@@ -10,6 +10,7 @@
         <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:15%;">Thumbnail</th>
         {{end}}
         <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:13%;">Confidence</th>
+        <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:12%;">Status</th>
         <th scope="col" class="py-2 px-2 sm:pl-1 sm:py-1" style="width:22%;">Recording</th>
         {{if $.Security.AccessAllowed}}
         <!-- Action Menu Column -->
@@ -55,12 +56,40 @@
             <div class="confidence-badge {{confidenceColor .Confidence}} text-white font-medium">
               {{ confidence .Confidence}}
             </div>
-            {{if .Verified}}
-              {{if eq .Verified "correct"}}
-                <div class="review-badge correct" title="Verified correct">✓</div>
-              {{else if eq .Verified "false_positive"}}
-                <div class="review-badge false_positive" title="Marked as false positive">✗</div>
+          </div>
+        </td>
+
+        <!-- Status Column -->
+        <td class="py-1 px-2 sm:px-1 sm:py-1">
+          <div class="flex flex-wrap gap-1">
+            {{if .Review}}
+              {{if eq .Review.Verified "correct"}}
+                <div class="text-success" title="Verified correct">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+              {{else if eq .Review.Verified "false_positive"}}
+                <div class="text-error" title="Marked as false positive">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z" clip-rule="evenodd" />
+                  </svg>
+                </div>
               {{end}}
+            {{end}}
+            {{if .Lock}}
+              <div class="text-warning" title="Detection is locked">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+                  <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" />
+                </svg>
+              </div>
+            {{end}}
+            {{if .Comments}}
+              <div class="text-info" title="Has comments">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+                  <path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z" clip-rule="evenodd" />
+                </svg>
+              </div>
             {{end}}
           </div>
         </td>
@@ -152,66 +181,83 @@
           {{title .CommonName}}
         </a>
 
-        <!-- Mobile view confidence -->
-        <div class="flex items-center gap-2 ml-auto">
-          <div class="confidence-container">
-            <div class="confidence-badge {{confidenceColor .Confidence}} text-white font-medium">
-              {{confidence .Confidence}}
-            </div>
-            {{if .Verified}}
-              {{if eq .Verified "correct"}}
-                <div class="review-badge correct" title="Verified correct">✓</div>
-              {{else if eq .Verified "false_positive"}}
-                <div class="review-badge false_positive" title="Marked as false positive">✗</div>
-              {{end}}
+        <!-- Status badges for mobile -->
+        <div class="flex items-center gap-1 mx-2">
+          {{if .Review}}
+            {{if eq .Review.Verified "correct"}}
+              <div class="text-success" title="Verified correct">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd" />
+                </svg>
+              </div>
+            {{else if eq .Review.Verified "false_positive"}}
+              <div class="text-error" title="Marked as false positive">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z" clip-rule="evenodd" />
+                </svg>
+              </div>
             {{end}}
-          </div>
-        </div>
-      </div>
-
-      <!-- Second row: Spectrogram -->
-
-      <!-- Audio player -->
-      <div class="audio-player-container relative">
-        <!-- Spectrogram Image -->
-        <img loading="lazy" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram"
-          class="w-full h-auto rounded-md shadow-sm">
-
-        <!-- Play position indicator -->
-        <div id="position-indicator-{{.ID}}b" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
-          style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
-
-        <!-- Audio player overlay - Full version -->
-        <div
-          class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 group-hover:opacity-100 sm:block">
-          <audio id="audio-{{.ID}}b" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
-          <div class="flex items-center justify-between">
-            <button id="playPause-{{.ID}}b"
-              class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                  d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-                </path>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
-                </path>
+          {{end}}
+          {{if .Lock}}
+            <div class="text-warning" title="Detection is locked">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+                <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" />
               </svg>
-            </button>
-            <div id="progress-{{.ID}}b" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
-              <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
             </div>
-            <span id="currentTime-{{.ID}}b" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-            <a href="/media/audio?clip={{.ClipName}}" download
-              class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+          {{end}}
+          {{if .Comments}}
+            <div class="text-info" title="Has comments">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+                <path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z" clip-rule="evenodd" />
               </svg>
-            </a>
-          </div>
+            </div>
+          {{end}}
         </div>
 
+        <!-- Second row: Spectrogram -->
+
+        <!-- Audio player -->
+        <div class="audio-player-container relative">
+          <!-- Spectrogram Image -->
+          <img loading="lazy" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram"
+            class="w-full h-auto rounded-md shadow-sm">
+
+          <!-- Play position indicator -->
+          <div id="position-indicator-{{.ID}}b" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
+            style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
+
+          <!-- Audio player overlay - Full version -->
+          <div
+            class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 group-hover:opacity-100 sm:block">
+            <audio id="audio-{{.ID}}b" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
+            <div class="flex items-center justify-between">
+              <button id="playPause-{{.ID}}b"
+                class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+                  </path>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
+                  </path>
+                </svg>
+              </button>
+              <div id="progress-{{.ID}}b" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
+                <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
+              </div>
+              <span id="currentTime-{{.ID}}b" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
+              <a href="/media/audio?clip={{.ClipName}}" download
+                class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                </svg>
+              </a>
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
     {{end}}
