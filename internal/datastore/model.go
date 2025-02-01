@@ -74,11 +74,9 @@ type NoteComment struct {
 // NoteLock represents the lock status of a Note
 // GORM will automatically create table name as 'note_locks'
 type NoteLock struct {
-	ID          uint      `gorm:"primaryKey"`
-	NoteID      uint      `gorm:"uniqueIndex;not null;constraint:OnDelete:CASCADE,OnUpdate:CASCADE;foreignKey:NoteID;references:ID"` // Foreign key to associate with Note
-	LockedAt    time.Time `gorm:"index;not null"`                                                                                    // When the note was locked
-	Description string    `gorm:"type:text"`                                                                                         // Optional description of why the note was locked
-	LockedBy    string    `gorm:"type:varchar(255)"`                                                                                 // Who locked the note (can be username or system)
+	ID       uint      `gorm:"primaryKey"`
+	NoteID   uint      `gorm:"uniqueIndex;not null;constraint:OnDelete:CASCADE,OnUpdate:CASCADE;foreignKey:NoteID;references:ID"` // Foreign key to associate with Note, with unique constraint
+	LockedAt time.Time `gorm:"index;not null"`                                                                                    // When the note was locked
 }
 
 // DailyEvents represents the daily weather data that doesn't change throughout the day
