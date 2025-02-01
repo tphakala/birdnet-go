@@ -10,8 +10,10 @@ func TestNewSunCalc(t *testing.T) {
 	sc := NewSunCalc(latitude, longitude)
 	if sc == nil {
 		t.Fatal("NewSunCalc returned nil")
+		return // Explicitly return to make it clear no further checks happen
 	}
 
+	// Now safe to access sc.observer since we've confirmed sc is not nil
 	if sc.observer.Latitude != latitude {
 		t.Errorf("Expected latitude %v, got %v", latitude, sc.observer.Latitude)
 	}

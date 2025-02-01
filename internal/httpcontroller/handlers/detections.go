@@ -374,7 +374,7 @@ func (h *Handlers) DeleteDetection(c echo.Context) error {
 }
 
 // handleSpeciesExclusion handles the logic for managing species in the exclusion list
-func (h *Handlers) handleSpeciesExclusion(note *datastore.Note, verified string, ignoreSpecies string) error {
+func (h *Handlers) handleSpeciesExclusion(note *datastore.Note, verified, ignoreSpecies string) error {
 	settings := conf.Setting()
 
 	if verified == "false_positive" && ignoreSpecies != "" {
