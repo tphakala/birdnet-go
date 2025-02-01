@@ -661,47 +661,68 @@ func (h *Handlers) LockDetection(c echo.Context) error {
 		return h.NewHandlerError(fmt.Errorf("no ID provided"), "Missing detection ID", http.StatusBadRequest)
 	}
 
-	// Get the current note to check its lock status
-	note, err := h.DS.Get(id)
-	if err != nil {
-		h.SSE.SendNotification(Notification{
-			Message: fmt.Sprintf("Failed to get detection: %v", err),
-			Type:    "error",
-		})
-		return h.NewHandlerError(err, "Failed to get detection", http.StatusInternalServerError)
-	}
-
-	// Check current lock status
-	isLocked, err := h.DS.IsNoteLocked(id)
-	if err != nil {
-		h.SSE.SendNotification(Notification{
-			Message: fmt.Sprintf("Failed to check lock status: %v", err),
-			Type:    "error",
-		})
-		return h.NewHandlerError(err, "Failed to check lock status", http.StatusInternalServerError)
-	}
+	// Retry configuration for SQLite locking
+	maxRetries := 5
+	baseDelay := 500 * time.Millisecond
 
 	var message string
-	if isLocked {
-		// Unlock the detection
-		if err := h.DS.UnlockNote(id); err != nil {
+	var lastErr error
+
+	// Attempt the transaction with retries
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		err := h.DS.Transaction(func(tx *gorm.DB) error {
+			// Get the current note to check its lock status
+			note, err := h.DS.Get(id)
+			if err != nil {
+				return fmt.Errorf("failed to get detection: %w", err)
+			}
+
+			// Check current lock status
+			isLocked, err := h.DS.IsNoteLocked(id)
+			if err != nil {
+				return fmt.Errorf("failed to check lock status: %w", err)
+			}
+
+			if isLocked {
+				if err := h.DS.UnlockNote(id); err != nil {
+					return fmt.Errorf("failed to unlock detection: %w", err)
+				}
+				message = fmt.Sprintf("Detection of %s unlocked successfully", note.CommonName)
+			} else {
+				if err := h.DS.LockNote(id); err != nil {
+					return fmt.Errorf("failed to lock detection: %w", err)
+				}
+				message = fmt.Sprintf("Detection of %s locked successfully", note.CommonName)
+			}
+			return nil
+		})
+
+		if err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
+				delay := baseDelay * time.Duration(attempt+1)
+				h.Debug("Database locked during lock operation, retrying in %v (attempt %d/%d)", delay, attempt+1, maxRetries)
+				time.Sleep(delay)
+				lastErr = err
+				continue
+			}
 			h.SSE.SendNotification(Notification{
-				Message: fmt.Sprintf("Failed to unlock detection: %v", err),
+				Message: err.Error(),
 				Type:    "error",
 			})
-			return h.NewHandlerError(err, "Failed to unlock detection", http.StatusInternalServerError)
+			return h.NewHandlerError(err, "Failed to process lock operation", http.StatusInternalServerError)
 		}
-		message = fmt.Sprintf("Detection of %s unlocked successfully", note.CommonName)
-	} else {
-		// Lock the detection
-		if err := h.DS.LockNote(id); err != nil {
-			h.SSE.SendNotification(Notification{
-				Message: fmt.Sprintf("Failed to lock detection: %v", err),
-				Type:    "error",
-			})
-			return h.NewHandlerError(err, "Failed to lock detection", http.StatusInternalServerError)
-		}
-		message = fmt.Sprintf("Detection of %s locked successfully", note.CommonName)
+
+		// If we get here, the transaction was successful
+		break
+	}
+
+	// Check if all retries failed
+	if lastErr != nil {
+		h.SSE.SendNotification(Notification{
+			Message: fmt.Sprintf("Failed after %d attempts: %v", maxRetries, lastErr),
+			Type:    "error",
+		})
+		return h.NewHandlerError(lastErr, "Failed to process lock operation after retries", http.StatusInternalServerError)
 	}
 
 	// Send success notification

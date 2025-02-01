@@ -739,21 +739,45 @@ func (ds *DataStore) LockNote(noteID string) error {
 		return fmt.Errorf("invalid note ID: %w", err)
 	}
 
-	lock := &NoteLock{
-		NoteID:   uint(id),
-		LockedAt: time.Now(),
+	// Generate a unique transaction ID (first 8 chars of UUID)
+	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
+
+	// Retry configuration
+	maxRetries := 5
+	baseDelay := 500 * time.Millisecond
+
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		lock := &NoteLock{
+			NoteID:   uint(id),
+			LockedAt: time.Now(),
+		}
+
+		// Use upsert operation to either create or update the lock
+		result := ds.DB.Where("note_id = ?", id).
+			Assign(*lock).
+			FirstOrCreate(lock)
+
+		if result.Error != nil {
+			if strings.Contains(strings.ToLower(result.Error.Error()), "database is locked") {
+				delay := baseDelay * time.Duration(attempt+1)
+				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				time.Sleep(delay)
+				lastErr = result.Error
+				continue
+			}
+			return fmt.Errorf("failed to lock note: %w", result.Error)
+		}
+
+		// Log if retry count is not 0 and transaction was successful
+		if attempt > 0 {
+			log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
+		}
+
+		return nil
 	}
 
-	// Use upsert operation to either create or update the lock
-	result := ds.DB.Where("note_id = ?", id).
-		Assign(*lock).
-		FirstOrCreate(lock)
-
-	if result.Error != nil {
-		return fmt.Errorf("failed to lock note: %w", result.Error)
-	}
-
-	return nil
+	return fmt.Errorf("[%s] failed after %d attempts: %w", txID, maxRetries, lastErr)
 }
 
 // UnlockNote removes a lock from a note
@@ -763,12 +787,37 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 		return fmt.Errorf("invalid note ID: %w", err)
 	}
 
-	result := ds.DB.Where("note_id = ?", id).Delete(&NoteLock{})
-	if result.Error != nil {
-		return fmt.Errorf("failed to unlock note: %w", result.Error)
+	// Generate a unique transaction ID (first 8 chars of UUID)
+	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
+
+	// Retry configuration
+	maxRetries := 5
+	baseDelay := 500 * time.Millisecond
+
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		result := ds.DB.Where("note_id = ?", id).Delete(&NoteLock{})
+
+		if result.Error != nil {
+			if strings.Contains(strings.ToLower(result.Error.Error()), "database is locked") {
+				delay := baseDelay * time.Duration(attempt+1)
+				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				time.Sleep(delay)
+				lastErr = result.Error
+				continue
+			}
+			return fmt.Errorf("failed to unlock note: %w", result.Error)
+		}
+
+		// Log if retry count is not 0 and transaction was successful
+		if attempt > 0 {
+			log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
+		}
+
+		return nil
 	}
 
-	return nil
+	return fmt.Errorf("[%s] failed after %d attempts: %w", txID, maxRetries, lastErr)
 }
 
 // GetNoteLock retrieves the lock status for a note
