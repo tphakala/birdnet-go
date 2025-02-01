@@ -105,6 +105,10 @@
                 if (success) {
                   const eventName = isLocked ? 'detection-unlocked-' + {{.ID}} : 'detection-locked-' + {{.ID}};
                   document.body.dispatchEvent(new Event(eventName));
+                  const list = htmx.find('[hx-trigger*=refreshListEvent]');
+                  if (list) {
+                    htmx.trigger(list, 'refreshListEvent');
+                  }
                   modal.close();
                 }
               }
@@ -139,7 +143,7 @@
               htmx.ajax('DELETE', '/detections/delete?id={{.ID}}', {
               handler: (success) => {
                 if (success) {
-                  const list = htmx.find('[hx-trigger*=\'refreshListEvent\']');
+                  const list = htmx.find('[hx-trigger*=refreshListEvent]');
                   if (list) {
                     htmx.trigger(list, 'refreshListEvent');
                   } else {

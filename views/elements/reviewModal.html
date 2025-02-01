@@ -60,12 +60,16 @@
           }"
           x-init="init()"
           @htmx:after-request="(() => {
-          if (event.detail.successful) {
-            const modal = document.getElementById('reviewModal{{.ID}}');
-            if (modal) {
-              modal.close();
+            if (event.detail.successful) {
+              const modal = document.getElementById('reviewModal{{.ID}}');
+              if (modal) {
+                modal.close();
+              }
+              const list = htmx.find('[hx-trigger*=refreshListEvent]');
+              if (list) {
+                htmx.trigger(list, 'refreshListEvent');
+              }
             }
-          }
           })()"
     >
       <input type="hidden" name="id" value="{{.ID}}">
