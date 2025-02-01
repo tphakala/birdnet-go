@@ -142,6 +142,11 @@ Source: MIT
 License: https://github.com/klauspost/compress/blob/v1.17.9/LICENSE
 Source: Apache-2.0
 
+### github.com/klauspost/cpuid/v2
+
+License: https://github.com/klauspost/cpuid/blob/v2.2.9/LICENSE
+Source: MIT
+
 ### github.com/labstack/echo/v4
 
 License: https://github.com/labstack/echo/blob/v4.13.3/LICENSE
@@ -335,6 +340,11 @@ Source: BSD-3-Clause
 ### golang.org/x/sys/unix
 
 License: https://cs.opensource.google/go/x/sys/+/v0.29.0:LICENSE
+Source: BSD-3-Clause
+
+### golang.org/x/term
+
+License: https://cs.opensource.google/go/x/term/+/v0.28.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
