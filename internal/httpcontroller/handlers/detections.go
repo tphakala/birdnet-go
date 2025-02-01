@@ -661,6 +661,16 @@ func (h *Handlers) LockDetection(c echo.Context) error {
 		return h.NewHandlerError(fmt.Errorf("no ID provided"), "Missing detection ID", http.StatusBadRequest)
 	}
 
+	// Get the current note first to have the species name for messages
+	note, err := h.DS.Get(id)
+	if err != nil {
+		h.SSE.SendNotification(Notification{
+			Message: fmt.Sprintf("Failed to get detection: %v", err),
+			Type:    "error",
+		})
+		return h.NewHandlerError(err, "Failed to get detection", http.StatusInternalServerError)
+	}
+
 	// Retry configuration for SQLite locking
 	maxRetries := 5
 	baseDelay := 500 * time.Millisecond
@@ -668,34 +678,30 @@ func (h *Handlers) LockDetection(c echo.Context) error {
 	var message string
 	var lastErr error
 
-	// Attempt the transaction with retries
+	// Check current lock status first
+	isLocked, err := h.DS.IsNoteLocked(id)
+	if err != nil {
+		h.SSE.SendNotification(Notification{
+			Message: fmt.Sprintf("Failed to check lock status: %v", err),
+			Type:    "error",
+		})
+		return h.NewHandlerError(err, "Failed to check lock status", http.StatusInternalServerError)
+	}
+
+	// Attempt the lock operation with retries
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		err := h.DS.Transaction(func(tx *gorm.DB) error {
-			// Get the current note to check its lock status
-			note, err := h.DS.Get(id)
-			if err != nil {
-				return fmt.Errorf("failed to get detection: %w", err)
-			}
-
-			// Check current lock status
-			isLocked, err := h.DS.IsNoteLocked(id)
-			if err != nil {
-				return fmt.Errorf("failed to check lock status: %w", err)
-			}
-
-			if isLocked {
-				if err := h.DS.UnlockNote(id); err != nil {
-					return fmt.Errorf("failed to unlock detection: %w", err)
-				}
+		var err error
+		if isLocked {
+			err = h.DS.UnlockNote(id)
+			if err == nil {
 				message = fmt.Sprintf("Detection of %s unlocked successfully", note.CommonName)
-			} else {
-				if err := h.DS.LockNote(id); err != nil {
-					return fmt.Errorf("failed to lock detection: %w", err)
-				}
+			}
+		} else {
+			err = h.DS.LockNote(id)
+			if err == nil {
 				message = fmt.Sprintf("Detection of %s locked successfully", note.CommonName)
 			}
-			return nil
-		})
+		}
 
 		if err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
@@ -712,7 +718,7 @@ func (h *Handlers) LockDetection(c echo.Context) error {
 			return h.NewHandlerError(err, "Failed to process lock operation", http.StatusInternalServerError)
 		}
 
-		// If we get here, the transaction was successful
+		// If we get here, the operation was successful
 		break
 	}
 
