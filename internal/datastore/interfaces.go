@@ -48,7 +48,7 @@ type Interface interface {
 	CountSearchResults(query string) (int64, error)
 	Transaction(fc func(tx *gorm.DB) error) error
 	// Lock management methods
-	LockNote(noteID string, description string, lockedBy string) error
+	LockNote(noteID string) error
 	UnlockNote(noteID string) error
 	GetNoteLock(noteID string) (*NoteLock, error)
 	IsNoteLocked(noteID string) (bool, error)
@@ -733,17 +733,15 @@ func (ds *DataStore) Transaction(fc func(tx *gorm.DB) error) error {
 }
 
 // LockNote creates or updates a lock for a note
-func (ds *DataStore) LockNote(noteID, description, lockedBy string) error {
+func (ds *DataStore) LockNote(noteID string) error {
 	id, err := strconv.ParseUint(noteID, 10, 32)
 	if err != nil {
 		return fmt.Errorf("invalid note ID: %w", err)
 	}
 
 	lock := &NoteLock{
-		NoteID:      uint(id),
-		LockedAt:    time.Now(),
-		Description: description,
-		LockedBy:    lockedBy,
+		NoteID:   uint(id),
+		LockedAt: time.Now(),
 	}
 
 	// Use upsert operation to either create or update the lock
