@@ -99,7 +99,7 @@ func retryWithTimeout(timeout time.Duration, operation func() error) error {
 		log.Printf("[DEBUG] Operation succeeded after %d attempts", attempts)
 		return nil
 	}
-	return fmt.Errorf("operation timed out after %v and %d attempts, last error: %v", timeout, attempts, lastErr)
+	return fmt.Errorf("operation timed out after %v and %d attempts, last error: %w", timeout, attempts, lastErr)
 }
 
 // TestMQTTClient runs a suite of tests for the MQTT client implementation.
@@ -107,6 +107,7 @@ func retryWithTimeout(timeout time.Duration, operation func() error) error {
 func TestMQTTClient(t *testing.T) {
 	broker := getBrokerAddress()
 	if broker == localTestBroker {
+		//nolint:misspell // "mosquitto" is the correct spelling for the MQTT broker software
 		t.Log("Using local MQTT broker. Please ensure mosquitto is running on localhost:1883")
 	} else {
 		t.Logf("Using remote MQTT broker: %s", broker)
@@ -502,7 +503,7 @@ func testContextCancellation(t *testing.T) {
 		if err == nil {
 			t.Fatal("Expected publish to fail due to context cancellation")
 		}
-		if err != context.Canceled {
+		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("Expected context.Canceled error, got: %v", err)
 		}
 	})
@@ -552,9 +553,7 @@ func testTimeoutHandling(t *testing.T) {
 		}
 
 		// Force disconnect to simulate network issues
-		if c, ok := mqttClient.(Client); ok {
-			c.Disconnect()
-		}
+		mqttClient.Disconnect()
 
 		// Use a short context timeout for publish
 		publishCtx, publishCancel := context.WithTimeout(context.Background(), 2*time.Second)
