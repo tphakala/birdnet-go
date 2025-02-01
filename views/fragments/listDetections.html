@@ -6,7 +6,7 @@
      hx-trigger="refreshListEvent from:body" 
      hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{.Offset}}" 
      hx-target="#listDetections"
-     hx-swap="innerHTML">
+     hx-swap="outerHTML">
     
         <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
             <div class="flex justify-between">
