@@ -93,7 +93,7 @@
         @click="
           open = false;
           const modal = document.getElementById('confirmModal{{.ID}}');
-          document.getElementById('confirmTitle{{.ID}}').textContent = isLocked ? 'Unlock Detection of {{.CommonName | js}}' : 'Lock Detection of {{.CommonName | js}}';
+          document.getElementById('confirmTitle{{.ID}}').textContent = isLocked ? 'Unlock Detection' : 'Lock Detection';
           document.getElementById('confirmMessage{{.ID}}').textContent = isLocked 
             ? 'Are you sure you want to unlock this detection of {{.CommonName | js}}? This will allow it to be deleted during regular cleanup.'
             : 'Are you sure you want to lock this detection of {{.CommonName | js}}? This will prevent it from being deleted during regular cleanup.';

@@ -480,6 +480,11 @@ func (h *Handlers) processReview(noteID uint, verified string, lockDetection boo
 		return nil
 	}
 
+	h.Debug("processReview: Starting review process for note ID %d", noteID)
+	h.Debug("processReview: Verified status: %s", verified)
+	h.Debug("processReview: Lock detection: %v", lockDetection)
+	h.Debug("processReview: Username: %s", username)
+
 	// Validate review status
 	if verified != "correct" && verified != "false_positive" {
 		return fmt.Errorf("invalid verification status")
@@ -491,15 +496,24 @@ func (h *Handlers) processReview(noteID uint, verified string, lockDetection boo
 			// Get note and existing review in a transaction
 			note, err := h.DS.Get(strconv.FormatUint(uint64(noteID), 10))
 			if err != nil {
+				h.Debug("processReview: Failed to retrieve note: %v", err)
 				return fmt.Errorf("failed to retrieve note: %w", err)
+			}
+			h.Debug("processReview: Retrieved note, current lock status: %v", note.Lock != nil)
+
+			// Check if note is locked and trying to mark as false positive
+			if note.Lock != nil && verified == "false_positive" {
+				h.Debug("processReview: Attempt to mark locked note as false positive")
+				return fmt.Errorf("cannot mark locked detection as false positive - unlock it first")
 			}
 
 			// Handle species exclusion
 			if err := h.handleSpeciesExclusion(&note, verified, ""); err != nil {
+				h.Debug("processReview: Failed to handle species exclusion: %v", err)
 				return err
 			}
 
-			// Create or update the review
+			// Create or update the review using upsert
 			review := &datastore.NoteReview{
 				NoteID:    noteID,
 				Verified:  verified,
@@ -507,24 +521,42 @@ func (h *Handlers) processReview(noteID uint, verified string, lockDetection boo
 				UpdatedAt: time.Now(),
 			}
 
-			if err := tx.Save(review).Error; err != nil {
+			// Use upsert operation for the review
+			if err := tx.Where("note_id = ?", noteID).
+				Assign(*review).
+				FirstOrCreate(review).Error; err != nil {
+				h.Debug("processReview: Failed to save review: %v", err)
 				return fmt.Errorf("failed to save review: %w", err)
 			}
+			h.Debug("processReview: Review saved successfully")
 
-			// Handle lock detection if the detection is marked as correct
-			if verified == "correct" && lockDetection {
-				lock := &datastore.NoteLock{
-					NoteID:      noteID,
-					LockedAt:    time.Now(),
-					Description: "Locked during review verification",
-					LockedBy:    username,
-				}
+			// Handle lock state changes
+			if verified == "correct" {
+				h.Debug("processReview: Handling lock state for correct detection, lockDetection=%v", lockDetection)
+				if lockDetection {
+					// Lock the detection
+					lock := &datastore.NoteLock{
+						NoteID:      noteID,
+						LockedAt:    time.Now(),
+						Description: "Locked during review verification",
+						LockedBy:    username,
+					}
 
-				// Use upsert operation within the same transaction
-				if err := tx.Where("note_id = ?", noteID).
-					Assign(*lock).
-					FirstOrCreate(lock).Error; err != nil {
-					return fmt.Errorf("failed to lock note: %w", err)
+					// Use upsert operation within the same transaction
+					if err := tx.Where("note_id = ?", noteID).
+						Assign(*lock).
+						FirstOrCreate(lock).Error; err != nil {
+						h.Debug("processReview: Failed to lock note: %v", err)
+						return fmt.Errorf("failed to lock note: %w", err)
+					}
+					h.Debug("processReview: Note locked successfully")
+				} else {
+					// Remove lock if exists
+					if err := tx.Where("note_id = ?", noteID).Delete(&datastore.NoteLock{}).Error; err != nil {
+						h.Debug("processReview: Failed to unlock note: %v", err)
+						return fmt.Errorf("failed to unlock note: %w", err)
+					}
+					h.Debug("processReview: Note unlocked successfully")
 				}
 			}
 
@@ -534,7 +566,7 @@ func (h *Handlers) processReview(noteID uint, verified string, lockDetection boo
 		if err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
 				delay := baseDelay * time.Duration(attempt+1)
-				h.Debug("Database locked during review, retrying in %v (attempt %d/%d)", delay, attempt+1, maxRetries)
+				h.Debug("processReview: Database locked, retrying in %v (attempt %d/%d)", delay, attempt+1, maxRetries)
 				time.Sleep(delay)
 				lastErr = err
 				continue
@@ -543,9 +575,11 @@ func (h *Handlers) processReview(noteID uint, verified string, lockDetection boo
 		}
 
 		// If we get here, the transaction was successful
+		h.Debug("processReview: Transaction completed successfully")
 		return nil
 	}
 
+	h.Debug("processReview: All attempts failed, last error: %v", lastErr)
 	return lastErr
 }
 
@@ -565,12 +599,19 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 	lockDetection := c.FormValue("lock_detection") == "true"
 	ignoreSpecies := c.FormValue("ignore_species")
 
+	h.Debug("ReviewDetection: Processing review for note ID %d", noteID)
+	h.Debug("ReviewDetection: Verified status: %s", verified)
+	h.Debug("ReviewDetection: Lock detection: %v", lockDetection)
+	h.Debug("ReviewDetection: Lock detection form value: %s", c.FormValue("lock_detection"))
+	h.Debug("ReviewDetection: Ignore species: %s", ignoreSpecies)
+
 	// Retry configuration for SQLite locking
 	maxRetries := 5
 	baseDelay := 100 * time.Millisecond
 
 	// Handle comment first (this doesn't require review status)
 	if err := h.processComment(uint(noteID), comment, maxRetries, baseDelay); err != nil {
+		h.Debug("ReviewDetection: Failed to process comment: %v", err)
 		h.SSE.SendNotification(Notification{
 			Message: fmt.Sprintf("Failed to process comment: %v", err),
 			Type:    "error",
@@ -585,10 +626,13 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 			username = u
 		}
 	}
+	h.Debug("ReviewDetection: Using username: %s", username)
 
 	// Handle species exclusion if provided
 	if verified == "false_positive" && ignoreSpecies != "" {
+		h.Debug("ReviewDetection: Processing species exclusion for %s", ignoreSpecies)
 		if err := h.handleSpeciesExclusion(nil, verified, ignoreSpecies); err != nil {
+			h.Debug("ReviewDetection: Failed to handle species exclusion: %v", err)
 			h.SSE.SendNotification(Notification{
 				Message: fmt.Sprintf("Failed to handle species exclusion: %v", err),
 				Type:    "error",
@@ -599,6 +643,7 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 
 	// Handle review status if provided
 	if err := h.processReview(uint(noteID), verified, lockDetection, username, maxRetries, baseDelay); err != nil {
+		h.Debug("ReviewDetection: Failed to process review: %v", err)
 		h.SSE.SendNotification(Notification{
 			Message: fmt.Sprintf("Failed to process review: %v", err),
 			Type:    "error",
