@@ -52,6 +52,10 @@ type Interface interface {
 	UnlockNote(noteID string) error
 	GetNoteLock(noteID string) (*NoteLock, error)
 	IsNoteLocked(noteID string) (bool, error)
+	// Image cache methods
+	GetImageCache(scientificName string) (*ImageCache, error)
+	SaveImageCache(cache *ImageCache) error
+	GetAllImageCaches() ([]ImageCache, error)
 }
 
 // DataStore implements StoreInterface using a GORM database.
@@ -865,4 +869,46 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 	}
 
 	return fmt.Errorf("[%s] failed after %d attempts: %w", txID, maxRetries, lastErr)
+}
+
+// GetImageCache retrieves an image cache entry by scientific name
+func (ds *DataStore) GetImageCache(scientificName string) (*ImageCache, error) {
+	var cache ImageCache
+	// Use Session to disable logging for this query
+	err := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
+		Where("scientific_name = ?", scientificName).First(&cache).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("error getting image cache: %w", err)
+	}
+	return &cache, nil
+}
+
+// SaveImageCache saves or updates an image cache entry
+func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
+	if cache == nil {
+		return fmt.Errorf("cache cannot be nil")
+	}
+
+	result := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
+		Where("scientific_name = ?", cache.ScientificName).
+		Assign(*cache).
+		FirstOrCreate(cache)
+
+	if result.Error != nil {
+		return fmt.Errorf("failed to save image cache: %w", result.Error)
+	}
+	return nil
+}
+
+// GetAllImageCaches retrieves all image cache entries
+func (ds *DataStore) GetAllImageCaches() ([]ImageCache, error) {
+	var caches []ImageCache
+	if err := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
+		Find(&caches).Error; err != nil {
+		return nil, fmt.Errorf("error getting all image caches: %w", err)
+	}
+	return caches, nil
 }

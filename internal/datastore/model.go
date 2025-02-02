@@ -109,3 +109,15 @@ type HourlyWeather struct {
 	WeatherDesc   string
 	WeatherIcon   string
 }
+
+// ImageCache represents cached image metadata for species
+type ImageCache struct {
+	ID             uint      `gorm:"primaryKey"`
+	ScientificName string    `gorm:"uniqueIndex;not null"` // Scientific name of the species
+	URL            string    // The URL of the image
+	LicenseName    string    // The name of the license for the image
+	LicenseURL     string    // The URL of the license details
+	AuthorName     string    // The name of the image author
+	AuthorURL      string    // The URL of the author's page or profile
+	CachedAt       time.Time `gorm:"index"` // When the image was cached
+}
