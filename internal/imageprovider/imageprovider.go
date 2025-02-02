@@ -161,6 +161,14 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 		log.Printf("Debug: Refreshing cache entry for %s", scientificName)
 	}
 
+	// Check if provider is set
+	if c.provider == nil {
+		if c.debug {
+			log.Printf("Debug: No provider available for %s", scientificName)
+		}
+		return
+	}
+
 	// Fetch new image
 	birdImage, err := c.provider.Fetch(scientificName)
 	if err != nil {
