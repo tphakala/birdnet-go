@@ -306,7 +306,8 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 		// Track how many species need images
 		needsImage := 0
 
-		for _, species := range speciesList {
+		for i := range speciesList {
+			species := &speciesList[i] // Use pointer to avoid copying
 			// Check if we already have this image cached
 			if cached, err := ds.GetImageCache(species.ScientificName); err == nil && cached != nil {
 				continue // Skip if already cached

@@ -106,11 +106,11 @@ func (c *BirdImageCache) refreshStaleEntries() {
 	}
 
 	// Find stale entries
-	var staleEntries []datastore.ImageCache
+	var staleEntries []string // Store only scientific names instead of full entries
 	cutoff := time.Now().Add(-defaultCacheTTL)
-	for _, entry := range entries {
-		if entry.CachedAt.Before(cutoff) {
-			staleEntries = append(staleEntries, entry)
+	for i := range entries {
+		if entries[i].CachedAt.Before(cutoff) {
+			staleEntries = append(staleEntries, entries[i].ScientificName)
 		}
 	}
 
@@ -130,12 +130,12 @@ func (c *BirdImageCache) refreshStaleEntries() {
 		}
 
 		batch := staleEntries[i:end]
-		for _, entry := range batch {
+		for _, scientificName := range batch {
 			select {
 			case <-c.quit:
 				return // Exit if we're shutting down
 			case <-time.After(refreshDelay):
-				c.refreshEntry(entry.ScientificName)
+				c.refreshEntry(scientificName)
 			}
 		}
 	}
@@ -278,15 +278,16 @@ func (c *BirdImageCache) loadCachedImages() error {
 		return nil // Continue with empty cache
 	}
 
-	for _, cache := range cached {
-		c.dataMap.Store(cache.ScientificName, &BirdImage{
-			URL:            cache.URL,
-			ScientificName: cache.ScientificName,
-			LicenseName:    cache.LicenseName,
-			LicenseURL:     cache.LicenseURL,
-			AuthorName:     cache.AuthorName,
-			AuthorURL:      cache.AuthorURL,
-			CachedAt:       cache.CachedAt,
+	for i := range cached {
+		entry := &cached[i] // Use pointer to avoid copying
+		c.dataMap.Store(entry.ScientificName, &BirdImage{
+			URL:            entry.URL,
+			ScientificName: entry.ScientificName,
+			LicenseName:    entry.LicenseName,
+			LicenseURL:     entry.LicenseURL,
+			AuthorName:     entry.AuthorName,
+			AuthorURL:      entry.AuthorURL,
+			CachedAt:       entry.CachedAt,
 		})
 	}
 
