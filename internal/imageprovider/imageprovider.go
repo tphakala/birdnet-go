@@ -2,6 +2,7 @@
 package imageprovider
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"sync"
@@ -307,31 +308,47 @@ func (c *BirdImageCache) loadCachedImages() error {
 	return nil
 }
 
-// Get retrieves a bird image from the cache or fetches it if not found
-func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
-	// Check if this species is being initialized
-	if _, initializing := c.Initializing.Load(scientificName); initializing {
-		// Skip database lookup during initialization to avoid double lookups
-		if c.debug {
-			log.Printf("Debug: Species %s is being initialized, skipping database lookup", scientificName)
-		}
-	} else {
-		// Check memory cache first
-		if value, ok := c.dataMap.Load(scientificName); ok {
-			if image, ok := value.(*BirdImage); ok {
-				if c.debug {
-					log.Printf("Debug: Found image in memory cache for: %s", scientificName)
-				}
-				if c.metrics != nil {
-					c.metrics.IncrementCacheHits()
-				}
-				return *image, nil
-			}
-		}
+// tryInitialize attempts to initialize the cache entry for a species
+func (c *BirdImageCache) tryInitialize(scientificName string) (BirdImage, bool, error) {
+	// Try to acquire the lock
+	if _, initializing := c.Initializing.LoadOrStore(scientificName, true); !initializing {
+		defer c.Initializing.Delete(scientificName)
 
-		// Check database cache if not being initialized
+		// Check database cache first
 		if image, err := c.loadFromDBCache(scientificName); err == nil && image != nil {
 			c.dataMap.Store(scientificName, image)
+			if c.metrics != nil {
+				c.metrics.IncrementCacheHits()
+			}
+			return *image, true, nil
+		}
+
+		if c.metrics != nil {
+			c.metrics.IncrementCacheMisses()
+		}
+
+		// Check if provider is set
+		if c.provider == nil {
+			if c.debug {
+				log.Printf("Debug: No image provider available for: %s", scientificName)
+			}
+			return BirdImage{}, false, fmt.Errorf("image provider not available")
+		}
+
+		image, err := c.fetchAndStore(scientificName)
+		return image, true, err
+	}
+	return BirdImage{}, false, nil
+}
+
+// Get retrieves a bird image from the cache or fetches it if not found
+func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
+	// Check memory cache first for quick return
+	if value, ok := c.dataMap.Load(scientificName); ok {
+		if image, ok := value.(*BirdImage); ok {
+			if c.debug {
+				log.Printf("Debug: Found image in memory cache for: %s", scientificName)
+			}
 			if c.metrics != nil {
 				c.metrics.IncrementCacheHits()
 			}
@@ -339,18 +356,85 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 		}
 	}
 
-	if c.metrics != nil {
-		c.metrics.IncrementCacheMisses()
-	}
+	startTime := time.Now()
+	maxTotalTime := 2 * time.Second // Maximum total time including all retries and final fetch
 
-	// Check if provider is set
-	if c.provider == nil {
-		if c.debug {
-			log.Printf("Debug: No image provider available for: %s", scientificName)
+	// Try to acquire initialization lock
+	initAttempts := 0
+	maxAttempts := 3 // Maximum number of initialization attempts
+	for initAttempts < maxAttempts {
+		// Check if we've exceeded total time
+		if time.Since(startTime) > maxTotalTime {
+			if c.debug {
+				log.Printf("Debug: Total time exceeded for %s, proceeding with direct fetch", scientificName)
+			}
+			break
 		}
-		return BirdImage{}, fmt.Errorf("image provider not available")
+
+		// Try to initialize
+		if image, ok, err := c.tryInitialize(scientificName); ok {
+			return image, err
+		}
+
+		// Someone else has the lock, wait with timeout
+		timer := time.NewTimer(300 * time.Millisecond)
+		<-timer.C
+		// Check if the entry is now in cache before trying again
+		if value, ok := c.dataMap.Load(scientificName); ok {
+			if image, ok := value.(*BirdImage); ok {
+				if c.debug {
+					log.Printf("Debug: Found image in memory cache for: %s after waiting", scientificName)
+				}
+				if c.metrics != nil {
+					c.metrics.IncrementCacheHits()
+				}
+				return *image, nil
+			}
+		}
+		if c.debug {
+			log.Printf("Debug: Initialization wait timeout for %s, attempt %d", scientificName, initAttempts+1)
+		}
+		timer.Stop()
+		initAttempts++
 	}
 
+	// Force clear any stale initialization state
+	c.Initializing.Delete(scientificName)
+
+	// Final attempt with remaining time
+	remainingTime := maxTotalTime - time.Since(startTime)
+	if remainingTime < 0 {
+		remainingTime = 100 * time.Millisecond // Minimum time for final attempt
+	}
+
+	// Create a context with the remaining time as timeout
+	ctx, cancel := context.WithTimeout(context.Background(), remainingTime)
+	defer cancel()
+
+	// Try one final time with the remaining time budget
+	done := make(chan struct{})
+	var result BirdImage
+	var fetchErr error
+
+	go func() {
+		result, fetchErr = c.fetchAndStore(scientificName)
+		close(done)
+	}()
+
+	select {
+	case <-ctx.Done():
+		// Instead of returning an error, try one last direct fetch
+		if c.debug {
+			log.Printf("Debug: Context timeout, attempting direct fetch for: %s", scientificName)
+		}
+		return c.fetchAndStore(scientificName)
+	case <-done:
+		return result, fetchErr
+	}
+}
+
+// fetchAndStore handles the fetching and storing of an image
+func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error) {
 	if c.debug {
 		log.Printf("Debug: Fetching image for species: %s", scientificName)
 	}
@@ -363,7 +447,6 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 		if c.metrics != nil {
 			c.metrics.IncrementDownloadErrors()
 		}
-		// Pass through the user-friendly error from the provider
 		return BirdImage{}, err
 	}
 

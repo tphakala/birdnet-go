@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,21 +19,39 @@ import (
 type mockImageProvider struct {
 	fetchCounter int
 	shouldFail   bool
+	fetchDelay   time.Duration
+	mu           sync.Mutex
+	lastURL      string // Track last generated URL for consistency
 }
 
 func (m *mockImageProvider) Fetch(scientificName string) (imageprovider.BirdImage, error) {
+	m.mu.Lock()
 	m.fetchCounter++
+	currentCount := m.fetchCounter
+	m.mu.Unlock()
+
 	if m.shouldFail {
 		return imageprovider.BirdImage{}, errors.New("mock fetch error")
 	}
-	// Add timestamp to URL to ensure it's different each time
-	url := fmt.Sprintf("http://example.com/%s_%d.jpg", scientificName, time.Now().UnixNano())
+
+	// Simulate network delay if specified
+	if m.fetchDelay > 0 {
+		time.Sleep(m.fetchDelay)
+	}
+
+	// Generate consistent URL for the same fetch count
+	url := fmt.Sprintf("http://example.com/%s_%d.jpg", scientificName, currentCount)
+
+	m.mu.Lock()
+	m.lastURL = url
+	m.mu.Unlock()
+
 	return imageprovider.BirdImage{
 		URL:            url,
 		ScientificName: scientificName,
 		LicenseName:    "CC BY-SA 4.0",
 		LicenseURL:     "https://creativecommons.org/licenses/by-sa/4.0/",
-		AuthorName:     fmt.Sprintf("Mock Author %d", m.fetchCounter),
+		AuthorName:     fmt.Sprintf("Mock Author %d", currentCount),
 		AuthorURL:      "http://example.com/author",
 		CachedAt:       time.Now(),
 	}, nil
@@ -53,7 +72,7 @@ func newMockStore() *mockStore {
 func (m *mockStore) GetImageCache(scientificName string) (*datastore.ImageCache, error) {
 	if img, ok := m.images[scientificName]; ok {
 		// Keep this debug print as it's useful for cache hit/miss tracking
-		log.Printf("Debug: GetImageCache found entry for %s", scientificName)
+		//log.Printf("Debug: GetImageCache found entry for %s", scientificName)
 		return img, nil
 	}
 	return nil, nil
@@ -89,7 +108,7 @@ func (m *mockStore) SaveImageCache(cache *datastore.ImageCache) error {
 func (m *mockStore) GetAllImageCaches() ([]datastore.ImageCache, error) {
 	var result []datastore.ImageCache
 	// Keep this debug print as it's useful for tracking cache size
-	log.Printf("Debug: GetAllImageCaches found %d entries", len(m.images))
+	//log.Printf("Debug: GetAllImageCaches found %d entries", len(m.images))
 	for _, img := range m.images {
 		result = append(result, *img)
 	}
@@ -475,5 +494,168 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 	// Clean up
 	if err := cache.Close(); err != nil {
 		t.Errorf("Failed to close cache: %v", err)
+	}
+}
+
+// TestConcurrentInitialization tests that concurrent requests for the same species
+// don't result in multiple fetches
+func TestConcurrentInitialization(t *testing.T) {
+	// Create a mock provider with a delay to simulate network latency
+	mockProvider := &mockImageProvider{
+		fetchDelay: 200 * time.Millisecond, // Delay to make race conditions more likely
+	}
+	mockStore := newMockStore()
+	metrics, err := telemetry.NewMetrics()
+	if err != nil {
+		t.Fatalf("Failed to create metrics: %v", err)
+	}
+
+	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
+	if err != nil {
+		t.Fatalf("Failed to create default cache: %v", err)
+	}
+	cache.SetImageProvider(mockProvider)
+
+	// Number of concurrent requests
+	const numRequests = 10
+	const scientificName = "Turdus merula"
+
+	// Create a wait group to synchronize goroutines
+	var wg sync.WaitGroup
+	wg.Add(numRequests)
+
+	// Channel to collect results
+	results := make(chan string, numRequests)
+	errors := make(chan error, numRequests)
+
+	// Launch concurrent requests
+	for i := 0; i < numRequests; i++ {
+		go func() {
+			defer wg.Done()
+			image, err := cache.Get(scientificName)
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- image.URL
+		}()
+	}
+
+	// Wait for all requests to complete
+	wg.Wait()
+	close(results)
+	close(errors)
+
+	// Check for errors
+	for err := range errors {
+		t.Errorf("Concurrent request error: %v", err)
+	}
+
+	// Verify that only one fetch occurred
+	if mockProvider.fetchCounter != 1 {
+		t.Errorf("Expected 1 fetch, got %d fetches", mockProvider.fetchCounter)
+	}
+
+	// Verify that all requests got the same URL
+	var firstURL string
+	urlCount := 0
+	for url := range results {
+		if urlCount == 0 {
+			firstURL = url
+		} else if url != firstURL {
+			t.Errorf("Got different URLs: first=%s, other=%s", firstURL, url)
+		}
+		urlCount++
+	}
+
+	if urlCount != numRequests {
+		t.Errorf("Expected %d successful results, got %d", numRequests, urlCount)
+	}
+}
+
+// TestInitializationTimeout tests that requests don't wait forever if initialization fails
+func TestInitializationTimeout(t *testing.T) {
+	// Create a mock provider that takes longer than the retry timeout
+	mockProvider := &mockImageProvider{
+		fetchDelay: 2 * time.Second, // Longer than the total retry time
+	}
+	mockStore := newMockStore()
+	metrics, err := telemetry.NewMetrics()
+	if err != nil {
+		t.Fatalf("Failed to create metrics: %v", err)
+	}
+
+	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
+	if err != nil {
+		t.Fatalf("Failed to create default cache: %v", err)
+	}
+	cache.SetImageProvider(mockProvider)
+
+	// Start a long-running fetch in the background
+	go func() {
+		_, _ = cache.Get("Turdus merula")
+	}()
+
+	// Wait a moment for the first request to start
+	time.Sleep(100 * time.Millisecond)
+
+	// Try to get the same species - should timeout and proceed with new fetch
+	start := time.Now()
+	cache.Get("Turdus merula")
+	duration := time.Since(start)
+
+	// We expect:
+	// - 3 initialization attempts (300ms each)
+	// - Context timeout
+	// - Final direct fetch (2s)
+	// Plus some overhead for processing
+	maxExpectedDuration := 4*time.Second + 500*time.Millisecond
+	if duration > maxExpectedDuration {
+		t.Errorf("Request waited too long: %v (max expected: %v)", duration, maxExpectedDuration)
+	}
+
+	// The fetch counter should be 3:
+	// 1. Initial background fetch
+	// 2. After context timeout
+	// 3. Final direct fetch
+	expectedFetches := 3
+	if mockProvider.fetchCounter != expectedFetches {
+		t.Errorf("Expected %d fetches, got %d fetches", expectedFetches, mockProvider.fetchCounter)
+	}
+}
+
+// TestInitializationFailure tests that initialization failure is handled gracefully
+func TestInitializationFailure(t *testing.T) {
+	// Create a mock provider that fails
+	mockProvider := &mockImageProvider{
+		shouldFail: true,
+	}
+	mockStore := newMockStore()
+	metrics, err := telemetry.NewMetrics()
+	if err != nil {
+		t.Fatalf("Failed to create metrics: %v", err)
+	}
+
+	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
+	if err != nil {
+		t.Fatalf("Failed to create default cache: %v", err)
+	}
+	cache.SetImageProvider(mockProvider)
+
+	// Try to get an image - should fail but not leave initialization flag set
+	_, err = cache.Get("Turdus merula")
+	if err == nil {
+		t.Error("Expected error from failed fetch")
+	}
+
+	// Try again immediately - should attempt a new fetch
+	_, err = cache.Get("Turdus merula")
+	if err == nil {
+		t.Error("Expected error from second fetch")
+	}
+
+	// Verify that we attempted both fetches
+	if mockProvider.fetchCounter != 2 {
+		t.Errorf("Expected 2 fetches, got %d fetches", mockProvider.fetchCounter)
 	}
 }
