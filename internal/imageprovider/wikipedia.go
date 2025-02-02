@@ -148,7 +148,7 @@ func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
 		if l.debug {
 			log.Printf("[%s] Debug: Failed to fetch thumbnail for %s: %v", reqID, scientificName, err)
 		}
-		return BirdImage{}, fmt.Errorf("failed to query thumbnail of bird: %s : %w", scientificName, err)
+		return BirdImage{}, err // Pass through the user-friendly error from queryThumbnail
 	}
 
 	if l.debug {
@@ -161,7 +161,8 @@ func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
 		if l.debug {
 			log.Printf("[%s] Debug: Failed to fetch author info for %s: %v", reqID, scientificName, err)
 		}
-		return BirdImage{}, fmt.Errorf("failed to query thumbnail credit of bird: %s : %w", scientificName, err)
+		// Don't expose internal error to user, use a generic message
+		return BirdImage{}, fmt.Errorf("unable to retrieve image attribution for species: %s", scientificName)
 	}
 
 	if l.debug {
@@ -199,7 +200,7 @@ func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string) (url, f
 		if l.debug {
 			log.Printf("Debug: Failed to query thumbnail page: %v", err)
 		}
-		return "", "", fmt.Errorf("failed to query thumbnail: %w", err)
+		return "", "", fmt.Errorf("no Wikipedia page found for species: %s", scientificName)
 	}
 
 	url, err = page.GetString("thumbnail", "source")
@@ -207,7 +208,7 @@ func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string) (url, f
 		if l.debug {
 			log.Printf("Debug: Failed to extract thumbnail URL: %v", err)
 		}
-		return "", "", fmt.Errorf("failed to get thumbnail URL: %w", err)
+		return "", "", fmt.Errorf("no free-license image available for species: %s", scientificName)
 	}
 
 	fileName, err = page.GetString("pageimage")
@@ -215,7 +216,7 @@ func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string) (url, f
 		if l.debug {
 			log.Printf("Debug: Failed to extract thumbnail filename: %v", err)
 		}
-		return "", "", fmt.Errorf("failed to get thumbnail file name: %w", err)
+		return "", "", fmt.Errorf("image metadata not available for species: %s", scientificName)
 	}
 
 	if l.debug {
