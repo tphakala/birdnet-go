@@ -282,46 +282,60 @@ func clipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}) {
 
 // initBirdImageCache initializes the bird image cache by fetching all detected species from the database.
 func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *imageprovider.BirdImageCache {
-	birdImageCache, err := imageprovider.CreateDefaultCache(metrics)
+	// Create the cache first
+	birdImageCache, err := imageprovider.CreateDefaultCache(metrics, ds)
 	if err != nil {
 		log.Printf("Failed to create image cache: %v", err)
 		return nil
 	}
 
-	// Initialize the image cache by fetching all detected species in the database
+	// Get the list of all detected species
+	speciesList, err := ds.GetAllDetectedSpecies()
+	if err != nil {
+		log.Printf("Failed to get detected species: %v", err)
+		return birdImageCache // Return the cache even if we can't get species list
+	}
+
+	// Start background fetching of images
 	go func() {
-		// Retrieve the list of all detected species from the datastore
-		speciesList, err := ds.GetAllDetectedSpecies()
-		if err != nil {
-			log.Printf("Failed to get detected species: %v", err)
-			return
-		}
-
-		//log.Printf("Fetching images for %d species", len(speciesList))
-
 		// Use a WaitGroup to wait for all goroutines to complete
 		var wg sync.WaitGroup
+		// Use a semaphore to limit concurrent fetches
+		sem := make(chan struct{}, 5) // Limit to 5 concurrent fetches
 
-		for i := range speciesList {
+		// Track how many species need images
+		needsImage := 0
+
+		for _, species := range speciesList {
+			// Check if we already have this image cached
+			if cached, err := ds.GetImageCache(species.ScientificName); err == nil && cached != nil {
+				continue // Skip if already cached
+			}
+
+			needsImage++
 			wg.Add(1)
-
-			// Launch a goroutine to fetch the image for each species
-			go func(speciesName string) {
+			// Mark this species as being initialized
+			birdImageCache.Initializing.Store(species.ScientificName, struct{}{})
+			go func(name string) {
 				defer wg.Done()
+				defer birdImageCache.Initializing.Delete(name) // Remove initialization mark when done
+				sem <- struct{}{}                              // Acquire semaphore
+				defer func() { <-sem }()                       // Release semaphore
+
 				// Attempt to fetch the image for the given species
-				_, _ = birdImageCache.Get(speciesName)
-				/* TODO add debug flag to image cache and enable prints only if debug is true
-				if err != nil {
-					//log.Printf("Failed to get image for species %s: %v\n", speciesName, err)
-				} else {
-					//log.Printf("Successfully fetched image for species %s\n", speciesName)
-				}*/
-			}(speciesList[i].ScientificName)
+				if _, err := birdImageCache.Get(name); err != nil {
+					log.Printf("Failed to fetch image for %s: %v", name, err)
+				}
+			}(species.ScientificName)
 		}
 
-		// Wait for all goroutines to complete
-		wg.Wait()
-		log.Println("Finished initializing BirdImageCache")
+		if needsImage > 0 {
+			// Wait for all goroutines to complete
+			wg.Wait()
+			log.Printf("Finished initializing BirdImageCache (%d species needed images)", needsImage)
+		} else {
+			log.Println("BirdImageCache initialized (all species images already cached)")
+		}
 	}()
 
 	return birdImageCache
