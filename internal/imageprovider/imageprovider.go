@@ -60,10 +60,10 @@ func (c *BirdImageCache) SetImageProvider(provider ImageProvider) {
 }
 
 const (
-	defaultCacheTTL  = 14 * 24 * time.Hour // 14 days
-	refreshInterval  = 1 * time.Hour       // How often to check for stale entries
-	refreshBatchSize = 10                  // Number of entries to refresh in one batch
-	refreshDelay     = 5 * time.Second     // Delay between refreshing individual entries
+	defaultCacheTTL  = 14 * 24 * time.Hour    // 14 days
+	refreshInterval  = 1 * time.Second        // How often to check for stale entries (shortened for testing)
+	refreshBatchSize = 10                     // Number of entries to refresh in one batch
+	refreshDelay     = 100 * time.Millisecond // Delay between refreshing individual entries (shortened for testing)
 )
 
 // startCacheRefresh starts the background cache refresh routine
@@ -75,6 +75,9 @@ func (c *BirdImageCache) startCacheRefresh(quit chan struct{}) {
 	go func() {
 		ticker := time.NewTicker(refreshInterval)
 		defer ticker.Stop()
+
+		// Run an immediate refresh when starting
+		c.refreshStaleEntries()
 
 		for {
 			select {
@@ -105,16 +108,26 @@ func (c *BirdImageCache) refreshStaleEntries() {
 		return
 	}
 
+	if c.debug {
+		log.Printf("Debug: Checking %d entries for staleness", len(entries))
+	}
+
 	// Find stale entries
 	var staleEntries []string // Store only scientific names instead of full entries
 	cutoff := time.Now().Add(-defaultCacheTTL)
 	for i := range entries {
 		if entries[i].CachedAt.Before(cutoff) {
+			if c.debug {
+				log.Printf("Debug: Found stale entry: %s (CachedAt: %v)", entries[i].ScientificName, entries[i].CachedAt)
+			}
 			staleEntries = append(staleEntries, entries[i].ScientificName)
 		}
 	}
 
 	if len(staleEntries) == 0 {
+		if c.debug {
+			log.Printf("Debug: No stale entries found")
+		}
 		return
 	}
 
@@ -406,14 +419,26 @@ func CreateDefaultCache(metrics *telemetry.Metrics, store datastore.Interface) (
 		return nil, fmt.Errorf("failed to create WikiMedia provider: %w", err)
 	}
 
+	settings := conf.Setting()
+	quit := make(chan struct{})
 	cache := &BirdImageCache{
 		provider: provider,
 		metrics:  metrics.ImageProvider,
-		debug:    false,
+		debug:    settings.Realtime.Dashboard.Thumbnails.Debug,
 		store:    store,
 		logger:   log.Default(),
-		quit:     make(chan struct{}),
+		quit:     quit,
 	}
+
+	// Load cached images into memory only if store is available
+	if store != nil {
+		if err := cache.loadCachedImages(); err != nil && cache.debug {
+			log.Printf("Debug: Error loading cached images: %v", err)
+		}
+	}
+
+	// Start cache refresh routine
+	cache.startCacheRefresh(quit)
 
 	return cache, nil
 }

@@ -3,9 +3,11 @@ package imageprovider_test
 import (
 	"errors"
 	"fmt"
+	"log"
 	"testing"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -23,12 +25,16 @@ func (m *mockImageProvider) Fetch(scientificName string) (imageprovider.BirdImag
 	if m.shouldFail {
 		return imageprovider.BirdImage{}, errors.New("mock fetch error")
 	}
+	// Add timestamp to URL to ensure it's different each time
+	url := fmt.Sprintf("http://example.com/%s_%d.jpg", scientificName, time.Now().UnixNano())
 	return imageprovider.BirdImage{
-		URL:         "http://example.com/" + scientificName + ".jpg",
-		LicenseName: "CC BY-SA 4.0",
-		LicenseURL:  "https://creativecommons.org/licenses/by-sa/4.0/",
-		AuthorName:  "Mock Author",
-		AuthorURL:   "http://example.com/author",
+		URL:            url,
+		ScientificName: scientificName,
+		LicenseName:    "CC BY-SA 4.0",
+		LicenseURL:     "https://creativecommons.org/licenses/by-sa/4.0/",
+		AuthorName:     fmt.Sprintf("Mock Author %d", m.fetchCounter),
+		AuthorURL:      "http://example.com/author",
+		CachedAt:       time.Now(),
 	}, nil
 }
 
@@ -46,20 +52,46 @@ func newMockStore() *mockStore {
 // Implement only the methods we need for testing
 func (m *mockStore) GetImageCache(scientificName string) (*datastore.ImageCache, error) {
 	if img, ok := m.images[scientificName]; ok {
+		// Keep this debug print as it's useful for cache hit/miss tracking
+		log.Printf("Debug: GetImageCache found entry for %s", scientificName)
 		return img, nil
 	}
 	return nil, nil
 }
 
 func (m *mockStore) SaveImageCache(cache *datastore.ImageCache) error {
-	m.images[cache.ScientificName] = cache
+	if cache.ScientificName == "" {
+		return fmt.Errorf("scientific name cannot be empty")
+	}
+
+	oldCache, exists := m.images[cache.ScientificName]
+	if exists {
+		// Keep this debug print as it's useful for tracking cache updates
+		log.Printf("Debug: SaveImageCache updating entry for %s: Old(CachedAt=%v) -> New(CachedAt=%v)",
+			cache.ScientificName, oldCache.CachedAt, cache.CachedAt)
+	}
+
+	// Create a new copy of the cache entry to avoid shared references
+	newCache := &datastore.ImageCache{
+		URL:            cache.URL,
+		ScientificName: cache.ScientificName,
+		LicenseName:    cache.LicenseName,
+		LicenseURL:     cache.LicenseURL,
+		AuthorName:     cache.AuthorName,
+		AuthorURL:      cache.AuthorURL,
+		CachedAt:       cache.CachedAt,
+	}
+
+	m.images[cache.ScientificName] = newCache
 	return nil
 }
 
 func (m *mockStore) GetAllImageCaches() ([]datastore.ImageCache, error) {
 	var result []datastore.ImageCache
-	for _, v := range m.images {
-		result = append(result, *v)
+	// Keep this debug print as it's useful for tracking cache size
+	log.Printf("Debug: GetAllImageCaches found %d entries", len(m.images))
+	for _, img := range m.images {
+		result = append(result, *img)
 	}
 	return result, nil
 }
@@ -379,6 +411,7 @@ func TestBirdImageCacheNilStore(t *testing.T) {
 
 // TestBirdImageCacheRefresh tests the cache refresh functionality
 func TestBirdImageCacheRefresh(t *testing.T) {
+	t.Log("Starting TestBirdImageCacheRefresh")
 	mockProvider := &mockImageProvider{}
 	mockStore := newMockStore()
 	metrics, err := telemetry.NewMetrics()
@@ -396,32 +429,45 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 		AuthorURL:      "http://example.com/old-author",
 		CachedAt:       time.Now().Add(-15 * 24 * time.Hour), // 15 days old
 	}
-	mockStore.SaveImageCache(oldEntry)
+	t.Logf("Created old entry: CachedAt=%v", oldEntry.CachedAt)
 
+	if err := mockStore.SaveImageCache(oldEntry); err != nil {
+		t.Fatalf("Failed to save old cache entry: %v", err)
+	}
+
+	// Enable debug mode for the cache
+	settings := conf.Setting()
+	settings.Realtime.Dashboard.Thumbnails.Debug = true
+
+	// Create cache with default settings
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	if err != nil {
 		t.Fatalf("Failed to create default cache: %v", err)
 	}
+
+	// Set our mock provider
 	cache.SetImageProvider(mockProvider)
 
-	// Wait for refresh to happen
-	time.Sleep(2 * time.Second)
+	// Wait for refresh routine to run
+	t.Log("Waiting for refresh routine to run...")
+	time.Sleep(5 * time.Second)
 
 	// Check if the entry was refreshed
 	refreshed, err := mockStore.GetImageCache("Turdus merula")
 	if err != nil {
 		t.Fatalf("Failed to get refreshed cache entry: %v", err)
 	}
-
 	if refreshed == nil {
 		t.Fatal("Cache entry was not found")
 	}
 
-	// Verify that the entry was updated
+	// Compare timestamps
 	if refreshed.CachedAt.Equal(oldEntry.CachedAt) {
 		t.Error("Cache entry was not refreshed")
+		t.Logf("Mock provider fetch count: %d", mockProvider.fetchCounter)
 	}
 
+	// Compare URLs
 	if refreshed.URL == oldEntry.URL {
 		t.Error("Cache entry URL was not updated")
 	}
