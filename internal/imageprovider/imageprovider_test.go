@@ -87,14 +87,14 @@ func (m *mockStore) SearchNotes(query string, asc bool, limit, offset int) ([]da
 }
 func (m *mockStore) GetNoteClipPath(noteID string) (string, error) { return "", nil }
 func (m *mockStore) DeleteNoteClipPath(noteID string) error        { return nil }
-func (m *mockStore) GetClipsQualifyingForRemoval(minHours int, minClips int) ([]datastore.ClipForRemoval, error) {
+func (m *mockStore) GetClipsQualifyingForRemoval(minHours, minClips int) ([]datastore.ClipForRemoval, error) {
 	return nil, nil
 }
 func (m *mockStore) GetNoteReview(noteID string) (*datastore.NoteReview, error)     { return nil, nil }
 func (m *mockStore) SaveNoteReview(review *datastore.NoteReview) error              { return nil }
 func (m *mockStore) GetNoteComments(noteID string) ([]datastore.NoteComment, error) { return nil, nil }
 func (m *mockStore) SaveNoteComment(comment *datastore.NoteComment) error           { return nil }
-func (m *mockStore) UpdateNoteComment(commentID string, entry string) error         { return nil }
+func (m *mockStore) UpdateNoteComment(commentID, entry string) error                { return nil }
 func (m *mockStore) DeleteNoteComment(commentID string) error                       { return nil }
 func (m *mockStore) SaveDailyEvents(dailyEvents *datastore.DailyEvents) error       { return nil }
 func (m *mockStore) GetDailyEvents(date string) (datastore.DailyEvents, error) {
