@@ -115,11 +115,11 @@ func (s *SQLiteStore) Open() error {
 
 	// Set pragmas
 	pragmas := []string{
-		"PRAGMA foreign_keys=ON",     // required for foreign key constraints
-		"PRAGMA journal_mode=MEMORY", // faster writes
-		"PRAGMA synchronous=NORMAL",  // faster writes
-		"PRAGMA cache_size=-4000",    // increase cache size
-		"PRAGMA temp_store=MEMORY",   // faster writes
+		"PRAGMA foreign_keys=ON",    // required for foreign key constraints
+		"PRAGMA journal_mode=WAL",   // faster writes
+		"PRAGMA synchronous=NORMAL", // faster writes
+		"PRAGMA cache_size=-4000",   // increase cache size
+		"PRAGMA temp_store=MEMORY",  // faster writes
 	}
 
 	for _, pragma := range pragmas {
