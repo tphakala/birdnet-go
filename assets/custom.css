@@ -21,7 +21,7 @@ html, body {
 }
 
 .confidence-badge {
-  width: 54px;
+  width: 40px;
   height: 25px;
   display: flex;
   align-items: center;
@@ -213,7 +213,6 @@ thead.sticky-header {
 .thumbnail-container {
   position: relative;
   display: inline-block;
-  max-width: 16vw;
 }
 
 .thumbnail-tooltip {
@@ -234,10 +233,116 @@ thead.sticky-header {
   display: block;
 }
 
-/* Define your custom background colors here if the default Tailwind classes aren't working */
-.bg-confidence-high { background-color: #10b981; } /* Green for high confidence */
-.bg-confidence-medium { background-color: #f97316; } /* Orange for average confidence */
-.bg-confidence-low { background-color: #ef4444; } /* Red for low confidence */
+/* Circular Progress Style */
+/* Base circle */
+.confidence-circle {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;  /* Prevent shrinking */
+  min-height: 42px; /* Prevent shrinking */
+  flex-shrink: 0;   /* Prevent flex container from squeezing */
+  border-radius: 50%;
+  background: var(--lighter-color, #f3f4f6);
+}
+
+[data-theme="dark"] .confidence-circle {
+  background: rgba(243, 244, 246, 0.1);
+}
+
+/* Track (inner circle) to create a ring effect */
+.confidence-circle-track {
+  position: absolute;
+  top: 5px;    /* Adjust these values to control ring thickness */
+  left: 5px;
+  right: 5px;
+  bottom: 5px;
+  background: #f3f4f6;  /* Should match the container background in light mode */
+  border-radius: 50%;
+  z-index: 2;  /* Place above the progress arc */
+}
+
+/* In dark mode, use the appropriate track background */
+[data-theme="dark"] .confidence-circle-track {
+  background: rgba(243, 244, 246, 0.1);
+}
+
+/* Progress arc (ring) */
+.confidence-circle-progress {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  transform-origin: center;
+  /* Rotate by 180deg to shift the starting point from 12 o'clock to 6 o'clock */
+  transform: rotate(180deg);
+  /* The conic gradient uses the custom property --progress to define the arc length.
+     The gradient starts with the currentColor (the "active" part) and then becomes transparent. */
+  background: conic-gradient(currentColor var(--progress), transparent 0);
+  transition: all 0.3s ease;
+  z-index: 1;  /* Behind the track so that only the ring outline remains visible */
+}
+
+/* High confidence (70-100%) */
+.confidence-high {
+  color: #059669;           /* Used for the progress ring */
+  --lighter-color: #ecfdf5;  /* Lighter background color */
+}
+
+/* Medium confidence (40-69%) */
+.confidence-medium {
+  color: #d97706;
+  --lighter-color: #fffbeb;
+}
+
+/* Low confidence (0-39%) */
+.confidence-low {
+  color: #dc2626;
+  --lighter-color: #fef2f2;
+}
+
+/* Text inside the circle */
+.confidence-circle-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: currentColor;
+  z-index: 3;
+  white-space: nowrap; /* Prevent text wrapping */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.confidence-circle-text svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 3;
+}
+
+[data-theme="dark"] .confidence-circle {
+  background: rgba(243, 244, 246, 0.1);
+}
+
+/* Dark theme adjustments for progress colors */
+[data-theme="dark"] .confidence-high {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.1);
+}
+
+[data-theme="dark"] .confidence-medium {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+}
+
+[data-theme="dark"] .confidence-low {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}
 
 .progress {
   min-height: 14px; /* Adjust this value as needed */
@@ -604,4 +709,77 @@ thead.sticky-header {
     justify-content: center;
     margin-top: 0.125rem;
     height: 1rem;
+}
+
+/* Status Badge Styles */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  border: 1px solid;
+}
+
+.status-badge.unverified {
+  color: #6b7280;
+  border-color: #6b7280;
+  background-color: #f3f4f6;
+}
+
+.status-badge.correct {
+  color: #059669;
+  border-color: #059669;
+  background-color: #ecfdf5;
+}
+
+.status-badge.false {
+  color: #dc2626;
+  border-color: #dc2626;
+  background-color: #fef2f2;
+}
+
+.status-badge.locked {
+  color: #d97706;
+  border-color: #d97706;
+  background-color: #fffbeb;
+}
+
+.status-badge.comment {
+  color: #2563eb;
+  border-color: #2563eb;
+  background-color: #eff6ff;
+}
+
+[data-theme="dark"] .status-badge.unverified {
+  color: #9ca3af;
+  border-color: #9ca3af;
+  background-color: rgba(156, 163, 175, 0.1);
+}
+
+[data-theme="dark"] .status-badge.correct {
+  color: #34d399;
+  border-color: #34d399;
+  background-color: rgba(52, 211, 153, 0.1);
+}
+
+[data-theme="dark"] .status-badge.false {
+  color: #f87171;
+  border-color: #f87171;
+  background-color: rgba(248, 113, 113, 0.1);
+}
+
+[data-theme="dark"] .status-badge.locked {
+  color: #fbbf24;
+  border-color: #fbbf24;
+  background-color: rgba(251, 191, 36, 0.1);
+}
+
+[data-theme="dark"] .status-badge.comment {
+  color: #60a5fa;
+  border-color: #60a5fa;
+  background-color: rgba(96, 165, 250, 0.1);
 }
