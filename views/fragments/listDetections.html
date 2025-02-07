@@ -1,222 +1,221 @@
 {{define "listDetections"}}
 
-<section class="card col-span-12 overflow-x-auto bg-base-100 shadow-sm">
-    <div id="listDetections"
-     hx-trigger="refreshListEvent from:body" 
-     hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{.Offset}}" 
-     hx-target="#listDetections"
-     hx-swap="outerHTML">
+<section class="card col-span-12 overflow-x-auto bg-base-100 shadow-sm"
+    id="listDetections"
+    hx-trigger="refreshListEvent from:body" 
+    hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{.Offset}}" 
+    hx-target="#listDetections"
+    hx-swap="outerHTML">
     
-        <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
-            <div class="flex justify-between">
-                <!-- Title -->
-                <span class="card-title grow text-base sm:text-xl">
-                    {{if eq .QueryType "hourly"}}
-                        {{if gt .Duration 1}}
-                            Hourly Results from {{.Hour}}:00 to {{add .Hour .Duration}}:00 on {{.Date}}
-                        {{else}}
-                            Hourly Results for {{.Hour}}:00 on {{.Date}}
-                        {{end}}
-                    {{else if eq .QueryType "species"}}
-                    Results for {{.Species}} on {{.Date}}
-                    {{else if eq .QueryType "search"}}
-                    Search Results for "{{.Search}}"
+    <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
+        <div class="flex justify-between">
+            <!-- Title -->
+            <span class="card-title grow text-base sm:text-xl">
+                {{if eq .QueryType "hourly"}}
+                    {{if gt .Duration 1}}
+                        Hourly Results from {{.Hour}}:00 to {{add .Hour .Duration}}:00 on {{.Date}}
                     {{else}}
-                    All Detections for {{.Date}}
+                        Hourly Results for {{.Hour}}:00 on {{.Date}}
                     {{end}}
-                </span>
-            </div>
+                {{else if eq .QueryType "species"}}
+                Results for {{.Species}} on {{.Date}}
+                {{else if eq .QueryType "search"}}
+                Search Results for "{{.Search}}"
+                {{else}}
+                All Detections for {{.Date}}
+                {{end}}
+            </span>
+        </div>
+    </div>
+
+    <!-- Desktop Layout -->
+    <div class="block w-full">
+        <!-- Header -->
+        <div class="flex text-xs px-4 pb-2 border-b border-gray-200">
+            <div class="flex-1 min-w-[120px]">Date & Time</div>
+            <div class="flex-1 min-w-[100px]">Weather</div>
+            <div class="flex-1 min-w-[180px]">Species</div>
+            {{if .DashboardSettings.Thumbnails.Summary}}
+            <div class="flex-1 min-w-[100px]">Thumbnail</div>
+            {{end}}
+            <div class="flex-1 min-w-[120px]">Status</div>
+            <div class="flex-1 min-w-[120px]">Recording</div>
+            <div class="w-[5%] min-w-[40px]"></div>
         </div>
 
-        <!-- Desktop Layout -->
-        <div class="block w-full">
-            <!-- Header -->
-            <div class="flex text-xs px-4 pb-2 border-b border-gray-200">
-                <div class="flex-1 min-w-[120px]">Date & Time</div>
-                <div class="flex-1 min-w-[100px]">Weather</div>
-                <div class="flex-1 min-w-[180px]">Species</div>
-                {{if .DashboardSettings.Thumbnails.Summary}}
-                <div class="flex-1 min-w-[100px]">Thumbnail</div>
-                {{end}}
-                <div class="flex-1 min-w-[120px]">Status</div>
-                <div class="flex-1 min-w-[120px]">Recording</div>
-                <div class="w-[5%] min-w-[40px]"></div>
-            </div>
+        <!-- Content -->
+        <div class="divide-y divide-gray-100">
+            {{range .Notes}}
+            <div class="flex items-center px-4 py-1 hover:bg-gray-50">
+                <!-- Date & Time -->
+                <div class="flex-1 min-w-[120px] text-sm">
+                    <div class="flex items-center gap-2">
+                        <span>{{.Date}} {{.Time}}</span>
+                    </div>
+                </div>
 
-            <!-- Content -->
-            <div class="divide-y divide-gray-100">
-                {{range .Notes}}
-                <div class="flex items-center px-4 py-1 hover:bg-gray-50">
-                    <!-- Date & Time -->
-                    <div class="flex-1 min-w-[120px] text-sm">
+                <!-- Weather Column -->                   
+                <div class="flex-1 min-w-[100px] text-sm px-2">
+                    {{if .Weather}}
                         <div class="flex items-center gap-2">
-                            <span>{{.Date}} {{.Time}}</span>
+                            <span>{{weatherIcon .Weather.WeatherIcon .TimeOfDay}}</span>
+                            <span>{{weatherDescription .Weather.WeatherIcon}}</span>
                         </div>
-                    </div>
-
-                    <!-- Weather Column -->                   
-                    <div class="flex-1 min-w-[100px] text-sm px-2">
-                        {{if .Weather}}
-                            <div class="flex items-center gap-2">
-                                <span>{{weatherIcon .Weather.WeatherIcon .TimeOfDay}}</span>
-                                <span>{{weatherDescription .Weather.WeatherIcon}}</span>
-                            </div>
-                        {{else}}
-                            <div>No weather data</div>
-                        {{end}}
-                    </div>
-
-                    <!-- Bird species with confidence -->
-                    <div class="flex-1 min-w-[180px] text-sm">
-                        <div class="flex flex-wrap items-center gap-4">
-                            {{$value := confidence .Confidence}}
-                            {{$numValue := slice $value 0 (sub (len $value) 1)}}
-                            <div class="confidence-circle {{if ge $numValue 70}}confidence-high{{else if ge $numValue 40}}confidence-medium{{else}}confidence-low{{end}}"
-                                style="--progress: {{$numValue}}%">
-                                <div class="confidence-circle-track"></div>
-                                <div class="confidence-circle-progress"></div>
-                                <div class="confidence-circle-text">
-                                    {{if eq $numValue "100"}}
-                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-                                        </svg>
-                                    {{else}}
-                                        {{$value}}
-                                    {{end}}
-                                </div>
-                            </div>
-                            <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
-                                hx-trigger="click" hx-push-url="true" class="hover:text-blue-600">
-                                {{.CommonName}}
-                            </a>
-                        </div>
-                    </div>
-
-                    <!-- Bird thumbnail -->
-                    {{if $.DashboardSettings.Thumbnails.Summary}}
-                    <div class="flex-1 min-w-[100px] relative">
-                        <div class="thumbnail-container w-full">
-                            <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
-                                hx-trigger="click" hx-push-url="true" class="flex items-center justify-center">
-                                <img loading="lazy" src="{{thumbnail .ScientificName}}" class="w-full h-auto rounded-md object-contain">
-                            </a>
-                            <div class="thumbnail-tooltip hidden">
-                                {{thumbnailAttribution .ScientificName}}
-                            </div>
-                        </div>
-                    </div>
+                    {{else}}
+                        <div>No weather data</div>
                     {{end}}
+                </div>
 
-                    <!-- Status -->
-                    <div class="flex-1 min-w-[120px]">                   
-                        <div class="flex flex-wrap gap-1">
-                            {{if .Review}}
-                                {{if eq .Review.Verified "correct"}}
-                                    <div class="status-badge correct">correct</div>
-                                {{else if eq .Review.Verified "false_positive"}}
-                                    <div class="status-badge false">false</div>
+                <!-- Bird species with confidence -->
+                <div class="flex-1 min-w-[180px] text-sm">
+                    <div class="flex flex-wrap items-center gap-4">
+                        {{$value := confidence .Confidence}}
+                        {{$numValue := slice $value 0 (sub (len $value) 1)}}
+                        <div class="confidence-circle {{if ge $numValue 70}}confidence-high{{else if ge $numValue 40}}confidence-medium{{else}}confidence-low{{end}}"
+                            style="--progress: {{$numValue}}%">
+                            <div class="confidence-circle-track"></div>
+                            <div class="confidence-circle-progress"></div>
+                            <div class="confidence-circle-text">
+                                {{if eq $numValue "100"}}
+                                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                                    </svg>
                                 {{else}}
-                                    <div class="status-badge unverified">unverified</div>
+                                    {{$value}}
                                 {{end}}
+                            </div>
+                        </div>
+                        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
+                            hx-trigger="click" hx-push-url="true" class="hover:text-blue-600">
+                            {{.CommonName}}
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Bird thumbnail -->
+                {{if $.DashboardSettings.Thumbnails.Summary}}
+                <div class="flex-1 min-w-[100px] relative">
+                    <div class="thumbnail-container w-full">
+                        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
+                            hx-trigger="click" hx-push-url="true" class="flex items-center justify-center">
+                            <img loading="lazy" src="{{thumbnail .ScientificName}}" class="w-full h-auto rounded-md object-contain">
+                        </a>
+                        <div class="thumbnail-tooltip hidden">
+                            {{thumbnailAttribution .ScientificName}}
+                        </div>
+                    </div>
+                </div>
+                {{end}}
+
+                <!-- Status -->
+                <div class="flex-1 min-w-[120px]">                   
+                    <div class="flex flex-wrap gap-1">
+                        {{if .Review}}
+                            {{if eq .Review.Verified "correct"}}
+                                <div class="status-badge correct">correct</div>
+                            {{else if eq .Review.Verified "false_positive"}}
+                                <div class="status-badge false">false</div>
                             {{else}}
                                 <div class="status-badge unverified">unverified</div>
                             {{end}}
-                            {{if .Lock}}
-                                <div class="status-badge locked">locked</div>
-                            {{end}}
-                            {{if .Comments}}
-                                <div class="status-badge comment">comment</div>
-                            {{end}}
-                        </div>
+                        {{else}}
+                            <div class="status-badge unverified">unverified</div>
+                        {{end}}
+                        {{if .Lock}}
+                            <div class="status-badge locked">locked</div>
+                        {{end}}
+                        {{if .Comments}}
+                            <div class="status-badge comment">comment</div>
+                        {{end}}
                     </div>
+                </div>
 
-                    <!-- Recording -->
-                    <div class="flex-1 min-w-[120px]">
-                        <div class="audio-player-container relative min-w-[50px]">
-                            <!-- Spectrogram Image -->
-                            <img loading="lazy" width="400" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram Image"
-                                class="w-full h-auto rounded-md object-contain">
+                <!-- Recording -->
+                <div class="flex-1 min-w-[120px]">
+                    <div class="audio-player-container relative min-w-[50px]">
+                        <!-- Spectrogram Image -->
+                        <img loading="lazy" width="400" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram Image"
+                            class="w-full h-auto rounded-md object-contain">
 
-                            <!-- Play position indicator -->
-                            <div id="position-indicator-{{.ID}}" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
-                                style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
+                        <!-- Play position indicator -->
+                        <div id="position-indicator-{{.ID}}" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
+                            style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
 
-                            <!-- Audio player overlay -->
-                            <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 opacity-0 group-hover:opacity-100 hidden md:block">
-                                <audio id="audio-{{.ID}}" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
-                                <div class="flex items-center justify-between">
-                                    <button id="playPause-{{.ID}}" class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
-                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                        </svg>
-                                    </button>
-                                    <div id="progress-{{.ID}}" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
-                                        <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
-                                    </div>
-                                    <span id="currentTime-{{.ID}}" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-                                    <a href="/media/audio?clip={{.ClipName}}" download class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                                        </svg>
-                                    </a>
+                        <!-- Audio player overlay -->
+                        <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 opacity-0 group-hover:opacity-100 hidden md:block">
+                            <audio id="audio-{{.ID}}" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
+                            <div class="flex items-center justify-between">
+                                <button id="playPause-{{.ID}}" class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </button>
+                                <div id="progress-{{.ID}}" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
+                                    <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
                                 </div>
+                                <span id="currentTime-{{.ID}}" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
+                                <a href="/media/audio?clip={{.ClipName}}" download class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                    </svg>
+                                </a>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Action Menu -->
-                    {{if or (not $.Security.Enabled) $.Security.AccessAllowed}}
-                    <div class="w-[5%] min-w-[40px] flex justify-end">
-                        <div class="relative">
-                            {{template "actionMenu" .}}
-                        </div>
+                <!-- Action Menu -->
+                {{if or (not $.Security.Enabled) $.Security.AccessAllowed}}
+                <div class="w-[5%] min-w-[40px] flex justify-end">
+                    <div class="relative">
+                        {{template "actionMenu" .}}
                     </div>
-                    {{end}}
                 </div>
                 {{end}}
             </div>
-        </div>       
+            {{end}}
+        </div>
+    </div>       
 
-        <!-- Pagination Controls - Shown for both desktop and mobile -->
-        {{if gt .TotalResults .ItemsPerPage}}
-        <div class="border-t border-gray-100 mt-2">
-            <div class="flex justify-between items-center p-4">
-                <div class="text-sm text-gray-600">
-                    Showing {{.ShowingFrom}} to {{.ShowingTo}} of {{.TotalResults}} results
-                </div>
-                <div class="flex space-x-2">
-                    {{if gt .CurrentPage 1}}
-                        <button
-                            hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
-                            hx-target="#listDetections"
-                            hx-swap="outerHTML"
-                            class="btn btn-sm btn-primary">
-                            Previous
-                        </button>
-                    {{else}}
-                    <button class="btn btn-sm btn-disabled">
-                        Previous
-                    </button>
-                    {{end}}
-                    {{if lt .CurrentPage .TotalPages}}
+    <!-- Pagination Controls - Shown for both desktop and mobile -->
+    {{if gt .TotalResults .ItemsPerPage}}
+    <div class="border-t border-gray-100 mt-2">
+        <div class="flex justify-between items-center p-4">
+            <div class="text-sm text-gray-600">
+                Showing {{.ShowingFrom}} to {{.ShowingTo}} of {{.TotalResults}} results
+            </div>
+            <div class="flex space-x-2">
+                {{if gt .CurrentPage 1}}
                     <button
-                        hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
+                        hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
                         hx-target="#listDetections"
                         hx-swap="outerHTML"
                         class="btn btn-sm btn-primary">
-                        Next
+                        Previous
                     </button>
-                    {{else}}
-                    <button class="btn btn-sm btn-disabled">
-                        Next
-                    </button>
-                    {{end}}
-                </div>
+                {{else}}
+                <button class="btn btn-sm btn-disabled">
+                    Previous
+                </button>
+                {{end}}
+                {{if lt .CurrentPage .TotalPages}}
+                <button
+                    hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
+                    hx-target="#listDetections"
+                    hx-swap="outerHTML"
+                    class="btn btn-sm btn-primary">
+                    Next
+                </button>
+                {{else}}
+                <button class="btn btn-sm btn-disabled">
+                    Next
+                </button>
+                {{end}}
             </div>
         </div>
-        {{end}}
     </div>
+    {{end}}
 </section>
 
 {{end}}
