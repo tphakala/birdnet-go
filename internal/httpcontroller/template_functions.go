@@ -30,6 +30,7 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"seq":                   seqFunc,
 		"dict":                  dictFunc,
 		"even":                  even,
+		"ge":                    geFunc,
 		"calcWidth":             calcWidth,
 		"heatmapColor":          heatmapColor,
 		"title":                 cases.Title(language.English).String,
@@ -352,4 +353,28 @@ func (s *Server) GetAllSpecies() []string {
 	sort.Strings(result)
 
 	return result
+}
+
+// Convert interface{} to float64 for numeric comparisons
+func toFloat64(v interface{}) (float64, error) {
+	switch val := v.(type) {
+	case int:
+		return float64(val), nil
+	case float64:
+		return val, nil
+	case string:
+		return strconv.ParseFloat(val, 64)
+	default:
+		return 0, fmt.Errorf("cannot convert %T to float64", v)
+	}
+}
+
+// geFunc returns true if a >= b
+func geFunc(a, b interface{}) bool {
+	aFloat, err1 := toFloat64(a)
+	bFloat, err2 := toFloat64(b)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return aFloat >= bFloat
 }

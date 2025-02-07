@@ -1,319 +1,221 @@
 {{define "listDetections"}}
 
-<section class="card col-span-12 overflow-x-auto bg-base-100 shadow-sm">
-
-    <div id="listDetections"
-     hx-trigger="refreshListEvent from:body" 
-     hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{.Offset}}" 
-     hx-target="#listDetections"
-     hx-swap="outerHTML">
+<section class="card col-span-12 overflow-x-auto bg-base-100 shadow-sm"
+    id="listDetections"
+    hx-trigger="refreshListEvent from:body" 
+    hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{.Offset}}" 
+    hx-target="#listDetections"
+    hx-swap="outerHTML">
     
-        <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
-            <div class="flex justify-between">
-                <!-- Title -->
-                <span class="card-title grow text-base sm:text-xl">
-                    {{if eq .QueryType "hourly"}}
-                        {{if gt .Duration 1}}
-                            Hourly Results from {{.Hour}}:00 to {{add .Hour .Duration}}:00 on {{.Date}}
-                        {{else}}
-                            Hourly Results for {{.Hour}}:00 on {{.Date}}
-                        {{end}}
-                    {{else if eq .QueryType "species"}}
-                    Results for {{.Species}} on {{.Date}}
-                    {{else if eq .QueryType "search"}}
-                    Search Results for "{{.Search}}"
+    <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
+        <div class="flex justify-between">
+            <!-- Title -->
+            <span class="card-title grow text-base sm:text-xl">
+                {{if eq .QueryType "hourly"}}
+                    {{if gt .Duration 1}}
+                        Hourly Results from {{.Hour}}:00 to {{add .Hour .Duration}}:00 on {{.Date}}
                     {{else}}
-                    All Detections for {{.Date}}
+                        Hourly Results for {{.Hour}}:00 on {{.Date}}
                     {{end}}
-                </span>
-            </div>
+                {{else if eq .QueryType "species"}}
+                Results for {{.Species}} on {{.Date}}
+                {{else if eq .QueryType "search"}}
+                Search Results for "{{.Search}}"
+                {{else}}
+                All Detections for {{.Date}}
+                {{end}}
+            </span>
+        </div>
+    </div>
+
+    <!-- Desktop Layout -->
+    <div class="block w-full">
+        <!-- Header -->
+        <div class="flex text-xs px-4 pb-2 border-b border-gray-200">
+            <div class="flex-1 min-w-[120px]">Date & Time</div>
+            <div class="flex-1 min-w-[100px]">Weather</div>
+            <div class="flex-1 min-w-[180px]">Species</div>
+            {{if .DashboardSettings.Thumbnails.Summary}}
+            <div class="flex-1 min-w-[100px]">Thumbnail</div>
+            {{end}}
+            <div class="flex-1 min-w-[120px]">Status</div>
+            <div class="flex-1 min-w-[120px]">Recording</div>
+            <div class="w-[5%] min-w-[40px]"></div>
         </div>
 
-        <table class="table w-full text-left">
-            <thead class="text-xs">
-                <tr>
-                    <!-- Date/Time Column -->
-                    <th scope="col" class="py-0 px-2 sm:px-4" style="width: auto">
-                        <span class="hidden sm:inline">Date</span>
-                        <span class="sm:hidden">Date Time</span>
-                    </th>
+        <!-- Content -->
+        <div class="divide-y divide-gray-100">
+            {{range .Notes}}
+            <div class="flex items-center px-4 py-1 hover:bg-gray-50">
+                <!-- Date & Time -->
+                <div class="flex-1 min-w-[120px] text-sm">
+                    <div class="flex items-center gap-2">
+                        <span>{{.Date}} {{.Time}}</span>
+                    </div>
+                </div>
 
-                    <!-- Time Column (hidden on small screens) -->
-                    <th scope="col" class="py-2 px-2 hidden sm:table-cell" style="width: auto">Time</th>
-
-                    <!-- Weather Column, selectively enabled -->
-                    {{if .WeatherEnabled}}
-                        {{if eq .QueryType "species"}}
-                        <!-- Show weather column for species query type -->
-                        <th scope="col" class="py-2 px-4" style="width: auto">Weather</th>
-                        {{else}}
-                        <!-- Hide weather column on small screens for other query types -->
-                        <th scope="col" class="py-2 px-2 hidden sm:table-cell" style="width: auto">Weather</th>
-                        {{end}}
-                    {{end}}
-
-                    <!-- Common Name Column -->
-                    {{if ne .QueryType "species"}}
-                        <th scope="col" class="py-2 px-4" style="width: auto">Species</th>
-                    {{end}}
-
-                    <!-- Thumbnail Column -->
-                    {{if .DashboardSettings.Thumbnails.Summary}}
-                        <th scope="col" class="py-2 px-4" style="width: 20%">Thumbnail</th>
-                    {{end}}
-
-                    <!-- Confidence Column -->
-                    <th scope="col" class="py-2 px-4" style="width: auto">
-                        <span class="hidden sm:inline">Confidence</span>
-                        <span class="sm:hidden">Confid.</span>
-                    </th>
-
-                    <!-- Status Column -->
-                    <th scope="col" class="py-2 px-4" style="width: auto">
-                        <span>Status</span>
-                    </th>
-
-                    <!-- Recording Column -->
-                    <th scope="col" class="py-2 px-4" style="width: 30%">Recording</th>
-
-                    <!-- Action Menu Column -->
-                    {{if $.Security.AccessAllowed}}
-                    <th scope="col" class="hidden sm:table-cell py-2 px-4" style="width: 5%"></th>
-                    {{end}}
-                </tr>
-            </thead>
-            <tbody>
-                {{range .Notes}}
-                <tr class="text-xs sm:text-sm">
-                    <!-- Date/Time Column -->
-                    <td class="py-0 px-2 sm:px-4 font-normal">
-                        <div class="flex flex-col sm:flex-row sm:items-center">
-                            <span>{{.Date}}</span>
-                            <span class="sm:hidden">{{.Time}}</span>
-                        </div>
-                    </td>
-
-                    <!-- Time Column (hidden on small screens) -->
-                    <td class="py-1 px-2 font-normal hidden sm:table-cell">
+                <!-- Weather Column -->                   
+                <div class="flex-1 min-w-[100px] text-sm px-2">
+                    {{if .Weather}}
                         <div class="flex items-center gap-2">
-                            <span>{{sunPositionIcon .TimeOfDay}}</span>
-                            <span>{{.Time}}</span>
+                            <span>{{weatherIcon .Weather.WeatherIcon .TimeOfDay}}</span>
+                            <span>{{weatherDescription .Weather.WeatherIcon}}</span>
                         </div>
-                    </td>
-
-                    <!-- Weather Column -->
-                    {{if $.WeatherEnabled}}
-                        <!-- For species query type, always show weather -->
-                        <!-- For other query types, hide weather on small screens -->
-                        <td class="py-1 px-2 font-normal {{if ne $.QueryType "species"}}hidden sm:table-cell{{end}}">
-                            {{if .Weather}}
-                                <div class="flex items-center gap-2">
-                                    <span>{{weatherIcon .Weather.WeatherIcon .TimeOfDay}}</span>
-                                    <span>{{weatherDescription .Weather.WeatherIcon}}</span>
-                                </div>
-                            {{else}}
-                                <div>No weather data</div>
-                            {{end}}
-                        </td>
+                    {{else}}
+                        <div>No weather data</div>
                     {{end}}
+                </div>
 
-                    <!-- Common Name Column -->
-                    {{if ne $.QueryType "species"}}
-                    <td class="py-1 px-4 font-normal">
-                        <div class="flex items-center gap-2">
-                            <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
-                                hx-trigger="click" hx-push-url="true">
-                                {{.CommonName}}
-                            </a>
-                            {{if .Verified}}
-                                {{if eq .Verified "correct"}}
-                                    <span class="badge badge-success badge-sm" title="Verified correct">✓</span>
-                                {{else if eq .Verified "false_positive"}}
-                                    <span class="badge badge-error badge-sm" title="Marked as false positive">✗</span>
+                <!-- Bird species with confidence -->
+                <div class="flex-1 min-w-[180px] text-sm">
+                    <div class="flex flex-wrap items-center gap-4">
+                        {{$value := confidence .Confidence}}
+                        {{$numValue := slice $value 0 (sub (len $value) 1)}}
+                        <div class="confidence-circle {{if ge $numValue 70}}confidence-high{{else if ge $numValue 40}}confidence-medium{{else}}confidence-low{{end}}"
+                            style="--progress: {{$numValue}}%">
+                            <div class="confidence-circle-track"></div>
+                            <div class="confidence-circle-progress"></div>
+                            <div class="confidence-circle-text">
+                                {{if eq $numValue "100"}}
+                                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                {{else}}
+                                    {{$value}}
                                 {{end}}
-                            {{end}}
-                        </div>
-                    </td>
-                    {{end}}
-                    
-                    <!-- Thumbnail Column -->
-                    {{if $.DashboardSettings.Thumbnails.Summary}}
-                    <td class="py-1 px-2 font-normal">
-                        <div class="thumbnail-container">
-                            <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent"
-                                hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
-                                <img loading="lazy" width="150" src="{{thumbnail .ScientificName}}"
-                                    alt="Thumbnail of {{.CommonName}}" class="h-auto rounded-md">
-                            </a>
-                            <div class="thumbnail-tooltip hidden">
-                                {{thumbnailAttribution .ScientificName}}
                             </div>
                         </div>
-                    </td>
-                    {{end}}
+                        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
+                            hx-trigger="click" hx-push-url="true" class="hover:text-blue-600">
+                            {{.CommonName}}
+                        </a>
+                    </div>
+                </div>
 
-                    <!-- Confidence Column -->
-                    <td class="py-1 px-4 font-normal">
-                        <div class="confidence-container">
-                            <div class="confidence-badge {{confidenceColor .Confidence}} text-white font-medium">
-                                <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent"
-                                    hx-swap="innerHTML" hx-trigger="click" hx-push-url="true">
-                                    {{confidence .Confidence}}
+                <!-- Bird thumbnail -->
+                {{if $.DashboardSettings.Thumbnails.Summary}}
+                <div class="flex-1 min-w-[100px] relative">
+                    <div class="thumbnail-container w-full">
+                        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
+                            hx-trigger="click" hx-push-url="true" class="flex items-center justify-center">
+                            <img loading="lazy" src="{{thumbnail .ScientificName}}" class="w-full h-auto rounded-md object-contain">
+                        </a>
+                        <div class="thumbnail-tooltip hidden">
+                            {{thumbnailAttribution .ScientificName}}
+                        </div>
+                    </div>
+                </div>
+                {{end}}
+
+                <!-- Status -->
+                <div class="flex-1 min-w-[120px]">                   
+                    <div class="flex flex-wrap gap-1">
+                        {{if .Review}}
+                            {{if eq .Review.Verified "correct"}}
+                                <div class="status-badge correct">correct</div>
+                            {{else if eq .Review.Verified "false_positive"}}
+                                <div class="status-badge false">false</div>
+                            {{else}}
+                                <div class="status-badge unverified">unverified</div>
+                            {{end}}
+                        {{else}}
+                            <div class="status-badge unverified">unverified</div>
+                        {{end}}
+                        {{if .Lock}}
+                            <div class="status-badge locked">locked</div>
+                        {{end}}
+                        {{if .Comments}}
+                            <div class="status-badge comment">comment</div>
+                        {{end}}
+                    </div>
+                </div>
+
+                <!-- Recording -->
+                <div class="flex-1 min-w-[120px]">
+                    <div class="audio-player-container relative min-w-[50px]">
+                        <!-- Spectrogram Image -->
+                        <img loading="lazy" width="400" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram Image"
+                            class="w-full h-auto rounded-md object-contain">
+
+                        <!-- Play position indicator -->
+                        <div id="position-indicator-{{.ID}}" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
+                            style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
+
+                        <!-- Audio player overlay -->
+                        <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 opacity-0 group-hover:opacity-100 hidden md:block">
+                            <audio id="audio-{{.ID}}" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
+                            <div class="flex items-center justify-between">
+                                <button id="playPause-{{.ID}}" class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </button>
+                                <div id="progress-{{.ID}}" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
+                                    <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
+                                </div>
+                                <span id="currentTime-{{.ID}}" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
+                                <a href="/media/audio?clip={{.ClipName}}" download class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                    </svg>
                                 </a>
                             </div>
                         </div>
-                    </td>
+                    </div>
+                </div>
 
-                    <!-- Status Column -->
-                    <td class="py-1 px-4 font-normal">
-                        <div class="flex flex-wrap gap-1">
-                            {{if .Review}}
-                                {{if eq .Review.Verified "correct"}}
-                                    <div class="text-success" title="Verified correct">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
-                                            <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd" />
-                                        </svg>
-                                    </div>
-                                {{else if eq .Review.Verified "false_positive"}}
-                                    <div class="text-error" title="Marked as false positive">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
-                                            <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z" clip-rule="evenodd" />
-                                        </svg>
-                                    </div>
-                                {{end}}
-                            {{end}}
-                            {{if .Lock}}
-                                <div class="text-warning" title="Detection is locked">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
-                                        <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" />
-                                    </svg>
-                                </div>
-                            {{end}}
-                            {{if .Comments}}
-                                <div class="text-info" title="Has comments">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
-                                        <path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z" clip-rule="evenodd" />
-                                    </svg>
-                                </div>
-                            {{end}}
-                        </div>
-                    </td>
-
-                    <!-- Recording Column -->
-                    <td class="py-1 px-4 font-normal">
-                        <div class="audio-player-container relative min-w-[50px] max-w-[400px]">
-                            <!-- Spectrogram Image -->
-                            <img loading="lazy" width="400" src="/media/spectrogram?clip={{.ClipName}}"
-                                alt="Spectrogram Image" class="w-full h-auto rounded-md">
-
-                            <!-- Play position indicator -->
-                            <div id="position-indicator-{{.ID}}"
-                                class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
-                                style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
-
-                            <!-- Audio player overlay - Full version -->
-                            <div
-                                class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 opacity-0 group-hover:opacity-100 hidden sm:block">
-                                <audio id="audio-{{.ID}}" src="/media/audio?clip={{.ClipName}}" preload="metadata"
-                                    class="hidden"></audio>
-                                <div class="flex items-center justify-between">
-                                    <button id="playPause-{{.ID}}"
-                                        class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
-                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                                            xmlns="http://www.w3.org/2000/svg">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                                                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-                                            </path>
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                                                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                        </svg>
-                                    </button>
-                                    <div id="progress-{{.ID}}"
-                                        class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
-                                        <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
-                                    </div>
-                                    <span id="currentTime-{{.ID}}"
-                                        class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-                                    <a href="/media/audio?clip={{.ClipName}}" download
-                                        class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                                            xmlns="http://www.w3.org/2000/svg">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4">
-                                            </path>
-                                        </svg>
-                                    </a>
-                                </div>
-                            </div>
-
-                            <!-- Audio player overlay - Compact version -->
-                            <div class="absolute inset-0 flex items-center justify-center sm:hidden"
-                                style="--player-opacity: 0.7;">
-                                <div class="w-full h-full flex items-center justify-center">
-                                    <button id="playPause-compact-{{.ID}}"
-                                        class="w-6 h-6 flex items-center justify-center text-white hover:text-blue-200 bg-black bg-opacity-25 rounded-full"
-                                        style="opacity: var(--player-opacity);">
-                                        <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                                            xmlns="http://www.w3.org/2000/svg">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3"
-                                                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-                                            </path>
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </td>
-
-                    <!-- Action Menu Column -->
-                    {{if $.Security.AccessAllowed}}
-                    <td class="hidden sm:table-cell py-1 px-4 font-normal">           
+                <!-- Action Menu -->
+                {{if or (not $.Security.Enabled) $.Security.AccessAllowed}}
+                <div class="w-[5%] min-w-[40px] flex justify-end">
+                    <div class="relative">
                         {{template "actionMenu" .}}
-                    </td>
-                    {{end}}
-                </tr>
+                    </div>
+                </div>
                 {{end}}
+            </div>
+            {{end}}
+        </div>
+    </div>       
 
-                {{if gt .TotalResults .ItemsPerPage}}
-                <tr>
-                    <td colspan="6">
-                        <div class="flex justify-between items-center p-4">
-                            <div class="text-sm text-gray-600">
-                                Showing {{.ShowingFrom}} to {{.ShowingTo}} of {{.TotalResults}} results
-                            </div>
-                            <div class="flex space-x-2">
-                                {{if gt .CurrentPage 1}}
-                                    <button
-                                        hx-get="?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
-                                        hx-target="#listDetections-wrapper" class="btn btn-sm btn-primary">
-                                        Previous
-                                    </button>
-                                {{else}}
-                                <button class="btn btn-sm btn-disabled">
-                                    Previous
-                                </button>
-                                {{end}}
-                                {{if lt .CurrentPage .TotalPages}}
-                                <button
-                                    hx-get="?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
-                                    hx-target="#listDetections-wrapper" class="btn btn-sm btn-primary">
-                                    Next
-                                </button>
-                                {{else}}
-                                <button class="btn btn-sm btn-disabled">
-                                    Next
-                                </button>
-                                {{end}}
-                            </div>
-                        </div>
-                    </td>
-                </tr>
+    <!-- Pagination Controls - Shown for both desktop and mobile -->
+    {{if gt .TotalResults .ItemsPerPage}}
+    <div class="border-t border-gray-100 mt-2">
+        <div class="flex justify-between items-center p-4">
+            <div class="text-sm text-gray-600">
+                Showing {{.ShowingFrom}} to {{.ShowingTo}} of {{.TotalResults}} results
+            </div>
+            <div class="flex space-x-2">
+                {{if gt .CurrentPage 1}}
+                    <button
+                        hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
+                        hx-target="#listDetections"
+                        hx-swap="outerHTML"
+                        class="btn btn-sm btn-primary">
+                        Previous
+                    </button>
+                {{else}}
+                <button class="btn btn-sm btn-disabled">
+                    Previous
+                </button>
                 {{end}}
-
-            </tbody>
-        </table>
-
+                {{if lt .CurrentPage .TotalPages}}
+                <button
+                    hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
+                    hx-target="#listDetections"
+                    hx-swap="outerHTML"
+                    class="btn btn-sm btn-primary">
+                    Next
+                </button>
+                {{else}}
+                <button class="btn btn-sm btn-disabled">
+                    Next
+                </button>
+                {{end}}
+            </div>
+        </div>
     </div>
+    {{end}}
 </section>
 
 {{end}}
