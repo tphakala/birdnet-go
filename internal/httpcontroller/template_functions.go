@@ -26,7 +26,6 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"add":                   addFunc,
 		"sub":                   subFunc,
 		"div":                   divFunc,
-		"mul":                   mulFunc,
 		"mod":                   modFunc,
 		"seq":                   seqFunc,
 		"dict":                  dictFunc,
@@ -354,35 +353,6 @@ func (s *Server) GetAllSpecies() []string {
 	sort.Strings(result)
 
 	return result
-}
-
-// mulFunc multiplies two numbers
-func mulFunc(a, b interface{}) float64 {
-	var aFloat, bFloat float64
-
-	switch v := a.(type) {
-	case int:
-		aFloat = float64(v)
-	case string:
-		if i, err := strconv.ParseFloat(v, 64); err == nil {
-			aFloat = i
-		}
-	case float64:
-		aFloat = v
-	}
-
-	switch v := b.(type) {
-	case int:
-		bFloat = float64(v)
-	case string:
-		if i, err := strconv.ParseFloat(v, 64); err == nil {
-			bFloat = i
-		}
-	case float64:
-		bFloat = v
-	}
-
-	return aFloat * bFloat
 }
 
 // Convert interface{} to float64 for numeric comparisons
