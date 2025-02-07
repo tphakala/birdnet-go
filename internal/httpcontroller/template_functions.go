@@ -26,10 +26,12 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"add":                   addFunc,
 		"sub":                   subFunc,
 		"div":                   divFunc,
+		"mul":                   mulFunc,
 		"mod":                   modFunc,
 		"seq":                   seqFunc,
 		"dict":                  dictFunc,
 		"even":                  even,
+		"ge":                    geFunc,
 		"calcWidth":             calcWidth,
 		"heatmapColor":          heatmapColor,
 		"title":                 cases.Title(language.English).String,
@@ -352,4 +354,57 @@ func (s *Server) GetAllSpecies() []string {
 	sort.Strings(result)
 
 	return result
+}
+
+// mulFunc multiplies two numbers
+func mulFunc(a, b interface{}) float64 {
+	var aFloat, bFloat float64
+
+	switch v := a.(type) {
+	case int:
+		aFloat = float64(v)
+	case string:
+		if i, err := strconv.ParseFloat(v, 64); err == nil {
+			aFloat = i
+		}
+	case float64:
+		aFloat = v
+	}
+
+	switch v := b.(type) {
+	case int:
+		bFloat = float64(v)
+	case string:
+		if i, err := strconv.ParseFloat(v, 64); err == nil {
+			bFloat = i
+		}
+	case float64:
+		bFloat = v
+	}
+
+	return aFloat * bFloat
+}
+
+// Convert interface{} to float64 for numeric comparisons
+func toFloat64(v interface{}) (float64, error) {
+	switch val := v.(type) {
+	case int:
+		return float64(val), nil
+	case float64:
+		return val, nil
+	case string:
+		return strconv.ParseFloat(val, 64)
+	default:
+		return 0, fmt.Errorf("cannot convert %T to float64", v)
+	}
+}
+
+// geFunc returns true if a >= b
+func geFunc(a, b interface{}) bool {
+	aFloat, err1 := toFloat64(a)
+	bFloat, err2 := toFloat64(b)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return aFloat >= bFloat
 }
