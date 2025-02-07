@@ -246,8 +246,9 @@ thead.sticky-header {
   background: var(--lighter-color, #f3f4f6);
 }
 
+/* Dark theme base circle */
 [data-theme="dark"] .confidence-circle {
-  background: rgba(243, 244, 246, 0.1);
+  background: var(--darker-color, rgb(17, 24, 39)); /* Opaque dark color */
 }
 
 /* Track (inner circle) to create a ring effect */
@@ -257,14 +258,14 @@ thead.sticky-header {
   left: 5px;
   right: 5px;
   bottom: 5px;
-  background: #f3f4f6;  /* Should match the container background in light mode */
+  background: var(--lighter-color, #f3f4f6);  /* Should match the container background in light mode */
   border-radius: 50%;
   z-index: 2;  /* Place above the progress arc */
 }
 
-/* In dark mode, use the appropriate track background */
+/* Dark theme track */
 [data-theme="dark"] .confidence-circle-track {
-  background: rgba(243, 244, 246, 0.1);
+  background: var(--darker-color, rgb(17, 24, 39)); /* Opaque dark color */
 }
 
 /* Progress arc (ring) */
@@ -286,18 +287,21 @@ thead.sticky-header {
 .confidence-high {
   color: #059669;           /* Used for the progress ring */
   --lighter-color: #ecfdf5;  /* Lighter background color */
+  --darker-color: rgba(6, 78, 59, 0.2);  /* Dark mode background */
 }
 
 /* Medium confidence (40-69%) */
 .confidence-medium {
   color: #d97706;
   --lighter-color: #fffbeb;
+  --darker-color: rgba(120, 53, 15, 0.2);
 }
 
 /* Low confidence (0-39%) */
 .confidence-low {
   color: #dc2626;
   --lighter-color: #fef2f2;
+  --darker-color: rgba(127, 29, 29, 0.2);
 }
 
 /* Text inside the circle */
@@ -324,24 +328,21 @@ thead.sticky-header {
   stroke-width: 3;
 }
 
-[data-theme="dark"] .confidence-circle {
-  background: rgba(243, 244, 246, 0.1);
-}
 
 /* Dark theme adjustments for progress colors */
 [data-theme="dark"] .confidence-high {
   color: #34d399;
-  background: rgba(52, 211, 153, 0.1);
+  --darker-color: rgb(6, 78, 59);  /* Changed to opaque */
 }
 
 [data-theme="dark"] .confidence-medium {
   color: #fbbf24;
-  background: rgba(251, 191, 36, 0.1);
+  --darker-color: rgb(120, 53, 15); /* Change to an opaque version as needed */
 }
 
 [data-theme="dark"] .confidence-low {
   color: #f87171;
-  background: rgba(248, 113, 113, 0.1);
+  --darker-color: rgb(127, 29, 29); /* Change to an opaque version as needed */
 }
 
 .progress {
@@ -782,4 +783,18 @@ thead.sticky-header {
   color: #60a5fa;
   border-color: #60a5fa;
   background-color: rgba(96, 165, 250, 0.1);
+}
+
+/* Row highlighting in dark mode */
+[data-theme="dark"] .hover\:bg-gray-50:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Divide lines in dark mode */
+[data-theme="dark"] .divide-gray-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .border-gray-200 {
+  border-color: rgba(255, 255, 255, 0.1);
 }
