@@ -29,11 +29,11 @@
         </div>
 
         <!-- Desktop Layout -->
-        <div class="hidden sm:block w-full">
+        <div class="block w-full">
             <!-- Header -->
             <div class="flex text-xs px-4 pb-2 border-b border-gray-200">
                 <div class="flex-1 min-w-[120px]">Date & Time</div>
-                <div class="flex-1 min-w-[100px] px-2">Weather</div>
+                <div class="flex-1 min-w-[100px]">Weather</div>
                 <div class="flex-1 min-w-[180px]">Species</div>
                 {{if .DashboardSettings.Thumbnails.Summary}}
                 <div class="flex-1 min-w-[100px]">Thumbnail</div>
@@ -176,156 +176,11 @@
                 </div>
                 {{end}}
             </div>
+        </div>       
 
-            {{if gt .TotalResults .ItemsPerPage}}
-            <div class="flex justify-between items-center p-4 border-t border-gray-200">
-                <div class="text-sm text-gray-600">
-                    Showing {{.ShowingFrom}} to {{.ShowingTo}} of {{.TotalResults}} results
-                </div>
-                <div class="flex space-x-2">
-                    {{if gt .CurrentPage 1}}
-                        <button
-                            hx-get="?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
-                            hx-target="#listDetections-wrapper" class="btn btn-sm btn-primary">
-                            Previous
-                        </button>
-                    {{else}}
-                    <button class="btn btn-sm btn-disabled">
-                        Previous
-                    </button>
-                    {{end}}
-                    {{if lt .CurrentPage .TotalPages}}
-                    <button
-                        hx-get="?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
-                        hx-target="#listDetections-wrapper" class="btn btn-sm btn-primary">
-                        Next
-                    </button>
-                    {{else}}
-                    <button class="btn btn-sm btn-disabled">
-                        Next
-                    </button>
-                    {{end}}
-                </div>
-            </div>
-            {{end}}
-        </div>
-
-        <!-- Mobile Layout -->
-        <div class="sm:hidden">
-            {{range .Notes}}
-            <div class="shadow-md rounded-lg p-4 mb-4">
-                <!-- First row: timestamp and weather -->
-                <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center gap-2">
-                        <span>{{sunPositionIcon .TimeOfDay}}</span>
-                        <span class="text-sm font-normal">{{.Date}} {{.Time}}</span>
-                    </div>
-                    {{if $.WeatherEnabled}}
-                        {{if .Weather}}
-                            <div class="flex items-center gap-2">
-                                <span>{{weatherIcon .Weather.WeatherIcon .TimeOfDay}}</span>
-                            </div>
-                        {{end}}
-                    {{end}}
-                </div>
-
-                <!-- Second row: bird species and confidence -->
-                {{if ne $.QueryType "species"}}
-                <div class="flex items-center justify-between mb-3">
-                    <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
-                        hx-trigger="click" hx-push-url="true" class="text-sm font-normal">
-                        {{.CommonName}}
-                    </a>
-                    <div class="flex items-center gap-2">
-                        {{$value := confidence .Confidence}}
-                        {{$numValue := slice $value 0 (sub (len $value) 1)}}
-                        <div class="confidence-circle {{if ge $numValue 70}}confidence-high{{else if ge $numValue 40}}confidence-medium{{else}}confidence-low{{end}}"
-                            style="--progress: {{$numValue}}%">
-                            <div class="confidence-circle-track"></div>
-                            <div class="confidence-circle-progress"></div>
-                            <div class="confidence-circle-text">
-                                {{if eq $numValue "100"}}
-                                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-                                    </svg>
-                                {{else}}
-                                    {{$value}}
-                                {{end}}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {{end}}
-
-                <!-- Third row: status badges -->
-                <div class="flex flex-wrap gap-1 mb-3">
-                    {{if .Review}}
-                        {{if eq .Review.Verified "correct"}}
-                            <div class="status-badge correct">correct</div>
-                        {{else if eq .Review.Verified "false_positive"}}
-                            <div class="status-badge false">false</div>
-                        {{else}}
-                            <div class="status-badge unverified">unverified</div>
-                        {{end}}
-                    {{else}}
-                        <div class="status-badge unverified">unverified</div>
-                    {{end}}
-                    {{if .Lock}}
-                        <div class="status-badge locked">locked</div>
-                    {{end}}
-                    {{if .Comments}}
-                        <div class="status-badge comment">comment</div>
-                    {{end}}
-                </div>
-
-                <!-- Fourth row: thumbnail -->
-                {{if $.DashboardSettings.Thumbnails.Summary}}
-                <div class="mb-3">
-                    <div class="thumbnail-container">
-                        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
-                            hx-trigger="click" hx-push-url="true">
-                            <img loading="lazy" src="{{thumbnail .ScientificName}}" class="w-full h-auto rounded-md">
-                        </a>
-                        <div class="thumbnail-tooltip hidden">
-                            {{thumbnailAttribution .ScientificName}}
-                        </div>
-                    </div>
-                </div>
-                {{end}}
-
-                <!-- Fifth row: audio player -->
-                <div class="audio-player-container relative">
-                    <img loading="lazy" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram"
-                        class="w-full h-auto rounded-md shadow-sm">
-
-                    <div id="position-indicator-{{.ID}}b" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
-                        style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
-
-                    <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300">
-                        <audio id="audio-{{.ID}}b" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
-                        <div class="flex items-center justify-between">
-                            <button id="playPause-{{.ID}}b" class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                </svg>
-                            </button>
-                            <div id="progress-{{.ID}}b" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
-                                <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
-                            </div>
-                            <span id="currentTime-{{.ID}}b" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-                            <a href="/media/audio?clip={{.ClipName}}" download class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                                </svg>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {{end}}
-
-            {{if gt .TotalResults .ItemsPerPage}}
+        <!-- Pagination Controls - Shown for both desktop and mobile -->
+        {{if gt .TotalResults .ItemsPerPage}}
+        <div class="border-t border-gray-100 mt-2">
             <div class="flex justify-between items-center p-4">
                 <div class="text-sm text-gray-600">
                     Showing {{.ShowingFrom}} to {{.ShowingTo}} of {{.TotalResults}} results
@@ -333,8 +188,10 @@
                 <div class="flex space-x-2">
                     {{if gt .CurrentPage 1}}
                         <button
-                            hx-get="?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
-                            hx-target="#listDetections-wrapper" class="btn btn-sm btn-primary">
+                            hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
+                            hx-target="#listDetections"
+                            hx-swap="outerHTML"
+                            class="btn btn-sm btn-primary">
                             Previous
                         </button>
                     {{else}}
@@ -344,8 +201,10 @@
                     {{end}}
                     {{if lt .CurrentPage .TotalPages}}
                     <button
-                        hx-get="?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
-                        hx-target="#listDetections-wrapper" class="btn btn-sm btn-primary">
+                        hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
+                        hx-target="#listDetections"
+                        hx-swap="outerHTML"
+                        class="btn btn-sm btn-primary">
                         Next
                     </button>
                     {{else}}
@@ -355,8 +214,8 @@
                     {{end}}
                 </div>
             </div>
-            {{end}}
         </div>
+        {{end}}
     </div>
 </section>
 
