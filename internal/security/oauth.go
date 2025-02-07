@@ -91,6 +91,12 @@ func (s *OAuth2Server) UpdateProviders() {
 }
 
 func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
+	if clientIP := net.ParseIP(c.RealIP()); isInLocalSubnet(clientIP) {
+		// For clients in the local subnet, consider them authenticated
+		s.Debug("User authenticated from local subnet")
+		return true
+	}
+
 	if token, err := gothic.GetFromSession("access_token", c.Request()); err == nil &&
 		token != "" && s.ValidateAccessToken(token) {
 		s.Debug("User was authenticated with valid access_token")

@@ -444,7 +444,7 @@ func (ds *DataStore) SearchNotes(query string, sortAscending bool, limit, offset
 	var notes []Note
 	sortOrder := sortAscendingString(sortAscending)
 
-	err := ds.DB.Preload("Review").Preload("Comments", func(db *gorm.DB) *gorm.DB {
+	err := ds.DB.Preload("Review").Preload("Lock").Preload("Comments", func(db *gorm.DB) *gorm.DB {
 		return db.Order("created_at DESC") // Order comments by creation time, newest first
 	}).Where("common_name LIKE ? OR scientific_name LIKE ?", "%"+query+"%", "%"+query+"%").
 		Order("id " + sortOrder).
@@ -452,11 +452,12 @@ func (ds *DataStore) SearchNotes(query string, sortAscending bool, limit, offset
 		Offset(offset).
 		Find(&notes).Error
 
-	// Populate virtual Verified field
+	// Populate virtual fields
 	for i := range notes {
 		if notes[i].Review != nil {
 			notes[i].Verified = notes[i].Review.Verified
 		}
+		notes[i].Locked = notes[i].Lock != nil
 	}
 
 	if err != nil {

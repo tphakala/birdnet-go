@@ -1,273 +1,221 @@
 {{define "recentDetections"}}
 
-  <div id="recentDetections"
-       hx-trigger="refreshListEvent from:body" 
-       hx-get="/detections/recent" 
-       hx-target="#recentDetections"
-       hx-swap="outerHTML">
+<!-- desktop version -->
 
-  <table class="hidden sm:table table w-full text-sm text-left">
-    <thead class="text-xs">
-      <tr>
-        <th scope="col" class="py-2 px-2 sm:pr-1 sm:py-1" style="width:15%;">Date</th>
-        <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:15%;">Time</th>
-        <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:20%;">Common Name</th>
-        {{if .DashboardSettings.Thumbnails.Recent}}
-        <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:15%;">Thumbnail</th>
-        {{end}}
-        <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:13%;">Confidence</th>
-        <th scope="col" class="py-2 px-2 sm:px-1 sm:py-1" style="width:12%;">Status</th>
-        <th scope="col" class="py-2 px-2 sm:pl-1 sm:py-1" style="width:22%;">Recording</th>
-        {{if $.Security.AccessAllowed}}
-        <!-- Action Menu Column -->
-        <th scope="col" class="hidden sm:table-cell py-2 px-2 sm:px-1 sm:py-1" style="width:5%;"></th>
-        {{end}}
-      </tr>
-    </thead>
-    <tbody>
-      {{range .Notes}}
-      <tr class="">
-        <!-- Date -->
-        <td class="py-1 px-2 sm:pr-1 sm:py-1 font-normal">{{.Date}}</td>
+<!-- Desktop Grid Layout -->
+<div class="hidden sm:block w-full">
+  <!-- Header -->
+  <div class="grid grid-cols-12 gap-4 text-xs px-4 pb-2 border-b border-gray-200">
+    <div class="col-span-2">Date & Time</div>
+    <div class="col-span-2">Common Name</div>
+    {{if .DashboardSettings.Thumbnails.Recent}}
+    <div class="col-span-2">Thumbnail</div>
+    {{end}}
+    <div class="col-span-2">Status</div>
+    <div class="col-span-3">Recording</div>
+  </div>
 
-        <!-- Time -->
-        <td class="py-1 px-2 sm:px-1 sm:py-1 font-normal">{{.Time}}</td>
+  <!-- Content -->
+  <div class="divide-y divide-gray-100">
+    {{range .Notes}}
+    <div class="grid grid-cols-12 gap-4 items-center px-4 py-1 hover:bg-gray-50">
+      <!-- Date & Time -->
+      <div class="col-span-2 text-sm">{{.Date}} {{.Time}}</div>
 
-        <!-- Bird species -->
-        <td class="py-1 px-2 sm:px-1 sm:py-1 font-normal">
+      <!-- Bird species with confidence -->
+      <div class="col-span-2 text-sm">
+        <div class="flex flex-col items-center gap-2">
+          {{$value := confidence .Confidence}}
+          {{$numValue := slice $value 0 (sub (len $value) 1)}}
+          <div class="confidence-circle {{if ge $numValue 70}}confidence-high{{else if ge $numValue 40}}confidence-medium{{else}}confidence-low{{end}}"
+                style="--progress: {{$numValue}}%">
+            <div class="confidence-circle-track"></div>
+            <div class="confidence-circle-progress"></div>
+            <div class="confidence-circle-text">
+              {{if eq $numValue "100"}}
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                </svg>
+              {{else}}
+                {{$value}}
+              {{end}}
+            </div>
+          </div>
           <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
-            hx-trigger="click" hx-push-url="true">
+            hx-trigger="click" hx-push-url="true" class="hover:text-blue-600">
             {{ .CommonName}}
           </a>
-        </td>
+        </div>
+      </div>
 
-        <!-- Bird thumbnail  -->
-        {{if $.DashboardSettings.Thumbnails.Recent}}
-        <td class="py-1 px-2 sm:px-1 sm:py-1 relative">
-          <div class="thumbnail-container">
-            <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
-              hx-trigger="click" hx-push-url="true">
-              <img loading="lazy" src="{{thumbnail .ScientificName}}" class="h-auto rounded-md">
-            </a>
-            <div class="thumbnail-tooltip hidden">
-              {{thumbnailAttribution .ScientificName}}
-            </div>
+      <!-- Bird thumbnail -->
+      {{if $.DashboardSettings.Thumbnails.Recent}}
+      <div class="col-span-2 relative flex items-center">
+        <div class="thumbnail-container w-full">
+          <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
+            hx-trigger="click" hx-push-url="true" class="flex items-center justify-center">
+            <img loading="lazy" src="{{thumbnail .ScientificName}}" class="w-full h-auto rounded-md object-contain">
+          </a>
+          <div class="thumbnail-tooltip hidden">
+            {{thumbnailAttribution .ScientificName}}
           </div>
-        </td>
-        {{end}}
-
-        <!-- Confidence indicator -->
-        <td class="py-1 px-2 sm:px-1 sm:py-1">
-          <div class="confidence-container">
-            <div class="confidence-badge {{confidenceColor .Confidence}} text-white font-medium">
-              {{ confidence .Confidence}}
-            </div>
-          </div>
-        </td>
-
-        <!-- Status Column -->
-        <td class="py-1 px-2 sm:px-1 sm:py-1">
-          <div class="flex flex-wrap gap-1">
-            {{if .Review}}
-              {{if eq .Review.Verified "correct"}}
-                <div class="text-success" title="Verified correct">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd" />
-                  </svg>
-                </div>
-              {{else if eq .Review.Verified "false_positive"}}
-                <div class="text-error" title="Marked as false positive">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z" clip-rule="evenodd" />
-                  </svg>
-                </div>
-              {{end}}
-            {{end}}
-            {{if .Lock}}
-              <div class="text-warning" title="Detection is locked">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
-                  <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" />
-                </svg>
-              </div>
-            {{end}}
-            {{if .Comments}}
-              <div class="text-info" title="Has comments">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
-                  <path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z" clip-rule="evenodd" />
-                </svg>
-              </div>
-            {{end}}
-          </div>
-        </td>
-
-        <!-- Recording Column -->
-        <td class="py-1 px-2 sm:pl-1 sm:py-1 font-normal">
-          <div class="audio-player-container relative min-w-[50px] max-w-[400px]">
-            <!-- Spectrogram Image -->
-            <img loading="lazy" width="400" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram Image"
-              class="max-w-full h-auto rounded-md">
-
-            <!-- Play position indicator -->
-            <div id="position-indicator-{{.ID}}" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
-              style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
-
-            <!-- Audio player overlay - Full version -->
-            <div
-              class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 opacity-0 group-hover:opacity-100 hidden md:block">
-              <audio id="audio-{{.ID}}" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
-              <div class="flex items-center justify-between">
-                <button id="playPause-{{.ID}}"
-                  class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
-                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                      d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-                    </path>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                      d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                  </svg>
-                </button>
-                <div id="progress-{{.ID}}" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
-                  <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
-                </div>
-                <span id="currentTime-{{.ID}}" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-                <a href="/media/audio?clip={{.ClipName}}" download
-                  class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                  </svg>
-                </a>
-              </div>
-            </div>
-
-            <!-- Audio player overlay - Compact version -->
-            <div class="absolute inset-0 flex items-center justify-center md:hidden" style="--player-opacity: 0.7;">
-              <div class="w-full h-full flex items-center justify-center">
-                <button id="playPause-compact-{{.ID}}"
-                  class="w-6 h-6 flex items-center justify-center text-white hover:text-blue-200 bg-black bg-opacity-25 rounded-full"
-                  style="opacity: var(--player-opacity);">
-                  <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3"
-                      d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-                    </path>
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-
-        </td>
-
-        <!-- Action Menu Column -->
-        {{if $.Security.AccessAllowed}}
-        <td class="w-4">
-          {{template "actionMenu" .}}
-        </td>
-        {{end}}
-      </tr>
+        </div>
+      </div>
       {{end}}
-    </tbody>
-  </table>
 
-  <!-- Responsive layout for small screens -->
-  <div class="sm:hidden">
-    {{range .Notes}}
-    <div class="shadow-md rounded-lg p-4 mb-4">
-      <!-- First row: timestamp, bird species, thumbnail, and confidence -->
-      <div class="flex items-center mb-3">
-        <!-- Timestamp -->
-        <span class="text-sm font-normal mr-2">{{.Time}}</span>
-
-        <!-- Bird species -->
-        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
-          hx-trigger="click" hx-push-url="true" class="text-sm font-normal">
-          {{title .CommonName}}
-        </a>
-
-        <!-- Status badges for mobile -->
-        <div class="flex items-center gap-1 mx-2">
+      <!-- Status -->
+      <div class="col-span-2">                   
+        <div class="flex flex-wrap gap-1">
           {{if .Review}}
             {{if eq .Review.Verified "correct"}}
-              <div class="text-success" title="Verified correct">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd" />
-                </svg>
-              </div>
+              <div class="status-badge correct">correct</div>
             {{else if eq .Review.Verified "false_positive"}}
-              <div class="text-error" title="Marked as false positive">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z" clip-rule="evenodd" />
-                </svg>
-              </div>
+              <div class="status-badge false">false</div>
+            {{else}}
+              <div class="status-badge unverified">unverified</div>
             {{end}}
+          {{else}}
+            <div class="status-badge unverified">unverified</div>
           {{end}}
           {{if .Lock}}
-            <div class="text-warning" title="Detection is locked">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
-                <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" />
-              </svg>
-            </div>
+            <div class="status-badge locked">locked</div>
           {{end}}
           {{if .Comments}}
-            <div class="text-info" title="Has comments">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
-                <path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z" clip-rule="evenodd" />
-              </svg>
-            </div>
+            <div class="status-badge comment">comment</div>
           {{end}}
         </div>
+      </div>
 
-        <!-- Second row: Spectrogram -->
-
-        <!-- Audio player -->
-        <div class="audio-player-container relative">
+      <!-- Recording -->
+      <div class="col-span-3">
+        <div class="audio-player-container relative min-w-[50px]">
           <!-- Spectrogram Image -->
-          <img loading="lazy" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram"
-            class="w-full h-auto rounded-md shadow-sm">
+          <img loading="lazy" width="400" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram Image"
+            class="w-full h-auto rounded-md object-contain">
 
           <!-- Play position indicator -->
-          <div id="position-indicator-{{.ID}}b" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
+          <div id="position-indicator-{{.ID}}" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
             style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
 
           <!-- Audio player overlay - Full version -->
-          <div
-            class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 group-hover:opacity-100 sm:block">
-            <audio id="audio-{{.ID}}b" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
+          <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 opacity-0 group-hover:opacity-100 hidden md:block">
+            <audio id="audio-{{.ID}}" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
             <div class="flex items-center justify-between">
-              <button id="playPause-{{.ID}}b"
-                class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-                  </path>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
-                  </path>
+              <button id="playPause-{{.ID}}" class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>
               </button>
-              <div id="progress-{{.ID}}b" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
+              <div id="progress-{{.ID}}" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
                 <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
               </div>
-              <span id="currentTime-{{.ID}}b" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-              <a href="/media/audio?clip={{.ClipName}}" download
-                class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+              <span id="currentTime-{{.ID}}" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
+              <a href="/media/audio?clip={{.ClipName}}" download class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                 </svg>
               </a>
             </div>
           </div>
-
         </div>
       </div>
+
+      <!-- Action Menu -->
+      {{if or (not $.Security.Enabled) $.Security.AccessAllowed}}
+      <div class="col-span-1 flex justify-end items-center justify-center">
+        <div class="relative">
+          {{template "actionMenu" .}}
+        </div>
+      </div>
+      {{end}}
     </div>
     {{end}}
   </div>
+</div>
 
+<!-- Responsive layout for small screens -->
+<div class="sm:hidden">
+  {{range .Notes}}
+  <div class="shadow-md rounded-lg p-4 mb-4">
+    <!-- First row: timestamp, bird species, thumbnail, and confidence -->
+    <div class="flex items-center mb-3">
+      <!-- Timestamp -->
+      <span class="text-sm font-normal mr-2">{{.Time}}</span>
+
+      <!-- Bird species -->
+      <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
+        hx-trigger="click" hx-push-url="true" class="text-sm font-normal">
+        {{title .CommonName}}
+      </a>
+
+      <!-- Confidence indicator -->
+      <div class="justify-center inline-flex flex-grow py-1">
+        <div class="font-medium text-xs px-2 py-1">
+          <span class="hidden xs:block">Confid.</span>
+        </div>
+        <div class="confidence-ball {{confidenceColor .Confidence}} text-white font-medium text-xs px-2 py-1 rounded">
+          {{confidence .Confidence}}
+        </div>
+      </div>
+
+      <!-- Thumbnail -->
+      {{if $.DashboardSettings.Thumbnails.Recent}}
+      <div class="thumbnail-container w-20 ml-2">
+        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
+          hx-trigger="click" hx-push-url="true" class="text-sm font-normal flex-grow">
+          <img loading="lazy" src="{{thumbnail .ScientificName}}" class="rounded-md">
+        </a>
+      </div>
+      {{end}}
+    </div>
+
+    <!-- Second row: Spectrogram -->
+
+    <!-- Audio player -->
+    <div class="audio-player-container relative">
+      <!-- Spectrogram Image -->
+      <img loading="lazy" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram"
+        class="w-full h-auto rounded-md shadow-sm">
+
+      <!-- Play position indicator -->
+      <div id="position-indicator-{{.ID}}b" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
+        style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
+
+      <!-- Audio player overlay - Full version -->
+      <div
+        class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 group-hover:opacity-100 sm:block">
+        <audio id="audio-{{.ID}}b" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
+        <div class="flex items-center justify-between">
+          <button id="playPause-{{.ID}}b"
+            class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+              </path>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
+              </path>
+            </svg>
+          </button>
+          <div id="progress-{{.ID}}b" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
+            <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
+          </div>
+          <span id="currentTime-{{.ID}}b" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
+          <a href="/media/audio?clip={{.ClipName}}" download
+            class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+            </svg>
+          </a>
+        </div>
+      </div>
+
+    </div>
   </div>
+  {{end}}
+</div>
+
 {{end}}
