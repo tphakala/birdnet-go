@@ -86,23 +86,21 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Initialize audioLevelChan, used to visualize audio levels on web ui
 	audioLevelChan = make(chan myaudio.AudioLevelData, 100)
 
-	// Initialize ring buffers for each audio source
+	// Prepare sources list
 	var sources []string
-	if len(settings.Realtime.RTSP.URLs) > 0 {
-		sources = settings.Realtime.RTSP.URLs
-		// DEBUG
-		//log.Println("RTSP sources configured, using RTSP for audio capture")
-	} else {
-		// DEBUG
-		//log.Println("No RTSP sources configured, using malgo for audio capture")
-		sources = []string{"malgo"}
+	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
+		if len(settings.Realtime.RTSP.URLs) > 0 {
+			sources = settings.Realtime.RTSP.URLs
+		}
+		if settings.Realtime.Audio.Source != "" {
+			sources = append(sources, "malgo")
+		}
+
+		// Initialize ring buffers for each audio source
+		myaudio.InitRingBuffers(conf.BufferSize*3, sources) // 3x buffer size to avoid underruns
+		// Audio buffer for extended audio clip capture
+		myaudio.InitAudioBuffers(60, conf.SampleRate, conf.BitDepth/8, sources)
 	}
-
-	// Initialize ring buffers for each audio source
-	myaudio.InitRingBuffers(conf.BufferSize*3, sources) // 3x buffer size to avoid underruns
-
-	// Audio buffer for extended audio clip capture
-	myaudio.InitAudioBuffers(60, conf.SampleRate, conf.BitDepth/8, sources)
 
 	// init detection queue
 	queue.Init(5, 5)
@@ -131,14 +129,18 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Initialize the wait group to wait for all goroutines to finish
 	var wg sync.WaitGroup
 
-	// Start buffer monitors for each audio source
-	for _, source := range sources {
-		wg.Add(1)
-		go myaudio.BufferMonitor(&wg, bn, quitChan, source)
-	}
+	// Start buffer monitors for each audio source only if we have active sources
+	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
+		for _, source := range sources {
+			wg.Add(1)
+			go myaudio.BufferMonitor(&wg, bn, quitChan, source)
+		}
 
-	// start audio capture
-	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan)
+		// start audio capture
+		startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan)
+	} else {
+		log.Println("Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
+	}
 
 	// start cleanup of clips
 	if conf.Setting().Realtime.Audio.Export.Retention.Policy != "none" {
@@ -154,7 +156,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	startTelemetryEndpoint(&wg, settings, metrics, quitChan)
 
 	// start control monitor for hot reloads
-	startControlMonitor(&wg, controlChan, quitChan, notificationChan)
+	startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan)
 
 	// start quit signal monitor
 	monitorCtrlC(quitChan)
@@ -343,7 +345,7 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 }
 
 // startControlMonitor handles various control signals for realtime analysis mode
-func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan chan struct{}, notificationChan chan handlers.Notification) {
+func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan chan struct{}, restartChan chan struct{}, notificationChan chan handlers.Notification) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -392,6 +394,14 @@ func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan c
 								Type:    "success",
 							}
 						}
+					}
+				case "reconfigure_audio":
+					log.Printf("\033[32m🔄 Reconfiguring audio capture...\033[0m")
+					myaudio.ReconfigureRTSPStreams(conf.Setting(), wg, quitChan, restartChan, audioLevelChan)
+					log.Printf("\033[32m✅ Audio capture reconfigured successfully\033[0m")
+					notificationChan <- handlers.Notification{
+						Message: "Audio capture reconfigured successfully",
+						Type:    "success",
 					}
 				default:
 					log.Printf("Received unknown control signal: %v", signal)
