@@ -38,6 +38,9 @@ type AudioLevelData struct {
 	Clipping bool // true if clipping is detected
 }
 
+// activeStreams keeps track of currently active RTSP streams
+var activeStreams sync.Map
+
 // ListAudioSources returns a list of available audio capture devices.
 func ListAudioSources() ([]AudioDeviceInfo, error) {
 	// Initialize the audio context
@@ -130,8 +133,6 @@ func SetAudioDevice(deviceName string) (string, error) {
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	deviceConfig.Capture.Format = malgo.FormatS16
 	deviceConfig.Capture.Channels = conf.NumChannels
-	deviceConfig.SampleRate = conf.SampleRate
-	deviceConfig.Alsa.NoMMap = 1
 	deviceConfig.Capture.DeviceID = infos[index].ID.Pointer()
 
 	// Initialize the device
@@ -144,17 +145,79 @@ func SetAudioDevice(deviceName string) (string, error) {
 	return infos[index].Name(), nil
 }
 
+// ReconfigureRTSPStreams handles dynamic reconfiguration of RTSP streams
+func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+	// Get current active streams
+	currentStreams := make(map[string]bool)
+	activeStreams.Range(func(key, value interface{}) bool {
+		currentStreams[key.(string)] = true
+		return true
+	})
+
+	// Stop streams that are no longer in settings
+	for url := range currentStreams {
+		found := false
+		for _, newURL := range settings.Realtime.RTSP.URLs {
+			if url == newURL {
+				found = true
+				break
+			}
+		}
+		if !found {
+			// Stream is no longer in settings, stop it
+			if process, exists := ffmpegProcesses.Load(url); exists {
+				if p, ok := process.(*FFmpegProcess); ok {
+					p.Cleanup(url)
+				}
+			}
+			activeStreams.Delete(url)
+		}
+	}
+
+	// Start new streams
+	for _, url := range settings.Realtime.RTSP.URLs {
+		if _, exists := activeStreams.Load(url); !exists {
+			// New stream, start it
+			wg.Add(1)
+			activeStreams.Store(url, true)
+			go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, audioLevelChan)
+		}
+	}
+}
+
 func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+	// If no RTSP URLs and no audio device configured, log a friendly message and return
+	if len(settings.Realtime.RTSP.URLs) == 0 && settings.Realtime.Audio.Source == "" {
+		log.Println("No audio sources configured. You can configure audio devices or RTSP streams through the web interface at Audio Capture Settings.")
+		return
+	}
+
+	// Initialize ring buffers for each audio source
+	var sources []string
+	if len(settings.Realtime.RTSP.URLs) > 0 {
+		sources = settings.Realtime.RTSP.URLs
+	}
+	if settings.Realtime.Audio.Source != "" {
+		sources = append(sources, "malgo")
+	}
+
+	// Initialize ring buffers for all sources
+	InitRingBuffers(conf.BufferSize*3, sources) // 3x buffer size to avoid underruns
+	InitAudioBuffers(60, conf.SampleRate, conf.BitDepth/8, sources)
+
 	if len(settings.Realtime.RTSP.URLs) > 0 {
 		// RTSP audio capture for each URL
 		for _, url := range settings.Realtime.RTSP.URLs {
 			wg.Add(1)
+			activeStreams.Store(url, true)
 			go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, audioLevelChan)
 		}
-	} else {
-		// Default audio capture
+	}
+
+	if settings.Realtime.Audio.Source != "" {
+		// Device audio capture
 		wg.Add(1)
-		captureAudioMalgo(settings, wg, quitChan, restartChan, audioLevelChan)
+		go captureAudioMalgo(settings, wg, quitChan, restartChan, audioLevelChan)
 	}
 }
 
@@ -165,6 +228,11 @@ func selectCaptureSource(settings *conf.Settings, infos []malgo.DeviceInfo) (cap
 
 	var selectedSource captureSource
 	var deviceFound bool
+
+	// If no devices are available, return appropriate error
+	if len(infos) == 0 {
+		return captureSource{}, fmt.Errorf("no audio capture devices found")
+	}
 
 	for i := range infos {
 		// Decode the device ID from hexadecimal to ASCII
@@ -201,9 +269,9 @@ func selectCaptureSource(settings *conf.Settings, infos []malgo.DeviceInfo) (cap
 				"Instructions for running BirdNET-Go in Docker are at https://github.com/tphakala/birdnet-go/blob/main/doc/installation.md")
 	}
 
-	// If no device was found, print a message
+	// If no device was found, return error with more descriptive message
 	if !deviceFound {
-		fmt.Printf("No suitable capture source found for device setting %s, please configure audio device in application settings\n", settings.Realtime.Audio.Source)
+		return captureSource{}, fmt.Errorf("no suitable capture source found for device setting '%s', please configure audio device in application settings", settings.Realtime.Audio.Source)
 	}
 
 	return selectedSource, nil
