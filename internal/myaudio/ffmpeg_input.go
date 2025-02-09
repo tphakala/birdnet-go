@@ -242,10 +242,24 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 	// Start watchdog goroutine
 	watchdogDone := p.startWatchdog(ctx, url, watchdog)
 
+	// Get a human-readable name for the source
+	sourceName := getSourceName(url)
+	log.Printf("Starting audio processing for RTSP source: %s (display name: %s)", url, sourceName)
+
+	// Add a ticker for debug logging (once every 5 seconds)
+	var debugTicker *time.Ticker
+	if conf.Setting().WebServer.Debug {
+		debugTicker = time.NewTicker(5 * time.Second)
+		defer debugTicker.Stop()
+	}
+
+	var lastLoggedLevel int = -1 // Track last logged level to reduce noise
+
 	// Continuously process audio data
 	for {
 		select {
 		case <-ctx.Done():
+			log.Printf("Stopping audio processing for RTSP source: %s", url)
 			<-watchdogDone // Wait for watchdog to finish
 			return nil     // Return nil on normal shutdown
 		case <-watchdogDone:
@@ -303,13 +317,26 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 					continue
 				}
 
-				// Calculate audio level
-				audioLevelData := calculateAudioLevel(buf[:n])
+				// Calculate audio level with source information
+				audioLevelData := calculateAudioLevel(buf[:n], url, sourceName)
 
 				// Send level to channel (non-blocking)
 				select {
 				case audioLevelChan <- audioLevelData:
-					// Data sent successfully
+					// Only log if debug ticker is ready or if level changed significantly
+					if conf.Setting().WebServer.Debug && debugTicker != nil {
+						select {
+						case <-debugTicker.C:
+							log.Printf("📊 Audio level for %s: %+v", sourceName, audioLevelData)
+							lastLoggedLevel = audioLevelData.Level
+						default:
+							// Log if level changed by more than 20%
+							if abs(int16(audioLevelData.Level-lastLoggedLevel)) > 20 {
+								log.Printf("📊 Audio level change for %s: %+v", sourceName, audioLevelData)
+								lastLoggedLevel = audioLevelData.Level
+							}
+						}
+					}
 				default:
 					// Channel is full, clear the channel
 					for len(audioLevelChan) > 0 {
@@ -321,6 +348,28 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 			}
 		}
 	}
+}
+
+// getSourceName returns a human-readable name for the source URL
+func getSourceName(url string) string {
+	// Extract the last part of the URL path
+	parts := strings.Split(url, "/")
+	if len(parts) > 0 {
+		lastPart := parts[len(parts)-1]
+		// Remove any query parameters
+		if idx := strings.Index(lastPart, "?"); idx != -1 {
+			lastPart = lastPart[:idx]
+		}
+		// If it's an IP address with port, make it more readable
+		if strings.Contains(lastPart, ":") {
+			hostPort := strings.Split(lastPart, ":")
+			if len(hostPort) == 2 {
+				return fmt.Sprintf("Camera %s", hostPort[0])
+			}
+		}
+		return fmt.Sprintf("Camera %s", lastPart)
+	}
+	return "RTSP Camera" // Fallback name
 }
 
 // startFFmpeg starts an FFmpeg process with the given configuration
