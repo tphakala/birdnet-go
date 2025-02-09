@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BIRDNET_GO_VERSION="dev"
+BIRDNET_GO_VERSION="nightly"
 BIRDNET_GO_IMAGE="ghcr.io/tphakala/birdnet-go:${BIRDNET_GO_VERSION}"
 
 # Colors for output
