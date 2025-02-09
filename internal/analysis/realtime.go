@@ -99,18 +99,13 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 			sources = append(sources, "malgo")
 		}
 
-		// Initialize analysis buffers for each audio source
-		err := myaudio.InitAnalysisBuffers(conf.BufferSize*3, sources) // 3x buffer size to avoid underruns
-		if err != nil {
-			log.Printf("❌ Error initializing analysis buffers: %v", err)
+		// Initialize buffers for all audio sources
+		if err := initializeBuffers(sources); err != nil {
+			log.Printf("❌ %v", err)
 			return err
 		}
-		// Initialize capture buffers for each audio source
-		err = myaudio.InitCaptureBuffers(60, conf.SampleRate, conf.BitDepth/8, sources)
-		if err != nil {
-			log.Printf("❌ Error initializing capture buffers: %v", err)
-			return err
-		}
+	} else {
+		log.Println("⚠️  Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
 	}
 
 	// init detection queue
@@ -439,4 +434,21 @@ func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, 
 			}
 		}
 	}()
+}
+
+// initializeBuffers handles initialization of all audio-related buffers
+func initializeBuffers(sources []string) error {
+	// Initialize analysis buffers
+	if err := myaudio.InitAnalysisBuffers(conf.BufferSize*3, sources); err != nil { // 3x buffer size to avoid underruns
+		return fmt.Errorf("failed to initialize analysis buffers: %w", err)
+	}
+
+	// Initialize capture buffers
+	if err := myaudio.InitCaptureBuffers(60, conf.SampleRate, conf.BitDepth/8, sources); err != nil {
+		// Cleanup analysis buffers on failure
+		myaudio.CleanupAnalysisBuffers()
+		return fmt.Errorf("failed to initialize capture buffers: %w", err)
+	}
+
+	return nil
 }
