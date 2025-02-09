@@ -34,8 +34,10 @@ type AudioDeviceInfo struct {
 
 // AudioLevelData holds audio level data
 type AudioLevelData struct {
-	Level    int  // 0-100
-	Clipping bool // true if clipping is detected
+	Level    int    `json:"level"`    // 0-100
+	Clipping bool   `json:"clipping"` // true if clipping is detected
+	Source   string `json:"source"`   // Source identifier (e.g., "malgo" for device, or RTSP URL)
+	Name     string `json:"name"`     // Human-readable name of the source
 }
 
 // activeStreams keeps track of currently active RTSP streams
@@ -497,7 +499,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan, re
 		}
 
 		// Calculate audio level
-		audioLevelData := calculateAudioLevel(pSamples)
+		audioLevelData := calculateAudioLevel(pSamples, "malgo", captureSource.Name)
 
 		// Send level to channel (non-blocking)
 		select {
@@ -595,10 +597,10 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan, re
 
 // calculateAudioLevel calculates the RMS (Root Mean Square) of the audio samples
 // and returns an AudioLevelData struct with the level and clipping status
-func calculateAudioLevel(samples []byte) AudioLevelData {
+func calculateAudioLevel(samples []byte, source string, name string) AudioLevelData {
 	// If there are no samples, return zero level and no clipping
 	if len(samples) == 0 {
-		return AudioLevelData{Level: 0, Clipping: false}
+		return AudioLevelData{Level: 0, Clipping: false, Source: source, Name: name}
 	}
 
 	// Ensure we have an even number of bytes (16-bit samples)
@@ -636,7 +638,7 @@ func calculateAudioLevel(samples []byte) AudioLevelData {
 
 	// If we ended up with no samples, return zero level and no clipping
 	if sampleCount == 0 {
-		return AudioLevelData{Level: 0, Clipping: false}
+		return AudioLevelData{Level: 0, Clipping: false, Source: source, Name: name}
 	}
 
 	// Calculate Root Mean Square (RMS)
@@ -666,6 +668,8 @@ func calculateAudioLevel(samples []byte) AudioLevelData {
 	return AudioLevelData{
 		Level:    int(scaledLevel),
 		Clipping: isClipping,
+		Source:   source,
+		Name:     name,
 	}
 }
 
