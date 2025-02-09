@@ -99,10 +99,18 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 			sources = append(sources, "malgo")
 		}
 
-		// Initialize ring buffers for each audio source
-		myaudio.InitAnalysisBuffers(conf.BufferSize*3, sources) // 3x buffer size to avoid underruns
-		// Audio buffer for extended audio clip capture
-		myaudio.InitCaptureBuffers(60, conf.SampleRate, conf.BitDepth/8, sources)
+		// Initialize analysis buffers for each audio source
+		err := myaudio.InitAnalysisBuffers(conf.BufferSize*3, sources) // 3x buffer size to avoid underruns
+		if err != nil {
+			log.Printf("❌ Error initializing analysis buffers: %v", err)
+			return err
+		}
+		// Initialize capture buffers for each audio source
+		err = myaudio.InitCaptureBuffers(60, conf.SampleRate, conf.BitDepth/8, sources)
+		if err != nil {
+			log.Printf("❌ Error initializing capture buffers: %v", err)
+			return err
+		}
 	}
 
 	// init detection queue
@@ -349,7 +357,7 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 }
 
 // startControlMonitor handles various control signals for realtime analysis mode
-func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan chan struct{}, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager) {
+func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
