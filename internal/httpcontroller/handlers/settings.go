@@ -84,6 +84,15 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		h.controlChan <- "rebuild_range_filter"
 	}
 
+	// Check if RTSP settings have changed
+	if rtspSettingsChanged(&oldSettings, settings) {
+		h.SSE.SendNotification(Notification{
+			Message: "Reconfiguring RTSP sources...",
+			Type:    "info",
+		})
+		h.controlChan <- "reconfigure_rtsp_sources"
+	}
+
 	// Check the authentication settings and update if needed
 	h.updateAuthenticationSettings(settings)
 
@@ -621,6 +630,21 @@ func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 
 	// Check for changes in BirdNET XNNPACK acceleration
 	if oldSettings.BirdNET.UseXNNPACK != currentSettings.BirdNET.UseXNNPACK {
+		return true
+	}
+
+	return false
+}
+
+// rtspSettingsChanged checks if RTSP settings have been modified
+func rtspSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Check for changes in RTSP transport protocol
+	if oldSettings.Realtime.RTSP.Transport != currentSettings.Realtime.RTSP.Transport {
+		return true
+	}
+
+	// Check for changes in RTSP URLs
+	if !reflect.DeepEqual(oldSettings.Realtime.RTSP.URLs, currentSettings.Realtime.RTSP.URLs) {
 		return true
 	}
 
