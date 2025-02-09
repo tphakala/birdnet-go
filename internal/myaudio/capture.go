@@ -41,6 +41,9 @@ type AudioLevelData struct {
 // activeStreams keeps track of currently active RTSP streams
 var activeStreams sync.Map
 
+// ffmpegMonitor is the global FFmpeg process monitor
+var ffmpegMonitor *FFmpegMonitor
+
 // ListAudioSources returns a list of available audio capture devices.
 func ListAudioSources() ([]AudioDeviceInfo, error) {
 	// Initialize the audio context
@@ -149,6 +152,12 @@ func SetAudioDevice(deviceName string) (string, error) {
 
 // ReconfigureRTSPStreams handles dynamic reconfiguration of RTSP streams
 func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+	// Initialize FFmpeg monitor if not already running
+	if ffmpegMonitor == nil {
+		ffmpegMonitor = NewFFmpegMonitor()
+		ffmpegMonitor.Start()
+	}
+
 	// Get current active streams
 	currentStreams := make(map[string]bool)
 	activeStreams.Range(func(key, value interface{}) bool {
@@ -199,7 +208,7 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 			continue
 		}
 
-		abExists, cbExists := false, false
+		abExists, cbExists := false, false //nolint:wastedassign // Need to initialize variables
 		// Check if analysis buffer exists
 		abMutex.RLock()
 		_, abExists = analysisBuffers[url]
@@ -222,8 +231,11 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 		if !cbExists {
 			if err := AllocateCaptureBuffer(60, conf.SampleRate, conf.BitDepth/8, url); err != nil {
 				// Clean up the ring buffer if audio buffer init fails and we just created it
-				if !cbExists {
-					RemoveCaptureBuffer(url)
+				if !abExists {
+					err := RemoveCaptureBuffer(url)
+					if err != nil {
+						log.Printf("❌ Failed to remove capture buffer for %s: %v", url, err)
+					}
 				}
 				log.Printf("❌ Failed to initialize capture buffer for %s: %v", url, err)
 				continue
@@ -234,6 +246,12 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 		wg.Add(1)
 		activeStreams.Store(url, true)
 		go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, audioLevelChan)
+	}
+
+	// If no more RTSP streams are configured, stop the FFmpeg monitor
+	if len(settings.Realtime.RTSP.URLs) == 0 && ffmpegMonitor != nil {
+		ffmpegMonitor.Stop()
+		ffmpegMonitor = nil
 	}
 }
 
@@ -246,7 +264,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 	// Initialize buffers for each audio source
 	if len(settings.Realtime.RTSP.URLs) > 0 {
 		for _, url := range settings.Realtime.RTSP.URLs {
-			abExists, cbExists := false, false
+			abExists, cbExists := false, false //nolint:wastedassign // Need to initialize variables
 			// Check if analysis buffer already exists
 			abMutex.RLock()
 			_, abExists = analysisBuffers[url]
@@ -270,7 +288,10 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 				if err := AllocateCaptureBuffer(60, conf.SampleRate, conf.BitDepth/8, url); err != nil {
 					// Clean up the ring buffer if audio buffer init fails and we just created it
 					if !cbExists {
-						RemoveCaptureBuffer(url)
+						err := RemoveCaptureBuffer(url)
+						if err != nil {
+							log.Printf("❌ Failed to remove capture buffer for %s: %v", url, err)
+						}
 					}
 					log.Printf("❌ Failed to initialize capture buffer for %s: %v", url, err)
 					continue
@@ -284,7 +305,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 	}
 
 	if settings.Realtime.Audio.Source != "" {
-		abExists, cbExists := false, false
+		abExists, cbExists := false, false //nolint:wastedassign // Need to initialize variables
 		// Check if analysis buffer exists
 		abMutex.RLock()
 		_, abExists = analysisBuffers["malgo"]
@@ -308,7 +329,10 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 			if err := AllocateCaptureBuffer(60, conf.SampleRate, conf.BitDepth/8, "malgo"); err != nil {
 				// Clean up the ring buffer if audio buffer init fails and we just created it
 				if !cbExists {
-					RemoveCaptureBuffer("malgo")
+					err := RemoveCaptureBuffer("malgo")
+					if err != nil {
+						log.Printf("❌ Failed to remove capture buffer for device capture: %v", err)
+					}
 				}
 				log.Printf("❌ Failed to initialize capture buffer for device capture: %v", err)
 				return
@@ -324,7 +348,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 // selectCaptureSource selects an appropriate capture device based on the provided settings and available device information.
 // It prints available devices and returns the selected device and any error encountered.
 func selectCaptureSource(settings *conf.Settings, infos []malgo.DeviceInfo) (captureSource, error) {
-	fmt.Println("🎤 Available Capture Sources:")
+	fmt.Println("Available Capture Sources:")
 
 	var selectedSource captureSource
 	var deviceFound bool
@@ -463,8 +487,14 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan, re
 			}
 		}
 
-		WriteToAnalysisBuffer("malgo", pSamples)
-		WriteToCaptureBuffer("malgo", pSamples)
+		err = WriteToAnalysisBuffer("malgo", pSamples)
+		if err != nil {
+			log.Printf("❌ Error writing to analysis buffer: %v", err)
+		}
+		err = WriteToCaptureBuffer("malgo", pSamples)
+		if err != nil {
+			log.Printf("❌ Error writing to capture buffer: %v", err)
+		}
 
 		// Calculate audio level
 		audioLevelData := calculateAudioLevel(pSamples)
@@ -536,7 +566,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan, re
 		fmt.Println("Device started")
 	}
 	// print audio device we are attached to
-	color.New(color.FgHiGreen).Printf("🎤 Listening on source: %s (%s)\n", captureSource.Name, captureSource.ID)
+	color.New(color.FgHiGreen).Printf("Listening on source: %s (%s)\n", captureSource.Name, captureSource.ID)
 
 	// Now, instead of directly waiting on QuitChannel,
 	// check if it's closed in a non-blocking select.
