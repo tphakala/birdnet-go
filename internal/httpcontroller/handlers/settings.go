@@ -87,10 +87,10 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 	// Check if RTSP settings have changed
 	if rtspSettingsChanged(&oldSettings, settings) {
 		h.SSE.SendNotification(Notification{
-			Message: "Reconfiguring audio capture...",
+			Message: "Reconfiguring RTSP sources...",
 			Type:    "info",
 		})
-		h.controlChan <- "reconfigure_audio"
+		h.controlChan <- "reconfigure_rtsp_sources"
 	}
 
 	// Check the authentication settings and update if needed
