@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -42,13 +43,15 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Get system details with golps
 	info, err := host.Info()
 	if err != nil {
-		fmt.Printf("Error retrieving host info: %v\n", err)
+		fmt.Printf("❌ Error retrieving host info: %v\n", err)
 	}
 
 	var hwModel string
 	// Print SBC hardware details
 	if conf.IsLinuxArm64() {
 		hwModel = conf.GetBoardModel()
+		// remove possible new line from hwModel
+		hwModel = strings.TrimSpace(hwModel)
 	} else {
 		hwModel = "unknown"
 	}
@@ -97,9 +100,9 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		}
 
 		// Initialize ring buffers for each audio source
-		myaudio.InitRingBuffers(conf.BufferSize*3, sources) // 3x buffer size to avoid underruns
+		myaudio.InitAnalysisBuffers(conf.BufferSize*3, sources) // 3x buffer size to avoid underruns
 		// Audio buffer for extended audio clip capture
-		myaudio.InitAudioBuffers(60, conf.SampleRate, conf.BitDepth/8, sources)
+		myaudio.InitCaptureBuffers(60, conf.SampleRate, conf.BitDepth/8, sources)
 	}
 
 	// init detection queue
@@ -129,18 +132,18 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Initialize the wait group to wait for all goroutines to finish
 	var wg sync.WaitGroup
 
+	// Initialize the buffer manager
+	bufferManager := NewBufferManager(bn, quitChan, &wg)
+
 	// Start buffer monitors for each audio source only if we have active sources
 	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
-		for _, source := range sources {
-			wg.Add(1)
-			go myaudio.BufferMonitor(&wg, bn, quitChan, source)
-		}
-
-		// start audio capture
-		startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan)
+		bufferManager.UpdateMonitors(sources)
 	} else {
-		log.Println("Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
+		log.Println("⚠️  Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
 	}
+
+	// start audio capture
+	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan)
 
 	// start cleanup of clips
 	if conf.Setting().Realtime.Audio.Export.Retention.Policy != "none" {
@@ -156,7 +159,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	startTelemetryEndpoint(&wg, settings, metrics, quitChan)
 
 	// start control monitor for hot reloads
-	startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan)
+	startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager)
 
 	// start quit signal monitor
 	monitorCtrlC(quitChan)
@@ -167,6 +170,8 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		case <-quitChan:
 			// Close controlChan to signal that no restart attempts should be made.
 			close(controlChan)
+			// Stop all analysis buffer monitors
+			bufferManager.RemoveAllMonitors()
 			// Wait for all goroutines to finish.
 			wg.Wait()
 			// Delete the BirdNET interpreter.
@@ -176,11 +181,10 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 		case <-restartChan:
 			// Handle the restart signal.
-			fmt.Println("Restarting audio capture")
+			fmt.Println("🔄 Restarting audio capture")
 			startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan)
 		}
 	}
-
 }
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
@@ -200,7 +204,7 @@ func startWeatherPolling(wg *sync.WaitGroup, settings *conf.Settings, dataStore 
 	// Create new weather service
 	weatherService, err := weather.NewService(settings, dataStore)
 	if err != nil {
-		log.Printf("Failed to initialize weather service: %v", err)
+		log.Printf("⛈️ Failed to initialize weather service: %v", err)
 		return
 	}
 
@@ -345,7 +349,7 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 }
 
 // startControlMonitor handles various control signals for realtime analysis mode
-func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan chan struct{}, restartChan chan struct{}, notificationChan chan handlers.Notification) {
+func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan chan struct{}, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -395,10 +399,26 @@ func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan c
 							}
 						}
 					}
-				case "reconfigure_audio":
-					log.Printf("\033[32m🔄 Reconfiguring audio capture...\033[0m")
-					myaudio.ReconfigureRTSPStreams(conf.Setting(), wg, quitChan, restartChan, audioLevelChan)
-					log.Printf("\033[32m✅ Audio capture reconfigured successfully\033[0m")
+				case "reconfigure_rtsp_sources":
+					log.Printf("\033[32m🔄 Reconfiguring RTSP sources...\033[0m")
+					settings := conf.Setting()
+
+					// Prepare the list of active sources
+					var sources []string
+					if len(settings.Realtime.RTSP.URLs) > 0 {
+						sources = append(sources, settings.Realtime.RTSP.URLs...)
+					}
+					if settings.Realtime.Audio.Source != "" {
+						sources = append(sources, "malgo")
+					}
+
+					// Update the analysis buffer monitors
+					bufferManager.UpdateMonitors(sources)
+
+					// Reconfigure RTSP streams
+					myaudio.ReconfigureRTSPStreams(settings, wg, quitChan, restartChan, audioLevelChan)
+
+					log.Printf("\033[32m✅ RTSP sources reconfigured successfully\033[0m")
 					notificationChan <- handlers.Notification{
 						Message: "Audio capture reconfigured successfully",
 						Type:    "success",
