@@ -85,7 +85,7 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 	case queue.ResultsQueue <- copyToSend:
 		// Results enqueued successfully
 	default:
-		log.Println("Queue is full!")
+		log.Println("❌ Results queue is full!")
 		// Queue is full
 	}
 	return nil
