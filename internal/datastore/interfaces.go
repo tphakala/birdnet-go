@@ -301,7 +301,7 @@ func (ds *DataStore) GetClipsQualifyingForRemoval(minHours, minClips int) ([]Cli
 	var results []ClipForRemoval
 
 	// Define a subquery to count the number of recordings per scientific name
-	subquery := ds.DB.Model(&Note{}).Select("ID, scientific_name, ROW_NUMBER() OVER (PARTITION BY scientific_name) as num_recordings").
+	subquery := ds.DB.Model(&Note{}).Select("notes.ID, notes.scientific_name, ROW_NUMBER() OVER (PARTITION BY notes.scientific_name) as num_recordings").
 		Where("clip_name != ''").
 		// Exclude notes that have a lock
 		Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id").
