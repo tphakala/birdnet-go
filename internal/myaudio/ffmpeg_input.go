@@ -246,15 +246,6 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 	sourceName := getSourceName(url)
 	log.Printf("Starting audio processing for RTSP source: %s (display name: %s)", url, sourceName)
 
-	// Add a ticker for debug logging (once every 5 seconds)
-	var debugTicker *time.Ticker
-	if conf.Setting().WebServer.Debug {
-		debugTicker = time.NewTicker(5 * time.Second)
-		defer debugTicker.Stop()
-	}
-
-	var lastLoggedLevel int = -1 // Track last logged level to reduce noise
-
 	// Continuously process audio data
 	for {
 		select {
@@ -323,26 +314,12 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 				// Send level to channel (non-blocking)
 				select {
 				case audioLevelChan <- audioLevelData:
-					// Only log if debug ticker is ready or if level changed significantly
-					if conf.Setting().WebServer.Debug && debugTicker != nil {
-						select {
-						case <-debugTicker.C:
-							log.Printf("📊 Audio level for %s: %+v", sourceName, audioLevelData)
-							lastLoggedLevel = audioLevelData.Level
-						default:
-							// Log if level changed by more than 20%
-							if abs(int16(audioLevelData.Level-lastLoggedLevel)) > 20 {
-								log.Printf("📊 Audio level change for %s: %+v", sourceName, audioLevelData)
-								lastLoggedLevel = audioLevelData.Level
-							}
-						}
-					}
+					// Successfully sent data
 				default:
-					// Channel is full, clear the channel
+					// Channel is full, clear it and send new data
 					for len(audioLevelChan) > 0 {
 						<-audioLevelChan
 					}
-					// Try to send the new data
 					audioLevelChan <- audioLevelData
 				}
 			}
