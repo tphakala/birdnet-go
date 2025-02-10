@@ -242,10 +242,15 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 	// Start watchdog goroutine
 	watchdogDone := p.startWatchdog(ctx, url, watchdog)
 
+	// Get a human-readable name for the source
+	sourceName := getSourceName(url)
+	log.Printf("Starting audio processing for RTSP source: %s (display name: %s)", url, sourceName)
+
 	// Continuously process audio data
 	for {
 		select {
 		case <-ctx.Done():
+			log.Printf("Stopping audio processing for RTSP source: %s", url)
 			<-watchdogDone // Wait for watchdog to finish
 			return nil     // Return nil on normal shutdown
 		case <-watchdogDone:
@@ -303,24 +308,45 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 					continue
 				}
 
-				// Calculate audio level
-				audioLevelData := calculateAudioLevel(buf[:n])
+				// Calculate audio level with source information
+				audioLevelData := calculateAudioLevel(buf[:n], url, sourceName)
 
 				// Send level to channel (non-blocking)
 				select {
 				case audioLevelChan <- audioLevelData:
-					// Data sent successfully
+					// Successfully sent data
 				default:
-					// Channel is full, clear the channel
+					// Channel is full, clear it and send new data
 					for len(audioLevelChan) > 0 {
 						<-audioLevelChan
 					}
-					// Try to send the new data
 					audioLevelChan <- audioLevelData
 				}
 			}
 		}
 	}
+}
+
+// getSourceName returns a human-readable name for the source URL
+func getSourceName(url string) string {
+	// Extract the last part of the URL path
+	parts := strings.Split(url, "/")
+	if len(parts) > 0 {
+		lastPart := parts[len(parts)-1]
+		// Remove any query parameters
+		if idx := strings.Index(lastPart, "?"); idx != -1 {
+			lastPart = lastPart[:idx]
+		}
+		// If it's an IP address with port, make it more readable
+		if strings.Contains(lastPart, ":") {
+			hostPort := strings.Split(lastPart, ":")
+			if len(hostPort) == 2 {
+				return fmt.Sprintf("Camera %s", hostPort[0])
+			}
+		}
+		return fmt.Sprintf("Camera %s", lastPart)
+	}
+	return "RTSP Camera" // Fallback name
 }
 
 // startFFmpeg starts an FFmpeg process with the given configuration

@@ -647,7 +647,7 @@ func (h *Handlers) ServeAudioClip(c echo.Context) error {
 	c.Response().Header().Set("Content-Description", "File Transfer")
 	// Set both ASCII and UTF-8 versions of the filename for better browser compatibility
 	c.Response().Header().Set(echo.HeaderContentDisposition,
-		fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`,
+		fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`, //nolint:gocritic // %s is correct here, %q will mangle filename
 			safeFilename,
 			safeFilename))
 
