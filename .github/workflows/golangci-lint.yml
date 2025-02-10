@@ -16,15 +16,7 @@ permissions:
   #pull-requests: read
 
 jobs:
-  wait-for-quiet-period:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Wait for quiet period
-        run: sleep 60  # Wait for 1 minute
-
   golangci:
-    needs: [wait-for-quiet-period]
     name: lint
     runs-on: ubuntu-22.04
     steps:

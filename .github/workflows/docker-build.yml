@@ -17,19 +17,11 @@ on:
       - main
 
 jobs:
-  wait-for-quiet-period:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Wait for quiet period
-        run: sleep 60  # Wait for 1 minute
-
   golangci:
-    needs: [wait-for-quiet-period]
     uses: ./.github/workflows/golangci-lint.yml
 
   test-docker-image:
-    needs: [wait-for-quiet-period, golangci]
+    needs: [golangci]
     # Ubuntu-20.04 required until this is fixed: https://github.com/actions/runner-images/discussions/9074
     runs-on: ubuntu-20.04
     steps:
