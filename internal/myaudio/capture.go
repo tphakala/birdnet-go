@@ -154,6 +154,15 @@ func SetAudioDevice(deviceName string) (string, error) {
 
 // ReconfigureRTSPStreams handles dynamic reconfiguration of RTSP streams
 func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+	// If there are no RTSP URLs configured and FFmpeg monitor is running, stop it
+	if len(settings.Realtime.RTSP.URLs) == 0 {
+		if ffmpegMonitor != nil {
+			ffmpegMonitor.Stop()
+			ffmpegMonitor = nil
+		}
+		return
+	}
+
 	// Initialize FFmpeg monitor if not already running
 	if ffmpegMonitor == nil {
 		ffmpegMonitor = NewFFmpegMonitor()
@@ -248,12 +257,6 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 		wg.Add(1)
 		activeStreams.Store(url, true)
 		go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, audioLevelChan)
-	}
-
-	// If no more RTSP streams are configured, stop the FFmpeg monitor
-	if len(settings.Realtime.RTSP.URLs) == 0 && ffmpegMonitor != nil {
-		ffmpegMonitor.Stop()
-		ffmpegMonitor = nil
 	}
 }
 
