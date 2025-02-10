@@ -84,8 +84,8 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		h.controlChan <- "rebuild_range_filter"
 	}
 
-	// Check if RTSP settings have changed
-	if rtspSettingsChanged(&oldSettings, settings) {
+	// Check if RTSP settings were included in the form and have changed
+	if hasRTSPSettings(formParams) && rtspSettingsChanged(&oldSettings, settings) {
 		h.SSE.SendNotification(Notification{
 			Message: "Reconfiguring RTSP sources...",
 			Type:    "info",
@@ -648,5 +648,22 @@ func rtspSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		return true
 	}
 
+	return false
+}
+
+// hasRTSPSettings checks if any RTSP-related settings were included in the form data
+func hasRTSPSettings(formParams map[string][]string) bool {
+	rtspPrefixes := []string{
+		"realtime.rtsp.urls",
+		"realtime.rtsp.transport",
+	}
+
+	for key := range formParams {
+		for _, prefix := range rtspPrefixes {
+			if strings.HasPrefix(strings.ToLower(key), prefix) {
+				return true
+			}
+		}
+	}
 	return false
 }
