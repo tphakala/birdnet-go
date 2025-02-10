@@ -583,6 +583,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan, re
 			if settings.Debug {
 				fmt.Println("🛑 Stopping audio capture due to quit signal.")
 			}
+			time.Sleep(100 * time.Millisecond)
 			return
 		case <-restartChan:
 			// Handle restart signal
