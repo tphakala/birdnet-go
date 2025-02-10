@@ -1,7 +1,7 @@
 name: golangci-lint
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: golangci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 on:

@@ -2,7 +2,7 @@ name: Build docker image
 
 # Add concurrency configuration to handle multiple pushes
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: docker-build-${{ github.ref }}
   cancel-in-progress: true
 
 on:
