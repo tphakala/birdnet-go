@@ -31,7 +31,6 @@ type Interface interface {
 	SearchNotes(query string, sortAscending bool, limit int, offset int) ([]Note, error)
 	GetNoteClipPath(noteID string) (string, error)
 	DeleteNoteClipPath(noteID string) error
-	GetClipsQualifyingForRemoval(minHours int, minClips int) ([]ClipForRemoval, error)
 	GetNoteReview(noteID string) (*NoteReview, error)
 	SaveNoteReview(review *NoteReview) error
 	GetNoteComments(noteID string) ([]NoteComment, error)
@@ -288,44 +287,6 @@ type ClipForRemoval struct {
 	ScientificName string
 	ClipName       string
 	NumRecordings  int
-}
-
-// GetClipsQualifyingForRemoval returns the list of clips that qualify for removal based on retention policy.
-// It checks each clip's age and count of recordings per scientific name, filtering out clips based on provided minimum hours and clip count criteria.
-func (ds *DataStore) GetClipsQualifyingForRemoval(minHours, minClips int) ([]ClipForRemoval, error) {
-	// Validate input parameters
-	if minHours <= 0 || minClips <= 0 {
-		return nil, fmt.Errorf("invalid parameters: minHours and minClips must be greater than 0")
-	}
-
-	var results []ClipForRemoval
-
-	// Define a subquery to count the number of recordings per scientific name
-	subquery := ds.DB.Model(&Note{}).Select("ID, scientific_name, ROW_NUMBER() OVER (PARTITION BY scientific_name) as num_recordings").
-		Where("clip_name != ''").
-		// Exclude notes that have a lock
-		Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id").
-		Where("note_locks.id IS NULL")
-
-	if err := subquery.Error; err != nil {
-		return nil, fmt.Errorf("error creating subquery: %w", err)
-	}
-
-	// Main query to find clips qualifying for removal based on retention policy
-	err := ds.DB.Table("(?) AS n", ds.DB.Model(&Note{})).
-		Select("n.ID, n.scientific_name, n.clip_name, sub.num_recordings").
-		Joins("INNER JOIN (?) AS sub ON n.ID = sub.ID", subquery).
-		// Exclude notes that have a lock
-		Joins("LEFT JOIN note_locks ON n.id = note_locks.note_id").
-		Where("note_locks.id IS NULL").
-		Where("strftime('%s', 'now') - strftime('%s', begin_time) > ?", minHours*3600). // Convert hours to seconds for comparison
-		Where("sub.num_recordings > ?", minClips).
-		Scan(&results).Error
-	if err != nil {
-		return nil, fmt.Errorf("error executing main query: %w", err)
-	}
-
-	return results, nil
 }
 
 // GetHourFormat returns the database-specific SQL fragment for formatting a time column as hour.
