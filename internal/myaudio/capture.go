@@ -597,7 +597,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan, re
 
 // calculateAudioLevel calculates the RMS (Root Mean Square) of the audio samples
 // and returns an AudioLevelData struct with the level and clipping status
-func calculateAudioLevel(samples []byte, source string, name string) AudioLevelData {
+func calculateAudioLevel(samples []byte, source, name string) AudioLevelData {
 	// If there are no samples, return zero level and no clipping
 	if len(samples) == 0 {
 		return AudioLevelData{Level: 0, Clipping: false, Source: source, Name: name}
