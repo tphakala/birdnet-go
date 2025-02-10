@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"golang.org/x/sys/unix"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -23,6 +22,36 @@ type SQLiteStore struct {
 func validateSQLiteConfig() error {
 	// Add validation logic for SQLite configuration
 	// Return an error if the configuration is invalid
+	return nil
+}
+
+// getDiskSpace returns available disk space for the given path
+func getDiskSpace(path string) (uint64, error) {
+	var availableSpace uint64
+
+	// OS-specific disk space check
+	dir := filepath.Dir(path)
+
+	// Get directory information using OS-agnostic method
+	var err error
+	availableSpace, err = getDiskFreeSpace(dir)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get disk space: %w", err)
+	}
+
+	return availableSpace, nil
+}
+
+// checkWritePermission checks if we have write permission to the directory
+func checkWritePermission(path string) error {
+	// Create a temporary file to test write permissions
+	tempFile := filepath.Join(filepath.Dir(path), ".tmp_write_test")
+	f, err := os.OpenFile(tempFile, os.O_CREATE|os.O_WRONLY, 0o666)
+	if err != nil {
+		return fmt.Errorf("no write permission in directory: %w", err)
+	}
+	f.Close()
+	os.Remove(tempFile)
 	return nil
 }
 
@@ -40,13 +69,11 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 	}
 
 	// Check available disk space
-	var stat unix.Statfs_t
-	if err := unix.Statfs(filepath.Dir(dbPath), &stat); err != nil {
-		return fmt.Errorf("failed to get filesystem stats: %w", err)
+	availableSpace, err := getDiskSpace(dbPath)
+	if err != nil {
+		return err
 	}
 
-	// Available space in bytes
-	availableSpace := stat.Bavail * uint64(stat.Bsize)
 	requiredSpace := uint64(dbInfo.Size()) + 1024*1024 // Add 1MB buffer
 
 	if availableSpace < requiredSpace {
@@ -54,9 +81,8 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 	}
 
 	// Check if we have write permissions in the backup directory
-	backupDir := filepath.Dir(dbPath)
-	if err := unix.Access(backupDir, unix.W_OK); err != nil {
-		return fmt.Errorf("no write permission in backup directory: %w", err)
+	if err := checkWritePermission(dbPath); err != nil {
+		return err
 	}
 
 	// Create timestamp for backup file
