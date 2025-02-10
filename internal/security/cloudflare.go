@@ -108,6 +108,10 @@ func (ca *CloudflareAccess) fetchCerts(issuer string) error {
 		return fmt.Errorf("failed to decode certs response: %w", err)
 	}
 
+	// Lock before modifying the certs map
+	ca.certCache.mutex.Lock()
+	defer ca.certCache.mutex.Unlock()
+
 	// Store the certificates with kids as keys
 	for _, cert := range certsResponse.PublicCerts {
 		ca.certs[cert.Kid] = cert.Cert
