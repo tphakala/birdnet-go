@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Wait for quiet period
-        run: sleep 300  # Wait for 5 minutes
+        run: sleep 60  # Wait for 1 minute
 
   golangci:
     needs: [wait-for-quiet-period]

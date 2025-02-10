@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Wait for quiet period
-        run: sleep 600  # Wait for 10 minutes
+        run: sleep 60  # Wait for 1 minute
 
   golangci:
     needs: [wait-for-quiet-period]
