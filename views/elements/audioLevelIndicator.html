@@ -180,22 +180,23 @@
          x-transition:leave="transition ease-in duration-75"
          x-transition:leave-start="transform opacity-100 scale-100"
          x-transition:leave-end="transform opacity-0 scale-95"
-         class="absolute right-0 mt-2 w-64 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50"
+         class="absolute right-0 mt-2 w-64 rounded-md shadow-lg bg-base-100 ring-1 ring-black ring-opacity-5 z-50"
          role="menu">
         <div class="py-1" role="none">
             <template x-if="Object.keys(levels).length === 0">
-                <div class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">No audio sources available</div>
+                <div class="px-4 py-2 text-sm text-base-content/60">No audio sources available</div>
             </template>
             <template x-for="(data, source) in levels" :key="source">
                 <button @click="selectedSource = source; dropdownOpen = false"
-                        class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between"
+                        class="w-full text-left px-4 py-2 text-sm hover:bg-base-200 flex items-center justify-between"
                         :class="{
-                            'bg-gray-50 dark:bg-gray-700': selectedSource === source,
-                            'text-gray-400 dark:text-gray-500': isInactive(source)
+                            'bg-base-200': selectedSource === source,
+                            'text-base-content/50': isInactive(source),
+                            'text-base-content': !isInactive(source)
                         }"
                         role="menuitem">
                     <span x-text="getSourceDisplayName(source)"></span>
-                    <span x-show="isInactive(source)" class="text-xs text-gray-400 dark:text-gray-500">(silent)</span>
+                    <span x-show="isInactive(source)" class="text-xs text-base-content/50">(silent)</span>
                 </button>
             </template>
         </div>
