@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -193,46 +192,6 @@ func (h *Handlers) WithErrorHandling(fn func(echo.Context) error) echo.HandlerFu
 			return h.HandleError(err, c)
 		}
 		return nil
-	}
-}
-
-// AudioLevelSSE handles Server-Sent Events for real-time audio level updates
-func (h *Handlers) AudioLevelSSE(c echo.Context) error {
-	// Set headers for SSE
-	c.Response().Header().Set(echo.HeaderContentType, "text/event-stream")
-	c.Response().Header().Set(echo.HeaderCacheControl, "no-cache")
-	c.Response().Header().Set(echo.HeaderConnection, "keep-alive")
-	c.Response().WriteHeader(http.StatusOK)
-
-	for {
-		select {
-		case <-c.Request().Context().Done():
-			// Client disconnected
-			return nil
-		case audioData := <-h.AudioLevelChan:
-			// Prepare data structure for JSON encoding
-			data := struct {
-				Level    int  `json:"level"`
-				Clipping bool `json:"clipping"`
-			}{
-				Level:    audioData.Level,
-				Clipping: audioData.Clipping,
-			}
-
-			// Marshal data to JSON
-			jsonData, err := json.Marshal(data)
-			if err != nil {
-				return err
-			}
-
-			// Write SSE formatted data
-			if _, err := fmt.Fprintf(c.Response(), "data: %s\n\n", jsonData); err != nil {
-				return err
-			}
-
-			// Flush the response writer buffer
-			c.Response().Flush()
-		}
 	}
 }
 
