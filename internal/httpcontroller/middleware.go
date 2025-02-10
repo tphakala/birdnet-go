@@ -3,17 +3,37 @@ package httpcontroller
 import (
 	"crypto/sha256"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/security"
 )
 
 // configureMiddleware sets up middleware for the server.
 func (s *Server) configureMiddleware() {
 	s.Echo.Use(middleware.Recover())
+
+	// Configure CSRF protection
+	s.Echo.Use(middleware.CSRFWithConfig(middleware.CSRFConfig{
+		TokenLookup:    "form:_csrf,header:X-CSRF-Token",
+		CookieName:     "csrf",
+		CookiePath:     "/",
+		CookieHTTPOnly: true,
+		CookieSameSite: http.SameSiteLaxMode,
+		CookieMaxAge:   3600, // 1 hour token lifetime
+		// Use secure cookie in production, but allow non-secure for local development
+		CookieSecure: !security.IsInLocalSubnet(net.ParseIP(s.Settings.Security.Host)),
+		// Skip CSRF check for assets and media
+		Skipper: func(c echo.Context) bool {
+			path := c.Path()
+			return strings.HasPrefix(path, "/assets/") || strings.HasPrefix(path, "/media/")
+		},
+	}))
+
 	s.Echo.Use(s.AuthMiddleware)
 	s.Echo.Use(middleware.GzipWithConfig(middleware.GzipConfig{
 		Level:     6,

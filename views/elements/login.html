@@ -2,6 +2,7 @@
 <div class="modal-box sm:p-6 sm:pb-10 p-3 overflow-y-auto" role="dialog">
   <form id="loginForm" hx-post="/login" hx-on:submit="showError(false)" role="form">
     <input type="hidden" id="redirectUri" name="redirect" value="{{.RedirectURL}}">
+    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
 
     <div class="flex items-start flex-row">
       <div class="hidden xs:flex flex-initial">
