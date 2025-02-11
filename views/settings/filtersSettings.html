@@ -190,7 +190,7 @@ x-init="
                     <span class="label-text">Dog Bark Expire Time (Minutes)</span>
                     <span class="help-icon" @mouseenter="showTooltip = 'dogBarkExpire'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
-                <input type="number" x-model="dogBarkFilter.remember" min="0" class="input input-bordered input-sm w-full" />
+                <input type="number" id="dogBarkFilterRemember" name="realtime.dogbarkfilter.remember" x-model="dogBarkFilter.remember" min="0" class="input input-bordered input-sm w-full" />
                 <div x-show="showTooltip === 'dogBarkExpire'" x-cloak class="tooltip">
                     Set how long to remember a detected dog bark
                 </div>
