@@ -96,13 +96,17 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 			sources = settings.Realtime.RTSP.URLs
 		}
 		if settings.Realtime.Audio.Source != "" {
+			// We'll add malgo to sources only if device initialization succeeds
+			// This will be handled in CaptureAudio
 			sources = append(sources, "malgo")
 		}
 
 		// Initialize buffers for all audio sources
 		if err := initializeBuffers(sources); err != nil {
-			log.Printf("❌ %v", err)
-			return err
+			// If buffer initialization fails, log the error but continue
+			// Some sources might still work
+			log.Printf("⚠️  Error initializing buffers: %v", err)
+			log.Println("⚠️  Some audio sources might not be available.")
 		}
 	} else {
 		log.Println("⚠️  Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
@@ -353,9 +357,10 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 
 // startControlMonitor handles various control signals for realtime analysis mode
 func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager) {
-	wg.Add(1)
+	// Create a channel to signal when the control monitor should stop
+	monitorDone := make(chan struct{})
+
 	go func() {
-		defer wg.Done()
 		for {
 			select {
 			case signal := <-controlChan:
@@ -430,24 +435,32 @@ func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, 
 					log.Printf("Received unknown control signal: %v", signal)
 				}
 			case <-quitChan:
+				close(monitorDone)
 				return
 			}
 		}
 	}()
+
+	// Wait for the monitor to be done before returning
+	<-monitorDone
 }
 
 // initializeBuffers handles initialization of all audio-related buffers
 func initializeBuffers(sources []string) error {
+	var initErrors []string
+
 	// Initialize analysis buffers
 	if err := myaudio.InitAnalysisBuffers(conf.BufferSize*3, sources); err != nil { // 3x buffer size to avoid underruns
-		return fmt.Errorf("failed to initialize analysis buffers: %w", err)
+		initErrors = append(initErrors, fmt.Sprintf("failed to initialize analysis buffers: %v", err))
 	}
 
 	// Initialize capture buffers
 	if err := myaudio.InitCaptureBuffers(60, conf.SampleRate, conf.BitDepth/8, sources); err != nil {
-		// Cleanup analysis buffers on failure
-		myaudio.CleanupAnalysisBuffers()
-		return fmt.Errorf("failed to initialize capture buffers: %w", err)
+		initErrors = append(initErrors, fmt.Sprintf("failed to initialize capture buffers: %v", err))
+	}
+
+	if len(initErrors) > 0 {
+		return fmt.Errorf("buffer initialization errors: %s", strings.Join(initErrors, "; "))
 	}
 
 	return nil
