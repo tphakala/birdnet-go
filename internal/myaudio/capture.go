@@ -269,7 +269,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 	// Initialize buffers for each audio source
 	if len(settings.Realtime.RTSP.URLs) > 0 {
 		for _, url := range settings.Realtime.RTSP.URLs {
-			abExists, cbExists := false, false //nolint:wastedassign // Need to initialize variables
+			var abExists, cbExists bool
 			// Check if analysis buffer already exists
 			abMutex.RLock()
 			_, abExists = analysisBuffers[url]
@@ -310,7 +310,15 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 	}
 
 	if settings.Realtime.Audio.Source != "" {
-		abExists, cbExists := false, false //nolint:wastedassign // Need to initialize variables
+		// Try to select and test a capture device
+		selectedSource, err := selectCaptureSource(settings)
+		if err != nil {
+			log.Printf("❌ Audio device selection failed: %v", err)
+			log.Println("⚠️  Continuing without audio device capture. You can configure a working audio device through the web interface.")
+			return
+		}
+
+		var abExists, cbExists bool
 		// Check if analysis buffer exists
 		abMutex.RLock()
 		_, abExists = analysisBuffers["malgo"]
@@ -346,17 +354,43 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 
 		// Device audio capture
 		wg.Add(1)
-		go captureAudioMalgo(settings, wg, quitChan, restartChan, audioLevelChan)
+		go captureAudioMalgo(settings, selectedSource, wg, quitChan, restartChan, audioLevelChan)
 	}
 }
 
-// selectCaptureSource selects an appropriate capture device based on the provided settings and available device information.
-// It prints available devices and returns the selected device and any error encountered.
-func selectCaptureSource(settings *conf.Settings, infos []malgo.DeviceInfo) (captureSource, error) {
+// selectCaptureSource selects and tests an appropriate capture device based on the provided settings.
+// It prints available devices, tests the selected device, and returns the selected device and any error encountered.
+func selectCaptureSource(settings *conf.Settings) (captureSource, error) {
+	// Initialize malgo context
+	var backend malgo.Backend
+	switch runtime.GOOS {
+	case "linux":
+		backend = malgo.BackendAlsa
+	case "windows":
+		backend = malgo.BackendWasapi
+	case "darwin":
+		backend = malgo.BackendCoreaudio
+	}
+
+	malgoCtx, err := malgo.InitContext([]malgo.Backend{backend}, malgo.ContextConfig{}, func(message string) {
+		if settings.Debug {
+			fmt.Print(message)
+		}
+	})
+	if err != nil {
+		return captureSource{}, fmt.Errorf("audio context initialization failed: %w", err)
+	}
+	defer malgoCtx.Uninit() //nolint:errcheck // We handle errors in the caller
+
 	fmt.Println("Available Capture Sources:")
 
 	var selectedSource captureSource
-	var deviceFound bool
+
+	// Get list of capture sources
+	infos, err := malgoCtx.Devices(malgo.Capture)
+	if err != nil {
+		return captureSource{}, fmt.Errorf("failed to get capture devices: %w", err)
+	}
 
 	// If no devices are available, return appropriate error
 	if len(infos) == 0 {
@@ -384,26 +418,47 @@ func selectCaptureSource(settings *conf.Settings, infos []malgo.DeviceInfo) (cap
 				ID:      decodedID,
 				Pointer: infos[i].ID.Pointer(),
 			}
-			deviceFound = true
+
+			// Try to actually initialize and test the device
+			deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
+			deviceConfig.Capture.Format = malgo.FormatS16
+			deviceConfig.Capture.Channels = conf.NumChannels
+			deviceConfig.Capture.DeviceID = selectedSource.Pointer
+			deviceConfig.SampleRate = conf.SampleRate
+			deviceConfig.Alsa.NoMMap = 1
+
+			// Try to initialize the device
+			testDevice, err := malgo.InitDevice(malgoCtx.Context, deviceConfig, malgo.DeviceCallbacks{})
+			if err != nil {
+				if settings.Debug {
+					log.Printf("❌ Device initialization test failed for %s: %v", selectedSource.Name, err)
+				}
+				fmt.Printf("%s (❌ initialization failed)\n", output)
+				continue
+			}
+
+			// Try to start the device
+			if err := testDevice.Start(); err != nil {
+				if settings.Debug {
+					log.Printf("❌ Device start test failed for %s: %v", selectedSource.Name, err)
+				}
+				testDevice.Uninit()
+				fmt.Printf("%s (❌ start failed)\n", output)
+				continue
+			}
+
+			// Stop and uninit the test device
+			_ = testDevice.Stop()
+			testDevice.Uninit()
+
+			fmt.Printf("%s (✅ working)\n", output)
+			return selectedSource, nil
 		}
 
 		fmt.Println(output)
 	}
 
-	// Check if running in container and only null device is available
-	if conf.RunningInContainer() && len(infos) == 1 && strings.Contains(infos[0].Name(), "Discard all samples") {
-		return captureSource{}, fmt.Errorf(
-			"no audio devices available in container\n" +
-				"Please map host audio devices by running docker with: --device /dev/snd\n" +
-				"Instructions for running BirdNET-Go in Docker are at https://github.com/tphakala/birdnet-go/blob/main/doc/installation.md")
-	}
-
-	// If no device was found, return error with more descriptive message
-	if !deviceFound {
-		return captureSource{}, fmt.Errorf("no suitable capture source found for device setting '%s'", settings.Realtime.Audio.Source)
-	}
-
-	return selectedSource, nil
+	return captureSource{}, fmt.Errorf("no working capture device found matching '%s'", settings.Realtime.Audio.Source)
 }
 
 // matchesDeviceSettings checks if the device matches the settings specified by the user.
@@ -425,9 +480,8 @@ func hexToASCII(hexStr string) (string, error) {
 	return string(bytes), nil
 }
 
-func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
 	defer wg.Done() // Ensure this is called when the goroutine exits
-	var device *malgo.Device
 
 	if settings.Debug {
 		fmt.Println("Initializing context")
@@ -453,35 +507,21 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan, re
 		color.New(color.FgHiYellow).Fprintln(os.Stderr, "❌ context init failed:", err)
 		return
 	}
-	defer malgoCtx.Uninit() //nolint:errcheck // This is a defer, avoid warning about error return value
+	defer malgoCtx.Uninit() //nolint:errcheck // We handle errors in the caller
 
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	deviceConfig.Capture.Format = malgo.FormatS16
 	deviceConfig.Capture.Channels = conf.NumChannels
 	deviceConfig.SampleRate = conf.SampleRate
 	deviceConfig.Alsa.NoMMap = 1
-
-	var infos []malgo.DeviceInfo
-
-	// Get list of capture sources
-	infos, err = malgoCtx.Devices(malgo.Capture)
-	if err != nil {
-		color.New(color.FgHiYellow).Fprintln(os.Stderr, "❌ Error getting capture devices:", err)
-		return
-	}
-
-	// Select the capture source based on the settings
-	captureSource, err := selectCaptureSource(settings, infos)
-	if err != nil {
-		color.New(color.FgHiYellow).Fprintln(os.Stderr, "❌ Error selecting capture source:", err)
-		return
-	}
-	deviceConfig.Capture.DeviceID = captureSource.Pointer
+	deviceConfig.Capture.DeviceID = source.Pointer
 
 	// Initialize the filter chain
 	if err := InitializeFilterChain(settings); err != nil {
 		log.Printf("❌ Error initializing filter chain: %v", err)
 	}
+
+	var captureDevice *malgo.Device
 
 	onReceiveFrames := func(pSample2, pSamples []byte, framecount uint32) {
 		// Apply audio EQ filters if enabled
@@ -502,7 +542,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan, re
 		}
 
 		// Calculate audio level
-		audioLevelData := calculateAudioLevel(pSamples, "malgo", captureSource.Name)
+		audioLevelData := calculateAudioLevel(pSamples, "malgo", source.Name)
 
 		// Send level to channel (non-blocking)
 		select {
@@ -530,12 +570,17 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan, re
 				if settings.Debug {
 					fmt.Println("🔄 Attempting to restart audio device.")
 				}
-				err := device.Start()
+				err := captureDevice.Start()
 				if err != nil {
 					log.Printf("❌ Failed to restart audio device: %v", err)
 					log.Println("🔄 Attempting full audio context restart in 1 second.")
 					time.Sleep(1 * time.Second)
-					restartChan <- struct{}{}
+					select {
+					case restartChan <- struct{}{}:
+						// Successfully sent restart signal
+					case <-quitChan:
+						// Application is shutting down, don't send restart signal
+					}
 				} else if settings.Debug {
 					fmt.Println("🔄 Audio device restarted successfully.")
 				}
@@ -550,7 +595,7 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan, re
 	}
 
 	// Initialize the capture device
-	device, err = malgo.InitDevice(malgoCtx.Context, deviceConfig, deviceCallbacks)
+	captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceConfig, deviceCallbacks)
 	if err != nil {
 		color.New(color.FgHiYellow).Fprintln(os.Stderr, "❌ Device initialization failed:", err)
 		conf.PrintUserInfo()
@@ -560,18 +605,18 @@ func captureAudioMalgo(settings *conf.Settings, wg *sync.WaitGroup, quitChan, re
 	if settings.Debug {
 		fmt.Println("Starting device")
 	}
-	err = device.Start()
+	err = captureDevice.Start()
 	if err != nil {
 		color.New(color.FgHiYellow).Fprintln(os.Stderr, "❌ Device start failed:", err)
 		return
 	}
-	defer device.Stop() //nolint:errcheck // This is a defer, avoid warning about error return value
+	defer captureDevice.Stop() //nolint:errcheck // We handle errors in the caller
 
 	if settings.Debug {
 		fmt.Println("Device started")
 	}
 	// print audio device we are attached to
-	color.New(color.FgHiGreen).Printf("Listening on source: %s (%s)\n", captureSource.Name, captureSource.ID)
+	color.New(color.FgHiGreen).Printf("Listening on source: %s (%s)\n", source.Name, source.ID)
 
 	// Now, instead of directly waiting on QuitChannel,
 	// check if it's closed in a non-blocking select.
