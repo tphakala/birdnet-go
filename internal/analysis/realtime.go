@@ -357,9 +357,6 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 
 // startControlMonitor handles various control signals for realtime analysis mode
 func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager) {
-	// Create a channel to signal when the control monitor should stop
-	monitorDone := make(chan struct{})
-
 	go func() {
 		for {
 			select {
@@ -435,14 +432,10 @@ func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, 
 					log.Printf("Received unknown control signal: %v", signal)
 				}
 			case <-quitChan:
-				close(monitorDone)
 				return
 			}
 		}
 	}()
-
-	// Wait for the monitor to be done before returning
-	<-monitorDone
 }
 
 // initializeBuffers handles initialization of all audio-related buffers
