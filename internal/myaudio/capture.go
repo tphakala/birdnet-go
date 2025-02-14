@@ -260,47 +260,55 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 	}
 }
 
+// initializeBuffersForSource handles the initialization of analysis and capture buffers for a given source
+func initializeBuffersForSource(sourceID string) error {
+	var abExists, cbExists bool
+
+	// Check if analysis buffer exists
+	abMutex.RLock()
+	_, abExists = analysisBuffers[sourceID]
+	abMutex.RUnlock()
+
+	// Check if capture buffer exists
+	cbMutex.RLock()
+	_, cbExists = captureBuffers[sourceID]
+	cbMutex.RUnlock()
+
+	// Initialize analysis buffer if it doesn't exist
+	if !abExists {
+		if err := AllocateAnalysisBuffer(conf.BufferSize*3, sourceID); err != nil {
+			return fmt.Errorf("failed to initialize analysis buffer: %w", err)
+		}
+	}
+
+	// Initialize capture buffer if it doesn't exist
+	if !cbExists {
+		if err := AllocateCaptureBuffer(60, conf.SampleRate, conf.BitDepth/8, sourceID); err != nil {
+			// Clean up the analysis buffer if we just created it and capture buffer init fails
+			if !abExists {
+				if cleanupErr := RemoveAnalysisBuffer(sourceID); cleanupErr != nil {
+					log.Printf("❌ Failed to cleanup analysis buffer after capture buffer init failure for %s: %v", sourceID, cleanupErr)
+				}
+			}
+			return fmt.Errorf("failed to initialize capture buffer: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
-	// If no RTSP URLs and no audio device configured, log a friendly message and return
+	// If no RTSP URLs and no audio device configured, return early
 	if len(settings.Realtime.RTSP.URLs) == 0 && settings.Realtime.Audio.Source == "" {
 		return
 	}
 
-	// Initialize buffers for each audio source
+	// Initialize buffers for RTSP sources
 	if len(settings.Realtime.RTSP.URLs) > 0 {
 		for _, url := range settings.Realtime.RTSP.URLs {
-			var abExists, cbExists bool
-			// Check if analysis buffer already exists
-			abMutex.RLock()
-			_, abExists = analysisBuffers[url]
-			abMutex.RUnlock()
-
-			// Check if capture buffer exists
-			cbMutex.RLock()
-			_, cbExists = captureBuffers[url]
-			cbMutex.RUnlock()
-
-			// Initialize analysis buffer if it doesn't exist
-			if !abExists {
-				if err := AllocateAnalysisBuffer(conf.BufferSize*3, url); err != nil {
-					log.Printf("❌ Failed to initialize analysis buffer for %s: %v", url, err)
-					continue
-				}
-			}
-
-			// Initialize capture buffer if it doesn't exist
-			if !cbExists {
-				if err := AllocateCaptureBuffer(60, conf.SampleRate, conf.BitDepth/8, url); err != nil {
-					// Clean up the ring buffer if audio buffer init fails and we just created it
-					if !cbExists {
-						err := RemoveCaptureBuffer(url)
-						if err != nil {
-							log.Printf("❌ Failed to remove capture buffer for %s: %v", url, err)
-						}
-					}
-					log.Printf("❌ Failed to initialize capture buffer for %s: %v", url, err)
-					continue
-				}
+			if err := initializeBuffersForSource(url); err != nil {
+				log.Printf("❌ Failed to initialize buffers for RTSP source %s: %v", url, err)
+				continue
 			}
 
 			wg.Add(1)
@@ -309,6 +317,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 		}
 	}
 
+	// Handle local audio device if configured
 	if settings.Realtime.Audio.Source != "" {
 		// Try to select and test a capture device
 		selectedSource, err := selectCaptureSource(settings)
@@ -318,38 +327,10 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 			return
 		}
 
-		var abExists, cbExists bool
-		// Check if analysis buffer exists
-		abMutex.RLock()
-		_, abExists = analysisBuffers["malgo"]
-		abMutex.RUnlock()
-
-		// Check if capture buffer exists
-		cbMutex.RLock()
-		_, cbExists = captureBuffers["malgo"]
-		cbMutex.RUnlock()
-
-		// Initialize analysis buffer if it doesn't exist
-		if !abExists {
-			if err := AllocateAnalysisBuffer(conf.BufferSize*3, "malgo"); err != nil {
-				log.Printf("❌ Failed to initialize analysis buffer for device capture: %v", err)
-				return
-			}
-		}
-
-		// Initialize capture buffer if it doesn't exist
-		if !cbExists {
-			if err := AllocateCaptureBuffer(60, conf.SampleRate, conf.BitDepth/8, "malgo"); err != nil {
-				// Clean up the ring buffer if audio buffer init fails and we just created it
-				if !cbExists {
-					err := RemoveCaptureBuffer("malgo")
-					if err != nil {
-						log.Printf("❌ Failed to remove capture buffer for device capture: %v", err)
-					}
-				}
-				log.Printf("❌ Failed to initialize capture buffer for device capture: %v", err)
-				return
-			}
+		// Initialize buffers for local audio device
+		if err := initializeBuffersForSource("malgo"); err != nil {
+			log.Printf("❌ Failed to initialize buffers for device capture: %v", err)
+			return
 		}
 
 		// Device audio capture
@@ -720,12 +701,4 @@ func calculateAudioLevel(samples []byte, source, name string) AudioLevelData {
 		Source:   source,
 		Name:     name,
 	}
-}
-
-// abs returns the absolute value of a 16-bit integer
-func abs(x int16) int16 {
-	if x < 0 {
-		return -x
-	}
-	return x
 }
