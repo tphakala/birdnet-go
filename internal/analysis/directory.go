@@ -16,15 +16,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// isLockFileStale checks if a lock file is older than 5 minutes
-func isLockFileStale(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return time.Since(info.ModTime()) > 5*time.Minute
-}
-
 // cleanupProcessingFiles removes all .processing files from the output directory
 func cleanupProcessingFiles(outputPath string) {
 	pattern := filepath.Join(outputPath, "*.processing")
