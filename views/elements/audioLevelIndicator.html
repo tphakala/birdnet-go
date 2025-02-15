@@ -160,7 +160,6 @@
     <!-- Tooltip for selected source -->
     <div x-show="selectedSource && !dropdownOpen"
     class="hidden group-hover:flex absolute left-1/2 transform -translate-x-1/2 -translate-y-full mt-2 px-2 py-1 bg-gray-900 text-gray-50 text-sm rounded whitespace-nowrap z-50">
-
          x-transition:enter="transition ease-out duration-100"
          x-transition:enter-start="opacity-0"
          x-transition:enter-end="opacity-100"
@@ -174,23 +173,23 @@
     
     <!-- Dropdown menu, shown only for authenticated users -->
     <template x-if="dropdownOpen">
-        <div class="absolute right-0 mt-2 w-64 max-w-[90vw] overflow-hidden rounded-md shadow-lg bg-base-100 ring-1 ring-black ring-opacity-5 z-50">
-    
+        <!-- Dropdown menu container -->
+        <div class="absolute p-1 right-0 mt-2 w-auto min-w-[12rem] max-w-[90vw] overflow-hidden rounded-md shadow-lg bg-base-100 ring-1 ring-black ring-opacity-5 z-50">
             <div class="py-1" role="none">
                 <template x-if="Object.keys(levels).length === 0">
                     <div class="px-4 py-2 text-sm text-base-content/60">No audio sources available</div>
                 </template>
                 <template x-for="(data, source) in levels" :key="source">
                     <button @click="selectedSource = source; dropdownOpen = false"
-                            class="w-full text-left px-4 py-2 text-sm hover:bg-base-200 flex items-center justify-between"
+                            class="w-full text-left p-2 text-sm hover:bg-base-200 flex items-center justify-between space-x-2 rounded-md"
                             :class="{
                                 'bg-base-200': selectedSource === source,
                                 'text-base-content/50': isInactive(source),
                                 'text-base-content': !isInactive(source)
                             }"
                             role="menuitem">
-                        <span x-text="getSourceDisplayName(source)"></span>
-                        <span x-show="isInactive(source)" class="text-xs text-base-content/50">(silent)</span>
+                        <span class="flex-1 whitespace-nowrap" x-text="getSourceDisplayName(source)"></span>
+                        <span x-show="isInactive(source)" class="text-xs text-base-content/50 shrink-0">(silent)</span>
                     </button>
                 </template>
             </div>
