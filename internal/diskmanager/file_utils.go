@@ -14,6 +14,9 @@ import (
 	"time"
 )
 
+// allowedFileTypes is the list of file extensions that are allowed to be deleted
+var allowedFileTypes = []string{".wav", ".flac", ".aac", ".opus", ".mp3"}
+
 // FileInfo holds information about a file
 type FileInfo struct {
 	Path       string
@@ -21,6 +24,12 @@ type FileInfo struct {
 	Confidence int
 	Timestamp  time.Time
 	Size       int64
+	Locked     bool
+}
+
+// Interface represents the minimal database interface needed for diskmanager
+type Interface interface {
+	GetLockedNotesClipPaths() ([]string, error)
 }
 
 // LoadPolicy loads the cleanup policies from a CSV file
@@ -57,10 +66,20 @@ func LoadPolicy(policyFile string) (*Policy, error) {
 }
 
 // GetAudioFiles returns a list of audio files in the directory and its subdirectories
-func GetAudioFiles(baseDir string, allowedExts []string, debug bool) ([]FileInfo, error) {
+func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug bool) ([]FileInfo, error) {
 	var files []FileInfo
 
-	err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+	// Get list of protected clips from database
+	lockedClips, err := getLockedClips(db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get protected clips: %w", err)
+	}
+
+	if debug {
+		log.Printf("Found %d protected clips", len(lockedClips))
+	}
+
+	err = filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -71,6 +90,8 @@ func GetAudioFiles(baseDir string, allowedExts []string, debug bool) ([]FileInfo
 				if err != nil {
 					return err
 				}
+				// Check if the file is protected
+				fileInfo.Locked = isLockedClip(fileInfo.Path, lockedClips)
 				files = append(files, fileInfo)
 			}
 		}
@@ -149,4 +170,24 @@ func WriteSortedFilesToFile(files []FileInfo, filePath string) error {
 
 	log.Printf("Sorted files have been written to %s", filePath)
 	return nil
+}
+
+// getLockedClips retrieves the list of locked clip paths from the database
+func getLockedClips(db Interface) ([]string, error) {
+	if db == nil {
+		return nil, fmt.Errorf("database interface is nil")
+	}
+	return db.GetLockedNotesClipPaths()
+}
+
+// isLockedClip checks if a file path is in the list of locked clips
+func isLockedClip(path string, lockedClips []string) bool {
+	filename := filepath.Base(path)
+	for _, lockedPath := range lockedClips {
+		if filepath.Base(lockedPath) == filename {
+			log.Printf("Locked clip found: %s", path)
+			return true
+		}
+	}
+	return false
 }
