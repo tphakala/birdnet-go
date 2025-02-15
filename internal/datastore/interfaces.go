@@ -55,6 +55,7 @@ type Interface interface {
 	GetImageCache(scientificName string) (*ImageCache, error)
 	SaveImageCache(cache *ImageCache) error
 	GetAllImageCaches() ([]ImageCache, error)
+	GetLockedNotesClipPaths() ([]string, error)
 }
 
 // DataStore implements StoreInterface using a GORM database.
@@ -873,4 +874,22 @@ func (ds *DataStore) GetAllImageCaches() ([]ImageCache, error) {
 		return nil, fmt.Errorf("error getting all image caches: %w", err)
 	}
 	return caches, nil
+}
+
+// GetLockedNotesClipPaths retrieves a list of clip paths from all locked notes
+func (ds *DataStore) GetLockedNotesClipPaths() ([]string, error) {
+	var clipPaths []string
+
+	// Query to get clip paths from notes that have an associated lock
+	err := ds.DB.Model(&Note{}).
+		Joins("JOIN note_locks ON notes.id = note_locks.note_id").
+		Where("notes.clip_name != ''"). // Only include notes that have a clip path
+		Pluck("notes.clip_name", &clipPaths).
+		Error
+
+	if err != nil {
+		return nil, fmt.Errorf("error getting locked notes clip paths: %w", err)
+	}
+
+	return clipPaths, nil
 }

@@ -154,7 +154,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 	// start cleanup of clips
 	if conf.Setting().Realtime.Audio.Export.Retention.Policy != "none" {
-		startClipCleanupMonitor(&wg, quitChan)
+		startClipCleanupMonitor(&wg, quitChan, dataStore)
 	}
 
 	// start weather polling
@@ -201,9 +201,9 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 }
 
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
-func startClipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}) {
+func startClipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}, dataStore datastore.Interface) {
 	wg.Add(1)
-	go clipCleanupMonitor(wg, quitChan)
+	go clipCleanupMonitor(wg, quitChan, dataStore)
 }
 
 // startWeatherPolling initializes and starts the weather polling routine in a new goroutine.
@@ -260,7 +260,7 @@ func closeDataStore(store datastore.Interface) {
 }
 
 // ClipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
-func clipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}) {
+func clipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}, dataStore datastore.Interface) {
 	defer wg.Done() // Ensure that the WaitGroup is marked as done after the function exits
 
 	// Create a ticker that triggers every five minutes to perform cleanup
@@ -278,14 +278,14 @@ func clipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}) {
 		case <-ticker.C:
 			// age based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "age" {
-				if err := diskmanager.AgeBasedCleanup(quitChan); err != nil {
+				if err := diskmanager.AgeBasedCleanup(quitChan, dataStore); err != nil {
 					log.Println("Error cleaning up clips: ", err)
 				}
 			}
 
 			// priority based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "usage" {
-				if err := diskmanager.UsageBasedCleanup(quitChan); err != nil {
+				if err := diskmanager.UsageBasedCleanup(quitChan, dataStore); err != nil {
 					log.Println("Error cleaning up clips: ", err)
 				}
 			}
