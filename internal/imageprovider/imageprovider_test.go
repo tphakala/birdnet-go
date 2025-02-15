@@ -166,6 +166,7 @@ func (m *mockStore) LockNote(noteID string) error                           { re
 func (m *mockStore) UnlockNote(noteID string) error                         { return nil }
 func (m *mockStore) GetNoteLock(noteID string) (*datastore.NoteLock, error) { return nil, nil }
 func (m *mockStore) IsNoteLocked(noteID string) (bool, error)               { return false, nil }
+func (m *mockStore) GetLockedNotesClipPaths() ([]string, error)             { return nil, nil }
 
 // mockFailingStore is a mock implementation that simulates database failures
 type mockFailingStore struct {
