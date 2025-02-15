@@ -18,7 +18,7 @@ type Policy struct {
 }
 
 // UsageBasedCleanup cleans up old audio files based on the configuration and monitors for quit signals
-func UsageBasedCleanup(quitChan chan struct{}) error {
+func UsageBasedCleanup(quitChan chan struct{}, db Interface) error {
 	settings := conf.Setting()
 
 	debug := settings.Realtime.Audio.Export.Retention.Debug
@@ -30,9 +30,6 @@ func UsageBasedCleanup(quitChan chan struct{}) error {
 	if err != nil {
 		return err
 	}
-
-	// Only remove files with extensions in this list
-	allowedExts := []string{".wav"}
 
 	if debug {
 		log.Printf("Starting cleanup process. Base directory: %s, Threshold: %.1f%%", baseDir, threshold)
@@ -49,8 +46,8 @@ func UsageBasedCleanup(quitChan chan struct{}) error {
 			log.Printf("Disk usage %.1f%% is above the %.1f%% threshold. Cleanup needed.", diskUsage, threshold)
 		}
 
-		// Get the list of audio files
-		files, err := GetAudioFiles(baseDir, allowedExts, debug)
+		// Get the list of audio files, limited to allowed file types defined in file_utils.go
+		files, err := GetAudioFiles(baseDir, allowedFileTypes, db, debug)
 		if err != nil {
 			return err
 		}
@@ -86,6 +83,14 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 			log.Println("Received quit signal, ending cleanup run.")
 			return nil
 		default:
+			// Skip locked files
+			if file.Locked {
+				if debug {
+					log.Printf("Skipping locked file: %s", file.Path)
+				}
+				continue
+			}
+
 			// Get the subdirectory name
 			subDir := filepath.Dir(file.Path)
 			month := file.Timestamp.Format("2006-01")

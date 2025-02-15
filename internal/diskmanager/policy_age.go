@@ -12,7 +12,7 @@ import (
 )
 
 // AgeBasedCleanup removes clips from the filesystem based on their age and the number of clips per species.
-func AgeBasedCleanup(quit <-chan struct{}) error {
+func AgeBasedCleanup(quit <-chan struct{}, db Interface) error {
 	settings := conf.Setting()
 
 	debug := settings.Realtime.Audio.Export.Retention.Debug
@@ -26,13 +26,12 @@ func AgeBasedCleanup(quit <-chan struct{}) error {
 		return err
 	}
 
-	allowedExts := []string{".wav"}
-
 	if debug {
 		log.Printf("Starting age-based cleanup process. Base directory: %s, Retention period: %s", baseDir, retentionPeriod)
 	}
 
-	files, err := GetAudioFiles(baseDir, allowedExts, debug)
+	// Get the list of audio files, limited to allowed file types defined in file_utils.go
+	files, err := GetAudioFiles(baseDir, allowedFileTypes, db, debug)
 	if err != nil {
 		return err
 	}
@@ -58,6 +57,14 @@ func AgeBasedCleanup(quit <-chan struct{}) error {
 			log.Printf("Cleanup interrupted by quit signal\n")
 			return nil
 		default:
+			// Skip locked files from deletion
+			if file.Locked {
+				if debug {
+					log.Printf("Skipping locked file: %s", file.Path)
+				}
+				continue
+			}
+
 			if file.Timestamp.Before(expirationTime) {
 				subDir := filepath.Dir(file.Path)
 
