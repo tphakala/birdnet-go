@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -253,19 +252,6 @@ func validateAudioSettings(settings *AudioSettings) error {
 		}
 	}
 
-	return nil
-}
-
-// checkFFmpegAvailability checks if FFmpeg is installed and available
-func checkFFmpegAvailability() error {
-	cmd := exec.Command("ffmpeg", "-version")
-	err := cmd.Run()
-	if err != nil {
-		if errors.Is(err, exec.ErrNotFound) {
-			return fmt.Errorf("FFmpeg is not installed or not in the system PATH")
-		}
-		return fmt.Errorf("error checking FFmpeg availability: %w", err)
-	}
 	return nil
 }
 
