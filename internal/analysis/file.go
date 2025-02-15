@@ -480,15 +480,6 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 	return allNotes, nil
 }
 
-// truncateFilename truncates the filename to 30 characters if it's longer.
-func truncateFilename(path string) string {
-	filename := filepath.Base(path)
-	if len(filename) > 30 {
-		return filename[:27] + "..."
-	}
-	return filename
-}
-
 // writeResults writes the notes to the output file based on the configuration.
 func writeResults(settings *conf.Settings, notes []datastore.Note) error {
 	// Prepare the output file path if OutputDir is specified in the configuration.
