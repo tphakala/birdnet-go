@@ -323,7 +323,6 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 		selectedSource, err := selectCaptureSource(settings)
 		if err != nil {
 			log.Printf("❌ Audio device selection failed: %v", err)
-			log.Println("⚠️  Continuing without audio device capture. You can configure a working audio device through the web interface.")
 			return
 		}
 
