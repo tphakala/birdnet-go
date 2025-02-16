@@ -284,7 +284,7 @@ func (ca *CloudflareAccess) GetLogoutURL() string {
 }
 
 func (ca *CloudflareAccess) Debug(format string, v ...interface{}) {
-	if !ca.debug {
+	if ca.debug {
 		prefix := "[security/cloudflare] "
 		if len(v) == 0 {
 			log.Print(prefix + format)
