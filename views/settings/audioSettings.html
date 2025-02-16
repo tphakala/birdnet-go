@@ -123,7 +123,7 @@ x-init="
 
         <div class="form-control relative">
             <label class="label justify-start" for="audioSource">
-                <span class="label-text">Audio Source</span>
+                <span class="label-text">Audio Source (requires application restart to take effect)</span>
                 <span class="help-icon" 
                       role="button"
                       aria-label="Show help for audio source"
@@ -133,10 +133,12 @@ x-init="
             <select x-model="audioCapture.source"
                     name="realtime.audio.source"
                     class="select select-bordered select-sm w-full">
-                <option value="">No sound card capture</option>
+                <option value="" :selected="!audioCapture.source">No sound card capture</option>
                 <template x-for="device in audioDevices" :key="device.Index">
                     <option :value="device.Name" 
-                            x-text="device.Name"></option>
+                        :selected="audioCapture.source && (device.Name.toLowerCase().includes(audioCapture.source.toLowerCase()) || device.Name === audioCapture.source)"
+                        x-text="device.Name">
+                    </option>
                 </template>
             </select>
             <div x-show="showTooltip === 'audioSource'" 
