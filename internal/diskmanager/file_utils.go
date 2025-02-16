@@ -185,7 +185,6 @@ func isLockedClip(path string, lockedClips []string) bool {
 	filename := filepath.Base(path)
 	for _, lockedPath := range lockedClips {
 		if filepath.Base(lockedPath) == filename {
-			log.Printf("Locked clip found: %s", path)
 			return true
 		}
 	}
