@@ -259,7 +259,6 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 		}
 
 		// New stream, start it
-		wg.Add(1)
 		activeStreams.Store(url, true)
 		go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, audioLevelChan)
 	}
@@ -316,7 +315,6 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 				continue
 			}
 
-			wg.Add(1)
 			activeStreams.Store(url, true)
 			go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, audioLevelChan)
 		}
@@ -343,7 +341,6 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 		}
 
 		// Device audio capture
-		wg.Add(1)
 		go captureAudioMalgo(settings, selectedSource, wg, quitChan, restartChan, audioLevelChan)
 	}
 }
@@ -425,7 +422,7 @@ func ValidateAudioDevice(settings *conf.Settings) error {
 		settings.Realtime.Audio.Source = ""
 		return fmt.Errorf("failed to initialize audio context: %w", err)
 	}
-	defer malgoCtx.Uninit() //nolint:errcheck
+	defer malgoCtx.Uninit() //nolint:errcheck // We handle errors in the caller
 
 	// Get list of capture devices
 	infos, err := malgoCtx.Devices(malgo.Capture)
@@ -481,7 +478,7 @@ func selectCaptureSource(settings *conf.Settings) (captureSource, error) {
 	if err != nil {
 		return captureSource{}, fmt.Errorf("audio context initialization failed: %w", err)
 	}
-	defer malgoCtx.Uninit() //nolint:errcheck
+	defer malgoCtx.Uninit() //nolint:errcheck // We handle errors in the caller
 
 	// Get list of capture sources
 	infos, err := malgoCtx.Devices(malgo.Capture)
@@ -543,7 +540,10 @@ func hexToASCII(hexStr string) (string, error) {
 }
 
 func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
-	defer wg.Done() // Ensure this is called when the goroutine exits
+	wg.Add(1)
+	defer func() {
+		wg.Done()
+	}()
 
 	if settings.Debug {
 		fmt.Println("Initializing context")
@@ -625,6 +625,7 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 		go func() {
 			select {
 			case <-quitChan:
+				log.Printf("🛑 DEBUG: Quit signal received, do not attempt to restart")
 				// Quit signal has been received, do not attempt to restart
 				return
 			case <-time.After(100 * time.Millisecond):
@@ -687,9 +688,9 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 		select {
 		case <-quitChan:
 			// QuitChannel was closed, clean up and return.
-			if settings.Debug {
-				fmt.Println("🛑 Stopping audio capture due to quit signal.")
-			}
+			//if settings.Debug {
+			fmt.Println("🛑 Stopping audio capture due to quit signal.")
+			//}
 			time.Sleep(100 * time.Millisecond)
 			return
 		case <-restartChan:

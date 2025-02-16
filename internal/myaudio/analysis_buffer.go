@@ -279,7 +279,10 @@ func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan cha
 	// preRecordingTime is the time to subtract from the current time to get the start time of the detection
 	const preRecordingTime = -5000 * time.Millisecond
 
-	defer wg.Done()
+	wg.Add(1)
+	defer func() {
+		wg.Done()
+	}()
 
 	// Creating a ticker that ticks every 100ms
 	ticker := time.NewTicker(pollInterval)
