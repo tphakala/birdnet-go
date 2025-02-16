@@ -180,6 +180,7 @@ func (p *FFmpegProcess) Cleanup(url string) {
 
 	select {
 	case <-done:
+		log.Printf("🛑 FFmpeg process for RTSP source %s stopped normally", url)
 		// Process finished normally
 	case <-time.After(10 * time.Second):
 		// Timeout occurred, forcefully kill the process
@@ -364,7 +365,7 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 	}
 
 	// Log the FFmpeg command for debugging purposes
-	log.Println("⬆️  Starting FFmpeg with command:", cmd.String())
+	log.Printf("⬆️ Starting FFmpeg with command: %s", cmd.String())
 
 	// Start the FFmpeg process
 	if err := cmd.Start(); err != nil {
@@ -474,7 +475,6 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 		select {
 		case <-ctx.Done():
 			// Context cancelled, stop the FFmpeg process
-			log.Printf("🔴 Context cancelled, stopping FFmpeg for RTSP source %s.", config.URL)
 			process.Cleanup(config.URL)
 			return ctx.Err()
 
@@ -555,9 +555,6 @@ func getExitCode(err error) int {
 
 // CaptureAudioRTSP is the main function for capturing audio from an RTSP stream
 func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
-	// Ensure the WaitGroup is decremented when the function exits
-	defer wg.Done()
-
 	// Return with error if FFmpeg path is not set
 	if conf.GetFfmpegBinaryName() == "" {
 		log.Printf("❌ FFmpeg is not available, cannot capture audio from RTSP source %s.", url)
