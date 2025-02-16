@@ -203,7 +203,10 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
 func startClipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}, dataStore datastore.Interface) {
 	wg.Add(1)
-	go clipCleanupMonitor(wg, quitChan, dataStore)
+	go func() {
+		defer wg.Done()
+		clipCleanupMonitor(quitChan, dataStore)
+	}()
 }
 
 // startWeatherPolling initializes and starts the weather polling routine in a new goroutine.
@@ -260,9 +263,7 @@ func closeDataStore(store datastore.Interface) {
 }
 
 // ClipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
-func clipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}, dataStore datastore.Interface) {
-	defer wg.Done() // Ensure that the WaitGroup is marked as done after the function exits
-
+func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 	// Create a ticker that triggers every five minutes to perform cleanup
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop() // Ensure the ticker is stopped to prevent leaks
@@ -331,7 +332,9 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 			// Mark this species as being initialized
 			birdImageCache.Initializing.Store(species.ScientificName, struct{}{})
 			go func(name string) {
-				defer wg.Done()
+				defer func() {
+					wg.Done()
+				}()
 				defer birdImageCache.Initializing.Delete(name) // Remove initialization mark when done
 				sem <- struct{}{}                              // Acquire semaphore
 				defer func() { <-sem }()                       // Release semaphore

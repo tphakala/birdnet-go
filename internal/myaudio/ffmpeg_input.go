@@ -180,6 +180,7 @@ func (p *FFmpegProcess) Cleanup(url string) {
 
 	select {
 	case <-done:
+		log.Printf("🛑 FFmpeg process for RTSP source %s stopped normally", url)
 		// Process finished normally
 	case <-time.After(10 * time.Second):
 		// Timeout occurred, forcefully kill the process
@@ -241,10 +242,6 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 
 	// Start watchdog goroutine
 	watchdogDone := p.startWatchdog(ctx, url, watchdog)
-
-	// Get a human-readable name for the source
-	sourceName := getSourceName(url)
-	log.Printf("Starting audio processing for RTSP source: %s (display name: %s)", url, sourceName)
 
 	// Continuously process audio data
 	for {
@@ -309,7 +306,7 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 				}
 
 				// Calculate audio level with source information
-				audioLevelData := calculateAudioLevel(buf[:n], url, sourceName)
+				audioLevelData := calculateAudioLevel(buf[:n], url, "")
 
 				// Send level to channel (non-blocking)
 				select {
@@ -325,28 +322,6 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 			}
 		}
 	}
-}
-
-// getSourceName returns a human-readable name for the source URL
-func getSourceName(url string) string {
-	// Extract the last part of the URL path
-	parts := strings.Split(url, "/")
-	if len(parts) > 0 {
-		lastPart := parts[len(parts)-1]
-		// Remove any query parameters
-		if idx := strings.Index(lastPart, "?"); idx != -1 {
-			lastPart = lastPart[:idx]
-		}
-		// If it's an IP address with port, make it more readable
-		if strings.Contains(lastPart, ":") {
-			hostPort := strings.Split(lastPart, ":")
-			if len(hostPort) == 2 {
-				return fmt.Sprintf("Camera %s", hostPort[0])
-			}
-		}
-		return fmt.Sprintf("Camera %s", lastPart)
-	}
-	return "RTSP Camera" // Fallback name
 }
 
 // startFFmpeg starts an FFmpeg process with the given configuration
@@ -390,12 +365,14 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 	}
 
 	// Log the FFmpeg command for debugging purposes
-	log.Println("⬆️  Starting ffmpeg with command:", cmd.String())
+	log.Printf("⬆️ Starting FFmpeg with command: %s", cmd.String())
 
 	// Start the FFmpeg process
 	if err := cmd.Start(); err != nil {
 		cancel() // Cancel the context if process start fails
 		return nil, fmt.Errorf("error starting FFmpeg: %w", err)
+	} else {
+		log.Printf("✅ FFmpeg started successfully for RTSP source %s", config.URL)
 	}
 
 	// Create a channel to receive the exit status of the FFmpeg process
@@ -498,7 +475,6 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 		select {
 		case <-ctx.Done():
 			// Context cancelled, stop the FFmpeg process
-			log.Printf("🔴 Context cancelled, stopping FFmpeg for RTSP source %s.", config.URL)
 			process.Cleanup(config.URL)
 			return ctx.Err()
 
@@ -579,9 +555,6 @@ func getExitCode(err error) int {
 
 // CaptureAudioRTSP is the main function for capturing audio from an RTSP stream
 func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
-	// Ensure the WaitGroup is decremented when the function exits
-	defer wg.Done()
-
 	// Return with error if FFmpeg path is not set
 	if conf.GetFfmpegBinaryName() == "" {
 		log.Printf("❌ FFmpeg is not available, cannot capture audio from RTSP source %s.", url)

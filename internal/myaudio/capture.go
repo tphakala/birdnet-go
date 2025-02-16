@@ -48,10 +48,13 @@ var ffmpegMonitor *FFmpegMonitor
 
 // ListAudioSources returns a list of available audio capture devices.
 func ListAudioSources() ([]AudioDeviceInfo, error) {
+	// Create a slice to store audio device information
+	var devices []AudioDeviceInfo
+
 	// Initialize the audio context
 	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize context: %w", err)
+		return devices, fmt.Errorf("failed to initialize context: %w", err)
 	}
 
 	// Ensure the context is uninitialized when the function returns
@@ -64,14 +67,16 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 	// Get a list of capture devices
 	infos, err := ctx.Devices(malgo.Capture)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get devices: %w", err)
+		return devices, fmt.Errorf("failed to get devices: %w", err)
 	}
-
-	// Create a slice to store audio device information
-	var devices []AudioDeviceInfo
 
 	// Iterate through the list of devices
 	for i := range infos {
+		// Skip the discard/null device
+		if strings.Contains(infos[i].Name(), "Discard all samples") {
+			continue
+		}
+
 		// Decode the device ID from hexadecimal to ASCII
 		decodedID, err := hexToASCII(infos[i].ID.String())
 		if err != nil {
@@ -254,7 +259,6 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 		}
 
 		// New stream, start it
-		wg.Add(1)
 		activeStreams.Store(url, true)
 		go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, audioLevelChan)
 	}
@@ -311,15 +315,19 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 				continue
 			}
 
-			wg.Add(1)
 			activeStreams.Store(url, true)
 			go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, audioLevelChan)
 		}
 	}
 
-	// Handle local audio device if configured
+	// Handle sound card source if configured
 	if settings.Realtime.Audio.Source != "" {
-		// Try to select and test a capture device
+		// Validate audio device
+		if err := ValidateAudioDevice(settings); err != nil {
+			log.Printf("⚠️ Audio device validation failed: %v", err)
+			return
+		}
+
 		selectedSource, err := selectCaptureSource(settings)
 		if err != nil {
 			log.Printf("❌ Audio device selection failed: %v", err)
@@ -333,15 +341,125 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 		}
 
 		// Device audio capture
-		wg.Add(1)
 		go captureAudioMalgo(settings, selectedSource, wg, quitChan, restartChan, audioLevelChan)
 	}
 }
 
-// selectCaptureSource selects and tests an appropriate capture device based on the provided settings.
-// It prints available devices, tests the selected device, and returns the selected device and any error encountered.
-func selectCaptureSource(settings *conf.Settings) (captureSource, error) {
+// isHardwareDevice checks if the device ID indicates a hardware device
+func isHardwareDevice(decodedID string) bool {
+	// On Linux, hardware devices have IDs in the format ":X,Y"
+	if runtime.GOOS == "linux" {
+		return strings.Contains(decodedID, ":") && strings.Contains(decodedID, ",")
+	}
+	// On Windows and macOS, consider all devices as potential hardware devices
+	// as the ID format is different and we rely on the OS's device enumeration
+	return true
+}
+
+// getHardwareDevices filters the device infos to return only hardware devices
+func getHardwareDevices(infos []malgo.DeviceInfo) []malgo.DeviceInfo {
+	var hardwareDevices []malgo.DeviceInfo
+	for i := range infos {
+		decodedID, err := hexToASCII(infos[i].ID.String())
+		if err != nil {
+			continue
+		}
+		if isHardwareDevice(decodedID) {
+			hardwareDevices = append(hardwareDevices, infos[i])
+		}
+	}
+	return hardwareDevices
+}
+
+// TestCaptureDevice tests if a capture device can be initialized and started.
+// Returns true if the device is working, false otherwise.
+func TestCaptureDevice(ctx *malgo.AllocatedContext, info *malgo.DeviceInfo) bool {
+	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
+	deviceConfig.Capture.Format = malgo.FormatS16
+	deviceConfig.Capture.Channels = conf.NumChannels
+	deviceConfig.Capture.DeviceID = info.ID.Pointer()
+	deviceConfig.SampleRate = conf.SampleRate
+	deviceConfig.Alsa.NoMMap = 1
+
+	// Try to initialize the device
+	device, err := malgo.InitDevice(ctx.Context, deviceConfig, malgo.DeviceCallbacks{})
+	if err != nil {
+		return false
+	}
+	defer device.Uninit()
+
+	// Try to start the device
+	if err := device.Start(); err != nil {
+		return false
+	}
+
+	// Stop the device
+	_ = device.Stop()
+	return true
+}
+
+// ValidateAudioDevice checks if the configured audio source is available and working.
+// Returns an error if the device is not available or not working.
+// This function also updates the settings if the device is not valid.
+func ValidateAudioDevice(settings *conf.Settings) error {
+	if settings.Realtime.Audio.Source == "" {
+		return nil
+	}
+
+	var backend malgo.Backend
+	switch runtime.GOOS {
+	case "linux":
+		backend = malgo.BackendAlsa
+	case "windows":
+		backend = malgo.BackendWasapi
+	case "darwin":
+		backend = malgo.BackendCoreaudio
+	}
+
 	// Initialize malgo context
+	malgoCtx, err := malgo.InitContext([]malgo.Backend{backend}, malgo.ContextConfig{}, nil)
+	if err != nil {
+		settings.Realtime.Audio.Source = ""
+		return fmt.Errorf("failed to initialize audio context: %w", err)
+	}
+	defer malgoCtx.Uninit() //nolint:errcheck // We handle errors in the caller
+
+	// Get list of capture devices
+	infos, err := malgoCtx.Devices(malgo.Capture)
+	if err != nil {
+		settings.Realtime.Audio.Source = ""
+		return fmt.Errorf("failed to get capture devices: %w", err)
+	}
+
+	// Filter to get only hardware devices
+	hardwareDevices := getHardwareDevices(infos)
+	if len(hardwareDevices) == 0 {
+		settings.Realtime.Audio.Source = ""
+		return fmt.Errorf("no hardware audio capture devices found")
+	}
+
+	// Try to find and test the configured device
+	for i := range hardwareDevices {
+		decodedID, err := hexToASCII(hardwareDevices[i].ID.String())
+		if err != nil {
+			continue
+		}
+
+		if matchesDeviceSettings(decodedID, &hardwareDevices[i], settings.Realtime.Audio.Source) {
+			if TestCaptureDevice(malgoCtx, &hardwareDevices[i]) {
+				return nil
+			}
+			settings.Realtime.Audio.Source = ""
+			return fmt.Errorf("configured audio device '%s' failed hardware test", settings.Realtime.Audio.Source)
+		}
+	}
+
+	settings.Realtime.Audio.Source = ""
+	return fmt.Errorf("configured audio device '%s' not found", settings.Realtime.Audio.Source)
+}
+
+// selectCaptureSource selects and tests an appropriate capture device based on the provided settings.
+func selectCaptureSource(settings *conf.Settings) (captureSource, error) {
 	var backend malgo.Backend
 	switch runtime.GOOS {
 	case "linux":
@@ -362,79 +480,40 @@ func selectCaptureSource(settings *conf.Settings) (captureSource, error) {
 	}
 	defer malgoCtx.Uninit() //nolint:errcheck // We handle errors in the caller
 
-	fmt.Println("Available Capture Sources:")
-
-	var selectedSource captureSource
-
 	// Get list of capture sources
 	infos, err := malgoCtx.Devices(malgo.Capture)
 	if err != nil {
 		return captureSource{}, fmt.Errorf("failed to get capture devices: %w", err)
 	}
 
-	// If no devices are available, return appropriate error
-	if len(infos) == 0 {
-		return captureSource{}, fmt.Errorf("no audio capture devices found")
-	}
+	// Filter to get only hardware devices
+	hardwareDevices := getHardwareDevices(infos)
 
-	for i := range infos {
-		// Decode the device ID from hexadecimal to ASCII
-		decodedID, err := hexToASCII(infos[i].ID.String())
+	fmt.Println("Available Hardware Capture Sources:")
+	for i := range hardwareDevices {
+		decodedID, err := hexToASCII(hardwareDevices[i].ID.String())
 		if err != nil {
 			fmt.Printf("❌ Error decoding ID for device %d: %v\n", i, err)
 			continue
 		}
 
-		// Prepare the output string for listing available devices
-		output := fmt.Sprintf("  %d: %s", i, infos[i].Name())
+		output := fmt.Sprintf("  %d: %s", i, hardwareDevices[i].Name())
 		if runtime.GOOS == "linux" {
-			output = fmt.Sprintf("%s, %s", output, decodedID) // Include decoded ID in the output for Linux
+			output = fmt.Sprintf("%s, %s", output, decodedID)
 		}
 
-		// Determine if the current device matches the specified settings
-		if matchesDeviceSettings(decodedID, &infos[i], settings.Realtime.Audio.Source) {
-			selectedSource = captureSource{
-				Name:    infos[i].Name(),
-				ID:      decodedID,
-				Pointer: infos[i].ID.Pointer(),
+		if matchesDeviceSettings(decodedID, &hardwareDevices[i], settings.Realtime.Audio.Source) {
+			if TestCaptureDevice(malgoCtx, &hardwareDevices[i]) {
+				fmt.Printf("%s (✅ selected)\n", output)
+				return captureSource{
+					Name:    hardwareDevices[i].Name(),
+					ID:      decodedID,
+					Pointer: hardwareDevices[i].ID.Pointer(),
+				}, nil
 			}
-
-			// Try to actually initialize and test the device
-			deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
-			deviceConfig.Capture.Format = malgo.FormatS16
-			deviceConfig.Capture.Channels = conf.NumChannels
-			deviceConfig.Capture.DeviceID = selectedSource.Pointer
-			deviceConfig.SampleRate = conf.SampleRate
-			deviceConfig.Alsa.NoMMap = 1
-
-			// Try to initialize the device
-			testDevice, err := malgo.InitDevice(malgoCtx.Context, deviceConfig, malgo.DeviceCallbacks{})
-			if err != nil {
-				if settings.Debug {
-					log.Printf("❌ Device initialization test failed for %s: %v", selectedSource.Name, err)
-				}
-				fmt.Printf("%s (❌ initialization failed)\n", output)
-				continue
-			}
-
-			// Try to start the device
-			if err := testDevice.Start(); err != nil {
-				if settings.Debug {
-					log.Printf("❌ Device start test failed for %s: %v", selectedSource.Name, err)
-				}
-				testDevice.Uninit()
-				fmt.Printf("%s (❌ start failed)\n", output)
-				continue
-			}
-
-			// Stop and uninit the test device
-			_ = testDevice.Stop()
-			testDevice.Uninit()
-
-			fmt.Printf("%s (✅ working)\n", output)
-			return selectedSource, nil
+			fmt.Printf("%s (❌ device test failed)\n", output)
+			continue
 		}
-
 		fmt.Println(output)
 	}
 
@@ -461,7 +540,10 @@ func hexToASCII(hexStr string) (string, error) {
 }
 
 func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
-	defer wg.Done() // Ensure this is called when the goroutine exits
+	wg.Add(1)
+	defer func() {
+		wg.Done()
+	}()
 
 	if settings.Debug {
 		fmt.Println("Initializing context")
@@ -543,6 +625,7 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 		go func() {
 			select {
 			case <-quitChan:
+				log.Printf("🛑 DEBUG: Quit signal received, do not attempt to restart")
 				// Quit signal has been received, do not attempt to restart
 				return
 			case <-time.After(100 * time.Millisecond):
@@ -605,9 +688,9 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 		select {
 		case <-quitChan:
 			// QuitChannel was closed, clean up and return.
-			if settings.Debug {
-				fmt.Println("🛑 Stopping audio capture due to quit signal.")
-			}
+			//if settings.Debug {
+			fmt.Println("🛑 Stopping audio capture due to quit signal.")
+			//}
 			time.Sleep(100 * time.Millisecond)
 			return
 		case <-restartChan:
