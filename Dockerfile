@@ -53,12 +53,25 @@ RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
 # Create final image using a multi-platform base image
 FROM --platform=$TARGETPLATFORM debian:bookworm-slim
 
-# Install ALSA library and SOX
+# Install ALSA library and SOX for audio processing, and other system utilities for debugging
 RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     ca-certificates \
     libasound2 \
     ffmpeg \
-    sox
+    sox \
+    procps \
+    iproute2 \
+    net-tools \
+    curl \
+    wget \
+    nano \
+    vim \
+    less \
+    tzdata \
+    jq \
+    strace \
+    lsof \
+    bash-completion
 
 # Clean up apt cache
 RUN rm -rf /var/lib/apt/lists/*
