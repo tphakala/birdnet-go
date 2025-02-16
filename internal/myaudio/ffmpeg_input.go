@@ -242,10 +242,6 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 	// Start watchdog goroutine
 	watchdogDone := p.startWatchdog(ctx, url, watchdog)
 
-	// Get a human-readable name for the source
-	sourceName := getSourceName(url)
-	log.Printf("Starting audio processing for RTSP source: %s (display name: %s)", url, sourceName)
-
 	// Continuously process audio data
 	for {
 		select {
@@ -309,7 +305,7 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 				}
 
 				// Calculate audio level with source information
-				audioLevelData := calculateAudioLevel(buf[:n], url, sourceName)
+				audioLevelData := calculateAudioLevel(buf[:n], url, "")
 
 				// Send level to channel (non-blocking)
 				select {
@@ -325,28 +321,6 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 			}
 		}
 	}
-}
-
-// getSourceName returns a human-readable name for the source URL
-func getSourceName(url string) string {
-	// Extract the last part of the URL path
-	parts := strings.Split(url, "/")
-	if len(parts) > 0 {
-		lastPart := parts[len(parts)-1]
-		// Remove any query parameters
-		if idx := strings.Index(lastPart, "?"); idx != -1 {
-			lastPart = lastPart[:idx]
-		}
-		// If it's an IP address with port, make it more readable
-		if strings.Contains(lastPart, ":") {
-			hostPort := strings.Split(lastPart, ":")
-			if len(hostPort) == 2 {
-				return fmt.Sprintf("Camera %s", hostPort[0])
-			}
-		}
-		return fmt.Sprintf("Camera %s", lastPart)
-	}
-	return "RTSP Camera" // Fallback name
 }
 
 // startFFmpeg starts an FFmpeg process with the given configuration
@@ -390,12 +364,14 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 	}
 
 	// Log the FFmpeg command for debugging purposes
-	log.Println("⬆️  Starting ffmpeg with command:", cmd.String())
+	log.Println("⬆️  Starting FFmpeg with command:", cmd.String())
 
 	// Start the FFmpeg process
 	if err := cmd.Start(); err != nil {
 		cancel() // Cancel the context if process start fails
 		return nil, fmt.Errorf("error starting FFmpeg: %w", err)
+	} else {
+		log.Printf("✅ FFmpeg started successfully for RTSP source %s", config.URL)
 	}
 
 	// Create a channel to receive the exit status of the FFmpeg process
