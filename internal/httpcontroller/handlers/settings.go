@@ -93,6 +93,14 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		h.controlChan <- "reconfigure_rtsp_sources"
 	}
 
+	// Check if audio device settings have changed
+	if audioDeviceSettingChanged(&oldSettings, settings) {
+		h.SSE.SendNotification(Notification{
+			Message: "Audio device changed. Please restart the application for the changes to take effect.",
+			Type:    "warning",
+		})
+	}
+
 	// Check the authentication settings and update if needed
 	h.updateAuthenticationSettings(settings)
 
@@ -634,6 +642,11 @@ func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	}
 
 	return false
+}
+
+// audioDeviceSettingChanged checks if audio device settings have been modified
+func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return oldSettings.Realtime.Audio.Source != currentSettings.Realtime.Audio.Source
 }
 
 // rtspSettingsChanged checks if RTSP settings have been modified
