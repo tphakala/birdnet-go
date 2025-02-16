@@ -45,7 +45,7 @@ func (h *Handlers) Detections(c echo.Context) error {
 	}
 
 	// Set configurable items per page
-	itemsPerPage := 25
+	itemsPerPage := 20
 
 	// Validate and set default values
 	if req.NumResults == 0 {
