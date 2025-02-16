@@ -431,22 +431,22 @@ func ValidateAudioDevice(settings *conf.Settings) error {
 		return fmt.Errorf("failed to get capture devices: %w", err)
 	}
 
-	// Filter to get only hardware devices
+	// Filter to get only hardware devices to check if any are available
 	hardwareDevices := getHardwareDevices(infos)
 	if len(hardwareDevices) == 0 {
 		settings.Realtime.Audio.Source = ""
 		return fmt.Errorf("no hardware audio capture devices found")
 	}
 
-	// Try to find and test the configured device
-	for i := range hardwareDevices {
-		decodedID, err := hexToASCII(hardwareDevices[i].ID.String())
+	// Try to find and test the configured device, in this we also accept alsa speudo devices
+	for i := range infos {
+		decodedID, err := hexToASCII(infos[i].ID.String())
 		if err != nil {
 			continue
 		}
 
-		if matchesDeviceSettings(decodedID, &hardwareDevices[i], settings.Realtime.Audio.Source) {
-			if TestCaptureDevice(malgoCtx, &hardwareDevices[i]) {
+		if matchesDeviceSettings(decodedID, &infos[i], settings.Realtime.Audio.Source) {
+			if TestCaptureDevice(malgoCtx, &infos[i]) {
 				return nil
 			}
 			settings.Realtime.Audio.Source = ""
@@ -454,7 +454,7 @@ func ValidateAudioDevice(settings *conf.Settings) error {
 		}
 	}
 
-	settings.Realtime.Audio.Source = ""
+	//settings.Realtime.Audio.Source = ""
 	return fmt.Errorf("configured audio device '%s' not found", settings.Realtime.Audio.Source)
 }
 
@@ -486,29 +486,26 @@ func selectCaptureSource(settings *conf.Settings) (captureSource, error) {
 		return captureSource{}, fmt.Errorf("failed to get capture devices: %w", err)
 	}
 
-	// Filter to get only hardware devices
-	hardwareDevices := getHardwareDevices(infos)
-
-	fmt.Println("Available Hardware Capture Sources:")
-	for i := range hardwareDevices {
-		decodedID, err := hexToASCII(hardwareDevices[i].ID.String())
+	fmt.Println("Available Capture Sources:")
+	for i := range infos {
+		decodedID, err := hexToASCII(infos[i].ID.String())
 		if err != nil {
 			fmt.Printf("❌ Error decoding ID for device %d: %v\n", i, err)
 			continue
 		}
 
-		output := fmt.Sprintf("  %d: %s", i, hardwareDevices[i].Name())
+		output := fmt.Sprintf("  %d: %s", i, infos[i].Name())
 		if runtime.GOOS == "linux" {
 			output = fmt.Sprintf("%s, %s", output, decodedID)
 		}
 
-		if matchesDeviceSettings(decodedID, &hardwareDevices[i], settings.Realtime.Audio.Source) {
-			if TestCaptureDevice(malgoCtx, &hardwareDevices[i]) {
+		if matchesDeviceSettings(decodedID, &infos[i], settings.Realtime.Audio.Source) {
+			if TestCaptureDevice(malgoCtx, &infos[i]) {
 				fmt.Printf("%s (✅ selected)\n", output)
 				return captureSource{
-					Name:    hardwareDevices[i].Name(),
+					Name:    infos[i].Name(),
 					ID:      decodedID,
-					Pointer: hardwareDevices[i].ID.Pointer(),
+					Pointer: infos[i].ID.Pointer(),
 				}, nil
 			}
 			fmt.Printf("%s (❌ device test failed)\n", output)
