@@ -625,7 +625,6 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 		go func() {
 			select {
 			case <-quitChan:
-				log.Printf("🛑 DEBUG: Quit signal received, do not attempt to restart")
 				// Quit signal has been received, do not attempt to restart
 				return
 			case <-time.After(100 * time.Millisecond):
