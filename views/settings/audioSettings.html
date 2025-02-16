@@ -132,12 +132,10 @@ x-init="
             </label>
             <select x-model="audioCapture.source"
                     name="realtime.audio.source"
-                    class="select select-bordered select-sm w-full"
-                    :disabled="audioCapture.rtsp.urls.length > 0">
-                <option value="">Select an audio source</option>
+                    class="select select-bordered select-sm w-full">
+                <option value="">No sound card capture</option>
                 <template x-for="device in audioDevices" :key="device.Index">
                     <option :value="device.Name" 
-                            :selected="device.Name.toLowerCase().includes(audioCapture.source.toLowerCase()) || device.Name === audioCapture.source" 
                             x-text="device.Name"></option>
                 </template>
             </select>
@@ -146,7 +144,7 @@ x-init="
                  class="tooltip" 
                  role="tooltip"
                  aria-live="polite">
-                Audio source to use for analysis (e.g., 'sysdefault'). This setting is disabled if RTSP URLs are configured.
+                Audio source to use for analysis (e.g., 'sysdefault'). Select 'No sound card capture' to disable sound card capture.
             </div>
         </div>
 
