@@ -30,26 +30,22 @@
            const spaceAbove = buttonRect.top;
            const menuHeight = menu.offsetHeight;
            
+           // Position menu relative to viewport
+           menu.style.position = 'fixed';
+           menu.style.zIndex = '50';
+           
            // Determine vertical position
            if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
-             menu.style.bottom = 'calc(100% + 0.5rem)';
+             menu.style.bottom = (window.innerHeight - buttonRect.top + 8) + 'px';
              menu.style.top = 'auto';
            } else {
-             menu.style.top = 'calc(100% + 0.5rem)';
+             menu.style.top = (buttonRect.bottom + 8) + 'px';
              menu.style.bottom = 'auto';
            }
            
-           // Determine horizontal position
-           const spaceRight = window.innerWidth - buttonRect.right;
-           const menuWidth = menu.offsetWidth;
-           
-           if (spaceRight < menuWidth) {
-             menu.style.right = '0';
-             menu.style.left = 'auto';
-           } else {
-             menu.style.left = '0';
-             menu.style.right = 'auto';
-           }
+           // Always align menu's right edge with button's right edge
+           menu.style.left = 'auto';
+           menu.style.right = (window.innerWidth - buttonRect.right) + 'px';
          });
        }
      }"
@@ -71,7 +67,7 @@
       x-transition:leave="transition ease-in duration-150"
       x-transition:leave-start="opacity-100 scale-100"
       x-transition:leave-end="opacity-0 scale-95"
-      class="absolute z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 border border-base-300"
+      class="fixed menu p-2 shadow-lg bg-base-100 rounded-box w-52 border border-base-300"
       style="display: none;">
     <li>
       <a href="#" 
