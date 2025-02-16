@@ -1,6 +1,6 @@
 {{define "listDetections"}}
 
-<section class="card col-span-12 overflow-x-auto bg-base-100 shadow-sm"
+<section class="card col-span-12 bg-base-100 shadow-sm"
     id="listDetections"
     hx-trigger="refreshListEvent from:body" 
     hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{.Offset}}" 
@@ -29,7 +29,7 @@
     </div>
 
     <!-- Desktop Layout -->
-    <div class="block w-full">
+    <div class="block w-full overflow-x-auto">
         <!-- Header -->
         <div class="flex text-xs px-4 pb-2 border-b border-gray-200">
             <div class="flex-1 min-w-[120px]">Date & Time</div>
@@ -168,7 +168,7 @@
                 <!-- Action Menu -->
                 {{if or (not $.Security.Enabled) $.Security.AccessAllowed}}
                 <div class="w-[5%] min-w-[40px] flex justify-end">
-                    <div class="relative">
+                    <div class="relative" style="position: static;">
                         {{template "actionMenu" .}}
                     </div>
                 </div>
