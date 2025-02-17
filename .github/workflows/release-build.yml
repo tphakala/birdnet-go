@@ -16,15 +16,23 @@ permissions:
 jobs:
   build:
     if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        goos: [linux, windows]
-        goarch: [amd64, arm64]
-        exclude:
-          - goarch: arm64
-            goos: windows
+        include:
+          - goos: linux
+            goarch: amd64
+            os: ubuntu-22.04
+          - goos: linux
+            goarch: arm64
+            os: ubuntu-22.04
+          - goos: windows
+            goarch: amd64
+            os: ubuntu-22.04
+          - goos: darwin
+            goarch: arm64
+            os: macos-latest
 
     steps:
       - name: Checkout code
@@ -36,7 +44,8 @@ jobs:
           go-version: '1.23'
           check-latest: true
 
-      - name: Install system dependencies
+      - name: Install Linux system dependencies
+        if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
@@ -73,6 +82,8 @@ jobs:
             fi
           elif [ "${{ matrix.goos }}" = "windows" ]; then
             cp /usr/x86_64-w64-mingw32/lib/tensorflowlite_c.dll artifacts/
+          elif [ "${{ matrix.goos }}" = "darwin" ]; then
+            cp /opt/homebrew/lib/libtensorflowlite_c.dylib artifacts/
           fi
           
           # Create tarball
@@ -85,25 +96,46 @@ jobs:
           name: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}
           path: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
 
-      - name: Upload Release Assets
+      # Optional: Create a GitHub release for tagged builds
+      - name: Create Release
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          DATE=$(date +'%Y%m%d')
+          echo "RELEASE_DATE=$DATE" >> $GITHUB_ENV
+        
+      - name: Create GitHub Release
+        if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v1
         with:
           files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+          tag_name: nightly-${{ env.RELEASE_DATE }}
+          name: "Nightly Build ${{ env.RELEASE_DATE }}"
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete old releases
+        uses: dev-drprasad/delete-older-releases@v0.3.2
+        with:
+          keep_latest: 14
+          delete_tags: true
+          delete_tag_pattern: ^nightly-
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   docker:
     if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
-
+    strategy:
+      matrix:
+        platform: [linux/amd64, linux/arm64]
+        
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          install: true
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -113,29 +145,57 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate downcase repository name
-        run: echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+        run: |
+          echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
 
-      - name: Extract metadata for Docker
+      - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ env.REPO }}
           tags: |
-            type=semver,pattern={{version}}
-            type=raw,value=latest      
+            type=raw,value={{version}}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+            type=raw,value=${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
 
-      - name: Build and push multi-arch Docker image
+      - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ghcr.io/${{ env.REPO }}:${{ github.ref_name }}
-            ghcr.io/${{ env.REPO }}:latest
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
-          build-args: |
-            VERSION=${{ github.ref_name }}
+
+  create-manifest:
+    needs: docker
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate downcase repository name
+        run: |
+          echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+
+      - name: Create and push manifest
+        run: |         
+          # Create and push the versioned manifest
+          docker manifest create ghcr.io/${{ env.REPO }}:${{ github.ref_name }} \
+            ghcr.io/${{ env.REPO }}:${{ github.ref_name }}-amd64 \
+            ghcr.io/${{ env.REPO }}:${{ github.ref_name }}-arm64
+          docker manifest push ghcr.io/${{ env.REPO }}:${{ github.ref_name }}
+          
+          # Create and push the latest manifest
+          docker manifest create ghcr.io/${{ env.REPO }}:latest \
+            ghcr.io/${{ env.REPO }}:amd64 \
+            ghcr.io/${{ env.REPO }}:arm64
+          docker manifest push ghcr.io/${{ env.REPO }}:latest
