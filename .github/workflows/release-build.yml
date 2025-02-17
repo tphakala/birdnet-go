@@ -139,5 +139,5 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
           build-args: |
-            TARGETPLATFORM=${{ matrix.platform }}
-            BUILDPLATFORM=${{ matrix.platform }}
+            VERSION=${{ github.ref_name }}
+            TARGETARCH=${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
