@@ -264,12 +264,12 @@ Source: MIT
 
 ### github.com/spf13/cobra
 
-License: https://github.com/spf13/cobra/blob/v1.8.1/LICENSE.txt
+License: https://github.com/spf13/cobra/blob/v1.9.1/LICENSE.txt
 Source: Apache-2.0
 
 ### github.com/spf13/pflag
 
-License: https://github.com/spf13/pflag/blob/v1.0.5/LICENSE
+License: https://github.com/spf13/pflag/blob/v1.0.6/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/spf13/viper
@@ -319,12 +319,12 @@ Source: MIT
 
 ### golang.org/x/crypto/acme
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.32.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.33.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.34.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.35.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -334,27 +334,27 @@ Source: BSD-3-Clause
 
 ### golang.org/x/sync/semaphore
 
-License: https://cs.opensource.google/go/x/sync/+/v0.10.0:LICENSE
+License: https://cs.opensource.google/go/x/sync/+/v0.11.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sys/unix
 
-License: https://cs.opensource.google/go/x/sys/+/v0.29.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.30.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term
 
-License: https://cs.opensource.google/go/x/term/+/v0.28.0:LICENSE
+License: https://cs.opensource.google/go/x/term/+/v0.29.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.21.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.22.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
 
-License: https://cs.opensource.google/go/x/time/+/v0.9.0:LICENSE
+License: https://cs.opensource.google/go/x/time/+/v0.10.0:LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/protobuf
