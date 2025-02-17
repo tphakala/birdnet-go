@@ -47,6 +47,7 @@ jobs:
           images: ghcr.io/${{ env.REPO }}
           tags: |
             type=raw,value=${{ env.VERSION }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+            type=raw,value=${VERSION#v}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
             type=raw,value=latest-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
 
       - name: Build and push Docker image
@@ -91,11 +92,17 @@ jobs:
 
       - name: Create and push manifest
         run: |         
-          # Create and push the versioned manifest
+          # Create and push the versioned manifest (with v prefix)
           docker manifest create --amend ghcr.io/${{ env.REPO }}:${{ env.VERSION }} \
             ghcr.io/${{ env.REPO }}:${{ env.VERSION }}-amd64 \
             ghcr.io/${{ env.REPO }}:${{ env.VERSION }}-arm64
           docker manifest push --purge ghcr.io/${{ env.REPO }}:${{ env.VERSION }}
+          
+          # Create and push the versioned manifest (without v prefix)
+          docker manifest create --amend ghcr.io/${{ env.REPO }}:${VERSION#v} \
+            ghcr.io/${{ env.REPO }}:${{ env.VERSION }}-amd64 \
+            ghcr.io/${{ env.REPO }}:${{ env.VERSION }}-arm64
+          docker manifest push --purge ghcr.io/${{ env.REPO }}:${VERSION#v}
           
           # Create and push the latest manifest
           docker manifest create --amend ghcr.io/${{ env.REPO }}:latest \
