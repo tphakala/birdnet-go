@@ -94,7 +94,7 @@ jobs:
 
   docker:
     if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: build
     strategy:
       matrix:
@@ -124,20 +124,50 @@ jobs:
         with:
           images: ghcr.io/${{ env.REPO }}
           tags: |
-            type=semver,pattern={{version}}
-            type=raw,value=latest
+            type=semver,pattern={{version}}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+            type=raw,value=latest-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
+          platforms: ${{ matrix.platform }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: ${{ matrix.platform }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
           build-args: |
             VERSION=${{ github.ref_name }}
-            TARGETARCH=${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+
+  create-manifest:
+    needs: docker
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate downcase repository name
+        run: |
+          echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+
+      - name: Create and push manifest
+        run: |
+          VERSION="${{ github.ref_name }}"
+          
+          # Create and push the versioned manifest
+          docker manifest create ghcr.io/${{ env.REPO }}:${VERSION} \
+            ghcr.io/${{ env.REPO }}:${VERSION}-amd64 \
+            ghcr.io/${{ env.REPO }}:${VERSION}-arm64
+          docker manifest push ghcr.io/${{ env.REPO }}:${VERSION}
+          
+          # Create and push the latest manifest
+          docker manifest create ghcr.io/${{ env.REPO }}:latest \
+            ghcr.io/${{ env.REPO }}:latest-amd64 \
+            ghcr.io/${{ env.REPO }}:latest-arm64
+          docker manifest push ghcr.io/${{ env.REPO }}:latest
