@@ -157,16 +157,23 @@ jobs:
         run: |
           echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
 
+      - name: Ensure images exist before manifest
+        run: |
+          VERSION="${{ github.ref_name }}"
+          echo "Checking if images exist before creating manifest..."
+          docker manifest inspect ghcr.io/${{ env.REPO }}:${VERSION}-amd64 || exit 1
+          docker manifest inspect ghcr.io/${{ env.REPO }}:${VERSION}-arm64 || exit 1
+
       - name: Create and push manifest
         run: |
           VERSION="${{ github.ref_name }}"
-          
+
           # Create and push the versioned manifest
           docker manifest create ghcr.io/${{ env.REPO }}:${VERSION} \
             ghcr.io/${{ env.REPO }}:${VERSION}-amd64 \
             ghcr.io/${{ env.REPO }}:${VERSION}-arm64
           docker manifest push ghcr.io/${{ env.REPO }}:${VERSION}
-          
+
           # Create and push the latest manifest
           docker manifest create ghcr.io/${{ env.REPO }}:latest \
             ghcr.io/${{ env.REPO }}:latest-amd64 \
