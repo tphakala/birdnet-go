@@ -95,7 +95,6 @@ jobs:
   docker:
     if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
-    needs: build
     strategy:
       matrix:
         platform: [linux/amd64, linux/arm64]
