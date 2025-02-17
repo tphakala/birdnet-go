@@ -47,7 +47,7 @@ jobs:
           images: ghcr.io/${{ env.REPO }}
           tags: |
             type=raw,value=${{ env.VERSION }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
-            type=raw,value=${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+            type=raw,value=latest-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -92,13 +92,13 @@ jobs:
       - name: Create and push manifest
         run: |         
           # Create and push the versioned manifest
-          docker manifest create ghcr.io/${{ env.REPO }}:${{ env.VERSION }} \
+          docker manifest create --amend ghcr.io/${{ env.REPO }}:${{ env.VERSION }} \
             ghcr.io/${{ env.REPO }}:${{ env.VERSION }}-amd64 \
             ghcr.io/${{ env.REPO }}:${{ env.VERSION }}-arm64
-          docker manifest push ghcr.io/${{ env.REPO }}:${{ env.VERSION }}
+          docker manifest push --purge ghcr.io/${{ env.REPO }}:${{ env.VERSION }}
           
           # Create and push the latest manifest
-          docker manifest create ghcr.io/${{ env.REPO }}:latest \
-            ghcr.io/${{ env.REPO }}:amd64 \
-            ghcr.io/${{ env.REPO }}:arm64
-          docker manifest push ghcr.io/${{ env.REPO }}:latest 
+          docker manifest create --amend ghcr.io/${{ env.REPO }}:latest \
+            ghcr.io/${{ env.REPO }}:latest-amd64 \
+            ghcr.io/${{ env.REPO }}:latest-arm64
+          docker manifest push --purge ghcr.io/${{ env.REPO }}:latest 
