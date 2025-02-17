@@ -49,6 +49,7 @@ type RenderData struct {
 	ContentTemplate string
 	PreloadFragment string
 	Security        *Security
+	CSRFToken       string
 }
 
 // initRoutes initializes the routes for the server.
@@ -171,6 +172,12 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 		)
 	}
 
+	// Get CSRF token from context
+	token := c.Get("csrf")
+	if token == nil {
+		return fmt.Errorf("CSRF token not found in context")
+	}
+
 	data := RenderData{
 		C:        c,
 		Page:     pageRoute.TemplateName,
@@ -181,6 +188,7 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 			AccessAllowed: s.IsAccessAllowed(c),
 			IsCloudflare:  isCloudflare,
 		},
+		CSRFToken: token.(string), // Ensure token is properly cast to string
 	}
 
 	fragmentPath := c.Request().RequestURI

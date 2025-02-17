@@ -27,6 +27,7 @@ type PageData struct {
 	Locales         []LocaleData   // List of available locales
 	Charts          template.HTML  // HTML content for charts, if any
 	PreloadFragment string         // The preload route for the current page
+	CSRFToken       string         // CSRF token for form submissions
 }
 
 // TemplateRenderer is a custom HTML template renderer for Echo framework.
