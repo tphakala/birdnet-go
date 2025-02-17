@@ -25,18 +25,15 @@ func (s *Server) configureMiddleware() {
 
 // CSRFMiddleware configures CSRF protection for the server
 func (s *Server) CSRFMiddleware() echo.MiddlewareFunc {
-	return middleware.CSRFWithConfig(middleware.CSRFConfig{
+	config := middleware.CSRFConfig{
 		TokenLookup:    "header:X-CSRF-Token,form:_csrf",
 		CookieName:     "csrf",
 		CookiePath:     "/",
 		CookieHTTPOnly: true,
 		CookieSameSite: http.SameSiteLaxMode,
 		CookieMaxAge:   3600, // 1 hour token lifetime
-		// Use secure cookie in production, but allow non-secure for local development
-		CookieSecure: !security.IsInLocalSubnet(net.ParseIP(s.Settings.Security.Host)),
-		TokenLength:  32,
-		ContextKey:   "csrf",
-		// Skip CSRF check for assets and media
+		TokenLength:    32,
+		ContextKey:     "csrf",
 		Skipper: func(c echo.Context) bool {
 			path := c.Path()
 			return strings.HasPrefix(path, "/assets/") ||
@@ -45,16 +42,42 @@ func (s *Server) CSRFMiddleware() echo.MiddlewareFunc {
 				strings.HasPrefix(path, "/oauth2/token") ||
 				path == "/callback"
 		},
-		// CSRF error handler with more detailed logging
 		ErrorHandler: func(err error, c echo.Context) error {
-			s.Debug("CSRF Error - Method: %s, Path: %s", c.Request().Method, c.Request().URL.Path)
-			s.Debug("CSRF Token in Header: %s", c.Request().Header.Get("X-CSRF-Token"))
-			s.Debug("CSRF Token in Form: %s", c.FormValue("_csrf"))
-			s.Debug("CSRF Cookie: %s", c.Request().Header.Get("Cookie"))
-			s.Debug("Error details: %v", err)
-			return echo.NewHTTPError(http.StatusForbidden, "invalid csrf token")
+			s.Debug("🚨 CSRF ERROR: Rejected request")
+
+			// Log request method and path
+			s.Debug("🔍 Request Method: %s, Path: %s", c.Request().Method, c.Request().URL.Path)
+
+			// Log CSRF token lookup sources
+			s.Debug("📌 CSRF Token in Header: %s", c.Request().Header.Get("X-CSRF-Token"))
+			s.Debug("📌 CSRF Token in Form: %s", c.FormValue("_csrf"))
+
+			// Log CSRF cookie details
+			csrfCookie, cookieErr := c.Cookie("csrf")
+			if cookieErr == nil {
+				s.Debug("🍪 CSRF Cookie: %s", csrfCookie.Value)
+			} else {
+				s.Debug("⚠️ No CSRF Cookie found")
+			}
+
+			// Log full request cookies for debugging
+			s.Debug("📝 All Cookies: %s", c.Request().Header.Get("Cookie"))
+			s.Debug("💡 Error Details: %v", err)
+
+			return echo.NewHTTPError(http.StatusForbidden, "Invalid CSRF token")
 		},
-	})
+	}
+
+	// Wrap the middleware to access context
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		csrfMiddleware := middleware.CSRFWithConfig(config)
+		return func(c echo.Context) error {
+			clientIP := net.ParseIP(s.RealIP(c))
+			// Set the cookie secure option based on the client IP
+			config.CookieSecure = !security.IsInLocalSubnet(clientIP)
+			return csrfMiddleware(next)(c)
+		}
+	}
 }
 
 // GzipMiddleware configures Gzip compression for the server
