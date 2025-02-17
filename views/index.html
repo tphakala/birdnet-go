@@ -28,11 +28,41 @@
 	<link href="/assets/custom.css?v={{.Settings.Version}}" rel="stylesheet" />
 	<!-- htmx -->
 	<script src="/assets/htmx.min.js?v={{.Settings.Version}}" defer></script>
+	<!-- Supply CSRF token in all requests, must be executed before any HTMX requests -->
+	<script>
+		// Configure HTMX to include CSRF token in all requests
+		document.addEventListener('htmx:configRequest', function(evt) {
+			// Get the token from the meta tag
+			let token = document.querySelector('meta[name="csrf-token"]').content;
+			
+			// Add the token to the headers
+			evt.detail.headers['X-CSRF-Token'] = token;
+			
+			// For form submissions, also add the token as a form field
+			if (evt.detail.parameters) {
+				evt.detail.parameters['_csrf'] = token;
+			}
+		});
+
+		// Also handle regular form submissions
+		document.addEventListener('submit', function(e) {
+			let form = e.target;
+			if (!form.querySelector('input[name="_csrf"]')) {
+				let token = document.querySelector('meta[name="csrf-token"]').content;
+				let input = document.createElement('input');
+				input.type = 'hidden';
+				input.name = '_csrf';
+				input.value = token;
+				form.appendChild(input);
+			}
+		});
+	</script>
 	<!-- alpine.js -->
 	<script src="/assets/alpinejs.min.js?v={{.Settings.Version}}" defer></script>
 	<!-- Custom utilities -->
 	<script src="/assets/audioplayer.js?v={{.Settings.Version}}" type="module"></script>
 	<script src="/assets/util.js?v={{.Settings.Version}}" defer></script>
+	<meta name="csrf-token" content="{{.CSRFToken}}">
 </head>
 
 <body class="drawer lg:drawer-open min-h-screen bg-base-200">
@@ -113,6 +143,8 @@
 			}
 		})();
 		{{ end }}
+
+
 
 	</script>
 </body>
