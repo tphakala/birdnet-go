@@ -31,9 +31,9 @@ func (s *Server) CSRFMiddleware() echo.MiddlewareFunc {
 		CookiePath:     "/",
 		CookieHTTPOnly: true,
 		CookieSameSite: http.SameSiteLaxMode,
-		CookieMaxAge:   3600, // 1 hour token lifetime
+		CookieMaxAge:   1800, // 30 minutes token lifetime
 		TokenLength:    32,
-		ContextKey:     "csrf",
+		ContextKey:     "birdnet-go.csrf",
 		Skipper: func(c echo.Context) bool {
 			path := c.Path()
 			return strings.HasPrefix(path, "/assets/") ||
