@@ -92,6 +92,7 @@ func (s *Server) handleLoginPage(c echo.Context) error {
 			"BasicEnabled":  s.Settings.Security.BasicAuth.Enabled,
 			"GoogleEnabled": s.Settings.Security.GoogleAuth.Enabled,
 			"GithubEnabled": s.Settings.Security.GithubAuth.Enabled,
+			"CSRFToken":     c.Get(CSRFContextKey),
 		})
 	}
 

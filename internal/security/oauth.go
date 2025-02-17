@@ -90,8 +90,9 @@ func (s *OAuth2Server) UpdateProviders() {
 	InitializeGoth(s.Settings)
 }
 
+// IsUserAuthenticated checks if the user is authenticated
 func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
-	if clientIP := net.ParseIP(c.RealIP()); isInLocalSubnet(clientIP) {
+	if clientIP := net.ParseIP(c.RealIP()); IsInLocalSubnet(clientIP) {
 		// For clients in the local subnet, consider them authenticated
 		s.Debug("User authenticated from local subnet")
 		return true
@@ -135,6 +136,7 @@ func isValidUserId(configuredIds, providedId string) bool {
 	return false
 }
 
+// GenerateAuthCode generates a new authorization code with CSRF protection
 func (s *OAuth2Server) GenerateAuthCode() (string, error) {
 	code := make([]byte, 32)
 	_, err := rand.Read(code)
@@ -153,6 +155,7 @@ func (s *OAuth2Server) GenerateAuthCode() (string, error) {
 	return authCode, nil
 }
 
+// ExchangeAuthCode exchanges an authorization code for an access token with CSRF validation
 func (s *OAuth2Server) ExchangeAuthCode(code string) (string, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -176,6 +179,7 @@ func (s *OAuth2Server) ExchangeAuthCode(code string) (string, error) {
 	return accessToken, nil
 }
 
+// ValidateAccessToken validates an access token
 func (s *OAuth2Server) ValidateAccessToken(token string) bool {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
