@@ -188,7 +188,13 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 			AccessAllowed: s.IsAccessAllowed(c),
 			IsCloudflare:  isCloudflare,
 		},
-		CSRFToken: token.(string), // Ensure token is properly cast to string
+		CSRFToken: func() string {
+			tokenStr, ok := token.(string)
+			if !ok {
+				return ""
+			}
+			return tokenStr
+		}(),
 	}
 
 	fragmentPath := c.Request().RequestURI
