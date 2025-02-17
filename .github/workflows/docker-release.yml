@@ -25,6 +25,7 @@ jobs:
         run: |
           LATEST_TAG=$(git describe --tags --abbrev=0)
           echo "VERSION=${LATEST_TAG}" >> $GITHUB_ENV
+          echo "VERSION_NO_V=${LATEST_TAG#v}" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -47,7 +48,7 @@ jobs:
           images: ghcr.io/${{ env.REPO }}
           tags: |
             type=raw,value=${{ env.VERSION }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
-            type=raw,value=${VERSION#v}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+            type=raw,value=${{ env.VERSION_NO_V }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
             type=raw,value=latest-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
 
       - name: Build and push Docker image
@@ -78,6 +79,7 @@ jobs:
         run: |
           LATEST_TAG=$(git describe --tags --abbrev=0)
           echo "VERSION=${LATEST_TAG}" >> $GITHUB_ENV
+          echo "VERSION_NO_V=${LATEST_TAG#v}" >> $GITHUB_ENV
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -99,10 +101,10 @@ jobs:
           docker manifest push --purge ghcr.io/${{ env.REPO }}:${{ env.VERSION }}
           
           # Create and push the versioned manifest (without v prefix)
-          docker manifest create --amend ghcr.io/${{ env.REPO }}:${VERSION#v} \
+          docker manifest create --amend ghcr.io/${{ env.REPO }}:${{ env.VERSION_NO_V }} \
             ghcr.io/${{ env.REPO }}:${{ env.VERSION }}-amd64 \
             ghcr.io/${{ env.REPO }}:${{ env.VERSION }}-arm64
-          docker manifest push --purge ghcr.io/${{ env.REPO }}:${VERSION#v}
+          docker manifest push --purge ghcr.io/${{ env.REPO }}:${{ env.VERSION_NO_V }}
           
           # Create and push the latest manifest
           docker manifest create --amend ghcr.io/${{ env.REPO }}:latest \
