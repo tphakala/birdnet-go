@@ -329,7 +329,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
 
-License: https://cs.opensource.google/go/x/oauth2/+/v0.25.0:LICENSE
+License: https://cs.opensource.google/go/x/oauth2/+/v0.26.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sync/semaphore
