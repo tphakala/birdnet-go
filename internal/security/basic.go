@@ -10,8 +10,8 @@ import (
 	"github.com/markbates/goth/gothic"
 )
 
-// isInLocalSubnet checks if the given IP is in the same subnet as any local network interface
-func isInLocalSubnet(clientIP net.IP) bool {
+// IsInLocalSubnet checks if the given IP is in the same subnet as any local network interface
+func IsInLocalSubnet(clientIP net.IP) bool {
 	if clientIP == nil {
 		return false
 	}
@@ -102,7 +102,7 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	}
 
 	// Check if client is in local subnet and configure cookie store accordingly
-	if clientIP := net.ParseIP(c.RealIP()); isInLocalSubnet(clientIP) {
+	if clientIP := net.ParseIP(c.RealIP()); IsInLocalSubnet(clientIP) {
 		// For clients in the local subnet, allow non-HTTPS cookies
 		configureLocalNetworkCookieStore()
 	}
