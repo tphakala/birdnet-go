@@ -8,10 +8,10 @@ htmx.on('htmx:afterSettle', function (event) {
     }
 
     // Constants
-    const GAIN_SLIDER_INACTIVITY_TIMEOUT_MS = 5000; // Hide gain slider after 5 seconds of inactivity
-    const GAIN_SLIDER_MARGIN = 4; // Gain slider margin from spectrogram
-    const GAIN_MAX_DB = 24; // Maximum gain value in decibels
-    const MIN_PLAYER_WIDTH_FOR_CONTROLS = 175; // Minimum width in pixels to show EQ and gain controls
+    const GAIN_SLIDER_INACTIVITY_TIMEOUT_MS = 5000;
+    const GAIN_SLIDER_MARGIN = 4;
+    const GAIN_MAX_DB = 24;
+    const MIN_PLAYER_WIDTH_FOR_CONTROLS = 175;
 
     const FILTER_TYPES = {
         highpass: 'highpass',
@@ -22,6 +22,75 @@ htmx.on('htmx:afterSettle', function (event) {
     const FILTER_HP_DEFAULT_FREQ = 20; // Default highpass filter frequency
     const FILTER_HP_MIN_FREQ = 20; // Minimum highpass filter frequency
     const FILTER_HP_MAX_FREQ = 10000; // Maximum highpass filter frequency
+
+    // SVG Icons
+    const ICONS = {
+        play: `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>`,
+        pause: `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>`,
+        pauseCompact: `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6"></path>
+        </svg>`,
+        playCompact: `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+        </svg>`,
+        volume: `<svg width="16" height="16" viewBox="0 0 24 24" style="color: white;" aria-hidden="true">
+            <path d="M12 5v14l-7-7h-3v-4h3l7-7z" fill="currentColor"/>
+            <path d="M16 8a4 4 0 0 1 0 8" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
+            <path d="M19 5a8 8 0 0 1 0 14" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
+        </svg>`
+    };
+
+    // Utility Functions
+    const updateButtonIcon = (button, icon) => {
+        button.innerHTML = ICONS[icon];
+    };
+
+    const setupEventListener = (element, event, handler, options = {}) => {
+        element.addEventListener(event, handler, options);
+        return () => element.removeEventListener(event, handler, options);
+    };
+
+    const createAudioNodes = (audioContext, audio) => {
+        const audioSource = audioContext.createMediaElementSource(audio);
+        const gainNode = audioContext.createGain();
+        gainNode.gain.value = 1;
+
+        const highPassFilter = audioContext.createBiquadFilter();
+        highPassFilter.type = 'highpass';
+        highPassFilter.frequency.value = FILTER_HP_DEFAULT_FREQ;
+        highPassFilter.Q.value = 1;
+
+        const compressor = audioContext.createDynamicsCompressor();
+        compressor.threshold.value = -24;
+        compressor.knee.value = 30;
+        compressor.ratio.value = 12;
+        compressor.attack.value = 0.003;
+        compressor.release.value = 0.25;
+
+        audioSource
+            .connect(highPassFilter)
+            .connect(gainNode)
+            .connect(compressor)
+            .connect(audioContext.destination);
+
+        return {
+            source: audioSource,
+            gain: gainNode,
+            compressor,
+            filters: {
+                highPass: highPassFilter
+            }
+        };
+    };
+
+    const setupClickPrevention = (elements, event) => {
+        return !elements.some(el => el.contains(event.target));
+    };
 
     // Utility functions for creating UI elements
     const createSlider = (className, height = 'h-32') => {
@@ -158,6 +227,181 @@ htmx.on('htmx:afterSettle', function (event) {
         if (activeGainControl) {
             activeGainControl.hideSlider();
             activeGainControl = null;
+        }
+    };
+
+    // Audio Player State Management
+    const createPlayerState = (audio, updateProgress) => {
+        let updateInterval;
+
+        const startInterval = () => {
+            updateInterval = setInterval(updateProgress, 100);
+        };
+
+        const stopInterval = () => {
+            clearInterval(updateInterval);
+        };
+
+        const togglePlay = (e, audioContext) => {
+            e.stopPropagation();
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+            if (audio.paused) {
+                audio.play();
+            } else {
+                audio.pause();
+            }
+        };
+
+        return {
+            startInterval,
+            stopInterval,
+            togglePlay
+        };
+    };
+
+    // UI Update Functions
+    const createUIUpdaters = (gainNode, volumeControl, sliderElement, sliderBar) => {
+        const updateGainValue = (dbValue) => {
+            const gainValue = dbToGain(dbValue);
+            gainNode.gain.value = gainValue;
+            const gainDisplay = volumeControl.querySelector('.gain-display');
+            const displayText = `${dbValue > 0 ? '+' : ''}${dbValue} dB`;
+            gainDisplay.textContent = displayText;
+            sliderElement.setAttribute('aria-valuenow', dbValue.toString());
+            sliderElement.setAttribute('aria-valuetext', `${dbValue} decibels`);
+            
+            const heightPercent = (dbValue / GAIN_MAX_DB) * 100;
+            sliderBar.style.height = `${heightPercent}%`;
+        };
+
+        return { updateGainValue };
+    };
+
+    const createFilterUpdaters = (filterControl, filterSlider, filterBar) => {
+        const updateFilterDisplay = (freq) => {
+            const filterLabel = filterControl.querySelector('span');
+            const displayText = `HP: ${Math.round(freq)} Hz`;
+            filterLabel.textContent = displayText;
+            filterSlider.setAttribute('aria-valuenow', Math.round(freq).toString());
+            filterSlider.setAttribute('aria-valuetext', `${Math.round(freq)} Hertz`);
+            
+            const pos = Math.log(freq/FILTER_HP_MIN_FREQ) / Math.log(FILTER_HP_MAX_FREQ/FILTER_HP_MIN_FREQ);
+            filterBar.style.height = `${pos * 100}%`;
+        };
+
+        return { updateFilterDisplay };
+    };
+
+    // Keyboard Control Setup
+    const setupKeyboardControls = (element, manager, updateFn, params) => {
+        element.addEventListener('keydown', (e) => {
+            if (manager.isActive()) {
+                let newValue;
+                
+                switch(e.key) {
+                    case 'ArrowUp':
+                        newValue = params.up();
+                        break;
+                    case 'ArrowDown':
+                        newValue = params.down();
+                        break;
+                    case 'Home':
+                        newValue = params.min;
+                        break;
+                    case 'End':
+                        newValue = params.max;
+                        break;
+                    default:
+                        return;
+                }
+                
+                if (newValue !== params.current) {
+                    e.preventDefault();
+                    updateFn(newValue);
+                    manager.resetTimer();
+                }
+            }
+        });
+    };
+
+    // Event Handling Setup
+    const setupPlayerEvents = (playPause, playPauseCompact, audio, playerState) => {
+        const handlers = {
+            play: () => {
+                updateButtonIcon(playPause, 'pause');
+                if (playPauseCompact) {
+                    updateButtonIcon(playPauseCompact, 'pauseCompact');
+                }
+                playerState.startInterval();
+            },
+            pause: () => {
+                updateButtonIcon(playPause, 'play');
+                if (playPauseCompact) {
+                    updateButtonIcon(playPauseCompact, 'playCompact');
+                }
+                playerState.stopInterval();
+            },
+            ended: playerState.stopInterval
+        };
+
+        audio.addEventListener('play', handlers.play);
+        audio.addEventListener('pause', handlers.pause);
+        audio.addEventListener('ended', handlers.ended);
+
+        return handlers;
+    };
+
+    // Slider Interaction Setup
+    const createSliderInteraction = (slider, manager, updateFn) => {
+        const handleUpdate = (e) => {
+            e.preventDefault();
+            manager.resetTimer();
+            const sliderRect = slider.querySelector('.relative').getBoundingClientRect();
+            let y = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+            
+            let pos = (sliderRect.bottom - y) / sliderRect.height;
+            pos = Math.max(0, Math.min(1, pos));
+            
+            return pos;
+        };
+
+        return handleUpdate;
+    };
+
+    // Seeking Setup
+    const setupSeeking = (container, playerOverlay, elements, audio, updateProgress) => {
+        if (isDesktop()) {
+            container.addEventListener('click', (e) => {
+                if (setupClickPrevention([playerOverlay, ...elements], e)) {
+                    const rect = container.getBoundingClientRect();
+                    const pos = (e.clientX - rect.left) / rect.width;
+                    audio.currentTime = pos * audio.duration;
+                    updateProgress();
+                }
+            });
+        } else {
+            let isDragging = false;
+            
+            container.addEventListener('touchstart', (e) => {
+                if (!audio.paused && setupClickPrevention([playerOverlay, ...elements], e)) {
+                    isDragging = true;
+                }
+            }, {passive: true});
+            
+            container.addEventListener('touchmove', (e) => {
+                if (isDragging && !playerOverlay.contains(e.target)) {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    const rect = container.getBoundingClientRect();
+                    const pos = (touch.clientX - rect.left) / rect.width;
+                    audio.currentTime = pos * audio.duration;
+                    updateProgress();
+                }
+            }, {passive: true});
+            
+            container.addEventListener('touchend', () => { isDragging = false; }, {passive: true});
         }
     };
 
@@ -497,34 +741,17 @@ htmx.on('htmx:afterSettle', function (event) {
 
                 // Update play/pause button icons and start/stop interval when audio is played
                 audio.addEventListener('play', () => {
-                    playPause.innerHTML = `
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                    `;
+                    playPause.innerHTML = ICONS.play;
                     if (playPauseCompact)
-                        playPauseCompact.innerHTML = `
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6"></path>
-                            </svg>
-                        `;
+                        playPauseCompact.innerHTML = ICONS.playCompact;
                     startInterval();
                 });
 
                 // Update play/pause button icons and stop interval when audio is paused
                 audio.addEventListener('pause', () => {
-                    playPause.innerHTML = `
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                    `;
+                    playPause.innerHTML = ICONS.pause;
                     if (playPauseCompact)
-                        playPauseCompact.innerHTML = `
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                            </svg>
-                        `;
+                        playPauseCompact.innerHTML = ICONS.pauseCompact;
                     stopInterval();
                 });
 
@@ -547,45 +774,7 @@ htmx.on('htmx:afterSettle', function (event) {
                 });
 
                 // Seeking functionality
-                if (isDesktop()) {
-                    spectrogramContainer.addEventListener('click', (e) => {
-                        // Ignore clicks if they are on the player overlay, sliders, or their controls
-                        if (!playerOverlay.contains(e.target) && 
-                            !sliderElement.contains(e.target) && 
-                            !filterSlider.contains(e.target) &&
-                            !volumeControl.contains(e.target) &&
-                            !filterControl.contains(e.target)) {
-                            const rect = spectrogramContainer.getBoundingClientRect();
-                            const pos = (e.clientX - rect.left) / rect.width;
-                            audio.currentTime = pos * audio.duration;
-                            updateProgress(); // Immediately update visuals
-                        }
-                    });
-                } else {
-                    let isDragging = false;
-                    spectrogramContainer.addEventListener('touchstart', (e) => { 
-                        // Ignore touch if it starts on the player overlay, sliders, or their controls
-                        if (!audio.paused && 
-                            !playerOverlay.contains(e.target) &&
-                            !sliderElement.contains(e.target) && 
-                            !filterSlider.contains(e.target) &&
-                            !volumeControl.contains(e.target) &&
-                            !filterControl.contains(e.target)) {
-                            isDragging = true; 
-                        }
-                    }, {passive: true});
-                    spectrogramContainer.addEventListener('touchmove', (e) => {
-                        if (isDragging && !playerOverlay.contains(e.target)) {
-                            e.preventDefault(); // Prevent scrolling while dragging
-                            const touch = e.touches[0];
-                            const rect = spectrogramContainer.getBoundingClientRect();
-                            const pos = (touch.clientX - rect.left) / rect.width;
-                            audio.currentTime = pos * audio.duration;
-                            updateProgress(); // Immediately update visuals
-                        }
-                    }, {passive: true});
-                    spectrogramContainer.addEventListener('touchend', () => { isDragging = false; }, {passive: true});
-                }
+                setupSeeking(spectrogramContainer, playerOverlay, [sliderElement, filterSlider, volumeControl, filterControl], audio, updateProgress);
 
                 if (isDesktop()) {
                     // On desktop show full version player when hovering over the spectrogram
