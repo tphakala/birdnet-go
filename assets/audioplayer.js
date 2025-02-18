@@ -11,6 +11,7 @@ htmx.on('htmx:afterSettle', function (event) {
     const GAIN_SLIDER_INACTIVITY_TIMEOUT_MS = 5000; // Hide gain slider after 5 seconds of inactivity
     const GAIN_SLIDER_MARGIN = 4; // Gain slider margin from spectrogram
     const GAIN_MAX_DB = 24; // Maximum gain value in decibels
+    const MIN_PLAYER_WIDTH_FOR_CONTROLS = 175; // Minimum width in pixels to show EQ and gain controls
 
     const FILTER_TYPES = {
         highpass: 'highpass',
@@ -26,9 +27,12 @@ htmx.on('htmx:afterSettle', function (event) {
     const createSlider = (className, height = 'h-32') => {
         const slider = document.createElement('div');
         slider.className = className;
+        slider.setAttribute('role', 'slider');
+        slider.setAttribute('aria-orientation', 'vertical');
+        slider.setAttribute('tabindex', '0');
         slider.style.cssText = 'display: none; position: absolute; z-index: 1000; background: rgba(0, 0, 0, 0.2); backdrop-filter: blur(4px); padding: 8px; border-radius: 4px;';
         slider.innerHTML = `
-            <div class="flex flex-col items-center ${height}">
+            <div class="flex flex-col items-center h-full">
                 <div class="relative h-full w-2 bg-white/50 dark:bg-white/10 rounded-full overflow-hidden">
                     <div class="absolute bottom-0 w-full rounded-full transition-all duration-100" style="height: 0%"></div>
                 </div>
@@ -37,12 +41,17 @@ htmx.on('htmx:afterSettle', function (event) {
         return slider;
     };
 
-    const createControlButton = (position, content) => {
+    const createControlButton = (position, content, ariaLabel) => {
         const control = document.createElement('div');
         control.style.cssText = `position: absolute; top: 8px; ${position}: 8px; z-index: 10; opacity: 0; transition: opacity 0.2s;`;
         control.innerHTML = `
             <div class="flex items-center gap-1" style="position: relative;">
-                <button class="flex items-center justify-center gap-1" style="height: 28px; padding: 0 8px; border-radius: 14px; background: rgba(0, 0, 0, 0.5); transition: background 0.2s;">
+                <button class="flex items-center justify-center gap-1" 
+                    style="height: 28px; padding: 0 8px; border-radius: 14px; background: rgba(0, 0, 0, 0.5); transition: background 0.2s;"
+                    aria-label="${ariaLabel}"
+                    aria-expanded="false"
+                    role="button"
+                    tabindex="0">
                     ${content}
                 </button>
             </div>
@@ -87,8 +96,9 @@ htmx.on('htmx:afterSettle', function (event) {
             if (sliderElement.style.display !== 'none') {
                 const containerRect = container.getBoundingClientRect();
                 const sliderRect = sliderElement.getBoundingClientRect();
-                const top = (containerRect.height - sliderRect.height) / 2;
+                const top = 0;  // Align to top
                 sliderElement.style.top = `${top}px`;
+                sliderElement.style.height = `${containerRect.height}px`; // Match container height
                 return { containerRect, sliderRect, top };
             }
             return null;
@@ -168,27 +178,37 @@ htmx.on('htmx:afterSettle', function (event) {
 
         // Create volume control elements
         const volumeControl = createControlButton('right', `
-            <svg width="16" height="16" viewBox="0 0 24 24" style="color: white;">
+            <svg width="16" height="16" viewBox="0 0 24 24" style="color: white;" aria-hidden="true">
                 <path d="M12 5v14l-7-7h-3v-4h3l7-7z" fill="currentColor"/>
                 <path d="M16 8a4 4 0 0 1 0 8" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
                 <path d="M19 5a8 8 0 0 1 0 14" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
             </svg>
-            <span class="gain-display text-xs text-white">0 dB</span>
-        `);
+            <span class="gain-display text-xs text-white" aria-live="polite">0 dB</span>
+        `, 'Adjust volume gain');
 
         // Create volume slider
         const sliderElement = createSlider('volume-slider');
+        sliderElement.setAttribute('aria-label', 'Volume gain control');
+        sliderElement.setAttribute('aria-valuemin', '0');
+        sliderElement.setAttribute('aria-valuemax', GAIN_MAX_DB.toString());
+        sliderElement.setAttribute('aria-valuenow', '0');
+        sliderElement.setAttribute('aria-valuetext', '0 decibels');
         const sliderBar = sliderElement.querySelector('.w-full');
         sliderBar.classList.add('bg-primary');
 
         // Create filter control UI
         const filterControl = createControlButton('left', `
-            <span class="text-xs text-white">HP: ${FILTER_HP_DEFAULT_FREQ} Hz</span>
-        `);
+            <span class="text-xs text-white" aria-live="polite">HP: ${FILTER_HP_DEFAULT_FREQ} Hz</span>
+        `, 'Adjust high-pass filter');
         filterControl.classList.add('filter-control');
 
         // Create filter slider
         const filterSlider = createSlider('filter-slider');
+        filterSlider.setAttribute('aria-label', 'High-pass filter frequency control');
+        filterSlider.setAttribute('aria-valuemin', FILTER_HP_MIN_FREQ.toString());
+        filterSlider.setAttribute('aria-valuemax', FILTER_HP_MAX_FREQ.toString());
+        filterSlider.setAttribute('aria-valuenow', FILTER_HP_DEFAULT_FREQ.toString());
+        filterSlider.setAttribute('aria-valuetext', `${FILTER_HP_DEFAULT_FREQ} Hertz`);
         const filterBar = filterSlider.querySelector('.w-full');
         filterBar.classList.add('bg-blue-500');
 
@@ -201,6 +221,34 @@ htmx.on('htmx:afterSettle', function (event) {
         // Initialize slider managers
         const gainManager = createSliderManager(sliderElement, volumeControl, GAIN_SLIDER_INACTIVITY_TIMEOUT_MS);
         const filterManager = createSliderManager(filterSlider, filterControl, GAIN_SLIDER_INACTIVITY_TIMEOUT_MS);
+
+        // Function to check and update control visibility based on container width
+        const updateControlsVisibility = () => {
+            const containerWidth = spectrogramContainer.getBoundingClientRect().width;
+            const shouldShowControls = containerWidth >= MIN_PLAYER_WIDTH_FOR_CONTROLS;
+            
+            volumeControl.style.display = shouldShowControls ? 'block' : 'none';
+            filterControl.style.display = shouldShowControls ? 'block' : 'none';
+            
+            // If controls are hidden, also hide their sliders
+            if (!shouldShowControls) {
+                if (gainManager.isActive()) {
+                    gainManager.hide();
+                }
+                if (filterManager.isActive()) {
+                    filterManager.hide();
+                }
+            }
+        };
+
+        // Initial visibility check
+        updateControlsVisibility();
+
+        // Add resize observer to handle container width changes
+        const resizeObserver = new ResizeObserver(() => {
+            updateControlsVisibility();
+        });
+        resizeObserver.observe(spectrogramContainer);
 
         // Show controls on hover
         spectrogramContainer.addEventListener('mouseenter', () => {
@@ -261,7 +309,10 @@ htmx.on('htmx:afterSettle', function (event) {
                     const gainValue = dbToGain(dbValue);
                     gainNode.gain.value = gainValue;
                     const gainDisplay = volumeControl.querySelector('.gain-display');
-                    gainDisplay.textContent = `${dbValue > 0 ? '+' : ''}${dbValue} dB`;
+                    const displayText = `${dbValue > 0 ? '+' : ''}${dbValue} dB`;
+                    gainDisplay.textContent = displayText;
+                    sliderElement.setAttribute('aria-valuenow', dbValue.toString());
+                    sliderElement.setAttribute('aria-valuetext', `${dbValue} decibels`);
                     
                     // Update slider bar height (0-GAIN_MAX_DB maps to 0-100%)
                     const heightPercent = (dbValue / GAIN_MAX_DB) * 100;
@@ -271,7 +322,11 @@ htmx.on('htmx:afterSettle', function (event) {
                 // Function to update filter frequency display
                 const updateFilterDisplay = (freq) => {
                     const filterLabel = filterControl.querySelector('span');
-                    filterLabel.textContent = `HP: ${Math.round(freq)} Hz`;
+                    const displayText = `HP: ${Math.round(freq)} Hz`;
+                    filterLabel.textContent = displayText;
+                    filterSlider.setAttribute('aria-valuenow', Math.round(freq).toString());
+                    filterSlider.setAttribute('aria-valuetext', `${Math.round(freq)} Hertz`);
+                    
                     // Calculate slider position based on frequency
                     const pos = Math.log(freq/FILTER_HP_MIN_FREQ) / Math.log(FILTER_HP_MAX_FREQ/FILTER_HP_MIN_FREQ);
                     filterBar.style.height = `${pos * 100}%`;
@@ -314,12 +369,15 @@ htmx.on('htmx:afterSettle', function (event) {
                 // Volume button click handler
                 volumeControl.querySelector('button').addEventListener('click', (e) => {
                     e.stopPropagation();
+                    const button = volumeControl.querySelector('button');
                     if (!gainManager.isActive()) {
                         if (filterManager.isActive()) {
                             filterManager.hide();
+                            filterControl.querySelector('button').setAttribute('aria-expanded', 'false');
                         }
                         hideActiveGainControl();
                         gainManager.show();
+                        button.setAttribute('aria-expanded', 'true');
                         const { containerRect, sliderRect } = gainManager.updatePosition(spectrogramContainer, GAIN_SLIDER_MARGIN);
                         sliderElement.style.left = `${containerRect.width + GAIN_SLIDER_MARGIN}px`;
                         activeGainControl = {
@@ -328,21 +386,26 @@ htmx.on('htmx:afterSettle', function (event) {
                         };
                     } else {
                         gainManager.hide();
+                        button.setAttribute('aria-expanded', 'false');
                     }
                 });
 
                 // Filter button click handler
                 filterControl.querySelector('button').addEventListener('click', (e) => {
                     e.stopPropagation();
+                    const button = filterControl.querySelector('button');
                     if (!filterManager.isActive()) {
                         if (gainManager.isActive()) {
                             gainManager.hide();
+                            volumeControl.querySelector('button').setAttribute('aria-expanded', 'false');
                         }
                         filterManager.show();
+                        button.setAttribute('aria-expanded', 'true');
                         const { containerRect, sliderRect } = filterManager.updatePosition(spectrogramContainer, GAIN_SLIDER_MARGIN);
                         filterSlider.style.left = `${-(sliderRect.width + GAIN_SLIDER_MARGIN)}px`;
                     } else {
                         filterManager.hide();
+                        button.setAttribute('aria-expanded', 'false');
                     }
                 });
 
@@ -536,6 +599,68 @@ htmx.on('htmx:afterSettle', function (event) {
 
                 // Mark this audio element as initialized
                 audio.dataset.initialized = 'true';
+
+                // Add keyboard controls for sliders
+                sliderElement.addEventListener('keydown', (e) => {
+                    if (gainManager.isActive()) {
+                        const currentDb = Math.round(gainToDb(gainNode.gain.value));
+                        let newValue = currentDb;
+                        
+                        switch(e.key) {
+                            case 'ArrowUp':
+                                newValue = Math.min(GAIN_MAX_DB, currentDb + 1);
+                                break;
+                            case 'ArrowDown':
+                                newValue = Math.max(0, currentDb - 1);
+                                break;
+                            case 'Home':
+                                newValue = 0;
+                                break;
+                            case 'End':
+                                newValue = GAIN_MAX_DB;
+                                break;
+                            default:
+                                return;
+                        }
+                        
+                        if (newValue !== currentDb) {
+                            e.preventDefault();
+                            updateGainValue(newValue);
+                            gainManager.resetTimer();
+                        }
+                    }
+                });
+
+                filterSlider.addEventListener('keydown', (e) => {
+                    if (filterManager.isActive()) {
+                        const currentFreq = highPassFilter.frequency.value;
+                        let newFreq = currentFreq;
+                        
+                        switch(e.key) {
+                            case 'ArrowUp':
+                                newFreq = Math.min(FILTER_HP_MAX_FREQ, currentFreq * 1.1);
+                                break;
+                            case 'ArrowDown':
+                                newFreq = Math.max(FILTER_HP_MIN_FREQ, currentFreq * 0.9);
+                                break;
+                            case 'Home':
+                                newFreq = FILTER_HP_MIN_FREQ;
+                                break;
+                            case 'End':
+                                newFreq = FILTER_HP_MAX_FREQ;
+                                break;
+                            default:
+                                return;
+                        }
+                        
+                        if (newFreq !== currentFreq) {
+                            e.preventDefault();
+                            highPassFilter.frequency.value = newFreq;
+                            updateFilterDisplay(newFreq);
+                            filterManager.resetTimer();
+                        }
+                    }
+                });
 
             } catch (e) {
                 console.warn('Error setting up Web Audio API:', e);
