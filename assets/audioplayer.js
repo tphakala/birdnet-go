@@ -12,6 +12,13 @@ htmx.on('htmx:afterSettle', function (event) {
     const GAIN_SLIDER_MARGIN = 4; // Gain slider margin from spectrogram
     const GAIN_MAX_DB = 24; // Maximum gain value in decibels
 
+    const FILTER_TYPES = {
+        highpass: 'highpass',
+        lowpass: 'lowpass',
+        bandpass: 'bandpass'
+    };
+    
+
     // Store audio nodes for each player
     const audioNodes = new Map();
 
@@ -113,6 +120,12 @@ htmx.on('htmx:afterSettle', function (event) {
                 gainNode = audioContext.createGain();
                 gainNode.gain.value = 1; // 0dB = gain of 1
                 
+                // Create filters
+                const highPassFilter = audioContext.createBiquadFilter();
+                highPassFilter.type = 'highpass';
+                highPassFilter.frequency.value = 500;
+                highPassFilter.Q.value = 1;
+
                 // Create and configure compressor for normalization
                 const compressor = audioContext.createDynamicsCompressor();
                 compressor.threshold.value = -24;
@@ -121,14 +134,22 @@ htmx.on('htmx:afterSettle', function (event) {
                 compressor.attack.value = 0.003;
                 compressor.release.value = 0.25;
 
-                // Connect the audio graph
+                // Connect the audio graph with filters
                 audioSource
+                    .connect(highPassFilter)
                     .connect(gainNode)
                     .connect(compressor)
                     .connect(audioContext.destination);
 
                 // Store nodes for this player
-                audioNodes.set(id, { source: audioSource, gain: gainNode, compressor });
+                audioNodes.set(id, { 
+                    source: audioSource, 
+                    gain: gainNode, 
+                    compressor,
+                    filters: {
+                        highPass: highPassFilter
+                    }
+                });
 
                 // Add volume control interactions
                 const volumeButton = volumeControl.querySelector('.volume-button');
@@ -441,6 +462,151 @@ htmx.on('htmx:afterSettle', function (event) {
                     // On mobile show always full version player controls
                     playerOverlay.style.opacity = '1';
                 }
+
+                // Create filter control UI
+                const filterControl = document.createElement('div');
+                filterControl.className = 'filter-control';
+                filterControl.style.cssText = 'position: absolute; top: 8px; left: 8px; z-index: 10; opacity: 0; transition: opacity 0.2s;';
+                filterControl.innerHTML = `
+                    <div class="filter-control-container flex items-center gap-1" style="position: relative;">
+                        <button class="filter-button flex items-center justify-center" style="height: 28px; padding: 0 8px; border-radius: 14px; background: rgba(0, 0, 0, 0.5); transition: background 0.2s;">
+                            <span class="text-xs text-white">HP: 500 Hz</span>
+                        </button>
+                    </div>
+                `;
+
+                // Create filter slider
+                const filterSlider = document.createElement('div');
+                filterSlider.className = 'filter-slider';
+                filterSlider.style.cssText = 'display: none; position: absolute; z-index: 1000; background: rgba(0, 0, 0, 0.2); backdrop-filter: blur(4px); padding: 8px; border-radius: 4px;';
+                filterSlider.innerHTML = `
+                    <div class="flex flex-col items-center h-32">
+                        <div class="relative h-full w-2 bg-white/50 dark:bg-white/10 rounded-full overflow-hidden">
+                            <div class="absolute bottom-0 w-full bg-blue-500 rounded-full transition-all duration-100" style="height: 50%"></div>
+                        </div>
+                    </div>
+                `;
+
+                // Add filter controls to player
+                spectrogramContainer.appendChild(filterControl);
+                spectrogramContainer.appendChild(filterSlider);
+
+                // Show controls on hover
+                spectrogramContainer.addEventListener('mouseenter', () => {
+                    filterControl.style.opacity = '1';
+                });
+
+                spectrogramContainer.addEventListener('mouseleave', () => {
+                    filterControl.style.opacity = '0';
+                    if (!isFilterSliderActive) {
+                        filterSlider.style.display = 'none';
+                    }
+                });
+
+                // Add filter control logic
+                let isFilterSliderActive = false;
+                const filterButton = filterControl.querySelector('.filter-button');
+                const filterLabel = filterButton.querySelector('span');
+                const filterBar = filterSlider.querySelector('.bg-blue-500');
+                
+                // Initialize filter frequency display
+                const updateFilterDisplay = (freq) => {
+                    filterLabel.textContent = `HP: ${Math.round(freq)} Hz`;
+                    // Calculate slider position based on frequency
+                    const minFreq = 20;
+                    const maxFreq = 10000;
+                    const pos = Math.log(freq/minFreq) / Math.log(maxFreq/minFreq);
+                    filterBar.style.height = `${pos * 100}%`;
+                };
+
+                // Set initial display
+                updateFilterDisplay(highPassFilter.frequency.value);
+
+                filterButton.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    isFilterSliderActive = !isFilterSliderActive;
+                    filterSlider.style.display = isFilterSliderActive ? 'block' : 'none';
+                    
+                    if (isFilterSliderActive) {
+                        // Calculate optimal slider position
+                        const spectrogramRect = spectrogramContainer.getBoundingClientRect();
+                        const sliderRect = filterSlider.getBoundingClientRect();
+                        
+                        // Position slider to the left of the spectrogram
+                        let left = -(sliderRect.width + GAIN_SLIDER_MARGIN);
+                        let top = (spectrogramRect.height - sliderRect.height) / 2;
+
+                        filterSlider.style.top = `${top}px`;
+                        filterSlider.style.left = `${left}px`;
+                    }
+                });
+
+                // Add a resize handler to update the filter slider position
+                const updateFilterSliderPosition = () => {
+                    if (filterSlider.style.display !== 'none') {
+                        const spectrogramRect = spectrogramContainer.getBoundingClientRect();
+                        const sliderRect = filterSlider.getBoundingClientRect();
+                        
+                        let left = -(sliderRect.width + GAIN_SLIDER_MARGIN);
+                        let top = (spectrogramRect.height - sliderRect.height) / 2;
+
+                        filterSlider.style.top = `${top}px`;
+                        filterSlider.style.left = `${left}px`;
+                    }
+                };
+
+                // Add the resize handler to your existing window resize listener
+                window.addEventListener('resize', () => {
+                    if (isFilterSliderActive) {
+                        updateFilterSliderPosition();
+                    }
+                });
+
+                // Handle filter slider interaction
+                const updateFilterFrequency = (e) => {
+                    e.preventDefault();
+                    const sliderRect = filterSlider.querySelector('.relative').getBoundingClientRect();
+                    let y = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+                    
+                    let pos = (sliderRect.bottom - y) / sliderRect.height;
+                    pos = Math.max(0, Math.min(1, pos));
+                    
+                    const minFreq = 20;
+                    const maxFreq = 10000;
+                    const freq = Math.round(minFreq * Math.pow(maxFreq/minFreq, pos));
+                    
+                    highPassFilter.frequency.value = freq;
+                    updateFilterDisplay(freq);
+                };
+
+                // Add mouse and touch event listeners for filter slider
+                filterSlider.addEventListener('mousedown', (e) => {
+                    if (e.button === 0) {
+                        updateFilterFrequency(e);
+                        document.addEventListener('mousemove', updateFilterFrequency);
+                        document.addEventListener('mouseup', () => {
+                            document.removeEventListener('mousemove', updateFilterFrequency);
+                        }, { once: true });
+                    }
+                });
+
+                filterSlider.addEventListener('touchstart', (e) => {
+                    updateFilterFrequency(e);
+                    document.addEventListener('touchmove', updateFilterFrequency, { passive: false });
+                    document.addEventListener('touchend', () => {
+                        document.removeEventListener('touchmove', updateFilterFrequency);
+                    }, { once: true });
+                });
+
+                // Add wheel event listener for fine adjustment
+                filterSlider.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const currentFreq = highPassFilter.frequency.value;
+                    const direction = e.deltaY > 0 ? 0.97 : 1.03;
+                    const newFreq = Math.min(10000, Math.max(20, currentFreq * direction));
+                    highPassFilter.frequency.value = newFreq;
+                    updateFilterDisplay(newFreq);
+                }, { passive: false });
 
                 // Mark this audio element as initialized
                 audio.dataset.initialized = 'true';
