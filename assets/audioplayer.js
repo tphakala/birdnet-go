@@ -8,8 +8,9 @@ htmx.on('htmx:afterSettle', function (event) {
     }
 
     // Constants
-    const SLIDER_INACTIVITY_TIMEOUT_MS = 5000; // 5 seconds
-    const SLIDER_MARGIN = 8; // Margin between spectrogram and slider
+    const GAIN_SLIDER_INACTIVITY_TIMEOUT_MS = 5000; // Hide gain slider after 5 seconds of inactivity
+    const GAIN_SLIDER_MARGIN = 4; // Gain slider margin from spectrogram
+    const GAIN_MAX_DB = 24; // Maximum gain value in decibels
 
     // Store audio nodes for each player
     const audioNodes = new Map();
@@ -50,8 +51,9 @@ htmx.on('htmx:afterSettle', function (event) {
         const volumeControl = document.createElement('div');
         volumeControl.style.cssText = 'position: absolute; top: 8px; right: 8px; z-index: 10; opacity: 0; transition: opacity 0.2s;';
         volumeControl.innerHTML = `
-            <div class="volume-control-container" style="position: relative;">
-                <button class="volume-button" style="padding: 4px; border-radius: 50%; background: rgba(0, 0, 0, 0.5); transition: background 0.2s;">
+            <div class="volume-control-container flex items-center gap-1" style="position: relative;">
+                <span class="gain-display text-xs text-white bg-black/50 mb-1 flex items-center" style="height: 28px; line-height: 28px;">0 dB</span>
+                <button class="volume-button flex items-center justify-center" style="height: 28px; width: 28px; border-radius: 50%; background: rgba(0, 0, 0, 0.5); transition: background 0.2s;">
                     <svg width="20" height="20" viewBox="0 0 24 24" style="color: white;">
                         <path d="M12 5v14l-7-7h-3v-4h3l7-7z" fill="currentColor"/>
                         <path d="M16 8a4 4 0 0 1 0 8" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
@@ -63,14 +65,13 @@ htmx.on('htmx:afterSettle', function (event) {
 
         // Create slider element separately
         const sliderElement = document.createElement('div');
-        sliderElement.className = 'volume-slider bg-transparent';
-        sliderElement.style.cssText = 'display: none; position: absolute; background: transparent; z-index: 1000;';
+        sliderElement.className = 'volume-slider';
+        sliderElement.style.cssText = 'display: none; position: absolute; z-index: 1000; background: rgba(0, 0, 0, 0.2); backdrop-filter: blur(4px); padding: 8px; border-radius: 4px;';
         sliderElement.innerHTML = `
-            <div class="flex flex-col items-center space-y-2 bg-transparent">
-                <input type="range" min="0" max="12" step="3" value="0" 
-                    class="h-20 w-12 appearance-none bg-transparent"
-                    style="writing-mode: bt-lr; -webkit-appearance: slider-vertical;">
-                <span class="text-base-content text-xs">+0 dB</span>
+            <div class="flex flex-col items-center h-full">
+                <div class="relative h-full w-2 bg-white/50 dark:bg-white/10 rounded-full overflow-hidden">
+                    <div class="absolute bottom-0 w-full bg-primary rounded-full transition-all duration-100" style="height: 0%"></div>
+                </div>
             </div>
         `;
 
@@ -78,45 +79,24 @@ htmx.on('htmx:afterSettle', function (event) {
         spectrogramContainer.appendChild(volumeControl);
         spectrogramContainer.appendChild(sliderElement);
 
-        // Style the volume slider to match player theme
-        const sliderStyle = document.createElement('style');
-        sliderStyle.textContent = `
-            .volume-button:hover {
-                background: rgba(0, 0, 0, 0.7) !important;
-            }
-            input[type=range]::-webkit-slider-thumb {
-                -webkit-appearance: none;
-                height: 12px;
-                width: 12px;
-                border-radius: 50%;
-                background: var(--fallback-bc,oklch(var(--bc)));
-                cursor: pointer;
-                margin-top: -4px;
-                transform: translateX(-16px);
-            }
-            input[type=range]::-webkit-slider-runnable-track {
-                width: 100%;
-                height: 4px;
-                border-radius: 2px;
-            }
-            input[type=range]:focus {
-                outline: none;
-            }
-        `;
-
-        document.head.appendChild(sliderStyle);
-
         let sliderTimeout;
         let isSliderActive = false;
 
-        // Add hover behavior to match other controls
-        spectrogramContainer.addEventListener('mouseenter', () => {
-            volumeControl.style.opacity = '1'; // Keep fully visible
-        });
+        // Function to update slider height to match container
+        const updateSliderHeight = () => {
+            const containerHeight = spectrogramContainer.clientHeight;
+            sliderElement.style.height = `${containerHeight}px`;
+        };
+
+        // Initial height update
+        updateSliderHeight();
 
         // Add hover behavior to match other controls
+        spectrogramContainer.addEventListener('mouseenter', () => {
+            volumeControl.style.opacity = '1';
+        });
+
         spectrogramContainer.addEventListener('mouseleave', () => {
-            // Only reduce opacity if the slider is NOT visible
             if (!isSliderActive) {
                 volumeControl.style.opacity = '0';
             }
@@ -152,8 +132,8 @@ htmx.on('htmx:afterSettle', function (event) {
 
                 // Add volume control interactions
                 const volumeButton = volumeControl.querySelector('.volume-button');
-                const sliderInput = sliderElement.querySelector('input');
-                const dbDisplay = sliderElement.querySelector('span');
+                const gainDisplay = volumeControl.querySelector('.gain-display');
+                const sliderBar = sliderElement.querySelector('.bg-primary');
 
                 // Function to calculate optimal slider position
                 const calculateSliderPosition = () => {
@@ -161,17 +141,15 @@ htmx.on('htmx:afterSettle', function (event) {
                     const sliderRect = sliderElement.getBoundingClientRect();
                     const viewportWidth = window.innerWidth;
                     
-                    // Calculate position relative to the spectrogram container
-                    let left = spectrogramRect.width + SLIDER_MARGIN;
+                    // Position slider closer to the spectrogram
+                    let left = spectrogramRect.width + GAIN_SLIDER_MARGIN;
                     let top = 0;
 
-                    // Check if slider would go off the right edge of the viewport
-                    if (spectrogramRect.right + SLIDER_MARGIN + sliderRect.width > viewportWidth) {
-                        // Position on the left side instead
-                        left = -sliderRect.width - SLIDER_MARGIN;
+                    if (spectrogramRect.right + GAIN_SLIDER_MARGIN + sliderRect.width > viewportWidth) {
+                        // If slider would go off screen, position it on the left side
+                        left = -(sliderRect.width + GAIN_SLIDER_MARGIN);
                     }
 
-                    // Vertically center the slider relative to the spectrogram
                     top = (spectrogramRect.height - sliderRect.height) / 2;
 
                     return { top, left };
@@ -191,7 +169,6 @@ htmx.on('htmx:afterSettle', function (event) {
                     sliderElement.style.display = 'none';
                     isSliderActive = false;
 
-                    // Only lower opacity if the user is NOT hovering over the spectrogram
                     if (!spectrogramContainer.matches(':hover')) {
                         volumeControl.style.opacity = '0';
                     }
@@ -201,33 +178,39 @@ htmx.on('htmx:afterSettle', function (event) {
                         sliderTimeout = null;
                     }
 
-                    // Clear active gain control if this one is being hidden
                     if (activeGainControl && activeGainControl.id === id) {
                         activeGainControl = null;
                     }
                 };
 
+                // Add window resize listener after hideSlider is defined
+                const resizeHandler = () => {
+                    if (isSliderActive) {
+                        hideSlider();
+                    }
+                    updateSliderHeight();
+                };
+                window.addEventListener('resize', resizeHandler);
+
                 // Function to show slider
                 const showSlider = () => {
-                    // Hide any other active gain control first
                     hideActiveGainControl();
 
                     sliderElement.style.display = 'block';
                     isSliderActive = true;
                     volumeControl.style.opacity = '1';
                     updateSliderPosition();
+                    updateSliderHeight(); // Update height when showing
 
-                    // Set this as the active gain control
                     activeGainControl = {
                         id: id,
                         hideSlider: hideSlider
                     };
 
-                    // Reset and start inactivity timer
                     if (sliderTimeout) {
                         clearTimeout(sliderTimeout);
                     }
-                    sliderTimeout = setTimeout(hideSlider, SLIDER_INACTIVITY_TIMEOUT_MS);
+                    sliderTimeout = setTimeout(hideSlider, GAIN_SLIDER_INACTIVITY_TIMEOUT_MS);
                 };
 
                 // Function to reset inactivity timer
@@ -235,15 +218,57 @@ htmx.on('htmx:afterSettle', function (event) {
                     if (sliderTimeout) {
                         clearTimeout(sliderTimeout);
                     }
-                    sliderTimeout = setTimeout(hideSlider, SLIDER_INACTIVITY_TIMEOUT_MS);
+                    sliderTimeout = setTimeout(hideSlider, GAIN_SLIDER_INACTIVITY_TIMEOUT_MS);
                 };
 
-                // Add scroll and resize listeners for slider positioning
-                window.addEventListener('scroll', updateSliderPosition, { passive: true });
-                window.addEventListener('resize', () => {
-                    // Hide slider on window resize
-                    hideSlider();
-                }, { passive: true });
+                // Function to update gain value and display
+                const updateGainValue = (dbValue) => {
+                    const gainValue = dbToGain(dbValue);
+                    gainNode.gain.value = gainValue;
+                    gainDisplay.textContent = `${dbValue > 0 ? '+' : ''}${dbValue} dB`;
+                    
+                    // Update slider bar height (0-GAIN_MAX_DB maps to 0-100%)
+                    const heightPercent = (dbValue / GAIN_MAX_DB) * 100;
+                    sliderBar.style.height = `${heightPercent}%`;
+                };
+
+                // Function to handle slider interaction
+                const handleSliderInteraction = (e) => {
+                    if (!isSliderActive) return;
+                    
+                    e.preventDefault();
+                    resetTimer();
+
+                    const sliderRect = sliderElement.querySelector('.relative').getBoundingClientRect();
+                    let y = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+                    
+                    // Calculate position (0 at top, 1 at bottom)
+                    let pos = (sliderRect.bottom - y) / sliderRect.height;
+                    pos = Math.max(0, Math.min(1, pos));
+                    
+                    // Map position to dB value (0-GAIN_MAX_DB)
+                    const dbValue = Math.round(pos * GAIN_MAX_DB);
+                    updateGainValue(dbValue);
+                };
+
+                // Add mouse/touch event listeners for slider interaction
+                sliderElement.addEventListener('mousedown', (e) => {
+                    if (e.button === 0) { // Left click only
+                        handleSliderInteraction(e);
+                        document.addEventListener('mousemove', handleSliderInteraction);
+                        document.addEventListener('mouseup', () => {
+                            document.removeEventListener('mousemove', handleSliderInteraction);
+                        }, { once: true });
+                    }
+                });
+
+                sliderElement.addEventListener('touchstart', (e) => {
+                    handleSliderInteraction(e);
+                    document.addEventListener('touchmove', handleSliderInteraction, { passive: false });
+                    document.addEventListener('touchend', () => {
+                        document.removeEventListener('touchmove', handleSliderInteraction);
+                    }, { once: true });
+                });
 
                 // Toggle volume slider visibility
                 volumeButton.addEventListener('click', (e) => {
@@ -255,194 +280,175 @@ htmx.on('htmx:afterSettle', function (event) {
                     }
                 });
 
-                // Function to update gain value and display
-                const updateGainValue = (newValue) => {
-                    sliderInput.value = newValue;
-                    const gainValue = dbToGain(newValue);
-                    gainNode.gain.value = gainValue;
-                    dbDisplay.textContent = `+${newValue} dB`;
-                };
-
-                // Add interaction listeners to reset timer
-                sliderElement.addEventListener('mouseover', resetTimer);
-                sliderElement.addEventListener('mousemove', resetTimer);
-                sliderInput.addEventListener('input', (e) => {
-                    resetTimer();
-                    const dbValue = parseInt(e.target.value);
-                    updateGainValue(dbValue);
-                });
-
-                // Function to handle gain adjustment via mouse wheel
+                // Add mouse wheel control for gain
                 const handleWheel = (e) => {
-                    if (sliderElement.style.display !== 'none') {
-                        e.preventDefault(); // Prevent page scrolling
-                        resetTimer();
-                        const currentValue = parseInt(sliderInput.value);
-                        // Determine scroll direction and adjust by step value (3dB)
-                        const step = e.deltaY < 0 ? 3 : -3;
-                        const newValue = Math.max(0, Math.min(12, currentValue + step));
-                        
-                        if (newValue !== currentValue) {
-                            updateGainValue(newValue);
-                        }
+                    e.preventDefault(); // Prevent page scrolling
+                    
+                    // Show slider if it's not already visible
+                    if (sliderElement.style.display === 'none') {
+                        showSlider();
+                    }
+                    
+                    resetTimer();
+
+                    const currentDb = Math.round(gainToDb(gainNode.gain.value));
+                    // Determine scroll direction and adjust by 1dB
+                    const step = e.deltaY < 0 ? 1 : -1;
+                    const newValue = Math.max(0, Math.min(GAIN_MAX_DB, currentDb + step));
+                    
+                    if (newValue !== currentDb) {
+                        updateGainValue(newValue);
                     }
                 };
 
-                // Add mouse wheel control for gain when slider is visible
+                // Add wheel event listeners to both spectrogram and slider
                 sliderElement.addEventListener('wheel', handleWheel, { passive: false });
                 spectrogramContainer.addEventListener('wheel', handleWheel, { passive: false });
 
-                // Hide volume slider when clicking outside
-                document.addEventListener('click', (e) => {
-                    if (!volumeControl.contains(e.target) && !sliderElement.contains(e.target)) {
-                        hideSlider();
+                // Function to update progress
+                const updateProgress = () => {
+                    const percent = (audio.currentTime / audio.duration) * 100;
+                    progress.firstElementChild.style.width = `${percent}%`;
+                    currentTime.textContent = formatTime(audio.currentTime);
+
+                    // Update position indicator
+                    positionIndicator.style.left = `${percent}%`;
+                    positionIndicator.style.opacity = 
+                        (audio.currentTime === 0 || audio.currentTime === audio.duration) ? '0' : '0.7';
+                };
+
+                // Function to start the interval
+                const startInterval = () => {
+                    updateInterval = setInterval(updateProgress, 100);
+                };
+
+                // Function to stop the interval
+                const stopInterval = () => {
+                    clearInterval(updateInterval);
+                };
+
+                // Function to toggle play/pause state of the audio
+                const togglePlay = (e) => {
+                    e.stopPropagation(); // Prevent event from bubbling up
+                    if (audioContext && audioContext.state === 'suspended') {
+                        audioContext.resume();
                     }
+                    if (audio.paused) {
+                        audio.play();
+                    } else {
+                        audio.pause();
+                    }
+                };
+
+                if (playPauseCompact) {
+                    // Editable translucency parameter (0 to 1, where 1 is fully opaque)
+                    const playerOpacity = 0.7;
+                    playPauseCompact.style.setProperty('--player-opacity', playerOpacity);
+                    // Add event listeners for play/pause buttons
+                    playPauseCompact.addEventListener('click', togglePlay);
+                }
+
+                // Add event listeners for play/pause buttons
+                playPause.addEventListener('click', togglePlay);
+
+                // Update play/pause button icons and start/stop interval when audio is played
+                audio.addEventListener('play', () => {
+                    playPause.innerHTML = `
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    `;
+                    if (playPauseCompact)
+                        playPauseCompact.innerHTML = `
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6"></path>
+                            </svg>
+                        `;
+                    startInterval();
                 });
+
+                // Update play/pause button icons and stop interval when audio is paused
+                audio.addEventListener('pause', () => {
+                    playPause.innerHTML = `
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    `;
+                    if (playPauseCompact)
+                        playPauseCompact.innerHTML = `
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                            </svg>
+                        `;
+                    stopInterval();
+                });
+
+                // Stop interval when audio ends
+                audio.addEventListener('ended', stopInterval);
+
+                // Initial update and interval start if audio is already playing
+                if (!audio.paused) {
+                    updateProgress();
+                    startInterval();
+                }
+
+                // Allow seeking by clicking on the progress bar
+                progress.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Prevent event from bubbling up
+                    const rect = progress.getBoundingClientRect();
+                    const pos = (e.clientX - rect.left) / rect.width;
+                    audio.currentTime = pos * audio.duration;
+                    updateProgress(); // Immediately update visuals
+                });
+
+                // Seeking functionality
+                if (isDesktop()) {
+                    spectrogramContainer.addEventListener('click', (e) => {
+                        if (!playerOverlay.contains(e.target)) {
+                            const rect = spectrogramContainer.getBoundingClientRect();
+                            const pos = (e.clientX - rect.left) / rect.width;
+                            audio.currentTime = pos * audio.duration;
+                            updateProgress(); // Immediately update visuals
+                        }
+                    });
+                } else {
+                    let isDragging = false;
+                    spectrogramContainer.addEventListener('touchstart', (e) => { 
+                        if (!audio.paused && !playerOverlay.contains(e.target)) {
+                            isDragging = true; 
+                        }
+                    }, {passive: true});
+                    spectrogramContainer.addEventListener('touchmove', (e) => {
+                        if (isDragging && !playerOverlay.contains(e.target)) {
+                            e.preventDefault(); // Prevent scrolling while dragging
+                            const touch = e.touches[0];
+                            const rect = spectrogramContainer.getBoundingClientRect();
+                            const pos = (touch.clientX - rect.left) / rect.width;
+                            audio.currentTime = pos * audio.duration;
+                            updateProgress(); // Immediately update visuals
+                        }
+                    }, {passive: true});
+                    spectrogramContainer.addEventListener('touchend', () => { isDragging = false; }, {passive: true});
+                }
+
+                if (isDesktop()) {
+                    // On desktop show full version player when hovering over the spectrogram
+                    spectrogramContainer.addEventListener('mouseenter', () => { playerOverlay.style.opacity = '1'; });
+                    spectrogramContainer.addEventListener('mouseleave', () => { playerOverlay.style.opacity = '0'; });
+                    playerOverlay.style.opacity = '0';
+                } else {
+                    // On mobile show always full version player controls
+                    playerOverlay.style.opacity = '1';
+                }
+
+                // Mark this audio element as initialized
+                audio.dataset.initialized = 'true';
 
             } catch (e) {
                 console.warn('Error setting up Web Audio API:', e);
             }
         }
-
-        // Function to update progress
-        const updateProgress = () => {
-            const percent = (audio.currentTime / audio.duration) * 100;
-            progress.firstElementChild.style.width = `${percent}%`;
-            currentTime.textContent = formatTime(audio.currentTime);
-
-            // Update position indicator
-            positionIndicator.style.left = `${percent}%`;
-            positionIndicator.style.opacity = 
-                (audio.currentTime === 0 || audio.currentTime === audio.duration) ? '0' : '0.7';
-        };
-
-        // Function to start the interval
-        const startInterval = () => {
-            updateInterval = setInterval(updateProgress, 100);
-        };
-
-        // Function to stop the interval
-        const stopInterval = () => {
-            clearInterval(updateInterval);
-        };
-
-        // Function to toggle play/pause state of the audio
-        const togglePlay = (e) => {
-            e.stopPropagation(); // Prevent event from bubbling up
-            if (audioContext && audioContext.state === 'suspended') {
-                audioContext.resume();
-            }
-            if (audio.paused) {
-                audio.play();
-            } else {
-                audio.pause();
-            }
-        };
-
-        if (playPauseCompact) {
-            // Editable translucency parameter (0 to 1, where 1 is fully opaque)
-            const playerOpacity = 0.7;
-            playPauseCompact.style.setProperty('--player-opacity', playerOpacity);
-            // Add event listeners for play/pause buttons
-            playPauseCompact.addEventListener('click', togglePlay);
-        }
-
-        // Add event listeners for play/pause buttons
-        playPause.addEventListener('click', togglePlay);
-
-        // Update play/pause button icons and start/stop interval when audio is played
-        audio.addEventListener('play', () => {
-            playPause.innerHTML = `
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-            `;
-            if (playPauseCompact)
-                playPauseCompact.innerHTML = `
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6"></path>
-                    </svg>
-                `;
-            startInterval();
-        });
-
-        // Update play/pause button icons and stop interval when audio is paused
-        audio.addEventListener('pause', () => {
-            playPause.innerHTML = `
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-            `;
-            if (playPauseCompact)
-                playPauseCompact.innerHTML = `
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                    </svg>
-                `;
-            stopInterval();
-        });
-
-        // Stop interval when audio ends
-        audio.addEventListener('ended', stopInterval);
-
-        // Initial update and interval start if audio is already playing
-        if (!audio.paused) {
-            updateProgress();
-            startInterval();
-        }
-
-        // Allow seeking by clicking on the progress bar
-        progress.addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevent event from bubbling up
-            const rect = progress.getBoundingClientRect();
-            const pos = (e.clientX - rect.left) / rect.width;
-            audio.currentTime = pos * audio.duration;
-            updateProgress(); // Immediately update visuals
-        });
-
-        // Seeking functionality
-        if (isDesktop()) {
-            spectrogramContainer.addEventListener('click', (e) => {
-                if (!playerOverlay.contains(e.target)) {
-                    const rect = spectrogramContainer.getBoundingClientRect();
-                    const pos = (e.clientX - rect.left) / rect.width;
-                    audio.currentTime = pos * audio.duration;
-                    updateProgress(); // Immediately update visuals
-                }
-            });
-        } else {
-            let isDragging = false;
-            spectrogramContainer.addEventListener('touchstart', (e) => { 
-                if (!audio.paused && !playerOverlay.contains(e.target)) {
-                    isDragging = true; 
-                }
-            }, {passive: true});
-            spectrogramContainer.addEventListener('touchmove', (e) => {
-                if (isDragging && !playerOverlay.contains(e.target)) {
-                    e.preventDefault(); // Prevent scrolling while dragging
-                    const touch = e.touches[0];
-                    const rect = spectrogramContainer.getBoundingClientRect();
-                    const pos = (touch.clientX - rect.left) / rect.width;
-                    audio.currentTime = pos * audio.duration;
-                    updateProgress(); // Immediately update visuals
-                }
-            }, {passive: true});
-            spectrogramContainer.addEventListener('touchend', () => { isDragging = false; }, {passive: true});
-        }
-
-        if (isDesktop()) {
-            // On desktop show full version player when hovering over the spectrogram
-            spectrogramContainer.addEventListener('mouseenter', () => { playerOverlay.style.opacity = '1'; });
-            spectrogramContainer.addEventListener('mouseleave', () => { playerOverlay.style.opacity = '0'; });
-            playerOverlay.style.opacity = '0';
-        } else {
-            // On mobile show always full version player controls
-            playerOverlay.style.opacity = '1';
-        }
-
-        // Mark this audio element as initialized
-        audio.dataset.initialized = 'true';
     });
 });
 
