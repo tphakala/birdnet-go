@@ -63,6 +63,9 @@ func (h *Handlers) Detections(c echo.Context) error {
 			return h.NewHandlerError(fmt.Errorf("missing date or hour"), "Date and hour parameters are required for hourly detections", http.StatusBadRequest)
 		}
 		notes, err = h.DS.GetHourlyDetections(req.Date, req.Hour, req.Duration, req.NumResults, req.Offset)
+		if err != nil {
+			return h.NewHandlerError(err, "Failed to get hourly detections", http.StatusInternalServerError)
+		}
 		totalResults, err = h.DS.CountHourlyDetections(req.Date, req.Hour, req.Duration)
 		if err != nil {
 			return h.NewHandlerError(err, "Failed to count hourly detections", http.StatusInternalServerError)

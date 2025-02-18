@@ -42,7 +42,7 @@ type Interface interface {
 	SaveHourlyWeather(hourlyWeather *HourlyWeather) error
 	GetHourlyWeather(date string) ([]HourlyWeather, error)
 	LatestHourlyWeather() (*HourlyWeather, error)
-	GetHourlyDetections(date, hour string, duration int, limit, offset int) ([]Note, error)
+	GetHourlyDetections(date, hour string, duration, limit, offset int) ([]Note, error)
 	CountSpeciesDetections(species, date, hour string, duration int) (int64, error)
 	CountSearchResults(query string) (int64, error)
 	Transaction(fc func(tx *gorm.DB) error) error
@@ -502,7 +502,7 @@ func (ds *DataStore) LatestHourlyWeather() (*HourlyWeather, error) {
 }
 
 // GetHourlyDetections retrieves bird detections for a specific date and hour.
-func (ds *DataStore) GetHourlyDetections(date, hour string, duration int, limit, offset int) ([]Note, error) {
+func (ds *DataStore) GetHourlyDetections(date, hour string, duration, limit, offset int) ([]Note, error) {
 	var detections []Note
 
 	startTime, endTime := getHourRange(hour, duration)
