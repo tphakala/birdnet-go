@@ -63,13 +63,14 @@ htmx.on('htmx:afterSettle', function (event) {
 
         // Create slider element separately
         const sliderElement = document.createElement('div');
-        sliderElement.className = 'volume-slider';
-        sliderElement.style.cssText = 'display: none; position: absolute; background: rgba(0, 0, 0, 0.5); padding: 12px 8px; border-radius: 4px; z-index: 1000;';
+        sliderElement.className = 'volume-slider bg-transparent';
+        sliderElement.style.cssText = 'display: none; position: absolute; background: transparent; z-index: 1000;';
         sliderElement.innerHTML = `
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+            <div class="flex flex-col items-center space-y-2 bg-transparent">
                 <input type="range" min="0" max="12" step="3" value="0" 
-                       style="writing-mode: bt-lr; -webkit-appearance: slider-vertical; height: 100px; width: 24px; background: transparent;">
-                <span style="color: white; font-size: 12px;">0 dB</span>
+                    class="h-20 w-12 appearance-none bg-transparent"
+                    style="writing-mode: bt-lr; -webkit-appearance: slider-vertical;">
+                <span class="text-base-content text-xs">+0 dB</span>
             </div>
         `;
 
@@ -88,20 +89,21 @@ htmx.on('htmx:afterSettle', function (event) {
                 height: 12px;
                 width: 12px;
                 border-radius: 50%;
-                background: white;
+                background: var(--fallback-bc,oklch(var(--bc)));
                 cursor: pointer;
                 margin-top: -4px;
+                transform: translateX(-16px);
             }
             input[type=range]::-webkit-slider-runnable-track {
                 width: 100%;
                 height: 4px;
-                background: rgba(255, 255, 255, 0.3);
                 border-radius: 2px;
             }
             input[type=range]:focus {
                 outline: none;
             }
         `;
+
         document.head.appendChild(sliderStyle);
 
         let sliderTimeout;
@@ -253,15 +255,21 @@ htmx.on('htmx:afterSettle', function (event) {
                     }
                 });
 
+                // Function to update gain value and display
+                const updateGainValue = (newValue) => {
+                    sliderInput.value = newValue;
+                    const gainValue = dbToGain(newValue);
+                    gainNode.gain.value = gainValue;
+                    dbDisplay.textContent = `+${newValue} dB`;
+                };
+
                 // Add interaction listeners to reset timer
                 sliderElement.addEventListener('mouseover', resetTimer);
                 sliderElement.addEventListener('mousemove', resetTimer);
                 sliderInput.addEventListener('input', (e) => {
                     resetTimer();
                     const dbValue = parseInt(e.target.value);
-                    const gainValue = dbToGain(dbValue);
-                    gainNode.gain.value = gainValue;
-                    dbDisplay.textContent = `${dbValue} dB`;
+                    updateGainValue(dbValue);
                 });
 
                 // Function to handle gain adjustment via mouse wheel
@@ -275,10 +283,7 @@ htmx.on('htmx:afterSettle', function (event) {
                         const newValue = Math.max(0, Math.min(12, currentValue + step));
                         
                         if (newValue !== currentValue) {
-                            sliderInput.value = newValue;
-                            const gainValue = dbToGain(newValue);
-                            gainNode.gain.value = gainValue;
-                            dbDisplay.textContent = `${newValue} dB`;
+                            updateGainValue(newValue);
                         }
                     }
                 };
