@@ -17,7 +17,8 @@ htmx.on('htmx:afterSettle', function (event) {
         lowpass: 'lowpass',
         bandpass: 'bandpass'
     };
-    
+
+    const FILTER_HP_DEFAULT_FREQ = 20; // Default highpass filter frequency
 
     // Utility functions for creating UI elements
     const createSlider = (className, height = 'h-32') => {
@@ -180,7 +181,7 @@ htmx.on('htmx:afterSettle', function (event) {
 
         // Create filter control UI
         const filterControl = createControlButton('left', `
-            <span class="text-xs text-white">HP: 500 Hz</span>
+            <span class="text-xs text-white">HP: ${FILTER_HP_DEFAULT_FREQ} Hz</span>
         `);
         filterControl.classList.add('filter-control');
 
@@ -225,7 +226,7 @@ htmx.on('htmx:afterSettle', function (event) {
                 // Create filters
                 const highPassFilter = audioContext.createBiquadFilter();
                 highPassFilter.type = 'highpass';
-                highPassFilter.frequency.value = 500;
+                highPassFilter.frequency.value = FILTER_HP_DEFAULT_FREQ;
                 highPassFilter.Q.value = 1;
 
                 // Create and configure compressor for normalization
