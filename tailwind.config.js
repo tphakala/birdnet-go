@@ -6,6 +6,7 @@ module.exports = {
     './views/*.html',
     './views/*/*.html',
     './views/*/*/*.html',
+    './assets/*.js',
   ],
   safelist: [
     'bg-red-500',
