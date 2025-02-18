@@ -67,6 +67,17 @@
               }
               const list = htmx.find('[hx-trigger*=refreshListEvent]');
               if (list) {
+                // Get current URL parameters
+                const urlParams = new URLSearchParams(window.location.search);
+                const duration = urlParams.get('duration');
+                // Update list's hx-get attribute with duration if it exists
+                if (duration) {
+                  const currentHxGet = list.getAttribute('hx-get');
+                  const updatedHxGet = currentHxGet.includes('duration=') 
+                    ? currentHxGet 
+                    : `${currentHxGet}&duration=${duration}`;
+                  list.setAttribute('hx-get', updatedHxGet);
+                }
                 htmx.trigger(list, 'refreshListEvent');
               }
             }
