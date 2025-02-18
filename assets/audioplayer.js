@@ -183,14 +183,27 @@ htmx.on('htmx:afterSettle', function (event) {
     };
 
     // Utility function for mouse/touch event handling
-    const setupSliderInteraction = (slider, updateFn) => {
+    const setupSliderInteraction = (slider, manager, updateFn) => {
+        const calculatePosition = (e) => {
+            const sliderRect = slider.querySelector('.relative').getBoundingClientRect();
+            let y = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+            let pos = (sliderRect.bottom - y) / sliderRect.height;
+            return Math.max(0, Math.min(1, pos));
+        };
+
+        const handleUpdate = (e) => {
+            e.preventDefault();
+            manager.resetTimer();
+            updateFn(calculatePosition(e));
+        };
+
         const handleStart = (e) => {
             if (e.type === 'mousedown' && e.button !== 0) return;
             
-            updateFn(e);
+            handleUpdate(e);
             const moveHandler = (e) => {
                 e.preventDefault();
-                updateFn(e);
+                handleUpdate(e);
             };
 
             if (e.type === 'mousedown') {
@@ -577,38 +590,17 @@ htmx.on('htmx:afterSettle', function (event) {
                 };
 
                 // Setup gain slider interaction
-                const updateGainFromPosition = (e) => {
-                    e.preventDefault();
-                    gainManager.resetTimer();
-                    const sliderRect = sliderElement.querySelector('.relative').getBoundingClientRect();
-                    let y = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-                    
-                    let pos = (sliderRect.bottom - y) / sliderRect.height;
-                    pos = Math.max(0, Math.min(1, pos));
-                    
+                setupSliderInteraction(sliderElement, gainManager, (pos) => {
                     const dbValue = Math.round(pos * GAIN_MAX_DB);
                     updateGainValue(dbValue);
-                };
+                });
 
                 // Setup filter slider interaction
-                const updateFilterFrequency = (e) => {
-                    e.preventDefault();
-                    filterManager.resetTimer();
-                    const sliderRect = filterSlider.querySelector('.relative').getBoundingClientRect();
-                    let y = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-                    
-                    let pos = (sliderRect.bottom - y) / sliderRect.height;
-                    pos = Math.max(0, Math.min(1, pos));
-                    
+                setupSliderInteraction(filterSlider, filterManager, (pos) => {
                     const freq = Math.round(FILTER_HP_MIN_FREQ * Math.pow(FILTER_HP_MAX_FREQ/FILTER_HP_MIN_FREQ, pos));
-                    
                     highPassFilter.frequency.value = freq;
                     updateFilterDisplay(freq);
-                };
-
-                // Setup slider interactions
-                setupSliderInteraction(sliderElement, updateGainFromPosition);
-                setupSliderInteraction(filterSlider, updateFilterFrequency);
+                });
 
                 // Volume button click handler
                 volumeControl.querySelector('button').addEventListener('click', (e) => {
