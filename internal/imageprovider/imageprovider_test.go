@@ -154,7 +154,7 @@ func (m *mockStore) GetDailyEvents(date string) (datastore.DailyEvents, error) {
 func (m *mockStore) SaveHourlyWeather(hourlyWeather *datastore.HourlyWeather) error  { return nil }
 func (m *mockStore) GetHourlyWeather(date string) ([]datastore.HourlyWeather, error) { return nil, nil }
 func (m *mockStore) LatestHourlyWeather() (*datastore.HourlyWeather, error)          { return nil, nil }
-func (m *mockStore) GetHourlyDetections(date, hour string, duration int) ([]datastore.Note, error) {
+func (m *mockStore) GetHourlyDetections(date, hour string, duration, limit, offset int) ([]datastore.Note, error) {
 	return nil, nil
 }
 func (m *mockStore) CountSpeciesDetections(species, date, hour string, duration int) (int64, error) {
@@ -167,6 +167,9 @@ func (m *mockStore) UnlockNote(noteID string) error                         { re
 func (m *mockStore) GetNoteLock(noteID string) (*datastore.NoteLock, error) { return nil, nil }
 func (m *mockStore) IsNoteLocked(noteID string) (bool, error)               { return false, nil }
 func (m *mockStore) GetLockedNotesClipPaths() ([]string, error)             { return nil, nil }
+func (m *mockStore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
+	return 0, nil
+}
 
 // mockFailingStore is a mock implementation that simulates database failures
 type mockFailingStore struct {
