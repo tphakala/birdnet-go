@@ -179,6 +179,76 @@ func setDefaultConfig() {
 	viper.SetDefault("output.mysql.host", "localhost")
 	viper.SetDefault("output.mysql.port", 3306)
 
+	// Backup configuration
+	viper.SetDefault("backup.enabled", false)
+	viper.SetDefault("backup.debug", false)
+	viper.SetDefault("backup.schedule", "0 0 * * *") // Daily at midnight
+	viper.SetDefault("backup.encryption", false)     // Encryption disabled by default
+	viper.SetDefault("backup.retention.maxage", "30d")
+	viper.SetDefault("backup.retention.maxbackups", 30)
+	viper.SetDefault("backup.retention.minbackups", 7)
+	viper.SetDefault("backup.providers", []BackupProvider{
+		{
+			Type:    "local",
+			Enabled: true,
+			Settings: map[string]interface{}{
+				"path": "backups/",
+			},
+		},
+		{
+			Type:    "ftp",
+			Enabled: false,
+			Settings: map[string]interface{}{
+				"host":     "localhost",
+				"port":     21,
+				"username": "",
+				"password": "",
+				"path":     "backups/",
+				"timeout":  "30s",
+			},
+		},
+		{
+			Type:    "sftp",
+			Enabled: false,
+			Settings: map[string]interface{}{
+				"host":     "localhost",
+				"port":     22,
+				"username": "",
+				"password": "",
+				"key_file": "",
+				"path":     "backups/",
+				"timeout":  "30s",
+			},
+		},
+		{
+			Type:    "rsync",
+			Enabled: false,
+			Settings: map[string]interface{}{
+				"host":     "localhost",
+				"port":     22,
+				"username": "",
+				"key_file": "",
+				"path":     "backups/",
+			},
+		},
+		{
+			Type:    "gdrive",
+			Enabled: false,
+			Settings: map[string]interface{}{
+				"bucket":      "",
+				"credentials": "credentials.json",
+				"path":        "backups/",
+			},
+		},
+	})
+	viper.SetDefault("backup.targets", []BackupTarget{
+		{
+			Type:     "sqlite",
+			Enabled:  true,
+			Settings: map[string]interface{}{},
+		},
+	})
+
 	// Security configuration
 	viper.SetDefault("security.debug", false)
 	viper.SetDefault("security.host", "")

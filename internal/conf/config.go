@@ -327,6 +327,8 @@ type Settings struct {
 			Port     string // port for mysql database
 		}
 	}
+
+	Backup BackupConfig // Backup configuration
 }
 
 // LogConfig defines the configuration for a log file
@@ -346,6 +348,39 @@ const (
 	RotationWeekly RotationType = "weekly"
 	RotationSize   RotationType = "size"
 )
+
+// BackupProvider defines settings for a specific backup provider
+type BackupProvider struct {
+	Type     string                 `yaml:"type"`     // "local", "cifs", "nfs", "ftp", "onedrive", etc.
+	Enabled  bool                   `yaml:"enabled"`  // true to enable this provider
+	Settings map[string]interface{} `yaml:"settings"` // Provider-specific settings
+}
+
+// BackupRetention defines backup retention policy
+type BackupRetention struct {
+	MaxAge     string `yaml:"maxage"`     // Duration string like "30d", "6m", "1y"
+	MaxBackups int    `yaml:"maxbackups"` // Maximum number of backups to keep
+	MinBackups int    `yaml:"minbackups"` // Minimum number of backups to keep regardless of age
+}
+
+// BackupTarget defines what should be backed up
+type BackupTarget struct {
+	Type     string                 `yaml:"type"`     // "sqlite", "mysql", etc.
+	Enabled  bool                   `yaml:"enabled"`  // true to enable backup for this target
+	Settings map[string]interface{} `yaml:"settings"` // Target-specific settings
+}
+
+// BackupConfig defines the configuration for backups
+type BackupConfig struct {
+	Enabled       bool             `yaml:"enabled"`        // true to enable backup functionality
+	Debug         bool             `yaml:"debug"`          // true to enable debug logging
+	Schedule      string           `yaml:"schedule"`       // Cron expression for backup schedule
+	Encryption    bool             `yaml:"encryption"`     // true to enable backup encryption
+	EncryptionKey string           `yaml:"encryption_key"` // AES-256 key for encrypting backups (hex-encoded)
+	Retention     BackupRetention  `yaml:"retention"`      // Backup retention settings
+	Providers     []BackupProvider `yaml:"providers"`      // List of backup providers
+	Targets       []BackupTarget   `yaml:"targets"`        // List of backup targets
+}
 
 // settingsInstance is the current settings instance
 var (

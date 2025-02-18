@@ -3,6 +3,7 @@
 package conf
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -64,6 +65,13 @@ func ValidateSettings(settings *Settings) error {
 	// Validate Weather settings
 	if err := validateWeatherSettings(&settings.Realtime.Weather); err != nil {
 		ve.Errors = append(ve.Errors, err.Error())
+	}
+
+	// Validate Backup settings if enabled
+	if settings.Backup.Enabled {
+		if err := validateBackupConfig(&settings.Backup); err != nil {
+			ve.Errors = append(ve.Errors, err.Error())
+		}
 	}
 
 	// If there are any errors, return the ValidationError
@@ -271,5 +279,100 @@ func validateWeatherSettings(settings *WeatherSettings) error {
 	if settings.PollInterval < 15 {
 		return fmt.Errorf("weather poll interval must be at least 15 minutes, got %d", settings.PollInterval)
 	}
+	return nil
+}
+
+// validateBackupConfig validates the backup configuration
+func validateBackupConfig(config *BackupConfig) error {
+	var errs []string
+
+	// Validate schedule (cron expression)
+	if config.Schedule == "" {
+		errs = append(errs, "backup schedule must not be empty")
+	}
+	// TODO: Add cron expression validation when schedule is not empty
+
+	// Validate encryption key format if encryption is enabled
+	if config.Encryption {
+		if config.EncryptionKey == "" {
+			errs = append(errs, "encryption_key must be provided when encryption is enabled")
+		} else {
+			// Check if it's a valid hex string
+			if _, err := hex.DecodeString(config.EncryptionKey); err != nil {
+				errs = append(errs, "encryption_key must be a valid hex-encoded string")
+			} else if len(config.EncryptionKey) != 64 { // 32 bytes = 64 hex chars
+				errs = append(errs, "encryption_key must be exactly 32 bytes (64 hex characters) for AES-256")
+			}
+		}
+	}
+
+	// Validate retention settings
+	if config.Retention.MaxBackups < config.Retention.MinBackups {
+		errs = append(errs, "maxbackups must be greater than or equal to minbackups")
+	}
+
+	if config.Retention.MinBackups < 1 {
+		errs = append(errs, "minbackups must be at least 1")
+	}
+
+	// Validate maxage format (e.g., "30d", "6m", "1y")
+	if config.Retention.MaxAge != "" {
+		if !regexp.MustCompile(`^\d+[dmy]$`).MatchString(config.Retention.MaxAge) {
+			errs = append(errs, "maxage must be in format: <number>[d|m|y] (e.g., 30d, 6m, 1y)")
+		}
+	}
+
+	// Validate providers
+	if len(config.Providers) == 0 {
+		errs = append(errs, "at least one backup provider must be configured when backup is enabled")
+	}
+
+	for i, provider := range config.Providers {
+		if provider.Type == "" {
+			errs = append(errs, fmt.Sprintf("provider %d: type must not be empty", i+1))
+		}
+
+		// Validate provider-specific settings based on type
+		switch provider.Type {
+		case "local":
+			if path, ok := provider.Settings["path"].(string); !ok || path == "" {
+				errs = append(errs, fmt.Sprintf("provider %d: local provider requires 'path' setting", i+1))
+			}
+		case "cifs":
+			if _, ok := provider.Settings["share"].(string); !ok {
+				errs = append(errs, fmt.Sprintf("provider %d: CIFS provider requires 'share' setting", i+1))
+			}
+		case "ftp":
+			if _, ok := provider.Settings["host"].(string); !ok {
+				errs = append(errs, fmt.Sprintf("provider %d: FTP provider requires 'host' setting", i+1))
+			}
+		}
+	}
+
+	// Validate targets
+	if len(config.Targets) == 0 {
+		errs = append(errs, "at least one backup target must be configured when backup is enabled")
+	}
+
+	for i, target := range config.Targets {
+		if target.Type == "" {
+			errs = append(errs, fmt.Sprintf("target %d: type must not be empty", i+1))
+		}
+
+		// Validate target-specific settings based on type
+		switch target.Type {
+		case "sqlite":
+			// No additional settings required for SQLite, it uses the main SQLite configuration
+		case "mysql":
+			// MySQL backup might need additional settings in the future
+		default:
+			errs = append(errs, fmt.Sprintf("target %d: unsupported backup target type: %s", i+1, target.Type))
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("backup configuration errors: %v", errs)
+	}
+
 	return nil
 }
