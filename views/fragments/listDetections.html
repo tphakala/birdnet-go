@@ -3,7 +3,7 @@
 <section class="card col-span-12 bg-base-100 shadow-sm"
     id="listDetections"
     hx-trigger="refreshListEvent from:body" 
-    hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{.Offset}}" 
+    hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&duration={{.Duration}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{.Offset}}" 
     hx-target="#listDetections"
     hx-swap="outerHTML">
     
@@ -188,7 +188,7 @@
             <div class="flex space-x-2">
                 {{if gt .CurrentPage 1}}
                     <button
-                        hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
+                        hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&duration={{.Duration}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
                         hx-target="#listDetections"
                         hx-swap="outerHTML"
                         class="btn btn-sm btn-primary">
@@ -201,7 +201,7 @@
                 {{end}}
                 {{if lt .CurrentPage .TotalPages}}
                 <button
-                    hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
+                    hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&duration={{.Duration}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
                     hx-target="#listDetections"
                     hx-swap="outerHTML"
                     class="btn btn-sm btn-primary">

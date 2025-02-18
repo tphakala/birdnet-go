@@ -42,7 +42,7 @@ type Interface interface {
 	SaveHourlyWeather(hourlyWeather *HourlyWeather) error
 	GetHourlyWeather(date string) ([]HourlyWeather, error)
 	LatestHourlyWeather() (*HourlyWeather, error)
-	GetHourlyDetections(date, hour string, duration int) ([]Note, error)
+	GetHourlyDetections(date, hour string, duration, limit, offset int) ([]Note, error)
 	CountSpeciesDetections(species, date, hour string, duration int) (int64, error)
 	CountSearchResults(query string) (int64, error)
 	Transaction(fc func(tx *gorm.DB) error) error
@@ -56,6 +56,7 @@ type Interface interface {
 	SaveImageCache(cache *ImageCache) error
 	GetAllImageCaches() ([]ImageCache, error)
 	GetLockedNotesClipPaths() ([]string, error)
+	CountHourlyDetections(date, hour string, duration int) (int64, error)
 }
 
 // DataStore implements StoreInterface using a GORM database.
@@ -501,13 +502,25 @@ func (ds *DataStore) LatestHourlyWeather() (*HourlyWeather, error) {
 }
 
 // GetHourlyDetections retrieves bird detections for a specific date and hour.
-func (ds *DataStore) GetHourlyDetections(date, hour string, duration int) ([]Note, error) {
+func (ds *DataStore) GetHourlyDetections(date, hour string, duration, limit, offset int) ([]Note, error) {
 	var detections []Note
 
 	startTime, endTime := getHourRange(hour, duration)
-	err := ds.DB.Where("date = ? AND time >= ? AND time < ?", date, startTime, endTime).
+	err := ds.DB.Preload("Review").Preload("Lock").Preload("Comments", func(db *gorm.DB) *gorm.DB {
+		return db.Order("created_at DESC") // Order comments by creation time, newest first
+	}).Where("date = ? AND time >= ? AND time < ?", date, startTime, endTime).
 		Order("time ASC").
+		Limit(limit).
+		Offset(offset).
 		Find(&detections).Error
+
+	// Populate virtual fields
+	for i := range detections {
+		if detections[i].Review != nil {
+			detections[i].Verified = detections[i].Review.Verified
+		}
+		detections[i].Locked = detections[i].Lock != nil
+	}
 
 	return detections, err
 }
@@ -892,4 +905,19 @@ func (ds *DataStore) GetLockedNotesClipPaths() ([]string, error) {
 	}
 
 	return clipPaths, nil
+}
+
+// CountHourlyDetections counts the number of detections for a specific date and hour.
+func (ds *DataStore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
+	var count int64
+	startTime, endTime := getHourRange(hour, duration)
+	err := ds.DB.Model(&Note{}).
+		Where("date = ? AND time >= ? AND time < ?", date, startTime, endTime).
+		Count(&count).Error
+
+	if err != nil {
+		return 0, fmt.Errorf("error counting hourly detections: %w", err)
+	}
+
+	return count, nil
 }
