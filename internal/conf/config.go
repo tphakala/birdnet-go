@@ -363,23 +363,22 @@ type BackupRetention struct {
 	MinBackups int    `yaml:"minbackups"` // Minimum number of backups to keep regardless of age
 }
 
-// BackupTarget defines what should be backed up
+// BackupTarget defines settings for a backup target
 type BackupTarget struct {
-	Type     string                 `yaml:"type"`     // "sqlite", "mysql", etc.
-	Enabled  bool                   `yaml:"enabled"`  // true to enable backup for this target
+	Type     string                 `yaml:"type"`     // "local", "ftp", "sftp", "rsync", "gdrive"
+	Enabled  bool                   `yaml:"enabled"`  // true to enable this target
 	Settings map[string]interface{} `yaml:"settings"` // Target-specific settings
 }
 
 // BackupConfig defines the configuration for backups
 type BackupConfig struct {
-	Enabled       bool             `yaml:"enabled"`        // true to enable backup functionality
-	Debug         bool             `yaml:"debug"`          // true to enable debug logging
-	Schedule      string           `yaml:"schedule"`       // Cron expression for backup schedule
-	Encryption    bool             `yaml:"encryption"`     // true to enable backup encryption
-	EncryptionKey string           `yaml:"encryption_key"` // AES-256 key for encrypting backups (hex-encoded)
-	Retention     BackupRetention  `yaml:"retention"`      // Backup retention settings
-	Providers     []BackupProvider `yaml:"providers"`      // List of backup providers
-	Targets       []BackupTarget   `yaml:"targets"`        // List of backup targets
+	Enabled       bool            `yaml:"enabled"`        // true to enable backup functionality
+	Debug         bool            `yaml:"debug"`          // true to enable debug logging
+	Schedule      string          `yaml:"schedule"`       // Cron expression for backup schedule
+	Encryption    bool            `yaml:"encryption"`     // true to enable backup encryption
+	EncryptionKey string          `yaml:"encryption_key"` // AES-256 key for encrypting backups (hex-encoded)
+	Retention     BackupRetention `yaml:"retention"`      // Backup retention settings
+	Targets       []BackupTarget  `yaml:"targets"`        // List of backup targets
 }
 
 // settingsInstance is the current settings instance

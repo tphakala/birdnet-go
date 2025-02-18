@@ -37,7 +37,7 @@ type Target interface {
 	// Name returns the name of the target
 	Name() string
 	// Store stores a backup file in the target's storage
-	Store(ctx context.Context, sourcePath string, metadata Metadata) error
+	Store(ctx context.Context, sourcePath string, metadata *Metadata) error
 	// List returns a list of stored backups
 	List(ctx context.Context) ([]BackupInfo, error)
 	// Delete deletes a backup from storage
@@ -232,62 +232,87 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	m.logger.Println("Starting backup process...")
+
+	// Validate that we have at least one target
+	if len(m.targets) == 0 {
+		return fmt.Errorf("no backup targets registered, backup cannot proceed")
+	}
+
 	// Get current timestamp in UTC
 	now := time.Now().UTC()
 	isDaily := now.Hour() == 0 && now.Minute() < 15 // Consider it a daily backup if run between 00:00 and 00:15
 
 	var tempDirs []string
 	defer func() {
+		m.logger.Printf("Cleaning up %d temporary directories...", len(tempDirs))
 		for _, dir := range tempDirs {
 			os.RemoveAll(dir)
 		}
 	}()
 
+	var errs []error
 	for sourceName, source := range m.sources {
+		m.logger.Printf("Processing backup source: %s", sourceName)
+
 		// Create backup file
+		m.logger.Printf("Creating backup file for source: %s", sourceName)
 		backupPath, err := source.Backup(ctx)
 		if err != nil {
 			m.logger.Printf("Failed to backup source %s: %v", sourceName, err)
+			errs = append(errs, fmt.Errorf("failed to backup source %s: %w", sourceName, err))
 			continue
 		}
+		m.logger.Printf("Successfully created backup file at: %s", backupPath)
 
 		// Create a temporary directory for the archive
+		m.logger.Printf("Creating temporary directory for archive...")
 		tempDir, err := os.MkdirTemp("", "backup-*")
 		if err != nil {
 			m.logger.Printf("Failed to create temporary directory: %v", err)
+			errs = append(errs, fmt.Errorf("failed to create temporary directory: %w", err))
 			continue
 		}
 		tempDirs = append(tempDirs, tempDir)
+		m.logger.Printf("Created temporary directory: %s", tempDir)
 
 		// Read the backup file
+		m.logger.Printf("Reading backup file: %s", backupPath)
 		backupData, err := os.ReadFile(backupPath)
 		if err != nil {
 			m.logger.Printf("Failed to read backup file %s: %v", backupPath, err)
+			errs = append(errs, fmt.Errorf("failed to read backup file: %w", err))
 			continue
 		}
+		m.logger.Printf("Successfully read backup file, size: %d bytes", len(backupData))
 
 		// Create metadata
 		metadata := Metadata{
-			ID:        fmt.Sprintf("%s-%s", sourceName, now.Format("20060102-150405")),
+			ID:        fmt.Sprintf("birdnet-go-backup-%s", now.Format("20060102-150405")),
 			Timestamp: now,
 			Type:      sourceName,
 			Source:    backupPath,
 			IsDaily:   isDaily,
 		}
+		m.logger.Printf("Created backup metadata with ID: %s", metadata.ID)
 
 		// Create backup archive
 		archive := NewBackupArchive(&metadata)
+		m.logger.Printf("Created backup archive for ID: %s", metadata.ID)
 
 		// Add the backup file to the archive
-		archive.AddFile(fmt.Sprintf("%s.db", sourceName), backupData)
+		dbFilename := fmt.Sprintf("%s.db", sourceName)
+		archive.AddFile(dbFilename, backupData)
+		m.logger.Printf("Added database file to archive: %s", dbFilename)
 
 		// Add sanitized configuration
 		if settings := conf.Setting(); settings != nil {
+			m.logger.Printf("Adding sanitized configuration to archive...")
 			if configData, err := yaml.Marshal(sanitizeConfig(settings)); err == nil {
 				archive.AddFile("config.yaml", configData)
-				// Calculate hash of the config for verification
 				hash := sha256.Sum256(configData)
 				archive.Metadata.ConfigHash = hex.EncodeToString(hash[:])
+				m.logger.Printf("Added configuration file to archive with hash: %s", archive.Metadata.ConfigHash)
 			} else {
 				m.logger.Printf("Warning: Failed to include configuration in backup: %v", err)
 			}
@@ -295,30 +320,40 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 
 		// Create the archive file
 		archivePath := filepath.Join(tempDir, fmt.Sprintf("%s.zip", metadata.ID))
+		m.logger.Printf("Creating archive file at: %s", archivePath)
 		if err := m.createArchive(archivePath, archive); err != nil {
 			m.logger.Printf("Failed to create archive: %v", err)
+			errs = append(errs, fmt.Errorf("failed to create archive: %w", err))
 			continue
 		}
+		m.logger.Printf("Successfully created archive file")
 
 		// Store backup in all enabled targets
+		m.logger.Printf("Storing backup in %d target(s)...", len(m.targets))
 		for _, target := range m.targets {
-			if err := target.Store(ctx, archivePath, metadata); err != nil {
+			m.logger.Printf("Storing backup in target: %s", target.Name())
+			if err := target.Store(ctx, archivePath, &metadata); err != nil {
 				m.logger.Printf("Failed to store backup in target %s: %v", target.Name(), err)
+				errs = append(errs, fmt.Errorf("failed to store backup in target %s: %w", target.Name(), err))
 				continue
 			}
-			if m.config.Debug {
-				m.logger.Printf("Successfully stored backup %s in target %s", metadata.ID, target.Name())
-			}
+			m.logger.Printf("Successfully stored backup in target: %s", target.Name())
 		}
 
 		// Clean up old backups if this is a daily backup
 		if isDaily {
+			m.logger.Printf("Running cleanup of old backups...")
 			if err := m.cleanupOldBackups(ctx); err != nil {
 				m.logger.Printf("Warning: Failed to clean up old backups: %v", err)
 			}
 		}
 	}
 
+	if len(errs) > 0 {
+		return fmt.Errorf("backup errors occurred: %v", errs)
+	}
+
+	m.logger.Println("Backup process completed successfully")
 	return nil
 }
 

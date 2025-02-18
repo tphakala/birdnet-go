@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/backup/sources"
+	"github.com/tphakala/birdnet-go/internal/backup/targets"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -35,21 +36,90 @@ func runBackup(settings *conf.Settings) error {
 	// Create a backup manager
 	manager := backup.NewManager(&settings.Backup, log.Default())
 
-	// Register SQLite source
-	sqliteSource := sources.NewSQLiteSource(settings)
-	if err := manager.RegisterSource(sqliteSource); err != nil {
-		return fmt.Errorf("failed to register SQLite source: %w", err)
+	// Determine which database is in use and register appropriate source
+	switch {
+	case settings.Output.SQLite.Enabled:
+		log.Println("Initializing SQLite backup source...")
+		sqliteSource := sources.NewSQLiteSource(settings)
+
+		// Validate the source configuration first
+		if err := sqliteSource.Validate(); err != nil {
+			return fmt.Errorf("invalid SQLite configuration: %w", err)
+		}
+
+		if err := manager.RegisterSource(sqliteSource); err != nil {
+			return fmt.Errorf("failed to register SQLite source: %w", err)
+		}
+		log.Println("SQLite backup source initialized successfully")
+	case settings.Output.MySQL.Enabled:
+		log.Println("Warning: MySQL backups are not currently supported. Please use your database's native backup tools.")
+		return nil
+	default:
+		log.Println("Warning: No supported database configuration found. Please check your configuration.")
+		return nil
+	}
+
+	// Register configured backup targets
+	log.Println("Initializing backup targets...")
+	var registeredTargets int
+	for _, targetConfig := range settings.Backup.Targets {
+		if !targetConfig.Enabled {
+			continue
+		}
+
+		var target backup.Target
+		var err error
+
+		switch targetConfig.Type {
+		case "local":
+			target, err = targets.NewLocalTarget(targets.LocalTargetConfig{
+				Path:  targetConfig.Settings["path"].(string),
+				Debug: settings.Backup.Debug,
+			}, log.Default())
+		case "ftp":
+			target, err = targets.NewFTPTarget(targetConfig.Settings)
+		case "sftp":
+			target, err = targets.NewSFTPTarget(targetConfig.Settings)
+		case "rsync":
+			target, err = targets.NewRsyncTarget(targetConfig.Settings)
+		case "gdrive":
+			target, err = targets.NewGDriveTarget(targetConfig.Settings)
+		default:
+			log.Printf("Warning: Unsupported backup target type: %s", targetConfig.Type)
+			continue
+		}
+
+		if err != nil {
+			log.Printf("Warning: Failed to initialize %s backup target: %v", targetConfig.Type, err)
+			continue
+		}
+
+		if err := manager.RegisterTarget(target); err != nil {
+			log.Printf("Warning: Failed to register %s backup target: %v", targetConfig.Type, err)
+			continue
+		}
+
+		registeredTargets++
+		log.Printf("Successfully registered %s backup target", targetConfig.Type)
+	}
+
+	// Exit early if no targets were successfully registered
+	if registeredTargets == 0 {
+		return fmt.Errorf("no valid backup targets registered, backup cannot proceed")
 	}
 
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
+	log.Println("Starting backup process...")
+
 	// Run the backup
 	if err := manager.RunBackup(ctx); err != nil {
+		log.Printf("Backup failed: %v", err)
 		return fmt.Errorf("backup failed: %w", err)
 	}
 
-	fmt.Println("Backup completed successfully")
+	log.Println("Backup completed successfully")
 	return nil
 }

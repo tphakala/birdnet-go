@@ -197,18 +197,21 @@ func (t *LocalTarget) Validate() error {
 	os.Remove(tmpFile)
 
 	// Check available disk space
-	diskUsage, err := diskmanager.GetDiskUsage(t.path)
+	availableBytes, err := diskmanager.GetAvailableSpace(t.path)
 	if err != nil {
 		return fmt.Errorf("failed to check disk space: %w", err)
 	}
 
-	// Ensure at least 10% free space is available
-	if diskUsage >= 90.0 {
-		return fmt.Errorf("insufficient disk space: %.1f%% used", diskUsage)
+	// Convert available bytes to gigabytes
+	availableGB := float64(availableBytes) / (1024 * 1024 * 1024)
+
+	// Ensure at least 1GB free space is available
+	if availableGB < 1.0 {
+		return fmt.Errorf("insufficient disk space: %.1f GB available, minimum 1 GB required", availableGB)
 	}
 
 	if t.logger != nil {
-		t.logger.Printf("Disk usage at backup location: %.1f%%", diskUsage)
+		t.logger.Printf("Available disk space at backup location: %.1f GB", availableGB)
 	}
 
 	return nil

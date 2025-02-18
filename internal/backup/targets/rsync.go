@@ -3,8 +3,6 @@ package targets
 import (
 	"context"
 	"fmt"
-	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -83,29 +81,10 @@ func (t *RsyncTarget) Name() string {
 }
 
 // Store implements the backup.Target interface
-func (t *RsyncTarget) Store(ctx context.Context, info *backup.BackupInfo, reader io.Reader) error {
+func (t *RsyncTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
 	if t.debug {
-		fmt.Printf("Rsync: Storing backup %s to %s\n", info.Target, t.host)
+		fmt.Printf("Rsync: Storing backup %s to %s\n", filepath.Base(sourcePath), t.host)
 	}
-
-	// Create a temporary file to store the backup
-	tempDir, err := os.MkdirTemp("", "rsync-backup-*")
-	if err != nil {
-		return fmt.Errorf("rsync: failed to create temp directory: %w", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	tempFile := filepath.Join(tempDir, info.Target)
-	f, err := os.Create(tempFile)
-	if err != nil {
-		return fmt.Errorf("rsync: failed to create temp file: %w", err)
-	}
-
-	if _, err := io.Copy(f, reader); err != nil {
-		f.Close()
-		return fmt.Errorf("rsync: failed to write temp file: %w", err)
-	}
-	f.Close()
 
 	// Build rsync command
 	args := []string{
@@ -120,7 +99,7 @@ func (t *RsyncTarget) Store(ctx context.Context, info *backup.BackupInfo, reader
 
 	// Add source and destination
 	dest := fmt.Sprintf("%s@%s:%s", t.username, t.host, t.basePath)
-	args = append(args, tempFile, dest)
+	args = append(args, sourcePath, dest)
 
 	// Execute rsync command
 	cmd := exec.CommandContext(ctx, t.rsyncPath, args...)
@@ -129,7 +108,7 @@ func (t *RsyncTarget) Store(ctx context.Context, info *backup.BackupInfo, reader
 	}
 
 	if t.debug {
-		fmt.Printf("Rsync: Successfully stored backup %s\n", info.Target)
+		fmt.Printf("Rsync: Successfully stored backup %s\n", filepath.Base(sourcePath))
 	}
 
 	return nil

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -153,10 +154,17 @@ func (t *SFTPTarget) connect(ctx context.Context) (*sftp.Client, error) {
 }
 
 // Store implements the backup.Target interface
-func (t *SFTPTarget) Store(ctx context.Context, info *backup.BackupInfo, reader io.Reader) error {
+func (t *SFTPTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
 	if t.debug {
-		fmt.Printf("SFTP: Storing backup %s to %s\n", info.Target, t.host)
+		fmt.Printf("SFTP: Storing backup %s to %s\n", filepath.Base(sourcePath), t.host)
 	}
+
+	// Open source file
+	srcFile, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("sftp: failed to open source file: %w", err)
+	}
+	defer srcFile.Close()
 
 	client, err := t.connect(ctx)
 	if err != nil {
@@ -170,19 +178,19 @@ func (t *SFTPTarget) Store(ctx context.Context, info *backup.BackupInfo, reader 
 	}
 
 	// Store the backup file
-	backupPath := path.Join(t.basePath, info.Target)
+	backupPath := path.Join(t.basePath, filepath.Base(sourcePath))
 	dstFile, err := client.Create(backupPath)
 	if err != nil {
 		return fmt.Errorf("sftp: failed to create file: %w", err)
 	}
 	defer dstFile.Close()
 
-	if _, err := io.Copy(dstFile, reader); err != nil {
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
 		return fmt.Errorf("sftp: failed to write file: %w", err)
 	}
 
 	if t.debug {
-		fmt.Printf("SFTP: Successfully stored backup %s\n", info.Target)
+		fmt.Printf("SFTP: Successfully stored backup %s\n", filepath.Base(sourcePath))
 	}
 
 	return nil

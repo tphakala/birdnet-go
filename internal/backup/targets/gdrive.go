@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -78,13 +79,20 @@ func (t *GDriveTarget) Name() string {
 }
 
 // Store implements the backup.Target interface
-func (t *GDriveTarget) Store(ctx context.Context, info *backup.BackupInfo, reader io.Reader) error {
+func (t *GDriveTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
 	if t.debug {
-		t.logger.Printf("GDrive: Storing backup %s to bucket %s", info.Target, t.bucketName)
+		t.logger.Printf("GDrive: Storing backup %s to bucket %s", filepath.Base(sourcePath), t.bucketName)
 	}
 
+	// Open source file
+	srcFile, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("gdrive: failed to open source file: %w", err)
+	}
+	defer srcFile.Close()
+
 	// Create the object path
-	objectPath := path.Join(t.basePath, info.Target)
+	objectPath := path.Join(t.basePath, filepath.Base(sourcePath))
 	obj := t.client.Bucket(t.bucketName).Object(objectPath)
 
 	// Create a new bucket writer
@@ -92,14 +100,14 @@ func (t *GDriveTarget) Store(ctx context.Context, info *backup.BackupInfo, reade
 
 	// Set metadata
 	writer.Metadata = map[string]string{
-		"timestamp": info.Timestamp.Format(time.RFC3339),
-		"type":      info.Type,
-		"source":    info.Source,
-		"is_daily":  fmt.Sprintf("%v", info.IsDaily),
+		"timestamp": metadata.Timestamp.Format(time.RFC3339),
+		"type":      metadata.Type,
+		"source":    metadata.Source,
+		"is_daily":  fmt.Sprintf("%v", metadata.IsDaily),
 	}
 
 	// Copy the data
-	if _, err := io.Copy(writer, reader); err != nil {
+	if _, err := io.Copy(writer, srcFile); err != nil {
 		return fmt.Errorf("gdrive: failed to copy data: %w", err)
 	}
 
@@ -109,7 +117,7 @@ func (t *GDriveTarget) Store(ctx context.Context, info *backup.BackupInfo, reade
 	}
 
 	if t.debug {
-		t.logger.Printf("GDrive: Successfully stored backup %s", info.Target)
+		t.logger.Printf("GDrive: Successfully stored backup %s", filepath.Base(sourcePath))
 	}
 
 	return nil

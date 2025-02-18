@@ -187,18 +187,18 @@ func setDefaultConfig() {
 	viper.SetDefault("backup.retention.maxage", "30d")
 	viper.SetDefault("backup.retention.maxbackups", 30)
 	viper.SetDefault("backup.retention.minbackups", 7)
-	viper.SetDefault("backup.providers", []BackupProvider{
+	viper.SetDefault("backup.targets", []map[string]interface{}{
 		{
-			Type:    "local",
-			Enabled: true,
-			Settings: map[string]interface{}{
+			"type":    "local",
+			"enabled": true,
+			"settings": map[string]interface{}{
 				"path": "backups/",
 			},
 		},
 		{
-			Type:    "ftp",
-			Enabled: false,
-			Settings: map[string]interface{}{
+			"type":    "ftp",
+			"enabled": false,
+			"settings": map[string]interface{}{
 				"host":     "localhost",
 				"port":     21,
 				"username": "",
@@ -208,9 +208,9 @@ func setDefaultConfig() {
 			},
 		},
 		{
-			Type:    "sftp",
-			Enabled: false,
-			Settings: map[string]interface{}{
+			"type":    "sftp",
+			"enabled": false,
+			"settings": map[string]interface{}{
 				"host":     "localhost",
 				"port":     22,
 				"username": "",
@@ -221,9 +221,9 @@ func setDefaultConfig() {
 			},
 		},
 		{
-			Type:    "rsync",
-			Enabled: false,
-			Settings: map[string]interface{}{
+			"type":    "rsync",
+			"enabled": false,
+			"settings": map[string]interface{}{
 				"host":     "localhost",
 				"port":     22,
 				"username": "",
@@ -232,20 +232,13 @@ func setDefaultConfig() {
 			},
 		},
 		{
-			Type:    "gdrive",
-			Enabled: false,
-			Settings: map[string]interface{}{
+			"type":    "gdrive",
+			"enabled": false,
+			"settings": map[string]interface{}{
 				"bucket":      "",
 				"credentials": "credentials.json",
 				"path":        "backups/",
 			},
-		},
-	})
-	viper.SetDefault("backup.targets", []BackupTarget{
-		{
-			Type:     "sqlite",
-			Enabled:  true,
-			Settings: map[string]interface{}{},
 		},
 	})
 

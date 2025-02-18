@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -166,10 +167,17 @@ func (t *FTPTarget) createDirectory(ctx context.Context, conn *ftp.ServerConn, p
 }
 
 // Store implements the backup.Target interface
-func (t *FTPTarget) Store(ctx context.Context, info *backup.BackupInfo, reader io.Reader) error {
+func (t *FTPTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
 	if t.debug {
-		log.Printf("FTP: Storing backup %s to %s", info.Target, t.host)
+		log.Printf("FTP: Storing backup %s to %s", filepath.Base(sourcePath), t.host)
 	}
+
+	// Open source file
+	srcFile, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("ftp: failed to open source file: %w", err)
+	}
+	defer srcFile.Close()
 
 	conn, err := t.connect(ctx)
 	if err != nil {
@@ -187,8 +195,8 @@ func (t *FTPTarget) Store(ctx context.Context, info *backup.BackupInfo, reader i
 	}
 
 	// Store the backup file
-	backupPath := path.Join(t.basePath, info.Target)
-	if err := conn.Stor(backupPath, reader); err != nil {
+	backupPath := path.Join(t.basePath, filepath.Base(sourcePath))
+	if err := conn.Stor(backupPath, srcFile); err != nil {
 		if quitErr := conn.Quit(); quitErr != nil {
 			t.logger.Printf("Warning: failed to quit FTP connection after store error: %v", quitErr)
 		}
@@ -196,7 +204,7 @@ func (t *FTPTarget) Store(ctx context.Context, info *backup.BackupInfo, reader i
 	}
 
 	if t.debug {
-		log.Printf("FTP: Successfully stored backup %s", info.Target)
+		log.Printf("FTP: Successfully stored backup %s", filepath.Base(sourcePath))
 	}
 
 	return nil

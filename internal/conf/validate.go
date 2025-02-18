@@ -322,33 +322,6 @@ func validateBackupConfig(config *BackupConfig) error {
 		}
 	}
 
-	// Validate providers
-	if len(config.Providers) == 0 {
-		errs = append(errs, "at least one backup provider must be configured when backup is enabled")
-	}
-
-	for i, provider := range config.Providers {
-		if provider.Type == "" {
-			errs = append(errs, fmt.Sprintf("provider %d: type must not be empty", i+1))
-		}
-
-		// Validate provider-specific settings based on type
-		switch provider.Type {
-		case "local":
-			if path, ok := provider.Settings["path"].(string); !ok || path == "" {
-				errs = append(errs, fmt.Sprintf("provider %d: local provider requires 'path' setting", i+1))
-			}
-		case "cifs":
-			if _, ok := provider.Settings["share"].(string); !ok {
-				errs = append(errs, fmt.Sprintf("provider %d: CIFS provider requires 'share' setting", i+1))
-			}
-		case "ftp":
-			if _, ok := provider.Settings["host"].(string); !ok {
-				errs = append(errs, fmt.Sprintf("provider %d: FTP provider requires 'host' setting", i+1))
-			}
-		}
-	}
-
 	// Validate targets
 	if len(config.Targets) == 0 {
 		errs = append(errs, "at least one backup target must be configured when backup is enabled")
@@ -361,10 +334,29 @@ func validateBackupConfig(config *BackupConfig) error {
 
 		// Validate target-specific settings based on type
 		switch target.Type {
-		case "sqlite":
-			// No additional settings required for SQLite, it uses the main SQLite configuration
-		case "mysql":
-			// MySQL backup might need additional settings in the future
+		case "local":
+			if path, ok := target.Settings["path"].(string); !ok || path == "" {
+				errs = append(errs, fmt.Sprintf("target %d: local target requires 'path' setting", i+1))
+			}
+		case "ftp":
+			if _, ok := target.Settings["host"].(string); !ok {
+				errs = append(errs, fmt.Sprintf("target %d: FTP target requires 'host' setting", i+1))
+			}
+		case "sftp":
+			if _, ok := target.Settings["host"].(string); !ok {
+				errs = append(errs, fmt.Sprintf("target %d: SFTP target requires 'host' setting", i+1))
+			}
+		case "rsync":
+			if _, ok := target.Settings["host"].(string); !ok {
+				errs = append(errs, fmt.Sprintf("target %d: Rsync target requires 'host' setting", i+1))
+			}
+		case "gdrive":
+			if _, ok := target.Settings["bucket"].(string); !ok {
+				errs = append(errs, fmt.Sprintf("target %d: Google Drive target requires 'bucket' setting", i+1))
+			}
+			if _, ok := target.Settings["credentials"].(string); !ok {
+				errs = append(errs, fmt.Sprintf("target %d: Google Drive target requires 'credentials' setting", i+1))
+			}
 		default:
 			errs = append(errs, fmt.Sprintf("target %d: unsupported backup target type: %s", i+1, target.Type))
 		}
