@@ -62,8 +62,14 @@ func (h *Handlers) Detections(c echo.Context) error {
 		if req.Date == "" || req.Hour == "" {
 			return h.NewHandlerError(fmt.Errorf("missing date or hour"), "Date and hour parameters are required for hourly detections", http.StatusBadRequest)
 		}
-		notes, err = h.DS.GetHourlyDetections(req.Date, req.Hour, req.Duration)
-		totalResults = int64(len(notes))
+		notes, err = h.DS.GetHourlyDetections(req.Date, req.Hour, req.Duration, req.NumResults, req.Offset)
+		if err != nil {
+			return h.NewHandlerError(err, "Failed to get hourly detections", http.StatusInternalServerError)
+		}
+		totalResults, err = h.DS.CountHourlyDetections(req.Date, req.Hour, req.Duration)
+		if err != nil {
+			return h.NewHandlerError(err, "Failed to count hourly detections", http.StatusInternalServerError)
+		}
 	case "species":
 		if req.Species == "" {
 			return h.NewHandlerError(fmt.Errorf("missing species"), "Species parameter is required for species detections", http.StatusBadRequest)
