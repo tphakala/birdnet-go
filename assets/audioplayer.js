@@ -19,6 +19,8 @@ htmx.on('htmx:afterSettle', function (event) {
     };
 
     const FILTER_HP_DEFAULT_FREQ = 20; // Default highpass filter frequency
+    const FILTER_HP_MIN_FREQ = 20; // Minimum highpass filter frequency
+    const FILTER_HP_MAX_FREQ = 10000; // Maximum highpass filter frequency
 
     // Utility functions for creating UI elements
     const createSlider = (className, height = 'h-32') => {
@@ -271,9 +273,7 @@ htmx.on('htmx:afterSettle', function (event) {
                     const filterLabel = filterControl.querySelector('span');
                     filterLabel.textContent = `HP: ${Math.round(freq)} Hz`;
                     // Calculate slider position based on frequency
-                    const minFreq = 20;
-                    const maxFreq = 10000;
-                    const pos = Math.log(freq/minFreq) / Math.log(maxFreq/minFreq);
+                    const pos = Math.log(freq/FILTER_HP_MIN_FREQ) / Math.log(FILTER_HP_MAX_FREQ/FILTER_HP_MIN_FREQ);
                     filterBar.style.height = `${pos * 100}%`;
                 };
 
@@ -301,9 +301,7 @@ htmx.on('htmx:afterSettle', function (event) {
                     let pos = (sliderRect.bottom - y) / sliderRect.height;
                     pos = Math.max(0, Math.min(1, pos));
                     
-                    const minFreq = 20;
-                    const maxFreq = 10000;
-                    const freq = Math.round(minFreq * Math.pow(maxFreq/minFreq, pos));
+                    const freq = Math.round(FILTER_HP_MIN_FREQ * Math.pow(FILTER_HP_MAX_FREQ/FILTER_HP_MIN_FREQ, pos));
                     
                     highPassFilter.frequency.value = freq;
                     updateFilterDisplay(freq);
