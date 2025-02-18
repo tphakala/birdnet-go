@@ -59,13 +59,13 @@ htmx.on('htmx:afterSettle', function (event) {
         volumeControl.style.cssText = 'position: absolute; top: 8px; right: 8px; z-index: 10; opacity: 0; transition: opacity 0.2s;';
         volumeControl.innerHTML = `
             <div class="volume-control-container flex items-center gap-1" style="position: relative;">
-                <span class="gain-display text-xs text-white bg-black/50 mb-1 flex items-center" style="height: 28px; line-height: 28px;">0 dB</span>
-                <button class="volume-button flex items-center justify-center" style="height: 28px; width: 28px; border-radius: 50%; background: rgba(0, 0, 0, 0.5); transition: background 0.2s;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" style="color: white;">
+                <button class="volume-button flex items-center justify-center gap-1" style="height: 28px; padding: 0 8px; border-radius: 14px; background: rgba(0, 0, 0, 0.5); transition: background 0.2s;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" style="color: white;">
                         <path d="M12 5v14l-7-7h-3v-4h3l7-7z" fill="currentColor"/>
                         <path d="M16 8a4 4 0 0 1 0 8" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
                         <path d="M19 5a8 8 0 0 1 0 14" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
                     </svg>
+                    <span class="gain-display text-xs text-white">0 dB</span>
                 </button>
             </div>
         `;
@@ -252,6 +252,7 @@ htmx.on('htmx:afterSettle', function (event) {
                 const updateGainValue = (dbValue) => {
                     const gainValue = dbToGain(dbValue);
                     gainNode.gain.value = gainValue;
+                    const gainDisplay = volumeControl.querySelector('.gain-display');
                     gainDisplay.textContent = `${dbValue > 0 ? '+' : ''}${dbValue} dB`;
                     
                     // Update slider bar height (0-GAIN_MAX_DB maps to 0-100%)
@@ -440,14 +441,15 @@ htmx.on('htmx:afterSettle', function (event) {
                 });
 
                 spectrogramContainer.addEventListener('mouseleave', () => {
-                    filterControl.style.opacity = '0';
                     if (!isFilterSliderActive) {
+                        filterControl.style.opacity = '0';
                         filterSlider.style.display = 'none';
                     }
                 });
 
                 // Add filter control logic
                 let isFilterSliderActive = false;
+                let filterSliderTimeout;
                 const filterButton = filterControl.querySelector('.filter-button');
                 const filterLabel = filterButton.querySelector('span');
                 const filterBar = filterSlider.querySelector('.bg-blue-500');
@@ -462,6 +464,29 @@ htmx.on('htmx:afterSettle', function (event) {
                     filterBar.style.height = `${pos * 100}%`;
                 };
 
+                // Function to hide filter slider
+                const hideFilterSlider = () => {
+                    filterSlider.style.display = 'none';
+                    isFilterSliderActive = false;
+
+                    if (!spectrogramContainer.matches(':hover')) {
+                        filterControl.style.opacity = '0';
+                    }
+
+                    if (filterSliderTimeout) {
+                        clearTimeout(filterSliderTimeout);
+                        filterSliderTimeout = null;
+                    }
+                };
+
+                // Function to reset filter inactivity timer
+                const resetFilterTimer = () => {
+                    if (filterSliderTimeout) {
+                        clearTimeout(filterSliderTimeout);
+                    }
+                    filterSliderTimeout = setTimeout(hideFilterSlider, GAIN_SLIDER_INACTIVITY_TIMEOUT_MS);
+                };
+
                 // Set initial display
                 updateFilterDisplay(highPassFilter.frequency.value);
 
@@ -474,6 +499,7 @@ htmx.on('htmx:afterSettle', function (event) {
                         }
                         isFilterSliderActive = true;
                         filterSlider.style.display = 'block';
+                        filterControl.style.opacity = '1';
                         
                         // Calculate optimal slider position
                         const spectrogramRect = spectrogramContainer.getBoundingClientRect();
@@ -485,9 +511,11 @@ htmx.on('htmx:afterSettle', function (event) {
 
                         filterSlider.style.top = `${top}px`;
                         filterSlider.style.left = `${left}px`;
+
+                        // Start inactivity timer
+                        resetFilterTimer();
                     } else {
-                        isFilterSliderActive = false;
-                        filterSlider.style.display = 'none';
+                        hideFilterSlider();
                     }
                 });
 
@@ -508,13 +536,14 @@ htmx.on('htmx:afterSettle', function (event) {
                 // Add the resize handler to your existing window resize listener
                 window.addEventListener('resize', () => {
                     if (isFilterSliderActive) {
-                        updateFilterSliderPosition();
+                        hideFilterSlider();
                     }
                 });
 
                 // Handle filter slider interaction
                 const updateFilterFrequency = (e) => {
                     e.preventDefault();
+                    resetFilterTimer(); // Reset inactivity timer on interaction
                     const sliderRect = filterSlider.querySelector('.relative').getBoundingClientRect();
                     let y = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
                     
@@ -545,6 +574,39 @@ htmx.on('htmx:afterSettle', function (event) {
                     document.addEventListener('touchmove', updateFilterFrequency, { passive: false });
                     document.addEventListener('touchend', () => {
                         document.removeEventListener('touchmove', updateFilterFrequency);
+                    }, { once: true });
+                });
+
+                // Function to update gain based on mouse/touch position
+                const updateGainFromPosition = (e) => {
+                    e.preventDefault();
+                    resetTimer();
+                    const sliderRect = sliderElement.querySelector('.relative').getBoundingClientRect();
+                    let y = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+                    
+                    let pos = (sliderRect.bottom - y) / sliderRect.height;
+                    pos = Math.max(0, Math.min(1, pos));
+                    
+                    const dbValue = Math.round(pos * GAIN_MAX_DB);
+                    updateGainValue(dbValue);
+                };
+
+                // Add mouse and touch event listeners for gain slider
+                sliderElement.addEventListener('mousedown', (e) => {
+                    if (e.button === 0) {
+                        updateGainFromPosition(e);
+                        document.addEventListener('mousemove', updateGainFromPosition);
+                        document.addEventListener('mouseup', () => {
+                            document.removeEventListener('mousemove', updateGainFromPosition);
+                        }, { once: true });
+                    }
+                });
+
+                sliderElement.addEventListener('touchstart', (e) => {
+                    updateGainFromPosition(e);
+                    document.addEventListener('touchmove', updateGainFromPosition, { passive: false });
+                    document.addEventListener('touchend', () => {
+                        document.removeEventListener('touchmove', updateGainFromPosition);
                     }, { once: true });
                 });
 
