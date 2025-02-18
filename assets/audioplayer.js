@@ -366,23 +366,6 @@ htmx.on('htmx:afterSettle', function (event) {
         return handlers;
     };
 
-    // Slider Interaction Setup
-    const createSliderInteraction = (slider, manager, updateFn) => {
-        const handleUpdate = (e) => {
-            e.preventDefault();
-            manager.resetTimer();
-            const sliderRect = slider.querySelector('.relative').getBoundingClientRect();
-            let y = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-            
-            let pos = (sliderRect.bottom - y) / sliderRect.height;
-            pos = Math.max(0, Math.min(1, pos));
-            
-            return pos;
-        };
-
-        return handleUpdate;
-    };
-
     // Seeking Setup
     const setupSeeking = (container, playerOverlay, elements, audio, updateProgress) => {
         if (isDesktop()) {
@@ -506,6 +489,14 @@ htmx.on('htmx:afterSettle', function (event) {
             updateControlsVisibility();
         });
         resizeObserver.observe(spectrogramContainer);
+
+        // Clean up the observer when the audio player is destroyed
+        const cleanup = () => {
+            resizeObserver.disconnect();
+        };
+
+        // Add cleanup to the audio element for later use
+        audio.cleanup = cleanup;
 
         // Show controls on hover
         spectrogramContainer.addEventListener('mouseenter', () => {
