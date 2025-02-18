@@ -3,7 +3,7 @@
 <section class="card col-span-12 bg-base-100 shadow-sm"
     id="listDetections"
     hx-trigger="refreshListEvent from:body" 
-    hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{.Offset}}" 
+    hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&duration={{.Duration}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{.Offset}}" 
     hx-target="#listDetections"
     hx-swap="outerHTML">
     
