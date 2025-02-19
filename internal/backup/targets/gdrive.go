@@ -667,33 +667,43 @@ func (t *GDriveTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		}
 
 		query := fmt.Sprintf("'%s' in parents and trashed=false", folderId)
-		files, err := t.service.Files.List().Q(query).
-			Fields("files(id, name, size, createdTime, description)").
-			Context(ctx).Do()
-		if err != nil {
-			return backup.NewError(backup.ErrIO, "gdrive: failed to list files", err)
-		}
-
-		for _, file := range files.Files {
-			// Skip metadata files
-			if strings.HasSuffix(file.Name, gdriveMetadataFileExt) {
-				continue
-			}
-
-			createdTime, err := time.Parse(time.RFC3339, file.CreatedTime)
+		pageToken := ""
+		for {
+			fileList, err := t.service.Files.List().Q(query).
+				Fields("nextPageToken, files(id, name, size, createdTime, description)").
+				PageToken(pageToken).
+				Context(ctx).Do()
 			if err != nil {
-				t.logger.Printf("Warning: failed to parse creation time for file %s: %v", file.Name, err)
-				continue
+				return backup.NewError(backup.ErrIO, "gdrive: failed to list files", err)
 			}
 
-			backups = append(backups, backup.BackupInfo{
-				Target: file.Name,
-				Metadata: backup.Metadata{
-					ID:        file.Id,
-					Timestamp: createdTime,
-					Size:      file.Size,
-				},
-			})
+			for _, file := range fileList.Files {
+				// Skip metadata files
+				if strings.HasSuffix(file.Name, gdriveMetadataFileExt) {
+					continue
+				}
+
+				createdTime, err := time.Parse(time.RFC3339, file.CreatedTime)
+				if err != nil {
+					t.logger.Printf("Warning: failed to parse creation time for file %s: %v", file.Name, err)
+					continue
+				}
+
+				backups = append(backups, backup.BackupInfo{
+					Target: file.Name,
+					Metadata: backup.Metadata{
+						ID:        file.Id,
+						Timestamp: createdTime,
+						Size:      file.Size,
+					},
+				})
+			}
+
+			// If there are no more pages, break the loop
+			if fileList.NextPageToken == "" {
+				break
+			}
+			pageToken = fileList.NextPageToken
 		}
 
 		return nil

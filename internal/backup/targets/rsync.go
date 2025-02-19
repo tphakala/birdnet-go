@@ -616,7 +616,10 @@ func (t *RsyncTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 			continue
 		}
 
-		size, _ := parseInt64(parts[4])
+		size, err := parseInt64(parts[4])
+		if err != nil {
+			return nil, backup.NewError(backup.ErrValidation, "rsync: failed to parse file size", err)
+		}
 		timestamp, err := time.Parse("2006-01-02 15:04:05.000000000 -0700", parts[5]+" "+parts[6]+" "+parts[7])
 		if err != nil {
 			return nil, backup.NewError(backup.ErrValidation, "rsync: failed to parse timestamp", err)
