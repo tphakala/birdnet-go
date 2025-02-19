@@ -14,6 +14,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -67,21 +68,40 @@ type BackupInfo struct {
 
 // BackupArchive represents a backup archive containing multiple files
 type BackupArchive struct {
-	Files    map[string][]byte // Map of filenames to their contents
-	Metadata Metadata          // Metadata about the backup
+	Files    map[string]FileEntry // Map of filenames to their contents and metadata
+	Metadata Metadata             // Metadata about the backup
+}
+
+// FileMetadata contains platform-specific file metadata
+type FileMetadata struct {
+	Mode   os.FileMode // File mode and permission bits
+	UID    int         // User ID (Unix only)
+	GID    int         // Group ID (Unix only)
+	IsUnix bool        // Whether this metadata is from a Unix system
+}
+
+// FileEntry represents a file in the backup archive
+type FileEntry struct {
+	Data     []byte       // File contents
+	ModTime  time.Time    // File modification time
+	Metadata FileMetadata // Platform-specific metadata
 }
 
 // NewBackupArchive creates a new backup archive
 func NewBackupArchive(metadata *Metadata) *BackupArchive {
 	return &BackupArchive{
-		Files:    make(map[string][]byte),
+		Files:    make(map[string]FileEntry),
 		Metadata: *metadata,
 	}
 }
 
 // AddFile adds a file to the backup archive
-func (ba *BackupArchive) AddFile(name string, data []byte) {
-	ba.Files[name] = data
+func (ba *BackupArchive) AddFile(name string, data []byte, modTime time.Time, metadata FileMetadata) {
+	ba.Files[name] = FileEntry{
+		Data:     data,
+		ModTime:  modTime,
+		Metadata: metadata,
+	}
 }
 
 // sanitizeConfig creates a copy of the configuration with sensitive data removed
@@ -249,19 +269,14 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 	isDaily := now.Hour() == 0 && now.Minute() < 15 // Consider it a daily backup if run between 00:00 and 00:15
 
 	var allTempDirs []string
-	defer func() {
-		m.logger.Printf("🧹 Cleaning up %d temporary directories...", len(allTempDirs))
-		for _, dir := range allTempDirs {
-			if err := os.RemoveAll(dir); err != nil {
-				m.logger.Printf("⚠️ Failed to remove temporary directory %s: %v", dir, err)
-			}
-		}
-	}()
-
 	var errs []error
+
+	// Process each source
 	for sourceName, source := range m.sources {
 		select {
 		case <-ctx.Done():
+			// Clean up temp dirs before returning
+			m.cleanupTempDirectories(allTempDirs)
 			return NewError(ErrCanceled, "backup process cancelled", ctx.Err())
 		default:
 		}
@@ -274,6 +289,12 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 			continue
 		}
 	}
+
+	// Clean up temporary directories after all operations are complete
+	defer func() {
+		m.logger.Printf("🧹 Cleaning up %d temporary directories...", len(allTempDirs))
+		m.cleanupTempDirectories(allTempDirs)
+	}()
 
 	if len(errs) > 0 {
 		return combineErrors(errs)
@@ -299,6 +320,10 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 	// Create and prepare archive
 	tempDir, archive, err := m.prepareBackupArchive(ctx, backupPath, sourceName, now, isDaily)
 	if err != nil {
+		// Don't add tempDir to tempDirs if preparation failed
+		if tempDir != "" {
+			os.RemoveAll(tempDir)
+		}
 		return tempDirs, err
 	}
 	tempDirs = append(tempDirs, tempDir)
@@ -346,6 +371,21 @@ func (m *Manager) createSourceBackup(ctx context.Context, sourceName string, sou
 	return backupPath, nil
 }
 
+// getFileMetadata gets platform-specific file metadata
+func getFileMetadata(info os.FileInfo) FileMetadata {
+	metadata := FileMetadata{
+		Mode:   info.Mode(),
+		IsUnix: runtime.GOOS != "windows",
+	}
+
+	// Get Unix-specific metadata on Unix systems
+	if metadata.IsUnix {
+		getUnixMetadata(&metadata, info)
+	}
+
+	return metadata
+}
+
 // prepareBackupArchive creates and prepares a backup archive
 func (m *Manager) prepareBackupArchive(ctx context.Context, backupPath, sourceName string, now time.Time, isDaily bool) (string, *BackupArchive, error) {
 	// Create temporary directory
@@ -359,6 +399,12 @@ func (m *Manager) prepareBackupArchive(ctx context.Context, backupPath, sourceNa
 	case <-ctx.Done():
 		return tempDir, nil, NewError(ErrCanceled, "backup archive preparation cancelled", ctx.Err())
 	default:
+	}
+
+	// Get file info for modification time and metadata
+	fileInfo, err := os.Stat(backupPath)
+	if err != nil {
+		return tempDir, nil, NewError(ErrIO, fmt.Sprintf("failed to get backup file info %s", backupPath), err)
 	}
 
 	// Read the backup file
@@ -387,9 +433,9 @@ func (m *Manager) prepareBackupArchive(ctx context.Context, backupPath, sourceNa
 	archive := NewBackupArchive(&metadata)
 	m.logger.Printf("Created backup archive for ID: %s", metadata.ID)
 
-	// Add the backup file to the archive
+	// Add the backup file to the archive with its original modification time and metadata
 	dbFilename := fmt.Sprintf("%s.db", sourceName)
-	archive.AddFile(dbFilename, backupData)
+	archive.AddFile(dbFilename, backupData, fileInfo.ModTime(), getFileMetadata(fileInfo))
 	m.logger.Printf("Added database file to archive: %s", dbFilename)
 
 	// Add configuration if available
@@ -409,7 +455,14 @@ func (m *Manager) addConfigToArchive(archive *BackupArchive) error {
 			m.logger.Printf("⚠️ Failed to include configuration in backup: %v", err)
 			return NewError(ErrIO, "failed to marshal configuration", err)
 		}
-		archive.AddFile("config.yaml", configData)
+
+		// Create default metadata for config file
+		metadata := FileMetadata{
+			Mode:   0o644,
+			IsUnix: runtime.GOOS != "windows",
+		}
+
+		archive.AddFile("config.yaml", configData, archive.Metadata.Timestamp, metadata)
 		hash := sha256.Sum256(configData)
 		archive.Metadata.ConfigHash = hex.EncodeToString(hash[:])
 		m.logger.Printf("✅ Added configuration file to archive with hash: %s", archive.Metadata.ConfigHash)
@@ -507,12 +560,16 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, archive
 	default:
 	}
 
-	if err := addFileToZip(zw, "metadata.json", metadataBytes); err != nil {
+	metadataEntry := &FileEntry{
+		Data:    metadataBytes,
+		ModTime: archive.Metadata.Timestamp,
+	}
+	if err := addFileToZip(zw, "metadata.json", metadataEntry); err != nil {
 		return err
 	}
 
 	// Add all files to the archive
-	for name, data := range archive.Files {
+	for name, entry := range archive.Files {
 		// Check context before each file
 		select {
 		case <-ctx.Done():
@@ -520,7 +577,7 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, archive
 		default:
 		}
 
-		if err := addFileToZip(zw, name, data); err != nil {
+		if err := addFileToZip(zw, name, &entry); err != nil {
 			return err
 		}
 	}
@@ -709,12 +766,26 @@ func decryptData(encryptedData, key []byte) ([]byte, error) {
 }
 
 // addFileToZip adds a file to a zip archive
-func addFileToZip(zw *zip.Writer, name string, data []byte) error {
-	w, err := zw.Create(name)
+func addFileToZip(zw *zip.Writer, name string, entry *FileEntry) error {
+	// Create a new file header
+	header := &zip.FileHeader{
+		Name:     name,
+		Method:   zip.Deflate,
+		Modified: entry.ModTime,
+	}
+
+	// Set the file mode, preserving Unix permissions if available
+	if entry.Metadata.IsUnix {
+		header.SetMode(entry.Metadata.Mode)
+	} else {
+		header.SetMode(0o644)
+	}
+
+	w, err := zw.CreateHeader(header)
 	if err != nil {
 		return NewError(ErrIO, fmt.Sprintf("failed to create file %s in zip", name), err)
 	}
-	if _, err := w.Write(data); err != nil {
+	if _, err := w.Write(entry.Data); err != nil {
 		return NewError(ErrIO, fmt.Sprintf("failed to write file %s to zip", name), err)
 	}
 	return nil
@@ -979,4 +1050,13 @@ func (m *Manager) getDeleteTimeout() time.Duration {
 		return m.config.OperationTimeouts.Delete
 	}
 	return defaultTimeouts.Delete
+}
+
+// cleanupTempDirectories handles cleanup of temporary directories
+func (m *Manager) cleanupTempDirectories(dirs []string) {
+	for _, dir := range dirs {
+		if err := os.RemoveAll(dir); err != nil {
+			m.logger.Printf("⚠️ Failed to remove temporary directory %s: %v", dir, err)
+		}
+	}
 }

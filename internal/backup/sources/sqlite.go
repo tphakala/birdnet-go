@@ -148,7 +148,7 @@ func (s *SQLiteSource) createBackupDirectory() (string, error) {
 		}
 	}
 
-	tempDir, err := os.MkdirTemp(baseDir, "sqlite-backup-*")
+	tempDir, err := os.MkdirTemp(baseDir, "birdnet-go-backup-*")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp directory: %w", err)
 	}
@@ -519,19 +519,25 @@ func (s *SQLiteSource) Backup(ctx context.Context) (string, error) {
 	var tempDir string
 	var backupPath string
 
-	// Setup cleanup function
+	// Setup cleanup function for error cases
 	cleanup := func() {
 		if lockPath != "" {
 			s.cleanupPartialBackup(backupPath, lockPath)
 		}
-		if tempDir != "" {
+		// Only remove tempDir if we have an error
+		if tempDir != "" && backupPath == "" {
 			os.RemoveAll(tempDir)
 		}
 	}
 
 	// Setup signal handler
 	ctx = s.setupSignalHandler(ctx, cleanup)
-	defer cleanup()
+	// Only cleanup on error, not on successful completion
+	defer func() {
+		if backupPath == "" {
+			cleanup()
+		}
+	}()
 
 	// Validate configuration and get database path
 	dbPath, err := s.validateConfig()
@@ -580,6 +586,8 @@ func (s *SQLiteSource) Backup(ctx context.Context) (string, error) {
 	})
 
 	if err != nil {
+		// Reset backupPath to trigger cleanup
+		backupPath = ""
 		return "", err
 	}
 
