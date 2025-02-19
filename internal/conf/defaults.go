@@ -212,13 +212,14 @@ func setDefaultConfig() {
 			"type":    "sftp",
 			"enabled": false,
 			"settings": map[string]interface{}{
-				"host":     "localhost",
-				"port":     22,
-				"username": "",
-				"password": "",
-				"key_file": "",
-				"path":     "backups/",
-				"timeout":  "30s",
+				"host":             "localhost",
+				"port":             22,
+				"username":         "",
+				"password":         "",
+				"key_file":         "",
+				"known_hosts_file": "", // Will default to ~/.ssh/known_hosts if not specified
+				"path":             "backups/",
+				"timeout":          "30s",
 			},
 		},
 		{

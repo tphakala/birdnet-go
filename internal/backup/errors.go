@@ -36,6 +36,8 @@ const (
 	ErrValidation
 	// ErrEncryption represents an encryption/decryption error
 	ErrEncryption
+	// ErrSecurity represents a security-related error
+	ErrSecurity
 )
 
 // Error represents a backup operation error
