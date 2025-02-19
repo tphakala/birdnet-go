@@ -68,12 +68,12 @@ type SFTPTarget struct {
 }
 
 // ProgressReader wraps an io.Reader to track progress
-type ProgressReader struct {
+type SFTPProgressReader struct {
 	io.Reader
 	Progress func(n int64)
 }
 
-func (r *ProgressReader) Read(p []byte) (n int, err error) {
+func (r *SFTPProgressReader) Read(p []byte) (n int, err error) {
 	n, err = r.Reader.Read(p)
 	if n > 0 && r.Progress != nil {
 		r.Progress(int64(n))
@@ -529,7 +529,7 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 		}
 	}
 
-	reader := &ProgressReader{Reader: file, Progress: progress}
+	reader := &SFTPProgressReader{Reader: file, Progress: progress}
 
 	// Create a pipe for streaming with context cancellation
 	pr, pw := io.Pipe()
