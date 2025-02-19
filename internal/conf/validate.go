@@ -3,7 +3,6 @@
 package conf
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -292,20 +291,6 @@ func validateBackupConfig(config *BackupConfig) error {
 	}
 	// TODO: Add cron expression validation when schedule is not empty
 
-	// Validate encryption key format if encryption is enabled
-	if config.Encryption {
-		if config.EncryptionKey == "" {
-			errs = append(errs, "encryption_key must be provided when encryption is enabled")
-		} else {
-			// Check if it's a valid hex string
-			if _, err := hex.DecodeString(config.EncryptionKey); err != nil {
-				errs = append(errs, "encryption_key must be a valid hex-encoded string")
-			} else if len(config.EncryptionKey) != 64 { // 32 bytes = 64 hex chars
-				errs = append(errs, "encryption_key must be exactly 32 bytes (64 hex characters) for AES-256")
-			}
-		}
-	}
-
 	// Validate retention settings
 	if config.Retention.MaxBackups < config.Retention.MinBackups {
 		errs = append(errs, "maxbackups must be greater than or equal to minbackups")
@@ -363,7 +348,7 @@ func validateBackupConfig(config *BackupConfig) error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("backup configuration errors: %v", errs)
+		return fmt.Errorf("backup configuration validation failed: %s", strings.Join(errs, "; "))
 	}
 
 	return nil

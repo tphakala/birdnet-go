@@ -587,32 +587,74 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, archive
 	return nil
 }
 
+// getEncryptionKeyPath returns the path to the encryption key file
+func (m *Manager) getEncryptionKeyPath() (string, error) {
+	// Get the config directory
+	configPaths, err := conf.GetDefaultConfigPaths()
+	if err != nil {
+		return "", NewError(ErrConfig, "failed to get config paths", err)
+	}
+	if len(configPaths) == 0 {
+		return "", NewError(ErrConfig, "no config paths available", nil)
+	}
+
+	// Use the first config path (which should be the active one)
+	return filepath.Join(configPaths[0], "encryption.key"), nil
+}
+
 // getEncryptionKey returns the encryption key, generating it if necessary
 func (m *Manager) getEncryptionKey() ([]byte, error) {
 	if !m.config.Encryption {
 		return nil, NewError(ErrConfig, "encryption is not enabled", nil)
 	}
 
-	if m.config.EncryptionKey == "" {
-		// Generate a new key if none exists
+	// Get the encryption key file path
+	keyPath, err := m.getEncryptionKeyPath()
+	if err != nil {
+		return nil, err
+	}
+
+	// Try to read the existing key file
+	keyBytes, err := os.ReadFile(keyPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, NewError(ErrIO, "failed to read encryption key file", err)
+		}
+
+		// Generate a new key if the file doesn't exist
 		key := make([]byte, 32) // 256 bits
 		if _, err := rand.Read(key); err != nil {
 			return nil, NewError(ErrEncryption, "failed to generate encryption key", err)
 		}
-		m.config.EncryptionKey = hex.EncodeToString(key)
 
-		// Save the key to the configuration
-		if err := conf.SaveSettings(); err != nil {
-			return nil, NewError(ErrConfig, "failed to save encryption key", err)
+		// Encode the key as hex
+		keyHex := hex.EncodeToString(key)
+
+		// Create the config directory if it doesn't exist
+		if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
+			return nil, NewError(ErrIO, "failed to create config directory", err)
 		}
+
+		// Write the key to the file with secure permissions
+		if err := os.WriteFile(keyPath, []byte(keyHex), 0o600); err != nil {
+			return nil, NewError(ErrIO, "failed to write encryption key file", err)
+		}
+
 		return key, nil
 	}
 
-	// Decode existing key
-	key, err := hex.DecodeString(m.config.EncryptionKey)
+	// Decode existing key from hex
+	keyStr := strings.TrimSpace(string(keyBytes))
+	key, err := hex.DecodeString(keyStr)
 	if err != nil {
 		return nil, NewError(ErrEncryption, "failed to decode encryption key", err)
 	}
+
+	// Validate key length
+	if len(key) != 32 {
+		return nil, NewError(ErrEncryption, "invalid encryption key length", nil)
+	}
+
 	return key, nil
 }
 
