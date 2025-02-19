@@ -119,12 +119,22 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 	settingsType := strings.TrimPrefix(path, "/settings/")
 	templateName := fmt.Sprintf("%sSettings", settingsType)
 
+	// DEBUG do we have CSRF token?
+	csrfToken := c.Get(CSRFContextKey)
+	if csrfToken == nil {
+		log.Printf("Warning: 🚨 CSRF token not found in context for settings page: %s", path)
+		csrfToken = ""
+	} else {
+		log.Printf("Debug: ✅ CSRF token found in context for settings page: %s", path)
+	}
+
 	// Prepare the data for the template
 	data := map[string]interface{}{
 		"Settings":       s.Settings,             // Application settings
 		"Locales":        s.prepareLocalesData(), // Prepare locales data for the UI
 		"EqFilterConfig": conf.EqFilterConfig,    // Equalizer filter configuration for the UI
 		"TemplateName":   templateName,
+		"CSRFToken":      csrfToken,
 	}
 
 	// DEBUG Log the species settings

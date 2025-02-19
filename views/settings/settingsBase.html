@@ -1,5 +1,7 @@
 {{define "settingsBase"}}
 <script>
+    const CSRF_TOKEN = {{.CSRFToken}};
+
     document.addEventListener('alpine:init', () => {
         // Define a new Alpine.js component for the password field
         Alpine.data('inputField', (id, label, model, name, placeholder) => ({
@@ -149,6 +151,9 @@
         this.saving = true;
         fetch('/settings/save', {
             method: 'POST',
+            headers: {
+                'X-CSRF-Token': CSRF_TOKEN
+            },
             body: formData
         })
         .then(response => {
