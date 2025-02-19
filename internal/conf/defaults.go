@@ -170,6 +170,7 @@ func setDefaultConfig() {
 	// SQLite output configuration
 	viper.SetDefault("output.sqlite.enabled", true)
 	viper.SetDefault("output.sqlite.path", "birdnet.db")
+	viper.SetDefault("output.sqlite.tempdir", "")
 
 	// MySQL output configuration
 	viper.SetDefault("output.mysql.enabled", false)

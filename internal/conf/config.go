@@ -316,6 +316,7 @@ type Settings struct {
 		SQLite struct {
 			Enabled bool   // true to enable sqlite output
 			Path    string // path to sqlite database
+			TempDir string // path to temporary directory for backups
 		}
 
 		MySQL struct {
