@@ -21,7 +21,7 @@ const (
 	defaultRsyncTimeout  = 30 * time.Second
 	rsyncMaxRetries      = 3 // Renamed from defaultMaxRetries
 	rsyncRetryBackoff    = time.Second
-	rsyncTempFilePrefix  = ".tmp."
+	rsyncTempFilePrefix  = "tmp-"
 	rsyncMetadataFileExt = ".meta"
 	rsyncMetadataVersion = 1
 )
@@ -252,7 +252,7 @@ func (t *RsyncTarget) sanitizePath(pathToCheck string) (string, error) {
 		}
 
 		// Check for hidden files/directories
-		if strings.HasPrefix(component, ".") && component != ".write_test" {
+		if strings.HasPrefix(component, ".") {
 			return "", backup.NewError(backup.ErrSecurity, "hidden files/directories are not allowed", nil)
 		}
 

@@ -537,7 +537,7 @@ func (t *LocalTarget) Validate() error {
 	}
 
 	// Check if path is writable
-	tmpFile := filepath.Join(t.path, ".write_test")
+	tmpFile := filepath.Join(t.path, "write_test")
 	f, err := os.Create(tmpFile)
 	if err != nil {
 		return backup.NewError(backup.ErrValidation, "backup path is not writable", err)

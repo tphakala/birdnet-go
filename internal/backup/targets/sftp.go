@@ -24,7 +24,7 @@ const (
 	defaultSFTPMaxConns     = 5
 	defaultSFTPTimeout      = 30 * time.Second
 	defaultSFTPPort         = 22
-	sftpTempFilePrefix      = ".tmp."
+	sftpTempFilePrefix      = "tmp-"
 	sftpMetadataFileExt     = ".meta"
 	sftpMetadataVersion     = 1
 )
@@ -371,7 +371,11 @@ func (t *SFTPTarget) validatePath(pathToCheck string) error {
 		}
 
 		// Check for hidden files/directories
-		if strings.HasPrefix(component, ".") && component != ".write_test" {
+		if strings.HasPrefix(component, ".") {
+			// Debug print offending component
+			if t.config.Debug {
+				fmt.Printf("SFTP: Hidden file/directory: %s\n", component)
+			}
 			return backup.NewError(backup.ErrSecurity, "hidden files/directories are not allowed", nil)
 		}
 
@@ -647,7 +651,7 @@ func (t *SFTPTarget) Validate() error {
 
 	return t.withRetry(ctx, func(client *sftp.Client) error {
 		// Try to create and remove a test directory
-		testDir := path.Join(t.config.BasePath, ".write_test")
+		testDir := path.Join(t.config.BasePath, "write_test_dir")
 		if err := t.createDirectory(client, testDir); err != nil {
 			return backup.NewError(backup.ErrValidation, "sftp: failed to create test directory", err)
 		}
