@@ -77,13 +77,17 @@ func runBackup(settings *conf.Settings) error {
 				Debug: settings.Backup.Debug,
 			}, log.Default())
 		case "ftp":
-			target, err = targets.NewFTPTarget(targetConfig.Settings)
+			targetConfig.Settings["logger"] = log.Default()
+			target, err = targets.NewFTPTargetFromMap(targetConfig.Settings)
 		case "sftp":
+			targetConfig.Settings["logger"] = log.Default()
 			target, err = targets.NewSFTPTarget(targetConfig.Settings)
 		case "rsync":
+			targetConfig.Settings["logger"] = log.Default()
 			target, err = targets.NewRsyncTarget(targetConfig.Settings)
 		case "gdrive":
-			target, err = targets.NewGDriveTarget(targetConfig.Settings)
+			targetConfig.Settings["logger"] = log.Default()
+			target, err = targets.NewGDriveTargetFromMap(targetConfig.Settings)
 		default:
 			log.Printf("Warning: Unsupported backup target type: %s", targetConfig.Type)
 			continue

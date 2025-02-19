@@ -467,7 +467,11 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		decoder := json.NewDecoder(metadataFile)
 		if err := decoder.Decode(&versionedMetadata); err != nil {
 			// If that fails, try legacy format
-			metadataFile.Seek(0, 0)
+			if _, err := metadataFile.Seek(0, 0); err != nil {
+				metadataFile.Close()
+				t.logger.Printf("Warning: failed to seek in metadata file for backup %s: %v", entry.Name(), err)
+				continue
+			}
 			var legacyMetadata backup.Metadata
 			if err := decoder.Decode(&legacyMetadata); err != nil {
 				metadataFile.Close()

@@ -4,6 +4,7 @@ package targets
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -350,7 +351,8 @@ func (t *GDriveTarget) isAPIError(err error) (bool, error) {
 		return false, nil
 	}
 
-	if apiErr, ok := err.(*googleapi.Error); ok {
+	var apiErr *googleapi.Error
+	if errors.As(err, &apiErr) {
 		switch apiErr.Code {
 		case 401:
 			// Token expired or invalid, try to refresh
@@ -787,4 +789,54 @@ func (t *GDriveTarget) Close() error {
 	}
 
 	return nil
+}
+
+// NewGDriveTargetFromMap creates a new Google Drive target from a map configuration
+func NewGDriveTargetFromMap(settings map[string]interface{}) (*GDriveTarget, error) {
+	config := GDriveTargetConfig{}
+
+	// Required settings
+	credentialsFile, ok := settings["credentials_file"].(string)
+	if !ok {
+		return nil, backup.NewError(backup.ErrConfig, "gdrive: credentials_file is required", nil)
+	}
+	config.CredentialsFile = credentialsFile
+
+	// Optional settings
+	if tokenFile, ok := settings["token_file"].(string); ok {
+		config.TokenFile = tokenFile
+	}
+	if basePath, ok := settings["path"].(string); ok {
+		config.BasePath = basePath
+	}
+	if timeout, ok := settings["timeout"].(string); ok {
+		duration, err := time.ParseDuration(timeout)
+		if err != nil {
+			return nil, backup.NewError(backup.ErrValidation, "gdrive: invalid timeout format", err)
+		}
+		config.Timeout = duration
+	}
+	if debug, ok := settings["debug"].(bool); ok {
+		config.Debug = debug
+	}
+	if maxRetries, ok := settings["max_retries"].(int); ok {
+		config.MaxRetries = maxRetries
+	}
+	if retryBackoff, ok := settings["retry_backoff"].(string); ok {
+		duration, err := time.ParseDuration(retryBackoff)
+		if err != nil {
+			return nil, backup.NewError(backup.ErrValidation, "gdrive: invalid retry_backoff format", err)
+		}
+		config.RetryBackoff = duration
+	}
+	if minSpace, ok := settings["min_space"].(int64); ok {
+		config.MinSpace = minSpace
+	}
+
+	var logger backup.Logger
+	if l, ok := settings["logger"].(backup.Logger); ok {
+		logger = l
+	}
+
+	return NewGDriveTarget(&config, logger)
 }

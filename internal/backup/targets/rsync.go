@@ -525,7 +525,7 @@ func (t *RsyncTarget) cleanupTempFiles(ctx context.Context) error {
 			if t.config.Debug {
 				fmt.Printf("Warning: failed to clean up temporary file %s: %v\n", path, err)
 			}
-			errs = append(errs, fmt.Errorf("failed to delete %s: %v", path, err))
+			errs = append(errs, fmt.Errorf("failed to delete %s: %w", path, err))
 		} else {
 			delete(t.tempFiles, path) // Remove from map under the same lock
 		}
