@@ -98,6 +98,7 @@ func (rl *rateLimiter) stop() {
 type quotaInfo struct {
 	limit      int64
 	usage      int64
+	available  int64
 	updateTime time.Time
 }
 
@@ -414,6 +415,7 @@ func (t *GDriveTarget) checkStorageQuota(ctx context.Context, fileSize int64) er
 	t.quota = &quotaInfo{
 		limit:      about.StorageQuota.Limit,
 		usage:      about.StorageQuota.Usage,
+		available:  about.StorageQuota.Limit - about.StorageQuota.Usage,
 		updateTime: time.Now(),
 	}
 
@@ -478,7 +480,7 @@ func (t *GDriveTarget) refreshTokenIfNeeded(ctx context.Context) error {
 // cleanupOrphanedFiles removes old temporary files
 func (t *GDriveTarget) cleanupOrphanedFiles(ctx context.Context) error {
 	if t.config.Debug {
-		t.logger.Printf("GDrive: Cleaning up orphaned temporary files")
+		t.logger.Printf("🔄 GDrive: Cleaning up orphaned temporary files")
 	}
 
 	query := fmt.Sprintf("name contains '%s' and modifiedTime < '%s' and trashed=false",
@@ -495,9 +497,9 @@ func (t *GDriveTarget) cleanupOrphanedFiles(ctx context.Context) error {
 
 	for _, file := range files.Files {
 		if err := t.service.Files.Delete(file.Id).Context(ctx).Do(); err != nil {
-			t.logger.Printf("Warning: failed to delete orphaned temp file %s: %v", file.Name, err)
+			t.logger.Printf("⚠️ GDrive: Warning: failed to delete orphaned temp file %s: %v", file.Name, err)
 		} else if t.config.Debug {
-			t.logger.Printf("GDrive: Deleted orphaned temp file: %s", file.Name)
+			t.logger.Printf("✅ GDrive: Deleted orphaned temp file: %s", file.Name)
 		}
 	}
 
@@ -507,7 +509,7 @@ func (t *GDriveTarget) cleanupOrphanedFiles(ctx context.Context) error {
 // Store implements the backup.Target interface with improved error handling and quota checking
 func (t *GDriveTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
 	if t.config.Debug {
-		t.logger.Printf("GDrive: Storing backup %s", filepath.Base(sourcePath))
+		t.logger.Printf("🔄 GDrive: Storing backup %s", filepath.Base(sourcePath))
 	}
 
 	// Check file size
@@ -584,7 +586,7 @@ func (t *GDriveTarget) Store(ctx context.Context, sourcePath string, metadata *b
 		}
 
 		if t.config.Debug {
-			t.logger.Printf("GDrive: Successfully stored backup %s with metadata", filepath.Base(sourcePath))
+			t.logger.Printf("✅ GDrive: Successfully stored backup %s with metadata", filepath.Base(sourcePath))
 		}
 
 		return nil
@@ -654,7 +656,7 @@ func (t *GDriveTarget) ensureFolder(ctx context.Context, path string) (string, e
 // List implements the backup.Target interface
 func (t *GDriveTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	if t.config.Debug {
-		t.logger.Printf("GDrive: Listing backups")
+		t.logger.Printf("🔄 GDrive: Listing backups")
 	}
 
 	var backups []backup.BackupInfo
@@ -713,7 +715,7 @@ func (t *GDriveTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 // Delete implements the backup.Target interface
 func (t *GDriveTarget) Delete(ctx context.Context, id string) error {
 	if t.config.Debug {
-		t.logger.Printf("GDrive: Deleting backup %s", id)
+		t.logger.Printf("🔄 GDrive: Deleting backup %s", id)
 	}
 
 	return t.withRetry(ctx, func() error {
@@ -725,18 +727,18 @@ func (t *GDriveTarget) Delete(ctx context.Context, id string) error {
 		metadataQuery := fmt.Sprintf("name='%s%s' and trashed=false", id, gdriveMetadataFileExt)
 		files, err := t.service.Files.List().Q(metadataQuery).Fields("files(id)").Context(ctx).Do()
 		if err != nil {
-			t.logger.Printf("Warning: failed to find metadata file for %s: %v", id, err)
+			t.logger.Printf("⚠️ GDrive: Warning: failed to find metadata file for %s: %v", id, err)
 			return nil
 		}
 
 		for _, file := range files.Files {
 			if err := t.service.Files.Delete(file.Id).Context(ctx).Do(); err != nil {
-				t.logger.Printf("Warning: failed to delete metadata file %s: %v", file.Id, err)
+				t.logger.Printf("⚠️ GDrive: Warning: failed to delete metadata file %s: %v", file.Id, err)
 			}
 		}
 
 		if t.config.Debug {
-			t.logger.Printf("GDrive: Successfully deleted backup %s", id)
+			t.logger.Printf("✅ GDrive: Successfully deleted backup %s", id)
 		}
 
 		return nil
@@ -776,6 +778,16 @@ func (t *GDriveTarget) Validate() error {
 		// Clean up test folder
 		if err := t.service.Files.Delete(folderId).Context(ctx).Do(); err != nil {
 			t.logger.Printf("Warning: failed to delete test folder: %v", err)
+		}
+
+		// Check available space
+		quota, err := t.getQuota(context.Background())
+		if err != nil {
+			return backup.NewError(backup.ErrValidation, "gdrive: failed to check available space", err)
+		}
+
+		if t.config.Debug {
+			t.logger.Printf("💾 GDrive: Available space: %.2f GB", float64(quota.available)/(1024*1024*1024))
 		}
 
 		return nil
@@ -849,4 +861,24 @@ func NewGDriveTargetFromMap(settings map[string]interface{}) (*GDriveTarget, err
 	}
 
 	return NewGDriveTarget(&config, logger)
+}
+
+// getQuota retrieves the current quota information from Google Drive
+func (t *GDriveTarget) getQuota(ctx context.Context) (*quotaInfo, error) {
+	about, err := t.service.About.Get().Fields("storageQuota").Context(ctx).Do()
+	if err != nil {
+		return nil, err
+	}
+
+	t.quotaMu.Lock()
+	defer t.quotaMu.Unlock()
+
+	t.quota = &quotaInfo{
+		limit:      about.StorageQuota.Limit,
+		usage:      about.StorageQuota.Usage,
+		available:  about.StorageQuota.Limit - about.StorageQuota.Usage,
+		updateTime: time.Now(),
+	}
+
+	return t.quota, nil
 }

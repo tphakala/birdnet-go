@@ -321,7 +321,7 @@ func (t *RsyncTarget) executeCommand(ctx context.Context, cmd *exec.Cmd) error {
 // Store implements the backup.Target interface with enhanced security
 func (t *RsyncTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
 	if t.config.Debug {
-		fmt.Printf("Rsync: Storing backup %s to %s\n", filepath.Base(sourcePath), t.config.Host)
+		fmt.Printf("🔄 Rsync: Storing backup %s to %s\n", filepath.Base(sourcePath), t.config.Host)
 	}
 
 	// Create versioned metadata
@@ -365,7 +365,7 @@ func (t *RsyncTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	}
 
 	if t.config.Debug {
-		fmt.Printf("Rsync: Successfully stored backup %s with metadata\n", filepath.Base(sourcePath))
+		fmt.Printf("✅ Rsync: Successfully stored backup %s with metadata\n", filepath.Base(sourcePath))
 	}
 
 	return nil
@@ -523,7 +523,7 @@ func (t *RsyncTarget) cleanupTempFiles(ctx context.Context) error {
 	for path := range t.tempFiles {
 		if err := t.deleteFile(ctx, path); err != nil {
 			if t.config.Debug {
-				fmt.Printf("Warning: failed to clean up temporary file %s: %v\n", path, err)
+				fmt.Printf("⚠️ Rsync: Failed to clean up temporary file %s: %v\n", path, err)
 			}
 			errs = append(errs, fmt.Errorf("failed to delete %s: %w", path, err))
 		} else {
@@ -584,7 +584,7 @@ func (t *RsyncTarget) Name() string {
 // List implements the backup.Target interface
 func (t *RsyncTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	if t.config.Debug {
-		fmt.Printf("Rsync: Listing backups from %s\n", t.config.Host)
+		fmt.Printf("🔄 Rsync: Listing backups from %s\n", t.config.Host)
 	}
 
 	// Build SSH command to list files
@@ -641,7 +641,7 @@ func (t *RsyncTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 // Delete implements the backup.Target interface with enhanced security
 func (t *RsyncTarget) Delete(ctx context.Context, target string) error {
 	if t.config.Debug {
-		fmt.Printf("Rsync: Deleting backup %s from %s\n", target, t.config.Host)
+		fmt.Printf("🔄 Rsync: Deleting backup %s from %s\n", target, t.config.Host)
 	}
 
 	// Sanitize the target path
@@ -674,7 +674,7 @@ func (t *RsyncTarget) Delete(ctx context.Context, target string) error {
 	}
 
 	if t.config.Debug {
-		fmt.Printf("Rsync: Successfully deleted backup %s\n", target)
+		fmt.Printf("✅ Rsync: Successfully deleted backup %s\n", target)
 	}
 
 	return nil

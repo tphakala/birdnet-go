@@ -47,12 +47,48 @@ type Error struct {
 	Err     error     // Original error if any
 }
 
+// getErrorPrefix returns the appropriate emoji prefix based on error code
+func (e *Error) getErrorPrefix() string {
+	switch e.Code {
+	case ErrUnknown:
+		return "❌" // General error
+	case ErrConfig:
+		return "⚠️" // Warning for config issues
+	case ErrIO:
+		return "❌" // General error for I/O issues
+	case ErrMedia:
+		return "🚨" // Critical for media failures
+	case ErrDatabase:
+		return "🚨" // Critical for database issues
+	case ErrCorruption:
+		return "🚨" // Critical for data corruption
+	case ErrNotFound:
+		return "⚠️" // Warning for missing resources
+	case ErrLocked:
+		return "⚠️" // Warning for locked resources
+	case ErrInsufficientSpace:
+		return "🚨" // Critical for space issues
+	case ErrTimeout:
+		return "⚠️" // Warning for timeouts
+	case ErrCanceled:
+		return "ℹ️" // Info for cancellations
+	case ErrValidation:
+		return "⚠️" // Warning for validation issues
+	case ErrEncryption:
+		return "🚨" // Critical for encryption issues
+	case ErrSecurity:
+		return "🚨" // Critical for security issues
+	default:
+		return "❌" // Default to general error
+	}
+}
+
 // Error returns the error message
 func (e *Error) Error() string {
 	if e.Err != nil {
-		return fmt.Sprintf("%s: %v", e.Message, e.Err)
+		return fmt.Sprintf("%s %s: %v", e.getErrorPrefix(), e.Message, e.Err)
 	}
-	return e.Message
+	return fmt.Sprintf("%s %s", e.getErrorPrefix(), e.Message)
 }
 
 // Unwrap returns the underlying error
@@ -86,32 +122,32 @@ func IsMediaError(err error) bool {
 	return IsErrorCode(err, ErrMedia)
 }
 
-// IsInsufficientSpace checks if an error is due to insufficient space
-func IsInsufficientSpace(err error) bool {
+// IsTimeoutError checks if an error is a timeout error
+func IsTimeoutError(err error) bool {
+	return IsErrorCode(err, ErrTimeout)
+}
+
+// IsCanceledError checks if an error is a cancellation error
+func IsCanceledError(err error) bool {
+	return IsErrorCode(err, ErrCanceled)
+}
+
+// IsCorruptionError checks if an error is a data corruption error
+func IsCorruptionError(err error) bool {
+	return IsErrorCode(err, ErrCorruption)
+}
+
+// IsInsufficientSpaceError checks if an error is an insufficient space error
+func IsInsufficientSpaceError(err error) bool {
 	return IsErrorCode(err, ErrInsufficientSpace)
+}
+
+// IsSecurityError checks if an error is a security-related error
+func IsSecurityError(err error) bool {
+	return IsErrorCode(err, ErrSecurity)
 }
 
 // IsDatabaseError checks if an error is database-related
 func IsDatabaseError(err error) bool {
 	return IsErrorCode(err, ErrDatabase)
-}
-
-// IsCorruption checks if an error indicates data corruption
-func IsCorruption(err error) bool {
-	return IsErrorCode(err, ErrCorruption)
-}
-
-// IsLocked checks if an error indicates a locked resource
-func IsLocked(err error) bool {
-	return IsErrorCode(err, ErrLocked)
-}
-
-// IsTimeout checks if an error indicates a timeout
-func IsTimeout(err error) bool {
-	return IsErrorCode(err, ErrTimeout)
-}
-
-// IsCanceled checks if an error indicates a canceled operation
-func IsCanceled(err error) bool {
-	return IsErrorCode(err, ErrCanceled)
 }

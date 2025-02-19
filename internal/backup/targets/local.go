@@ -306,7 +306,7 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	}
 
 	if t.debug {
-		t.logger.Printf("Storing backup from %s to local target", sourcePath)
+		t.logger.Printf("🔄 Storing backup from %s to local target", sourcePath)
 	}
 
 	// Validate source file
@@ -348,7 +348,7 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	defer func() {
 		if !success {
 			if err := os.RemoveAll(backupDir); err != nil {
-				t.logger.Printf("Warning: failed to cleanup backup directory after error: %v", err)
+				t.logger.Printf("⚠️ Failed to cleanup backup directory after error: %v", err)
 			}
 		}
 	}()
@@ -410,7 +410,7 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 
 	success = true
 	if t.debug {
-		t.logger.Printf("Successfully stored backup in %s", backupDir)
+		t.logger.Printf("✅ Successfully stored backup in %s", backupDir)
 	}
 
 	return nil
@@ -441,7 +441,7 @@ func (t *LocalTarget) verifyBackup(ctx context.Context, backupPath string, expec
 // List returns a list of available backups with versioned metadata support
 func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	if t.debug {
-		t.logger.Printf("Listing backups in local target")
+		t.logger.Printf("🔄 Listing backups in local target")
 	}
 
 	entries, err := os.ReadDir(t.path)
@@ -458,7 +458,7 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		metadataPath := filepath.Join(t.path, entry.Name(), "metadata.json")
 		metadataFile, err := os.Open(metadataPath)
 		if err != nil {
-			t.logger.Printf("Warning: skipping backup %s: %v", entry.Name(), err)
+			t.logger.Printf("⚠️ Skipping backup %s: %v", entry.Name(), err)
 			continue
 		}
 
@@ -469,13 +469,13 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 			// If that fails, try legacy format
 			if _, err := metadataFile.Seek(0, 0); err != nil {
 				metadataFile.Close()
-				t.logger.Printf("Warning: failed to seek in metadata file for backup %s: %v", entry.Name(), err)
+				t.logger.Printf("⚠️ Failed to seek in metadata file for backup %s: %v", entry.Name(), err)
 				continue
 			}
 			var legacyMetadata backup.Metadata
 			if err := decoder.Decode(&legacyMetadata); err != nil {
 				metadataFile.Close()
-				t.logger.Printf("Warning: invalid metadata in backup %s: %v", entry.Name(), err)
+				t.logger.Printf("⚠️ Invalid metadata in backup %s: %v", entry.Name(), err)
 				continue
 			}
 			versionedMetadata = convertToVersionedMetadata(&legacyMetadata)
@@ -500,12 +500,16 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 // Delete removes a backup
 func (t *LocalTarget) Delete(ctx context.Context, backupID string) error {
 	if t.debug {
-		t.logger.Printf("Deleting backup %s from local target", backupID)
+		t.logger.Printf("🔄 Deleting backup %s from local target", backupID)
 	}
 
 	backupPath := filepath.Join(t.path, backupID)
 	if err := os.RemoveAll(backupPath); err != nil {
 		return backup.NewError(backup.ErrIO, "failed to delete backup", err)
+	}
+
+	if t.debug {
+		t.logger.Printf("✅ Successfully deleted backup %s", backupID)
 	}
 
 	return nil
@@ -556,7 +560,7 @@ func (t *LocalTarget) Validate() error {
 	}
 
 	if t.logger != nil {
-		t.logger.Printf("Available disk space at backup location: %.1f GB", availableGB)
+		t.logger.Printf("💾 Available disk space at backup location: %.1f GB", availableGB)
 	}
 
 	return nil

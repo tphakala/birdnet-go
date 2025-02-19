@@ -397,7 +397,7 @@ func (t *SFTPTarget) validatePath(pathToCheck string) error {
 // Store implements the backup.Target interface
 func (t *SFTPTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
 	if t.config.Debug {
-		fmt.Printf("SFTP: Storing backup %s to %s\n", filepath.Base(sourcePath), t.config.Host)
+		fmt.Printf("🔄 SFTP: Storing backup %s to %s\n", filepath.Base(sourcePath), t.config.Host)
 	}
 
 	// Validate the target path
@@ -461,7 +461,7 @@ func (t *SFTPTarget) Store(ctx context.Context, sourcePath string, metadata *bac
 		}
 
 		if t.config.Debug {
-			fmt.Printf("SFTP: Successfully stored backup %s with metadata\n", filepath.Base(sourcePath))
+			fmt.Printf("✅ SFTP: Successfully stored backup %s with metadata\n", filepath.Base(sourcePath))
 		}
 
 		return nil
@@ -570,7 +570,7 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 // List implements the backup.Target interface
 func (t *SFTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	if t.config.Debug {
-		fmt.Printf("SFTP: Listing backups from %s\n", t.config.Host)
+		fmt.Printf("🔄 SFTP: Listing backups from %s\n", t.config.Host)
 	}
 
 	var backups []backup.BackupInfo
@@ -613,7 +613,7 @@ func (t *SFTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 // Delete implements the backup.Target interface
 func (t *SFTPTarget) Delete(ctx context.Context, target string) error {
 	if t.config.Debug {
-		fmt.Printf("SFTP: Deleting backup %s from %s\n", target, t.config.Host)
+		fmt.Printf("🔄 SFTP: Deleting backup %s from %s\n", target, t.config.Host)
 	}
 
 	// Validate the target path
@@ -633,7 +633,7 @@ func (t *SFTPTarget) Delete(ctx context.Context, target string) error {
 		_ = client.Remove(metadataPath)
 
 		if t.config.Debug {
-			fmt.Printf("SFTP: Successfully deleted backup %s\n", target)
+			fmt.Printf("✅ SFTP: Successfully deleted backup %s\n", target)
 		}
 
 		return nil
@@ -674,12 +674,12 @@ func (t *SFTPTarget) Validate() error {
 
 		// Test file deletion
 		if err := client.Remove(testFile); err != nil {
-			fmt.Printf("Warning: failed to delete test file %s: %v\n", testFile, err)
+			fmt.Printf("⚠️ SFTP: Failed to delete test file %s: %v\n", testFile, err)
 		}
 
 		// Test directory deletion
 		if err := client.RemoveDirectory(testDir); err != nil {
-			fmt.Printf("Warning: failed to remove test directory %s: %v\n", testDir, err)
+			fmt.Printf("⚠️ SFTP: Failed to remove test directory %s: %v\n", testDir, err)
 		}
 
 		return nil
@@ -756,7 +756,7 @@ func (t *SFTPTarget) cleanupTempFiles(client *sftp.Client) {
 	for _, path := range tempFiles {
 		if err := client.Remove(path); err != nil {
 			if t.config.Debug {
-				fmt.Printf("Warning: failed to clean up temporary file %s: %v\n", path, err)
+				fmt.Printf("⚠️ SFTP: Failed to clean up temporary file %s: %v\n", path, err)
 			}
 		} else {
 			t.untrackTempFile(path)

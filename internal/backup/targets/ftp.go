@@ -358,7 +358,7 @@ func (t *FTPTarget) uploadFile(ctx context.Context, conn *ftp.ServerConn, localP
 // Store implements the backup.Target interface with atomic operations and metadata
 func (t *FTPTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
 	if t.config.Debug {
-		t.logger.Printf("FTP: Storing backup %s to %s", filepath.Base(sourcePath), t.config.Host)
+		t.logger.Printf("🔄 FTP: Storing backup %s to %s", filepath.Base(sourcePath), t.config.Host)
 	}
 
 	// Create versioned metadata
@@ -416,7 +416,7 @@ func (t *FTPTarget) Store(ctx context.Context, sourcePath string, metadata *back
 		}
 
 		if t.config.Debug {
-			t.logger.Printf("FTP: Successfully stored backup %s with metadata", filepath.Base(sourcePath))
+			t.logger.Printf("✅ FTP: Successfully stored backup %s with metadata", filepath.Base(sourcePath))
 		}
 
 		return nil
@@ -426,7 +426,7 @@ func (t *FTPTarget) Store(ctx context.Context, sourcePath string, metadata *back
 // List implements the backup.Target interface
 func (t *FTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	if t.config.Debug {
-		t.logger.Printf("FTP: Listing backups from %s", t.config.Host)
+		t.logger.Printf("🔄 FTP: Listing backups from %s", t.config.Host)
 	}
 
 	var backups []backup.BackupInfo
@@ -469,7 +469,7 @@ func (t *FTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 // Delete implements the backup.Target interface
 func (t *FTPTarget) Delete(ctx context.Context, target string) error {
 	if t.config.Debug {
-		t.logger.Printf("FTP: Deleting backup %s from %s", target, t.config.Host)
+		t.logger.Printf("🔄 FTP: Deleting backup %s from %s", target, t.config.Host)
 	}
 
 	return t.withRetry(ctx, func(conn *ftp.ServerConn) error {
@@ -479,7 +479,7 @@ func (t *FTPTarget) Delete(ctx context.Context, target string) error {
 		}
 
 		if t.config.Debug {
-			t.logger.Printf("FTP: Successfully deleted backup %s", target)
+			t.logger.Printf("✅ FTP: Successfully deleted backup %s", target)
 		}
 
 		return nil
@@ -525,12 +525,12 @@ func (t *FTPTarget) Validate() error {
 
 		// Test file deletion
 		if err := conn.Delete(testFile); err != nil {
-			t.logger.Printf("Warning: failed to delete test file %s: %v", testFile, err)
+			t.logger.Printf("⚠️ Failed to delete test file %s: %v", testFile, err)
 		}
 
 		// Test directory deletion
 		if err := conn.RemoveDir(testDir); err != nil {
-			t.logger.Printf("Warning: failed to remove test directory %s: %v", testDir, err)
+			t.logger.Printf("⚠️ Failed to remove test directory %s: %v", testDir, err)
 		}
 
 		return nil

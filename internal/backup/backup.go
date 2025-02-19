@@ -176,7 +176,7 @@ func parseCronSchedule(schedule string) (time.Duration, error) {
 // Start starts the backup manager
 func (m *Manager) Start() error {
 	if !m.config.Enabled {
-		m.logger.Println("Backup manager is disabled")
+		m.logger.Println("ℹ️ Backup manager is disabled")
 		return nil
 	}
 
@@ -197,7 +197,7 @@ func (m *Manager) Start() error {
 	// Start the backup scheduler
 	go m.scheduleBackups(initialDelay)
 
-	m.logger.Printf("Backup manager started with schedule: %s (next backup in %v)", m.config.Schedule, initialDelay)
+	m.logger.Printf("✅ Backup manager started with schedule: %s (next backup in %v)", m.config.Schedule, initialDelay)
 	return nil
 }
 
@@ -237,7 +237,7 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, m.getBackupTimeout())
 	defer cancel()
 
-	m.logger.Println("Starting backup process...")
+	m.logger.Println("🔄 Starting backup process...")
 
 	// Validate that we have at least one target
 	if len(m.targets) == 0 {
@@ -250,10 +250,10 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 
 	var allTempDirs []string
 	defer func() {
-		m.logger.Printf("Cleaning up %d temporary directories...", len(allTempDirs))
+		m.logger.Printf("🧹 Cleaning up %d temporary directories...", len(allTempDirs))
 		for _, dir := range allTempDirs {
 			if err := os.RemoveAll(dir); err != nil {
-				m.logger.Printf("Warning: Failed to remove temporary directory %s: %v", dir, err)
+				m.logger.Printf("⚠️ Failed to remove temporary directory %s: %v", dir, err)
 			}
 		}
 	}()
@@ -266,7 +266,7 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 		default:
 		}
 
-		m.logger.Printf("Processing backup source: %s", sourceName)
+		m.logger.Printf("🔄 Processing backup source: %s", sourceName)
 		tempDirs, err := m.processBackupSource(ctx, sourceName, source, now, isDaily)
 		allTempDirs = append(allTempDirs, tempDirs...)
 		if err != nil {
@@ -279,7 +279,7 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 		return combineErrors(errs)
 	}
 
-	m.logger.Println("Backup process completed successfully")
+	m.logger.Println("✅ Backup process completed successfully")
 	return nil
 }
 
@@ -289,12 +289,12 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 	var errs []error
 
 	// Create backup file with timeout
-	m.logger.Printf("Creating backup file for source: %s", sourceName)
+	m.logger.Printf("🔄 Creating backup file for source: %s", sourceName)
 	backupPath, err := m.createSourceBackup(ctx, sourceName, source)
 	if err != nil {
 		return tempDirs, err
 	}
-	m.logger.Printf("Successfully created backup file at: %s", backupPath)
+	m.logger.Printf("✅ Successfully created backup file at: %s", backupPath)
 
 	// Create and prepare archive
 	tempDir, archive, err := m.prepareBackupArchive(ctx, backupPath, sourceName, now, isDaily)
@@ -305,11 +305,11 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 
 	// Create the archive file
 	archivePath := filepath.Join(tempDir, fmt.Sprintf("%s.zip", archive.Metadata.ID))
-	m.logger.Printf("Creating archive file at: %s", archivePath)
+	m.logger.Printf("🔄 Creating archive file at: %s", archivePath)
 	if err := m.createArchive(ctx, archivePath, archive); err != nil {
 		return tempDirs, NewError(ErrIO, "failed to create archive", err)
 	}
-	m.logger.Printf("Successfully created archive file")
+	m.logger.Printf("✅ Successfully created archive file")
 
 	// Store backup in all targets
 	if err := m.storeBackupInTargets(ctx, archivePath, &archive.Metadata); err != nil {
@@ -403,16 +403,16 @@ func (m *Manager) prepareBackupArchive(ctx context.Context, backupPath, sourceNa
 // addConfigToArchive adds sanitized configuration to the archive
 func (m *Manager) addConfigToArchive(archive *BackupArchive) error {
 	if settings := conf.Setting(); settings != nil {
-		m.logger.Printf("Adding sanitized configuration to archive...")
+		m.logger.Printf("🔄 Adding sanitized configuration to archive...")
 		configData, err := yaml.Marshal(sanitizeConfig(settings))
 		if err != nil {
-			m.logger.Printf("Warning: Failed to include configuration in backup: %v", err)
+			m.logger.Printf("⚠️ Failed to include configuration in backup: %v", err)
 			return NewError(ErrIO, "failed to marshal configuration", err)
 		}
 		archive.AddFile("config.yaml", configData)
 		hash := sha256.Sum256(configData)
 		archive.Metadata.ConfigHash = hex.EncodeToString(hash[:])
-		m.logger.Printf("Added configuration file to archive with hash: %s", archive.Metadata.ConfigHash)
+		m.logger.Printf("✅ Added configuration file to archive with hash: %s", archive.Metadata.ConfigHash)
 	}
 	return nil
 }
@@ -420,7 +420,7 @@ func (m *Manager) addConfigToArchive(archive *BackupArchive) error {
 // storeBackupInTargets stores the backup in all configured targets
 func (m *Manager) storeBackupInTargets(ctx context.Context, archivePath string, metadata *Metadata) error {
 	var errs []error
-	m.logger.Printf("Storing backup in %d target(s)...", len(m.targets))
+	m.logger.Printf("🔄 Storing backup in %d target(s)...", len(m.targets))
 	for _, target := range m.targets {
 		select {
 		case <-ctx.Done():
@@ -428,21 +428,21 @@ func (m *Manager) storeBackupInTargets(ctx context.Context, archivePath string, 
 		default:
 		}
 
-		m.logger.Printf("Storing backup in target: %s", target.Name())
+		m.logger.Printf("🔄 Storing backup in target: %s", target.Name())
 		storeCtx, storeCancel := context.WithTimeout(ctx, 15*time.Minute)
 		err := target.Store(storeCtx, archivePath, metadata)
 		storeCancel()
 		if err != nil {
 			if storeCtx.Err() != nil {
-				m.logger.Printf("Store operation timed out for target %s: %v", target.Name(), err)
+				m.logger.Printf("❌ Store operation timed out for target %s: %v", target.Name(), err)
 				errs = append(errs, NewError(ErrTimeout, fmt.Sprintf("store operation timed out for target %s", target.Name()), err))
 			} else {
-				m.logger.Printf("Failed to store backup in target %s: %v", target.Name(), err)
+				m.logger.Printf("❌ Failed to store backup in target %s: %v", target.Name(), err)
 				errs = append(errs, NewError(ErrIO, fmt.Sprintf("failed to store backup in target %s", target.Name()), err))
 			}
 			continue
 		}
-		m.logger.Printf("Successfully stored backup in target: %s", target.Name())
+		m.logger.Printf("✅ Successfully stored backup in target: %s", target.Name())
 	}
 
 	if len(errs) > 0 {
