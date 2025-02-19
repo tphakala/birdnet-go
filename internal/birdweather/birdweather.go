@@ -30,7 +30,7 @@ type SoundscapeResponse struct {
 		URL       *string `json:"url"` // Pointer to handle null
 		Filesize  int     `json:"filesize"`
 		Extension string  `json:"extension"`
-		Duration  *string `json:"duration"` // Pointer to handle null
+		Duration  int     `json:"duration"` // Duration in seconds
 	} `json:"soundscape"`
 }
 
