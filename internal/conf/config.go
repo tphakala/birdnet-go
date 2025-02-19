@@ -371,7 +371,7 @@ type BackupTarget struct {
 	Settings map[string]interface{} `yaml:"settings"` // Target-specific settings
 }
 
-// BackupConfig defines the configuration for backups
+// BackupConfig contains backup-related configuration
 type BackupConfig struct {
 	Enabled       bool            `yaml:"enabled"`        // true to enable backup functionality
 	Debug         bool            `yaml:"debug"`          // true to enable debug logging
@@ -380,6 +380,14 @@ type BackupConfig struct {
 	EncryptionKey string          `yaml:"encryption_key"` // AES-256 key for encrypting backups (hex-encoded)
 	Retention     BackupRetention `yaml:"retention"`      // Backup retention settings
 	Targets       []BackupTarget  `yaml:"targets"`        // List of backup targets
+
+	// OperationTimeouts defines timeouts for various backup operations
+	OperationTimeouts struct {
+		Backup  time.Duration // Timeout for entire backup operation (default: 2h)
+		Store   time.Duration // Timeout for storing a backup (default: 15m)
+		Cleanup time.Duration // Timeout for cleanup operation (default: 10m)
+		Delete  time.Duration // Timeout for delete operation (default: 2m)
+	}
 }
 
 // settingsInstance is the current settings instance

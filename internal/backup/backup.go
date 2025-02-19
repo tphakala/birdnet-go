@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -132,7 +133,7 @@ func (m *Manager) RegisterSource(source Source) error {
 	defer m.mu.Unlock()
 
 	if err := source.Validate(); err != nil {
-		return fmt.Errorf("invalid source configuration: %w", err)
+		return NewError(ErrValidation, "invalid source configuration", err)
 	}
 
 	m.sources[source.Name()] = source
@@ -145,7 +146,7 @@ func (m *Manager) RegisterTarget(target Target) error {
 	defer m.mu.Unlock()
 
 	if err := target.Validate(); err != nil {
-		return fmt.Errorf("invalid target configuration: %w", err)
+		return NewError(ErrValidation, "invalid target configuration", err)
 	}
 
 	m.targets[target.Name()] = target
@@ -159,7 +160,7 @@ func parseCronSchedule(schedule string) (time.Duration, error) {
 	var hour int
 	_, err := fmt.Sscanf(schedule, "%d %d * * *", nil, &hour)
 	if err != nil {
-		return 0, fmt.Errorf("invalid schedule format, expected '0 HOUR * * *': %w", err)
+		return 0, NewError(ErrValidation, "invalid schedule format, expected '0 HOUR * * *'", err)
 	}
 
 	// Get current time
@@ -181,16 +182,16 @@ func (m *Manager) Start() error {
 
 	// Validate that we have at least one source and target
 	if len(m.sources) == 0 {
-		return fmt.Errorf("no backup sources registered")
+		return NewError(ErrValidation, "no backup sources registered", nil)
 	}
 	if len(m.targets) == 0 {
-		return fmt.Errorf("no backup targets registered")
+		return NewError(ErrValidation, "no backup targets registered", nil)
 	}
 
 	// Parse the schedule
 	initialDelay, err := parseCronSchedule(m.config.Schedule)
 	if err != nil {
-		return fmt.Errorf("failed to parse schedule: %w", err)
+		return NewError(ErrConfig, "failed to parse schedule", err)
 	}
 
 	// Start the backup scheduler
@@ -232,137 +233,260 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	// Add a timeout for the entire backup operation
+	ctx, cancel := context.WithTimeout(ctx, m.getBackupTimeout())
+	defer cancel()
+
 	m.logger.Println("Starting backup process...")
 
 	// Validate that we have at least one target
 	if len(m.targets) == 0 {
-		return fmt.Errorf("no backup targets registered, backup cannot proceed")
+		return NewError(ErrValidation, "no backup targets registered, backup cannot proceed", nil)
 	}
 
 	// Get current timestamp in UTC
 	now := time.Now().UTC()
 	isDaily := now.Hour() == 0 && now.Minute() < 15 // Consider it a daily backup if run between 00:00 and 00:15
 
-	var tempDirs []string
+	var allTempDirs []string
 	defer func() {
-		m.logger.Printf("Cleaning up %d temporary directories...", len(tempDirs))
-		for _, dir := range tempDirs {
-			os.RemoveAll(dir)
+		m.logger.Printf("Cleaning up %d temporary directories...", len(allTempDirs))
+		for _, dir := range allTempDirs {
+			if err := os.RemoveAll(dir); err != nil {
+				m.logger.Printf("Warning: Failed to remove temporary directory %s: %v", dir, err)
+			}
 		}
 	}()
 
 	var errs []error
 	for sourceName, source := range m.sources {
+		select {
+		case <-ctx.Done():
+			return NewError(ErrCanceled, "backup process cancelled", ctx.Err())
+		default:
+		}
+
 		m.logger.Printf("Processing backup source: %s", sourceName)
-
-		// Create backup file
-		m.logger.Printf("Creating backup file for source: %s", sourceName)
-		backupPath, err := source.Backup(ctx)
+		tempDirs, err := m.processBackupSource(ctx, sourceName, source, now, isDaily)
+		allTempDirs = append(allTempDirs, tempDirs...)
 		if err != nil {
-			m.logger.Printf("Failed to backup source %s: %v", sourceName, err)
-			errs = append(errs, fmt.Errorf("failed to backup source %s: %w", sourceName, err))
+			errs = append(errs, err)
 			continue
-		}
-		m.logger.Printf("Successfully created backup file at: %s", backupPath)
-
-		// Create a temporary directory for the archive
-		m.logger.Printf("Creating temporary directory for archive...")
-		tempDir, err := os.MkdirTemp("", "backup-*")
-		if err != nil {
-			m.logger.Printf("Failed to create temporary directory: %v", err)
-			errs = append(errs, fmt.Errorf("failed to create temporary directory: %w", err))
-			continue
-		}
-		tempDirs = append(tempDirs, tempDir)
-		m.logger.Printf("Created temporary directory: %s", tempDir)
-
-		// Read the backup file
-		m.logger.Printf("Reading backup file: %s", backupPath)
-		backupData, err := os.ReadFile(backupPath)
-		if err != nil {
-			m.logger.Printf("Failed to read backup file %s: %v", backupPath, err)
-			errs = append(errs, fmt.Errorf("failed to read backup file: %w", err))
-			continue
-		}
-		m.logger.Printf("Successfully read backup file, size: %d bytes", len(backupData))
-
-		// Create metadata
-		metadata := Metadata{
-			ID:        fmt.Sprintf("birdnet-go-backup-%s", now.Format("20060102-150405")),
-			Timestamp: now,
-			Type:      sourceName,
-			Source:    backupPath,
-			IsDaily:   isDaily,
-		}
-		m.logger.Printf("Created backup metadata with ID: %s", metadata.ID)
-
-		// Create backup archive
-		archive := NewBackupArchive(&metadata)
-		m.logger.Printf("Created backup archive for ID: %s", metadata.ID)
-
-		// Add the backup file to the archive
-		dbFilename := fmt.Sprintf("%s.db", sourceName)
-		archive.AddFile(dbFilename, backupData)
-		m.logger.Printf("Added database file to archive: %s", dbFilename)
-
-		// Add sanitized configuration
-		if settings := conf.Setting(); settings != nil {
-			m.logger.Printf("Adding sanitized configuration to archive...")
-			if configData, err := yaml.Marshal(sanitizeConfig(settings)); err == nil {
-				archive.AddFile("config.yaml", configData)
-				hash := sha256.Sum256(configData)
-				archive.Metadata.ConfigHash = hex.EncodeToString(hash[:])
-				m.logger.Printf("Added configuration file to archive with hash: %s", archive.Metadata.ConfigHash)
-			} else {
-				m.logger.Printf("Warning: Failed to include configuration in backup: %v", err)
-			}
-		}
-
-		// Create the archive file
-		archivePath := filepath.Join(tempDir, fmt.Sprintf("%s.zip", metadata.ID))
-		m.logger.Printf("Creating archive file at: %s", archivePath)
-		if err := m.createArchive(archivePath, archive); err != nil {
-			m.logger.Printf("Failed to create archive: %v", err)
-			errs = append(errs, fmt.Errorf("failed to create archive: %w", err))
-			continue
-		}
-		m.logger.Printf("Successfully created archive file")
-
-		// Store backup in all enabled targets
-		m.logger.Printf("Storing backup in %d target(s)...", len(m.targets))
-		for _, target := range m.targets {
-			m.logger.Printf("Storing backup in target: %s", target.Name())
-			if err := target.Store(ctx, archivePath, &metadata); err != nil {
-				m.logger.Printf("Failed to store backup in target %s: %v", target.Name(), err)
-				errs = append(errs, fmt.Errorf("failed to store backup in target %s: %w", target.Name(), err))
-				continue
-			}
-			m.logger.Printf("Successfully stored backup in target: %s", target.Name())
-		}
-
-		// Clean up old backups if this is a daily backup
-		if isDaily {
-			m.logger.Printf("Running cleanup of old backups...")
-			if err := m.cleanupOldBackups(ctx); err != nil {
-				m.logger.Printf("Warning: Failed to clean up old backups: %v", err)
-			}
 		}
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("backup errors occurred: %v", errs)
+		return combineErrors(errs)
 	}
 
 	m.logger.Println("Backup process completed successfully")
 	return nil
 }
 
+// processBackupSource handles the backup process for a single source
+func (m *Manager) processBackupSource(ctx context.Context, sourceName string, source Source, now time.Time, isDaily bool) ([]string, error) {
+	var tempDirs []string
+	var errs []error
+
+	// Create backup file with timeout
+	m.logger.Printf("Creating backup file for source: %s", sourceName)
+	backupPath, err := m.createSourceBackup(ctx, sourceName, source)
+	if err != nil {
+		return tempDirs, err
+	}
+	m.logger.Printf("Successfully created backup file at: %s", backupPath)
+
+	// Create and prepare archive
+	tempDir, archive, err := m.prepareBackupArchive(ctx, backupPath, sourceName, now, isDaily)
+	if err != nil {
+		return tempDirs, err
+	}
+	tempDirs = append(tempDirs, tempDir)
+
+	// Create the archive file
+	archivePath := filepath.Join(tempDir, fmt.Sprintf("%s.zip", archive.Metadata.ID))
+	m.logger.Printf("Creating archive file at: %s", archivePath)
+	if err := m.createArchive(ctx, archivePath, archive); err != nil {
+		return tempDirs, NewError(ErrIO, "failed to create archive", err)
+	}
+	m.logger.Printf("Successfully created archive file")
+
+	// Store backup in all targets
+	if err := m.storeBackupInTargets(ctx, archivePath, &archive.Metadata); err != nil {
+		return tempDirs, err
+	}
+
+	// Clean up old backups if this is a daily backup
+	if isDaily {
+		if err := m.performBackupCleanup(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return tempDirs, combineErrors(errs)
+	}
+	return tempDirs, nil
+}
+
+// createSourceBackup creates a backup of a single source with timeout
+func (m *Manager) createSourceBackup(ctx context.Context, sourceName string, source Source) (string, error) {
+	backupCtx, backupCancel := context.WithTimeout(ctx, 30*time.Minute)
+	defer backupCancel()
+
+	backupPath, err := source.Backup(backupCtx)
+	if err != nil {
+		if backupCtx.Err() != nil {
+			m.logger.Printf("Backup source %s timed out: %v", sourceName, err)
+			return "", NewError(ErrTimeout, fmt.Sprintf("backup source %s timed out", sourceName), err)
+		}
+		m.logger.Printf("Failed to backup source %s: %v", sourceName, err)
+		return "", NewError(ErrDatabase, fmt.Sprintf("failed to backup source %s", sourceName), err)
+	}
+	return backupPath, nil
+}
+
+// prepareBackupArchive creates and prepares a backup archive
+func (m *Manager) prepareBackupArchive(ctx context.Context, backupPath, sourceName string, now time.Time, isDaily bool) (string, *BackupArchive, error) {
+	// Create temporary directory
+	tempDir, err := os.MkdirTemp("", "backup-*")
+	if err != nil {
+		return "", nil, NewError(ErrIO, "failed to create temporary directory", err)
+	}
+	m.logger.Printf("Created temporary directory: %s", tempDir)
+
+	select {
+	case <-ctx.Done():
+		return tempDir, nil, NewError(ErrCanceled, "backup archive preparation cancelled", ctx.Err())
+	default:
+	}
+
+	// Read the backup file
+	backupData, err := os.ReadFile(backupPath)
+	if err != nil {
+		return tempDir, nil, NewError(ErrIO, fmt.Sprintf("failed to read backup file %s", backupPath), err)
+	}
+	m.logger.Printf("Successfully read backup file, size: %d bytes", len(backupData))
+
+	select {
+	case <-ctx.Done():
+		return tempDir, nil, NewError(ErrCanceled, "backup archive preparation cancelled", ctx.Err())
+	default:
+	}
+
+	// Create metadata and archive
+	metadata := Metadata{
+		ID:        fmt.Sprintf("birdnet-go-backup-%s", now.Format("20060102-150405")),
+		Timestamp: now,
+		Type:      sourceName,
+		Source:    backupPath,
+		IsDaily:   isDaily,
+	}
+	m.logger.Printf("Created backup metadata with ID: %s", metadata.ID)
+
+	archive := NewBackupArchive(&metadata)
+	m.logger.Printf("Created backup archive for ID: %s", metadata.ID)
+
+	// Add the backup file to the archive
+	dbFilename := fmt.Sprintf("%s.db", sourceName)
+	archive.AddFile(dbFilename, backupData)
+	m.logger.Printf("Added database file to archive: %s", dbFilename)
+
+	// Add configuration if available
+	if err := m.addConfigToArchive(archive); err != nil {
+		return tempDir, archive, err
+	}
+
+	return tempDir, archive, nil
+}
+
+// addConfigToArchive adds sanitized configuration to the archive
+func (m *Manager) addConfigToArchive(archive *BackupArchive) error {
+	if settings := conf.Setting(); settings != nil {
+		m.logger.Printf("Adding sanitized configuration to archive...")
+		configData, err := yaml.Marshal(sanitizeConfig(settings))
+		if err != nil {
+			m.logger.Printf("Warning: Failed to include configuration in backup: %v", err)
+			return NewError(ErrIO, "failed to marshal configuration", err)
+		}
+		archive.AddFile("config.yaml", configData)
+		hash := sha256.Sum256(configData)
+		archive.Metadata.ConfigHash = hex.EncodeToString(hash[:])
+		m.logger.Printf("Added configuration file to archive with hash: %s", archive.Metadata.ConfigHash)
+	}
+	return nil
+}
+
+// storeBackupInTargets stores the backup in all configured targets
+func (m *Manager) storeBackupInTargets(ctx context.Context, archivePath string, metadata *Metadata) error {
+	var errs []error
+	m.logger.Printf("Storing backup in %d target(s)...", len(m.targets))
+	for _, target := range m.targets {
+		select {
+		case <-ctx.Done():
+			return NewError(ErrCanceled, "backup process cancelled", ctx.Err())
+		default:
+		}
+
+		m.logger.Printf("Storing backup in target: %s", target.Name())
+		storeCtx, storeCancel := context.WithTimeout(ctx, 15*time.Minute)
+		err := target.Store(storeCtx, archivePath, metadata)
+		storeCancel()
+		if err != nil {
+			if storeCtx.Err() != nil {
+				m.logger.Printf("Store operation timed out for target %s: %v", target.Name(), err)
+				errs = append(errs, NewError(ErrTimeout, fmt.Sprintf("store operation timed out for target %s", target.Name()), err))
+			} else {
+				m.logger.Printf("Failed to store backup in target %s: %v", target.Name(), err)
+				errs = append(errs, NewError(ErrIO, fmt.Sprintf("failed to store backup in target %s", target.Name()), err))
+			}
+			continue
+		}
+		m.logger.Printf("Successfully stored backup in target: %s", target.Name())
+	}
+
+	if len(errs) > 0 {
+		return combineErrors(errs)
+	}
+	return nil
+}
+
+// performBackupCleanup handles the cleanup of old backups
+func (m *Manager) performBackupCleanup(ctx context.Context) error {
+	m.logger.Printf("Running cleanup of old backups...")
+	cleanupCtx, cleanupCancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cleanupCancel()
+
+	err := m.cleanupOldBackups(cleanupCtx)
+	if err != nil {
+		if cleanupCtx.Err() != nil {
+			m.logger.Printf("Warning: Cleanup operation timed out: %v", err)
+			return NewError(ErrTimeout, "cleanup operation timed out", err)
+		}
+		m.logger.Printf("Warning: Failed to clean up old backups: %v", err)
+		return NewError(ErrIO, "failed to clean up old backups", err)
+	}
+	return nil
+}
+
+// combineErrors combines multiple errors into a single error
+func combineErrors(errs []error) error {
+	if len(errs) == 0 {
+		return nil
+	}
+	var errMsgs []string
+	for _, err := range errs {
+		errMsgs = append(errMsgs, err.Error())
+	}
+	return NewError(ErrUnknown, fmt.Sprintf("multiple errors occurred: %s", strings.Join(errMsgs, "; ")), nil)
+}
+
 // createArchive creates a backup archive, optionally encrypting it
-func (m *Manager) createArchive(archivePath string, archive *BackupArchive) error {
+func (m *Manager) createArchive(ctx context.Context, archivePath string, archive *BackupArchive) error {
 	// Create a temporary file for the unencrypted archive
 	tempArchive, err := os.CreateTemp(filepath.Dir(archivePath), "temp-archive-*.zip")
 	if err != nil {
-		return fmt.Errorf("failed to create temporary archive: %w", err)
+		return NewError(ErrIO, "failed to create temporary archive", err)
 	}
 	tempArchivePath := tempArchive.Name()
 	defer os.Remove(tempArchivePath)
@@ -373,14 +497,29 @@ func (m *Manager) createArchive(archivePath string, archive *BackupArchive) erro
 	// Add metadata
 	metadataBytes, err := json.Marshal(archive.Metadata)
 	if err != nil {
-		return fmt.Errorf("failed to marshal metadata: %w", err)
+		return NewError(ErrIO, "failed to marshal metadata", err)
 	}
+
+	// Check context before proceeding
+	select {
+	case <-ctx.Done():
+		return NewError(ErrCanceled, "archive creation cancelled", ctx.Err())
+	default:
+	}
+
 	if err := addFileToZip(zw, "metadata.json", metadataBytes); err != nil {
 		return err
 	}
 
 	// Add all files to the archive
 	for name, data := range archive.Files {
+		// Check context before each file
+		select {
+		case <-ctx.Done():
+			return NewError(ErrCanceled, "archive creation cancelled", ctx.Err())
+		default:
+		}
+
 		if err := addFileToZip(zw, name, data); err != nil {
 			return err
 		}
@@ -388,18 +527,25 @@ func (m *Manager) createArchive(archivePath string, archive *BackupArchive) erro
 
 	// Close the zip writer
 	if err := zw.Close(); err != nil {
-		return fmt.Errorf("failed to close zip writer: %w", err)
+		return NewError(ErrIO, "failed to close zip writer", err)
 	}
 
 	// Close the temporary file
 	if err := tempArchive.Close(); err != nil {
-		return fmt.Errorf("failed to close temporary archive: %w", err)
+		return NewError(ErrIO, "failed to close temporary archive", err)
+	}
+
+	// Check context before reading archive
+	select {
+	case <-ctx.Done():
+		return NewError(ErrCanceled, "archive creation cancelled", ctx.Err())
+	default:
 	}
 
 	// Read the temporary archive
 	archiveData, err := os.ReadFile(tempArchivePath)
 	if err != nil {
-		return fmt.Errorf("failed to read temporary archive: %w", err)
+		return NewError(ErrIO, "failed to read temporary archive", err)
 	}
 
 	var finalData []byte
@@ -407,21 +553,35 @@ func (m *Manager) createArchive(archivePath string, archive *BackupArchive) erro
 		// Get or generate the encryption key
 		key, err := m.getEncryptionKey()
 		if err != nil {
-			return fmt.Errorf("failed to get encryption key: %w", err)
+			return err
+		}
+
+		// Check context before encryption
+		select {
+		case <-ctx.Done():
+			return NewError(ErrCanceled, "archive encryption cancelled", ctx.Err())
+		default:
 		}
 
 		// Encrypt the archive
 		finalData, err = encryptData(archiveData, key)
 		if err != nil {
-			return fmt.Errorf("failed to encrypt archive: %w", err)
+			return err
 		}
 	} else {
 		finalData = archiveData
 	}
 
+	// Check context before writing final archive
+	select {
+	case <-ctx.Done():
+		return NewError(ErrCanceled, "archive creation cancelled", ctx.Err())
+	default:
+	}
+
 	// Write the final data to the archive file
 	if err := os.WriteFile(archivePath, finalData, 0o644); err != nil {
-		return fmt.Errorf("failed to write archive: %w", err)
+		return NewError(ErrIO, "failed to write archive", err)
 	}
 
 	return nil
@@ -430,20 +590,20 @@ func (m *Manager) createArchive(archivePath string, archive *BackupArchive) erro
 // getEncryptionKey returns the encryption key, generating it if necessary
 func (m *Manager) getEncryptionKey() ([]byte, error) {
 	if !m.config.Encryption {
-		return nil, fmt.Errorf("encryption is not enabled")
+		return nil, NewError(ErrConfig, "encryption is not enabled", nil)
 	}
 
 	if m.config.EncryptionKey == "" {
 		// Generate a new key if none exists
 		key := make([]byte, 32) // 256 bits
 		if _, err := rand.Read(key); err != nil {
-			return nil, fmt.Errorf("failed to generate encryption key: %w", err)
+			return nil, NewError(ErrEncryption, "failed to generate encryption key", err)
 		}
 		m.config.EncryptionKey = hex.EncodeToString(key)
 
 		// Save the key to the configuration
 		if err := conf.SaveSettings(); err != nil {
-			return nil, fmt.Errorf("failed to save encryption key: %w", err)
+			return nil, NewError(ErrConfig, "failed to save encryption key", err)
 		}
 		return key, nil
 	}
@@ -451,7 +611,7 @@ func (m *Manager) getEncryptionKey() ([]byte, error) {
 	// Decode existing key
 	key, err := hex.DecodeString(m.config.EncryptionKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode encryption key: %w", err)
+		return nil, NewError(ErrEncryption, "failed to decode encryption key", err)
 	}
 	return key, nil
 }
@@ -460,18 +620,18 @@ func (m *Manager) getEncryptionKey() ([]byte, error) {
 func encryptData(data, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create cipher: %w", err)
+		return nil, NewError(ErrEncryption, "failed to create cipher", err)
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create GCM: %w", err)
+		return nil, NewError(ErrEncryption, "failed to create GCM", err)
 	}
 
 	// Generate a random nonce
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
-		return nil, fmt.Errorf("failed to generate nonce: %w", err)
+		return nil, NewError(ErrEncryption, "failed to generate nonce", err)
 	}
 
 	// Encrypt the data
@@ -483,16 +643,16 @@ func encryptData(data, key []byte) ([]byte, error) {
 func decryptData(encryptedData, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create cipher: %w", err)
+		return nil, NewError(ErrEncryption, "failed to create cipher", err)
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create GCM: %w", err)
+		return nil, NewError(ErrEncryption, "failed to create GCM", err)
 	}
 
 	if len(encryptedData) < gcm.NonceSize() {
-		return nil, fmt.Errorf("encrypted data too short")
+		return nil, NewError(ErrEncryption, "encrypted data too short", nil)
 	}
 
 	nonce := encryptedData[:gcm.NonceSize()]
@@ -500,7 +660,7 @@ func decryptData(encryptedData, key []byte) ([]byte, error) {
 
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt data: %w", err)
+		return nil, NewError(ErrEncryption, "failed to decrypt data", err)
 	}
 
 	return plaintext, nil
@@ -510,10 +670,104 @@ func decryptData(encryptedData, key []byte) ([]byte, error) {
 func addFileToZip(zw *zip.Writer, name string, data []byte) error {
 	w, err := zw.Create(name)
 	if err != nil {
-		return fmt.Errorf("failed to create file in zip: %w", err)
+		return NewError(ErrIO, fmt.Sprintf("failed to create file %s in zip", name), err)
 	}
 	if _, err := w.Write(data); err != nil {
-		return fmt.Errorf("failed to write file to zip: %w", err)
+		return NewError(ErrIO, fmt.Sprintf("failed to write file %s to zip", name), err)
+	}
+	return nil
+}
+
+// parseRetentionAge parses a retention age string (e.g., "30d", "6m", "1y") into a duration
+func (m *Manager) parseRetentionAge(age string) (time.Duration, error) {
+	if age == "" {
+		return 0, nil
+	}
+
+	// Parse the number and unit
+	var num int
+	var unit string
+	if _, err := fmt.Sscanf(age, "%d%s", &num, &unit); err != nil {
+		return 0, NewError(ErrValidation, fmt.Sprintf("invalid retention age format: %s", age), err)
+	}
+
+	// Convert to duration
+	switch unit {
+	case "d":
+		return time.Duration(num) * 24 * time.Hour, nil
+	case "m":
+		return time.Duration(num) * 30 * 24 * time.Hour, nil // approximate
+	case "y":
+		return time.Duration(num) * 365 * 24 * time.Hour, nil // approximate
+	default:
+		return 0, NewError(ErrValidation, fmt.Sprintf("invalid retention age unit: %s", unit), nil)
+	}
+}
+
+// groupBackupsByTargetAndType organizes backups by target and type
+func (m *Manager) groupBackupsByTargetAndType(backups []BackupInfo) map[string]map[string][]BackupInfo {
+	backupsByTargetAndType := make(map[string]map[string][]BackupInfo)
+	for i := range backups {
+		backup := &backups[i]
+		if _, ok := backupsByTargetAndType[backup.Target]; !ok {
+			backupsByTargetAndType[backup.Target] = make(map[string][]BackupInfo)
+		}
+		backupsByTargetAndType[backup.Target][backup.Type] = append(backupsByTargetAndType[backup.Target][backup.Type], backups[i])
+	}
+	return backupsByTargetAndType
+}
+
+// getDailyBackups extracts and sorts daily backups from a backup list
+func (m *Manager) getDailyBackups(backups []BackupInfo) []*BackupInfo {
+	// Sort backups by timestamp (newest first)
+	sort.Slice(backups, func(i, j int) bool {
+		return backups[i].Timestamp.After(backups[j].Timestamp)
+	})
+
+	var dailyBackups []*BackupInfo
+	for i := range backups {
+		if backups[i].IsDaily {
+			dailyBackups = append(dailyBackups, &backups[i])
+		}
+	}
+	return dailyBackups
+}
+
+// shouldKeepBackup determines if a backup should be kept based on retention policy
+func (m *Manager) shouldKeepBackup(index int, backup *BackupInfo, maxAge time.Duration, minBackups, maxBackups int) bool {
+	// Always keep minimum number of backups
+	if index < minBackups {
+		return true
+	}
+
+	// Keep backups within max age
+	if maxAge > 0 && time.Since(backup.Timestamp) < maxAge {
+		return true
+	}
+
+	// Keep if within max backups limit
+	if maxBackups > 0 && index < maxBackups {
+		return true
+	}
+
+	return false
+}
+
+// deleteBackupWithTimeout attempts to delete a backup with a timeout
+func (m *Manager) deleteBackupWithTimeout(ctx context.Context, backup *BackupInfo, targetName string) error {
+	deleteCtx, deleteCancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer deleteCancel()
+
+	err := m.DeleteBackup(deleteCtx, backup.ID)
+	if err != nil {
+		if deleteCtx.Err() != nil {
+			return NewError(ErrTimeout, fmt.Sprintf("delete operation timed out for backup %s", backup.ID), err)
+		}
+		return NewError(ErrIO, fmt.Sprintf("failed to delete backup %s", backup.ID), err)
+	}
+
+	if m.config.Debug {
+		m.logger.Printf("Deleted old backup %s from target %s", backup.ID, targetName)
 	}
 	return nil
 }
@@ -523,93 +777,67 @@ func (m *Manager) cleanupOldBackups(ctx context.Context) error {
 	// Get all backups
 	backups, err := m.ListBackups(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to list backups: %w", err)
+		return NewError(ErrIO, "failed to list backups", err)
+	}
+
+	// Check context before proceeding
+	select {
+	case <-ctx.Done():
+		return NewError(ErrCanceled, "cleanup operation cancelled", ctx.Err())
+	default:
 	}
 
 	// Group backups by target and type
-	backupsByTargetAndType := make(map[string]map[string][]BackupInfo)
-	for i := range backups {
-		backup := &backups[i]
-		if _, ok := backupsByTargetAndType[backup.Target]; !ok {
-			backupsByTargetAndType[backup.Target] = make(map[string][]BackupInfo)
-		}
-		backupsByTargetAndType[backup.Target][backup.Type] = append(backupsByTargetAndType[backup.Target][backup.Type], backups[i])
-	}
+	backupsByTargetAndType := m.groupBackupsByTargetAndType(backups)
 
+	// Parse retention policy
+	maxAge, err := m.parseRetentionAge(m.config.Retention.MaxAge)
+	if err != nil {
+		m.logger.Printf("Warning: %v, using no maximum age", err)
+		maxAge = 0
+	}
+	minBackups := m.config.Retention.MinBackups
+	maxBackups := m.config.Retention.MaxBackups
+
+	var errs []error
 	// Process each target and type
 	for targetName, typeBackups := range backupsByTargetAndType {
+		// Check context before processing each target
+		select {
+		case <-ctx.Done():
+			return NewError(ErrCanceled, "cleanup operation cancelled", ctx.Err())
+		default:
+		}
+
 		for _, backups := range typeBackups {
-			// Sort backups by timestamp (newest first)
-			sort.Slice(backups, func(i, j int) bool {
-				return backups[i].Timestamp.After(backups[j].Timestamp)
-			})
-
-			// Keep track of daily backups
-			var dailyBackups []*BackupInfo
-			for i := range backups {
-				if backups[i].IsDaily {
-					dailyBackups = append(dailyBackups, &backups[i])
-				}
-			}
-
-			// Apply retention policy
-			maxAge := m.parseRetentionAge(m.config.Retention.MaxAge)
-			minBackups := m.config.Retention.MinBackups
-			maxBackups := m.config.Retention.MaxBackups
+			dailyBackups := m.getDailyBackups(backups)
 
 			// Process daily backups
 			for i, backup := range dailyBackups {
-				// Always keep minimum number of backups
-				if i < minBackups {
+				// Check context before processing each backup
+				select {
+				case <-ctx.Done():
+					return NewError(ErrCanceled, "cleanup operation cancelled", ctx.Err())
+				default:
+				}
+
+				if m.shouldKeepBackup(i, backup, maxAge, minBackups, maxBackups) {
 					continue
 				}
 
-				// Keep backups within max age
-				if maxAge > 0 && time.Since(backup.Timestamp) < maxAge {
-					continue
-				}
-
-				// Remove if we have more than max backups
-				if maxBackups > 0 && i >= maxBackups {
-					if err := m.DeleteBackup(ctx, backup.ID); err != nil {
-						m.logger.Printf("Warning: Failed to delete old backup %s: %v", backup.ID, err)
-					} else if m.config.Debug {
-						m.logger.Printf("Deleted old backup %s from target %s", backup.ID, targetName)
-					}
+				if err := m.deleteBackupWithTimeout(ctx, backup, targetName); err != nil {
+					errs = append(errs, err)
+					m.logger.Printf("Warning: Failed to delete old backup %s: %v", backup.ID, targetName)
 				}
 			}
 		}
 	}
 
+	if len(errs) > 0 {
+		return combineErrors(errs)
+	}
+
 	return nil
-}
-
-// parseRetentionAge parses a retention age string (e.g., "30d", "6m", "1y") into a duration
-func (m *Manager) parseRetentionAge(age string) time.Duration {
-	if age == "" {
-		return 0
-	}
-
-	// Parse the number and unit
-	var num int
-	var unit string
-	if _, err := fmt.Sscanf(age, "%d%s", &num, &unit); err != nil {
-		m.logger.Printf("Warning: Invalid retention age format: %s", age)
-		return 0
-	}
-
-	// Convert to duration
-	switch unit {
-	case "d":
-		return time.Duration(num) * 24 * time.Hour
-	case "m":
-		return time.Duration(num) * 30 * 24 * time.Hour // approximate
-	case "y":
-		return time.Duration(num) * 365 * 24 * time.Hour // approximate
-	default:
-		m.logger.Printf("Warning: Invalid retention age unit: %s", unit)
-		return 0
-	}
 }
 
 // ListBackups returns a list of all stored backups across all targets
@@ -617,14 +845,34 @@ func (m *Manager) ListBackups(ctx context.Context) ([]BackupInfo, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	if len(m.targets) == 0 {
+		return nil, NewError(ErrValidation, "no backup targets registered", nil)
+	}
+
 	var allBackups []BackupInfo
+	var errs []error
 	for _, target := range m.targets {
 		backups, err := target.List(ctx)
 		if err != nil {
 			m.logger.Printf("Failed to list backups from target %s: %v", target.Name(), err)
+			errs = append(errs, NewError(ErrIO, fmt.Sprintf("failed to list backups from target %s", target.Name()), err))
 			continue
 		}
 		allBackups = append(allBackups, backups...)
+	}
+
+	if len(errs) > 0 {
+		// If we have some backups but also errors, log the errors but return the backups we have
+		if len(allBackups) > 0 {
+			m.logger.Printf("Warning: Some targets failed to list backups, returning partial results")
+			return allBackups, nil
+		}
+		// If we have no backups and all targets failed, return an error
+		var errMsgs []string
+		for _, err := range errs {
+			errMsgs = append(errMsgs, err.Error())
+		}
+		return nil, NewError(ErrIO, fmt.Sprintf("failed to list backups from all targets: %s", strings.Join(errMsgs, "; ")), nil)
 	}
 
 	return allBackups, nil
@@ -638,10 +886,55 @@ func (m *Manager) DeleteBackup(ctx context.Context, id string) error {
 	var lastErr error
 	for _, target := range m.targets {
 		if err := target.Delete(ctx, id); err != nil {
-			lastErr = fmt.Errorf("failed to delete backup %s from target %s: %w", id, target.Name(), err)
+			lastErr = NewError(ErrIO, fmt.Sprintf("failed to delete backup %s from target %s", id, target.Name()), err)
 			m.logger.Printf("Error: %v", lastErr)
 		}
 	}
 
 	return lastErr
+}
+
+// defaultTimeouts defines default operation timeouts
+var defaultTimeouts = struct {
+	Backup  time.Duration
+	Store   time.Duration
+	Cleanup time.Duration
+	Delete  time.Duration
+}{
+	Backup:  2 * time.Hour,
+	Store:   15 * time.Minute,
+	Cleanup: 10 * time.Minute,
+	Delete:  2 * time.Minute,
+}
+
+// getBackupTimeout returns the configured backup timeout or the default
+func (m *Manager) getBackupTimeout() time.Duration {
+	if m.config.OperationTimeouts.Backup > 0 {
+		return m.config.OperationTimeouts.Backup
+	}
+	return defaultTimeouts.Backup
+}
+
+// getStoreTimeout returns the configured store timeout or the default
+func (m *Manager) getStoreTimeout() time.Duration {
+	if m.config.OperationTimeouts.Store > 0 {
+		return m.config.OperationTimeouts.Store
+	}
+	return defaultTimeouts.Store
+}
+
+// getCleanupTimeout returns the configured cleanup timeout or the default
+func (m *Manager) getCleanupTimeout() time.Duration {
+	if m.config.OperationTimeouts.Cleanup > 0 {
+		return m.config.OperationTimeouts.Cleanup
+	}
+	return defaultTimeouts.Cleanup
+}
+
+// getDeleteTimeout returns the configured delete timeout or the default
+func (m *Manager) getDeleteTimeout() time.Duration {
+	if m.config.OperationTimeouts.Delete > 0 {
+		return m.config.OperationTimeouts.Delete
+	}
+	return defaultTimeouts.Delete
 }
