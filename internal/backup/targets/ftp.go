@@ -6,98 +6,255 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jlaffaye/ftp"
 	"github.com/tphakala/birdnet-go/internal/backup"
 )
 
+const (
+	defaultFTPPort        = 21
+	defaultTimeout        = 30 * time.Second
+	defaultMaxConnections = 5
+	defaultMaxRetries     = 3
+	defaultBasePath       = "backups"
+	metadataVersion       = 1
+	tempFilePrefix        = ".tmp."
+	metadataFileExt       = ".meta"
+)
+
+// FTPMetadataV1 represents version 1 of the backup metadata format
+type FTPMetadataV1 struct {
+	Version     int       `json:"version"`
+	Timestamp   time.Time `json:"timestamp"`
+	Size        int64     `json:"size"`
+	Type        string    `json:"type"`
+	Source      string    `json:"source"`
+	IsDaily     bool      `json:"is_daily"`
+	ConfigHash  string    `json:"config_hash,omitempty"`
+	AppVersion  string    `json:"app_version,omitempty"`
+	Compression string    `json:"compression,omitempty"`
+}
+
 // FTPTarget implements the backup.Target interface for FTP storage
 type FTPTarget struct {
-	host     string
-	port     int
-	username string
-	password string
-	basePath string
-	timeout  time.Duration
-	debug    bool
-	logger   backup.Logger
+	config      FTPTargetConfig
+	logger      backup.Logger
+	connPool    chan *ftp.ServerConn
+	mu          sync.Mutex // Protects connPool operations
+	tempFiles   map[string]bool
+	tempFilesMu sync.Mutex // Protects tempFiles map
 }
 
 // FTPTargetConfig holds configuration for the FTP target
 type FTPTargetConfig struct {
-	Host     string
-	Port     int
-	Username string
-	Password string
-	BasePath string
-	Timeout  time.Duration
-	Debug    bool
+	Host         string
+	Port         int
+	Username     string
+	Password     string
+	BasePath     string
+	Timeout      time.Duration
+	Debug        bool
+	MaxConns     int
+	MaxRetries   int
+	RetryBackoff time.Duration
+	Features     []string // Required server features
+	MinSpace     int64    // Minimum required space in bytes
 }
 
 // NewFTPTarget creates a new FTP target with the given configuration
-func NewFTPTarget(settings map[string]interface{}) (*FTPTarget, error) {
-	target := &FTPTarget{}
-
-	// Required settings
-	host, ok := settings["host"].(string)
-	if !ok {
-		return nil, fmt.Errorf("ftp: host is required")
+func NewFTPTarget(config *FTPTargetConfig, logger backup.Logger) (*FTPTarget, error) {
+	// Validate required fields
+	if config.Host == "" {
+		return nil, backup.NewError(backup.ErrConfig, "ftp: host is required", nil)
 	}
-	target.host = host
 
-	// Optional settings with defaults
-	if port, ok := settings["port"].(int); ok {
-		target.port = port
+	// Set defaults for optional fields
+	if config.Port == 0 {
+		config.Port = defaultFTPPort
+	}
+	if config.Timeout == 0 {
+		config.Timeout = defaultTimeout
+	}
+	if config.BasePath == "" {
+		config.BasePath = defaultBasePath
 	} else {
-		target.port = 21 // Default FTP port
+		config.BasePath = strings.TrimRight(config.BasePath, "/")
+	}
+	if config.MaxConns == 0 {
+		config.MaxConns = defaultMaxConnections
+	}
+	if config.MaxRetries == 0 {
+		config.MaxRetries = defaultMaxRetries
+	}
+	if config.RetryBackoff == 0 {
+		config.RetryBackoff = time.Second
 	}
 
-	if username, ok := settings["username"].(string); ok {
-		target.username = username
+	if logger == nil {
+		logger = backup.DefaultLogger()
 	}
 
-	if password, ok := settings["password"].(string); ok {
-		target.password = password
-	}
-
-	if path, ok := settings["path"].(string); ok {
-		target.basePath = strings.TrimRight(path, "/")
-	} else {
-		target.basePath = "backups"
-	}
-
-	if timeout, ok := settings["timeout"].(string); ok {
-		duration, err := time.ParseDuration(timeout)
-		if err != nil {
-			return nil, fmt.Errorf("ftp: invalid timeout format: %w", err)
-		}
-		target.timeout = duration
-	} else {
-		target.timeout = 30 * time.Second // Default timeout
-	}
-
-	if debug, ok := settings["debug"].(bool); ok {
-		target.debug = debug
-	}
-
-	if logger, ok := settings["logger"].(backup.Logger); ok {
-		target.logger = logger
-	} else {
-		target.logger = backup.DefaultLogger()
+	target := &FTPTarget{
+		config:    *config,
+		logger:    logger,
+		connPool:  make(chan *ftp.ServerConn, config.MaxConns),
+		tempFiles: make(map[string]bool),
 	}
 
 	return target, nil
 }
 
+// NewFTPTargetFromMap creates a new FTP target from a map configuration (for backward compatibility)
+func NewFTPTargetFromMap(settings map[string]interface{}) (*FTPTarget, error) {
+	config := FTPTargetConfig{}
+
+	// Required settings
+	host, ok := settings["host"].(string)
+	if !ok {
+		return nil, backup.NewError(backup.ErrConfig, "ftp: host is required", nil)
+	}
+	config.Host = host
+
+	// Optional settings
+	if port, ok := settings["port"].(int); ok {
+		config.Port = port
+	}
+	if username, ok := settings["username"].(string); ok {
+		config.Username = username
+	}
+	if password, ok := settings["password"].(string); ok {
+		config.Password = password
+	}
+	if path, ok := settings["path"].(string); ok {
+		config.BasePath = path
+	}
+	if timeout, ok := settings["timeout"].(string); ok {
+		duration, err := time.ParseDuration(timeout)
+		if err != nil {
+			return nil, backup.NewError(backup.ErrValidation, "ftp: invalid timeout format", err)
+		}
+		config.Timeout = duration
+	}
+	if debug, ok := settings["debug"].(bool); ok {
+		config.Debug = debug
+	}
+
+	var logger backup.Logger
+	if l, ok := settings["logger"].(backup.Logger); ok {
+		logger = l
+	}
+
+	return NewFTPTarget(&config, logger)
+}
+
 // Name returns the name of this target
 func (t *FTPTarget) Name() string {
 	return "ftp"
+}
+
+// getConnection gets a connection from the pool or creates a new one
+func (t *FTPTarget) getConnection(ctx context.Context) (*ftp.ServerConn, error) {
+	// Try to get a connection from the pool
+	select {
+	case conn := <-t.connPool:
+		if t.isConnectionAlive(conn) {
+			return conn, nil
+		}
+		// Connection is dead, close it and create a new one
+		_ = conn.Quit()
+	default:
+		// Pool is empty, create a new connection
+	}
+
+	return t.connect(ctx)
+}
+
+// returnConnection returns a connection to the pool or closes it if the pool is full
+func (t *FTPTarget) returnConnection(conn *ftp.ServerConn) {
+	if conn == nil {
+		return
+	}
+
+	select {
+	case t.connPool <- conn:
+		// Connection returned to pool
+	default:
+		// Pool is full, close the connection
+		if err := conn.Quit(); err != nil {
+			t.logger.Printf("Warning: failed to close FTP connection: %v", err)
+		}
+	}
+}
+
+// isConnectionAlive checks if a connection is still usable
+func (t *FTPTarget) isConnectionAlive(conn *ftp.ServerConn) bool {
+	if conn == nil {
+		return false
+	}
+	// Try a simple NOOP command to check connection
+	return conn.NoOp() == nil
+}
+
+// isTransientError checks if an error is likely temporary
+func (t *FTPTarget) isTransientError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "timeout") ||
+		strings.Contains(errStr, "temporary") ||
+		strings.Contains(errStr, "broken pipe") ||
+		strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "no route to host")
+}
+
+// withRetry executes an operation with retry logic
+func (t *FTPTarget) withRetry(ctx context.Context, op func(*ftp.ServerConn) error) error {
+	var lastErr error
+	for i := 0; i < t.config.MaxRetries; i++ {
+		select {
+		case <-ctx.Done():
+			return backup.NewError(backup.ErrCanceled, "ftp: operation canceled", ctx.Err())
+		default:
+		}
+
+		conn, err := t.getConnection(ctx)
+		if err != nil {
+			lastErr = err
+			if !t.isTransientError(err) {
+				return err
+			}
+			time.Sleep(t.config.RetryBackoff * time.Duration(i+1))
+			continue
+		}
+
+		err = op(conn)
+		if err == nil {
+			t.returnConnection(conn)
+			return nil
+		}
+
+		lastErr = err
+		_ = conn.Quit() // Close failed connection
+
+		if !t.isTransientError(err) {
+			return err
+		}
+
+		if t.config.Debug {
+			t.logger.Printf("FTP: Retrying operation after error: %v (attempt %d/%d)", err, i+1, t.config.MaxRetries)
+		}
+		time.Sleep(t.config.RetryBackoff * time.Duration(i+1))
+	}
+
+	return backup.NewError(backup.ErrIO, "ftp: operation failed after retries", lastErr)
 }
 
 // connect establishes a connection to the FTP server with context support
@@ -107,19 +264,19 @@ func (t *FTPTarget) connect(ctx context.Context) (*ftp.ServerConn, error) {
 	errChan := make(chan error, 1)
 
 	go func() {
-		addr := fmt.Sprintf("%s:%d", t.host, t.port)
-		conn, err := ftp.Dial(addr, ftp.DialWithTimeout(t.timeout))
+		addr := fmt.Sprintf("%s:%d", t.config.Host, t.config.Port)
+		conn, err := ftp.Dial(addr, ftp.DialWithTimeout(t.config.Timeout))
 		if err != nil {
-			errChan <- fmt.Errorf("ftp: connection failed: %w", err)
+			errChan <- backup.NewError(backup.ErrIO, "ftp: connection failed", err)
 			return
 		}
 
-		if t.username != "" {
-			if err := conn.Login(t.username, t.password); err != nil {
+		if t.config.Username != "" {
+			if err := conn.Login(t.config.Username, t.config.Password); err != nil {
 				if quitErr := conn.Quit(); quitErr != nil {
 					t.logger.Printf("Warning: failed to quit FTP connection after login error: %v", quitErr)
 				}
-				errChan <- fmt.Errorf("ftp: login failed: %w", err)
+				errChan <- backup.NewError(backup.ErrValidation, "ftp: login failed", err)
 				return
 			}
 		}
@@ -129,11 +286,318 @@ func (t *FTPTarget) connect(ctx context.Context) (*ftp.ServerConn, error) {
 
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, backup.NewError(backup.ErrCanceled, "ftp: connection attempt canceled", ctx.Err())
 	case err := <-errChan:
 		return nil, err
 	case conn := <-connChan:
 		return conn, nil
+	}
+}
+
+// atomicUpload performs an atomic upload operation using a temporary file
+func (t *FTPTarget) atomicUpload(ctx context.Context, conn *ftp.ServerConn, localPath, remotePath string) error {
+	// Create a temporary filename
+	tempName := path.Join(path.Dir(remotePath), tempFilePrefix+filepath.Base(remotePath))
+	t.trackTempFile(tempName)
+	defer t.untrackTempFile(tempName)
+
+	// Upload to temporary file
+	if err := t.uploadFile(ctx, conn, localPath, tempName); err != nil {
+		// Try to clean up the temporary file
+		_ = conn.Delete(tempName)
+		return err
+	}
+
+	// Rename to final destination
+	if err := conn.Rename(tempName, remotePath); err != nil {
+		// Try to clean up the temporary file
+		_ = conn.Delete(tempName)
+		return backup.NewError(backup.ErrIO, "ftp: failed to rename temporary file", err)
+	}
+
+	return nil
+}
+
+// uploadFile handles the actual file upload
+func (t *FTPTarget) uploadFile(ctx context.Context, conn *ftp.ServerConn, localPath, remotePath string) error {
+	file, err := os.Open(localPath)
+	if err != nil {
+		return backup.NewError(backup.ErrIO, "ftp: failed to open local file", err)
+	}
+	defer file.Close()
+
+	// Create a pipe for streaming
+	pr, pw := io.Pipe()
+	errChan := make(chan error, 1)
+
+	// Start upload in a goroutine
+	go func() {
+		defer pw.Close()
+		_, err := io.Copy(pw, file)
+		if err != nil {
+			errChan <- backup.NewError(backup.ErrIO, "ftp: failed to copy file data", err)
+			return
+		}
+		errChan <- nil
+	}()
+
+	// Store the file on the FTP server
+	if err := conn.Stor(remotePath, pr); err != nil {
+		return backup.NewError(backup.ErrIO, "ftp: failed to store file", err)
+	}
+
+	// Wait for upload completion or context cancellation
+	select {
+	case <-ctx.Done():
+		return backup.NewError(backup.ErrCanceled, "ftp: upload operation canceled", ctx.Err())
+	case err := <-errChan:
+		return err
+	}
+}
+
+// Store implements the backup.Target interface with atomic operations and metadata
+func (t *FTPTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
+	if t.config.Debug {
+		t.logger.Printf("FTP: Storing backup %s to %s", filepath.Base(sourcePath), t.config.Host)
+	}
+
+	// Create versioned metadata
+	ftpMetadata := FTPMetadataV1{
+		Version:    metadataVersion,
+		Timestamp:  metadata.Timestamp,
+		Size:       metadata.Size,
+		Type:       metadata.Type,
+		Source:     metadata.Source,
+		IsDaily:    metadata.IsDaily,
+		ConfigHash: metadata.ConfigHash,
+		AppVersion: metadata.AppVersion,
+	}
+
+	// Marshal metadata
+	metadataBytes, err := json.Marshal(ftpMetadata)
+	if err != nil {
+		return backup.NewError(backup.ErrIO, "ftp: failed to marshal metadata", err)
+	}
+
+	return t.withRetry(ctx, func(conn *ftp.ServerConn) error {
+		// Ensure the target directory exists
+		if err := t.createDirectory(ctx, conn, t.config.BasePath); err != nil {
+			return err
+		}
+
+		// Store the backup file atomically
+		backupPath := path.Join(t.config.BasePath, filepath.Base(sourcePath))
+		if err := t.atomicUpload(ctx, conn, sourcePath, backupPath); err != nil {
+			return err
+		}
+
+		// Store metadata file
+		metadataPath := backupPath + metadataFileExt
+		tempMetadataFile, err := os.CreateTemp("", "ftp-metadata-*")
+		if err != nil {
+			return backup.NewError(backup.ErrIO, "ftp: failed to create temporary metadata file", err)
+		}
+		defer os.Remove(tempMetadataFile.Name())
+		defer tempMetadataFile.Close()
+
+		if _, err := tempMetadataFile.Write(metadataBytes); err != nil {
+			return backup.NewError(backup.ErrIO, "ftp: failed to write metadata", err)
+		}
+		if err := tempMetadataFile.Sync(); err != nil {
+			return backup.NewError(backup.ErrIO, "ftp: failed to sync metadata file", err)
+		}
+		if err := tempMetadataFile.Close(); err != nil {
+			return backup.NewError(backup.ErrIO, "ftp: failed to close metadata file", err)
+		}
+
+		// Upload metadata file atomically
+		if err := t.atomicUpload(ctx, conn, tempMetadataFile.Name(), metadataPath); err != nil {
+			return backup.NewError(backup.ErrIO, "ftp: failed to store metadata", err)
+		}
+
+		if t.config.Debug {
+			t.logger.Printf("FTP: Successfully stored backup %s with metadata", filepath.Base(sourcePath))
+		}
+
+		return nil
+	})
+}
+
+// List implements the backup.Target interface
+func (t *FTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
+	if t.config.Debug {
+		t.logger.Printf("FTP: Listing backups from %s", t.config.Host)
+	}
+
+	var backups []backup.BackupInfo
+	err := t.withRetry(ctx, func(conn *ftp.ServerConn) error {
+		entries, err := conn.List(t.config.BasePath)
+		if err != nil {
+			if strings.Contains(err.Error(), "No such file or directory") {
+				return nil
+			}
+			return backup.NewError(backup.ErrIO, "ftp: failed to list backups", err)
+		}
+
+		for _, entry := range entries {
+			if entry.Type == ftp.EntryTypeFile {
+				backups = append(backups, backup.BackupInfo{
+					Target: entry.Name,
+					Metadata: backup.Metadata{
+						Timestamp: entry.Time,
+						Size:      int64(entry.Size),
+					},
+				})
+			}
+
+			select {
+			case <-ctx.Done():
+				return backup.NewError(backup.ErrCanceled, "ftp: listing operation canceled", ctx.Err())
+			default:
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return backups, nil
+}
+
+// Delete implements the backup.Target interface
+func (t *FTPTarget) Delete(ctx context.Context, target string) error {
+	if t.config.Debug {
+		t.logger.Printf("FTP: Deleting backup %s from %s", target, t.config.Host)
+	}
+
+	return t.withRetry(ctx, func(conn *ftp.ServerConn) error {
+		backupPath := path.Join(t.config.BasePath, target)
+		if err := conn.Delete(backupPath); err != nil {
+			return backup.NewError(backup.ErrIO, "ftp: failed to delete backup", err)
+		}
+
+		if t.config.Debug {
+			t.logger.Printf("FTP: Successfully deleted backup %s", target)
+		}
+
+		return nil
+	})
+}
+
+// Validate performs comprehensive validation of the FTP target
+func (t *FTPTarget) Validate() error {
+	ctx, cancel := context.WithTimeout(context.Background(), t.config.Timeout)
+	defer cancel()
+
+	return t.withRetry(ctx, func(conn *ftp.ServerConn) error {
+		// Check server features if required
+		if len(t.config.Features) > 0 {
+			t.logger.Printf("Warning: feature checking is not supported with current FTP library version")
+		}
+
+		// Try to create and remove a test directory
+		testDir := path.Join(t.config.BasePath, ".write_test")
+		if err := t.createDirectory(ctx, conn, testDir); err != nil {
+			return backup.NewError(backup.ErrValidation, "ftp: failed to create test directory", err)
+		}
+
+		// Create a test file
+		testFile := path.Join(testDir, "test.txt")
+		testData := []byte("test")
+		tempFile, err := os.CreateTemp("", "ftp-test-*")
+		if err != nil {
+			return backup.NewError(backup.ErrIO, "ftp: failed to create temporary test file", err)
+		}
+		defer os.Remove(tempFile.Name())
+		if _, err := tempFile.Write(testData); err != nil {
+			return backup.NewError(backup.ErrIO, "ftp: failed to write test data", err)
+		}
+		if err := tempFile.Close(); err != nil {
+			return backup.NewError(backup.ErrIO, "ftp: failed to close test file", err)
+		}
+
+		// Test atomic upload
+		if err := t.atomicUpload(ctx, conn, tempFile.Name(), testFile); err != nil {
+			return backup.NewError(backup.ErrValidation, "ftp: failed to upload test file", err)
+		}
+
+		// Test file deletion
+		if err := conn.Delete(testFile); err != nil {
+			t.logger.Printf("Warning: failed to delete test file %s: %v", testFile, err)
+		}
+
+		// Test directory deletion
+		if err := conn.RemoveDir(testDir); err != nil {
+			t.logger.Printf("Warning: failed to remove test directory %s: %v", testDir, err)
+		}
+
+		return nil
+	})
+}
+
+// trackTempFile adds a temporary file to the tracking map
+func (t *FTPTarget) trackTempFile(path string) {
+	t.tempFilesMu.Lock()
+	defer t.tempFilesMu.Unlock()
+	t.tempFiles[path] = true
+}
+
+// untrackTempFile removes a temporary file from the tracking map
+func (t *FTPTarget) untrackTempFile(path string) {
+	t.tempFilesMu.Lock()
+	defer t.tempFilesMu.Unlock()
+	delete(t.tempFiles, path)
+}
+
+// cleanupTempFiles attempts to clean up any tracked temporary files
+func (t *FTPTarget) cleanupTempFiles(conn *ftp.ServerConn) {
+	t.tempFilesMu.Lock()
+	tempFiles := make([]string, 0, len(t.tempFiles))
+	for path := range t.tempFiles {
+		tempFiles = append(tempFiles, path)
+	}
+	t.tempFilesMu.Unlock()
+
+	for _, path := range tempFiles {
+		if err := conn.Delete(path); err != nil {
+			if t.config.Debug {
+				t.logger.Printf("Warning: failed to clean up temporary file %s: %v", path, err)
+			}
+		} else {
+			t.untrackTempFile(path)
+		}
+	}
+}
+
+// Close closes all connections in the pool and cleans up resources
+func (t *FTPTarget) Close() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	var lastErr error
+
+	// Try to clean up temporary files with one last connection
+	conn, err := t.connect(context.Background())
+	if err == nil {
+		t.cleanupTempFiles(conn)
+		if err := conn.Quit(); err != nil {
+			lastErr = err
+		}
+	}
+
+	// Close all pooled connections
+	for {
+		select {
+		case conn := <-t.connPool:
+			if err := conn.Quit(); err != nil {
+				lastErr = err
+				t.logger.Printf("Warning: failed to close FTP connection: %v", err)
+			}
+		default:
+			return lastErr
+		}
 	}
 }
 
@@ -152,267 +616,16 @@ func (t *FTPTarget) createDirectory(ctx context.Context, conn *ftp.ServerConn, p
 		if err != nil {
 			// Ignore directory exists error
 			if !strings.Contains(err.Error(), "File exists") {
-				return fmt.Errorf("ftp: failed to create directory %s: %w", currentPath, err)
+				return backup.NewError(backup.ErrIO, fmt.Sprintf("ftp: failed to create directory %s", currentPath), err)
 			}
 		}
 
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return backup.NewError(backup.ErrCanceled, "ftp: directory creation canceled", ctx.Err())
 		default:
 		}
 	}
 
 	return nil
-}
-
-// Store implements the backup.Target interface
-func (t *FTPTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
-	if t.debug {
-		log.Printf("FTP: Storing backup %s to %s", filepath.Base(sourcePath), t.host)
-	}
-
-	// Open source file
-	srcFile, err := os.Open(sourcePath)
-	if err != nil {
-		return fmt.Errorf("ftp: failed to open source file: %w", err)
-	}
-	defer srcFile.Close()
-
-	conn, err := t.connect(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := conn.Quit(); err != nil {
-			t.logger.Printf("Warning: failed to quit FTP connection: %v", err)
-		}
-	}()
-
-	// Ensure the target directory exists
-	if err := t.createDirectory(ctx, conn, t.basePath); err != nil {
-		return err
-	}
-
-	// Store the backup file
-	backupPath := path.Join(t.basePath, filepath.Base(sourcePath))
-	if err := conn.Stor(backupPath, srcFile); err != nil {
-		if quitErr := conn.Quit(); quitErr != nil {
-			t.logger.Printf("Warning: failed to quit FTP connection after store error: %v", quitErr)
-		}
-		return fmt.Errorf("ftp: failed to store backup: %w", err)
-	}
-
-	if t.debug {
-		log.Printf("FTP: Successfully stored backup %s", filepath.Base(sourcePath))
-	}
-
-	return nil
-}
-
-// List implements the backup.Target interface
-func (t *FTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
-	if t.debug {
-		log.Printf("FTP: Listing backups from %s", t.host)
-	}
-
-	conn, err := t.connect(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := conn.Quit(); err != nil {
-			t.logger.Printf("Warning: failed to quit FTP connection: %v", err)
-		}
-	}()
-
-	entries, err := conn.List(t.basePath)
-	if err != nil {
-		if strings.Contains(err.Error(), "No such file or directory") {
-			return []backup.BackupInfo{}, nil
-		}
-		return nil, fmt.Errorf("ftp: failed to list backups: %w", err)
-	}
-
-	var backups []backup.BackupInfo
-	for _, entry := range entries {
-		if entry.Type == ftp.EntryTypeFile {
-			backups = append(backups, backup.BackupInfo{
-				Target: entry.Name,
-				Metadata: backup.Metadata{
-					Timestamp: entry.Time,
-					Size:      int64(entry.Size), // Convert uint64 to int64
-				},
-			})
-		}
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-	}
-
-	return backups, nil
-}
-
-// Delete implements the backup.Target interface
-func (t *FTPTarget) Delete(ctx context.Context, target string) error {
-	if t.debug {
-		log.Printf("FTP: Deleting backup %s from %s", target, t.host)
-	}
-
-	conn, err := t.connect(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := conn.Quit(); err != nil {
-			t.logger.Printf("Warning: failed to quit FTP connection: %v", err)
-		}
-	}()
-
-	backupPath := path.Join(t.basePath, target)
-	if err := conn.Delete(backupPath); err != nil {
-		return fmt.Errorf("ftp: failed to delete backup: %w", err)
-	}
-
-	if t.debug {
-		log.Printf("FTP: Successfully deleted backup %s", target)
-	}
-
-	return nil
-}
-
-// Validate checks if the target configuration is valid
-func (t *FTPTarget) Validate() error {
-	ctx, cancel := context.WithTimeout(context.Background(), t.timeout)
-	defer cancel()
-
-	// Try to connect to the FTP server
-	conn, err := t.connect(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to validate FTP connection: %w", err)
-	}
-	defer func() {
-		if err := conn.Quit(); err != nil {
-			t.logger.Printf("Warning: failed to quit FTP connection: %v", err)
-		}
-	}()
-
-	// Try to create and remove a test directory
-	testDir := path.Join(t.basePath, ".write_test")
-	if err := t.createDirectory(ctx, conn, testDir); err != nil {
-		return fmt.Errorf("failed to create test directory: %w", err)
-	}
-
-	if err := conn.RemoveDir(testDir); err != nil {
-		t.logger.Printf("Warning: failed to remove test directory %s: %v", testDir, err)
-	}
-
-	return nil
-}
-
-// Helper functions
-
-func (t *FTPTarget) uploadFile(ctx context.Context, conn *ftp.ServerConn, localPath, remotePath string) error {
-	// Open local file
-	file, err := os.Open(localPath)
-	if err != nil {
-		return fmt.Errorf("failed to open local file: %w", err)
-	}
-	defer file.Close()
-
-	// Create a pipe for streaming
-	pr, pw := io.Pipe()
-
-	// Start upload in a goroutine
-	errChan := make(chan error, 1)
-	go func() {
-		defer pw.Close()
-		_, err := io.Copy(pw, file)
-		if err != nil {
-			errChan <- fmt.Errorf("failed to copy file data: %w", err)
-			return
-		}
-		errChan <- nil
-	}()
-
-	// Store the file on the FTP server
-	err = conn.Stor(remotePath, pr)
-	if err != nil {
-		return fmt.Errorf("failed to store file on FTP server: %w", err)
-	}
-
-	// Wait for upload completion or context cancellation
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case err := <-errChan:
-		return err
-	}
-}
-
-func (t *FTPTarget) listDirectory(ctx context.Context, conn *ftp.ServerConn, dir string) ([]*ftp.Entry, error) {
-	// Create channels for result and error
-	entriesChan := make(chan []*ftp.Entry)
-	errChan := make(chan error)
-
-	go func() {
-		entries, err := conn.List(dir)
-		if err != nil {
-			errChan <- fmt.Errorf("failed to list directory: %w", err)
-			return
-		}
-		entriesChan <- entries
-	}()
-
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case err := <-errChan:
-		return nil, err
-	case entries := <-entriesChan:
-		return entries, nil
-	}
-}
-
-func (t *FTPTarget) readMetadata(ctx context.Context, conn *ftp.ServerConn, path string) (backup.Metadata, error) {
-	var metadata backup.Metadata
-
-	// Create a pipe for reading
-	pr, pw := io.Pipe()
-
-	// Start download in a goroutine
-	errChan := make(chan error, 1)
-	go func() {
-		defer pw.Close()
-		resp, err := conn.Retr(path)
-		if err != nil {
-			errChan <- fmt.Errorf("failed to retrieve metadata file: %w", err)
-			return
-		}
-		defer resp.Close()
-
-		_, err = io.Copy(pw, resp)
-		if err != nil {
-			errChan <- fmt.Errorf("failed to copy metadata file: %w", err)
-			return
-		}
-		errChan <- nil
-	}()
-
-	// Read and decode metadata
-	decoder := json.NewDecoder(pr)
-	if err := decoder.Decode(&metadata); err != nil {
-		return metadata, fmt.Errorf("failed to decode metadata: %w", err)
-	}
-
-	// Wait for download completion or context cancellation
-	select {
-	case <-ctx.Done():
-		return metadata, ctx.Err()
-	case err := <-errChan:
-		return metadata, err
-	}
 }
