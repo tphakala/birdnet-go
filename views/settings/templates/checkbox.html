@@ -3,12 +3,15 @@
 <!-- Checkbox field -->
 <div class="form-control relative {{.class}}" x-data="{ 
     showTooltip: null,
-    fieldId: '{{.id}}{{if .index}}_{{.index}}{{end}}'
+    fieldId: {{if .dynamicId}}'{{.id}}_' + index{{else}}'{{.id}}'{{end}}
 }">
     <label class="label cursor-pointer justify-start" :for="fieldId">
         <!-- Checkbox field -->
         <input type="checkbox" :id="fieldId" name="{{.name}}" 
-               x-model="{{.model}}" class="checkbox checkbox-primary checkbox-xs mr-2">
+               x-model="{{.model}}" class="checkbox checkbox-primary checkbox-xs mr-2"
+               x-ref="input"
+               aria-label="{{.label}}"
+               :aria-describedby="fieldId + '-tooltip'">
 
         <!-- Have a value for the above field even if checkbox is unchecked -->
         <input type="hidden" name="{{.name}}" value="false">
@@ -20,6 +23,9 @@
 
     <!-- Tooltip -->
     <div x-show="showTooltip === fieldId" x-cloak
+        :id="fieldId + '-tooltip'"
+        role="tooltip"
+        aria-hidden="true"
         class="tooltip">
         {{.tooltip}}
     </div>

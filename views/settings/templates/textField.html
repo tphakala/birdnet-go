@@ -4,9 +4,9 @@
 <div class="form-control relative" x-data="{ 
     showTooltip: null,
     touched: false,
-    fieldId: '{{.id}}{{if .index}}_{{.index}}{{end}}',
+    fieldId: {{if .dynamicId}}'{{.id}}_' + index{{else}}'{{.id}}'{{end}},
     validInput() {
-        return this.$refs[this.fieldId] ? this.$refs[this.fieldId].validity.valid : true;
+        return this.$refs.input ? this.$refs.input.validity.valid : true;
     }
 }">
 
@@ -27,7 +27,7 @@
         placeholder="{{with .placeholder}}{{.}}{{end}}"
         class="input input-sm input-bordered {{.class}}"
         :class="{ 'invalid': touched && !validInput() }"
-        :x-ref="fieldId"
+        x-ref="input"
         {{if .disabled}}x-bind:disabled="{{.disabled}}"{{end}}
         {{if .pattern}}
             pattern="{{.pattern}}"
@@ -36,10 +36,16 @@
             @input="touched = false"
             required
         {{end}}
-        maxlength="255">
+        maxlength="255"
+        aria-required="{{if .pattern}}true{{else}}false{{end}}"
+        aria-invalid="touched && !validInput()"
+        :aria-describedby="fieldId + '-error ' + fieldId + '-tooltip'">
 
     <!-- Validation messages -->
     <span class="text-sm text-red-500"
+        :id="fieldId + '-error'"
+        role="alert"
+        aria-live="polite"
         x-show="touched && !validInput()"
         x-cloak>
         {{with .validationMessage}}
@@ -51,6 +57,9 @@
 
     <!-- Tooltip -->
     <div x-show="showTooltip === fieldId"
+        :id="fieldId + '-tooltip'"
+        role="tooltip"
+        aria-hidden="true"
         x-cloak
         class="tooltip">
         {{.tooltip}}

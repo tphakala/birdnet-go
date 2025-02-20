@@ -211,164 +211,138 @@
                             "id" "targetEnabled"
                             "model" "target.enabled"
                             "name" "'backup.targets[' + targetIndex + '].enabled'"
-                            "index" "targetIndex"
                             "label" "Enable Target"
-                            "tooltip" "Enable or disable this backup target"}}
+                            "tooltip" "Enable or disable this backup target"
+                            "dynamicId" true}}
                     </div>
 
                     <!-- Target Settings -->
                     <div x-show="target.type === 'local'">
-                        <div x-data="{ targetIndex: index }">
-                            {{template "textField" dict
-                                "id" "localPath"
-                                "model" "target.settings.path"
-                                "name" "'backup.targets[' + targetIndex + '].settings.path'"
-                                "index" "targetIndex"
-                                "label" "Backup Path"
-                                "placeholder" "backups/"
-                                "tooltip" "Local directory path for storing backups"}}
-                        </div>
+                        {{template "textField" dict
+                            "id" "localPath"
+                            "model" "target.settings.path"
+                            "name" "'backup.targets[' + index + '].settings.path'"
+                            "label" "Backup Path"
+                            "placeholder" "backups/"
+                            "tooltip" "Local directory path for storing backups"
+                            "dynamicId" true}}
                     </div>
 
                     <div x-show="target.type === 'ftp'">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div x-data="{ targetIndex: index }">
-                                {{template "textField" dict
-                                    "id" "ftpHost"
-                                    "model" "target.settings.host"
-                                    "name" "'backup.targets[' + targetIndex + '].settings.host'"
-                                    "index" "targetIndex"
-                                    "label" "Host"
-                                    "placeholder" "ftp.example.com"
-                                    "tooltip" "FTP server hostname"}}
-                            </div>
+                            {{template "textField" dict
+                                "id" "ftpHost"
+                                "model" "target.settings.host"
+                                "name" "'backup.targets[' + index + '].settings.host'"
+                                "label" "Host"
+                                "placeholder" "ftp.example.com"
+                                "tooltip" "FTP server hostname"
+                                "dynamicId" true}}
 
-                            <div x-data="{ targetIndex: index }">
-                                {{template "textField" dict
-                                    "id" "ftpPort"
-                                    "model" "target.settings.port"
-                                    "name" "'backup.targets[' + targetIndex + '].settings.port'"
-                                    "index" "targetIndex"
-                                    "label" "Port"
-                                    "placeholder" "21"
-                                    "type" "number"
-                                    "pattern" "^\\d+$"
-                                    "tooltip" "FTP server port number"}}
-                            </div>
+                            {{template "textField" dict
+                                "id" "ftpPort"
+                                "model" "target.settings.port"
+                                "name" "'backup.targets[' + index + '].settings.port'"
+                                "label" "Port"
+                                "placeholder" "21"
+                                "type" "number"
+                                "pattern" "^\\d+$"
+                                "tooltip" "FTP server port number"
+                                "dynamicId" true}}
 
-                            <div x-data="{ targetIndex: index }">
-                                {{template "textField" dict
-                                    "id" "ftpUsername"
-                                    "model" "target.settings.username"
-                                    "name" "'backup.targets[' + targetIndex + '].settings.username'"
-                                    "index" "targetIndex"
-                                    "label" "Username"
-                                    "tooltip" "FTP account username"}}
-                            </div>
+                            {{template "textField" dict
+                                "id" "ftpUsername"
+                                "model" "target.settings.username"
+                                "name" "'backup.targets[' + index + '].settings.username'"
+                                "label" "Username"
+                                "tooltip" "FTP account username"
+                                "dynamicId" true}}
 
-                            <div x-data="{ targetIndex: index }">
-                                {{template "passwordField" dict
-                                    "id" "ftpPassword"
-                                    "model" "target.settings.password"
-                                    "name" "'backup.targets[' + targetIndex + '].settings.password'"
-                                    "index" "targetIndex"
-                                    "label" "Password"
-                                    "tooltip" "FTP account password"}}
-                            </div>
+                            {{template "passwordField" dict
+                                "id" "ftpPassword"
+                                "model" "target.settings.password"
+                                "name" "'backup.targets[' + index + '].settings.password'"
+                                "label" "Password"
+                                "tooltip" "FTP account password"
+                                "dynamicId" true}}
 
-                            <div x-data="{ targetIndex: index }">
-                                {{template "textField" dict
-                                    "id" "ftpPath"
-                                    "model" "target.settings.path"
-                                    "name" "'backup.targets[' + targetIndex + '].settings.path'"
-                                    "index" "targetIndex"
-                                    "label" "Remote Path"
-                                    "placeholder" "backups/"
-                                    "tooltip" "Remote directory path for storing backups"
-                                    "class" "md:col-span-2"}}
-                            </div>
+                            {{template "textField" dict
+                                "id" "ftpPath"
+                                "model" "target.settings.path"
+                                "name" "'backup.targets[' + index + '].settings.path'"
+                                "label" "Remote Path"
+                                "placeholder" "backups/"
+                                "tooltip" "Remote directory path for storing backups"
+                                "class" "md:col-span-2"
+                                "dynamicId" true}}
                         </div>
                     </div>
 
                     <div x-show="target.type === 'sftp'">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div x-data="{ targetIndex: index }">
-                                {{template "textField" dict
-                                    "id" "sftpHost"
-                                    "model" "target.settings.host"
-                                    "name" "'backup.targets[' + targetIndex + '].settings.host'"
-                                    "index" "targetIndex"
-                                    "label" "Host"
-                                    "placeholder" "sftp.example.com"
-                                    "tooltip" "SFTP server hostname"}}
-                            </div>
+                            {{template "textField" dict
+                                "id" "sftpHost"
+                                "model" "target.settings.host"
+                                "name" "'backup.targets[' + index + '].settings.host'"
+                                "label" "Host"
+                                "placeholder" "sftp.example.com"
+                                "tooltip" "SFTP server hostname"
+                                "dynamicId" true}}
 
-                            <div x-data="{ targetIndex: index }">
-                                {{template "textField" dict
-                                    "id" "sftpPort"
-                                    "model" "target.settings.port"
-                                    "name" "'backup.targets[' + targetIndex + '].settings.port'"
-                                    "index" "targetIndex"
-                                    "label" "Port"
-                                    "placeholder" "22"
-                                    "type" "number"
-                                    "pattern" "^\\d+$"
-                                    "tooltip" "SFTP server port number"}}
-                            </div>
+                            {{template "textField" dict
+                                "id" "sftpPort"
+                                "model" "target.settings.port"
+                                "name" "'backup.targets[' + index + '].settings.port'"
+                                "label" "Port"
+                                "placeholder" "22"
+                                "type" "number"
+                                "pattern" "^\\d+$"
+                                "tooltip" "SFTP server port number"
+                                "dynamicId" true}}
 
-                            <div x-data="{ targetIndex: index }">
-                                {{template "textField" dict
-                                    "id" "sftpUsername"
-                                    "model" "target.settings.username"
-                                    "name" "'backup.targets[' + targetIndex + '].settings.username'"
-                                    "index" "targetIndex"
-                                    "label" "Username"
-                                    "tooltip" "SFTP account username"}}
-                            </div>
+                            {{template "textField" dict
+                                "id" "sftpUsername"
+                                "model" "target.settings.username"
+                                "name" "'backup.targets[' + index + '].settings.username'"
+                                "label" "Username"
+                                "tooltip" "SFTP account username"
+                                "dynamicId" true}}
 
-                            <div x-data="{ targetIndex: index }">
-                                {{template "passwordField" dict
-                                    "id" "sftpPassword"
-                                    "model" "target.settings.password"
-                                    "name" "'backup.targets[' + targetIndex + '].settings.password'"
-                                    "index" "targetIndex"
-                                    "label" "Password"
-                                    "tooltip" "SFTP account password"}}
-                            </div>
+                            {{template "passwordField" dict
+                                "id" "sftpPassword"
+                                "model" "target.settings.password"
+                                "name" "'backup.targets[' + index + '].settings.password'"
+                                "label" "Password"
+                                "tooltip" "SFTP account password"
+                                "dynamicId" true}}
 
-                            <div x-data="{ targetIndex: index }">
-                                {{template "textField" dict
-                                    "id" "sftpKeyFile"
-                                    "model" "target.settings.key_file"
-                                    "name" "'backup.targets[' + targetIndex + '].settings.key_file'"
-                                    "index" "targetIndex"
-                                    "label" "SSH Key File"
-                                    "placeholder" "~/.ssh/id_rsa"
-                                    "tooltip" "Path to SSH private key file"}}
-                            </div>
+                            {{template "textField" dict
+                                "id" "sftpKeyFile"
+                                "model" "target.settings.key_file"
+                                "name" "'backup.targets[' + index + '].settings.key_file'"
+                                "label" "SSH Key File"
+                                "placeholder" "~/.ssh/id_rsa"
+                                "tooltip" "Path to SSH private key file"
+                                "dynamicId" true}}
 
-                            <div x-data="{ targetIndex: index }">
-                                {{template "textField" dict
-                                    "id" "sftpKnownHosts"
-                                    "model" "target.settings.known_hosts_file"
-                                    "name" "'backup.targets[' + targetIndex + '].settings.known_hosts_file'"
-                                    "index" "targetIndex"
-                                    "label" "Known Hosts File"
-                                    "placeholder" "~/.ssh/known_hosts"
-                                    "tooltip" "Path to SSH known hosts file"}}
-                            </div>
+                            {{template "textField" dict
+                                "id" "sftpKnownHosts"
+                                "model" "target.settings.known_hosts_file"
+                                "name" "'backup.targets[' + index + '].settings.known_hosts_file'"
+                                "label" "Known Hosts File"
+                                "placeholder" "~/.ssh/known_hosts"
+                                "tooltip" "Path to SSH known hosts file"
+                                "dynamicId" true}}
 
-                            <div x-data="{ targetIndex: index }">
-                                {{template "textField" dict
-                                    "id" "sftpPath"
-                                    "model" "target.settings.path"
-                                    "name" "'backup.targets[' + targetIndex + '].settings.path'"
-                                    "index" "targetIndex"
-                                    "label" "Remote Path"
-                                    "placeholder" "backups/"
-                                    "tooltip" "Remote directory path for storing backups"
-                                    "class" "md:col-span-2"}}
-                            </div>
+                            {{template "textField" dict
+                                "id" "sftpPath"
+                                "model" "target.settings.path"
+                                "name" "'backup.targets[' + index + '].settings.path'"
+                                "label" "Remote Path"
+                                "placeholder" "backups/"
+                                "tooltip" "Remote directory path for storing backups"
+                                "class" "md:col-span-2"
+                                "dynamicId" true}}
                         </div>
                     </div>
 
