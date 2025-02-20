@@ -707,8 +707,10 @@ get_ip_location() {
     if [ $? -eq 0 ] && [ -n "$nordvpn_info" ]; then
         # Check if the response is valid JSON and contains the required fields
         if echo "$nordvpn_info" | jq -e '.city and .country' >/dev/null 2>&1; then
-            local city=$(echo "$nordvpn_info" | jq -r '.city')
-            local country=$(echo "$nordvpn_info" | jq -r '.country')
+            local city
+            local country
+            city=$(echo "$nordvpn_info" | jq -r '.city')
+            country=$(echo "$nordvpn_info" | jq -r '.country')
             
             if [ "$city" != "null" ] && [ "$country" != "null" ] && [ -n "$city" ] && [ -n "$country" ]; then
                 # Use OpenStreetMap to get precise coordinates
@@ -716,8 +718,10 @@ get_ip_location() {
                 coordinates=$(curl -s "https://nominatim.openstreetmap.org/search?city=${city}&country=${country}&format=json" | jq -r '.[0] | "\(.lat) \(.lon)"')
                 
                 if [ -n "$coordinates" ] && [ "$coordinates" != "null null" ]; then
-                    local lat=$(echo "$coordinates" | cut -d' ' -f1)
-                    local lon=$(echo "$coordinates" | cut -d' ' -f2)
+                    local lat
+                    local lon
+                    lat=$(echo "$coordinates" | cut -d' ' -f1)
+                    lon=$(echo "$coordinates" | cut -d' ' -f2)
                     echo "$lat|$lon|$city|$country"
                     return 0
                 fi
@@ -732,10 +736,14 @@ get_ip_location() {
     if [ $? -eq 0 ] && [ -n "$ipapi_info" ]; then
         # Check if the response is valid JSON and contains the required fields
         if echo "$ipapi_info" | jq -e '.city and .country_name and .latitude and .longitude' >/dev/null 2>&1; then
-            local city=$(echo "$ipapi_info" | jq -r '.city')
-            local country=$(echo "$ipapi_info" | jq -r '.country_name')
-            local lat=$(echo "$ipapi_info" | jq -r '.latitude')
-            local lon=$(echo "$ipapi_info" | jq -r '.longitude')
+            local city
+            local country
+            local lat
+            local lon
+            city=$(echo "$ipapi_info" | jq -r '.city')
+            country=$(echo "$ipapi_info" | jq -r '.country_name')
+            lat=$(echo "$ipapi_info" | jq -r '.latitude')
+            lon=$(echo "$ipapi_info" | jq -r '.longitude')
             
             if [ "$city" != "null" ] && [ "$country" != "null" ] && \
                [ "$lat" != "null" ] && [ "$lon" != "null" ] && \
@@ -883,6 +891,7 @@ configure_auth() {
 # Function to add systemd service configuration
 add_systemd_config() {
     # Get timezone
+    local TZ
     if [ -f /etc/timezone ]; then
         TZ=$(cat /etc/timezone)
     else
@@ -1082,7 +1091,7 @@ validate_installation() {
 # Function to get current container version
 get_container_version() {
     local image_name="$1"
-    local current_version=""
+    local current_version
     
     # Try to get the version from the running container first
     current_version=$(docker ps --format "{{.Image}}" | grep "birdnet-go" | cut -d: -f2)
@@ -1102,6 +1111,7 @@ check_systemd_service() {
     local needs_update=false
     
     # Get timezone
+    local TZ
     if [ -f /etc/timezone ]; then
         TZ=$(cat /etc/timezone)
     else
@@ -1144,9 +1154,13 @@ EOF
 
 # Function to handle container update process
 handle_container_update() {
-    local current_version=$(get_container_version "ghcr.io/tphakala/birdnet-go")
-    local target_version="$BIRDNET_GO_VERSION"
-    local service_needs_update=$(check_systemd_service)
+    local current_version
+    local target_version
+    local service_needs_update
+    
+    current_version=$(get_container_version "ghcr.io/tphakala/birdnet-go")
+    target_version="$BIRDNET_GO_VERSION"
+    service_needs_update=$(check_systemd_service)
     
     print_message "🔍 Current version: " "$YELLOW" "nonewline"
     print_message "$current_version" "$NC"
@@ -1206,7 +1220,6 @@ handle_container_update() {
 CONFIG_DIR="$HOME/birdnet-go-app/config"
 DATA_DIR="$HOME/birdnet-go-app/data"
 CONFIG_FILE="$CONFIG_DIR/config.yaml"
-TEMP_CONFIG="/tmp/config.yaml"
 
 # Function to clean existing installation
 clean_installation() {
