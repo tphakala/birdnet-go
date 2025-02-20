@@ -171,6 +171,11 @@ func (m *Manager) Start() error {
 		return NewError(ErrValidation, "no backup targets registered", nil)
 	}
 
+	// Validate encryption configuration if enabled
+	if err := m.ValidateEncryption(); err != nil {
+		return err
+	}
+
 	m.logger.Printf("✅ Backup manager started")
 	return nil
 }
@@ -352,11 +357,21 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 	return tempDirs, nil
 }
 
-// addConfigToArchive adds sanitized configuration to the archive
+// addConfigToArchive adds configuration to the archive
 func (m *Manager) addConfigToArchive(tw *tar.Writer, metadata *Metadata) error {
 	if settings := conf.Setting(); settings != nil {
-		m.logger.Printf("🔄 Adding sanitized configuration to archive...")
-		configData, err := yaml.Marshal(sanitizeConfig(settings))
+		m.logger.Printf("🔄 Adding configuration to archive...")
+
+		var configData []byte
+		var err error
+
+		if m.config.SanitizeConfig {
+			m.logger.Printf("🔄 Sanitizing configuration before adding to archive...")
+			configData, err = yaml.Marshal(sanitizeConfig(settings))
+		} else {
+			configData, err = yaml.Marshal(settings)
+		}
+
 		if err != nil {
 			m.logger.Printf("⚠️ Failed to include configuration in backup: %v", err)
 			return NewError(ErrIO, "failed to marshal configuration", err)
@@ -986,4 +1001,58 @@ func (m *Manager) cleanupTempDirectories(dirs []string) {
 			m.logger.Printf("⚠️ Failed to remove temporary directory %s: %v", dir, err)
 		}
 	}
+}
+
+// GenerateEncryptionKey generates a new encryption key and saves it to the default location
+func (m *Manager) GenerateEncryptionKey() (string, error) {
+	// Generate a new 256-bit key
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return "", NewError(ErrEncryption, "failed to generate random key", err)
+	}
+
+	// Convert key to hex string
+	keyHex := hex.EncodeToString(key)
+
+	// Get the key file path
+	keyPath, err := m.getEncryptionKeyPath()
+	if err != nil {
+		return "", err
+	}
+
+	// Create the config directory if it doesn't exist
+	if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
+		return "", NewError(ErrIO, "failed to create config directory", err)
+	}
+
+	// Write the key to file with secure permissions
+	if err := os.WriteFile(keyPath, []byte(keyHex), 0o600); err != nil {
+		return "", NewError(ErrIO, "failed to write encryption key file", err)
+	}
+
+	m.logger.Printf("✅ Encryption key saved to: %s", keyPath)
+	return keyHex, nil
+}
+
+// ValidateEncryption checks if encryption is properly configured
+func (m *Manager) ValidateEncryption() error {
+	if !m.config.Encryption {
+		return nil // Encryption is not enabled, no validation needed
+	}
+
+	// Try to read the encryption key
+	key, err := m.getEncryptionKey()
+	if err != nil {
+		if os.IsNotExist(err) {
+			return NewError(ErrEncryption, "encryption is enabled but no key file found, please generate a key first", err)
+		}
+		return NewError(ErrEncryption, "failed to read encryption key", err)
+	}
+
+	// Validate key length
+	if len(key) != 32 {
+		return NewError(ErrEncryption, "invalid encryption key length", nil)
+	}
+
+	return nil
 }

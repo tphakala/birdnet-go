@@ -25,6 +25,23 @@ func Command(settings *conf.Settings) *cobra.Command {
 		},
 	}
 
+	// Add genkey subcommand
+	genKeyCmd := &cobra.Command{
+		Use:   "genkey",
+		Short: "Generate a new encryption key for backups",
+		Long:  `Generate a new encryption key for securing backups. The key will be saved to the default configuration directory.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			manager := backup.NewManager(&settings.Backup, log.Default())
+			key, err := manager.GenerateEncryptionKey()
+			if err != nil {
+				return fmt.Errorf("failed to generate encryption key: %w", err)
+			}
+			log.Printf("Successfully generated new encryption key: %s", key)
+			return nil
+		},
+	}
+
+	cmd.AddCommand(genKeyCmd)
 	return cmd
 }
 

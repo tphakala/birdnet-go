@@ -184,7 +184,8 @@ func setDefaultConfig() {
 	viper.SetDefault("backup.enabled", false)
 	viper.SetDefault("backup.debug", false)
 	viper.SetDefault("backup.schedule", "0 0 * * *") // Daily at midnight
-	viper.SetDefault("backup.encryption", false)     // Encryption disabled by default
+	viper.SetDefault("backup.encryption", false)
+	viper.SetDefault("backup.sanitize_config", true) // Default to sanitizing config for security
 	viper.SetDefault("backup.retention.maxage", "30d")
 	viper.SetDefault("backup.retention.maxbackups", 30)
 	viper.SetDefault("backup.retention.minbackups", 7)

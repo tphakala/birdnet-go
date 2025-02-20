@@ -373,12 +373,13 @@ type BackupTarget struct {
 
 // BackupConfig contains backup-related configuration
 type BackupConfig struct {
-	Enabled    bool            `yaml:"enabled"`    // true to enable backup functionality
-	Debug      bool            `yaml:"debug"`      // true to enable debug logging
-	Schedule   string          `yaml:"schedule"`   // Cron expression for backup schedule
-	Encryption bool            `yaml:"encryption"` // true to enable backup encryption
-	Retention  BackupRetention `yaml:"retention"`  // Backup retention settings
-	Targets    []BackupTarget  `yaml:"targets"`    // List of backup targets
+	Enabled        bool            `yaml:"enabled"`         // true to enable backup functionality
+	Debug          bool            `yaml:"debug"`           // true to enable debug logging
+	Schedule       string          `yaml:"schedule"`        // Cron expression for backup schedule
+	Encryption     bool            `yaml:"encryption"`      // true to enable backup encryption
+	SanitizeConfig bool            `yaml:"sanitize_config"` // true to sanitize sensitive data from config backups
+	Retention      BackupRetention `yaml:"retention"`       // Backup retention settings
+	Targets        []BackupTarget  `yaml:"targets"`         // List of backup targets
 
 	// OperationTimeouts defines timeouts for various backup operations
 	OperationTimeouts struct {
