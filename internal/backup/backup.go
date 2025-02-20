@@ -72,7 +72,8 @@ type Metadata struct {
 	AppVersion   string    `json:"app_version"`             // Version of the application that created the backup
 	Checksum     string    `json:"checksum,omitempty"`      // File checksum if available
 	Compressed   bool      `json:"compressed,omitempty"`    // Whether the backup is compressed
-	OriginalSize int64     `json:"original_size,omitempty"` // Original size before compression
+	Encrypted    bool      `json:"encrypted,omitempty"`     // Whether the backup is encrypted
+	OriginalSize int64     `json:"original_size,omitempty"` // Original size before compression/encryption
 }
 
 // BackupInfo represents information about a stored backup
@@ -258,30 +259,32 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 
 	// Create metadata
 	metadata := Metadata{
-		ID:        fmt.Sprintf("birdnet-go-backup-%s", now.Format("20060102-150405")),
-		Timestamp: now,
-		Type:      sourceName,
-		IsDaily:   isDaily,
+		ID:         fmt.Sprintf("birdnet-go-backup-%s", now.Format("20060102-150405")),
+		Timestamp:  now,
+		Type:       sourceName,
+		IsDaily:    isDaily,
+		Compressed: true,
 	}
 
-	// Create the archive file
-	archivePath := filepath.Join(tempDir, fmt.Sprintf("%s.tar.gz", metadata.ID))
+	// Determine file extension based on encryption setting
+	fileExt := ".tar.gz"
+	if m.config.Encryption {
+		fileExt = ".enc"
+	}
+
+	// Create the archive file path
+	archivePath := filepath.Join(tempDir, metadata.ID+fileExt)
 	m.logger.Printf("🔄 Creating archive file at: %s", archivePath)
 
-	// Create archive file
-	archiveFile, err := os.Create(archivePath)
-	if err != nil {
-		return tempDirs, NewError(ErrIO, "failed to create archive", err)
-	}
-	defer archiveFile.Close()
+	// Create a buffer to hold the archive data
+	var archiveBuffer bytes.Buffer
+	var writer io.Writer = &archiveBuffer
 
 	// Create gzip writer
-	gzipWriter := gzip.NewWriter(archiveFile)
-	defer gzipWriter.Close()
+	gzipWriter := gzip.NewWriter(writer)
 
 	// Create tar writer
 	tarWriter := tar.NewWriter(gzipWriter)
-	defer tarWriter.Close()
 
 	// Add metadata
 	metadataBytes, err := json.Marshal(metadata)
@@ -317,6 +320,7 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 		return tempDirs, NewError(ErrIO, "failed to read backup data", err)
 	}
 	dbHeader.Size = size
+	metadata.OriginalSize = size
 
 	// Write the header and data
 	if err := tarWriter.WriteHeader(dbHeader); err != nil {
@@ -337,6 +341,41 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 	}
 	if err := gzipWriter.Close(); err != nil {
 		return tempDirs, NewError(ErrIO, "failed to close gzip writer", err)
+	}
+
+	// Get the compressed archive data
+	archiveData := archiveBuffer.Bytes()
+	metadata.Size = int64(len(archiveData))
+
+	// If encryption is enabled, encrypt the archive
+	if m.config.Encryption {
+		m.logger.Printf("🔐 Encrypting backup archive...")
+
+		// Get encryption key
+		key, err := m.getEncryptionKey()
+		if err != nil {
+			return tempDirs, err
+		}
+
+		// Encrypt the data
+		encryptedData, err := encryptData(archiveData, key)
+		if err != nil {
+			return tempDirs, err
+		}
+
+		// Update metadata
+		metadata.Encrypted = true
+		metadata.Size = int64(len(encryptedData))
+
+		// Write encrypted data to file
+		if err := os.WriteFile(archivePath, encryptedData, 0o600); err != nil {
+			return tempDirs, NewError(ErrIO, "failed to write encrypted archive", err)
+		}
+	} else {
+		// Write unencrypted archive
+		if err := os.WriteFile(archivePath, archiveData, 0o600); err != nil {
+			return tempDirs, NewError(ErrIO, "failed to write archive", err)
+		}
 	}
 
 	// Store backup in all targets
@@ -1055,4 +1094,23 @@ func (m *Manager) ValidateEncryption() error {
 	}
 
 	return nil
+}
+
+// GetEncryptionKey returns the current encryption key
+func (m *Manager) GetEncryptionKey() ([]byte, error) {
+	return m.getEncryptionKey()
+}
+
+// DecryptData decrypts the provided data using the configured encryption key
+func (m *Manager) DecryptData(encryptedData []byte) ([]byte, error) {
+	if !m.config.Encryption {
+		return nil, NewError(ErrEncryption, "encryption is not enabled", nil)
+	}
+
+	key, err := m.getEncryptionKey()
+	if err != nil {
+		return nil, err
+	}
+
+	return decryptData(encryptedData, key)
 }

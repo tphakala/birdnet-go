@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/cmd/license"
 	"github.com/tphakala/birdnet-go/cmd/rangefilter"
 	"github.com/tphakala/birdnet-go/cmd/realtime"
+	"github.com/tphakala/birdnet-go/cmd/restore"
 	"github.com/tphakala/birdnet-go/cmd/support"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -43,6 +44,7 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 	supportCmd := support.Command(settings)
 	benchmarkCmd := benchmark.Command(settings)
 	backupCmd := backup.Command(settings)
+	restoreCmd := restore.Command(settings)
 
 	subcommands := []*cobra.Command{
 		fileCmd,
@@ -54,6 +56,7 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 		supportCmd,
 		benchmarkCmd,
 		backupCmd,
+		restoreCmd,
 	}
 
 	rootCmd.AddCommand(subcommands...)
