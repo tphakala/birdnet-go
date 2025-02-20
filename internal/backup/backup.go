@@ -77,42 +77,12 @@ type BackupInfo struct {
 	Target string // Name of the target storing this backup
 }
 
-// BackupArchive represents a backup archive containing multiple files
-type BackupArchive struct {
-	Files    map[string]FileEntry // Map of filenames to their contents and metadata
-	Metadata Metadata             // Metadata about the backup
-}
-
 // FileMetadata contains platform-specific file metadata
 type FileMetadata struct {
 	Mode   os.FileMode // File mode and permission bits
 	UID    int         // User ID (Unix only)
 	GID    int         // Group ID (Unix only)
 	IsUnix bool        // Whether this metadata is from a Unix system
-}
-
-// FileEntry represents a file in the backup archive
-type FileEntry struct {
-	Data     []byte       // File contents
-	ModTime  time.Time    // File modification time
-	Metadata FileMetadata // Platform-specific metadata
-}
-
-// NewBackupArchive creates a new backup archive
-func NewBackupArchive(metadata *Metadata) *BackupArchive {
-	return &BackupArchive{
-		Files:    make(map[string]FileEntry),
-		Metadata: *metadata,
-	}
-}
-
-// AddFile adds a file to the backup archive
-func (ba *BackupArchive) AddFile(name string, data []byte, modTime time.Time, metadata FileMetadata) {
-	ba.Files[name] = FileEntry{
-		Data:     data,
-		ModTime:  modTime,
-		Metadata: metadata,
-	}
 }
 
 // sanitizeConfig creates a copy of the configuration with sensitive data removed
@@ -138,7 +108,6 @@ type Manager struct {
 	config  *conf.BackupConfig
 	sources map[string]Source
 	targets map[string]Target
-	done    chan struct{}
 	mu      sync.RWMutex
 	logger  *log.Logger
 }
@@ -153,7 +122,6 @@ func NewManager(config *conf.BackupConfig, logger *log.Logger) *Manager {
 		config:  config,
 		sources: make(map[string]Source),
 		targets: make(map[string]Target),
-		done:    make(chan struct{}),
 		logger:  logger,
 	}
 }
@@ -184,26 +152,6 @@ func (m *Manager) RegisterTarget(target Target) error {
 	return nil
 }
 
-// parseCronSchedule parses a cron-like schedule string (e.g., "0 0 * * *") and returns a duration
-// This is a simple implementation that only supports daily schedules at a specific hour
-func parseCronSchedule(schedule string) (time.Duration, error) {
-	// Split the schedule into fields
-	var hour int
-	_, err := fmt.Sscanf(schedule, "%d %d * * *", nil, &hour)
-	if err != nil {
-		return 0, NewError(ErrValidation, "invalid schedule format, expected '0 HOUR * * *'", err)
-	}
-
-	// Get current time
-	now := time.Now()
-	next := time.Date(now.Year(), now.Month(), now.Day(), hour, 0, 0, 0, now.Location())
-	if next.Before(now) {
-		next = next.Add(24 * time.Hour)
-	}
-
-	return next.Sub(now), nil
-}
-
 // Start starts the backup manager
 func (m *Manager) Start() error {
 	if !m.config.Enabled {
@@ -219,44 +167,8 @@ func (m *Manager) Start() error {
 		return NewError(ErrValidation, "no backup targets registered", nil)
 	}
 
-	// Parse the schedule
-	initialDelay, err := parseCronSchedule(m.config.Schedule)
-	if err != nil {
-		return NewError(ErrConfig, "failed to parse schedule", err)
-	}
-
-	// Start the backup scheduler
-	go m.scheduleBackups(initialDelay)
-
-	m.logger.Printf("✅ Backup manager started with schedule: %s (next backup in %v)", m.config.Schedule, initialDelay)
+	m.logger.Printf("✅ Backup manager started")
 	return nil
-}
-
-// scheduleBackups runs the backup scheduler
-func (m *Manager) scheduleBackups(initialDelay time.Duration) {
-	// Wait for the initial delay
-	timer := time.NewTimer(initialDelay)
-	defer timer.Stop()
-
-	for {
-		select {
-		case <-m.done:
-			return
-		case <-timer.C:
-			// Run the backup
-			if err := m.RunBackup(context.Background()); err != nil {
-				m.logger.Printf("Scheduled backup failed: %v", err)
-			}
-
-			// Reset the timer for the next day
-			timer.Reset(24 * time.Hour)
-		}
-	}
-}
-
-// Stop stops the backup manager
-func (m *Manager) Stop() {
-	close(m.done)
 }
 
 // RunBackup performs an immediate backup of all sources
@@ -372,7 +284,7 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 	metadataHeader := &tar.Header{
 		Name:    "metadata.json",
 		Size:    int64(len(metadataBytes)),
-		Mode:    0644,
+		Mode:    0o644,
 		ModTime: now,
 	}
 	if err := tarWriter.WriteHeader(metadataHeader); err != nil {
@@ -385,7 +297,7 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 	// Add database file to tar
 	dbHeader := &tar.Header{
 		Name:    fmt.Sprintf("%s.db", sourceName),
-		Mode:    0644,
+		Mode:    0o644,
 		ModTime: now,
 	}
 
@@ -450,7 +362,7 @@ func (m *Manager) addConfigToArchive(tw *tar.Writer, metadata *Metadata) error {
 		header := &tar.Header{
 			Name:    "config.yaml",
 			Size:    int64(len(configData)),
-			Mode:    0644,
+			Mode:    0o644,
 			ModTime: metadata.Timestamp,
 		}
 
@@ -533,7 +445,7 @@ func combineErrors(errs []error) error {
 }
 
 // createArchive creates a backup archive, optionally encrypting it
-func (m *Manager) createArchive(ctx context.Context, archivePath string, archive *BackupArchive) error {
+func (m *Manager) createArchive(ctx context.Context, archivePath string, reader io.Reader, metadata *Metadata) error {
 	// Create the archive file
 	archiveFile, err := os.Create(archivePath)
 	if err != nil {
@@ -559,44 +471,18 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, archive
 	defer tarWriter.Close()
 
 	// Add metadata
-	metadataBytes, err := json.Marshal(archive.Metadata)
-	if err != nil {
-		return NewError(ErrIO, "failed to marshal metadata", err)
+	if err := m.addMetadataToArchive(ctx, tarWriter, metadata); err != nil {
+		return err
 	}
 
-	// Check context before proceeding
-	select {
-	case <-ctx.Done():
-		return NewError(ErrCanceled, "archive creation cancelled", ctx.Err())
-	default:
+	// Add the backup data
+	if err := m.addBackupDataToArchive(ctx, tarWriter, reader, metadata); err != nil {
+		return err
 	}
 
-	// Add metadata file to tar
-	metadataHeader := &tar.Header{
-		Name:    "metadata.json",
-		Size:    int64(len(metadataBytes)),
-		Mode:    0644,
-		ModTime: archive.Metadata.Timestamp,
-	}
-	if err := tarWriter.WriteHeader(metadataHeader); err != nil {
-		return NewError(ErrIO, "failed to write metadata header", err)
-	}
-	if _, err := tarWriter.Write(metadataBytes); err != nil {
-		return NewError(ErrIO, "failed to write metadata", err)
-	}
-
-	// Add all files to the archive
-	for name, entry := range archive.Files {
-		// Check context before each file
-		select {
-		case <-ctx.Done():
-			return NewError(ErrCanceled, "archive creation cancelled", ctx.Err())
-		default:
-		}
-
-		if err := addFileToTar(tarWriter, name, &entry); err != nil {
-			return err
-		}
+	// Add configuration if available
+	if err := m.addConfigToArchive(tarWriter, metadata); err != nil {
+		return err
 	}
 
 	// Close writers in correct order
@@ -609,56 +495,99 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, archive
 
 	// If encryption is enabled, encrypt the compressed data
 	if m.config.Encryption {
-		// Get or generate the encryption key
-		key, err := m.getEncryptionKey()
-		if err != nil {
+		if err := m.encryptAndWriteArchive(ctx, archiveFile, encryptedBuf.Bytes()); err != nil {
 			return err
-		}
-
-		// Check context before encryption
-		select {
-		case <-ctx.Done():
-			return NewError(ErrCanceled, "archive encryption cancelled", ctx.Err())
-		default:
-		}
-
-		// Encrypt the archive
-		encryptedData, err := encryptData(encryptedBuf.Bytes(), key)
-		if err != nil {
-			return err
-		}
-
-		// Write the encrypted data to the file
-		if _, err := archiveFile.Write(encryptedData); err != nil {
-			return NewError(ErrIO, "failed to write encrypted archive", err)
 		}
 	}
 
 	return nil
 }
 
-// addFileToTar adds a file to a tar archive
-func addFileToTar(tw *tar.Writer, name string, entry *FileEntry) error {
-	// Create tar header
-	header := &tar.Header{
-		Name:    name,
-		Size:    int64(len(entry.Data)),
-		Mode:    int64(entry.Metadata.Mode),
-		ModTime: entry.ModTime,
+// addMetadataToArchive adds metadata to the archive
+func (m *Manager) addMetadataToArchive(ctx context.Context, tw *tar.Writer, metadata *Metadata) error {
+	metadataBytes, err := json.Marshal(metadata)
+	if err != nil {
+		return NewError(ErrIO, "failed to marshal metadata", err)
 	}
 
-	// Set Unix-specific metadata if available
-	if entry.Metadata.IsUnix {
-		header.Uid = entry.Metadata.UID
-		header.Gid = entry.Metadata.GID
+	select {
+	case <-ctx.Done():
+		return NewError(ErrCanceled, "archive creation cancelled", ctx.Err())
+	default:
+	}
+
+	header := &tar.Header{
+		Name:    "metadata.json",
+		Size:    int64(len(metadataBytes)),
+		Mode:    0644,
+		ModTime: metadata.Timestamp,
 	}
 
 	if err := tw.WriteHeader(header); err != nil {
-		return NewError(ErrIO, fmt.Sprintf("failed to write header for %s", name), err)
+		return NewError(ErrIO, "failed to write metadata header", err)
+	}
+	if _, err := tw.Write(metadataBytes); err != nil {
+		return NewError(ErrIO, "failed to write metadata", err)
 	}
 
-	if _, err := tw.Write(entry.Data); err != nil {
-		return NewError(ErrIO, fmt.Sprintf("failed to write file %s", name), err)
+	return nil
+}
+
+// addBackupDataToArchive adds the backup data to the archive
+func (m *Manager) addBackupDataToArchive(ctx context.Context, tw *tar.Writer, reader io.Reader, metadata *Metadata) error {
+	select {
+	case <-ctx.Done():
+		return NewError(ErrCanceled, "archive creation cancelled", ctx.Err())
+	default:
+	}
+
+	header := &tar.Header{
+		Name:    fmt.Sprintf("%s.db", metadata.Source),
+		Mode:    0644,
+		ModTime: metadata.Timestamp,
+	}
+
+	// Create a buffer to calculate the size
+	var buf bytes.Buffer
+	size, err := io.Copy(&buf, reader)
+	if err != nil {
+		return NewError(ErrIO, "failed to read backup data", err)
+	}
+	header.Size = size
+
+	if err := tw.WriteHeader(header); err != nil {
+		return NewError(ErrIO, "failed to write backup header", err)
+	}
+	if _, err := io.Copy(tw, &buf); err != nil {
+		return NewError(ErrIO, "failed to write backup data", err)
+	}
+
+	return nil
+}
+
+// encryptAndWriteArchive encrypts and writes the archive data
+func (m *Manager) encryptAndWriteArchive(ctx context.Context, writer io.Writer, data []byte) error {
+	// Get or generate the encryption key
+	key, err := m.getEncryptionKey()
+	if err != nil {
+		return err
+	}
+
+	select {
+	case <-ctx.Done():
+		return NewError(ErrCanceled, "archive encryption cancelled", ctx.Err())
+	default:
+	}
+
+	// Encrypt the archive
+	encryptedData, err := encryptData(data, key)
+	if err != nil {
+		return err
+	}
+
+	// Write the encrypted data
+	if _, err := writer.Write(encryptedData); err != nil {
+		return NewError(ErrIO, "failed to write encrypted archive", err)
 	}
 
 	return nil

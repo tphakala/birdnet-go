@@ -83,10 +83,7 @@ func (s *SQLiteSource) validateConfig() (string, error) {
 			return "", backup.NewError(backup.ErrConfig, "failed to resolve absolute database path", err)
 		}
 		dbPath = absPath
-		s.logger.Printf("Converted database path to absolute: %s", dbPath)
 	}
-
-	s.logger.Printf("DEBUG: Database path: %s", dbPath)
 
 	return dbPath, nil
 }
@@ -102,7 +99,7 @@ func (s *SQLiteSource) verifySourceDatabase(dbPath string) error {
 		}
 		return backup.NewError(backup.ErrIO, "database file not accessible", err)
 	}
-	s.logger.Printf("Verified database file %s exists and is accessible", dbPath)
+
 	return nil
 }
 
@@ -128,8 +125,6 @@ func (dc *DatabaseConnection) Close() error {
 
 // openDatabase opens a database connection with the given path
 func (s *SQLiteSource) openDatabase(dbPath string, readOnly bool) (*DatabaseConnection, error) {
-	s.logger.Printf("Opening database: %s", dbPath)
-
 	// Build DSN with additional safety parameters
 	dsn := dbPath
 	if readOnly {
@@ -146,8 +141,6 @@ func (s *SQLiteSource) openDatabase(dbPath string, readOnly bool) (*DatabaseConn
 		}
 		return nil, backup.NewError(backup.ErrDatabase, "failed to open database", err)
 	}
-
-	s.logger.Printf("DEBUG: Database %s opened successfully", dbPath)
 
 	// Verify connection
 	if err := db.Ping(); err != nil {
@@ -300,25 +293,28 @@ func (s *SQLiteSource) getDatabaseInfo(db *sql.DB) (int, error) {
 	var sourcePages int
 	err := db.QueryRow("PRAGMA page_count").Scan(&sourcePages)
 	if err != nil {
-		s.logger.Printf("DEBUG: Failed to get source page count: %v", err)
-	} else {
-		s.logger.Printf("DEBUG: Source database page count: %d", sourcePages)
+		if isMediaError(err) {
+			return 0, backup.NewError(backup.ErrMedia, "failed to get page count", err)
+		}
+		return 0, backup.NewError(backup.ErrDatabase, "failed to get page count", err)
 	}
 
 	var pageSize int
 	err = db.QueryRow("PRAGMA page_size").Scan(&pageSize)
 	if err != nil {
-		s.logger.Printf("DEBUG: Failed to get page size: %v", err)
-	} else {
-		s.logger.Printf("DEBUG: Database page size: %d", pageSize)
+		if isMediaError(err) {
+			return 0, backup.NewError(backup.ErrMedia, "failed to get page size", err)
+		}
+		return 0, backup.NewError(backup.ErrDatabase, "failed to get page size", err)
 	}
 
 	var journalMode string
 	err = db.QueryRow("PRAGMA journal_mode").Scan(&journalMode)
 	if err != nil {
-		s.logger.Printf("DEBUG: Failed to get journal mode: %v", err)
-	} else {
-		s.logger.Printf("DEBUG: Database journal mode: %s", journalMode)
+		if isMediaError(err) {
+			return 0, backup.NewError(backup.ErrMedia, "failed to get journal mode", err)
+		}
+		return 0, backup.NewError(backup.ErrDatabase, "failed to get journal mode", err)
 	}
 
 	return sourcePages, nil
@@ -331,11 +327,9 @@ func (s *SQLiteSource) initializeBackupConnection(srcDb, dstDb *sqlite3.SQLiteCo
 	if err != nil {
 		return nil, 0, backup.NewError(backup.ErrDatabase, "failed to initialize backup", err)
 	}
-	s.logger.Printf("DEBUG: Backup connection initialized: %v", backupConn)
 
 	// Get the initial page count
-	remaining, total := backupConn.PageCount(), backupConn.PageCount()
-	s.logger.Printf("DEBUG: Initial backup page counts - remaining: %d, total: %d", remaining, total)
+	_, total := backupConn.PageCount(), backupConn.PageCount()
 
 	return backupConn, total, nil
 }
@@ -345,10 +339,8 @@ func (s *SQLiteSource) validatePageCount(total, sourcePages int) (totalPages, re
 	if total <= 0 {
 		// If total is 0 but we have pages in source, try using source page count
 		if sourcePages > 0 {
-			s.logger.Printf("DEBUG: Using source page count as backup pages: %d", sourcePages)
 			return sourcePages, sourcePages, nil
 		} else {
-			s.logger.Printf("DEBUG: Both backup and source report 0 pages - database may be empty or corrupted")
 			return 0, 0, backup.NewError(backup.ErrDatabase, "invalid page count", nil)
 		}
 	}
@@ -369,26 +361,15 @@ func (s *SQLiteSource) performBackupSteps(ctx context.Context, backupConn *sqlit
 		}
 
 		// Step the backup process
-		prevRemaining := remaining
 		done, err := backupConn.Step(pagesPerStep)
 		if err != nil {
-			s.logger.Printf("DEBUG: Backup step failed - remaining: %d, error: %v", remaining, err)
 			if isMediaError(err) {
 				return backup.NewError(backup.ErrMedia, "failed during backup step", err)
 			}
 			return backup.NewError(backup.ErrDatabase, "failed during backup step", err)
 		}
 
-		// Get progress
-		remaining = backupConn.Remaining()
-		s.logger.Printf("DEBUG: Step completed - previous remaining: %d, new remaining: %d", prevRemaining, remaining)
-
-		// Log progress
-		progress := float64(total-remaining) / float64(total) * 100
-		s.logger.Printf("Backup progress: %.1f%% (%d/%d pages)", progress, total-remaining, total)
-
 		if done {
-			s.logger.Printf("DEBUG: Backup marked as done with %d pages remaining", remaining)
 			break
 		}
 	}
