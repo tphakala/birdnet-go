@@ -1,8 +1,5 @@
 #!/bin/bash
 
-BIRDNET_GO_VERSION="nightly"
-BIRDNET_GO_IMAGE="ghcr.io/tphakala/birdnet-go:${BIRDNET_GO_VERSION}"
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -17,6 +14,21 @@ print_message() {
         echo -e "${2}${1}${NC}"
     fi
 }
+
+# ASCII Art Banner
+cat << "EOF"
+ ____  _         _ _   _ _____ _____    ____      
+| __ )(_)_ __ __| | \ | | ____|_   _|  / ___| ___ 
+|  _ \| | '__/ _` |  \| |  _|   | |   | |  _ / _ \
+| |_) | | | | (_| | |\  | |___  | |   | |_| | (_) |
+|____/|_|_|  \__,_|_| \_|_____| |_|    \____|\___/ 
+EOF
+
+print_message "\n🐦 BirdNET-Go Installation Script" "$GREEN"
+print_message "This script will install BirdNET-Go and its dependencies." "$YELLOW"
+
+BIRDNET_GO_VERSION="nightly"
+BIRDNET_GO_IMAGE="ghcr.io/tphakala/birdnet-go:${BIRDNET_GO_VERSION}"
 
 # Function to get IP address
 get_ip_address() {
@@ -690,25 +702,51 @@ get_ip_location() {
     local nordvpn_info
     nordvpn_info=$(curl -s "https://nordvpn.com/wp-admin/admin-ajax.php" \
         -H "Content-Type: application/x-www-form-urlencoded" \
-        --data-urlencode "action=get_user_info_data")
+        --data-urlencode "action=get_user_info_data" 2>/dev/null)
     
     if [ $? -eq 0 ] && [ -n "$nordvpn_info" ]; then
-        local city=$(echo "$nordvpn_info" | jq -r '.city')
-        local country=$(echo "$nordvpn_info" | jq -r '.country')
-        
-        if [ "$city" != "null" ] && [ "$country" != "null" ] && [ -n "$city" ] && [ -n "$country" ]; then
-            # Use OpenStreetMap to get precise coordinates
-            local coordinates
-            coordinates=$(curl -s "https://nominatim.openstreetmap.org/search?city=${city}&country=${country}&format=json" | jq -r '.[0] | "\(.lat) \(.lon)"')
+        # Check if the response is valid JSON and contains the required fields
+        if echo "$nordvpn_info" | jq -e '.city and .country' >/dev/null 2>&1; then
+            local city=$(echo "$nordvpn_info" | jq -r '.city')
+            local country=$(echo "$nordvpn_info" | jq -r '.country')
             
-            if [ -n "$coordinates" ] && [ "$coordinates" != "null null" ]; then
-                local lat=$(echo "$coordinates" | cut -d' ' -f1)
-                local lon=$(echo "$coordinates" | cut -d' ' -f2)
+            if [ "$city" != "null" ] && [ "$country" != "null" ] && [ -n "$city" ] && [ -n "$country" ]; then
+                # Use OpenStreetMap to get precise coordinates
+                local coordinates
+                coordinates=$(curl -s "https://nominatim.openstreetmap.org/search?city=${city}&country=${country}&format=json" | jq -r '.[0] | "\(.lat) \(.lon)"')
+                
+                if [ -n "$coordinates" ] && [ "$coordinates" != "null null" ]; then
+                    local lat=$(echo "$coordinates" | cut -d' ' -f1)
+                    local lon=$(echo "$coordinates" | cut -d' ' -f2)
+                    echo "$lat|$lon|$city|$country"
+                    return 0
+                fi
+            fi
+        fi
+    fi
+
+    # If NordVPN fails, try ipapi.co as a fallback
+    local ipapi_info
+    ipapi_info=$(curl -s "https://ipapi.co/json/" 2>/dev/null)
+    
+    if [ $? -eq 0 ] && [ -n "$ipapi_info" ]; then
+        # Check if the response is valid JSON and contains the required fields
+        if echo "$ipapi_info" | jq -e '.city and .country_name and .latitude and .longitude' >/dev/null 2>&1; then
+            local city=$(echo "$ipapi_info" | jq -r '.city')
+            local country=$(echo "$ipapi_info" | jq -r '.country_name')
+            local lat=$(echo "$ipapi_info" | jq -r '.latitude')
+            local lon=$(echo "$ipapi_info" | jq -r '.longitude')
+            
+            if [ "$city" != "null" ] && [ "$country" != "null" ] && \
+               [ "$lat" != "null" ] && [ "$lon" != "null" ] && \
+               [ -n "$city" ] && [ -n "$country" ] && \
+               [ -n "$lat" ] && [ -n "$lon" ]; then
                 echo "$lat|$lon|$city|$country"
                 return 0
             fi
         fi
     fi
+
     return 1
 }
 
@@ -878,45 +916,17 @@ EOF
     sudo systemctl enable birdnet-go.service
 }
 
-# Function to check and handle existing BirdNET-Go containers
-check_existing_containers() {
-    print_message "🐳 Checking for existing BirdNET-Go containers..." "$YELLOW"
-    local existing_containers=$(docker ps --format "{{.ID}}: {{.Command}}" --no-trunc | grep "/usr/bin/birdnet-go" | cut -d: -f1)
-    
-    if [ -n "$existing_containers" ]; then
-        print_message "⚠️ Found existing BirdNET-Go container: " "$YELLOW" "nonewline"
-        print_message "$existing_containers"
-        print_message "❓ Do you want to update BirdNET-Go? (y/n): " "$YELLOW" "nonewline"
-        read -r response
-        
-        if [[ "$response" =~ ^[Yy]$ ]]; then
-            # First stop the systemd service to prevent auto-restart
-            print_message "🛑 Stopping BirdNET-Go service..." "$YELLOW"
-            if sudo systemctl stop birdnet-go.service; then
-                print_message "✅ Service stopped successfully" "$GREEN"
-                print_message ""
-            else
-                print_message "⚠️ Could not stop service, attempting to stop container directly..." "$YELLOW"
-                # Then stop the container
-                print_message "🛑 Stopping container..." "$YELLOW"
-                docker stop "$existing_containers"
-                print_message "✅ Container stopped successfully" "$GREEN"
-                print_message ""
-            fi
-            
-
-            # Continue with installation/update
-            return 0
-        else
-            print_message "❌ Installation cancelled" "$RED"
-            exit 1
-        fi
-    fi
-}
-
 # Function to start BirdNET-Go
 start_birdnet_go() {   
     print_message "\n🚀 Starting BirdNET-Go..." "$GREEN"
+    
+    # Check if container is already running
+    if docker ps | grep -q "birdnet-go"; then
+        print_message "✅ BirdNET-Go container is already running" "$GREEN"
+        return 0
+    fi
+    
+    # Start the service
     sudo systemctl start birdnet-go.service
     
     # Check if service started
@@ -939,6 +949,15 @@ start_birdnet_go() {
             print_message "✅ Container started successfully!" "$GREEN"
             break
         fi
+        
+        # Check if service is still running
+        if ! sudo systemctl is-active --quiet birdnet-go.service; then
+            print_message "❌ Service stopped unexpectedly" "$RED"
+            print_message "Checking service logs:" "$YELLOW"
+            sudo journalctl -u birdnet-go.service -n 50
+            exit 1
+        fi
+        
         print_message "⏳ Waiting for container to start (attempt $attempt/$max_attempts)..." "$YELLOW"
         sleep 1
         ((attempt++))
@@ -946,7 +965,10 @@ start_birdnet_go() {
 
     if [ -z "$container_id" ]; then
         print_message "❌ Container failed to start within ${max_attempts} seconds" "$RED"
-        print_message "Please check 'docker ps' and 'journalctl -u birdnet-go' for errors" "$YELLOW"
+        print_message "Service logs:" "$YELLOW"
+        sudo journalctl -u birdnet-go.service -n 50
+        print_message "\nDocker logs:" "$YELLOW"
+        docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | xargs -r docker logs
         exit 1
     fi
 
@@ -1057,28 +1079,292 @@ validate_installation() {
     return 1
 }
 
-# ASCII Art Banner
-cat << "EOF"
- ____  _         _ _   _ _____ _____    ____      
-| __ )(_)_ __ __| | \ | | ____|_   _|  / ___| ___ 
-|  _ \| | '__/ _` |  \| |  _|   | |   | |  _ / _ \
-| |_) | | | | (_| | |\  | |___  | |   | |_| | (_) |
-|____/|_|_|  \__,_|_| \_|_____| |_|    \____|\___/ 
+# Function to get current container version
+get_container_version() {
+    local image_name="$1"
+    local current_version=""
+    
+    # Try to get the version from the running container first
+    current_version=$(docker ps --format "{{.Image}}" | grep "birdnet-go" | cut -d: -f2)
+    
+    # If no running container, check if image exists locally
+    if [ -z "$current_version" ]; then
+        current_version=$(docker images --format "{{.Tag}}" "$image_name" | head -n1)
+    fi
+    
+    echo "$current_version"
+}
+
+# Function to check if systemd service file needs update
+check_systemd_service() {
+    local service_file="/etc/systemd/system/birdnet-go.service"
+    local temp_service_file="/tmp/birdnet-go.service.new"
+    local needs_update=false
+    
+    # Get timezone
+    if [ -f /etc/timezone ]; then
+        TZ=$(cat /etc/timezone)
+    else
+        TZ="UTC"
+    fi
+
+    # Create temporary service file with current configuration
+    cat > "$temp_service_file" << EOF
+[Unit]
+Description=BirdNET-Go
+After=docker.service
+Requires=docker.service
+
+[Service]
+Restart=always
+ExecStart=/usr/bin/docker run --rm \\
+    -p 8080:8080 \\
+    --env TZ="${TZ}" \\
+    ${AUDIO_ENV} \\
+    -v ${CONFIG_DIR}:/config \\
+    -v ${DATA_DIR}:/data \\
+    ${BIRDNET_GO_IMAGE}
+
+[Install]
+WantedBy=multi-user.target
 EOF
 
-print_message "\n🐦 BirdNET-Go Installation Script" "$GREEN"
-print_message "This script will install BirdNET-Go and its dependencies." "$YELLOW"
-print_message "Note: Root privileges will be required for:" "$YELLOW"
-print_message "  - Installing system packages (alsa-utils, curl, bc, jq, apache2-utils)" "$YELLOW"
-print_message "  - Installing Docker" "$YELLOW"
-print_message "  - Creating systemd service" "$YELLOW"
-print_message ""
+    # Check if service file exists and compare
+    if [ -f "$service_file" ]; then
+        if ! cmp -s "$service_file" "$temp_service_file"; then
+            needs_update=true
+        fi
+    else
+        needs_update=true
+    fi
+    
+    rm -f "$temp_service_file"
+    echo "$needs_update"
+}
+
+# Function to handle container update process
+handle_container_update() {
+    local current_version=$(get_container_version "ghcr.io/tphakala/birdnet-go")
+    local target_version="$BIRDNET_GO_VERSION"
+    local service_needs_update=$(check_systemd_service)
+    
+    print_message "🔍 Current version: " "$YELLOW" "nonewline"
+    print_message "$current_version" "$NC"
+    print_message "🎯 Target version: " "$YELLOW" "nonewline"
+    print_message "$target_version" "$NC"
+    
+    if [ "$current_version" = "$target_version" ] && [ "$service_needs_update" = "false" ]; then
+        print_message "✅ BirdNET-Go is already up to date" "$GREEN"
+        return 0
+    fi
+    
+    print_message "🔄 Update required" "$YELLOW"
+    
+    # Stop the service and container
+    print_message "🛑 Stopping BirdNET-Go service..." "$YELLOW"
+    sudo systemctl stop birdnet-go.service
+    
+    # Wait for container to stop
+    local max_wait=30
+    local waited=0
+    while docker ps | grep -q "birdnet-go" && [ $waited -lt $max_wait ]; do
+        sleep 1
+        ((waited++))
+    done
+    
+    if docker ps | grep -q "birdnet-go"; then
+        print_message "⚠️ Container still running after $max_wait seconds, forcing stop..." "$YELLOW"
+        docker ps --filter name=birdnet-go -q | xargs -r docker stop
+    fi
+    
+    # Pull new image
+    print_message "📥 Pulling new image..." "$YELLOW"
+    if ! docker pull "${BIRDNET_GO_IMAGE}"; then
+        print_message "❌ Failed to pull new image" "$RED"
+        return 1
+    fi
+    
+    # Update systemd service if needed
+    if [ "$service_needs_update" = "true" ]; then
+        print_message "📝 Updating systemd service..." "$YELLOW"
+        add_systemd_config
+    fi
+    
+    # Start the service
+    print_message "🚀 Starting BirdNET-Go service..." "$YELLOW"
+    sudo systemctl daemon-reload
+    if ! sudo systemctl start birdnet-go.service; then
+        print_message "❌ Failed to start service" "$RED"
+        return 1
+    fi
+    
+    print_message "✅ Update completed successfully" "$GREEN"
+    return 0
+}
 
 # Default paths
 CONFIG_DIR="$HOME/birdnet-go-app/config"
 DATA_DIR="$HOME/birdnet-go-app/data"
 CONFIG_FILE="$CONFIG_DIR/config.yaml"
 TEMP_CONFIG="/tmp/config.yaml"
+
+# Function to clean existing installation
+clean_installation() {
+    print_message "🧹 Cleaning existing installation..." "$YELLOW"
+    local cleanup_failed=false
+    
+    # Stop service if it exists
+    if systemctl list-unit-files | grep -q birdnet-go.service; then
+        print_message "🛑 Stopping BirdNET-Go service..." "$YELLOW"
+        sudo systemctl stop birdnet-go.service
+        sudo systemctl disable birdnet-go.service
+        sudo rm -f /etc/systemd/system/birdnet-go.service
+        sudo systemctl daemon-reload
+        print_message "✅ Removed systemd service" "$GREEN"
+    fi
+    
+    # Stop and remove containers
+    if docker ps -a | grep -q "birdnet-go"; then
+        print_message "🛑 Stopping and removing BirdNET-Go containers..." "$YELLOW"
+        docker ps -a --filter name=birdnet-go -q | xargs -r docker stop
+        docker ps -a --filter name=birdnet-go -q | xargs -r docker rm
+        print_message "✅ Removed containers" "$GREEN"
+    fi
+    
+    # Remove images
+    if docker images | grep -q "birdnet-go"; then
+        print_message "🗑️ Removing BirdNET-Go images..." "$YELLOW"
+        docker images --filter reference='*birdnet-go*' -q | xargs -r docker rmi -f
+        print_message "✅ Removed images" "$GREEN"
+    fi
+    
+    # Remove data directories
+    if [ -d "$CONFIG_DIR" ] || [ -d "$DATA_DIR" ]; then
+        print_message "📁 Removing data directories..." "$YELLOW"
+        
+        # Try normal removal first
+        if ! rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null; then
+            print_message "⚠️ Some files could not be removed, trying with sudo..." "$YELLOW"
+            
+            # Try with sudo
+            if ! sudo rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null; then
+                print_message "❌ Failed to remove some files even with sudo" "$RED"
+                print_message "The following files could not be removed:" "$RED"
+                
+                # List files that couldn't be removed
+                if [ -d "$CONFIG_DIR" ]; then
+                    find "$CONFIG_DIR" -type f ! -writable 2>/dev/null | while read -r file; do
+                        print_message "  • $file" "$RED"
+                    done
+                fi
+                if [ -d "$DATA_DIR" ]; then
+                    find "$DATA_DIR" -type f ! -writable 2>/dev/null | while read -r file; do
+                        print_message "  • $file" "$RED"
+                    done
+                fi
+                
+                cleanup_failed=true
+            else
+                print_message "✅ Removed data directories (with sudo)" "$GREEN"
+            fi
+        else
+            print_message "✅ Removed data directories" "$GREEN"
+        fi
+    fi
+    
+    if [ "$cleanup_failed" = true ]; then
+        print_message "\n⚠️ Some cleanup operations failed" "$RED"
+        print_message "You may need to manually remove remaining files" "$YELLOW"
+        return 1
+    else
+        print_message "✅ Cleanup completed successfully" "$GREEN"
+        return 0
+    fi
+}
+
+# Check for existing installation first
+if systemctl list-unit-files | grep -q birdnet-go.service || docker ps | grep -q "birdnet-go" || [ -f "$CONFIG_FILE" ]; then
+    print_message "🔍 Found existing BirdNET-Go installation" "$YELLOW"
+    print_message "1) Check for updates" "$YELLOW"
+    print_message "2) Fresh installation" "$YELLOW"
+    print_message "3) Uninstall BirdNET-Go" "$YELLOW"
+    print_message "4) Exit" "$YELLOW"
+    print_message "❓ Select an option (1-4): " "$YELLOW" "nonewline"
+    read -r response
+    
+    case $response in
+        1)
+            # First check network connectivity as it's required for updates
+            check_network
+            
+            if handle_container_update; then
+                # Update was successful (either up-to-date or updated successfully)
+                exit 0
+            else
+                # Update failed
+                print_message "⚠️ Update failed" "$RED"
+                print_message "❓ Do you want to proceed with fresh installation? (y/n): " "$YELLOW" "nonewline"
+                read -r response
+                if [[ ! "$response" =~ ^[Yy]$ ]]; then
+                    print_message "❌ Installation cancelled" "$RED"
+                    exit 1
+                fi
+            fi
+            ;;
+        2)
+            print_message "\n⚠️  WARNING: Fresh installation will:" "$RED"
+            print_message "  • Remove all BirdNET-Go containers and images" "$RED"
+            print_message "  • Delete all configuration and data in $CONFIG_DIR" "$RED"
+            print_message "  • Delete all recordings and database in $DATA_DIR" "$RED"
+            print_message "  • Remove systemd service configuration" "$RED"
+            print_message "\n❓ Type 'yes' to proceed with fresh installation: " "$YELLOW" "nonewline"
+            read -r response
+            
+            if [ "$response" = "yes" ]; then
+                clean_installation
+            else
+                print_message "❌ Installation cancelled" "$RED"
+                exit 1
+            fi
+            ;;
+        3)
+            print_message "\n⚠️  WARNING: Uninstalling BirdNET-Go will:" "$RED"
+            print_message "  • Remove all BirdNET-Go containers and images" "$RED"
+            print_message "  • Delete all configuration and data in $CONFIG_DIR" "$RED"
+            print_message "  • Delete all recordings and database in $DATA_DIR" "$RED"
+            print_message "  • Remove systemd service configuration" "$RED"
+            print_message "\n❓ Type 'yes' to proceed with uninstallation: " "$YELLOW" "nonewline"
+            read -r response
+            
+            if [ "$response" = "yes" ]; then
+                if clean_installation; then
+                    print_message "✅ BirdNET-Go has been successfully uninstalled" "$GREEN"
+                else
+                    print_message "⚠️ Some components could not be removed" "$RED"
+                    print_message "Please check the messages above for details" "$YELLOW"
+                fi
+                exit 0
+            else
+                print_message "❌ Uninstallation cancelled" "$RED"
+                exit 1
+            fi
+            ;;
+        4)
+            print_message "❌ Operation cancelled" "$RED"
+            exit 1
+            ;;
+        *)
+            print_message "❌ Invalid option" "$RED"
+            exit 1
+            ;;
+    esac
+fi
+
+print_message "Note: Root privileges will be required for:" "$YELLOW"
+print_message "  - Installing system packages (alsa-utils, curl, bc, jq, apache2-utils)" "$YELLOW"
+print_message "  - Installing Docker" "$YELLOW"
+print_message "  - Creating systemd service" "$YELLOW"
+print_message ""
 
 # First check basic network connectivity and ensure curl is available
 check_network
