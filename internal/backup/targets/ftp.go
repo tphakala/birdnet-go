@@ -309,7 +309,16 @@ func (t *FTPTarget) connect(ctx context.Context) (*ftp.ServerConn, error) {
 // atomicUpload performs an atomic upload operation using a temporary file
 func (t *FTPTarget) atomicUpload(ctx context.Context, conn *ftp.ServerConn, localPath, remotePath string) error {
 	// Create a temporary filename
-	tempName := path.Join(path.Dir(remotePath), tempFilePrefix+filepath.Base(remotePath))
+	tempFile, err := os.CreateTemp(filepath.Dir(localPath), "ftp-upload-*")
+	if err != nil {
+		return backup.NewError(backup.ErrIO, "ftp: failed to create temporary file", err)
+	}
+	tempName := tempFile.Name()
+	tempFile.Close()
+	os.Remove(tempName) // Remove the local temp file as we only need its name pattern
+
+	// Create the remote temp file name using the same base name
+	tempName = path.Join(path.Dir(remotePath), filepath.Base(tempName))
 	t.trackTempFile(tempName)
 	defer t.untrackTempFile(tempName)
 
@@ -456,7 +465,7 @@ func (t *FTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		}
 
 		for _, entry := range entries {
-			if entry.Type == ftp.EntryTypeFile {
+			if entry.Type == ftp.EntryTypeFile && !strings.HasPrefix(entry.Name, "ftp-upload-") {
 				backups = append(backups, backup.BackupInfo{
 					Target: entry.Name,
 					Metadata: backup.Metadata{
