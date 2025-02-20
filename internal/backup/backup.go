@@ -2,7 +2,9 @@
 package backup
 
 import (
-	"archive/zip"
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -11,10 +13,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -24,12 +26,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// writeCloserBuffer wraps bytes.Buffer to implement io.WriteCloser
+type writeCloserBuffer struct {
+	*bytes.Buffer
+}
+
+func (b *writeCloserBuffer) Close() error {
+	return nil
+}
+
 // Source represents a data source that needs to be backed up
 type Source interface {
 	// Name returns the name of the source
 	Name() string
-	// Backup performs the backup operation and returns the path to the backup file
-	Backup(ctx context.Context) (string, error)
+	// Backup performs the backup operation and returns a reader for streaming the backup data
+	Backup(ctx context.Context) (io.ReadCloser, error)
 	// Validate validates the source configuration
 	Validate() error
 }
@@ -311,33 +322,104 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 
 	// Create backup file with timeout
 	m.logger.Printf("🔄 Creating backup file for source: %s", sourceName)
-	backupPath, err := m.createSourceBackup(ctx, sourceName, source)
+	backupReader, err := source.Backup(ctx)
 	if err != nil {
 		return tempDirs, err
 	}
-	m.logger.Printf("✅ Successfully created backup file at: %s", backupPath)
+	defer backupReader.Close()
 
-	// Create and prepare archive
-	tempDir, archive, err := m.prepareBackupArchive(ctx, backupPath, sourceName, now, isDaily)
+	// Create temporary directory for the archive
+	tempDir, err := os.MkdirTemp("", "backup-*")
 	if err != nil {
-		// Don't add tempDir to tempDirs if preparation failed
-		if tempDir != "" {
-			os.RemoveAll(tempDir)
-		}
-		return tempDirs, err
+		return tempDirs, NewError(ErrIO, "failed to create temporary directory", err)
 	}
 	tempDirs = append(tempDirs, tempDir)
 
+	// Create metadata
+	metadata := Metadata{
+		ID:        fmt.Sprintf("birdnet-go-backup-%s", now.Format("20060102-150405")),
+		Timestamp: now,
+		Type:      sourceName,
+		IsDaily:   isDaily,
+	}
+
 	// Create the archive file
-	archivePath := filepath.Join(tempDir, fmt.Sprintf("%s.zip", archive.Metadata.ID))
+	archivePath := filepath.Join(tempDir, fmt.Sprintf("%s.tar.gz", metadata.ID))
 	m.logger.Printf("🔄 Creating archive file at: %s", archivePath)
-	if err := m.createArchive(ctx, archivePath, archive); err != nil {
+
+	// Create archive file
+	archiveFile, err := os.Create(archivePath)
+	if err != nil {
 		return tempDirs, NewError(ErrIO, "failed to create archive", err)
 	}
-	m.logger.Printf("✅ Successfully created archive file")
+	defer archiveFile.Close()
+
+	// Create gzip writer
+	gzipWriter := gzip.NewWriter(archiveFile)
+	defer gzipWriter.Close()
+
+	// Create tar writer
+	tarWriter := tar.NewWriter(gzipWriter)
+	defer tarWriter.Close()
+
+	// Add metadata
+	metadataBytes, err := json.Marshal(metadata)
+	if err != nil {
+		return tempDirs, NewError(ErrIO, "failed to marshal metadata", err)
+	}
+
+	// Add metadata file to tar
+	metadataHeader := &tar.Header{
+		Name:    "metadata.json",
+		Size:    int64(len(metadataBytes)),
+		Mode:    0644,
+		ModTime: now,
+	}
+	if err := tarWriter.WriteHeader(metadataHeader); err != nil {
+		return tempDirs, NewError(ErrIO, "failed to write metadata header", err)
+	}
+	if _, err := tarWriter.Write(metadataBytes); err != nil {
+		return tempDirs, NewError(ErrIO, "failed to write metadata", err)
+	}
+
+	// Add database file to tar
+	dbHeader := &tar.Header{
+		Name:    fmt.Sprintf("%s.db", sourceName),
+		Mode:    0644,
+		ModTime: now,
+	}
+
+	// Create a buffer to calculate the size
+	var buf bytes.Buffer
+	size, err := io.Copy(&buf, backupReader)
+	if err != nil {
+		return tempDirs, NewError(ErrIO, "failed to read backup data", err)
+	}
+	dbHeader.Size = size
+
+	// Write the header and data
+	if err := tarWriter.WriteHeader(dbHeader); err != nil {
+		return tempDirs, NewError(ErrIO, "failed to write database header", err)
+	}
+	if _, err := io.Copy(tarWriter, &buf); err != nil {
+		return tempDirs, NewError(ErrIO, "failed to write database content", err)
+	}
+
+	// Add configuration if available
+	if err := m.addConfigToArchive(tarWriter, &metadata); err != nil {
+		return tempDirs, err
+	}
+
+	// Close writers in correct order
+	if err := tarWriter.Close(); err != nil {
+		return tempDirs, NewError(ErrIO, "failed to close tar writer", err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		return tempDirs, NewError(ErrIO, "failed to close gzip writer", err)
+	}
 
 	// Store backup in all targets
-	if err := m.storeBackupInTargets(ctx, archivePath, &archive.Metadata); err != nil {
+	if err := m.storeBackupInTargets(ctx, archivePath, &metadata); err != nil {
 		return tempDirs, err
 	}
 
@@ -354,100 +436,8 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 	return tempDirs, nil
 }
 
-// createSourceBackup creates a backup of a single source with timeout
-func (m *Manager) createSourceBackup(ctx context.Context, sourceName string, source Source) (string, error) {
-	backupCtx, backupCancel := context.WithTimeout(ctx, 30*time.Minute)
-	defer backupCancel()
-
-	backupPath, err := source.Backup(backupCtx)
-	if err != nil {
-		if backupCtx.Err() != nil {
-			m.logger.Printf("Backup source %s timed out: %v", sourceName, err)
-			return "", NewError(ErrTimeout, fmt.Sprintf("backup source %s timed out", sourceName), err)
-		}
-		m.logger.Printf("Failed to backup source %s: %v", sourceName, err)
-		return "", NewError(ErrDatabase, fmt.Sprintf("failed to backup source %s", sourceName), err)
-	}
-	return backupPath, nil
-}
-
-// getFileMetadata gets platform-specific file metadata
-func getFileMetadata(info os.FileInfo) FileMetadata {
-	metadata := FileMetadata{
-		Mode:   info.Mode(),
-		IsUnix: runtime.GOOS != "windows",
-	}
-
-	// Get Unix-specific metadata on Unix systems
-	if metadata.IsUnix {
-		getUnixMetadata(&metadata, info)
-	}
-
-	return metadata
-}
-
-// prepareBackupArchive creates and prepares a backup archive
-func (m *Manager) prepareBackupArchive(ctx context.Context, backupPath, sourceName string, now time.Time, isDaily bool) (string, *BackupArchive, error) {
-	// Create temporary directory
-	tempDir, err := os.MkdirTemp("", "backup-*")
-	if err != nil {
-		return "", nil, NewError(ErrIO, "failed to create temporary directory", err)
-	}
-	m.logger.Printf("Created temporary directory: %s", tempDir)
-
-	select {
-	case <-ctx.Done():
-		return tempDir, nil, NewError(ErrCanceled, "backup archive preparation cancelled", ctx.Err())
-	default:
-	}
-
-	// Get file info for modification time and metadata
-	fileInfo, err := os.Stat(backupPath)
-	if err != nil {
-		return tempDir, nil, NewError(ErrIO, fmt.Sprintf("failed to get backup file info %s", backupPath), err)
-	}
-
-	// Read the backup file
-	backupData, err := os.ReadFile(backupPath)
-	if err != nil {
-		return tempDir, nil, NewError(ErrIO, fmt.Sprintf("failed to read backup file %s", backupPath), err)
-	}
-	m.logger.Printf("Successfully read backup file, size: %d bytes", len(backupData))
-
-	select {
-	case <-ctx.Done():
-		return tempDir, nil, NewError(ErrCanceled, "backup archive preparation cancelled", ctx.Err())
-	default:
-	}
-
-	// Create metadata and archive
-	metadata := Metadata{
-		ID:        fmt.Sprintf("birdnet-go-backup-%s", now.Format("20060102-150405")),
-		Timestamp: now,
-		Type:      sourceName,
-		Source:    backupPath,
-		IsDaily:   isDaily,
-	}
-	m.logger.Printf("Created backup metadata with ID: %s", metadata.ID)
-
-	archive := NewBackupArchive(&metadata)
-	m.logger.Printf("Created backup archive for ID: %s", metadata.ID)
-
-	// Add the backup file to the archive with its original modification time and metadata
-	dbFilename := fmt.Sprintf("%s.db", sourceName)
-	archive.AddFile(dbFilename, backupData, fileInfo.ModTime(), getFileMetadata(fileInfo))
-	m.logger.Printf("Added database file to archive: %s", dbFilename)
-
-	// Add configuration if available
-	if err := m.addConfigToArchive(archive); err != nil {
-		return tempDir, archive, err
-	}
-
-	return tempDir, archive, nil
-}
-
 // addConfigToArchive adds sanitized configuration to the archive
-func (m *Manager) addConfigToArchive(archive *BackupArchive) error {
+func (m *Manager) addConfigToArchive(tw *tar.Writer, metadata *Metadata) error {
 	if settings := conf.Setting(); settings != nil {
 		m.logger.Printf("🔄 Adding sanitized configuration to archive...")
 		configData, err := yaml.Marshal(sanitizeConfig(settings))
@@ -456,16 +446,24 @@ func (m *Manager) addConfigToArchive(archive *BackupArchive) error {
 			return NewError(ErrIO, "failed to marshal configuration", err)
 		}
 
-		// Create default metadata for config file
-		metadata := FileMetadata{
-			Mode:   0o644,
-			IsUnix: runtime.GOOS != "windows",
+		// Create header for config file
+		header := &tar.Header{
+			Name:    "config.yaml",
+			Size:    int64(len(configData)),
+			Mode:    0644,
+			ModTime: metadata.Timestamp,
 		}
 
-		archive.AddFile("config.yaml", configData, archive.Metadata.Timestamp, metadata)
+		if err := tw.WriteHeader(header); err != nil {
+			return NewError(ErrIO, "failed to write config header", err)
+		}
+		if _, err := tw.Write(configData); err != nil {
+			return NewError(ErrIO, "failed to write config data", err)
+		}
+
 		hash := sha256.Sum256(configData)
-		archive.Metadata.ConfigHash = hex.EncodeToString(hash[:])
-		m.logger.Printf("✅ Added configuration file to archive with hash: %s", archive.Metadata.ConfigHash)
+		metadata.ConfigHash = hex.EncodeToString(hash[:])
+		m.logger.Printf("✅ Added configuration file to archive with hash: %s", metadata.ConfigHash)
 	}
 	return nil
 }
@@ -536,16 +534,29 @@ func combineErrors(errs []error) error {
 
 // createArchive creates a backup archive, optionally encrypting it
 func (m *Manager) createArchive(ctx context.Context, archivePath string, archive *BackupArchive) error {
-	// Create a temporary file for the unencrypted archive
-	tempArchive, err := os.CreateTemp(filepath.Dir(archivePath), "temp-archive-*.zip")
+	// Create the archive file
+	archiveFile, err := os.Create(archivePath)
 	if err != nil {
-		return NewError(ErrIO, "failed to create temporary archive", err)
+		return NewError(ErrIO, "failed to create archive", err)
 	}
-	tempArchivePath := tempArchive.Name()
-	defer os.Remove(tempArchivePath)
+	defer archiveFile.Close()
 
-	// Create a new zip writer for the temporary file
-	zw := zip.NewWriter(tempArchive)
+	var writer io.WriteCloser = archiveFile
+
+	// If encryption is enabled, we'll encrypt after compression
+	var encryptedBuf *writeCloserBuffer
+	if m.config.Encryption {
+		encryptedBuf = &writeCloserBuffer{bytes.NewBuffer(nil)}
+		writer = encryptedBuf
+	}
+
+	// Create gzip writer
+	gzipWriter := gzip.NewWriter(writer)
+	defer gzipWriter.Close()
+
+	// Create tar writer
+	tarWriter := tar.NewWriter(gzipWriter)
+	defer tarWriter.Close()
 
 	// Add metadata
 	metadataBytes, err := json.Marshal(archive.Metadata)
@@ -560,12 +571,18 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, archive
 	default:
 	}
 
-	metadataEntry := &FileEntry{
-		Data:    metadataBytes,
+	// Add metadata file to tar
+	metadataHeader := &tar.Header{
+		Name:    "metadata.json",
+		Size:    int64(len(metadataBytes)),
+		Mode:    0644,
 		ModTime: archive.Metadata.Timestamp,
 	}
-	if err := addFileToZip(zw, "metadata.json", metadataEntry); err != nil {
-		return err
+	if err := tarWriter.WriteHeader(metadataHeader); err != nil {
+		return NewError(ErrIO, "failed to write metadata header", err)
+	}
+	if _, err := tarWriter.Write(metadataBytes); err != nil {
+		return NewError(ErrIO, "failed to write metadata", err)
 	}
 
 	// Add all files to the archive
@@ -577,35 +594,20 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, archive
 		default:
 		}
 
-		if err := addFileToZip(zw, name, &entry); err != nil {
+		if err := addFileToTar(tarWriter, name, &entry); err != nil {
 			return err
 		}
 	}
 
-	// Close the zip writer
-	if err := zw.Close(); err != nil {
-		return NewError(ErrIO, "failed to close zip writer", err)
+	// Close writers in correct order
+	if err := tarWriter.Close(); err != nil {
+		return NewError(ErrIO, "failed to close tar writer", err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		return NewError(ErrIO, "failed to close gzip writer", err)
 	}
 
-	// Close the temporary file
-	if err := tempArchive.Close(); err != nil {
-		return NewError(ErrIO, "failed to close temporary archive", err)
-	}
-
-	// Check context before reading archive
-	select {
-	case <-ctx.Done():
-		return NewError(ErrCanceled, "archive creation cancelled", ctx.Err())
-	default:
-	}
-
-	// Read the temporary archive
-	archiveData, err := os.ReadFile(tempArchivePath)
-	if err != nil {
-		return NewError(ErrIO, "failed to read temporary archive", err)
-	}
-
-	var finalData []byte
+	// If encryption is enabled, encrypt the compressed data
 	if m.config.Encryption {
 		// Get or generate the encryption key
 		key, err := m.getEncryptionKey()
@@ -621,24 +623,42 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, archive
 		}
 
 		// Encrypt the archive
-		finalData, err = encryptData(archiveData, key)
+		encryptedData, err := encryptData(encryptedBuf.Bytes(), key)
 		if err != nil {
 			return err
 		}
-	} else {
-		finalData = archiveData
+
+		// Write the encrypted data to the file
+		if _, err := archiveFile.Write(encryptedData); err != nil {
+			return NewError(ErrIO, "failed to write encrypted archive", err)
+		}
 	}
 
-	// Check context before writing final archive
-	select {
-	case <-ctx.Done():
-		return NewError(ErrCanceled, "archive creation cancelled", ctx.Err())
-	default:
+	return nil
+}
+
+// addFileToTar adds a file to a tar archive
+func addFileToTar(tw *tar.Writer, name string, entry *FileEntry) error {
+	// Create tar header
+	header := &tar.Header{
+		Name:    name,
+		Size:    int64(len(entry.Data)),
+		Mode:    int64(entry.Metadata.Mode),
+		ModTime: entry.ModTime,
 	}
 
-	// Write the final data to the archive file
-	if err := os.WriteFile(archivePath, finalData, 0o644); err != nil {
-		return NewError(ErrIO, "failed to write archive", err)
+	// Set Unix-specific metadata if available
+	if entry.Metadata.IsUnix {
+		header.Uid = entry.Metadata.UID
+		header.Gid = entry.Metadata.GID
+	}
+
+	if err := tw.WriteHeader(header); err != nil {
+		return NewError(ErrIO, fmt.Sprintf("failed to write header for %s", name), err)
+	}
+
+	if _, err := tw.Write(entry.Data); err != nil {
+		return NewError(ErrIO, fmt.Sprintf("failed to write file %s", name), err)
 	}
 
 	return nil
@@ -763,32 +783,6 @@ func decryptData(encryptedData, key []byte) ([]byte, error) {
 	}
 
 	return plaintext, nil
-}
-
-// addFileToZip adds a file to a zip archive
-func addFileToZip(zw *zip.Writer, name string, entry *FileEntry) error {
-	// Create a new file header
-	header := &zip.FileHeader{
-		Name:     name,
-		Method:   zip.Deflate,
-		Modified: entry.ModTime,
-	}
-
-	// Set the file mode, preserving Unix permissions if available
-	if entry.Metadata.IsUnix {
-		header.SetMode(entry.Metadata.Mode)
-	} else {
-		header.SetMode(0o644)
-	}
-
-	w, err := zw.CreateHeader(header)
-	if err != nil {
-		return NewError(ErrIO, fmt.Sprintf("failed to create file %s in zip", name), err)
-	}
-	if _, err := w.Write(entry.Data); err != nil {
-		return NewError(ErrIO, fmt.Sprintf("failed to write file %s to zip", name), err)
-	}
-	return nil
 }
 
 // parseRetentionAge parses a retention age string (e.g., "30d", "6m", "1y") into a duration

@@ -6,20 +6,17 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/mattn/go-sqlite3"
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/diskmanager"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 // SQLiteSource implements the backup.Source interface for SQLite databases
@@ -38,7 +35,10 @@ func NewSQLiteSource(config *conf.Settings) *SQLiteSource {
 
 // Name returns the name of this source
 func (s *SQLiteSource) Name() string {
-	return "sqlite"
+	// Use the original database filename without extension as the source name
+	dbPath := s.config.Output.SQLite.Path
+	baseName := filepath.Base(dbPath)
+	return strings.TrimSuffix(baseName, filepath.Ext(baseName))
 }
 
 // Operation represents a backup operation with tracking information
@@ -65,29 +65,6 @@ func (s *SQLiteSource) logf(op *Operation, format string, args ...interface{}) {
 	}
 }
 
-// validateTempDir validates the temporary directory configuration
-func (s *SQLiteSource) validateTempDir(tempDir string) error {
-	info, err := os.Stat(tempDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return backup.NewError(backup.ErrConfig, "temporary directory does not exist", err)
-		}
-		return backup.NewError(backup.ErrConfig, "failed to access temporary directory", err)
-	}
-	if !info.IsDir() {
-		return backup.NewError(backup.ErrConfig, "specified temporary directory path is not a directory", nil)
-	}
-	// Check if directory is writable by attempting to create a test file
-	testFile := filepath.Join(tempDir, fmt.Sprintf(".test-%d", time.Now().UnixNano()))
-	f, err := os.OpenFile(testFile, os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return backup.NewError(backup.ErrConfig, "temporary directory is not writable", err)
-	}
-	f.Close()
-	os.Remove(testFile)
-	return nil
-}
-
 // validateConfig checks if SQLite backup is enabled and properly configured
 func (s *SQLiteSource) validateConfig() (string, error) {
 	if !s.config.Output.SQLite.Enabled {
@@ -109,12 +86,7 @@ func (s *SQLiteSource) validateConfig() (string, error) {
 		s.logger.Printf("Converted database path to absolute: %s", dbPath)
 	}
 
-	// Validate temp directory if specified
-	if s.config.Output.SQLite.TempDir != "" {
-		if err := s.validateTempDir(s.config.Output.SQLite.TempDir); err != nil {
-			return "", err
-		}
-	}
+	s.logger.Printf("DEBUG: Database path: %s", dbPath)
 
 	return dbPath, nil
 }
@@ -130,45 +102,13 @@ func (s *SQLiteSource) verifySourceDatabase(dbPath string) error {
 		}
 		return backup.NewError(backup.ErrIO, "database file not accessible", err)
 	}
-	s.logger.Printf("Verified database file exists and is accessible")
+	s.logger.Printf("Verified database file %s exists and is accessible", dbPath)
 	return nil
-}
-
-// createBackupDirectory creates a temporary directory for the backup
-func (s *SQLiteSource) createBackupDirectory() (string, error) {
-	s.logger.Printf("Creating temporary directory for backup...")
-
-	// Use configured temp directory if available
-	baseDir := ""
-	if s.config.Output.SQLite.TempDir != "" {
-		baseDir = s.config.Output.SQLite.TempDir
-		// Ensure the directory exists
-		if err := os.MkdirAll(baseDir, 0o755); err != nil {
-			return "", fmt.Errorf("failed to create temp directory: %w", err)
-		}
-	}
-
-	tempDir, err := os.MkdirTemp(baseDir, "birdnet-go-backup-*")
-	if err != nil {
-		return "", fmt.Errorf("failed to create temp directory: %w", err)
-	}
-	s.logger.Printf("Created temporary directory: %s", tempDir)
-	return tempDir, nil
-}
-
-// generateBackupPath generates the backup file path with timestamp
-func (s *SQLiteSource) generateBackupPath(tempDir string) string {
-	timestamp := time.Now().UTC().Format("20060102150405")
-	backupFilename := fmt.Sprintf("birdnet-go-sqlite-%s.db", timestamp)
-	backupPath := filepath.Join(tempDir, backupFilename)
-	s.logger.Printf("Generated backup path: %s", backupPath)
-	return backupPath
 }
 
 // DatabaseConnection represents a managed database connection
 type DatabaseConnection struct {
-	DB     *gorm.DB
-	sqlDB  *sql.DB
+	db     *sql.DB
 	closed bool
 }
 
@@ -177,8 +117,8 @@ func (dc *DatabaseConnection) Close() error {
 	if dc.closed {
 		return nil
 	}
-	if dc.sqlDB != nil {
-		if err := dc.sqlDB.Close(); err != nil {
+	if dc.db != nil {
+		if err := dc.db.Close(); err != nil {
 			return fmt.Errorf("failed to close database connection: %w", err)
 		}
 		dc.closed = true
@@ -190,14 +130,16 @@ func (dc *DatabaseConnection) Close() error {
 func (s *SQLiteSource) openDatabase(dbPath string, readOnly bool) (*DatabaseConnection, error) {
 	s.logger.Printf("Opening database: %s", dbPath)
 
+	// Build DSN with additional safety parameters
 	dsn := dbPath
 	if readOnly {
 		dsn += "?mode=ro"
 	}
+	dsn += "&_busy_timeout=30000" // 30 second timeout
+	dsn += "&_journal_mode=WAL"   // Ensure WAL mode
+	dsn += "&_sync=NORMAL"        // Less aggressive syncing for better performance
 
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		if isMediaError(err) {
 			return nil, backup.NewError(backup.ErrMedia, "failed to open database", err)
@@ -205,14 +147,11 @@ func (s *SQLiteSource) openDatabase(dbPath string, readOnly bool) (*DatabaseConn
 		return nil, backup.NewError(backup.ErrDatabase, "failed to open database", err)
 	}
 
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, backup.NewError(backup.ErrDatabase, "failed to get underlying database connection", err)
-	}
+	s.logger.Printf("DEBUG: Database %s opened successfully", dbPath)
 
 	// Verify connection
-	if err := sqlDB.Ping(); err != nil {
-		sqlDB.Close()
+	if err := db.Ping(); err != nil {
+		db.Close()
 		if isMediaError(err) {
 			return nil, backup.NewError(backup.ErrMedia, "failed to verify database connection", err)
 		}
@@ -220,15 +159,14 @@ func (s *SQLiteSource) openDatabase(dbPath string, readOnly bool) (*DatabaseConn
 	}
 
 	return &DatabaseConnection{
-		DB:    db,
-		sqlDB: sqlDB,
+		db: db,
 	}, nil
 }
 
 // verifyDatabaseIntegrity checks database integrity
-func (s *SQLiteSource) verifyDatabaseIntegrity(db *gorm.DB) error {
+func (s *SQLiteSource) verifyDatabaseIntegrity(db *sql.DB) error {
 	var result string
-	if err := db.Raw("PRAGMA integrity_check").Scan(&result).Error; err != nil {
+	if err := db.QueryRow("PRAGMA integrity_check").Scan(&result); err != nil {
 		if isMediaError(err) {
 			return backup.NewError(backup.ErrMedia, "integrity check failed", err)
 		}
@@ -237,45 +175,6 @@ func (s *SQLiteSource) verifyDatabaseIntegrity(db *gorm.DB) error {
 
 	if result != "ok" {
 		return backup.NewError(backup.ErrCorruption, fmt.Sprintf("integrity check failed: %s", result), nil)
-	}
-	return nil
-}
-
-// verifyDiskSpace checks if there's enough space for the backup
-func (s *SQLiteSource) verifyDiskSpace(dbPath, tempDir string) error {
-	// Get the size of the source database
-	dbInfo, err := os.Stat(dbPath)
-	if err != nil {
-		if isMediaError(err) {
-			return backup.NewError(backup.ErrMedia, "failed to get database file info", err)
-		}
-		return backup.NewError(backup.ErrIO, "failed to get database file info", err)
-	}
-	dbSize := dbInfo.Size()
-
-	// Get available space in the temp directory
-	availableSpace, err := diskmanager.GetAvailableSpace(tempDir)
-	if err != nil {
-		if isMediaError(err) {
-			return backup.NewError(backup.ErrMedia, "failed to get available disk space", err)
-		}
-		return backup.NewError(backup.ErrIO, "failed to get available disk space", err)
-	}
-
-	// We need slightly more than 1x the database size for VACUUM INTO
-	// Adding 10% margin for safety
-	requiredSpace := uint64(float64(dbSize) * 1.1)
-
-	if availableSpace < requiredSpace {
-		return backup.NewError(backup.ErrInsufficientSpace,
-			fmt.Sprintf("insufficient disk space: need %d bytes, have %d bytes available",
-				requiredSpace, availableSpace), nil)
-	}
-
-	// If available space is less than 2x database size, log a warning
-	if availableSpace < uint64(dbSize)*2 {
-		s.logger.Printf("WARNING: Available disk space (%d bytes) is less than 2x database size (%d bytes). "+
-			"This might cause issues with future backups.", availableSpace, dbSize)
 	}
 
 	return nil
@@ -372,81 +271,6 @@ func isMediaError(err error) bool {
 	return false
 }
 
-// createLockFile creates a lock file to track backup in progress
-func (s *SQLiteSource) createLockFile(backupPath string) (string, error) {
-	lockPath := backupPath + ".lock"
-	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err != nil {
-		if os.IsExist(err) {
-			// Check if the lock file is stale (older than 1 hour)
-			if info, err := os.Stat(lockPath); err == nil {
-				if time.Since(info.ModTime()) > time.Hour {
-					// Remove stale lock file
-					os.Remove(lockPath)
-					return s.createLockFile(backupPath)
-				}
-			}
-			return "", backup.NewError(backup.ErrLocked, "backup already in progress", nil)
-		}
-		if isMediaError(err) {
-			return "", backup.NewError(backup.ErrMedia, "failed to create lock file", err)
-		}
-		return "", backup.NewError(backup.ErrIO, "failed to create lock file", err)
-	}
-	defer lockFile.Close()
-
-	// Write PID to lock file
-	if _, err := fmt.Fprintf(lockFile, "%d", os.Getpid()); err != nil {
-		os.Remove(lockPath)
-		if isMediaError(err) {
-			return "", backup.NewError(backup.ErrMedia, "failed to write lock file", err)
-		}
-		return "", backup.NewError(backup.ErrIO, "failed to write lock file", err)
-	}
-
-	return lockPath, nil
-}
-
-// cleanupPartialBackup removes incomplete backup files
-func (s *SQLiteSource) cleanupPartialBackup(backupPath, lockPath string) {
-	if lockPath != "" {
-		if err := os.Remove(lockPath); err != nil {
-			s.logger.Printf("WARNING: Failed to remove lock file: %v", err)
-		}
-	}
-	if backupPath != "" {
-		if err := os.Remove(backupPath); err != nil && !os.IsNotExist(err) {
-			s.logger.Printf("WARNING: Failed to remove partial backup: %v", err)
-		}
-	}
-}
-
-// setupSignalHandler sets up handling for system signals
-func (s *SQLiteSource) setupSignalHandler(ctx context.Context, cleanup func()) context.Context {
-	ctx, cancel := context.WithCancel(ctx)
-	sigChan := make(chan os.Signal, 1)
-
-	// Platform-specific signal handling
-	if runtime.GOOS == "windows" {
-		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	} else {
-		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-	}
-
-	go func() {
-		select {
-		case sig := <-sigChan:
-			s.logger.Printf("Received signal %v, cleaning up...", sig)
-			cleanup()
-			cancel()
-		case <-ctx.Done():
-			return
-		}
-	}()
-
-	return ctx
-}
-
 // withDatabase executes a function with a managed database connection
 func (s *SQLiteSource) withDatabase(dbPath string, readOnly bool, fn func(*DatabaseConnection) error) error {
 	conn, err := s.openDatabase(dbPath, readOnly)
@@ -467,149 +291,249 @@ func (s *SQLiteSource) verifyDatabase(dbPath string, readOnly bool) error {
 
 	// Then verify database connection and integrity
 	return s.withDatabase(dbPath, readOnly, func(conn *DatabaseConnection) error {
-		return s.verifyDatabaseIntegrity(conn.DB)
+		return s.verifyDatabaseIntegrity(conn.db)
 	})
 }
 
-// performBackupOperation executes the actual backup operation with timeout
-func (s *SQLiteSource) performBackupOperation(ctx context.Context, sourceConn *DatabaseConnection, backupPath string) error {
-	backupCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
-	defer cancel()
-
-	done := make(chan error, 1)
-	go func() {
-		s.logger.Printf("Performing VACUUM INTO backup...")
-		vacuumSQL := fmt.Sprintf("VACUUM INTO '%s'", backupPath)
-		done <- sourceConn.DB.Exec(vacuumSQL).Error
-	}()
-
-	select {
-	case <-backupCtx.Done():
-		return backup.NewError(backup.ErrTimeout, "backup operation timed out", backupCtx.Err())
-	case err := <-done:
-		if err != nil {
-			if isMediaError(err) {
-				return backup.NewError(backup.ErrMedia, "backup operation failed", err)
-			}
-			return backup.NewError(backup.ErrDatabase, "backup operation failed", err)
-		}
-		return nil
+// getDatabaseInfo retrieves and logs database information
+func (s *SQLiteSource) getDatabaseInfo(db *sql.DB) (int, error) {
+	var sourcePages int
+	err := db.QueryRow("PRAGMA page_count").Scan(&sourcePages)
+	if err != nil {
+		s.logger.Printf("DEBUG: Failed to get source page count: %v", err)
+	} else {
+		s.logger.Printf("DEBUG: Source database page count: %d", sourcePages)
 	}
+
+	var pageSize int
+	err = db.QueryRow("PRAGMA page_size").Scan(&pageSize)
+	if err != nil {
+		s.logger.Printf("DEBUG: Failed to get page size: %v", err)
+	} else {
+		s.logger.Printf("DEBUG: Database page size: %d", pageSize)
+	}
+
+	var journalMode string
+	err = db.QueryRow("PRAGMA journal_mode").Scan(&journalMode)
+	if err != nil {
+		s.logger.Printf("DEBUG: Failed to get journal mode: %v", err)
+	} else {
+		s.logger.Printf("DEBUG: Database journal mode: %s", journalMode)
+	}
+
+	return sourcePages, nil
 }
 
-// verifyBackupIntegrity verifies the integrity of the backup file
-func (s *SQLiteSource) verifyBackupIntegrity(backupPath string) error {
-	// First verify the file exists and is readable
-	if err := s.verifyBackupFile(backupPath); err != nil {
+// initializeBackupConnection sets up the backup connection between source and destination
+func (s *SQLiteSource) initializeBackupConnection(srcDb, dstDb *sqlite3.SQLiteConn) (*sqlite3.SQLiteBackup, int, error) {
+	// Start the backup
+	backupConn, err := dstDb.Backup("main", srcDb, "main")
+	if err != nil {
+		return nil, 0, backup.NewError(backup.ErrDatabase, "failed to initialize backup", err)
+	}
+	s.logger.Printf("DEBUG: Backup connection initialized: %v", backupConn)
+
+	// Get the initial page count
+	remaining, total := backupConn.PageCount(), backupConn.PageCount()
+	s.logger.Printf("DEBUG: Initial backup page counts - remaining: %d, total: %d", remaining, total)
+
+	return backupConn, total, nil
+}
+
+// validatePageCount checks if the page count is valid and adjusts if necessary
+func (s *SQLiteSource) validatePageCount(total, sourcePages int) (totalPages, remainingPages int, err error) {
+	if total <= 0 {
+		// If total is 0 but we have pages in source, try using source page count
+		if sourcePages > 0 {
+			s.logger.Printf("DEBUG: Using source page count as backup pages: %d", sourcePages)
+			return sourcePages, sourcePages, nil
+		} else {
+			s.logger.Printf("DEBUG: Both backup and source report 0 pages - database may be empty or corrupted")
+			return 0, 0, backup.NewError(backup.ErrDatabase, "invalid page count", nil)
+		}
+	}
+
+	return total, total, nil
+}
+
+// performBackupSteps executes the backup process in chunks
+func (s *SQLiteSource) performBackupSteps(ctx context.Context, backupConn *sqlite3.SQLiteBackup, total int) error {
+	remaining := total
+	const pagesPerStep = 1000
+
+	for remaining > 0 {
+		select {
+		case <-ctx.Done():
+			return backup.NewError(backup.ErrCanceled, "backup operation cancelled", ctx.Err())
+		default:
+		}
+
+		// Step the backup process
+		prevRemaining := remaining
+		done, err := backupConn.Step(pagesPerStep)
+		if err != nil {
+			s.logger.Printf("DEBUG: Backup step failed - remaining: %d, error: %v", remaining, err)
+			if isMediaError(err) {
+				return backup.NewError(backup.ErrMedia, "failed during backup step", err)
+			}
+			return backup.NewError(backup.ErrDatabase, "failed during backup step", err)
+		}
+
+		// Get progress
+		remaining = backupConn.Remaining()
+		s.logger.Printf("DEBUG: Step completed - previous remaining: %d, new remaining: %d", prevRemaining, remaining)
+
+		// Log progress
+		progress := float64(total-remaining) / float64(total) * 100
+		s.logger.Printf("Backup progress: %.1f%% (%d/%d pages)", progress, total-remaining, total)
+
+		if done {
+			s.logger.Printf("DEBUG: Backup marked as done with %d pages remaining", remaining)
+			break
+		}
+	}
+
+	return nil
+}
+
+// copyBackupToWriter copies the temporary backup file to the writer
+func (s *SQLiteSource) copyBackupToWriter(tempPath string, w io.Writer) error {
+	backupFile, err := os.Open(tempPath)
+	if err != nil {
+		return backup.NewError(backup.ErrIO, "failed to open backup file", err)
+	}
+	defer backupFile.Close()
+
+	if _, err := io.Copy(w, backupFile); err != nil {
+		if isMediaError(err) {
+			return backup.NewError(backup.ErrMedia, "failed to write backup", err)
+		}
+		return backup.NewError(backup.ErrIO, "failed to write backup", err)
+	}
+
+	return nil
+}
+
+// streamBackupToWriter performs a streaming backup of the SQLite database to the provided writer
+func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w io.Writer) error {
+	// Create a temporary file for the backup
+	tempFile, err := os.CreateTemp("", "birdnet-go-backup-*.db")
+	if err != nil {
+		return backup.NewError(backup.ErrIO, "failed to create temporary file", err)
+	}
+	tempPath := tempFile.Name()
+	tempFile.Close() // Close it so we can use it as a destination
+	defer os.Remove(tempPath)
+
+	// Open the destination database
+	destDB, err := sql.Open("sqlite3", tempPath)
+	if err != nil {
+		return backup.NewError(backup.ErrDatabase, "failed to open destination database", err)
+	}
+	defer destDB.Close()
+
+	// Get the SQLite connection objects using the internal driver connection
+	srcConn, err := db.Conn(ctx)
+	if err != nil {
+		return backup.NewError(backup.ErrDatabase, "failed to get source connection", err)
+	}
+	defer srcConn.Close()
+
+	dstConn, err := destDB.Conn(ctx)
+	if err != nil {
+		return backup.NewError(backup.ErrDatabase, "failed to get destination connection", err)
+	}
+	defer dstConn.Close()
+
+	// Execute backup within the connection context
+	err = srcConn.Raw(func(srcDrv interface{}) error {
+		return dstConn.Raw(func(dstDrv interface{}) error {
+			// Type assert to get the SQLite connections
+			srcDb, ok := srcDrv.(*sqlite3.SQLiteConn)
+			if !ok {
+				return backup.NewError(backup.ErrDatabase, "source is not a SQLite connection", nil)
+			}
+
+			dstDb, ok := dstDrv.(*sqlite3.SQLiteConn)
+			if !ok {
+				return backup.NewError(backup.ErrDatabase, "destination is not a SQLite connection", nil)
+			}
+
+			// Get database information
+			sourcePages, err := s.getDatabaseInfo(db)
+			if err != nil {
+				return err
+			}
+
+			// Initialize backup connection
+			backupConn, total, err := s.initializeBackupConnection(srcDb, dstDb)
+			if err != nil {
+				return err
+			}
+			defer backupConn.Close()
+
+			// Validate and adjust page counts
+			_, remaining, err := s.validatePageCount(total, sourcePages)
+			if err != nil {
+				return err
+			}
+
+			// Perform the backup in chunks
+			return s.performBackupSteps(ctx, backupConn, remaining)
+		})
+	})
+
+	if err != nil {
 		return err
 	}
 
-	// Then verify database integrity
-	return s.withDatabase(backupPath, true, func(conn *DatabaseConnection) error {
-		return s.verifyDatabaseIntegrity(conn.DB)
-	})
-}
-
-// Backup performs a backup of the SQLite database using VACUUM INTO
-func (s *SQLiteSource) Backup(ctx context.Context) (string, error) {
-	op := NewOperation()
-	s.logf(op, "Starting SQLite backup operation")
-
-	var lockPath string
-	var tempDir string
-	var backupPath string
-
-	// Setup cleanup function for error cases
-	cleanup := func() {
-		if lockPath != "" {
-			s.cleanupPartialBackup(backupPath, lockPath)
-		}
-		// Only remove tempDir if we have an error
-		if tempDir != "" && backupPath == "" {
-			os.RemoveAll(tempDir)
-		}
+	// Ensure all changes are written to disk
+	if err := destDB.Close(); err != nil {
+		return backup.NewError(backup.ErrIO, "failed to close destination database", err)
 	}
 
-	// Setup signal handler
-	ctx = s.setupSignalHandler(ctx, cleanup)
-	// Only cleanup on error, not on successful completion
-	defer func() {
-		if backupPath == "" {
-			cleanup()
-		}
-	}()
+	// Copy the backup file to the writer
+	return s.copyBackupToWriter(tempPath, w)
+}
+
+// Backup performs a streaming backup of the SQLite database
+func (s *SQLiteSource) Backup(ctx context.Context) (io.ReadCloser, error) {
+	op := NewOperation()
+	s.logf(op, "Starting SQLite streaming backup operation")
 
 	// Validate configuration and get database path
 	dbPath, err := s.validateConfig()
 	if err != nil {
-		return "", fmt.Errorf("configuration validation failed: %w", err)
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
 
 	s.logf(op, "Initiating backup for database: %s", dbPath)
 
 	// Verify source database
 	if err := s.verifyDatabase(dbPath, false); err != nil {
-		return "", fmt.Errorf("database verification failed: %w", err)
+		return nil, fmt.Errorf("database verification failed: %w", err)
 	}
 
-	// Create temporary directory
-	tempDir, err = s.createBackupDirectory()
-	if err != nil {
-		return "", fmt.Errorf("failed to create backup directory: %w", err)
-	}
+	// Create pipe for streaming
+	pr, pw := io.Pipe()
 
-	// Verify disk space before proceeding
-	if err := s.verifyDiskSpace(dbPath, tempDir); err != nil {
-		return "", fmt.Errorf("disk space verification failed: %w", err)
-	}
+	// Start backup in a goroutine
+	go func() {
+		defer pw.Close()
 
-	// Generate backup path and create lock file
-	backupPath = s.generateBackupPath(tempDir)
-	lockPath, err = s.createLockFile(backupPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to create lock file: %w", err)
-	}
+		err := s.withDatabase(dbPath, true, func(conn *DatabaseConnection) error {
+			return s.streamBackupToWriter(ctx, conn.db, pw)
+		})
 
-	// Perform backup with source database
-	err = s.withDatabase(dbPath, false, func(sourceConn *DatabaseConnection) error {
-		// Perform the backup operation
-		if err := s.performBackupOperation(ctx, sourceConn, backupPath); err != nil {
-			return fmt.Errorf("backup operation failed: %w", err)
+		if err != nil {
+			pw.CloseWithError(err)
+			return
 		}
 
-		// Verify backup integrity
-		if err := s.verifyBackupIntegrity(backupPath); err != nil {
-			return fmt.Errorf("backup integrity verification failed: %w", err)
-		}
+		s.logf(op, "SQLite backup completed successfully")
+	}()
 
-		return nil
-	})
-
-	if err != nil {
-		// Reset backupPath to trigger cleanup
-		backupPath = ""
-		return "", err
-	}
-
-	// Remove lock file after successful backup
-	if err := os.Remove(lockPath); err != nil {
-		s.logf(op, "WARNING: Failed to remove lock file: %v", err)
-	}
-	lockPath = "" // Prevent cleanup from removing the lock file again
-
-	s.logf(op, "SQLite backup completed successfully")
-	return backupPath, nil
-}
-
-// verifyBackupFile checks if the backup file was created and is readable
-func (s *SQLiteSource) verifyBackupFile(backupPath string) error {
-	s.logger.Printf("Verifying backup file...")
-	info, err := os.Stat(backupPath)
-	if err != nil {
-		return fmt.Errorf("backup file was not created successfully: %w", err)
-	}
-	s.logger.Printf("Verified backup file, size: %d bytes", info.Size())
-	return nil
+	return pr, nil
 }
 
 // Validate checks if the source configuration is valid
