@@ -371,15 +371,24 @@ type BackupTarget struct {
 	Settings map[string]interface{} `yaml:"settings"` // Target-specific settings
 }
 
+// BackupScheduleConfig defines a single backup schedule
+type BackupScheduleConfig struct {
+	Enabled  bool   `yaml:"enabled"`  // Whether this schedule is active
+	Hour     int    `yaml:"hour"`     // Hour to run backup (0-23)
+	Minute   int    `yaml:"minute"`   // Minute to run backup (0-59)
+	Weekday  string `yaml:"weekday"`  // Day of week for weekly backups ("" for daily)
+	IsWeekly bool   `yaml:"isweekly"` // true for weekly backups, false for daily
+}
+
 // BackupConfig contains backup-related configuration
 type BackupConfig struct {
-	Enabled        bool            `yaml:"enabled"`         // true to enable backup functionality
-	Debug          bool            `yaml:"debug"`           // true to enable debug logging
-	Schedule       string          `yaml:"schedule"`        // Cron expression for backup schedule
-	Encryption     bool            `yaml:"encryption"`      // true to enable backup encryption
-	SanitizeConfig bool            `yaml:"sanitize_config"` // true to sanitize sensitive data from config backups
-	Retention      BackupRetention `yaml:"retention"`       // Backup retention settings
-	Targets        []BackupTarget  `yaml:"targets"`         // List of backup targets
+	Enabled        bool                   `yaml:"enabled"`         // true to enable backup functionality
+	Debug          bool                   `yaml:"debug"`           // true to enable debug logging
+	Encryption     bool                   `yaml:"encryption"`      // true to enable backup encryption
+	SanitizeConfig bool                   `yaml:"sanitize_config"` // true to sanitize sensitive data from config backups
+	Retention      BackupRetention        `yaml:"retention"`       // Backup retention settings
+	Targets        []BackupTarget         `yaml:"targets"`         // List of backup targets
+	Schedules      []BackupScheduleConfig `yaml:"schedules"`       // List of backup schedules
 
 	// OperationTimeouts defines timeouts for various backup operations
 	OperationTimeouts struct {

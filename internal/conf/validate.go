@@ -285,11 +285,35 @@ func validateWeatherSettings(settings *WeatherSettings) error {
 func validateBackupConfig(config *BackupConfig) error {
 	var errs []string
 
-	// Validate schedule (cron expression)
-	if config.Schedule == "" {
-		errs = append(errs, "backup schedule must not be empty")
+	// Validate schedules
+	if len(config.Schedules) == 0 {
+		errs = append(errs, "at least one backup schedule must be configured when backup is enabled")
 	}
-	// TODO: Add cron expression validation when schedule is not empty
+
+	// Validate each schedule
+	for i, schedule := range config.Schedules {
+		// Validate hour
+		if schedule.Hour < 0 || schedule.Hour > 23 {
+			errs = append(errs, fmt.Sprintf("schedule %d: hour must be between 0 and 23", i+1))
+		}
+
+		// Validate minute
+		if schedule.Minute < 0 || schedule.Minute > 59 {
+			errs = append(errs, fmt.Sprintf("schedule %d: minute must be between 0 and 59", i+1))
+		}
+
+		// Validate weekday for weekly backups
+		if schedule.IsWeekly {
+			if schedule.Weekday == "" {
+				errs = append(errs, fmt.Sprintf("schedule %d: weekday must be specified for weekly backups", i+1))
+			} else {
+				_, err := ParseWeekday(schedule.Weekday)
+				if err != nil {
+					errs = append(errs, fmt.Sprintf("schedule %d: %v", i+1, err))
+				}
+			}
+		}
+	}
 
 	// Validate retention settings
 	if config.Retention.MaxBackups < config.Retention.MinBackups {

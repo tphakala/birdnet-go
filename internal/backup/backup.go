@@ -6,9 +6,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -88,6 +85,19 @@ type FileMetadata struct {
 	UID    int         // User ID (Unix only)
 	GID    int         // Group ID (Unix only)
 	IsUnix bool        // Whether this metadata is from a Unix system
+}
+
+// BackupStats contains statistics about backups in a target
+type BackupStats struct {
+	TotalBackups     int       // Total number of backups
+	DailyBackups     int       // Number of daily backups
+	WeeklyBackups    int       // Number of weekly backups
+	OldestBackup     time.Time // Timestamp of the oldest backup
+	NewestBackup     time.Time // Timestamp of the newest backup
+	TotalSize        int64     // Total size of all backups in bytes
+	AvailableSpace   int64     // Available space in target (if applicable)
+	LastBackupStatus string    // Status of the last backup operation
+	LastBackupTime   time.Time // Time of the last backup operation
 }
 
 // sanitizeConfig creates a copy of the configuration with sensitive data removed
@@ -577,7 +587,7 @@ func (m *Manager) addMetadataToArchive(ctx context.Context, tw *tar.Writer, meta
 	header := &tar.Header{
 		Name:    "metadata.json",
 		Size:    int64(len(metadataBytes)),
-		Mode:    0644,
+		Mode:    0o644,
 		ModTime: metadata.Timestamp,
 	}
 
@@ -601,7 +611,7 @@ func (m *Manager) addBackupDataToArchive(ctx context.Context, tw *tar.Writer, re
 
 	header := &tar.Header{
 		Name:    fmt.Sprintf("%s.db", metadata.Source),
-		Mode:    0644,
+		Mode:    0o644,
 		ModTime: metadata.Timestamp,
 	}
 
@@ -649,127 +659,6 @@ func (m *Manager) encryptAndWriteArchive(ctx context.Context, writer io.Writer, 
 	}
 
 	return nil
-}
-
-// getEncryptionKeyPath returns the path to the encryption key file
-func (m *Manager) getEncryptionKeyPath() (string, error) {
-	// Get the config directory
-	configPaths, err := conf.GetDefaultConfigPaths()
-	if err != nil {
-		return "", NewError(ErrConfig, "failed to get config paths", err)
-	}
-	if len(configPaths) == 0 {
-		return "", NewError(ErrConfig, "no config paths available", nil)
-	}
-
-	// Use the first config path (which should be the active one)
-	return filepath.Join(configPaths[0], "encryption.key"), nil
-}
-
-// getEncryptionKey returns the encryption key, generating it if necessary
-func (m *Manager) getEncryptionKey() ([]byte, error) {
-	if !m.config.Encryption {
-		return nil, NewError(ErrConfig, "encryption is not enabled", nil)
-	}
-
-	// Get the encryption key file path
-	keyPath, err := m.getEncryptionKeyPath()
-	if err != nil {
-		return nil, err
-	}
-
-	// Try to read the existing key file
-	keyBytes, err := os.ReadFile(keyPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, NewError(ErrIO, "failed to read encryption key file", err)
-		}
-
-		// Generate a new key if the file doesn't exist
-		key := make([]byte, 32) // 256 bits
-		if _, err := rand.Read(key); err != nil {
-			return nil, NewError(ErrEncryption, "failed to generate encryption key", err)
-		}
-
-		// Encode the key as hex
-		keyHex := hex.EncodeToString(key)
-
-		// Create the config directory if it doesn't exist
-		if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
-			return nil, NewError(ErrIO, "failed to create config directory", err)
-		}
-
-		// Write the key to the file with secure permissions
-		if err := os.WriteFile(keyPath, []byte(keyHex), 0o600); err != nil {
-			return nil, NewError(ErrIO, "failed to write encryption key file", err)
-		}
-
-		return key, nil
-	}
-
-	// Decode existing key from hex
-	keyStr := strings.TrimSpace(string(keyBytes))
-	key, err := hex.DecodeString(keyStr)
-	if err != nil {
-		return nil, NewError(ErrEncryption, "failed to decode encryption key", err)
-	}
-
-	// Validate key length
-	if len(key) != 32 {
-		return nil, NewError(ErrEncryption, "invalid encryption key length", nil)
-	}
-
-	return key, nil
-}
-
-// encryptData encrypts data using AES-256-GCM
-func encryptData(data, key []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, NewError(ErrEncryption, "failed to create cipher", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, NewError(ErrEncryption, "failed to create GCM", err)
-	}
-
-	// Generate a random nonce
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, NewError(ErrEncryption, "failed to generate nonce", err)
-	}
-
-	// Encrypt the data
-	ciphertext := gcm.Seal(nonce, nonce, data, nil)
-	return ciphertext, nil
-}
-
-// decryptData decrypts data using AES-256-GCM
-func decryptData(encryptedData, key []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, NewError(ErrEncryption, "failed to create cipher", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, NewError(ErrEncryption, "failed to create GCM", err)
-	}
-
-	if len(encryptedData) < gcm.NonceSize() {
-		return nil, NewError(ErrEncryption, "encrypted data too short", nil)
-	}
-
-	nonce := encryptedData[:gcm.NonceSize()]
-	ciphertext := encryptedData[gcm.NonceSize():]
-
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return nil, NewError(ErrEncryption, "failed to decrypt data", err)
-	}
-
-	return plaintext, nil
 }
 
 // parseRetentionAge parses a retention age string (e.g., "30d", "6m", "1y") into a duration
@@ -1042,75 +931,177 @@ func (m *Manager) cleanupTempDirectories(dirs []string) {
 	}
 }
 
-// GenerateEncryptionKey generates a new encryption key and saves it to the default location
-func (m *Manager) GenerateEncryptionKey() (string, error) {
-	// Generate a new 256-bit key
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		return "", NewError(ErrEncryption, "failed to generate random key", err)
+// GetBackupStats returns statistics about backups in all targets
+func (m *Manager) GetBackupStats(ctx context.Context) (map[string]BackupStats, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	stats := make(map[string]BackupStats)
+
+	for targetName, target := range m.targets {
+		backups, err := target.List(ctx)
+		if err != nil {
+			m.logger.Printf("Warning: Failed to get backups from target %s: %v", targetName, err)
+			continue
+		}
+
+		targetStats := BackupStats{}
+		if len(backups) > 0 {
+			targetStats.OldestBackup = backups[0].Timestamp
+			targetStats.NewestBackup = backups[0].Timestamp
+		}
+
+		for _, backup := range backups {
+			targetStats.TotalBackups++
+			targetStats.TotalSize += backup.Size
+
+			if backup.IsDaily {
+				targetStats.DailyBackups++
+			} else {
+				targetStats.WeeklyBackups++
+			}
+
+			if backup.Timestamp.Before(targetStats.OldestBackup) {
+				targetStats.OldestBackup = backup.Timestamp
+			}
+			if backup.Timestamp.After(targetStats.NewestBackup) {
+				targetStats.NewestBackup = backup.Timestamp
+			}
+		}
+
+		stats[targetName] = targetStats
 	}
 
-	// Convert key to hex string
-	keyHex := hex.EncodeToString(key)
-
-	// Get the key file path
-	keyPath, err := m.getEncryptionKeyPath()
-	if err != nil {
-		return "", err
-	}
-
-	// Create the config directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
-		return "", NewError(ErrIO, "failed to create config directory", err)
-	}
-
-	// Write the key to file with secure permissions
-	if err := os.WriteFile(keyPath, []byte(keyHex), 0o600); err != nil {
-		return "", NewError(ErrIO, "failed to write encryption key file", err)
-	}
-
-	m.logger.Printf("✅ Encryption key saved to: %s", keyPath)
-	return keyHex, nil
+	return stats, nil
 }
 
-// ValidateEncryption checks if encryption is properly configured
-func (m *Manager) ValidateEncryption() error {
-	if !m.config.Encryption {
-		return nil // Encryption is not enabled, no validation needed
-	}
-
-	// Try to read the encryption key
-	key, err := m.getEncryptionKey()
+// ValidateBackupCounts checks if the number of backups meets retention policy requirements
+func (m *Manager) ValidateBackupCounts(ctx context.Context) error {
+	stats, err := m.GetBackupStats(ctx)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return NewError(ErrEncryption, "encryption is enabled but no key file found, please generate a key first", err)
-		}
-		return NewError(ErrEncryption, "failed to read encryption key", err)
+		return fmt.Errorf("failed to get backup stats: %w", err)
 	}
 
-	// Validate key length
-	if len(key) != 32 {
-		return NewError(ErrEncryption, "invalid encryption key length", nil)
+	var errors []error
+	for targetName, targetStats := range stats {
+		// Check minimum backups requirement
+		if targetStats.TotalBackups < m.config.Retention.MinBackups {
+			errors = append(errors, fmt.Errorf(
+				"target %s has only %d backups, minimum required is %d",
+				targetName,
+				targetStats.TotalBackups,
+				m.config.Retention.MinBackups,
+			))
+		}
+
+		// Check maximum backups limit
+		if m.config.Retention.MaxBackups > 0 && targetStats.TotalBackups > m.config.Retention.MaxBackups {
+			errors = append(errors, fmt.Errorf(
+				"target %s has %d backups, exceeding maximum limit of %d",
+				targetName,
+				targetStats.TotalBackups,
+				m.config.Retention.MaxBackups,
+			))
+		}
+
+		// Check age of oldest backup against retention policy
+		if m.config.Retention.MaxAge != "" {
+			maxAge, err := m.parseRetentionAge(m.config.Retention.MaxAge)
+			if err != nil {
+				errors = append(errors, fmt.Errorf("invalid retention age: %w", err))
+				continue
+			}
+
+			oldestAllowed := time.Now().Add(-maxAge)
+			if targetStats.OldestBackup.Before(oldestAllowed) {
+				errors = append(errors, fmt.Errorf(
+					"target %s has backups older than maximum retention age (%s)",
+					targetName,
+					m.config.Retention.MaxAge,
+				))
+			}
+		}
+	}
+
+	if len(errors) > 0 {
+		return combineErrors(errors)
+	}
+	return nil
+}
+
+// UpdateBackupStats updates the backup statistics after a successful backup
+func (m *Manager) UpdateBackupStats(ctx context.Context, targetName string, metadata *Metadata) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	target, exists := m.targets[targetName]
+	if !exists {
+		return fmt.Errorf("target %s not found", targetName)
+	}
+
+	// Get current backups
+	backups, err := target.List(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list backups: %w", err)
+	}
+
+	// Update backup counts and check retention policy
+	if err := m.enforceRetentionPolicy(ctx, target, backups); err != nil {
+		m.logger.Printf("Warning: Failed to enforce retention policy: %v", err)
 	}
 
 	return nil
 }
 
-// GetEncryptionKey returns the current encryption key
-func (m *Manager) GetEncryptionKey() ([]byte, error) {
-	return m.getEncryptionKey()
-}
-
-// DecryptData decrypts the provided data using the configured encryption key
-func (m *Manager) DecryptData(encryptedData []byte) ([]byte, error) {
-	if !m.config.Encryption {
-		return nil, NewError(ErrEncryption, "encryption is not enabled", nil)
+// enforceRetentionPolicy ensures the backup retention policy is followed
+func (m *Manager) enforceRetentionPolicy(ctx context.Context, target Target, backups []BackupInfo) error {
+	if len(backups) == 0 {
+		return nil
 	}
 
-	key, err := m.getEncryptionKey()
+	// Sort backups by timestamp (newest first)
+	sort.Slice(backups, func(i, j int) bool {
+		return backups[i].Timestamp.After(backups[j].Timestamp)
+	})
+
+	// Get retention policy parameters
+	maxAge, err := m.parseRetentionAge(m.config.Retention.MaxAge)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("invalid retention age: %w", err)
 	}
 
-	return decryptData(encryptedData, key)
+	minBackups := m.config.Retention.MinBackups
+	maxBackups := m.config.Retention.MaxBackups
+	now := time.Now()
+
+	// Identify backups to delete
+	var toDelete []string
+	for i, backup := range backups {
+		// Always keep minimum number of backups
+		if i < minBackups {
+			continue
+		}
+
+		// Stop if we're within max backups limit
+		if maxBackups > 0 && i >= maxBackups {
+			toDelete = append(toDelete, backup.ID)
+			continue
+		}
+
+		// Check age
+		if maxAge > 0 && now.Sub(backup.Timestamp) > maxAge {
+			toDelete = append(toDelete, backup.ID)
+		}
+	}
+
+	// Delete identified backups
+	for _, id := range toDelete {
+		if err := target.Delete(ctx, id); err != nil {
+			m.logger.Printf("Warning: Failed to delete backup %s: %v", id, err)
+		} else {
+			m.logger.Printf("Deleted old backup: %s", id)
+		}
+	}
+
+	return nil
 }
