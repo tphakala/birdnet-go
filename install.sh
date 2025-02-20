@@ -166,7 +166,7 @@ check_prerequisites() {
             ;;
     esac
 
-    # Get OS information
+    # shellcheck source=/etc/os-release
     if [ -f /etc/os-release ]; then
         . /etc/os-release
     else
@@ -532,7 +532,7 @@ configure_sound_card() {
         fi
 
         # If no USB device was found, use first device as default
-        if [ $default_selection -eq 0 ]; then
+        if [ "$default_selection" -eq 0 ]; then
             default_selection=1
         fi
 
@@ -556,8 +556,8 @@ configure_sound_card() {
             local device_num
             local index=1
             while IFS= read -r line; do
-                if [[ $line =~ ^card[[:space:]]+([0-9]+)[[:space:]]*:[[:space:]]*([^,]+),[[:space:]]*device[[:space:]]+([0-9]+) ]]; then
-                    if [ $index -eq $selection ]; then
+                if [[ "$line" =~ ^card[[:space:]]+([0-9]+)[[:space:]]*:[[:space:]]*([^,]+),[[:space:]]*device[[:space:]]+([0-9]+) ]]; then
+                    if [ "$index" -eq "$selection" ]; then
                         card_num="${BASH_REMATCH[1]}"
                         device_num="${BASH_REMATCH[3]}"
                         break
@@ -700,11 +700,9 @@ configure_locale() {
 get_ip_location() {
     # First try NordVPN's service for city/country
     local nordvpn_info
-    nordvpn_info=$(curl -s "https://nordvpn.com/wp-admin/admin-ajax.php" \
+    if nordvpn_info=$(curl -s "https://nordvpn.com/wp-admin/admin-ajax.php" \
         -H "Content-Type: application/x-www-form-urlencoded" \
-        --data-urlencode "action=get_user_info_data" 2>/dev/null)
-    
-    if [ $? -eq 0 ] && [ -n "$nordvpn_info" ]; then
+        --data-urlencode "action=get_user_info_data" 2>/dev/null) && [ -n "$nordvpn_info" ]; then
         # Check if the response is valid JSON and contains the required fields
         if echo "$nordvpn_info" | jq -e '.city and .country' >/dev/null 2>&1; then
             local city
@@ -731,9 +729,7 @@ get_ip_location() {
 
     # If NordVPN fails, try ipapi.co as a fallback
     local ipapi_info
-    ipapi_info=$(curl -s "https://ipapi.co/json/" 2>/dev/null)
-    
-    if [ $? -eq 0 ] && [ -n "$ipapi_info" ]; then
+    if ipapi_info=$(curl -s "https://ipapi.co/json/" 2>/dev/null) && [ -n "$ipapi_info" ]; then
         # Check if the response is valid JSON and contains the required fields
         if echo "$ipapi_info" | jq -e '.city and .country_name and .latitude and .longitude' >/dev/null 2>&1; then
             local city
@@ -764,13 +760,15 @@ configure_location() {
     
     # Try to get location from NordVPN/OpenStreetMap
     local ip_location
-    ip_location=$(get_ip_location)
-    
-    if [ $? -eq 0 ]; then
-        local ip_lat=$(echo "$ip_location" | cut -d'|' -f1)
-        local ip_lon=$(echo "$ip_location" | cut -d'|' -f2)
-        local ip_city=$(echo "$ip_location" | cut -d'|' -f3)
-        local ip_country=$(echo "$ip_location" | cut -d'|' -f4)
+    if ip_location=$(get_ip_location); then
+        local ip_lat
+        local ip_lon
+        local ip_city
+        local ip_country
+        ip_lat=$(echo "$ip_location" | cut -d'|' -f1)
+        ip_lon=$(echo "$ip_location" | cut -d'|' -f2)
+        ip_city=$(echo "$ip_location" | cut -d'|' -f3)
+        ip_country=$(echo "$ip_location" | cut -d'|' -f4)
         
         print_message "📍 Based on your IP address, your location appears to be: " "$YELLOW" "nonewline"
         print_message "$ip_city, $ip_country ($ip_lat, $ip_lon)" "$NC"
@@ -801,8 +799,8 @@ configure_location() {
         case $location_choice in
             1)
                 while true; do
-                    read -p "Enter latitude (-90 to 90): " lat
-                    read -p "Enter longitude (-180 to 180): " lon
+                    read -r -p "Enter latitude (-90 to 90): " lat
+                    read -r -p "Enter longitude (-180 to 180): " lon
                     
                     if [[ "$lat" =~ ^-?[0-9]*\.?[0-9]+$ ]] && \
                        [[ "$lon" =~ ^-?[0-9]*\.?[0-9]+$ ]] && \
@@ -865,8 +863,8 @@ configure_auth() {
 
     if [[ $enable_auth == "y" ]]; then
         while true; do
-            read -p "Enter password: " password
-            read -p "Confirm password: " password2
+            read -r -p "Enter password: " password
+            read -r -p "Confirm password: " password2
             
             if [ "$password" = "$password2" ]; then
                 # Generate password hash (using bcrypt)
@@ -1405,9 +1403,9 @@ for pkg in $REQUIRED_PACKAGES; do
 done
 
 # Install missing packages in a single command
-if [ ! -z "$TO_INSTALL" ]; then
-    print_message "🔧 Installing missing packages:$TO_INSTALL" "$YELLOW"
-    if sudo apt install -qq -y $TO_INSTALL; then
+if [ -n "${TO_INSTALL}" ]; then
+    print_message "🔧 Installing missing packages: ${TO_INSTALL}" "$YELLOW"
+    if sudo apt install -qq -y "${TO_INSTALL}"; then
         print_message "✅ All packages installed successfully" "$GREEN"
     else
         print_message "❌ Failed to install some packages" "$RED"
