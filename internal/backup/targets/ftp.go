@@ -22,7 +22,6 @@ const (
 	defaultTimeout        = 30 * time.Second
 	defaultMaxConnections = 5
 	defaultMaxRetries     = 3
-	defaultBasePath       = "backups"
 	metadataVersion       = 1
 	tempFilePrefix        = "tmp-"
 	metadataFileExt       = ".meta"
@@ -61,6 +60,9 @@ func NewFTPTarget(config *FTPTargetConfig, logger backup.Logger) (*FTPTarget, er
 	if config.Host == "" {
 		return nil, backup.NewError(backup.ErrConfig, "ftp: host is required", nil)
 	}
+	if config.BasePath == "" {
+		return nil, backup.NewError(backup.ErrConfig, "ftp: base path is required", nil)
+	}
 
 	// Set defaults for optional fields
 	if config.Port == 0 {
@@ -69,11 +71,7 @@ func NewFTPTarget(config *FTPTargetConfig, logger backup.Logger) (*FTPTarget, er
 	if config.Timeout == 0 {
 		config.Timeout = defaultTimeout
 	}
-	if config.BasePath == "" {
-		config.BasePath = defaultBasePath
-	} else {
-		config.BasePath = strings.TrimRight(config.BasePath, "/")
-	}
+	config.BasePath = strings.TrimRight(config.BasePath, "/")
 	if config.MaxConns == 0 {
 		config.MaxConns = defaultMaxConnections
 	}

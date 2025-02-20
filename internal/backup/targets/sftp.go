@@ -79,6 +79,12 @@ func NewSFTPTarget(settings map[string]interface{}) (*SFTPTarget, error) {
 	}
 	config.Host = host
 
+	path, ok := settings["path"].(string)
+	if !ok {
+		return nil, backup.NewError(backup.ErrConfig, "sftp: path is required", nil)
+	}
+	config.BasePath = strings.TrimRight(path, "/")
+
 	// Optional settings with defaults
 	if port, ok := settings["port"].(int); ok {
 		config.Port = port
@@ -106,12 +112,6 @@ func NewSFTPTarget(settings map[string]interface{}) (*SFTPTarget, error) {
 		if err == nil {
 			config.KnownHostFile = filepath.Join(homeDir, ".ssh", "known_hosts")
 		}
-	}
-
-	if path, ok := settings["path"].(string); ok {
-		config.BasePath = strings.TrimRight(path, "/")
-	} else {
-		config.BasePath = "backups"
 	}
 
 	if timeout, ok := settings["timeout"].(string); ok {
@@ -387,10 +387,6 @@ func (t *SFTPTarget) validatePath(pathToCheck string) error {
 
 // Store implements the backup.Target interface
 func (t *SFTPTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
-	if t.config.Debug {
-		fmt.Printf("🔄 SFTP: Storing backup %s to %s\n", filepath.Base(sourcePath), t.config.Host)
-	}
-
 	// Validate the target path
 	targetPath := path.Join(t.config.BasePath, filepath.Base(sourcePath))
 	if err := t.validatePath(targetPath); err != nil {
@@ -437,10 +433,6 @@ func (t *SFTPTarget) Store(ctx context.Context, sourcePath string, metadata *bac
 		// Upload metadata file atomically
 		if err := t.atomicUpload(ctx, client, tempMetadataFile.Name(), metadataPath); err != nil {
 			return backup.NewError(backup.ErrIO, "sftp: failed to store metadata", err)
-		}
-
-		if t.config.Debug {
-			fmt.Printf("✅ SFTP: Successfully stored backup %s with metadata\n", filepath.Base(sourcePath))
 		}
 
 		return nil
@@ -497,27 +489,11 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 	}
 	defer file.Close()
 
-	fileInfo, err := file.Stat()
-	if err != nil {
-		return backup.NewError(backup.ErrIO, "sftp: failed to get file info", err)
-	}
-
 	dstFile, err := client.Create(remotePath)
 	if err != nil {
 		return backup.NewError(backup.ErrIO, "sftp: failed to create remote file", err)
 	}
 	defer dstFile.Close()
-
-	var uploaded int64
-	progress := func(n int64) {
-		uploaded += n
-		if t.config.Debug {
-			percent := float64(uploaded) / float64(fileInfo.Size()) * 100
-			fmt.Printf("\rUploading %s: %.2f%%", filepath.Base(localPath), percent)
-		}
-	}
-
-	reader := &SFTPProgressReader{Reader: file, Progress: progress}
 
 	// Create a pipe for streaming with context cancellation
 	pr, pw := io.Pipe()
@@ -525,7 +501,7 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 
 	go func() {
 		defer pw.Close()
-		_, err := io.Copy(pw, reader)
+		_, err := io.Copy(pw, file)
 		errChan <- err
 	}()
 
@@ -546,10 +522,6 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 		if err != nil {
 			return backup.NewError(backup.ErrIO, "sftp: failed to upload file", err)
 		}
-	}
-
-	if t.config.Debug {
-		fmt.Println() // New line after progress
 	}
 
 	return nil

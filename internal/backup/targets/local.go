@@ -288,25 +288,14 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 			nil)
 	}
 
-	// Create timestamp-based directory for this backup
-	timestamp := time.Now().UTC().Format("20060102150405")
-	backupDir := filepath.Join(t.path, timestamp)
-	if err := os.MkdirAll(backupDir, dirPermissions); err != nil {
-		return backup.NewError(backup.ErrIO, "failed to create backup directory", err)
+	// Marshal metadata
+	metadataBytes, err := json.Marshal(metadata)
+	if err != nil {
+		return backup.NewError(backup.ErrIO, "failed to marshal metadata", err)
 	}
 
-	// Setup cleanup in case of errors
-	success := false
-	defer func() {
-		if !success {
-			if err := os.RemoveAll(backupDir); err != nil {
-				t.logger.Printf("⚠️ Failed to cleanup backup directory after error: %v", err)
-			}
-		}
-	}()
-
 	// Copy the backup file with retries and atomic operations
-	dstPath := filepath.Join(backupDir, filepath.Base(sourcePath))
+	dstPath := filepath.Join(t.path, filepath.Base(sourcePath))
 	err = t.withRetry(func() error {
 		return atomicWriteFile(dstPath, "backup-*.tmp", filePermissions, func(tempFile *os.File) error {
 			srcFile, err := os.Open(sourcePath)
@@ -339,12 +328,11 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	}
 
 	// Store metadata with retries and atomic operations
-	metadataPath := filepath.Join(backupDir, "metadata.json")
+	metadataPath := dstPath + ".meta"
 	err = t.withRetry(func() error {
 		return atomicWriteFile(metadataPath, "metadata-*.tmp", filePermissions, func(tempFile *os.File) error {
-			encoder := json.NewEncoder(tempFile)
-			encoder.SetIndent("", "  ") // Pretty print JSON for better readability
-			return encoder.Encode(metadata)
+			_, err := tempFile.Write(metadataBytes)
+			return err
 		})
 	})
 
@@ -357,9 +345,8 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 		return err
 	}
 
-	success = true
 	if t.debug {
-		t.logger.Printf("✅ Successfully stored backup in %s", backupDir)
+		t.logger.Printf("✅ Successfully stored backup %s with metadata", filepath.Base(sourcePath))
 	}
 
 	return nil
@@ -400,14 +387,27 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 
 	var backups []backup.BackupInfo
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".meta") {
 			continue
 		}
 
-		metadataPath := filepath.Join(t.path, entry.Name(), "metadata.json")
+		// Get the backup file name by removing .meta suffix
+		backupName := strings.TrimSuffix(entry.Name(), ".meta")
+		backupPath := filepath.Join(t.path, backupName)
+
+		// Check if the corresponding backup file exists
+		if _, err := os.Stat(backupPath); err != nil {
+			if t.debug {
+				t.logger.Printf("⚠️ Skipping orphaned metadata file %s: backup file not found", entry.Name())
+			}
+			continue
+		}
+
+		// Read metadata file
+		metadataPath := filepath.Join(t.path, entry.Name())
 		metadataFile, err := os.Open(metadataPath)
 		if err != nil {
-			t.logger.Printf("⚠️ Skipping backup %s: %v", entry.Name(), err)
+			t.logger.Printf("⚠️ Skipping backup %s: %v", backupName, err)
 			continue
 		}
 
@@ -415,7 +415,7 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		decoder := json.NewDecoder(metadataFile)
 		if err := decoder.Decode(&metadata); err != nil {
 			metadataFile.Close()
-			t.logger.Printf("⚠️ Invalid metadata in backup %s: %v", entry.Name(), err)
+			t.logger.Printf("⚠️ Invalid metadata in backup %s: %v", backupName, err)
 			continue
 		}
 		metadataFile.Close()
@@ -441,9 +441,18 @@ func (t *LocalTarget) Delete(ctx context.Context, backupID string) error {
 		t.logger.Printf("🔄 Deleting backup %s from local target", backupID)
 	}
 
+	// Delete both the backup file and its metadata
 	backupPath := filepath.Join(t.path, backupID)
-	if err := os.RemoveAll(backupPath); err != nil {
-		return backup.NewError(backup.ErrIO, "failed to delete backup", err)
+	metadataPath := backupPath + ".meta"
+
+	// Delete backup file
+	if err := os.Remove(backupPath); err != nil && !os.IsNotExist(err) {
+		return backup.NewError(backup.ErrIO, "failed to delete backup file", err)
+	}
+
+	// Delete metadata file
+	if err := os.Remove(metadataPath); err != nil && !os.IsNotExist(err) {
+		return backup.NewError(backup.ErrIO, "failed to delete metadata file", err)
 	}
 
 	if t.debug {

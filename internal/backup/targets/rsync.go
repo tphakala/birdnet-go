@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -22,7 +23,7 @@ const (
 	rsyncMaxRetries      = 3 // Renamed from defaultMaxRetries
 	rsyncRetryBackoff    = time.Second
 	rsyncTempFilePrefix  = "tmp-"
-	rsyncMetadataFileExt = ".meta"
+	rsyncMetadataFileExt = ".tar.gz.meta"
 	rsyncMetadataVersion = 1
 )
 
@@ -116,7 +117,7 @@ func NewRsyncTarget(settings map[string]interface{}) (*RsyncTarget, error) {
 	if path, ok := settings["path"].(string); ok {
 		config.BasePath = strings.TrimRight(path, "/")
 	} else {
-		config.BasePath = "backups"
+		return nil, backup.NewError(backup.ErrConfig, "rsync: path is required", nil)
 	}
 
 	if timeout, ok := settings["timeout"].(string); ok {
@@ -359,10 +360,19 @@ func (t *RsyncTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 		return err
 	}
 
-	// Upload the metadata file
-	if err := t.atomicUpload(ctx, tempMetadataFile.Name()); err != nil {
-		return backup.NewError(backup.ErrIO, "rsync: failed to store metadata", err)
+	// Upload the metadata file with .tar.gz.meta extension
+	metadataFileName := filepath.Base(sourcePath) + rsyncMetadataFileExt
+	tempMetadataPath := tempMetadataFile.Name() + ".tmp"
+	if err := os.Rename(tempMetadataFile.Name(), tempMetadataPath); err != nil {
+		return backup.NewError(backup.ErrIO, "rsync: failed to prepare metadata file", err)
 	}
+
+	// Rename the temporary file to match the final name before upload
+	if err := t.atomicUpload(ctx, tempMetadataPath); err != nil {
+		os.Remove(tempMetadataPath)
+		return backup.NewError(backup.ErrIO, fmt.Sprintf("rsync: failed to store metadata file %s", metadataFileName), err)
+	}
+	os.Remove(tempMetadataPath)
 
 	if t.config.Debug {
 		fmt.Printf("✅ Rsync: Successfully stored backup %s with metadata\n", filepath.Base(sourcePath))
@@ -616,24 +626,69 @@ func (t *RsyncTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 			continue
 		}
 
-		size, err := parseInt64(parts[4])
-		if err != nil {
-			return nil, backup.NewError(backup.ErrValidation, "rsync: failed to parse file size", err)
-		}
-		timestamp, err := time.Parse("2006-01-02 15:04:05.000000000 -0700", parts[5]+" "+parts[6]+" "+parts[7])
-		if err != nil {
-			return nil, backup.NewError(backup.ErrValidation, "rsync: failed to parse timestamp", err)
-		}
 		name := strings.Join(parts[8:], " ")
+		// Only process metadata files
+		if !strings.HasSuffix(name, rsyncMetadataFileExt) {
+			continue
+		}
 
-		backups = append(backups, backup.BackupInfo{
-			Target: name,
+		// Get the backup file name by removing .tar.gz.meta suffix
+		backupName := strings.TrimSuffix(name, rsyncMetadataFileExt)
+		backupPath := path.Join(t.config.BasePath, backupName)
+
+		// Check if the corresponding backup file exists
+		checkCmd := exec.CommandContext(ctx, t.sshPath, append(sshArgs[:len(sshArgs)-1], fmt.Sprintf("test -f %s && echo exists", backupPath))...)
+		if output, err := checkCmd.CombinedOutput(); err != nil || !strings.Contains(string(output), "exists") {
+			if t.config.Debug {
+				fmt.Printf("⚠️ Rsync: Skipping orphaned metadata file %s: backup file not found\n", name)
+			}
+			continue
+		}
+
+		// Read metadata file
+		metadataPath := path.Join(t.config.BasePath, name)
+		tempFile, err := os.CreateTemp("", "rsync-metadata-*")
+		if err != nil {
+			fmt.Printf("⚠️ Rsync: Failed to create temporary file for metadata: %v\n", err)
+			continue
+		}
+		defer os.Remove(tempFile.Name())
+		defer tempFile.Close()
+
+		// Download metadata file
+		downloadCmd := exec.CommandContext(ctx, t.sshPath, append(sshArgs[:len(sshArgs)-1], fmt.Sprintf("cat %s", metadataPath))...)
+		metadataBytes, err := downloadCmd.Output()
+		if err != nil {
+			fmt.Printf("⚠️ Rsync: Failed to read metadata for %s: %v\n", backupName, err)
+			continue
+		}
+
+		var metadata RsyncMetadataV1
+		if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
+			fmt.Printf("⚠️ Rsync: Invalid metadata in backup %s: %v\n", backupName, err)
+			continue
+		}
+
+		backupInfo := backup.BackupInfo{
 			Metadata: backup.Metadata{
-				Timestamp: timestamp,
-				Size:      size,
+				Version:    metadata.Version,
+				Timestamp:  metadata.Timestamp,
+				Size:       metadata.Size,
+				Type:       metadata.Type,
+				Source:     metadata.Source,
+				IsDaily:    metadata.IsDaily,
+				ConfigHash: metadata.ConfigHash,
+				AppVersion: metadata.AppVersion,
 			},
-		})
+			Target: t.Name(),
+		}
+		backups = append(backups, backupInfo)
 	}
+
+	// Sort backups by timestamp (newest first)
+	sort.Slice(backups, func(i, j int) bool {
+		return backups[i].Timestamp.After(backups[j].Timestamp)
+	})
 
 	return backups, nil
 }
@@ -650,8 +705,14 @@ func (t *RsyncTarget) Delete(ctx context.Context, target string) error {
 		return err
 	}
 
+	// Delete both backup and metadata files
 	targetPath := path.Join(t.config.BasePath, cleanTarget)
+	metadataPath := targetPath + rsyncMetadataFileExt
 	cleanPath, err := t.sanitizePath(targetPath)
+	if err != nil {
+		return err
+	}
+	cleanMetadataPath, err := t.sanitizePath(metadataPath)
 	if err != nil {
 		return err
 	}
@@ -664,9 +725,9 @@ func (t *RsyncTarget) Delete(ctx context.Context, target string) error {
 		sshArgs = append(sshArgs, "-i", t.config.KeyFile)
 	}
 
-	// Use rm with properly escaped paths
+	// Delete backup file
 	sshArgs = append(sshArgs, fmt.Sprintf("%s@%s", t.config.Username, t.config.Host),
-		fmt.Sprintf("rm -- '%s'", cleanPath))
+		fmt.Sprintf("rm -f -- '%s' '%s'", cleanPath, cleanMetadataPath))
 
 	cmd := exec.CommandContext(ctx, t.sshPath, sshArgs...)
 	if err := t.executeCommand(ctx, cmd); err != nil {

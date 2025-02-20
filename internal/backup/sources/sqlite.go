@@ -57,9 +57,20 @@ func NewOperation() *Operation {
 
 // logf logs a message with operation context
 func (s *SQLiteSource) logf(op *Operation, format string, args ...interface{}) {
+	// Only log detailed operation messages if debug is enabled
 	if op != nil {
-		elapsed := time.Since(op.StartTime).Round(time.Millisecond)
-		s.logger.Printf("[%s +%v] %s", op.ID, elapsed, fmt.Sprintf(format, args...))
+		if s.config.Backup.Debug {
+			elapsed := time.Since(op.StartTime).Round(time.Millisecond)
+			s.logger.Printf("[%s +%v] %s", op.ID, elapsed, fmt.Sprintf(format, args...))
+		} else {
+			// For non-debug mode, only log start and completion messages with emojis
+			msg := fmt.Sprintf(format, args...)
+			if strings.Contains(msg, "Starting") {
+				s.logger.Printf("🔄 Starting SQLite backup")
+			} else if strings.Contains(msg, "completed successfully") {
+				s.logger.Printf("✅ SQLite backup completed successfully")
+			}
+		}
 	} else {
 		s.logger.Printf(format, args...)
 	}

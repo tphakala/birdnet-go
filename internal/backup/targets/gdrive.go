@@ -24,9 +24,8 @@ import (
 
 const (
 	defaultGDriveTimeout   = 30 * time.Second
-	defaultGDriveBasePath  = "backups"
-	gdriveTempFilePrefix   = ".tmp."
-	gdriveMetadataFileExt  = ".meta"
+	gdriveTempFilePrefix   = "tmp-"
+	gdriveMetadataFileExt  = ".tar.gz.meta"
 	defaultRateLimitTokens = 10                     // Maximum concurrent operations
 	defaultRateLimitReset  = 100 * time.Millisecond // Time between token resets
 	tempFileMaxAge         = 24 * time.Hour         // Maximum age for temporary files
@@ -161,16 +160,15 @@ func NewGDriveTarget(config *GDriveTargetConfig, logger backup.Logger) (*GDriveT
 	if config.CredentialsFile == "" {
 		return nil, backup.NewError(backup.ErrConfig, "gdrive: credentials file is required", nil)
 	}
+	if config.BasePath == "" {
+		return nil, backup.NewError(backup.ErrConfig, "gdrive: base path is required", nil)
+	}
 
 	// Set defaults for optional fields
 	if config.Timeout == 0 {
 		config.Timeout = defaultGDriveTimeout
 	}
-	if config.BasePath == "" {
-		config.BasePath = defaultGDriveBasePath
-	} else {
-		config.BasePath = strings.TrimRight(config.BasePath, "/")
-	}
+	config.BasePath = strings.TrimRight(config.BasePath, "/")
 	if config.MaxRetries == 0 {
 		config.MaxRetries = 3
 	}
