@@ -28,19 +28,6 @@ const (
 	metadataFileExt       = ".meta"
 )
 
-// FTPMetadataV1 represents version 1 of the backup metadata format
-type FTPMetadataV1 struct {
-	Version     int       `json:"version"`
-	Timestamp   time.Time `json:"timestamp"`
-	Size        int64     `json:"size"`
-	Type        string    `json:"type"`
-	Source      string    `json:"source"`
-	IsDaily     bool      `json:"is_daily"`
-	ConfigHash  string    `json:"config_hash,omitempty"`
-	AppVersion  string    `json:"app_version,omitempty"`
-	Compression string    `json:"compression,omitempty"`
-}
-
 // FTPTarget implements the backup.Target interface for FTP storage
 type FTPTarget struct {
 	config      FTPTargetConfig
@@ -380,26 +367,14 @@ func (t *FTPTarget) uploadFile(ctx context.Context, conn *ftp.ServerConn, localP
 	}
 }
 
-// Store implements the backup.Target interface with atomic operations and metadata
+// Store implements the backup.Target interface
 func (t *FTPTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
 	if t.config.Debug {
 		t.logger.Printf("🔄 FTP: Storing backup %s to %s", filepath.Base(sourcePath), t.config.Host)
 	}
 
-	// Create versioned metadata
-	ftpMetadata := FTPMetadataV1{
-		Version:    metadataVersion,
-		Timestamp:  metadata.Timestamp,
-		Size:       metadata.Size,
-		Type:       metadata.Type,
-		Source:     metadata.Source,
-		IsDaily:    metadata.IsDaily,
-		ConfigHash: metadata.ConfigHash,
-		AppVersion: metadata.AppVersion,
-	}
-
 	// Marshal metadata
-	metadataBytes, err := json.Marshal(ftpMetadata)
+	metadataBytes, err := json.Marshal(metadata)
 	if err != nil {
 		return backup.NewError(backup.ErrIO, "ftp: failed to marshal metadata", err)
 	}
@@ -466,6 +441,11 @@ func (t *FTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 
 		for _, entry := range entries {
 			if entry.Type == ftp.EntryTypeFile && !strings.HasPrefix(entry.Name, "ftp-upload-") {
+				// Skip metadata files
+				if strings.HasSuffix(entry.Name, metadataFileExt) {
+					continue
+				}
+
 				backups = append(backups, backup.BackupInfo{
 					Target: entry.Name,
 					Metadata: backup.Metadata{

@@ -29,19 +29,6 @@ const (
 	sftpMetadataVersion     = 1
 )
 
-// SFTPMetadataV1 represents version 1 of the backup metadata format
-type SFTPMetadataV1 struct {
-	Version     int       `json:"version"`
-	Timestamp   time.Time `json:"timestamp"`
-	Size        int64     `json:"size"`
-	Type        string    `json:"type"`
-	Source      string    `json:"source"`
-	IsDaily     bool      `json:"is_daily"`
-	ConfigHash  string    `json:"config_hash,omitempty"`
-	AppVersion  string    `json:"app_version,omitempty"`
-	Compression string    `json:"compression,omitempty"`
-}
-
 // SFTPTargetConfig holds configuration for the SFTP target
 type SFTPTargetConfig struct {
 	Host          string
@@ -410,20 +397,8 @@ func (t *SFTPTarget) Store(ctx context.Context, sourcePath string, metadata *bac
 		return err
 	}
 
-	// Create versioned metadata
-	sftpMetadata := SFTPMetadataV1{
-		Version:    sftpMetadataVersion,
-		Timestamp:  metadata.Timestamp,
-		Size:       metadata.Size,
-		Type:       metadata.Type,
-		Source:     metadata.Source,
-		IsDaily:    metadata.IsDaily,
-		ConfigHash: metadata.ConfigHash,
-		AppVersion: metadata.AppVersion,
-	}
-
 	// Marshal metadata
-	metadataBytes, err := json.Marshal(sftpMetadata)
+	metadataBytes, err := json.Marshal(metadata)
 	if err != nil {
 		return backup.NewError(backup.ErrIO, "sftp: failed to marshal metadata", err)
 	}
@@ -598,6 +573,11 @@ func (t *SFTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 
 		for _, entry := range entries {
 			if !entry.IsDir() && !strings.HasPrefix(entry.Name(), "sftp-upload-") {
+				// Skip metadata files
+				if strings.HasSuffix(entry.Name(), sftpMetadataFileExt) {
+					continue
+				}
+
 				backups = append(backups, backup.BackupInfo{
 					Target: entry.Name(),
 					Metadata: backup.Metadata{

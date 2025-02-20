@@ -61,14 +61,18 @@ type Target interface {
 
 // Metadata contains information about a backup
 type Metadata struct {
-	ID         string    // Unique identifier for the backup
-	Timestamp  time.Time // When the backup was created
-	Size       int64     // Size of the backup in bytes
-	Type       string    // Type of backup (e.g., "sqlite", "mysql")
-	Source     string    // Source of the backup (e.g., database name)
-	IsDaily    bool      // Whether this is a daily backup
-	ConfigHash string    // Hash of the configuration file (for verification)
-	AppVersion string    // Version of the application that created the backup
+	Version      int       `json:"version"`                 // Version of the metadata format
+	ID           string    `json:"id"`                      // Unique identifier for the backup
+	Timestamp    time.Time `json:"timestamp"`               // When the backup was created
+	Size         int64     `json:"size"`                    // Size of the backup in bytes
+	Type         string    `json:"type"`                    // Type of backup (e.g., "sqlite", "mysql")
+	Source       string    `json:"source"`                  // Source of the backup (e.g., database name)
+	IsDaily      bool      `json:"is_daily"`                // Whether this is a daily backup
+	ConfigHash   string    `json:"config_hash"`             // Hash of the configuration file (for verification)
+	AppVersion   string    `json:"app_version"`             // Version of the application that created the backup
+	Checksum     string    `json:"checksum,omitempty"`      // File checksum if available
+	Compressed   bool      `json:"compressed,omitempty"`    // Whether the backup is compressed
+	OriginalSize int64     `json:"original_size,omitempty"` // Original size before compression
 }
 
 // BackupInfo represents information about a stored backup

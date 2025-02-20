@@ -26,7 +26,6 @@ const (
 	copyBufferSize   = 32 * 1024               // 32KB buffer for file copies
 	maxRetries       = 3                       // Maximum number of retries for transient errors
 	baseBackoffDelay = 100 * time.Millisecond  // Base delay for exponential backoff
-	currentVersion   = 1                       // Current metadata version
 )
 
 // Windows-specific reserved names
@@ -34,53 +33,6 @@ var windowsReservedNames = map[string]bool{
 	"CON": true, "PRN": true, "AUX": true, "NUL": true,
 	"COM1": true, "COM2": true, "COM3": true, "COM4": true,
 	"LPT1": true, "LPT2": true, "LPT3": true, "LPT4": true,
-}
-
-// MetadataV1 represents version 1 of the backup metadata format
-type MetadataV1 struct {
-	Version      int       `json:"version"`
-	ID           string    `json:"id"`
-	Timestamp    time.Time `json:"timestamp"`
-	Size         int64     `json:"size"`
-	Type         string    `json:"type"`
-	Source       string    `json:"source"`
-	IsDaily      bool      `json:"is_daily"`
-	ConfigHash   string    `json:"config_hash"`
-	AppVersion   string    `json:"app_version"`
-	Checksum     string    `json:"checksum,omitempty"`      // File checksum if available
-	Compressed   bool      `json:"compressed,omitempty"`    // Whether the backup is compressed
-	OriginalSize int64     `json:"original_size,omitempty"` // Original size before compression
-}
-
-// convertToVersionedMetadata converts backup.Metadata to MetadataV1
-func convertToVersionedMetadata(m *backup.Metadata) MetadataV1 {
-	return MetadataV1{
-		Version:    currentVersion,
-		ID:         m.ID,
-		Timestamp:  m.Timestamp,
-		Size:       m.Size,
-		Type:       m.Type,
-		Source:     m.Source,
-		IsDaily:    m.IsDaily,
-		ConfigHash: m.ConfigHash,
-		AppVersion: m.AppVersion,
-		Compressed: false, // Set based on actual compression status
-		Checksum:   "",    // Calculate checksum if needed
-	}
-}
-
-// convertFromVersionedMetadata converts MetadataV1 to backup.Metadata
-func convertFromVersionedMetadata(m *MetadataV1) backup.Metadata {
-	return backup.Metadata{
-		ID:         m.ID,
-		Timestamp:  m.Timestamp,
-		Size:       m.Size,
-		Type:       m.Type,
-		Source:     m.Source,
-		IsDaily:    m.IsDaily,
-		ConfigHash: m.ConfigHash,
-		AppVersion: m.AppVersion,
-	}
 }
 
 // atomicWriteFile writes data to a temporary file and then renames it to the target path
@@ -386,16 +338,13 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 		return err
 	}
 
-	// Create versioned metadata
-	versionedMetadata := convertToVersionedMetadata(metadata)
-
 	// Store metadata with retries and atomic operations
 	metadataPath := filepath.Join(backupDir, "metadata.json")
 	err = t.withRetry(func() error {
 		return atomicWriteFile(metadataPath, "metadata-*.tmp", filePermissions, func(tempFile *os.File) error {
 			encoder := json.NewEncoder(tempFile)
 			encoder.SetIndent("", "  ") // Pretty print JSON for better readability
-			return encoder.Encode(versionedMetadata)
+			return encoder.Encode(metadata)
 		})
 	})
 
@@ -438,7 +387,7 @@ func (t *LocalTarget) verifyBackup(ctx context.Context, backupPath string, expec
 	return nil
 }
 
-// List returns a list of available backups with versioned metadata support
+// List returns a list of available backups
 func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	if t.debug {
 		t.logger.Printf("🔄 Listing backups in local target")
@@ -462,28 +411,17 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 			continue
 		}
 
-		// Try to decode as versioned metadata first
-		var versionedMetadata MetadataV1
+		var metadata backup.Metadata
 		decoder := json.NewDecoder(metadataFile)
-		if err := decoder.Decode(&versionedMetadata); err != nil {
-			// If that fails, try legacy format
-			if _, err := metadataFile.Seek(0, 0); err != nil {
-				metadataFile.Close()
-				t.logger.Printf("⚠️ Failed to seek in metadata file for backup %s: %v", entry.Name(), err)
-				continue
-			}
-			var legacyMetadata backup.Metadata
-			if err := decoder.Decode(&legacyMetadata); err != nil {
-				metadataFile.Close()
-				t.logger.Printf("⚠️ Invalid metadata in backup %s: %v", entry.Name(), err)
-				continue
-			}
-			versionedMetadata = convertToVersionedMetadata(&legacyMetadata)
+		if err := decoder.Decode(&metadata); err != nil {
+			metadataFile.Close()
+			t.logger.Printf("⚠️ Invalid metadata in backup %s: %v", entry.Name(), err)
+			continue
 		}
 		metadataFile.Close()
 
 		backupInfo := backup.BackupInfo{
-			Metadata: convertFromVersionedMetadata(&versionedMetadata),
+			Metadata: metadata,
 			Target:   t.Name(),
 		}
 		backups = append(backups, backupInfo)

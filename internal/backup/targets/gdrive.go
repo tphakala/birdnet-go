@@ -25,7 +25,6 @@ import (
 const (
 	defaultGDriveTimeout   = 30 * time.Second
 	defaultGDriveBasePath  = "backups"
-	gdriveMetadataVersion  = 1
 	gdriveTempFilePrefix   = ".tmp."
 	gdriveMetadataFileExt  = ".meta"
 	defaultRateLimitTokens = 10                     // Maximum concurrent operations
@@ -128,19 +127,6 @@ func (fc *folderCache) set(path, id string) {
 	fc.mu.Lock()
 	defer fc.mu.Unlock()
 	fc.cache[path] = id
-}
-
-// GDriveMetadataV1 represents version 1 of the backup metadata format
-type GDriveMetadataV1 struct {
-	Version     int       `json:"version"`
-	Timestamp   time.Time `json:"timestamp"`
-	Size        int64     `json:"size"`
-	Type        string    `json:"type"`
-	Source      string    `json:"source"`
-	IsDaily     bool      `json:"is_daily"`
-	ConfigHash  string    `json:"config_hash,omitempty"`
-	AppVersion  string    `json:"app_version,omitempty"`
-	Compression string    `json:"compression,omitempty"`
 }
 
 // GDriveTarget implements the backup.Target interface for Google Drive storage
@@ -506,7 +492,7 @@ func (t *GDriveTarget) cleanupOrphanedFiles(ctx context.Context) error {
 	return nil
 }
 
-// Store implements the backup.Target interface with improved error handling and quota checking
+// Store implements the backup.Target interface
 func (t *GDriveTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
 	if t.config.Debug {
 		t.logger.Printf("🔄 GDrive: Storing backup %s", filepath.Base(sourcePath))
@@ -533,20 +519,8 @@ func (t *GDriveTarget) Store(ctx context.Context, sourcePath string, metadata *b
 		return backup.NewError(backup.ErrCanceled, "gdrive: operation canceled while waiting for rate limit", err)
 	}
 
-	// Create versioned metadata
-	gdriveMetadata := GDriveMetadataV1{
-		Version:    gdriveMetadataVersion,
-		Timestamp:  metadata.Timestamp,
-		Size:       metadata.Size,
-		Type:       metadata.Type,
-		Source:     metadata.Source,
-		IsDaily:    metadata.IsDaily,
-		ConfigHash: metadata.ConfigHash,
-		AppVersion: metadata.AppVersion,
-	}
-
 	// Marshal metadata
-	metadataBytes, err := json.Marshal(gdriveMetadata)
+	metadataBytes, err := json.Marshal(metadata)
 	if err != nil {
 		return backup.NewError(backup.ErrIO, "gdrive: failed to marshal metadata", err)
 	}
