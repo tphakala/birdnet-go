@@ -2,38 +2,37 @@
 
 <!-- Text input field -->
 <div class="form-control relative" x-data="{
-        showPassword: false,
-        showTooltip: null,
-        touched: false,
-        validInput() {
-            return this.$refs.{{.id}}.validity.valid;
-        },
-        validHost() {
-            const configHost = security.host.replace(/^https?:\/\//, '');
-            const currentHost = location.host;
-            return configHost === currentHost;
-        },
-        ...inputField('{{.id}}', '{{.label}}', '{{.model}}', '{{.name}}', '{{.placeholder}}')
-    }">
+    showTooltip: null,
+    touched: false,
+    fieldId: '{{.id}}{{if .index}}_{{.index}}{{end}}',
+    validInput() {
+        return this.$refs[this.fieldId] ? this.$refs[this.fieldId].validity.valid : true;
+    },
+    validHost() {
+        const configHost = {{.model}}.replace(/^https?:\/\//, '');
+        const currentHost = location.host;
+        return configHost === currentHost;
+    }
+}">
 
     {{if .label}}
     <!-- Label -->
-    <label class="label justify-start" for="{{.id}}">
+    <label class="label justify-start" :for="fieldId">
         <span class="label-text capitalize">{{.label}}</span>
-        <span class="help-icon" @mouseenter="showTooltip = '{{.id}}'"
+        <span class="help-icon" @mouseenter="showTooltip = fieldId"
             @mouseleave="showTooltip = null">ⓘ</span>
     </label>
     {{end}}
 
     <!-- Input field -->
     <input type="text" 
-        id="{{.id}}" 
-        :name="name" 
+        :id="fieldId"
+        name="{{.name}}" 
         x-model="{{.model}}" 
-        :placeholder="placeholder"
+        placeholder="{{with .placeholder}}{{.}}{{end}}"
         class="input input-sm input-bordered {{.class}}" 
         :class="{ 'invalid': touched && !validInput() }"
-        x-ref="{{.id}}" 
+        :x-ref="fieldId"
         @blur="touched = true"
         {{if .disabled}}x-bind:disabled="{{.disabled}}"{{end}}
         pattern="^(https?:\/\/)?(localhost|([a-zA-Z0-9](-*[a-zA-Z0-9])*\.)+[a-zA-Z]{2,}|(\d{1,3}\.){3}\d{1,3})(:\d{1,5})?$"
@@ -43,11 +42,11 @@
         maxlength="255"
         aria-required="true"
         aria-invalid="touched && !validInput()"
-        aria-describedby="{{.id}}-error {{.id}}-warning {{.id}}-tooltip">
+        :aria-describedby="fieldId + '-error ' + fieldId + '-warning ' + fieldId + '-tooltip'">
 
     <!-- Validation messages -->
     <span class="text-sm text-red-500" 
-        id="{{.id}}-error"
+        :id="fieldId + '-error'"
         role="alert" 
         aria-live="polite"
         x-show="touched && !validInput()" 
@@ -55,15 +54,15 @@
         Please enter a valid host address
     </span>
     <span class="text-sm text-red-500" 
-        id="{{.id}}-warning"
+        :id="fieldId + '-warning'"
         x-show="!validHost() && validInput()"
         x-cloak>
         Warning: host address does not match the current location "<span x-text="location.host"></span>"
     </span>
 
     <!-- Tooltip -->
-    <div x-show="showTooltip === '{{.id}}'" 
-        id="{{.id}}-tooltip"
+    <div x-show="showTooltip === fieldId" 
+        :id="fieldId + '-tooltip'"
         role="tooltip"
         aria-hidden="true"
         x-cloak

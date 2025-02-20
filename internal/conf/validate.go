@@ -286,9 +286,9 @@ func validateBackupConfig(config *BackupConfig) error {
 	var errs []string
 
 	// Validate schedules
-	if len(config.Schedules) == 0 {
+	/*if len(config.Schedules) == 0 {
 		errs = append(errs, "at least one backup schedule must be configured when backup is enabled")
-	}
+	}*/
 
 	// Validate each schedule
 	for i, schedule := range config.Schedules {

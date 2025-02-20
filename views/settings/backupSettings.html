@@ -1,0 +1,384 @@
+{{define "backupSettings"}}
+
+<!-- Hidden input to always submit the template name -->
+<input type="hidden" name="templateName" value="{{.TemplateName}}">
+
+<!-- Backup Settings start -->
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+    role="region" 
+    aria-label="Backup Settings Section"
+    x-data="{ 
+        backup: {
+            enabled: {{.Settings.Backup.Enabled}},
+            debug: {{.Settings.Backup.Debug}},
+            encryption: {{.Settings.Backup.Encryption}},
+            sanitize_config: {{.Settings.Backup.SanitizeConfig}},
+            retention: {
+                maxage: '{{.Settings.Backup.Retention.MaxAge}}',
+                maxbackups: {{.Settings.Backup.Retention.MaxBackups}},
+                minbackups: {{.Settings.Backup.Retention.MinBackups}}
+            }
+        },
+        backupSettingsOpen: false,
+        showTooltip: null,
+        hasChanges: false
+    }" 
+    x-init="
+        $watch('backup', () => { hasChanges = true }, { deep: true });
+    "
+>
+    <!-- control collapse element open state and label visibility -->
+    <input type="checkbox" id="backupSettingsOpen" x-on:change="backupSettingsOpen = !backupSettingsOpen" />
+
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex items-center">
+            <label for="backupSettingsOpen" class="cursor-pointer">Backup Settings</label>
+            <div x-show="hasChanges" x-cloak class="ml-2">
+                <span class="badge badge-primary badge-sm changed-badge">
+                    <span class="text-xs mb-0.5">changed</span>
+                </span>
+            </div>
+        </div>
+        <p class="text-sm text-gray-500">Configure backup settings and targets</p>
+    </div>
+
+    <div class="collapse-content">
+        <!-- General Backup Settings -->
+        <div class="p-1">
+            <div class="text-lg font-medium">General Settings</div>
+            
+            <!-- Enable Backup -->
+            {{template "checkbox" dict
+                "id" "backupEnabled"
+                "model" "backup.enabled"
+                "name" "backup.enabled"
+                "label" "Enable Backup"
+                "tooltip" "Enable automatic backup functionality"}}
+
+            <!-- Debug Mode -->
+            {{template "checkbox" dict
+                "id" "backupDebug"
+                "model" "backup.debug"
+                "name" "backup.debug"
+                "label" "Debug Mode"
+                "tooltip" "Enable debug logging for backup operations"}}
+
+            <!-- Encryption -->
+            {{template "checkbox" dict
+                "id" "backupEncryption"
+                "model" "backup.encryption"
+                "name" "backup.encryption"
+                "label" "Enable Encryption"
+                "tooltip" "Enable encryption for backup files"}}
+
+            <!-- Sanitize Config -->
+            {{template "checkbox" dict
+                "id" "backupSanitizeConfig"
+                "model" "backup.sanitize_config"
+                "name" "backup.sanitize_config"
+                "label" "Sanitize Configuration"
+                "tooltip" "Remove sensitive data from configuration backups"}}
+        </div>
+
+        <!-- Retention Settings -->
+        <div class="p-1 pt-4">
+            <div class="text-lg font-medium">Retention Settings</div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Max Age -->
+                {{template "textField" dict
+                    "id" "retentionMaxAge"
+                    "model" "backup.retention.maxage"
+                    "name" "backup.retention.maxage"
+                    "label" "Maximum Age"
+                    "placeholder" "30d"
+                    "pattern" "^\\d+[dmy]$"
+                    "tooltip" "Maximum age of backups to keep (e.g., 30d, 6m, 1y)"
+                    "validationMessage" "Please enter a valid duration (e.g., 30d, 6m, 1y)"}}
+
+                <!-- Max Backups -->
+                {{template "textField" dict
+                    "id" "retentionMaxBackups"
+                    "model" "backup.retention.maxbackups"
+                    "name" "backup.retention.maxbackups"
+                    "label" "Maximum Backups"
+                    "type" "number"
+                    "pattern" "^[1-9]\\d*$"
+                    "tooltip" "Maximum number of backups to keep"
+                    "validationMessage" "Please enter a number greater than 0"}}
+
+                <!-- Min Backups -->
+                {{template "textField" dict
+                    "id" "retentionMinBackups"
+                    "model" "backup.retention.minbackups"
+                    "name" "backup.retention.minbackups"
+                    "label" "Minimum Backups"
+                    "type" "number"
+                    "pattern" "^[1-9]\\d*$"
+                    "tooltip" "Minimum number of backups to keep regardless of age"
+                    "validationMessage" "Please enter a number greater than 0"}}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Backup Targets -->
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
+    targets: [],
+    showTooltip: null,
+    hasChanges: false,
+    addTarget() {
+        this.targets.push({
+            type: 'local',
+            enabled: true,
+            settings: {
+                path: 'backups/'
+            }
+        });
+        this.hasChanges = true;
+    },
+    removeTarget(index) {
+        this.targets.splice(index, 1);
+        this.hasChanges = true;
+    },
+    initializeTarget(target) {
+        if (!target.settings) {
+            target.settings = {};
+        }
+        switch (target.type.toLowerCase()) {
+            case 'local':
+                if (!target.settings.path) target.settings.path = 'backups/';
+                break;
+            case 'ftp':
+                if (!target.settings.host) target.settings.host = '';
+                if (!target.settings.port) target.settings.port = 21;
+                if (!target.settings.username) target.settings.username = '';
+                if (!target.settings.password) target.settings.password = '';
+                if (!target.settings.path) target.settings.path = 'backups/';
+                break;
+            case 'sftp':
+                if (!target.settings.host) target.settings.host = '';
+                if (!target.settings.port) target.settings.port = 22;
+                if (!target.settings.username) target.settings.username = '';
+                if (!target.settings.password) target.settings.password = '';
+                if (!target.settings.key_file) target.settings.key_file = '';
+                if (!target.settings.known_hosts_file) target.settings.known_hosts_file = '';
+                if (!target.settings.path) target.settings.path = 'backups/';
+                break;
+        }
+    }
+}" x-init="
+    $watch('targets', () => { hasChanges = true }, { deep: true });
+    // Initialize targets from the server data
+    let serverTargets = {{.Settings.Backup.Targets | toJSON}};
+    targets = serverTargets.map(target => ({
+        type: target.Type.toLowerCase(),
+        enabled: target.Enabled,
+        settings: { ...target.Settings }
+    }));
+    // Initialize settings for each target
+    targets.forEach(target => initializeTarget(target));
+">
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex justify-between items-center">
+            <div>Backup Targets</div>
+            <button @click="addTarget()" class="btn btn-sm btn-primary">Add Target</button>
+        </div>
+    </div>
+
+    <div class="collapse-content">
+        <!-- Target List -->
+        <template x-for="(target, index) in targets" :key="index">
+            <div class="card bg-base-200 shadow-sm mt-4">
+                <div class="card-body p-4">
+                    <!-- Target Type -->
+                    <div class="form-control">
+                        <label class="label justify-start">
+                            <span class="label-text">Target Type</span>
+                        </label>
+                        <select x-model="target.type" :name="'backup.targets[' + index + '].type'"
+                            @change="initializeTarget(target)"
+                            class="select select-sm select-bordered">
+                            <option value="local">Local Storage</option>
+                            <option value="ftp">FTP Server</option>
+                            <option value="sftp">SFTP Server</option>
+                        </select>
+                    </div>
+
+                    <!-- Enable Target -->
+                    <div x-data="{ targetIndex: index }">
+                        {{template "checkbox" dict
+                            "id" "targetEnabled"
+                            "model" "target.enabled"
+                            "name" "'backup.targets[' + targetIndex + '].enabled'"
+                            "index" "targetIndex"
+                            "label" "Enable Target"
+                            "tooltip" "Enable or disable this backup target"}}
+                    </div>
+
+                    <!-- Target Settings -->
+                    <div x-show="target.type === 'local'">
+                        <div x-data="{ targetIndex: index }">
+                            {{template "textField" dict
+                                "id" "localPath"
+                                "model" "target.settings.path"
+                                "name" "'backup.targets[' + targetIndex + '].settings.path'"
+                                "index" "targetIndex"
+                                "label" "Backup Path"
+                                "placeholder" "backups/"
+                                "tooltip" "Local directory path for storing backups"}}
+                        </div>
+                    </div>
+
+                    <div x-show="target.type === 'ftp'">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div x-data="{ targetIndex: index }">
+                                {{template "textField" dict
+                                    "id" "ftpHost"
+                                    "model" "target.settings.host"
+                                    "name" "'backup.targets[' + targetIndex + '].settings.host'"
+                                    "index" "targetIndex"
+                                    "label" "Host"
+                                    "placeholder" "ftp.example.com"
+                                    "tooltip" "FTP server hostname"}}
+                            </div>
+
+                            <div x-data="{ targetIndex: index }">
+                                {{template "textField" dict
+                                    "id" "ftpPort"
+                                    "model" "target.settings.port"
+                                    "name" "'backup.targets[' + targetIndex + '].settings.port'"
+                                    "index" "targetIndex"
+                                    "label" "Port"
+                                    "placeholder" "21"
+                                    "type" "number"
+                                    "pattern" "^\\d+$"
+                                    "tooltip" "FTP server port number"}}
+                            </div>
+
+                            <div x-data="{ targetIndex: index }">
+                                {{template "textField" dict
+                                    "id" "ftpUsername"
+                                    "model" "target.settings.username"
+                                    "name" "'backup.targets[' + targetIndex + '].settings.username'"
+                                    "index" "targetIndex"
+                                    "label" "Username"
+                                    "tooltip" "FTP account username"}}
+                            </div>
+
+                            <div x-data="{ targetIndex: index }">
+                                {{template "passwordField" dict
+                                    "id" "ftpPassword"
+                                    "model" "target.settings.password"
+                                    "name" "'backup.targets[' + targetIndex + '].settings.password'"
+                                    "index" "targetIndex"
+                                    "label" "Password"
+                                    "tooltip" "FTP account password"}}
+                            </div>
+
+                            <div x-data="{ targetIndex: index }">
+                                {{template "textField" dict
+                                    "id" "ftpPath"
+                                    "model" "target.settings.path"
+                                    "name" "'backup.targets[' + targetIndex + '].settings.path'"
+                                    "index" "targetIndex"
+                                    "label" "Remote Path"
+                                    "placeholder" "backups/"
+                                    "tooltip" "Remote directory path for storing backups"
+                                    "class" "md:col-span-2"}}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div x-show="target.type === 'sftp'">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div x-data="{ targetIndex: index }">
+                                {{template "textField" dict
+                                    "id" "sftpHost"
+                                    "model" "target.settings.host"
+                                    "name" "'backup.targets[' + targetIndex + '].settings.host'"
+                                    "index" "targetIndex"
+                                    "label" "Host"
+                                    "placeholder" "sftp.example.com"
+                                    "tooltip" "SFTP server hostname"}}
+                            </div>
+
+                            <div x-data="{ targetIndex: index }">
+                                {{template "textField" dict
+                                    "id" "sftpPort"
+                                    "model" "target.settings.port"
+                                    "name" "'backup.targets[' + targetIndex + '].settings.port'"
+                                    "index" "targetIndex"
+                                    "label" "Port"
+                                    "placeholder" "22"
+                                    "type" "number"
+                                    "pattern" "^\\d+$"
+                                    "tooltip" "SFTP server port number"}}
+                            </div>
+
+                            <div x-data="{ targetIndex: index }">
+                                {{template "textField" dict
+                                    "id" "sftpUsername"
+                                    "model" "target.settings.username"
+                                    "name" "'backup.targets[' + targetIndex + '].settings.username'"
+                                    "index" "targetIndex"
+                                    "label" "Username"
+                                    "tooltip" "SFTP account username"}}
+                            </div>
+
+                            <div x-data="{ targetIndex: index }">
+                                {{template "passwordField" dict
+                                    "id" "sftpPassword"
+                                    "model" "target.settings.password"
+                                    "name" "'backup.targets[' + targetIndex + '].settings.password'"
+                                    "index" "targetIndex"
+                                    "label" "Password"
+                                    "tooltip" "SFTP account password"}}
+                            </div>
+
+                            <div x-data="{ targetIndex: index }">
+                                {{template "textField" dict
+                                    "id" "sftpKeyFile"
+                                    "model" "target.settings.key_file"
+                                    "name" "'backup.targets[' + targetIndex + '].settings.key_file'"
+                                    "index" "targetIndex"
+                                    "label" "SSH Key File"
+                                    "placeholder" "~/.ssh/id_rsa"
+                                    "tooltip" "Path to SSH private key file"}}
+                            </div>
+
+                            <div x-data="{ targetIndex: index }">
+                                {{template "textField" dict
+                                    "id" "sftpKnownHosts"
+                                    "model" "target.settings.known_hosts_file"
+                                    "name" "'backup.targets[' + targetIndex + '].settings.known_hosts_file'"
+                                    "index" "targetIndex"
+                                    "label" "Known Hosts File"
+                                    "placeholder" "~/.ssh/known_hosts"
+                                    "tooltip" "Path to SSH known hosts file"}}
+                            </div>
+
+                            <div x-data="{ targetIndex: index }">
+                                {{template "textField" dict
+                                    "id" "sftpPath"
+                                    "model" "target.settings.path"
+                                    "name" "'backup.targets[' + targetIndex + '].settings.path'"
+                                    "index" "targetIndex"
+                                    "label" "Remote Path"
+                                    "placeholder" "backups/"
+                                    "tooltip" "Remote directory path for storing backups"
+                                    "class" "md:col-span-2"}}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Remove Target Button -->
+                    <div class="flex justify-end mt-4">
+                        <button @click="removeTarget(index)" class="btn btn-sm btn-error">Remove Target</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+</div>
+{{end}}
