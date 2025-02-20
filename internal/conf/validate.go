@@ -68,7 +68,7 @@ func ValidateSettings(settings *Settings) error {
 
 	// Validate Backup settings if enabled
 	if settings.Backup.Enabled {
-		if err := validateBackupConfig(&settings.Backup); err != nil {
+		if err := ValidateBackupConfig(&settings.Backup); err != nil {
 			ve.Errors = append(ve.Errors, err.Error())
 		}
 	}
@@ -281,8 +281,8 @@ func validateWeatherSettings(settings *WeatherSettings) error {
 	return nil
 }
 
-// validateBackupConfig validates the backup configuration
-func validateBackupConfig(config *BackupConfig) error {
+// ValidateBackupConfig validates the backup configuration
+func ValidateBackupConfig(config *BackupConfig) error {
 	var errs []string
 
 	// Validate schedules

@@ -385,6 +385,7 @@ type BackupConfig struct {
 	Enabled        bool                   `yaml:"enabled"`         // true to enable backup functionality
 	Debug          bool                   `yaml:"debug"`           // true to enable debug logging
 	Encryption     bool                   `yaml:"encryption"`      // true to enable backup encryption
+	EncryptionKey  string                 `yaml:"encryption_key"`  // Base64-encoded encryption key for backups
 	SanitizeConfig bool                   `yaml:"sanitize_config"` // true to sanitize sensitive data from config backups
 	Retention      BackupRetention        `yaml:"retention"`       // Backup retention settings
 	Targets        []BackupTarget         `yaml:"targets"`         // List of backup targets

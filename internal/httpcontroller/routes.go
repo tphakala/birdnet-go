@@ -122,6 +122,10 @@ func (s *Server) initRoutes() {
 	s.Echo.POST("/settings/save", h.WithErrorHandling(h.SaveSettings), s.AuthMiddleware)
 	s.Echo.GET("/settings/audio/get", h.WithErrorHandling(h.GetAudioDevices), s.AuthMiddleware)
 
+	// Add backup encryption key management routes
+	s.Echo.POST("/backup/generate-key", h.WithErrorHandling(h.GenerateBackupKey), s.AuthMiddleware)
+	s.Echo.GET("/backup/download-key", h.WithErrorHandling(h.DownloadBackupKey), s.AuthMiddleware)
+
 	// Add DELETE method for detection deletion
 	s.Echo.DELETE("/detections/delete", h.WithErrorHandling(h.DeleteDetection), s.AuthMiddleware)
 

@@ -205,3 +205,60 @@ func (m *Manager) DecryptData(encryptedData []byte) ([]byte, error) {
 
 	return decryptData(encryptedData, key)
 }
+
+// GetEncryptionKeyPath returns the path to the encryption key file
+func (m *Manager) GetEncryptionKeyPath() (string, error) {
+	return m.getEncryptionKeyPath()
+}
+
+// ImportEncryptionKey imports an encryption key from a file
+func (m *Manager) ImportEncryptionKey(content []byte) error {
+	// Parse the key file content
+	lines := strings.Split(string(content), "\n")
+	if len(lines) < 3 {
+		return NewError(ErrValidation, "invalid key file format", nil)
+	}
+
+	// Verify the header
+	if !strings.HasPrefix(lines[0], "BirdNET-Go Backup Encryption Key") {
+		return NewError(ErrValidation, "invalid key file format: missing header", nil)
+	}
+
+	// Extract the key
+	var key string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "Key: ") {
+			key = strings.TrimPrefix(line, "Key: ")
+			key = strings.TrimSpace(key)
+			break
+		}
+	}
+
+	if key == "" {
+		return NewError(ErrValidation, "invalid key file format: key not found", nil)
+	}
+
+	// Validate key format (should be hex-encoded)
+	if _, err := hex.DecodeString(key); err != nil {
+		return NewError(ErrValidation, "invalid key format: not hex-encoded", err)
+	}
+
+	// Get the key file path
+	keyPath, err := m.getEncryptionKeyPath()
+	if err != nil {
+		return err
+	}
+
+	// Create the config directory if it doesn't exist
+	if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
+		return NewError(ErrIO, "failed to create config directory", err)
+	}
+
+	// Write the key to file with secure permissions
+	if err := os.WriteFile(keyPath, []byte(key), 0o600); err != nil {
+		return NewError(ErrIO, "failed to write encryption key file", err)
+	}
+
+	m.logger.Printf("✅ Imported encryption key saved to: %s", keyPath)
+	return nil
+}

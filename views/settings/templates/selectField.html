@@ -1,0 +1,37 @@
+{{define "selectField"}}
+<div class="form-control {{if .class}}{{.class}}{{end}}">
+    <label class="label justify-start">
+        <span class="label-text">{{.label}}</span>
+        {{if .tooltip}}
+        <span class="help-icon" 
+            @mouseenter="showTooltip = {{if .dynamicId}}'{{.id}}_' + index{{else}}'{{.id}}'{{end}}"
+            @mouseleave="showTooltip = null">ⓘ</span>
+        {{end}}
+    </label>
+    <select
+        {{if .dynamicId}}
+        :id="'{{.id}}_' + index"
+        x-model="{{.model}}"
+        :name="{{.name}}"
+        {{else}}
+        id="{{.id}}"
+        x-model="{{.model}}"
+        name="{{.name}}"
+        {{end}}
+        {{if .change}}@change="{{.change}}"{{end}}
+        class="select select-sm select-bordered w-full">
+        {{if .placeholder}}<option value="">{{.placeholder}}</option>{{end}}
+        {{range .options}}
+        <option value="{{.value}}">{{.label}}</option>
+        {{end}}
+    </select>
+    {{if .tooltip}}
+    <div x-show="showTooltip === {{if .dynamicId}}'{{.id}}_' + index{{else}}'{{.id}}'{{end}}" x-cloak
+        role="tooltip"
+        aria-hidden="true"
+        class="tooltip">
+        {{.tooltip}}
+    </div>
+    {{end}}
+</div>
+{{end}} 
