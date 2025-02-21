@@ -74,6 +74,7 @@ func (s *Server) initRoutes() {
 		"/settings/integrations":     {Path: "/settings/integrations", TemplateName: "settingsBase", Title: "Integration Settings", Authorized: true},
 		"/settings/security":         {Path: "/settings/security", TemplateName: "settingsBase", Title: "Security & Access Settings", Authorized: true},
 		"/settings/species":          {Path: "/settings/species", TemplateName: "settingsBase", Title: "Species Settings", Authorized: true},
+		"/settings/backup":           {Path: "/settings/backup", TemplateName: "settingsBase", Title: "Backup Settings", Authorized: true},
 	}
 
 	// Set up full page routes
@@ -120,6 +121,10 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/audio-level", s.Handlers.WithErrorHandling(s.Handlers.AudioLevelSSE))
 	s.Echo.POST("/settings/save", h.WithErrorHandling(h.SaveSettings), s.AuthMiddleware)
 	s.Echo.GET("/settings/audio/get", h.WithErrorHandling(h.GetAudioDevices), s.AuthMiddleware)
+
+	// Add backup encryption key management routes
+	s.Echo.POST("/backup/generate-key", h.WithErrorHandling(h.GenerateBackupKey), s.AuthMiddleware)
+	s.Echo.GET("/backup/download-key", h.WithErrorHandling(h.DownloadBackupKey), s.AuthMiddleware)
 
 	// Add DELETE method for detection deletion
 	s.Echo.DELETE("/detections/delete", h.WithErrorHandling(h.DeleteDetection), s.AuthMiddleware)

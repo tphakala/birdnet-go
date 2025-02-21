@@ -146,6 +146,8 @@ func (s *Server) initializeServer() {
 	s.initLogger()
 	s.configureMiddleware()
 	s.initRoutes()
+	s.initAuthRoutes()
+	s.initBackupRoutes()
 }
 
 // configureDefaultSettings sets default values for server settings.

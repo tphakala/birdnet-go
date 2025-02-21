@@ -1,0 +1,670 @@
+{{define "backupSettings"}}
+
+<!-- Hidden input to always submit the template name -->
+<input type="hidden" name="templateName" value="{{.TemplateName}}">
+
+<!-- Backup Schedule Settings -->
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3 mt-4"
+    x-data="{
+        backup: {
+            enabled: {{.Settings.Backup.Enabled}},
+            schedules: []
+        },
+        schedule: {
+            hour: {{if .Settings.Backup.Schedules}}{{index .Settings.Backup.Schedules 0 | toJSON}}.hour{{else}}3{{end}},
+            minute: {{if .Settings.Backup.Schedules}}{{index .Settings.Backup.Schedules 0 | toJSON}}.minute{{else}}0{{end}},
+            is_weekly: {{if .Settings.Backup.Schedules}}{{index .Settings.Backup.Schedules 0 | toJSON}}.is_weekly{{else}}false{{end}},
+            weekday: {{if .Settings.Backup.Schedules}}{{index .Settings.Backup.Schedules 0 | toJSON}}.weekday{{else}}'monday'{{end}}
+        },
+        showTooltip: null,
+        hasChanges: false
+    }"
+    x-init="
+        $watch('schedule', () => {
+            hasChanges = true;
+            backup.schedules = [schedule];
+        }, { deep: true });
+        $watch('backup.enabled', () => {
+            hasChanges = true;
+        });
+    "
+>
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex items-center">
+            <div>Backup Schedule</div>
+            <div x-show="hasChanges" x-cloak class="ml-2">
+                <span class="badge badge-primary badge-sm changed-badge">
+                    <span class="text-xs mb-0.5">changed</span>
+                </span>
+            </div>
+        </div>
+        <p class="text-sm text-gray-500">Configure when backups should run</p>
+    </div>
+
+    <div class="collapse-content">
+        <!-- Enable Backup -->
+        <div class="mb-4">
+            {{template "checkbox" dict
+                "id" "backupEnabled"
+                "model" "backup.enabled"
+                "name" "backup.enabled"
+                "label" "Enable Backup Schedule"
+                "tooltip" "Enable automatic backup functionality"}}
+            
+            <div x-show="!backup.enabled" class="mt-4 p-4 bg-base-200 rounded-lg text-sm">
+                <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-warning" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                    <span>Automatic backups are currently disabled. No backups will be created until backup schedule is enabled.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Schedule Settings -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end" x-show="backup.enabled">
+            <!-- Schedule Type -->
+            {{template "selectField" dict
+                "id" "scheduleType"
+                "model" "schedule.is_weekly"
+                "name" "backup.schedules[0].is_weekly"
+                "label" "Schedule Type"
+                "change" "schedule.is_weekly = $event.target.value === 'true'"
+                "options" (slice
+                    (dict "value" "false" "label" "Daily")
+                    (dict "value" "true" "label" "Weekly")
+                )
+                "tooltip" "Choose between daily or weekly backup schedule"}}
+
+            <!-- Weekday (shown and enabled only if weekly is selected) -->
+            <div x-show="true" :class="{ 'opacity-50': !schedule.is_weekly }">
+                {{template "selectField" dict
+                    "id" "weekday"
+                    "model" "schedule.weekday"
+                    "name" "backup.schedules[0].weekday"
+                    "label" "Weekday"
+                    "options" (slice
+                        (dict "value" "monday" "label" "Monday")
+                        (dict "value" "tuesday" "label" "Tuesday")
+                        (dict "value" "wednesday" "label" "Wednesday")
+                        (dict "value" "thursday" "label" "Thursday")
+                        (dict "value" "friday" "label" "Friday")
+                        (dict "value" "saturday" "label" "Saturday")
+                        (dict "value" "sunday" "label" "Sunday")
+                    )
+                    "tooltip" "Day of the week for weekly backups"
+                    "disabled" "!schedule.is_weekly"}}
+            </div>
+
+            <!-- Hour -->
+            {{template "numberField" dict
+                "id" "scheduleHour"
+                "model" "schedule.hour"
+                "name" "backup.schedules[0].hour"
+                "label" "Hour"
+                "min" "0"
+                "max" "23"
+                "tooltip" "Hour of the day in 24-hour format (0-23, e.g., 15 for 3 PM)"}}
+
+            <!-- Minute -->
+            {{template "numberField" dict
+                "id" "scheduleMinute"
+                "model" "schedule.minute"
+                "name" "backup.schedules[0].minute"
+                "label" "Minute"
+                "min" "0"
+                "max" "59"
+                "tooltip" "Minute of the hour (0-59)"}}
+        </div>
+        <div x-show="backup.enabled" class="mt-4 p-4 bg-base-200 rounded-lg text-sm">
+            <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-success" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
+                <span>
+                    <span class="font-medium">Backup Schedule:</span>
+                    <template x-if="!schedule.is_weekly">
+                        <span>Backups will run daily at <span x-text="String(schedule.hour).padStart(2, '0') + ':' + String(schedule.minute).padStart(2, '0')"></span></span>
+                    </template>
+                    <template x-if="schedule.is_weekly">
+                        <span>Backups will run every <span x-text="schedule.weekday.charAt(0).toUpperCase() + schedule.weekday.slice(1)"></span> at <span x-text="String(schedule.hour).padStart(2, '0') + ':' + String(schedule.minute).padStart(2, '0')"></span></span>
+                    </template>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Backup Encryption Settings -->
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3 mt-4"
+    x-data="{
+        encryption: {
+            enabled: {{.Settings.Backup.Encryption}},
+            key_exists: {{if .KeyFileExists}}true{{else}}false{{end}},
+            key_hash: {{if .KeyHash}}'{{.KeyHash}}'{{else}}null{{end}},
+            key_created: {{if .KeyCreated}}'{{.KeyCreated}}'{{else}}null{{end}}
+        },
+        showTooltip: null,
+        hasChanges: false,
+        errorMessage: '',
+        showRegenerateConfirm() {
+            const modal = document.getElementById('confirmModalRegenerateKey');
+            document.getElementById('confirmTitleRegenerateKey').textContent = 'Regenerate Encryption Key';
+            document.getElementById('confirmMessageRegenerateKey').textContent = 'Are you sure you want to regenerate the encryption key? This will make existing encrypted backups unrecoverable unless you have saved the previous key.';
+            modal.showModal();
+        },
+        importKey(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('keyFile', file);
+
+            fetch('/backup/import-key', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-Token': CSRF_TOKEN
+                },
+                body: formData,
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.message || 'Failed to import key');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    this.encryption.key_exists = true;
+                    this.encryption.key_hash = data.key_hash;
+                    this.encryption.key_created = data.key_created;
+                    this.hasChanges = true;
+                    this.errorMessage = '';
+                    // Reset file input
+                    event.target.value = '';
+                    // Add a notification for success
+                    this.$dispatch('add-notification', {
+                        message: 'Encryption key imported successfully',
+                        type: 'success'
+                    });
+                } else {
+                    throw new Error(data.message || 'Failed to import key');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                this.errorMessage = error.message;
+                // Reset file input
+                event.target.value = '';
+                // Add a notification for error
+                this.$dispatch('add-notification', {
+                    message: error.message,
+                    type: 'error'
+                });
+            });
+        },
+        generateKey() {
+            fetch('/backup/generate-key', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': CSRF_TOKEN
+                },
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.message || 'Failed to generate key');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    this.encryption.key_exists = true;
+                    this.encryption.key_hash = data.key_hash;
+                    this.encryption.key_created = data.key_created;
+                    this.hasChanges = true;
+                    this.errorMessage = '';
+                    // Add a notification for success
+                    this.$dispatch('add-notification', {
+                        message: 'Encryption key generated successfully',
+                        type: 'success'
+                    });
+                } else {
+                    throw new Error(data.message || 'Failed to generate key');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                this.errorMessage = error.message;
+                // Add a notification for error
+                this.$dispatch('add-notification', {
+                    message: error.message,
+                    type: 'error'
+                });
+            });
+        },
+        downloadKey() {
+            window.location.href = '/backup/download-key';
+        }
+    }"
+    x-init="
+        $watch('encryption', () => {
+            hasChanges = true;
+            backup.encryption = encryption.enabled;
+        }, { deep: true });
+    "
+>
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex items-center">
+            <div>Encryption Settings</div>
+            <div x-show="hasChanges" x-cloak class="ml-2">
+                <span class="badge badge-primary badge-sm changed-badge">
+                    <span class="text-xs mb-0.5">changed</span>
+                </span>
+            </div>
+        </div>
+        <p class="text-sm text-gray-500">Configure backup encryption settings</p>
+    </div>
+
+    <div class="collapse-content">
+        <div class="grid grid-cols-1 gap-4">
+            <!-- Enable Encryption -->
+            {{template "checkbox" dict
+                "id" "backupEncryption"
+                "model" "encryption.enabled"
+                "name" "backup.encryption"
+                "label" "Enable Encryption"
+                "tooltip" "Enable encryption for backup files to protect sensitive data"}}
+
+            <!-- Key Management -->
+            <div x-show="encryption.enabled">
+                <div class="text-sm font-medium mb-2">Encryption Key Management</div>
+                
+                <!-- Key Exists -->
+                <div x-show="encryption.key_exists" class="flex flex-col gap-2">
+                    <div class="text-sm text-gray-500">An encryption key has been generated.</div>
+                    <!-- Key Details -->
+                    <div class="bg-base-200 p-3 rounded-lg">
+                        <div class="text-sm">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium">Key ID:</span>
+                                <span x-text="encryption.key_hash || 'Loading...'"></span>
+                            </div>
+                            <div class="flex items-center gap-2 mt-1">
+                                <span class="font-medium">Created:</span>
+                                <span x-text="encryption.key_created || 'Loading...'"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 justify-between">
+                        <div class="flex gap-2">
+                            <button @click="downloadKey()" class="btn btn-sm btn-primary">
+                                Download Key
+                            </button>
+                            <label class="btn btn-sm btn-primary">
+                                Import Key
+                                <input type="file" @change="importKey($event)" class="hidden" accept=".key">
+                            </label>
+                        </div>
+                        <button @click="showRegenerateConfirm()" class="btn btn-sm btn-warning">
+                            Regenerate Key
+                        </button>
+                    </div>
+                    <div class="text-sm text-warning mt-2">
+                        Warning: Regenerating the key will make existing encrypted backups unrecoverable unless you have saved the previous key.
+                    </div>
+                </div>
+
+                <!-- No Key Generated -->
+                <div x-show="!encryption.key_exists">
+                    <div class="text-sm text-gray-500 mb-2">No encryption key has been generated yet.</div>
+                    <div class="flex gap-2">
+                        <button @click="generateKey()" class="btn btn-sm btn-primary">
+                            Generate New Key
+                        </button>
+                        <label class="btn btn-sm btn-primary">
+                            Import Key
+                            <input type="file" @change="importKey($event)" class="hidden" accept=".key">
+                        </label>
+                    </div>
+                    <div x-show="errorMessage" x-text="errorMessage" class="text-sm text-error mt-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal for Key Regeneration -->
+    <dialog id="confirmModalRegenerateKey" class="modal modal-bottom sm:modal-middle">
+        <div class="modal-box">
+            <h3 class="font-bold text-lg mb-4" id="confirmTitleRegenerateKey"></h3>
+            <p class="py-4" id="confirmMessageRegenerateKey"></p>
+            <div class="modal-action">
+                <button class="btn" @click="document.getElementById('confirmModalRegenerateKey').close()">Cancel</button>
+                <button class="btn btn-error" @click="generateKey(); document.getElementById('confirmModalRegenerateKey').close()">Confirm</button>
+            </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button>close</button>
+        </form>
+    </dialog>
+</div>
+
+<!-- Backup Retention Settings -->
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3 mt-4"
+    x-data="{
+        retention: {
+            maxage: '{{.Settings.Backup.Retention.MaxAge}}',
+            maxbackups: {{.Settings.Backup.Retention.MaxBackups}},
+            minbackups: {{.Settings.Backup.Retention.MinBackups}}
+        },
+        showTooltip: null,
+        hasChanges: false
+    }"
+    x-init="
+        $watch('retention', () => {
+            hasChanges = true;
+            $dispatch('retention-changed', retention);
+        }, { deep: true });
+    "
+    @retention-changed.window="backup.retention = $event.detail"
+>
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex items-center">
+            <div>Retention Settings</div>
+            <div x-show="hasChanges" x-cloak class="ml-2">
+                <span class="badge badge-primary badge-sm changed-badge">
+                    <span class="text-xs mb-0.5">changed</span>
+                </span>
+            </div>
+        </div>
+        <p class="text-sm text-gray-500">Configure how long backups should be kept</p>
+    </div>
+
+    <div class="collapse-content">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Max Age -->
+            {{template "textField" dict
+                "id" "retentionMaxAge"
+                "model" "retention.maxage"
+                "name" "backup.retention.maxage"
+                "label" "Maximum Age"
+                "placeholder" "30d"
+                "pattern" "^\\d+[dmy]$"
+                "tooltip" "Maximum age of backups to keep (e.g., 30d, 6m, 1y)"
+                "validationMessage" "Please enter a valid duration (e.g., 30d, 6m, 1y)"}}
+
+            <!-- Max Backups -->
+            {{template "textField" dict
+                "id" "retentionMaxBackups"
+                "model" "retention.maxbackups"
+                "name" "backup.retention.maxbackups"
+                "label" "Maximum Backups"
+                "type" "number"
+                "pattern" "^[1-9]\\d*$"
+                "tooltip" "Maximum number of backups to keep"
+                "validationMessage" "Please enter a number greater than 0"}}
+
+            <!-- Min Backups -->
+            {{template "textField" dict
+                "id" "retentionMinBackups"
+                "model" "retention.minbackups"
+                "name" "backup.retention.minbackups"
+                "label" "Minimum Backups"
+                "type" "number"
+                "pattern" "^[1-9]\\d*$"
+                "tooltip" "Minimum number of backups to keep regardless of age"
+                "validationMessage" "Please enter a number greater than 0"}}
+        </div>
+    </div>
+</div>
+
+<!-- Backup Targets -->
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
+    targets: [],
+    showTooltip: null,
+    hasChanges: false,
+    addTarget() {
+        this.targets.push({
+            type: 'local',
+            enabled: true,
+            settings: {
+                path: 'backups/'
+            }
+        });
+        this.hasChanges = true;
+    },
+    removeTarget(index) {
+        this.targets.splice(index, 1);
+        this.hasChanges = true;
+    },
+    initializeTarget(target) {
+        if (!target.settings) {
+            target.settings = {};
+        }
+        switch (target.type.toLowerCase()) {
+            case 'local':
+                if (!target.settings.path) target.settings.path = 'backups/';
+                break;
+            case 'ftp':
+                if (!target.settings.host) target.settings.host = '';
+                if (!target.settings.port) target.settings.port = 21;
+                if (!target.settings.username) target.settings.username = '';
+                if (!target.settings.password) target.settings.password = '';
+                if (!target.settings.path) target.settings.path = 'backups/';
+                break;
+            case 'sftp':
+                if (!target.settings.host) target.settings.host = '';
+                if (!target.settings.port) target.settings.port = 22;
+                if (!target.settings.username) target.settings.username = '';
+                if (!target.settings.password) target.settings.password = '';
+                if (!target.settings.key_file) target.settings.key_file = '';
+                if (!target.settings.known_hosts_file) target.settings.known_hosts_file = '';
+                if (!target.settings.path) target.settings.path = 'backups/';
+                break;
+        }
+    }
+}" x-init="
+    $watch('targets', () => { 
+        hasChanges = true;
+        // Update the hidden input with the JSON string of all targets
+        $refs.targetsInput.value = JSON.stringify(targets);
+    }, { deep: true });
+    // Initialize targets from the server data
+    let serverTargets = {{.Settings.Backup.Targets | toJSON}};
+    targets = serverTargets.map(target => ({
+        type: target.Type.toLowerCase(),
+        enabled: target.Enabled,
+        settings: { ...target.Settings }
+    }));
+    // Initialize settings for each target
+    targets.forEach(target => initializeTarget(target));
+    // Set initial value of hidden input
+    $refs.targetsInput.value = JSON.stringify(targets);
+">
+    <!-- Hidden input to store all targets as JSON -->
+    <input type="hidden" name="backup.targets" x-ref="targetsInput">
+
+    <div class="collapse-title text-xl font-medium">
+        <div class="flex justify-between items-center">
+            <div>Backup Targets</div>
+            <button @click="addTarget()" class="btn btn-sm btn-primary">Add Target</button>
+        </div>
+    </div>
+
+    <div class="collapse-content">
+        <!-- Target List -->
+        <template x-for="(target, index) in targets" :key="index">
+            <div class="card bg-base-200 shadow-sm mt-4">
+                <div class="card-body p-4">
+                    <!-- Target Type -->
+                    {{template "selectField" dict
+                        "id" "targetType"
+                        "model" "target.type"
+                        "name" "'backup.targets[' + index + '].type'"
+                        "label" "Target Type"
+                        "change" "initializeTarget(target)"
+                        "options" (slice
+                            (dict "value" "local" "label" "Local Storage")
+                            (dict "value" "ftp" "label" "FTP Server")
+                            (dict "value" "sftp" "label" "SFTP Server")
+                        )
+                        "tooltip" "Type of backup target"
+                        "dynamicId" true}}
+
+                    <!-- Enable Target -->
+                    {{template "checkbox" dict
+                        "id" "targetEnabled"
+                        "model" "target.enabled"
+                        "name" "'backup.targets[' + index + '].enabled'"
+                        "label" "Enable Target"
+                        "tooltip" "Enable or disable this backup target"
+                        "dynamicId" true}}
+
+                    <!-- Target Settings -->
+                    <div x-show="target.type === 'local'">
+                        {{template "textField" dict
+                            "id" "localPath"
+                            "model" "target.settings.path"
+                            "name" "'backup.targets[' + index + '].settings.path'"
+                            "label" "Backup Path"
+                            "placeholder" "backups/"
+                            "tooltip" "Local directory path for backups"
+                            "dynamicId" true}}
+                    </div>
+
+                    <div x-show="target.type === 'ftp'">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {{template "textField" dict
+                                "id" "ftpHost"
+                                "model" "target.settings.host"
+                                "name" "'backup.targets[' + index + '].settings.host'"
+                                "label" "Host"
+                                "placeholder" "ftp.example.com"
+                                "tooltip" "FTP server hostname"
+                                "dynamicId" true}}
+
+                            {{template "numberField" dict
+                                "id" "ftpPort"
+                                "model" "target.settings.port"
+                                "name" "'backup.targets[' + index + '].settings.port'"
+                                "label" "Port"
+                                "placeholder" "21"
+                                "min" "1"
+                                "max" "65535"
+                                "pattern" "^\\d+$"
+                                "tooltip" "FTP server port number"
+                                "dynamicId" true}}
+
+                            {{template "textField" dict
+                                "id" "ftpUsername"
+                                "model" "target.settings.username"
+                                "name" "'backup.targets[' + index + '].settings.username'"
+                                "label" "Username"
+                                "tooltip" "FTP account username"
+                                "dynamicId" true}}
+
+                            {{template "passwordField" dict
+                                "id" "ftpPassword"
+                                "model" "target.settings.password"
+                                "name" "'backup.targets[' + index + '].settings.password'"
+                                "label" "Password"
+                                "tooltip" "FTP account password"
+                                "dynamicId" true}}
+
+                            {{template "textField" dict
+                                "id" "ftpPath"
+                                "model" "target.settings.path"
+                                "name" "'backup.targets[' + index + '].settings.path'"
+                                "label" "Remote Path"
+                                "placeholder" "backups/"
+                                "tooltip" "Remote directory path for backups"
+                                "dynamicId" true
+                                "class" "md:col-span-2"}}
+                        </div>
+                    </div>
+
+                    <div x-show="target.type === 'sftp'">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {{template "textField" dict
+                                "id" "sftpHost"
+                                "model" "target.settings.host"
+                                "name" "'backup.targets[' + index + '].settings.host'"
+                                "label" "Host"
+                                "placeholder" "sftp.example.com"
+                                "tooltip" "SFTP server hostname"
+                                "dynamicId" true}}
+
+                            {{template "numberField" dict
+                                "id" "sftpPort"
+                                "model" "target.settings.port"
+                                "name" "'backup.targets[' + index + '].settings.port'"
+                                "label" "Port"
+                                "placeholder" "22"
+                                "min" "1"
+                                "max" "65535"
+                                "pattern" "^\\d+$"
+                                "tooltip" "SFTP server port number"
+                                "dynamicId" true}}
+
+                            {{template "textField" dict
+                                "id" "sftpUsername"
+                                "model" "target.settings.username"
+                                "name" "'backup.targets[' + index + '].settings.username'"
+                                "label" "Username"
+                                "tooltip" "SFTP account username"
+                                "dynamicId" true}}
+
+                            {{template "passwordField" dict
+                                "id" "sftpPassword"
+                                "model" "target.settings.password"
+                                "name" "'backup.targets[' + index + '].settings.password'"
+                                "label" "Password"
+                                "tooltip" "SFTP account password"
+                                "dynamicId" true}}
+
+                            {{template "textField" dict
+                                "id" "sftpKeyFile"
+                                "model" "target.settings.key_file"
+                                "name" "'backup.targets[' + index + '].settings.key_file'"
+                                "label" "SSH Key File"
+                                "placeholder" "~/.ssh/id_rsa"
+                                "tooltip" "Path to SSH private key file"
+                                "dynamicId" true}}
+
+                            {{template "textField" dict
+                                "id" "sftpKnownHosts"
+                                "model" "target.settings.known_hosts_file"
+                                "name" "'backup.targets[' + index + '].settings.known_hosts_file'"
+                                "label" "Known Hosts File"
+                                "placeholder" "~/.ssh/known_hosts"
+                                "tooltip" "Path to SSH known hosts file"
+                                "dynamicId" true}}
+
+                            {{template "textField" dict
+                                "id" "sftpPath"
+                                "model" "target.settings.path"
+                                "name" "'backup.targets[' + index + '].settings.path'"
+                                "label" "Remote Path"
+                                "placeholder" "backups/"
+                                "tooltip" "Remote directory path for backups"
+                                "dynamicId" true
+                                "class" "md:col-span-2"}}
+                        </div>
+                    </div>
+
+                    <!-- Remove Target Button -->
+                    <div class="flex justify-end mt-4">
+                        <button @click="removeTarget(index)" class="btn btn-sm btn-error">Remove Target</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+</div>
+{{end}}

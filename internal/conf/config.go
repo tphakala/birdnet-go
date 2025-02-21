@@ -316,6 +316,7 @@ type Settings struct {
 		SQLite struct {
 			Enabled bool   // true to enable sqlite output
 			Path    string // path to sqlite database
+			TempDir string // path to temporary directory for backups
 		}
 
 		MySQL struct {
@@ -327,6 +328,8 @@ type Settings struct {
 			Port     string // port for mysql database
 		}
 	}
+
+	Backup BackupConfig // Backup configuration
 }
 
 // LogConfig defines the configuration for a log file
@@ -346,6 +349,56 @@ const (
 	RotationWeekly RotationType = "weekly"
 	RotationSize   RotationType = "size"
 )
+
+// BackupProvider defines settings for a specific backup provider
+type BackupProvider struct {
+	Type     string                 `yaml:"type"`     // "local", "cifs", "nfs", "ftp", "onedrive", etc.
+	Enabled  bool                   `yaml:"enabled"`  // true to enable this provider
+	Settings map[string]interface{} `yaml:"settings"` // Provider-specific settings
+}
+
+// BackupRetention defines backup retention policy
+type BackupRetention struct {
+	MaxAge     string `yaml:"maxage"`     // Duration string like "30d", "6m", "1y"
+	MaxBackups int    `yaml:"maxbackups"` // Maximum number of backups to keep
+	MinBackups int    `yaml:"minbackups"` // Minimum number of backups to keep regardless of age
+}
+
+// BackupTarget defines settings for a backup target
+type BackupTarget struct {
+	Type     string                 `yaml:"type"`     // "local", "ftp", "sftp", "rsync", "gdrive"
+	Enabled  bool                   `yaml:"enabled"`  // true to enable this target
+	Settings map[string]interface{} `yaml:"settings"` // Target-specific settings
+}
+
+// BackupScheduleConfig defines a single backup schedule
+type BackupScheduleConfig struct {
+	Enabled  bool   `yaml:"enabled"`  // Whether this schedule is active
+	Hour     int    `yaml:"hour"`     // Hour to run backup (0-23)
+	Minute   int    `yaml:"minute"`   // Minute to run backup (0-59)
+	Weekday  string `yaml:"weekday"`  // Day of week for weekly backups ("" for daily)
+	IsWeekly bool   `yaml:"isweekly"` // true for weekly backups, false for daily
+}
+
+// BackupConfig contains backup-related configuration
+type BackupConfig struct {
+	Enabled        bool                   `yaml:"enabled"`         // true to enable backup functionality
+	Debug          bool                   `yaml:"debug"`           // true to enable debug logging
+	Encryption     bool                   `yaml:"encryption"`      // true to enable backup encryption
+	EncryptionKey  string                 `yaml:"encryption_key"`  // Base64-encoded encryption key for backups
+	SanitizeConfig bool                   `yaml:"sanitize_config"` // true to sanitize sensitive data from config backups
+	Retention      BackupRetention        `yaml:"retention"`       // Backup retention settings
+	Targets        []BackupTarget         `yaml:"targets"`         // List of backup targets
+	Schedules      []BackupScheduleConfig `yaml:"schedules"`       // List of backup schedules
+
+	// OperationTimeouts defines timeouts for various backup operations
+	OperationTimeouts struct {
+		Backup  time.Duration // Timeout for entire backup operation (default: 2h)
+		Store   time.Duration // Timeout for storing a backup (default: 15m)
+		Cleanup time.Duration // Timeout for cleanup operation (default: 10m)
+		Delete  time.Duration // Timeout for delete operation (default: 2m)
+	}
+}
 
 // settingsInstance is the current settings instance
 var (

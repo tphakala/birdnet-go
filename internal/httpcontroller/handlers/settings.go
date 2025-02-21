@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
@@ -61,7 +62,6 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 
 	// Update settings from form parameters
 	if err := updateSettingsFromForm(settings, formParams); err != nil {
-		//log.Printf("Debug: Form parameters for species config: %+v", formParams["realtime.species.config"])
 		return h.NewHandlerError(err, "Error updating settings", http.StatusInternalServerError)
 	}
 
@@ -98,6 +98,25 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		h.SSE.SendNotification(Notification{
 			Message: "Audio device changed. Please restart the application for the changes to take effect.",
 			Type:    "warning",
+		})
+	}
+
+	// Check if backup settings have changed
+	if backupSettingsChanged(&oldSettings, settings) {
+		// Validate backup settings if enabled
+		if settings.Backup.Enabled {
+			if err := conf.ValidateBackupConfig(&settings.Backup); err != nil {
+				h.SSE.SendNotification(Notification{
+					Message: fmt.Sprintf("Invalid backup configuration: %v", err),
+					Type:    "error",
+				})
+				return h.NewHandlerError(err, "Invalid backup configuration", http.StatusBadRequest)
+			}
+		}
+
+		h.SSE.SendNotification(Notification{
+			Message: "Backup settings updated. Changes will take effect on the next backup run.",
+			Type:    "info",
 		})
 	}
 
@@ -246,11 +265,14 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 					}
 					field.Set(reflect.ValueOf(config))
 				}
+			} else if fieldType.Type == reflect.TypeOf(conf.BackupConfig{}) {
+				// Special handling for BackupConfig
+				if err := updateBackupConfigFromForm(field, formValues, fullName); err != nil {
+					return err
+				}
 			} else {
-				//log.Println("Debug (updateStructFromForm): Updating struct field:", fullName)
 				// For other structs, recursively update their fields
 				if err := updateStructFromForm(field, formValues, fullName+"."); err != nil {
-					//log.Println("Debug (updateStructFromForm): Error updating struct field:", err)
 					return err
 				}
 			}
@@ -679,4 +701,201 @@ func hasRTSPSettings(formParams map[string][]string) bool {
 		}
 	}
 	return false
+}
+
+// updateBackupTargetsFromForm updates the backup targets from form values
+func updateBackupTargetsFromForm(field reflect.Value, formValues map[string][]string, prefix string) error {
+	// Always initialize an empty slice to handle the case where all targets are removed
+	targets := []conf.BackupTarget{}
+
+	// Get the targets JSON from form values
+	targetsJSON, exists := formValues[prefix+".targets"]
+	if exists && len(targetsJSON) > 0 {
+		// Only try to unmarshal if we have data
+		if err := json.Unmarshal([]byte(targetsJSON[0]), &targets); err != nil {
+			return fmt.Errorf("error unmarshaling backup targets: %w", err)
+		}
+
+		// Validate each target's settings
+		for i, target := range targets {
+			// Initialize settings map if nil
+			if target.Settings == nil {
+				target.Settings = make(map[string]interface{})
+			}
+
+			// Validate and set default settings based on target type
+			switch strings.ToLower(target.Type) {
+			case "local":
+				if path, ok := target.Settings["path"].(string); !ok || path == "" {
+					target.Settings["path"] = "backups/"
+				}
+			case "ftp":
+				if _, ok := target.Settings["host"].(string); !ok {
+					target.Settings["host"] = ""
+				}
+				if _, ok := target.Settings["port"].(float64); !ok {
+					target.Settings["port"] = 21
+				}
+				if _, ok := target.Settings["username"].(string); !ok {
+					target.Settings["username"] = ""
+				}
+				if _, ok := target.Settings["password"].(string); !ok {
+					target.Settings["password"] = ""
+				}
+				if _, ok := target.Settings["path"].(string); !ok {
+					target.Settings["path"] = "backups/"
+				}
+			case "sftp":
+				if _, ok := target.Settings["host"].(string); !ok {
+					target.Settings["host"] = ""
+				}
+				if _, ok := target.Settings["port"].(float64); !ok {
+					target.Settings["port"] = 22
+				}
+				if _, ok := target.Settings["username"].(string); !ok {
+					target.Settings["username"] = ""
+				}
+				if _, ok := target.Settings["password"].(string); !ok {
+					target.Settings["password"] = ""
+				}
+				if _, ok := target.Settings["key_file"].(string); !ok {
+					target.Settings["key_file"] = ""
+				}
+				if _, ok := target.Settings["known_hosts_file"].(string); !ok {
+					target.Settings["known_hosts_file"] = ""
+				}
+				if _, ok := target.Settings["path"].(string); !ok {
+					target.Settings["path"] = "backups/"
+				}
+			default:
+				return fmt.Errorf("unsupported backup target type for target %d: %s", i+1, target.Type)
+			}
+
+			targets[i] = target
+		}
+	}
+
+	// Always set the targets field, even if it's empty
+	field.Set(reflect.ValueOf(targets))
+	return nil
+}
+
+// updateBackupConfigFromForm updates the backup configuration from form values
+func updateBackupConfigFromForm(field reflect.Value, formValues map[string][]string, prefix string) error {
+	// Update enabled state
+	if enabled, exists := formValues[prefix+".enabled"]; exists && len(enabled) > 0 {
+		field.FieldByName("Enabled").SetBool(enabled[0] == "on" || enabled[0] == "true")
+	}
+
+	// Update debug state
+	if debug, exists := formValues[prefix+".debug"]; exists && len(debug) > 0 {
+		field.FieldByName("Debug").SetBool(debug[0] == "on" || debug[0] == "true")
+	}
+
+	// Update encryption state
+	if encryption, exists := formValues[prefix+".encryption"]; exists && len(encryption) > 0 {
+		field.FieldByName("Encryption").SetBool(encryption[0] == "on" || encryption[0] == "true")
+	}
+
+	// Update sanitize_config state
+	if sanitize, exists := formValues[prefix+".sanitize_config"]; exists && len(sanitize) > 0 {
+		field.FieldByName("SanitizeConfig").SetBool(sanitize[0] == "on" || sanitize[0] == "true")
+	}
+
+	// Update retention settings
+	retention := field.FieldByName("Retention")
+	if maxAge, exists := formValues[prefix+".retention.maxage"]; exists && len(maxAge) > 0 {
+		retention.FieldByName("MaxAge").SetString(maxAge[0])
+	}
+	if maxBackups, exists := formValues[prefix+".retention.maxbackups"]; exists && len(maxBackups) > 0 {
+		if val, err := strconv.Atoi(maxBackups[0]); err == nil {
+			retention.FieldByName("MaxBackups").SetInt(int64(val))
+		}
+	}
+	if minBackups, exists := formValues[prefix+".retention.minbackups"]; exists && len(minBackups) > 0 {
+		if val, err := strconv.Atoi(minBackups[0]); err == nil {
+			retention.FieldByName("MinBackups").SetInt(int64(val))
+		}
+	}
+
+	// Update targets
+	targets := field.FieldByName("Targets")
+	if err := updateBackupTargetsFromForm(targets, formValues, prefix); err != nil {
+		return fmt.Errorf("error updating backup targets: %w", err)
+	}
+
+	return nil
+}
+
+// backupSettingsChanged checks if backup settings have been modified in a way that requires action
+func backupSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Check if backup enabled state changed
+	if oldSettings.Backup.Enabled != currentSettings.Backup.Enabled {
+		return true
+	}
+
+	// Check if encryption settings changed
+	if oldSettings.Backup.Encryption != currentSettings.Backup.Encryption {
+		return true
+	}
+
+	// Check if retention settings changed
+	if !reflect.DeepEqual(oldSettings.Backup.Retention, currentSettings.Backup.Retention) {
+		return true
+	}
+
+	// Check if targets changed
+	if !reflect.DeepEqual(oldSettings.Backup.Targets, currentSettings.Backup.Targets) {
+		return true
+	}
+
+	return false
+}
+
+// GenerateBackupKey handles the request to generate a new backup encryption key
+func (h *Handlers) GenerateBackupKey(c echo.Context) error {
+	settings := conf.Setting()
+	if settings == nil {
+		return h.NewHandlerError(fmt.Errorf("settings is nil"), "Settings not initialized", http.StatusInternalServerError)
+	}
+
+	// Create a backup manager to handle key generation
+	manager := backup.NewManager(&settings.Backup, h.logger)
+
+	// Generate a new key using the manager
+	_, err := manager.GenerateEncryptionKey()
+	if err != nil {
+		return h.NewHandlerError(err, "Failed to generate encryption key", http.StatusInternalServerError)
+	}
+
+	// Send success notification
+	h.SSE.SendNotification(Notification{
+		Message: "New encryption key generated successfully",
+		Type:    "success",
+	})
+
+	return c.JSON(http.StatusOK, map[string]bool{"success": true})
+}
+
+// DownloadBackupKey handles the request to download the current backup encryption key
+func (h *Handlers) DownloadBackupKey(c echo.Context) error {
+	settings := conf.Setting()
+	if settings == nil {
+		return h.NewHandlerError(fmt.Errorf("settings is nil"), "Settings not initialized", http.StatusInternalServerError)
+	}
+
+	if settings.Backup.EncryptionKey == "" {
+		return h.NewHandlerError(fmt.Errorf("no encryption key found"), "No encryption key exists", http.StatusNotFound)
+	}
+
+	// Create a timestamp for the filename
+	timestamp := time.Now().UTC().Format("20060102150405")
+	filename := fmt.Sprintf("backup-encryption-key-%s.key", timestamp)
+
+	// Set headers for file download
+	c.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Response().Header().Set("Content-Type", "application/octet-stream")
+
+	// Write the key to the response
+	return c.String(http.StatusOK, settings.Backup.EncryptionKey)
 }

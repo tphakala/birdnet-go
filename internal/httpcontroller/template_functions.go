@@ -29,6 +29,7 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"mod":                   modFunc,
 		"seq":                   seqFunc,
 		"dict":                  dictFunc,
+		"slice":                 sliceFunc,
 		"even":                  even,
 		"ge":                    geFunc,
 		"calcWidth":             calcWidth,
@@ -377,4 +378,9 @@ func geFunc(a, b interface{}) bool {
 		return false
 	}
 	return aFloat >= bFloat
+}
+
+// sliceFunc creates a slice from its arguments
+func sliceFunc(args ...interface{}) []interface{} {
+	return args
 }

@@ -66,6 +66,13 @@ func ValidateSettings(settings *Settings) error {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
+	// Validate Backup settings if enabled
+	if settings.Backup.Enabled {
+		if err := ValidateBackupConfig(&settings.Backup); err != nil {
+			ve.Errors = append(ve.Errors, err.Error())
+		}
+	}
+
 	// If there are any errors, return the ValidationError
 	if len(ve.Errors) > 0 {
 		return ve
@@ -271,5 +278,102 @@ func validateWeatherSettings(settings *WeatherSettings) error {
 	if settings.PollInterval < 15 {
 		return fmt.Errorf("weather poll interval must be at least 15 minutes, got %d", settings.PollInterval)
 	}
+	return nil
+}
+
+// ValidateBackupConfig validates the backup configuration
+func ValidateBackupConfig(config *BackupConfig) error {
+	var errs []string
+
+	// Validate schedules
+	/*if len(config.Schedules) == 0 {
+		errs = append(errs, "at least one backup schedule must be configured when backup is enabled")
+	}*/
+
+	// Validate each schedule
+	for i, schedule := range config.Schedules {
+		// Validate hour
+		if schedule.Hour < 0 || schedule.Hour > 23 {
+			errs = append(errs, fmt.Sprintf("schedule %d: hour must be between 0 and 23", i+1))
+		}
+
+		// Validate minute
+		if schedule.Minute < 0 || schedule.Minute > 59 {
+			errs = append(errs, fmt.Sprintf("schedule %d: minute must be between 0 and 59", i+1))
+		}
+
+		// Validate weekday for weekly backups
+		if schedule.IsWeekly {
+			if schedule.Weekday == "" {
+				errs = append(errs, fmt.Sprintf("schedule %d: weekday must be specified for weekly backups", i+1))
+			} else {
+				_, err := ParseWeekday(schedule.Weekday)
+				if err != nil {
+					errs = append(errs, fmt.Sprintf("schedule %d: %v", i+1, err))
+				}
+			}
+		}
+	}
+
+	// Validate retention settings
+	if config.Retention.MaxBackups < config.Retention.MinBackups {
+		errs = append(errs, "maxbackups must be greater than or equal to minbackups")
+	}
+
+	if config.Retention.MinBackups < 1 {
+		errs = append(errs, "minbackups must be at least 1")
+	}
+
+	// Validate maxage format (e.g., "30d", "6m", "1y")
+	if config.Retention.MaxAge != "" {
+		if !regexp.MustCompile(`^\d+[dmy]$`).MatchString(config.Retention.MaxAge) {
+			errs = append(errs, "maxage must be in format: <number>[d|m|y] (e.g., 30d, 6m, 1y)")
+		}
+	}
+
+	// Validate targets
+	if len(config.Targets) == 0 {
+		errs = append(errs, "at least one backup target must be configured when backup is enabled")
+	}
+
+	for i, target := range config.Targets {
+		if target.Type == "" {
+			errs = append(errs, fmt.Sprintf("target %d: type must not be empty", i+1))
+		}
+
+		// Validate target-specific settings based on type
+		switch target.Type {
+		case "local":
+			if path, ok := target.Settings["path"].(string); !ok || path == "" {
+				errs = append(errs, fmt.Sprintf("target %d: local target requires 'path' setting", i+1))
+			}
+		case "ftp":
+			if _, ok := target.Settings["host"].(string); !ok {
+				errs = append(errs, fmt.Sprintf("target %d: FTP target requires 'host' setting", i+1))
+			}
+		case "sftp":
+			if _, ok := target.Settings["host"].(string); !ok {
+				errs = append(errs, fmt.Sprintf("target %d: SFTP target requires 'host' setting", i+1))
+			}
+		case "rsync":
+			if _, ok := target.Settings["host"].(string); !ok {
+				errs = append(errs, fmt.Sprintf("target %d: Rsync target requires 'host' setting", i+1))
+			}
+		case "gdrive":
+			if _, ok := target.Settings["bucket"].(string); !ok {
+				errs = append(errs, fmt.Sprintf("target %d: Google Drive target requires 'bucket' setting", i+1))
+			}
+			if _, ok := target.Settings["credentials"].(string); !ok {
+				errs = append(errs, fmt.Sprintf("target %d: Google Drive target requires 'credentials' setting", i+1))
+			}
+		default:
+			errs = append(errs, fmt.Sprintf("target %d: unsupported backup target type: %s", i+1, target.Type))
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("backup configuration validation failed: %s", strings.Join(errs, "; "))
+	}
+
 	return nil
 }

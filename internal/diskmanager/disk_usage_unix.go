@@ -21,3 +21,14 @@ func GetDiskUsage(baseDir string) (float64, error) {
 
 	return (float64(used) / float64(total)) * 100, nil
 }
+
+// GetAvailableSpace returns the available disk space in bytes
+func GetAvailableSpace(baseDir string) (uint64, error) {
+	var stat syscall.Statfs_t
+	err := syscall.Statfs(baseDir, &stat)
+	if err != nil {
+		return 0, err
+	}
+
+	return stat.Bavail * uint64(stat.Bsize), nil
+}

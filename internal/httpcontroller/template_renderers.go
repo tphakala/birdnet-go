@@ -6,9 +6,11 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -128,6 +130,29 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 		log.Printf("Debug: ✅ CSRF token found in context for settings page: %s", path)
 	}
 
+	// Check for encryption key file existence and details if this is the backup settings page
+	var keyFileExists bool
+	var keyHash string
+	var keyCreated string
+	if templateName == "backupSettings" {
+		manager := backup.NewManager(&s.Settings.Backup, log.Default())
+		keyPath, err := manager.GetEncryptionKeyPath()
+		if err == nil {
+			if info, err := os.Stat(keyPath); err == nil {
+				keyFileExists = true
+				// Read the key file to get its hash
+				if keyBytes, err := os.ReadFile(keyPath); err == nil {
+					// Take first 8 characters of the key as a short identifier
+					if len(keyBytes) >= 8 {
+						keyHash = string(keyBytes[:8])
+					}
+					// Format the creation time
+					keyCreated = info.ModTime().UTC().Format("2006-01-02 15:04:05 UTC")
+				}
+			}
+		}
+	}
+
 	// Prepare the data for the template
 	data := map[string]interface{}{
 		"Settings":       s.Settings,             // Application settings
@@ -135,6 +160,9 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 		"EqFilterConfig": conf.EqFilterConfig,    // Equalizer filter configuration for the UI
 		"TemplateName":   templateName,
 		"CSRFToken":      csrfToken,
+		"KeyFileExists":  keyFileExists,
+		"KeyHash":        keyHash,
+		"KeyCreated":     keyCreated,
 	}
 
 	// DEBUG Log the species settings

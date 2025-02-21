@@ -170,6 +170,7 @@ func setDefaultConfig() {
 	// SQLite output configuration
 	viper.SetDefault("output.sqlite.enabled", true)
 	viper.SetDefault("output.sqlite.path", "birdnet.db")
+	viper.SetDefault("output.sqlite.tempdir", "")
 
 	// MySQL output configuration
 	viper.SetDefault("output.mysql.enabled", false)
@@ -178,6 +179,71 @@ func setDefaultConfig() {
 	viper.SetDefault("output.mysql.database", "birdnet")
 	viper.SetDefault("output.mysql.host", "localhost")
 	viper.SetDefault("output.mysql.port", 3306)
+
+	// Backup configuration
+	viper.SetDefault("backup.enabled", false)
+	viper.SetDefault("backup.debug", false)
+	viper.SetDefault("backup.schedule", "0 0 * * *") // Daily at midnight
+	viper.SetDefault("backup.encryption", false)
+	viper.SetDefault("backup.sanitize_config", true) // Default to sanitizing config for security
+	viper.SetDefault("backup.retention.maxage", "30d")
+	viper.SetDefault("backup.retention.maxbackups", 30)
+	viper.SetDefault("backup.retention.minbackups", 7)
+	viper.SetDefault("backup.targets", []map[string]interface{}{
+		{
+			"type":    "local",
+			"enabled": true,
+			"settings": map[string]interface{}{
+				"path": "backups/",
+			},
+		},
+		{
+			"type":    "ftp",
+			"enabled": false,
+			"settings": map[string]interface{}{
+				"host":     "localhost",
+				"port":     21,
+				"username": "",
+				"password": "",
+				"path":     "backups/",
+				"timeout":  "30s",
+			},
+		},
+		{
+			"type":    "sftp",
+			"enabled": false,
+			"settings": map[string]interface{}{
+				"host":             "localhost",
+				"port":             22,
+				"username":         "",
+				"password":         "",
+				"key_file":         "",
+				"known_hosts_file": "", // Will default to ~/.ssh/known_hosts if not specified
+				"path":             "backups/",
+				"timeout":          "30s",
+			},
+		},
+		{
+			"type":    "rsync",
+			"enabled": false,
+			"settings": map[string]interface{}{
+				"host":     "localhost",
+				"port":     22,
+				"username": "",
+				"key_file": "",
+				"path":     "backups/",
+			},
+		},
+		{
+			"type":    "gdrive",
+			"enabled": false,
+			"settings": map[string]interface{}{
+				"bucket":      "",
+				"credentials": "credentials.json",
+				"path":        "backups/",
+			},
+		},
+	})
 
 	// Security configuration
 	viper.SetDefault("security.debug", false)

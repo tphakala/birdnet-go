@@ -1,0 +1,36 @@
+{{define "numberField"}}
+<div class="form-control {{if .class}}{{.class}}{{end}}">
+    <label class="label justify-start">
+        <span class="label-text">{{.label}}</span>
+        {{if .tooltip}}
+        <span class="help-icon" 
+            @mouseenter="showTooltip = {{if .dynamicId}}'{{.id}}_' + index{{else}}'{{.id}}'{{end}}"
+            @mouseleave="showTooltip = null">ⓘ</span>
+        {{end}}
+    </label>
+    <input type="number"
+        {{if .dynamicId}}
+        :id="'{{.id}}_' + index"
+        x-model.number="{{.model}}"
+        :name="{{.name}}"
+        {{else}}
+        id="{{.id}}"
+        x-model.number="{{.model}}"
+        name="{{.name}}"
+        {{end}}
+        class="input input-bordered input-sm w-full"
+        {{if .placeholder}}placeholder="{{.placeholder}}"{{end}}
+        {{if .pattern}}pattern="{{.pattern}}"{{end}}
+        {{if .min}}min="{{.min}}"{{end}}
+        {{if .max}}max="{{.max}}"{{end}}
+        {{if .step}}step="{{.step}}"{{end}}>
+    {{if .tooltip}}
+    <div x-show="showTooltip === {{if .dynamicId}}'{{.id}}_' + index{{else}}'{{.id}}'{{end}}" x-cloak
+        role="tooltip"
+        aria-hidden="true"
+        class="tooltip">
+        {{.tooltip}}
+    </div>
+    {{end}}
+</div>
+{{end}} 
