@@ -126,6 +126,8 @@ jobs:
   docker:
     if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.get_version.outputs.version }} 
     strategy:
       matrix:
         platform: [linux/amd64, linux/arm64]
@@ -163,7 +165,7 @@ jobs:
         with:
           images: ghcr.io/${{ env.REPO }}
           tags: |
-            type=raw,value={{version}}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+            type=raw,value=${{ steps.get_version.outputs.version }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
             type=raw,value=${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
 
       - name: Build and push Docker image
@@ -184,13 +186,6 @@ jobs:
     needs: docker
     runs-on: ubuntu-24.04
     steps:
-      - name: Get version
-        id: get_version
-        run: |
-          VERSION=$(git describe --tags --always)
-          echo "VERSION=${VERSION}" >> ${GITHUB_ENV}
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -205,10 +200,10 @@ jobs:
       - name: Create and push manifest
         run: |
           # Create and push the versioned manifest
-          docker manifest create ghcr.io/${{ env.REPO }}:${{ steps.get_version.outputs.version }} \
-            ghcr.io/${{ env.REPO }}:${{ steps.get_version.outputs.version }}-amd64 \
-            ghcr.io/${{ env.REPO }}:${{ steps.get_version.outputs.version }}-arm64
-          docker manifest push ghcr.io/${{ env.REPO }}:${{ steps.get_version.outputs.version }}
+          docker manifest create ghcr.io/${{ env.REPO }}:${{ needs.docker.outputs.version }} \
+            ghcr.io/${{ env.REPO }}:${{ needs.docker.outputs.version }}-amd64 \
+            ghcr.io/${{ env.REPO }}:${{ needs.docker.outputs.version }}-arm64
+          docker manifest push ghcr.io/${{ env.REPO }}:${{ needs.docker.outputs.version }}
           
           # Create and push the latest manifest
           docker manifest create ghcr.io/${{ env.REPO }}:latest \
