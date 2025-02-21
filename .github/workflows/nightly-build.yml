@@ -124,6 +124,8 @@ jobs:
 
   docker:
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
     strategy:
       matrix:
         platform: [linux/amd64, linux/arm64]
@@ -184,13 +186,6 @@ jobs:
     needs: docker
     runs-on: ubuntu-24.04
     steps:
-      - name: Get version
-        id: get_version
-        run: |
-          VERSION=$(git describe --tags --always)
-          echo "VERSION=${VERSION}" >> ${GITHUB_ENV}
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -207,10 +202,10 @@ jobs:
           DATE=$(date +'%Y%m%d')
 
           # Create and push the version-specific manifest
-          docker manifest create ghcr.io/${{ env.REPO }}:${{ steps.get_version.outputs.version }} \
-            ghcr.io/${{ env.REPO }}:${{ steps.get_version.outputs.version }}-amd64 \
-            ghcr.io/${{ env.REPO }}:${{ steps.get_version.outputs.version }}-arm64
-          docker manifest push ghcr.io/${{ env.REPO }}:${{ steps.get_version.outputs.version }}
+          docker manifest create ghcr.io/${{ env.REPO }}:${{ needs.docker.outputs.version }} \
+            ghcr.io/${{ env.REPO }}:${{ needs.docker.outputs.version }}-amd64 \
+            ghcr.io/${{ env.REPO }}:${{ needs.docker.outputs.version }}-arm64
+          docker manifest push ghcr.io/${{ env.REPO }}:${{ needs.docker.outputs.version }}
           
           # Create and push the dated manifest
           docker manifest create ghcr.io/${{ env.REPO }}:nightly-${DATE} \
