@@ -69,7 +69,7 @@ func mainWithExitCode() int {
 	settings.Version = version
 	settings.BuildDate = buildDate
 
-	fmt.Printf("🐦 \033[37mBirdNET-Go v%s (built: %s), using config file: %s\033[0m\n",
+	fmt.Printf("🐦 \033[37mBirdNET-Go %s (built: %s), using config file: %s\033[0m\n",
 		settings.Version, settings.BuildDate, viper.ConfigFileUsed())
 
 	// Execute the root command

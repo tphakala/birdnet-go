@@ -3,9 +3,9 @@ ARG TENSORFLOW_VERSION=2.17.1
 
 FROM --platform=$BUILDPLATFORM golang:1.23.5-bookworm AS buildenv
 
-# Pass VERSION through to the build stage
-ARG VERSION
-ENV VERSION=$VERSION
+# Pass BUILD_VERSION through to the build stage
+ARG BUILD_VERSION
+ENV BUILD_VERSION=${BUILD_VERSION:-unknown}
 
 # Install Task and other dependencies
 RUN apt-get update -q && apt-get install -q -y \
@@ -38,6 +38,8 @@ COPY --chown=dev-user . ./
 
 # Enter Build stage
 FROM --platform=$BUILDPLATFORM buildenv AS build
+ARG BUILD_VERSION
+ENV BUILD_VERSION=${BUILD_VERSION:-unknown}
 
 ARG TARGETPLATFORM
 
@@ -48,7 +50,8 @@ RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     task download-assets && \
     task generate-tailwindcss && \
     TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
-    DOCKER_LIB_DIR=/home/dev-user/lib VERSION=${VERSION} task ${TARGET}
+    echo "Building with BUILD_VERSION=${BUILD_VERSION}" && \
+    BUILD_VERSION="${BUILD_VERSION}" DOCKER_LIB_DIR=/home/dev-user/lib task ${TARGET}
 
 # Create final image using a multi-platform base image
 FROM --platform=$TARGETPLATFORM debian:bookworm-slim
