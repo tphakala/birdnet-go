@@ -11,7 +11,12 @@ vars:
   BUILD_DATE:
     sh: date -u +%Y-%m-%dT%H:%M:%SZ
   VERSION:
-    sh: git describe --tags --always 2>/dev/null || echo "unknown"
+    sh: |
+      if [ ! -z "$BUILD_VERSION" ]; then
+        echo "$BUILD_VERSION"
+      else
+        git describe --tags --always 2>/dev/null || echo "unknown"
+      fi
   UNAME_S:
     sh: uname -s
   UNAME_M:
