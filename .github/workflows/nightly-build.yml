@@ -163,10 +163,8 @@ jobs:
         with:
           images: ghcr.io/${{ env.REPO }}
           tags: |
-            type=raw,value=nightly-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+            type=raw,value=${{ steps.get_version.outputs.version }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
             type=raw,value=nightly-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}-{{date 'YYYYMMDD'}}
-            type=raw,value=nightly
-            type=raw,value=nightly-{{date 'YYYYMMDD'}}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -200,7 +198,7 @@ jobs:
       - name: Create and push manifest
         run: |
           DATE=$(date +'%Y%m%d')
-
+          
           # Create and push the version-specific manifest
           docker manifest create ghcr.io/${{ env.REPO }}:${{ needs.docker.outputs.version }} \
             ghcr.io/${{ env.REPO }}:${{ needs.docker.outputs.version }}-amd64 \
@@ -213,8 +211,7 @@ jobs:
             ghcr.io/${{ env.REPO }}:nightly-arm64-${DATE}
           docker manifest push ghcr.io/${{ env.REPO }}:nightly-${DATE}
           
-          # Create and push the latest manifest
-          docker manifest create ghcr.io/${{ env.REPO }}:nightly \
-            ghcr.io/${{ env.REPO }}:nightly-amd64-${DATE} \
-            ghcr.io/${{ env.REPO }}:nightly-arm64-${DATE}
-          docker manifest push ghcr.io/${{ env.REPO }}:nightly
+          # Add inspect commands for debugging
+          echo "Inspecting available images..."
+          docker manifest inspect ghcr.io/${{ env.REPO }}:${{ needs.docker.outputs.version }}-amd64 || true
+          docker manifest inspect ghcr.io/${{ env.REPO }}:${{ needs.docker.outputs.version }}-arm64 || true
