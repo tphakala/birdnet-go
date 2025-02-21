@@ -66,6 +66,7 @@ func (s *Server) initRoutes() {
 		"/dashboard": {Path: "/dashboard", TemplateName: "dashboard", Title: "Dashboard"},
 		"/logs":      {Path: "/logs", TemplateName: "logs", Title: "Logs"},
 		"/stats":     {Path: "/stats", TemplateName: "stats", Title: "Statistics"},
+		"/about":     {Path: "/about", TemplateName: "about", Title: "About BirdNET-Go"},
 		// Settings Routes are managed by settingsBase template
 		"/settings/main":             {Path: "/settings/main", TemplateName: "settingsBase", Title: "Main Settings", Authorized: true},
 		"/settings/audio":            {Path: "/settings/audio", TemplateName: "settingsBase", Title: "Audio Settings", Authorized: true},
