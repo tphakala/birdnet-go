@@ -34,13 +34,9 @@
             <pre class="bg-base-200 p-4 rounded overflow-x-auto text-sm text-base-content font-mono">{{.Message}}</pre>
             {{end}}
             
-            {{if and .StackTrace (or (not .Settings.Security.AuthEnabled) .User)}}
+            {{if and .StackTrace (or (not .Security.Enabled) .Security.AccessAllowed)}}
             <h3 class="text-2xl font-semibold text-base-content mt-4 mb-2">Stack Trace</h3>
             <pre class="bg-base-200 p-4 rounded overflow-x-auto text-sm text-base-content font-mono">{{.StackTrace}}</pre>
-            {{else if and .StackTrace .Settings.Security.AuthEnabled}}
-            <div class="mt-4 text-base-content/70 italic">
-                Stack trace is only visible to authenticated users.
-            </div>
             {{end}}
         </div>
 
@@ -50,12 +46,12 @@
                class="btn btn-primary normal-case text-base font-semibold hover:bg-primary-focus transition duration-300">
                 Go to Dashboard
             </a>
-            {{if and .StackTrace (or (not .Settings.Security.AuthEnabled) .User)}}
+            {{if or (not .Security.Enabled) .Security.AccessAllowed}}
             <a href="https://github.com/tphakala/birdnet-go/issues" 
                class="btn btn-accent normal-case text-base font-semibold hover:bg-accent-focus transition duration-300">
                 Report Issue
             </a>
-            {{else if and .StackTrace .Settings.Security.AuthEnabled}}
+            {{else}}
             <a href="/login" 
                class="btn btn-secondary normal-case text-base font-semibold hover:bg-secondary-focus transition duration-300">
                 Login to View Details

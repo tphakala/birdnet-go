@@ -217,6 +217,7 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // DOM Elements
             const zero = document.getElementById('zero');
             const gameContainer = document.getElementById('game-container');
             const scoreDisplay = document.getElementById('score');
@@ -224,21 +225,26 @@
             const timerDisplay = scoreDisplay.querySelector('.timer');
             const highScoreDisplay = scoreDisplay.querySelector('.high-score');
             
-            let isGameActive = false;
-            let score = 0;
-            let startTime = 0;
-            let timerInterval;
-            let highScore = {
-                score: parseInt(localStorage.getItem('birdSpotterHighScore') || '0'),
-                time: parseInt(localStorage.getItem('birdSpotterHighTime') || '0')
-            };
+            // Game Configuration
             const birds = ['🐦', '🦜', '🦢', '🦆', '🦅', '🦉'];
-            const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
             const minSpawnDelay = 600;
             const maxSpawnDelay = 1500;
             const minStayTime = 2000;
             const maxStayTime = 4000;
+            const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
+            // Game State
+            let isGameActive = false;
+            let score = 0;
+            let startTime = 0;
+            let timerInterval;
+            let featherInterval; // Declare at the top level
+            let highScore = {
+                score: parseInt(localStorage.getItem('birdSpotterHighScore') || '0'),
+                time: parseInt(localStorage.getItem('birdSpotterHighTime') || '0')
+            };
+
+            // Game Utility Functions
             function formatTime(ms) {
                 const seconds = Math.floor(ms / 1000);
                 const minutes = Math.floor(seconds / 60);
@@ -252,6 +258,10 @@
                 timerDisplay.textContent = `Time: ${formatTime(elapsed)}`;
             }
 
+            function updateScore() {
+                currentScoreDisplay.textContent = `Birds Spotted: ${score}`;
+            }
+
             function updateHighScore() {
                 const currentTime = Date.now() - startTime;
                 if (score > highScore.score || (score === highScore.score && currentTime < highScore.time)) {
@@ -263,12 +273,7 @@
                 highScoreDisplay.textContent = `Best: ${highScore.score} birds in ${formatTime(highScore.time)}`;
             }
 
-            zero.addEventListener('click', function() {
-                if (!isGameActive) {
-                    startGame();
-                }
-            });
-
+            // Visual Effect Functions
             function createSpottingEffect(x, y) {
                 const ring = document.createElement('div');
                 ring.className = 'spotting-ring text-base-content';
@@ -287,6 +292,7 @@
                 setTimeout(() => feather.remove(), 3000);
             }
 
+            // Game Control Functions
             function startGame() {
                 isGameActive = true;
                 score = 0;
@@ -301,6 +307,25 @@
                 }
                 timerInterval = setInterval(updateTimer, 1000);
                 spawnBird();
+            }
+
+            function endGame() {
+                isGameActive = false;
+                zero.classList.remove('flying');
+                scoreDisplay.classList.remove('visible');
+                document.body.classList.remove('cursor-binoculars');
+                clearInterval(timerInterval);
+                // Restart feather animation
+                featherInterval = setInterval(() => {
+                    if (Math.random() < 0.3) {
+                        createFeather();
+                    }
+                }, 4000);
+                Array.from(gameContainer.children).forEach(bird => {
+                    if (!bird.classList.contains('spotting-ring')) {
+                        bird.remove();
+                    }
+                });
             }
 
             function spawnBird() {
@@ -350,37 +375,21 @@
                 setTimeout(spawnBird, minSpawnDelay + Math.random() * (maxSpawnDelay - minSpawnDelay));
             }
 
-            function updateScore() {
-                currentScoreDisplay.textContent = `Birds Spotted: ${score}`;
-            }
+            // Event Listeners
+            zero.addEventListener('click', function() {
+                if (!isGameActive) {
+                    startGame();
+                }
+            });
 
-            function endGame() {
-                isGameActive = false;
-                zero.classList.remove('flying');
-                scoreDisplay.classList.remove('visible');
-                document.body.classList.remove('cursor-binoculars');
-                clearInterval(timerInterval);
-                featherInterval = setInterval(() => {
-                    if (Math.random() < 0.3) {
-                        createFeather();
-                    }
-                }, 4000);
-                Array.from(gameContainer.children).forEach(bird => {
-                    if (!bird.classList.contains('spotting-ring')) {
-                        bird.remove();
-                    }
-                });
-            }
-
-            // Add keyboard shortcut to end game
             document.addEventListener('keydown', function(event) {
                 if (event.key === 'Escape' && isGameActive) {
                     endGame();
                 }
             });
 
-            // Start occasional feather drops
-            let featherInterval = setInterval(() => {
+            // Initialize feather animation
+            featherInterval = setInterval(() => {
                 if (Math.random() < 0.3) {
                     createFeather();
                 }
