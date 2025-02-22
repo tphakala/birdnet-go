@@ -180,22 +180,22 @@
 
     <!-- Pagination Controls - Shown for both desktop and mobile -->
     {{if gt .TotalResults .ItemsPerPage}}
-    <div class="border-t border-gray-100 mt-2">
+    <div class="border-t border-base-200">
         <div class="flex justify-between items-center p-4">
-            <div class="text-sm text-gray-600">
+            <div class="text-sm text-base-content/70">
                 Showing {{.ShowingFrom}} to {{.ShowingTo}} of {{.TotalResults}} results
             </div>
-            <div class="flex space-x-2">
+            <div class="join">
                 {{if gt .CurrentPage 1}}
                     <button
                         hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&duration={{.Duration}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
                         hx-target="#listDetections"
                         hx-swap="outerHTML"
-                        class="btn btn-sm btn-primary">
+                        class="join-item btn btn-sm">
                         Previous
                     </button>
                 {{else}}
-                <button class="btn btn-sm btn-disabled">
+                <button class="join-item btn btn-sm btn-disabled">
                     Previous
                 </button>
                 {{end}}
@@ -204,11 +204,11 @@
                     hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&duration={{.Duration}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
                     hx-target="#listDetections"
                     hx-swap="outerHTML"
-                    class="btn btn-sm btn-primary">
+                    class="join-item btn btn-sm">
                     Next
                 </button>
                 {{else}}
-                <button class="btn btn-sm btn-disabled">
+                <button class="join-item btn btn-sm btn-disabled">
                     Next
                 </button>
                 {{end}}
