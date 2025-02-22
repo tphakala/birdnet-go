@@ -35,6 +35,17 @@ type TemplateRenderer struct {
 	logger    echo.Logger
 }
 
+// validateErrorTemplates checks if all required error templates exist
+func (t *TemplateRenderer) validateErrorTemplates() error {
+	requiredTemplates := []string{"error-404", "error-500", "error-default"}
+	for _, name := range requiredTemplates {
+		if tmpl := t.templates.Lookup(name); tmpl == nil {
+			return fmt.Errorf("required error template not found: %s", name)
+		}
+	}
+	return nil
+}
+
 // Render renders a template with the given data.
 func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
 	// Create a buffer to capture any template execution errors
@@ -64,11 +75,19 @@ func (s *Server) setupTemplateRenderer() {
 		s.Echo.Logger.Fatal(err)
 	}
 
-	// Set the custom renderer
-	s.Echo.Renderer = &TemplateRenderer{
+	// Create the renderer
+	renderer := &TemplateRenderer{
 		templates: tmpl,
 		logger:    s.Echo.Logger,
 	}
+
+	// Validate that all required error templates exist
+	if err := renderer.validateErrorTemplates(); err != nil {
+		s.Echo.Logger.Fatal(err)
+	}
+
+	// Set the custom renderer
+	s.Echo.Renderer = renderer
 }
 
 // RenderContent renders the content template with the given data
