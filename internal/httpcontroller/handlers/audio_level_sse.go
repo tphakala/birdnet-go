@@ -5,10 +5,17 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+)
+
+// activeSSEConnections tracks active SSE connections per client IP
+var (
+	activeSSEConnections sync.Map
+	connectionTimeout    = 65 * time.Second // slightly longer than client retry
 )
 
 // initializeSSEHeaders sets up the necessary headers for SSE connection
@@ -137,32 +144,64 @@ func checkSourceActivity(levels map[string]myaudio.AudioLevelData, lastUpdateTim
 
 // AudioLevelSSE handles Server-Sent Events for real-time audio level updates
 func (h *Handlers) AudioLevelSSE(c echo.Context) error {
-	if h.debug {
-		log.Printf("AudioLevelSSE: New connection from %s", c.Request().RemoteAddr)
+	clientIP := c.RealIP()
+
+	// Check for existing connection
+	if _, exists := activeSSEConnections.LoadOrStore(clientIP, time.Now()); exists {
+		if h.debug {
+			log.Printf("AudioLevelSSE: Rejected duplicate connection from %s", clientIP)
+		}
+		return c.NoContent(http.StatusTooManyRequests)
 	}
 
-	// Check authentication status
-	isAuthenticated := h.Server.IsAccessAllowed(c) || !h.Settings.Security.BasicAuth.Enabled
+	// Cleanup connection on exit
+	defer func() {
+		activeSSEConnections.Delete(clientIP)
+		if h.debug {
+			log.Printf("AudioLevelSSE: Cleaned up connection for %s", clientIP)
+		}
+	}()
+
+	// Start connection timeout timer
+	timeout := time.NewTimer(connectionTimeout)
+	defer timeout.Stop()
+
+	if h.debug {
+		log.Printf("AudioLevelSSE: New connection from %s", clientIP)
+	}
 
 	// Set up SSE headers
 	initializeSSEHeaders(c)
 
 	// Create tickers for heartbeat and activity check
-	heartbeat := time.NewTicker(30 * time.Second)
+	heartbeat := time.NewTicker(10 * time.Second)
 	defer heartbeat.Stop()
 	activityCheck := time.NewTicker(1 * time.Second)
 	defer activityCheck.Stop()
 
 	// Initialize data structures
 	const inactivityThreshold = 15 * time.Second
-	levels, lastUpdateTime, lastNonZeroTime := h.initializeLevelsData(isAuthenticated)
+	levels, lastUpdateTime, lastNonZeroTime := h.initializeLevelsData(h.Server.IsAccessAllowed(c))
 	lastLogTime := time.Now()
+	lastSentTime := time.Now()
+
+	// Send initial empty update to establish connection
+	if err := sendLevelsUpdate(c, levels); err != nil {
+		log.Printf("AudioLevelSSE: Error sending initial update: %v", err)
+		return err
+	}
 
 	for {
 		select {
+		case <-timeout.C:
+			if h.debug {
+				log.Printf("AudioLevelSSE: Connection timeout for %s", clientIP)
+			}
+			return nil
+
 		case <-c.Request().Context().Done():
 			if h.debug {
-				log.Printf("AudioLevelSSE: Client disconnected: %s", c.Request().RemoteAddr)
+				log.Printf("AudioLevelSSE: Client disconnected: %s", clientIP)
 			}
 			return nil
 
@@ -174,10 +213,15 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 				}
 			}
 
-			h.updateAudioLevels(audioData, levels, lastUpdateTime, lastNonZeroTime, isAuthenticated, inactivityThreshold)
-			if err := sendLevelsUpdate(c, levels); err != nil {
-				log.Printf("AudioLevelSSE: Error sending update: %v", err)
-				return err
+			h.updateAudioLevels(audioData, levels, lastUpdateTime, lastNonZeroTime, h.Server.IsAccessAllowed(c), inactivityThreshold)
+
+			// Only send updates if enough time has passed (rate limiting)
+			if time.Since(lastSentTime) >= 50*time.Millisecond {
+				if err := sendLevelsUpdate(c, levels); err != nil {
+					log.Printf("AudioLevelSSE: Error sending update: %v", err)
+					return err
+				}
+				lastSentTime = time.Now()
 			}
 
 		case <-activityCheck.C:
@@ -189,7 +233,8 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 			}
 
 		case <-heartbeat.C:
-			if _, err := fmt.Fprintf(c.Response(), ":\n\n"); err != nil {
+			// Send a comment as heartbeat
+			if _, err := fmt.Fprintf(c.Response(), ": heartbeat %d\n\n", time.Now().Unix()); err != nil {
 				if h.debug {
 					log.Printf("AudioLevelSSE: Heartbeat error: %v", err)
 				}
