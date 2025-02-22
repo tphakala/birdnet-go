@@ -145,30 +145,37 @@ func (h *Handlers) HandleError(err error, c echo.Context) error {
 		return nil
 	}
 
-	errorData := struct {
-		Title        string
-		Message      string
-		Debug        bool
-		ErrorDetails string
-		StackTrace   string
-	}{
-		Title:   fmt.Sprintf("%d Error", he.Code),
-		Message: he.Message,
-		Debug:   h.Settings.Debug,
-	}
+	// Get security state for the current context
+	security := h.GetSecurity(c)
 
-	// Include error details and stack trace
-	// TODO: this should be hidden for clients outside of server subnet
-	errorData.ErrorDetails = fmt.Sprintf("%v", he.Err)
-	errorData.StackTrace = string(debug.Stack())
+	// Prepare error data with consistent structure across all error templates
+	errorData := struct {
+		Code       int
+		Title      string
+		Message    string
+		StackTrace string
+		Settings   *conf.Settings
+		Security   *Security // Use the Security type from handlers package
+		User       interface{}
+		Debug      bool
+	}{
+		Code:       he.Code,
+		Title:      fmt.Sprintf("%d Error", he.Code),
+		Message:    he.Message,
+		StackTrace: string(debug.Stack()),
+		Settings:   h.Settings,
+		Security:   security, // Pass the security state
+		User:       c.Get("user"),
+		Debug:      h.Settings.Debug,
+	}
 
 	// Choose the appropriate template based on the error code
 	template := h.getErrorTemplate(he.Code)
 
-	// Set the response status code to the error code
+	// Set the response status code
 	c.Response().Status = he.Code
 
-	// Render the template with the correct status code
+	// Render the template
 	return c.Render(he.Code, template, errorData)
 }
 
@@ -180,7 +187,7 @@ func (h *Handlers) getErrorTemplate(code int) string {
 	case http.StatusInternalServerError:
 		return "error-500"
 	default:
-		return "error" // fallback to the generic error template
+		return "error-default" // Use the correct template name
 	}
 }
 
