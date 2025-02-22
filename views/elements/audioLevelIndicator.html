@@ -9,6 +9,13 @@
         smoothingFactor: 0.4,
         dropdownOpen: false,
         zeroLevelTime: {},
+        eventSource: null,
+        reconnectAttempts: 0,
+        maxReconnectAttempts: 5,
+        reconnectDelay: 1000,
+        isNavigating: false,
+        retryTimeout: null,
+
         isInactive(source) {
             // If we don't have the source in levels at all, consider it inactive
             if (!this.levels[source]) {
@@ -26,35 +33,58 @@
             // Source is inactive if it has had zero level for more than 5 seconds
             return (Date.now() - this.zeroLevelTime[source]) > 5000;
         },
-        init() {
-            console.log('Initializing audio level component');
-            const eventSource = new EventSource('/audio-level');
-            eventSource.onmessage = (event) => {
+
+        cleanupEventSource() {
+            if (this.eventSource) {
+                this.eventSource.close();
+                this.eventSource = null;
+            }
+            if (this.retryTimeout) {
+                clearTimeout(this.retryTimeout);
+                this.retryTimeout = null;
+            }
+        },
+
+        setupEventSource() {
+            // Don't setup if we're navigating away or already have a connection
+            if (this.isNavigating || this.eventSource) {
+                return;
+            }
+            
+            this.cleanupEventSource();
+            
+            this.eventSource = new EventSource('/audio-level');
+            
+            this.eventSource.onmessage = (event) => {
+                // Skip processing if we're navigating away
+                if (this.isNavigating) {
+                    this.cleanupEventSource();
+                    return;
+                }
+                
                 try {
                     const data = JSON.parse(event.data);
-                    //console.log('Received SSE data:', data);
-                    
                     if (data.type === 'audio-level') {
                         if (!data.levels) {
-                            //console.warn('No levels data in SSE message');
                             return;
                         }
+                        
+                        // Reset reconnect attempts on successful message
+                        this.reconnectAttempts = 0;
+                        this.reconnectDelay = 1000;
                         
                         // Update levels and track zero level times
                         const oldSources = Object.keys(this.levels);
                         this.levels = data.levels;
                         const newSources = Object.keys(this.levels);
-                        //console.log('Audio sources changed from', oldSources, 'to', newSources);
                         
                         // Track when sources start having zero levels
                         Object.entries(this.levels).forEach(([source, data]) => {
                             if (data.level === 0) {
-                                // Start tracking zero level time if not already tracking
                                 if (!this.zeroLevelTime[source]) {
                                     this.zeroLevelTime[source] = Date.now();
                                 }
                             } else {
-                                // Reset zero level time when we get a non-zero level
                                 delete this.zeroLevelTime[source];
                             }
                         });
@@ -63,7 +93,6 @@
                         Object.keys(this.levels).forEach(source => {
                             if (!(source in this.smoothedVolumes)) {
                                 this.smoothedVolumes[source] = 0;
-                                //console.log('Initialized smoothed volume for new source:', source, 'with data:', this.levels[source]);
                             }
                         });
                         
@@ -72,9 +101,6 @@
                             const sources = Object.keys(this.levels);
                             if (sources.length > 0) {
                                 this.selectedSource = sources[0];
-                                //console.log('Selected source:', this.selectedSource, 'with data:', this.levels[this.selectedSource]);
-                            } else {
-                                //console.warn('No audio sources available in the levels data');
                             }
                         }
                         
@@ -83,41 +109,87 @@
                             const oldVolume = this.smoothedVolumes[source] || 0;
                             this.smoothedVolumes[source] = this.smoothingFactor * data.level + 
                                 (1 - this.smoothingFactor) * oldVolume;
-                            //console.log('Updated volume for source:', source, 
-                            //    'from:', oldVolume, 
-                            //    'to:', this.smoothedVolumes[source], 
-                            //    'raw level:', data.level);
                         });
                     }
                 } catch (error) {
-                    console.error('Error processing SSE data:', error, 'Raw event data:', event.data);
+                    console.error('Error processing SSE data:', error);
                 }
             };
             
-            eventSource.onerror = (error) => {
+            this.eventSource.onerror = (error) => {
                 console.error('EventSource error:', error);
+                this.cleanupEventSource();
+                
+                // Don't attempt reconnection if we're navigating away
+                if (this.isNavigating) {
+                    return;
+                }
+                
+                // Implement exponential backoff for reconnection
+                if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                    this.retryTimeout = setTimeout(() => {
+                        this.reconnectAttempts++;
+                        this.reconnectDelay = Math.min(this.reconnectDelay * 2, 10000); // Cap at 10 seconds
+                        console.log(`Reconnecting to SSE (attempt ${this.reconnectAttempts})...`);
+                        this.setupEventSource();
+                    }, this.reconnectDelay);
+                } else {
+                    console.error('Max reconnection attempts reached');
+                }
+            };
+        },
+
+        init() {
+            // Setup initial connection
+            this.setupEventSource();
+            
+            // Listen for navigation events
+            document.addEventListener('htmx:beforeRequest', () => {
+                this.isNavigating = true;
+                this.cleanupEventSource();
+            });
+            
+            document.addEventListener('htmx:afterRequest', () => {
+                this.isNavigating = false;
+                // Only setup new connection if we're still on a page that needs it
+                if (document.body.contains(this.$el)) {
+                    this.setupEventSource();
+                }
+            });
+
+            // Listen for page visibility changes
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    this.cleanupEventSource();
+                } else if (!this.isNavigating) {
+                    this.setupEventSource();
+                }
+            });
+            
+            // Clean up on component destroy
+            this.$cleanup = () => {
+                this.cleanupEventSource();
+                document.removeEventListener('visibilitychange', this.cleanupEventSource);
+                document.removeEventListener('htmx:beforeRequest', this.cleanupEventSource);
+                document.removeEventListener('htmx:afterRequest', this.setupEventSource);
             };
         },
         getCurrentLevel() {
             const level = this.selectedSource && this.levels[this.selectedSource] ? 
                 this.levels[this.selectedSource].level : 0;
-            //console.log('Getting current level for source:', this.selectedSource, 'value:', level);
             return level;
         },
         isClipping() {
             const clipping = this.selectedSource && this.levels[this.selectedSource] ? 
                 this.levels[this.selectedSource].clipping : false;
-            //console.log('Checking clipping for source:', this.selectedSource, 'value:', clipping);
             return clipping;
         },
         getSmoothedVolume() {
             const volume = this.selectedSource ? this.smoothedVolumes[this.selectedSource] || 0 : 0;
-            //console.log('Getting smoothed volume for source:', this.selectedSource, 'value:', volume);
             return volume;
         },
         getSourceDisplayName(source) {
             const name = this.levels[source]?.name || source;
-            //console.log('Getting display name for source:', source, 'value:', name);
             return name;
         }
     }" 
