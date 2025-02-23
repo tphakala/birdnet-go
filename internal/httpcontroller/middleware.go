@@ -19,22 +19,11 @@ const CSRFContextKey = "birdnet-go-csrf"
 // configureMiddleware sets up middleware for the server.
 func (s *Server) configureMiddleware() {
 	s.Echo.Use(middleware.Recover())
+	s.Echo.Use(s.CSRFMiddleware())
+	s.Echo.Use(s.AuthMiddleware)
 	s.Echo.Use(s.GzipMiddleware())
 	s.Echo.Use(s.CacheControlMiddleware())
 	s.Echo.Use(s.VaryHeaderMiddleware())
-	s.Echo.Use(s.AuthMiddleware)
-	s.Echo.Pre(func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			// Pre-check for media and SSE routes to completely bypass CSRF
-			path := c.Path()
-			if strings.HasPrefix(path, "/api/v1/media/") ||
-				strings.HasPrefix(path, "/api/v1/sse") ||
-				strings.HasPrefix(path, "/api/v1/audio-level") {
-				return next(c)
-			}
-			return s.CSRFMiddleware()(next)(c)
-		}
-	})
 }
 
 // CSRFMiddleware configures CSRF protection for the server
@@ -52,9 +41,12 @@ func (s *Server) CSRFMiddleware() echo.MiddlewareFunc {
 			path := c.Path()
 			// Skip CSRF for static assets and auth endpoints only
 			return strings.HasPrefix(path, "/assets/") ||
+				strings.HasPrefix(path, "/api/v1/media/") ||
+				strings.HasPrefix(path, "/api/v1/sse") ||
+				strings.HasPrefix(path, "/api/v1/audio-level") ||
 				strings.HasPrefix(path, "/api/v1/auth/") ||
 				strings.HasPrefix(path, "/api/v1/oauth2/token") ||
-				strings.HasPrefix(path, "/api/v1/oauth2/callback")
+				path == "/api/v1/oauth2/callback"
 		},
 		ErrorHandler: func(err error, c echo.Context) error {
 			s.Debug("🚨 CSRF ERROR: Rejected request")
