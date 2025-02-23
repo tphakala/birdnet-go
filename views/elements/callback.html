@@ -21,7 +21,7 @@
             const clientSecret = '{{.Secret}}';
             const redirectUri = window.location.origin + '{{.RedirectURL}}';
 
-            fetch('/oauth2/token', {
+            fetch('/api/v1/oauth2/token', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
