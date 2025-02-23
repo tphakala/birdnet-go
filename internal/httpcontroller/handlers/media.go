@@ -220,6 +220,7 @@ func (h *Handlers) ThumbnailAttribution(scientificName string) template.HTML {
 }
 
 // ServeSpectrogram serves or generates a spectrogram for a given clip.
+// API: GET /api/v1/media/spectrogram
 func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	h.Debug("ServeSpectrogram: Handler called with URL: %s", c.Request().URL.String())
 
@@ -231,6 +232,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	sanitizedClipName, err := h.sanitizeClipName(clipName)
 	if err != nil {
 		h.Debug("ServeSpectrogram: Error sanitizing clip name: %v", err)
+		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 	h.Debug("ServeSpectrogram: Sanitized clip name: %s", sanitizedClipName)
@@ -243,10 +245,12 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	exists, err := fileExists(fullPath)
 	if err != nil {
 		h.Debug("ServeSpectrogram: Error checking audio file: %v", err)
+		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 	if !exists {
 		h.Debug("ServeSpectrogram: Audio file not found: %s", fullPath)
+		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 	h.Debug("ServeSpectrogram: Audio file exists at: %s", fullPath)
@@ -255,6 +259,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	spectrogramPath, err := h.getSpectrogramPath(fullPath, 400) // Assuming 400px width
 	if err != nil {
 		h.Debug("ServeSpectrogram: Error getting spectrogram path: %v", err)
+		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 	h.Debug("ServeSpectrogram: Final spectrogram path: %s", spectrogramPath)
@@ -263,6 +268,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	exists, err = fileExists(spectrogramPath)
 	if err != nil {
 		h.Debug("ServeSpectrogram: Error checking spectrogram file: %v", err)
+		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 	if !exists {
@@ -270,6 +276,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 		// Try to create the spectrogram
 		if err := createSpectrogramWithSoX(fullPath, spectrogramPath, 400); err != nil {
 			h.Debug("ServeSpectrogram: Failed to create spectrogram: %v", err)
+			c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 			return c.File("assets/images/spectrogram-placeholder.svg")
 		}
 		h.Debug("ServeSpectrogram: Successfully created spectrogram at: %s", spectrogramPath)
@@ -279,10 +286,14 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	exists, _ = fileExists(spectrogramPath)
 	if !exists {
 		h.Debug("ServeSpectrogram: Spectrogram still not found after creation attempt: %s", spectrogramPath)
+		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 
 	h.Debug("ServeSpectrogram: Serving spectrogram file: %s", spectrogramPath)
+	// Set the correct Content-Type header for PNG images
+	c.Response().Header().Set(echo.HeaderContentType, "image/png")
+	c.Response().Header().Set("Cache-Control", "public, max-age=2592000, immutable") // Cache spectrograms for 30 days
 	return c.File(spectrogramPath)
 }
 
@@ -584,6 +595,7 @@ func sanitizeContentDispositionFilename(filename string) string {
 }
 
 // ServeAudioClip serves an audio clip file
+// API: GET /api/v1/media/audio
 func (h *Handlers) ServeAudioClip(c echo.Context) error {
 	h.Debug("ServeAudioClip: Starting to handle request for path: %s", c.Request().URL.String())
 
