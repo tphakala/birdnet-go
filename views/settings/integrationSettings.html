@@ -137,11 +137,27 @@
         this.hasChanges = false;
     }
 }" x-init="
-    $watch('mqtt.enabled', () => hasChanges = true);
-    $watch('mqtt.broker', () => hasChanges = true);
-    $watch('mqtt.topic', () => hasChanges = true);
-    $watch('mqtt.username', () => hasChanges = true);
-    $watch('mqtt.password', () => hasChanges = true);
+    // Watch for changes in MQTT settings and update state
+    $watch('mqtt.enabled', () => { 
+        hasChanges = true;
+        mqtt.testResults = []; // Clear test results when settings change
+    });
+    $watch('mqtt.broker', () => { 
+        hasChanges = true;
+        mqtt.testResults = [];
+    });
+    $watch('mqtt.topic', () => { 
+        hasChanges = true;
+        mqtt.testResults = [];
+    });
+    $watch('mqtt.username', () => { 
+        hasChanges = true;
+        mqtt.testResults = [];
+    });
+    $watch('mqtt.password', () => { 
+        hasChanges = true;
+        mqtt.testResults = [];
+    });
 ">
 
     <!-- control collapse element open state and label visibility -->
