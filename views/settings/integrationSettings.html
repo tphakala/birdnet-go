@@ -441,7 +441,9 @@
                         </div>
                     </template>
                     <!-- Add reminder note after successful test -->
-                    <div x-show="mqtt.testResults.every(result => result.success) && !mqtt.isTesting" 
+                    <div x-show="!mqtt.isTesting && 
+                               mqtt.testResults.every(result => result.success) && 
+                               mqtt.testResults.some(result => result.stage === 'Message Publishing')" 
                          class="mt-4 p-2 bg-info text-info-content rounded"
                          role="alert"
                          aria-label="Save settings reminder">
