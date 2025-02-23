@@ -3,7 +3,7 @@
 <section class="card col-span-12 bg-base-100 shadow-sm"
     id="listDetections"
     hx-trigger="refreshListEvent from:body" 
-    hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&duration={{.Duration}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{.Offset}}" 
+    hx-get="/api/v1/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&duration={{.Duration}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{.Offset}}" 
     hx-target="#listDetections"
     hx-swap="outerHTML">
     
@@ -85,7 +85,7 @@
                                 {{end}}
                             </div>
                         </div>
-                        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
+                        <a href="#" hx-get="/api/v1/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
                             hx-trigger="click" hx-push-url="true" class="hover:text-blue-600">
                             {{.CommonName}}
                         </a>
@@ -96,7 +96,7 @@
                 {{if $.DashboardSettings.Thumbnails.Summary}}
                 <div class="flex-1 min-w-[100px] relative">
                     <div class="thumbnail-container w-full">
-                        <a href="#" hx-get="/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
+                        <a href="#" hx-get="/api/v1/detections/details?id={{.ID}}" hx-target="#mainContent" hx-swap="innerHTML"
                             hx-trigger="click" hx-push-url="true" class="flex items-center justify-center">
                             <img loading="lazy" src="{{thumbnail .ScientificName}}" class="w-full h-auto rounded-md object-contain">
                         </a>
@@ -134,7 +134,7 @@
                 <div class="flex-1 min-w-[120px] mr-5">
                     <div class="audio-player-container relative min-w-[50px]">
                         <!-- Spectrogram Image -->
-                        <img loading="lazy" width="400" src="/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram Image"
+                        <img loading="lazy" width="400" src="/api/v1/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram Image"
                             class="w-full h-auto rounded-md object-contain">
 
                         <!-- Play position indicator -->
@@ -143,7 +143,7 @@
 
                         <!-- Audio player overlay -->
                         <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 opacity-0 group-hover:opacity-100 hidden md:block">
-                            <audio id="audio-{{.ID}}" src="/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
+                            <audio id="audio-{{.ID}}" src="/api/v1/media/audio?clip={{.ClipName}}" preload="metadata" class="hidden"></audio>
                             <div class="flex items-center justify-between">
                                 <button id="playPause-{{.ID}}" class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
                                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -155,7 +155,7 @@
                                     <div class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
                                 </div>
                                 <span id="currentTime-{{.ID}}" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-                                <a href="/media/audio?clip={{.ClipName}}" download class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
+                                <a href="/api/v1/media/audio?clip={{.ClipName}}" download class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                                     </svg>
@@ -188,7 +188,7 @@
             <div class="join">
                 {{if gt .CurrentPage 1}}
                     <button
-                        hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&duration={{.Duration}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
+                        hx-get="/api/v1/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&duration={{.Duration}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{sub .Offset .NumResults}}"
                         hx-target="#listDetections"
                         hx-swap="outerHTML"
                         class="join-item btn btn-sm">
@@ -201,7 +201,7 @@
                 {{end}}
                 {{if lt .CurrentPage .TotalPages}}
                 <button
-                    hx-get="/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&duration={{.Duration}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
+                    hx-get="/api/v1/detections?queryType={{.QueryType}}&date={{.Date}}&hour={{.Hour}}&duration={{.Duration}}&species={{.Species}}&search={{.Search}}&numResults={{.NumResults}}&offset={{add .Offset .NumResults}}"
                     hx-target="#listDetections"
                     hx-swap="outerHTML"
                     class="join-item btn btn-sm">

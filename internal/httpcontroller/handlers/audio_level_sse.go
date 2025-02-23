@@ -142,7 +142,8 @@ func checkSourceActivity(levels map[string]myaudio.AudioLevelData, lastUpdateTim
 	return updated
 }
 
-// AudioLevelSSE handles Server-Sent Events for real-time audio level updates
+// AudioLevelSSE handles Server-Sent Events for audio level monitoring
+// API: GET /api/v1/audio-level
 func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 	clientIP := c.RealIP()
 

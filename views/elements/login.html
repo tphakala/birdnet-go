@@ -50,14 +50,14 @@
     {{if or .GoogleEnabled .GithubEnabled }}
     <div class="flex flex-col sm:flex-row gap-4 flex-wrap px-6 xs:px-16 pb-6">
       {{if or .GoogleEnabled }}
-      <a href="/auth/google" class="btn btn-primary grow xs:pr-10 text-xs xs:text-sm" onclick="showSpinner('googleSpinner')" role="button"
+      <a href="/api/v1/auth/google" class="btn btn-primary grow xs:pr-10 text-xs xs:text-sm" onclick="showSpinner('googleSpinner')" role="button"
         aria-label="Login with Google">
         <span id="googleSpinner" class="invisible xs:loading xs:loading-spinner" aria-hidden="true"></span>
         Login with Google
       </a>
       {{end}}
       {{if or .GithubEnabled }}
-      <a href="/auth/github" class="btn btn-primary grow xs:pr-10 text-xs xs:text-sm" onclick="showSpinner('githubSpinner')" role="button"
+      <a href="/api/v1/auth/github" class="btn btn-primary grow xs:pr-10 text-xs xs:text-sm" onclick="showSpinner('githubSpinner')" role="button"
         aria-label="Login with GitHub">
         <span id="githubSpinner" class="invisible xs:loading xs:loading-spinner" aria-hidden="true"></span>
         Login with GitHub

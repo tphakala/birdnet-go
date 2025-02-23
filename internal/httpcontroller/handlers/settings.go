@@ -31,6 +31,7 @@ var fieldsToSkip = map[string]bool{
 }
 
 // GetAudioDevices handles the request to list available audio devices
+// API: GET /api/v1/settings/audio/get
 func (h *Handlers) GetAudioDevices(c echo.Context) error {
 	devices, err := myaudio.ListAudioSources()
 
@@ -45,6 +46,7 @@ func (h *Handlers) GetAudioDevices(c echo.Context) error {
 }
 
 // SaveSettings handles the request to save settings
+// API: POST /api/v1/settings/save
 func (h *Handlers) SaveSettings(c echo.Context) error {
 	settings := conf.Setting()
 	if settings == nil {
