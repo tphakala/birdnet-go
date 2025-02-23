@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"strings"
 	"time"
@@ -52,6 +53,19 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 
 	// Helper function to send a result
 	sendResult := func(result TestResult) {
+		// Log the result with emoji
+		emoji := "❌"
+		if result.Success {
+			emoji = "✅"
+		}
+
+		// Format the log message
+		logMsg := result.Message
+		if !result.Success && result.Error != "" {
+			logMsg = fmt.Sprintf("%s: %s", result.Message, result.Error)
+		}
+		log.Printf("%s %s: %s", emoji, result.Stage, logMsg)
+
 		// Ensure we don't overwrite previous results for the same stage
 		for i, r := range results {
 			if r.Stage == result.Stage {
@@ -154,7 +168,7 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 	sendResult(TestResult{
 		Success: true,
 		Stage:   "DNS Resolution",
-		Message: "Running DNS resolution test...",
+		Message: fmt.Sprintf("Running DNS resolution test for %s...", brokerHost),
 	})
 
 	if result := testDNSResolution(dnsCtx, brokerHost); !result.Success {
@@ -171,7 +185,7 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 	sendResult(TestResult{
 		Success: true,
 		Stage:   "TCP Connection",
-		Message: "Testing TCP connection...",
+		Message: fmt.Sprintf("Testing TCP connection to %s...", c.config.Broker),
 	})
 
 	if result := testTCPConnection(tcpCtx, c.config.Broker); !result.Success {
@@ -189,7 +203,7 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 		sendResult(TestResult{
 			Success: true,
 			Stage:   "MQTT Connection",
-			Message: "Establishing MQTT connection...",
+			Message: fmt.Sprintf("Establishing MQTT connection to %s...", c.config.Broker),
 		})
 
 		if err := c.Connect(mqttCtx); err != nil {
@@ -205,7 +219,7 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 	sendResult(TestResult{
 		Success: true,
 		Stage:   MQTTConnection.String(),
-		Message: "Successfully connected to MQTT broker",
+		Message: fmt.Sprintf("Successfully connected to MQTT broker: %s", c.config.Broker),
 	})
 
 	// Stage 4: Test Message Publishing
@@ -215,7 +229,7 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 	sendResult(TestResult{
 		Success: true,
 		Stage:   "Message Publishing",
-		Message: "Testing message publishing...",
+		Message: fmt.Sprintf("Testing message publishing to topic: %s", constructTestTopic(c.config.Topic)),
 	})
 
 	if result := c.publishTestMessage(pubCtx); !result.Success {
