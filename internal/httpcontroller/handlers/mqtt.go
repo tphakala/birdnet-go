@@ -97,7 +97,7 @@ func (h *Handlers) TestMQTT(c echo.Context) error {
 	for result := range resultChan {
 		// Modify the result enhancement to handle progress messages
 		if !result.Success {
-			hint := generateTroubleshootingHint(result, settings.Realtime.MQTT.Broker)
+			hint := generateTroubleshootingHint(&result, settings.Realtime.MQTT.Broker)
 			if hint != "" {
 				result.Message = fmt.Sprintf("%s\n\n%s\n\n%s",
 					result.Message,
@@ -129,7 +129,7 @@ func (h *Handlers) TestMQTT(c echo.Context) error {
 func enhanceTestResults(results []mqtt.TestResult, broker string) []mqtt.TestResult {
 	for i := range results {
 		if !results[i].Success {
-			hint := generateTroubleshootingHint(results[i], broker)
+			hint := generateTroubleshootingHint(&results[i], broker)
 			if hint != "" {
 				// Format message with each component on its own line
 				results[i].Message = fmt.Sprintf("%s\n\n%s\n\n%s",
@@ -144,7 +144,7 @@ func enhanceTestResults(results []mqtt.TestResult, broker string) []mqtt.TestRes
 }
 
 // generateTroubleshootingHint provides context-specific troubleshooting suggestions
-func generateTroubleshootingHint(result mqtt.TestResult, broker string) string {
+func generateTroubleshootingHint(result *mqtt.TestResult, broker string) string {
 	switch result.Stage {
 	case "DNS Resolution":
 		if strings.Contains(result.Error, "no such host") {

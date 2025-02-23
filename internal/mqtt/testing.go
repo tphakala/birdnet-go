@@ -111,20 +111,21 @@ func (c *client) TestConnection(ctx context.Context, resultChan chan<- TestResul
 			strings.Contains(strings.ToLower(result.Message), "initializing")
 
 		// Set state based on result
-		if result.State != "" {
+		switch {
+		case result.State != "":
 			// Keep existing state if explicitly set
-		} else if result.Error != "" {
+		case result.Error != "":
 			result.State = "failed"
 			result.Success = false
 			result.IsProgress = false
-		} else if result.IsProgress {
+		case result.IsProgress:
 			result.State = "running"
-		} else if result.Success {
+		case result.Success:
 			result.State = "completed"
-		} else if strings.Contains(strings.ToLower(result.Error), "timeout") ||
-			strings.Contains(strings.ToLower(result.Error), "deadline exceeded") {
+		case strings.Contains(strings.ToLower(result.Error), "timeout") ||
+			strings.Contains(strings.ToLower(result.Error), "deadline exceeded"):
 			result.State = "timeout"
-		} else {
+		default:
 			result.State = "failed"
 		}
 
