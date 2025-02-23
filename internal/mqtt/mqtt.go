@@ -21,6 +21,14 @@ type Client interface {
 
 	// Disconnect closes the connection to the MQTT broker.
 	Disconnect()
+
+	// TestConnection performs a multi-stage test of the MQTT connection and functionality.
+	// It streams test results through the provided channel.
+	TestConnection(ctx context.Context, resultChan chan<- TestResult)
+
+	// SetControlChannel sets the control channel for the client.
+	// This channel is used to send control signals to the MQTT service.
+	SetControlChannel(ch chan string)
 }
 
 // Config holds the configuration for the MQTT client.
@@ -29,6 +37,7 @@ type Config struct {
 	ClientID          string
 	Username          string
 	Password          string
+	Topic             string // Default topic for publishing messages
 	ReconnectCooldown time.Duration
 	ReconnectDelay    time.Duration
 	// Connection timeouts

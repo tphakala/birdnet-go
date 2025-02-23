@@ -2,7 +2,6 @@
 package processor
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"math"
@@ -30,6 +29,7 @@ type Processor struct {
 	Bn                  *birdnet.BirdNET
 	BwClient            *birdweather.BwClient
 	MqttClient          mqtt.Client
+	mqttMutex           sync.RWMutex // Mutex to protect MQTT client access
 	BirdImageCache      *imageprovider.BirdImageCache
 	EventTracker        *EventTracker
 	LastDogDetection    map[string]time.Time // keep track of dog barks per audio source
@@ -110,27 +110,8 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		}
 	}
 
-	// Initialize MQTT client if enabled in settings.
-	if settings.Realtime.MQTT.Enabled {
-		var err error
-		// Create a new MQTT client using the settings and metrics
-		p.MqttClient, err = mqtt.NewClient(settings, p.Metrics)
-		if err != nil {
-			// Log an error if client creation fails
-			log.Printf("failed to create MQTT client: %s", err)
-		} else {
-			// Create a context with a 30-second timeout for the connection attempt
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel() // Ensure the cancel function is called to release resources
-
-			// Attempt to connect to the MQTT broker
-			if err := p.MqttClient.Connect(ctx); err != nil {
-				// Log an error if the connection attempt fails
-				log.Printf("failed to connect to MQTT broker: %s", err)
-			}
-			// Note: Successful connection is implied if no error is logged
-		}
-	}
+	// Initialize MQTT client if enabled in settings
+	p.initializeMQTT(settings)
 
 	return p
 }
@@ -523,15 +504,18 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			pcmData:      detection.pcmData3s})
 	}
 
-	// Add MQTT action if enabled
-	if p.Settings.Realtime.MQTT.Enabled && p.MqttClient != nil {
-		actions = append(actions, &MqttAction{
-			Settings:       p.Settings,
-			MqttClient:     p.MqttClient,
-			EventTracker:   p.EventTracker,
-			Note:           detection.Note,
-			BirdImageCache: p.BirdImageCache,
-		})
+	// Add MQTT action if enabled and client is available
+	if p.Settings.Realtime.MQTT.Enabled {
+		mqttClient := p.GetMQTTClient()
+		if mqttClient != nil && mqttClient.IsConnected() {
+			actions = append(actions, &MqttAction{
+				Settings:       p.Settings,
+				MqttClient:     mqttClient,
+				EventTracker:   p.EventTracker,
+				Note:           detection.Note,
+				BirdImageCache: p.BirdImageCache,
+			})
+		}
 	}
 
 	// Check if UpdateRangeFilterAction needs to be executed for the day

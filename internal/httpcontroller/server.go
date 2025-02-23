@@ -9,6 +9,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
@@ -35,6 +36,7 @@ type Server struct {
 	AudioLevelChan    chan myaudio.AudioLevelData
 	controlChan       chan string
 	notificationChan  chan handlers.Notification
+	Processor         *processor.Processor
 
 	// Page and partial routes
 	pageRoutes    map[string]PageRouteConfig
@@ -42,7 +44,7 @@ type Server struct {
 }
 
 // New initializes a new HTTP server with given context and datastore.
-func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache *imageprovider.BirdImageCache, audioLevelChan chan myaudio.AudioLevelData, controlChan chan string) *Server {
+func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache *imageprovider.BirdImageCache, audioLevelChan chan myaudio.AudioLevelData, controlChan chan string, proc *processor.Processor) *Server {
 	configureDefaultSettings(settings)
 
 	s := &Server{
@@ -56,6 +58,7 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 		CloudflareAccess:  security.NewCloudflareAccess(),
 		controlChan:       controlChan,
 		notificationChan:  make(chan handlers.Notification, 10),
+		Processor:         proc,
 	}
 
 	// Configure an IP extractor
@@ -66,6 +69,14 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 
 	// Initialize handlers
 	s.Handlers = handlers.New(s.DS, s.Settings, s.DashboardSettings, s.BirdImageCache, nil, s.SunCalc, s.AudioLevelChan, s.OAuth2Server, s.controlChan, s.notificationChan, s)
+
+	// Add processor middleware
+	s.Echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			c.Set("processor", s.Processor)
+			return next(c)
+		}
+	})
 
 	s.initializeServer()
 	return s
