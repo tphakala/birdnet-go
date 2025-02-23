@@ -87,12 +87,36 @@ func isIPAddress(host string) bool {
 	// Remove protocol prefix if present
 	if strings.Contains(host, "://") {
 		parts := strings.Split(host, "://")
+		if len(parts) != 2 {
+			return false
+		}
+		// Only allow mqtt and tcp protocols
+		if parts[0] != "mqtt" && parts[0] != "tcp" {
+			return false
+		}
 		host = parts[1]
 	}
 
-	// Remove port if present
-	if strings.Contains(host, ":") {
-		host = strings.Split(host, ":")[0]
+	// Handle IPv6 addresses with brackets
+	if strings.HasPrefix(host, "[") {
+		// Extract the IPv6 address from within brackets
+		end := strings.LastIndex(host, "]")
+		if end == -1 {
+			return false // Malformed IPv6 address with opening bracket but no closing bracket
+		}
+		// Extract the address without brackets
+		host = host[1:end]
+	} else if strings.Contains(host, ":") {
+		// If it contains a colon but no brackets, it could be either:
+		// 1. An IPv4 address with port (e.g. "192.168.1.1:1883")
+		// 2. A raw IPv6 address (e.g. "::1" or "2001:db8::1")
+
+		// If it has more than 2 colons, assume it's IPv6
+		if strings.Count(host, ":") <= 1 {
+			// Likely IPv4 with port, remove the port
+			host = strings.Split(host, ":")[0]
+		}
+		// Otherwise leave it as is for IPv6 parsing
 	}
 
 	// Try to parse as IP address
@@ -449,15 +473,28 @@ func extractHost(broker string) string {
 	// Remove protocol prefix if present
 	if strings.Contains(broker, "://") {
 		parts := strings.Split(broker, "://")
+		if len(parts) != 2 {
+			return broker
+		}
 		broker = parts[1]
 	}
 
-	// Remove port if present
-	if strings.Contains(broker, ":") {
-		parts := strings.Split(broker, ":")
-		broker = parts[0]
+	// Handle IPv6 addresses with brackets
+	if strings.HasPrefix(broker, "[") {
+		end := strings.LastIndex(broker, "]")
+		if end == -1 {
+			return broker // Malformed IPv6 address
+		}
+		return broker[1:end] // Return without brackets
 	}
 
+	// For IPv4 or hostname, remove port if present
+	if strings.Count(broker, ":") <= 1 {
+		if i := strings.LastIndex(broker, ":"); i != -1 {
+			return broker[:i]
+		}
+	}
+	// For IPv6 without brackets or no port, return as is
 	return broker
 }
 
@@ -466,12 +503,35 @@ func extractHostPort(broker string) string {
 	// Remove protocol prefix if present
 	if strings.Contains(broker, "://") {
 		parts := strings.Split(broker, "://")
+		if len(parts) != 2 {
+			return broker
+		}
 		broker = parts[1]
 	}
 
-	// If no port specified, use default MQTT port
+	// Handle IPv6 addresses
+	if strings.HasPrefix(broker, "[") {
+		// IPv6 with port
+		if i := strings.LastIndex(broker, "]:"); i != -1 {
+			return broker
+		}
+		// IPv6 without port
+		if strings.HasSuffix(broker, "]") {
+			return broker[:len(broker)-1] + "]:1883"
+		}
+		// Malformed IPv6
+		return broker
+	}
+
+	// Check if this might be a raw IPv6 address
+	if strings.Count(broker, ":") > 1 {
+		// Add brackets and port
+		return "[" + broker + "]:1883"
+	}
+
+	// IPv4 or hostname
 	if !strings.Contains(broker, ":") {
-		broker += ":1883"
+		return broker + ":1883"
 	}
 
 	return broker

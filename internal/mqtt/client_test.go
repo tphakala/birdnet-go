@@ -459,7 +459,7 @@ func testContextCancellation(t *testing.T) {
 		// Wait for connection attempt to start
 		<-connectStarted
 		debugLog(t, "Connection attempt started, waiting before cancellation")
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(150 * time.Millisecond)
 
 		debugLog(t, "Cancelling context")
 		cancel()
