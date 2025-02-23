@@ -23,8 +23,8 @@ type Client interface {
 	Disconnect()
 
 	// TestConnection performs a multi-stage test of the MQTT connection and functionality.
-	// It returns a slice of TestResult containing the results of each test stage.
-	TestConnection(ctx context.Context) []TestResult
+	// It streams test results through the provided channel.
+	TestConnection(ctx context.Context, resultChan chan<- TestResult)
 
 	// SetControlChannel sets the control channel for the client.
 	// This channel is used to send control signals to the MQTT service.

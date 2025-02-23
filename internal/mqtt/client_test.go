@@ -636,3 +636,53 @@ func createTestClient(t *testing.T, broker string) (Client, *telemetry.Metrics) 
 
 	return client, metrics
 }
+
+// TestIsIPAddress verifies the IP address detection function
+func TestIsIPAddress(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		// IPv4 addresses
+		{"Simple IPv4", "192.168.1.1", true},
+		{"IPv4 with tcp protocol", "tcp://192.168.1.1:1883", true},
+		{"IPv4 with mqtt protocol", "mqtt://10.0.0.1:1883", true},
+		{"IPv4 localhost", "127.0.0.1", true},
+		{"IPv4 with port", "127.0.0.1:1883", true},
+
+		// IPv6 addresses
+		{"Simple IPv6", "::1", true},
+		{"IPv6 localhost with brackets", "[::1]", true},
+		{"IPv6 with port", "[::1]:1883", true},
+		{"IPv6 with tcp protocol", "tcp://[2001:db8::1]:1883", true},
+		{"IPv6 with mqtt protocol", "mqtt://[2001:db8::1]:1883", true},
+		{"IPv6 address only", "2001:db8::1", true},
+		{"IPv6 with brackets", "[2001:db8::1]", true},
+
+		// Hostnames (should return false)
+		{"Simple hostname", "localhost", false},
+		{"Hostname with protocol", "mqtt://localhost:1883", false},
+		{"FQDN", "broker.hivemq.com", false},
+		{"FQDN with port", "test.mosquitto.org:1883", false},
+		{"Subdomain", "mqtt.example.com", false},
+
+		// Invalid inputs (should return false)
+		{"Empty string", "", false},
+		{"Invalid hostname", "not-an-ip", false},
+		{"Invalid IPv4", "256.256.256.256", false},
+		{"Invalid IPv6", "2001:zz::1", false},
+		{"Invalid protocol", "invalid://192.168.1.1", false},
+		{"Malformed IPv6 brackets", "[2001:db8::1", false},
+		{"IPv6 without closing bracket", "[2001:db8::1:1883", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isIPAddress(tt.input)
+			if result != tt.expected {
+				t.Errorf("isIPAddress(%q) = %v; want %v", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
