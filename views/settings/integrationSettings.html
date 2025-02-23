@@ -269,7 +269,14 @@
                     x-on:click="
                         mqtt.isTesting = true;
                         mqtt.testResults = [];
-                        fetch('/mqtt/test', {
+                        
+                        // Create a timeout promise
+                        const timeoutPromise = new Promise((_, reject) => {
+                            setTimeout(() => reject(new Error('Test timeout after 15 seconds')), 15000);
+                        });
+
+                        // Create the fetch promise
+                        const fetchPromise = fetch('/mqtt/test', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -282,7 +289,10 @@
                                 username: mqtt.username,
                                 password: mqtt.password
                             })
-                        })
+                        });
+
+                        // Race between fetch and timeout
+                        Promise.race([fetchPromise, timeoutPromise])
                             .then(response => {
                                 if (!response.ok) {
                                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -293,10 +303,14 @@
                                 mqtt.testResults = data;
                             })
                             .catch(error => {
+                                const errorMessage = error.message === 'Test timeout after 15 seconds'
+                                    ? 'The test took too long to complete. Please check your broker connection and try again.'
+                                    : 'Failed to perform MQTT test';
+                                
                                 mqtt.testResults = [{
                                     success: false,
                                     stage: 'Error',
-                                    message: 'Failed to perform MQTT test',
+                                    message: errorMessage,
                                     error: error.message
                                 }];
                             })
