@@ -309,7 +309,11 @@
                     aria-live="polite"
                     x-on:click="
                         mqtt.isTesting = true;
-                        mqtt.testResults = [];
+                        mqtt.testResults = [{
+                            success: true,
+                            stage: 'Starting Test',
+                            message: 'Initializing MQTT connection test...'
+                        }];
                         
                         // Create a timeout promise
                         const timeoutPromise = new Promise((_, reject) => {
@@ -338,10 +342,46 @@
                                 if (!response.ok) {
                                     throw new Error(`HTTP error! status: ${response.status}`);
                                 }
-                                return response.json();
-                            })
-                            .then(data => {
-                                mqtt.testResults = data;
+                                const reader = response.body.getReader();
+                                const decoder = new TextDecoder();
+                                let buffer = '';
+
+                                return new ReadableStream({
+                                    start(controller) {
+                                        function push() {
+                                            reader.read().then(({done, value}) => {
+                                                if (done) {
+                                                    controller.close();
+                                                    return;
+                                                }
+
+                                                buffer += decoder.decode(value, {stream: true});
+                                                const lines = buffer.split('\n');
+                                                buffer = lines.pop(); // Keep the incomplete line
+
+                                                lines.forEach(line => {
+                                                    if (line.trim()) {
+                                                        try {
+                                                            const result = JSON.parse(line);
+                                                            // Update the results array, keeping only the latest result for each stage
+                                                            mqtt.testResults = mqtt.testResults.filter(r => r.stage !== result.stage);
+                                                            mqtt.testResults.push(result);
+                                                        } catch (e) {
+                                                            console.error('Failed to parse test result:', e);
+                                                        }
+                                                    }
+                                                });
+
+                                                controller.enqueue(value);
+                                                push();
+                                            }).catch(error => {
+                                                controller.error(error);
+                                            });
+                                        }
+
+                                        push();
+                                    }
+                                });
                             })
                             .catch(error => {
                                 const errorMessage = error.message === 'Test timeout after 15 seconds'
@@ -401,7 +441,7 @@
                         </div>
                     </template>
                     <!-- Add reminder note after successful test -->
-                    <div x-show="mqtt.testResults.every(result => result.success)" 
+                    <div x-show="mqtt.testResults.every(result => result.success) && !mqtt.isTesting" 
                          class="mt-4 p-2 bg-info text-info-content rounded"
                          role="alert"
                          aria-label="Save settings reminder">

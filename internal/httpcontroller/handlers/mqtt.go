@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -78,16 +79,51 @@ func (h *Handlers) TestMQTT(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Run the test
-	results := mqttClient.TestConnection(ctx)
+	// Set up streaming response
+	c.Response().Header().Set("Content-Type", "application/x-ndjson")
+	c.Response().WriteHeader(http.StatusOK)
+
+	// Create a channel to receive test results
+	resultChan := make(chan mqtt.TestResult)
+
+	// Start test in a goroutine
+	go func() {
+		defer close(resultChan)
+		for _, result := range mqttClient.TestConnection(ctx) {
+			select {
+			case <-ctx.Done():
+				return
+			case resultChan <- result:
+			}
+		}
+	}()
+
+	// Stream results to client
+	enc := json.NewEncoder(c.Response())
+	for result := range resultChan {
+		// Enhance result with troubleshooting hints
+		if !result.Success {
+			hint := generateTroubleshootingHint(result, settings.Realtime.MQTT.Broker)
+			if hint != "" {
+				result.Message = fmt.Sprintf("%s\n\n%s\n\n%s",
+					result.Message,
+					result.Error,
+					hint)
+				result.Error = "" // Clear the error since we included it in the message
+			}
+		}
+
+		if err := enc.Encode(result); err != nil {
+			// If we can't write to the response, client probably disconnected
+			return nil
+		}
+		c.Response().Flush()
+	}
 
 	// Clean up
 	mqttClient.Disconnect()
 
-	// Enhance test results with troubleshooting suggestions
-	enhancedResults := enhanceTestResults(results, settings.Realtime.MQTT.Broker)
-
-	return c.JSON(http.StatusOK, enhancedResults)
+	return nil
 }
 
 // enhanceTestResults adds helpful troubleshooting suggestions to test results
