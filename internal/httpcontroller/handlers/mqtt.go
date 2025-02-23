@@ -33,6 +33,7 @@ const (
 )
 
 // TestMQTT handles requests to test MQTT connectivity and functionality
+// API: GET/POST /api/v1/mqtt/test
 func (h *Handlers) TestMQTT(c echo.Context) error {
 	// Define a struct for the test configuration
 	type TestConfig struct {

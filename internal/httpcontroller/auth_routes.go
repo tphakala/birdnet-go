@@ -18,13 +18,13 @@ func (s *Server) initAuthRoutes() {
 	g.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(10)))
 
 	// OAuth2 routes
-	g.GET("/oauth2/authorize", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthorize))
-	g.POST("/oauth2/token", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthToken))
-	g.GET("/callback", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthCallback))
+	g.GET("/api/v1/oauth2/authorize", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthorize))
+	g.POST("/api/v1/oauth2/token", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthToken))
+	g.GET("/api/v1/oauth2/callback", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthCallback))
 
 	// Social authentication routes
-	g.GET("/auth/:provider", s.Handlers.WithErrorHandling(handleGothProvider))
-	g.GET("/auth/:provider/callback", s.Handlers.WithErrorHandling(handleGothCallback))
+	g.GET("/api/v1/auth/:provider", s.Handlers.WithErrorHandling(handleGothProvider))
+	g.GET("/api/v1/auth/:provider/callback", s.Handlers.WithErrorHandling(handleGothCallback))
 
 	// Basic authentication routes
 	g.GET("/login", s.Handlers.WithErrorHandling(s.handleLoginPage))
@@ -127,7 +127,7 @@ func (s *Server) handleBasicAuthLogin(c echo.Context) error {
 	if !isValidRedirect(redirect) {
 		redirect = "/"
 	}
-	redirectURL := fmt.Sprintf("/callback?code=%s&redirect=%s", authCode, redirect)
+	redirectURL := fmt.Sprintf("/api/v1/oauth2/callback?code=%s&redirect=%s", authCode, redirect)
 	c.Response().Header().Set("HX-Redirect", redirectURL)
 	return c.String(http.StatusOK, "")
 }

@@ -51,7 +51,7 @@
                 return; // Already initialized
             }
             
-            this.eventSource = new EventSource('/sse');
+            this.eventSource = new EventSource('/api/v1/sse');
             this.eventSource.onmessage = (event) => {
                 const notification = JSON.parse(event.data);
 
@@ -149,7 +149,7 @@
         }
 
         this.saving = true;
-        fetch('/settings/save', {
+        fetch('/api/v1/settings/save', {
             method: 'POST',
             headers: {
                 'X-CSRF-Token': CSRF_TOKEN

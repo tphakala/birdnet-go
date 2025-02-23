@@ -53,7 +53,7 @@
             
             this.cleanupEventSource();
             
-            this.eventSource = new EventSource('/audio-level');
+            this.eventSource = new EventSource('/api/v1/audio-level');
             
             this.eventSource.onmessage = (event) => {
                 // Skip processing if we're navigating away
