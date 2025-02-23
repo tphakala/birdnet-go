@@ -50,14 +50,27 @@ func (s TestStage) String() string {
 func (c *client) TestConnection(ctx context.Context) []TestResult {
 	var results []TestResult
 
+	// Helper function to send a result
+	sendResult := func(result TestResult) {
+		// Ensure we don't overwrite previous results for the same stage
+		for i, r := range results {
+			if r.Stage == result.Stage {
+				results[i] = result
+				return
+			}
+		}
+		results = append(results, result)
+	}
+
 	// Check context before starting
 	if err := ctx.Err(); err != nil {
-		return []TestResult{{
+		sendResult(TestResult{
 			Success: false,
 			Stage:   "Test Setup",
 			Message: "Test cancelled",
 			Error:   err.Error(),
-		}}
+		})
+		return results
 	}
 
 	// Check if MQTT service is enabled and running in BirdNET-Go
@@ -65,7 +78,7 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 		// Try to connect first to ensure MQTT service is running
 		if err := c.Connect(ctx); err != nil {
 			// If connection fails, we need to reconfigure MQTT service
-			results = append(results, TestResult{
+			sendResult(TestResult{
 				Success: false,
 				Stage:   "Service Check",
 				Message: "MQTT service not running, attempting to start...",
@@ -76,12 +89,13 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 				select {
 				case c.controlChan <- "reconfigure_mqtt":
 				case <-ctx.Done():
-					return append(results, TestResult{
+					sendResult(TestResult{
 						Success: false,
 						Stage:   "Service Start",
 						Message: "Test cancelled while reconfiguring service",
 						Error:   ctx.Err().Error(),
 					})
+					return results
 				}
 
 				// Try to reconnect with retries
@@ -91,17 +105,18 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 				for i := 0; i < maxRetries; i++ {
 					select {
 					case <-ctx.Done():
-						return append(results, TestResult{
+						sendResult(TestResult{
 							Success: false,
 							Stage:   "Service Start",
 							Message: "Test cancelled during retry attempts",
 							Error:   ctx.Err().Error(),
 						})
+						return results
 					case <-time.After(retryDelay):
 					}
 
 					if err := c.Connect(ctx); err == nil {
-						results = append(results, TestResult{
+						sendResult(TestResult{
 							Success: true,
 							Stage:   "Service Start",
 							Message: "Successfully started MQTT service",
@@ -110,7 +125,7 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 					}
 					retryDelay *= 2 // Exponential backoff
 					if i == maxRetries-1 {
-						results = append(results, TestResult{
+						sendResult(TestResult{
 							Success: false,
 							Stage:   "Service Start",
 							Error:   "Maximum retry attempts reached",
@@ -120,7 +135,7 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 					}
 				}
 			} else {
-				results = append(results, TestResult{
+				sendResult(TestResult{
 					Success: false,
 					Stage:   "Service Start",
 					Error:   "Control channel not available",
@@ -135,27 +150,50 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 	brokerHost := extractHost(c.config.Broker)
 	dnsCtx, dnsCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer dnsCancel()
+
+	sendResult(TestResult{
+		Success: true,
+		Stage:   "DNS Resolution",
+		Message: "Running DNS resolution test...",
+	})
+
 	if result := testDNSResolution(dnsCtx, brokerHost); !result.Success {
-		return append(results, result)
+		sendResult(result)
+		return results
 	} else {
-		results = append(results, result)
+		sendResult(result)
 	}
 
 	// Stage 2: TCP Connection
 	tcpCtx, tcpCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer tcpCancel()
+
+	sendResult(TestResult{
+		Success: true,
+		Stage:   "TCP Connection",
+		Message: "Testing TCP connection...",
+	})
+
 	if result := testTCPConnection(tcpCtx, c.config.Broker); !result.Success {
-		return append(results, result)
+		sendResult(result)
+		return results
 	} else {
-		results = append(results, result)
+		sendResult(result)
 	}
 
 	// Stage 3: MQTT Connection
 	if !c.IsConnected() {
 		mqttCtx, mqttCancel := context.WithTimeout(ctx, 10*time.Second)
 		defer mqttCancel()
+
+		sendResult(TestResult{
+			Success: true,
+			Stage:   "MQTT Connection",
+			Message: "Establishing MQTT connection...",
+		})
+
 		if err := c.Connect(mqttCtx); err != nil {
-			results = append(results, TestResult{
+			sendResult(TestResult{
 				Success: false,
 				Stage:   MQTTConnection.String(),
 				Error:   err.Error(),
@@ -164,7 +202,7 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 			return results
 		}
 	}
-	results = append(results, TestResult{
+	sendResult(TestResult{
 		Success: true,
 		Stage:   MQTTConnection.String(),
 		Message: "Successfully connected to MQTT broker",
@@ -173,10 +211,18 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 	// Stage 4: Test Message Publishing
 	pubCtx, pubCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer pubCancel()
+
+	sendResult(TestResult{
+		Success: true,
+		Stage:   "Message Publishing",
+		Message: "Testing message publishing...",
+	})
+
 	if result := c.publishTestMessage(pubCtx); !result.Success {
-		return append(results, result)
+		sendResult(result)
+		return results
 	} else {
-		results = append(results, result)
+		sendResult(result)
 	}
 
 	return results
