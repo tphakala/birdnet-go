@@ -133,6 +133,10 @@ func (s *Server) initRoutes() {
 	// Add POST method for locking/unlocking detections
 	s.Echo.POST("/detections/lock", h.WithErrorHandling(h.LockDetection), s.AuthMiddleware)
 
+	// Add GET method for testing MQTT connection
+	s.Echo.GET("/mqtt/test", h.WithErrorHandling(h.TestMQTT), s.AuthMiddleware)
+	s.Echo.POST("/mqtt/test", h.WithErrorHandling(h.TestMQTT), s.AuthMiddleware)
+
 	// Setup Error handler
 	s.Echo.HTTPErrorHandler = func(err error, c echo.Context) {
 		if handleErr := s.Handlers.HandleError(err, c); handleErr != nil {
