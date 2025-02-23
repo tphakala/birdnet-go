@@ -161,12 +161,20 @@
 ">
 
     <!-- control collapse element open state and label visibility -->
-    <input type="checkbox" id="mqttSettingsOpen" x-on:change="mqttSettingsOpen = !mqttSettingsOpen" />
+    <input type="checkbox" 
+           id="mqttSettingsOpen" 
+           x-on:change="mqttSettingsOpen = !mqttSettingsOpen"
+           aria-controls="mqttSettingsContent"
+           aria-expanded="true" />
 
     <div class="collapse-title settings-section-header" id="mqttHeader">
         <div class="flex items-center">
-            <label for="mqttSettingsOpen" class="cursor-pointer" aria-label="MQTT Settings">MQTT</label>
-            <div x-show="hasChanges" x-cloak class="settings-changed-badge" role="status" aria-label="Settings changed">
+            <label for="mqttSettingsOpen" class="cursor-pointer" aria-label="MQTT Settings Section">MQTT</label>
+            <div x-show="hasChanges" 
+                 x-cloak 
+                 class="settings-changed-badge" 
+                 role="status" 
+                 aria-label="Settings have been modified">
                 <span class="badge">
                     <span>changed</span>
                 </span>
@@ -175,38 +183,65 @@
         <p class="settings-section-description" id="mqttDescription">Configure MQTT broker connection</p>
     </div>
 
-    <!-- disabled for now
-    <div class="p-4 pt-0" x-show="!mqttSettingsOpen">
-        <label class="cursor-pointer" for="mqttSettingsOpen">
-            <span>Configure MQTT integration</span>
-        </label>
-    </div>-->
-
-    <div class="collapse-content" role="group" aria-labelledby="mqttDescription">
+    <div class="collapse-content" 
+         id="mqttSettingsContent"
+         role="group" 
+         aria-labelledby="mqttDescription">
         <div class="form-control relative">
             <label class="label cursor-pointer justify-start" for="mqttEnabled">
-                <input type="checkbox" id="mqttEnabled" name="realtime.mqtt.enabled" x-model="mqtt.enabled"
-                    class="checkbox checkbox-primary checkbox-xs mr-2">
+                <input type="checkbox" 
+                       id="mqttEnabled" 
+                       name="realtime.mqtt.enabled" 
+                       x-model="mqtt.enabled"
+                       class="checkbox checkbox-primary checkbox-xs mr-2"
+                       aria-describedby="mqttEnabledTooltip">
                 <input type="hidden" name="realtime.mqtt.enabled" value="false">
                 <span class="label-text">Enable MQTT Integration</span>
-                <span class="help-icon" @mouseenter="showTooltip = 'mqttEnabled'"
-                    @mouseleave="showTooltip = null">ⓘ</span>
+                <button type="button"
+                        class="help-icon" 
+                        @mouseenter="showTooltip = 'mqttEnabled'" 
+                        @mouseleave="showTooltip = null"
+                        aria-label="Show help for MQTT integration"
+                        aria-expanded="false"
+                        aria-controls="mqttEnabledTooltip">ⓘ</button>
             </label>
-            <div x-show="showTooltip === 'mqttEnabled'" x-cloak class="tooltip">
+            <div x-show="showTooltip === 'mqttEnabled'" 
+                 x-cloak 
+                 class="tooltip" 
+                 id="mqttEnabledTooltip" 
+                 role="tooltip">
                 Enable or disable integration with MQTT service.
             </div>
         </div>
 
-        <div x-show="mqtt.enabled">
+        <div x-show="mqtt.enabled" 
+             id="mqttSettings"
+             role="group" 
+             aria-label="MQTT Connection Settings">
 
             <div class="settings-form-group">
                 <label class="justify-start" for="mqttBroker">
                     <span class="label-text">MQTT Broker</span>
-                    <span class="help-icon" @mouseenter="showTooltip = 'mqttBroker'" @mouseleave="showTooltip = null">ⓘ</span>
+                    <button type="button"
+                            class="help-icon" 
+                            @mouseenter="showTooltip = 'mqttBroker'" 
+                            @mouseleave="showTooltip = null"
+                            aria-label="Show help for MQTT broker"
+                            aria-expanded="false"
+                            aria-controls="mqttBrokerTooltip">ⓘ</button>
                 </label>
-                <input type="text" id="mqttBroker" name="realtime.mqtt.broker" x-model="mqtt.broker" 
-                       class="input input-sm input-bordered w-full" placeholder="mqtt://localhost:1883">
-                <div x-show="showTooltip === 'mqttBroker'" x-cloak class="tooltip">
+                <input type="text" 
+                       id="mqttBroker" 
+                       name="realtime.mqtt.broker" 
+                       x-model="mqtt.broker" 
+                       class="input input-sm input-bordered w-full" 
+                       placeholder="mqtt://localhost:1883"
+                       aria-describedby="mqttBrokerTooltip">
+                <div x-show="showTooltip === 'mqttBroker'" 
+                     x-cloak 
+                     class="tooltip" 
+                     id="mqttBrokerTooltip" 
+                     role="tooltip">
                     MQTT broker URL (e.g., mqtt://localhost:1883)
                 </div>
             </div>
@@ -266,6 +301,12 @@
                         !mqtt.broker ? 'MQTT broker must be specified' :
                         mqtt.isTesting ? 'Test in progress...' : 'Test MQTT connection'
                     "
+                    x-bind:aria-label="
+                        !mqtt.enabled ? 'MQTT must be enabled to test' :
+                        !mqtt.broker ? 'MQTT broker must be specified' :
+                        mqtt.isTesting ? 'Test in progress...' : 'Test MQTT connection'
+                    "
+                    aria-live="polite"
                     x-on:click="
                         mqtt.isTesting = true;
                         mqtt.testResults = [];
@@ -323,21 +364,24 @@
                 </button>
 
                 <!-- Test Results -->
-                <div x-show="mqtt.testResults.length > 0" class="space-y-2" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform -translate-y-2" x-transition:enter-end="opacity-100 transform translate-y-0">
+                <div x-show="mqtt.testResults.length > 0" 
+                     class="space-y-2" 
+                     role="region" 
+                     aria-label="MQTT Test Results"
+                     aria-live="polite">
                     <h4 class="font-semibold">Test Results:</h4>
                     <template x-for="result in mqtt.testResults" :key="result.stage">
                         <div class="p-2 rounded" 
                              x-bind:class="result.success ? 'bg-base-200' : 'bg-base-200'"
-                             x-transition:enter="transition ease-out duration-200"
-                             x-transition:enter-start="opacity-0 transform scale-95"
-                             x-transition:enter-end="opacity-100 transform scale-100">
+                             role="status"
+                             x-bind:aria-label="result.stage + ' test ' + (result.success ? 'succeeded' : 'failed')">
                             <div class="flex items-center space-x-2">
-                                <span x-show="result.success">
+                                <span x-show="result.success" aria-hidden="true">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 20 20" fill="currentColor">
                                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
                                     </svg>
                                 </span>
-                                <span x-show="!result.success">
+                                <span x-show="!result.success" aria-hidden="true">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-error" viewBox="0 0 20 20" fill="currentColor">
                                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
                                     </svg>
@@ -357,13 +401,14 @@
                         </div>
                     </template>
                     <!-- Add reminder note after successful test -->
-                    <div x-show="mqtt.testResults.every(result => result.success)" class="mt-4 p-2 bg-info text-info-content rounded">
+                    <div x-show="mqtt.testResults.every(result => result.success)" 
+                         class="mt-4 p-2 bg-info text-info-content rounded"
+                         role="alert"
+                         aria-label="Save settings reminder">
                         Please remember to save settings to apply the changes permanently.
                     </div>
                 </div>
-
             </div>
-
         </div>
     </div>
 </div>
