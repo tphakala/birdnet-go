@@ -15,6 +15,23 @@ import (
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
+// MQTT test stage constants
+const (
+	stageDNSResolution  = "DNS Resolution"
+	stageTCPConnection  = "TCP Connection"
+	stageMQTTConnection = "MQTT Connection"
+	stageMessagePublish = "Message Publishing"
+)
+
+// MQTT error message constants
+const (
+	errNoSuchHost    = "no such host"
+	errConnRefused   = "connection refused"
+	errIOTimeout     = "i/o timeout"
+	errBadConnection = "bad connection"
+	errAuth          = "auth"
+)
+
 // TestMQTT handles requests to test MQTT connectivity and functionality
 func (h *Handlers) TestMQTT(c echo.Context) error {
 	// Define a struct for the test configuration
@@ -127,34 +144,38 @@ func (h *Handlers) TestMQTT(c echo.Context) error {
 
 // enhanceTestResults adds helpful troubleshooting suggestions to test results
 func enhanceTestResults(results []mqtt.TestResult, broker string) []mqtt.TestResult {
-	for i := range results {
-		if !results[i].Success {
-			hint := generateTroubleshootingHint(&results[i], broker)
+	enhanced := make([]mqtt.TestResult, len(results))
+	copy(enhanced, results)
+	for i := range enhanced {
+		if !enhanced[i].Success {
+			hint := generateTroubleshootingHint(&enhanced[i], broker)
 			if hint != "" {
 				// Format message with each component on its own line
-				results[i].Message = fmt.Sprintf("%s\n\n%s\n\n%s",
-					results[i].Message,
-					results[i].Error,
+				enhanced[i].Message = fmt.Sprintf("%s\n\n%s\n\n%s",
+					enhanced[i].Message,
+					enhanced[i].Error,
 					hint)
-				results[i].Error = "" // Clear the error since we included it in the message
 			}
 		}
 	}
-	return results
+	return enhanced
 }
 
 // generateTroubleshootingHint provides context-specific troubleshooting suggestions
 func generateTroubleshootingHint(result *mqtt.TestResult, broker string) string {
+	// Convert error to lowercase once for case-insensitive comparisons
+	lowerError := strings.ToLower(result.Error)
+
 	switch result.Stage {
-	case "DNS Resolution":
-		if strings.Contains(result.Error, "no such host") {
+	case stageDNSResolution:
+		if strings.Contains(lowerError, strings.ToLower(errNoSuchHost)) {
 			return "Please verify that the broker hostname is correct."
 		}
 		return "Please check if the broker address is correctly formatted."
 
-	case "TCP Connection":
-		if strings.Contains(result.Error, "connection refused") {
-			if strings.Contains(broker, "localhost") || strings.Contains(broker, "127.0.0.1") {
+	case stageTCPConnection:
+		if strings.Contains(lowerError, strings.ToLower(errConnRefused)) {
+			if strings.Contains(strings.ToLower(broker), "localhost") || strings.Contains(broker, "127.0.0.1") {
 				return "The MQTT broker service does not appear to be running."
 			}
 			return "Please check:\n" +
@@ -162,7 +183,7 @@ func generateTroubleshootingHint(result *mqtt.TestResult, broker string) string 
 				"2. The port number is correct\n" +
 				"3. No firewall rules are blocking the connection"
 		}
-		if strings.Contains(result.Error, "i/o timeout") {
+		if strings.Contains(lowerError, strings.ToLower(errIOTimeout)) {
 			return "Please check:\n" +
 				"1. The broker address and port are correct\n" +
 				"2. The broker is accessible from your network\n" +
@@ -170,11 +191,11 @@ func generateTroubleshootingHint(result *mqtt.TestResult, broker string) string 
 		}
 		return "Please verify the broker is running and accessible from your network."
 
-	case "MQTT Connection":
-		if strings.Contains(strings.ToLower(result.Error), "auth") {
+	case stageMQTTConnection:
+		if strings.Contains(lowerError, strings.ToLower(errAuth)) {
 			return "Please verify your username and password are correct."
 		}
-		if strings.Contains(result.Error, "Bad Connection") {
+		if strings.Contains(lowerError, strings.ToLower(errBadConnection)) {
 			return "Please check:\n" +
 				"1. Your credentials are correct\n" +
 				"2. The broker is accepting connections\n" +
@@ -182,7 +203,7 @@ func generateTroubleshootingHint(result *mqtt.TestResult, broker string) string 
 		}
 		return "Please verify your broker settings and credentials."
 
-	case "Message Publishing":
+	case stageMessagePublish:
 		return "Please check:\n" +
 			"1. You have publish permissions on the topic\n" +
 			"2. The topic format is valid\n" +

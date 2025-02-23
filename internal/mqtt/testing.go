@@ -9,40 +9,57 @@ import (
 	"math/rand"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
-// Test configuration for artificial delays and failures
-// for UI testing
-var (
+// TestConfig encapsulates test configuration for artificial delays and failures
+type TestConfig struct {
 	// Set to true to enable artificial delays and random failures
-	TestMode = false
+	Enabled bool
 	// Internal flag to enable random failures (for testing UI behavior)
-	randomFailureMode = false
+	RandomFailureMode bool
 	// Probability of failure for each stage (0.0 - 1.0)
-	FailureProbability = 0.5
+	FailureProbability float64
 	// Min and max artificial delay in milliseconds
-	MinDelay = 500
-	MaxDelay = 3000
-)
+	MinDelay int
+	MaxDelay int
+	// Thread-safe random number generator
+	rng *rand.Rand
+	mu  sync.Mutex
+}
+
+// Default test configuration instance
+var testConfig = &TestConfig{
+	Enabled:            false,
+	RandomFailureMode:  false,
+	FailureProbability: 0.5,
+	MinDelay:           500,
+	MaxDelay:           3000,
+	rng:                rand.New(rand.NewSource(time.Now().UnixNano())),
+}
 
 // simulateDelay adds an artificial delay
 func simulateDelay() {
-	if !TestMode {
+	if !testConfig.Enabled {
 		return
 	}
-	delay := rand.Intn(MaxDelay-MinDelay) + MinDelay
+	testConfig.mu.Lock()
+	delay := testConfig.rng.Intn(testConfig.MaxDelay-testConfig.MinDelay) + testConfig.MinDelay
+	testConfig.mu.Unlock()
 	time.Sleep(time.Duration(delay) * time.Millisecond)
 }
 
 // simulateFailure returns true if the test should fail
 func simulateFailure() bool {
-	if !TestMode || !randomFailureMode {
+	if !testConfig.Enabled || !testConfig.RandomFailureMode {
 		return false
 	}
-	return rand.Float64() < FailureProbability
+	testConfig.mu.Lock()
+	defer testConfig.mu.Unlock()
+	return testConfig.rng.Float64() < testConfig.FailureProbability
 }
 
 // TestResult represents the result of an MQTT test
@@ -124,6 +141,140 @@ func isIPAddress(host string) bool {
 	return ip != nil
 }
 
+// Timeout constants for various test stages
+const (
+	dnsTimeout  = 5 * time.Second
+	tcpTimeout  = 5 * time.Second
+	mqttTimeout = 10 * time.Second
+	pubTimeout  = 5 * time.Second
+)
+
+// networkTest represents a generic network test function
+type networkTest func(context.Context) error
+
+// runNetworkTest executes a network test with proper timeout and cleanup
+func runNetworkTest(ctx context.Context, stage TestStage, test networkTest) TestResult {
+	// Add simulated delay if enabled
+	simulateDelay()
+
+	// Check for simulated failure
+	if simulateFailure() {
+		return TestResult{
+			Success: false,
+			Stage:   stage.String(),
+			Error:   fmt.Sprintf("simulated %s failure", stage),
+			Message: fmt.Sprintf("Failed to perform %s", stage),
+		}
+	}
+
+	// Create buffered channel for test result
+	resultChan := make(chan error, 1)
+
+	// Run the test in a goroutine
+	go func() {
+		resultChan <- test(ctx)
+	}()
+
+	// Wait for either test completion or context cancellation
+	select {
+	case <-ctx.Done():
+		return TestResult{
+			Success: false,
+			Stage:   stage.String(),
+			Error:   "operation timeout",
+			Message: fmt.Sprintf("%s operation timed out", stage),
+		}
+	case err := <-resultChan:
+		if err != nil {
+			return TestResult{
+				Success: false,
+				Stage:   stage.String(),
+				Error:   err.Error(),
+				Message: fmt.Sprintf("Failed to perform %s", stage),
+			}
+		}
+	}
+
+	return TestResult{
+		Success: true,
+		Stage:   stage.String(),
+		Message: fmt.Sprintf("Successfully completed %s", stage),
+	}
+}
+
+// testDNSStage performs DNS resolution testing
+func (c *client) testDNSStage(ctx context.Context, brokerHost string) TestResult {
+	dnsCtx, dnsCancel := context.WithTimeout(ctx, dnsTimeout)
+	defer dnsCancel()
+
+	return runNetworkTest(dnsCtx, DNSResolution, func(ctx context.Context) error {
+		_, err := net.DefaultResolver.LookupHost(ctx, brokerHost)
+		return err
+	})
+}
+
+// testTCPStage performs TCP connection testing
+func (c *client) testTCPStage(ctx context.Context) TestResult {
+	tcpCtx, tcpCancel := context.WithTimeout(ctx, tcpTimeout)
+	defer tcpCancel()
+
+	return runNetworkTest(tcpCtx, TCPConnection, func(ctx context.Context) error {
+		var d net.Dialer
+		conn, err := d.DialContext(ctx, "tcp", extractHostPort(c.config.Broker))
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		return nil
+	})
+}
+
+// testMQTTStage performs MQTT connection testing
+func (c *client) testMQTTStage(ctx context.Context) TestResult {
+	if c.IsConnected() {
+		return TestResult{
+			Success: true,
+			Stage:   MQTTConnection.String(),
+			Message: "Already connected to MQTT broker",
+		}
+	}
+
+	mqttCtx, mqttCancel := context.WithTimeout(ctx, mqttTimeout)
+	defer mqttCancel()
+
+	return runNetworkTest(mqttCtx, MQTTConnection, func(ctx context.Context) error {
+		return c.Connect(ctx)
+	})
+}
+
+// testPublishStage performs message publishing testing
+func (c *client) testPublishStage(ctx context.Context) TestResult {
+	pubCtx, pubCancel := context.WithTimeout(ctx, pubTimeout)
+	defer pubCancel()
+
+	return runNetworkTest(pubCtx, MessagePublish, func(ctx context.Context) error {
+		// Create a mock detection for Whooper Swan
+		mockNote := datastore.Note{
+			Time:           time.Now().Format(time.RFC3339),
+			CommonName:     "Whooper Swan",
+			ScientificName: "Cygnus cygnus",
+			Confidence:     0.95,
+			Source:         "MQTT Test",
+		}
+
+		// Convert to JSON
+		noteJson, err := json.Marshal(mockNote)
+		if err != nil {
+			return fmt.Errorf("failed to create test message: %w", err)
+		}
+
+		// Construct test topic with proper handling of base topic
+		testTopic := constructTestTopic(c.config.Topic)
+
+		return c.Publish(ctx, testTopic, string(noteJson))
+	})
+}
+
 // TestConnection performs a multi-stage test of the MQTT connection and functionality
 func (c *client) TestConnection(ctx context.Context, resultChan chan<- TestResult) {
 	// Helper function to send a result
@@ -193,109 +344,47 @@ func (c *client) TestConnection(ctx context.Context, resultChan chan<- TestResul
 	brokerHost := extractHost(c.config.Broker)
 	isIP := isIPAddress(brokerHost)
 
+	// Helper function to run a test stage
+	runStage := func(stage TestStage, test func() TestResult) bool {
+		// Send progress message
+		sendResult(TestResult{
+			Success: true,
+			Stage:   stage.String(),
+			Message: fmt.Sprintf("Running %s test...", stage.String()),
+		})
+
+		// Execute the test
+		result := test()
+		sendResult(result)
+		return result.Success
+	}
+
 	// Stage 1: DNS Resolution (skip if IP address)
 	if !isIP {
-		dnsCtx, dnsCancel := context.WithTimeout(ctx, 5*time.Second)
-		defer dnsCancel()
-
-		sendResult(TestResult{
-			Success: true,
-			Stage:   "DNS Resolution",
-			Message: fmt.Sprintf("Running DNS resolution test for %s...", brokerHost),
-		})
-
-		if result := testDNSResolution(dnsCtx, brokerHost); !result.Success {
-			sendResult(result)
+		if !runStage(DNSResolution, func() TestResult {
+			return c.testDNSStage(ctx, brokerHost)
+		}) {
 			return
 		}
-		sendResult(TestResult{
-			Success: true,
-			Stage:   DNSResolution.String(),
-			Message: fmt.Sprintf("Successfully resolved hostname: %s", brokerHost),
-		})
 	}
 
 	// Stage 2: TCP Connection
-	tcpCtx, tcpCancel := context.WithTimeout(ctx, 5*time.Second)
-	defer tcpCancel()
-
-	// First send the "running test" message
-	sendResult(TestResult{
-		Success: true,
-		Stage:   TCPConnection.String(),
-		Message: fmt.Sprintf("Running TCP connection test for %s...", c.config.Broker),
-	})
-
-	// Then perform the actual test
-	if result := testTCPConnection(tcpCtx, c.config.Broker); !result.Success {
-		sendResult(result)
+	if !runStage(TCPConnection, func() TestResult {
+		return c.testTCPStage(ctx)
+	}) {
 		return
 	}
-
-	// Finally send success message
-	sendResult(TestResult{
-		Success: true,
-		Stage:   TCPConnection.String(),
-		Message: fmt.Sprintf("Successfully established TCP connection to %s", c.config.Broker),
-	})
 
 	// Stage 3: MQTT Connection
-	if !c.IsConnected() {
-		mqttCtx, mqttCancel := context.WithTimeout(ctx, 10*time.Second)
-		defer mqttCancel()
-
-		sendResult(TestResult{
-			Success: true,
-			Stage:   "MQTT Connection",
-			Message: fmt.Sprintf("Establishing MQTT connection to %s...", c.config.Broker),
-		})
-
-		simulateDelay()
-
-		if simulateFailure() {
-			sendResult(TestResult{
-				Success: false,
-				Stage:   MQTTConnection.String(),
-				Error:   "simulated MQTT connection failure",
-				Message: "Failed to connect to MQTT broker",
-			})
-			return
-		}
-
-		if err := c.Connect(mqttCtx); err != nil {
-			sendResult(TestResult{
-				Success: false,
-				Stage:   MQTTConnection.String(),
-				Error:   err.Error(),
-				Message: "Failed to connect to MQTT broker",
-			})
-			return
-		}
-	}
-	sendResult(TestResult{
-		Success: true,
-		Stage:   MQTTConnection.String(),
-		Message: fmt.Sprintf("Successfully connected to MQTT broker: %s", c.config.Broker),
-	})
-
-	// Stage 4: Test Message Publishing
-	pubCtx, pubCancel := context.WithTimeout(ctx, 5*time.Second)
-	defer pubCancel()
-
-	sendResult(TestResult{
-		Success: true,
-		Stage:   "Message Publishing",
-		Message: fmt.Sprintf("Testing message publishing to topic: %s", constructTestTopic(c.config.Topic)),
-	})
-
-	if result := c.publishTestMessage(pubCtx); !result.Success {
-		sendResult(result)
+	if !runStage(MQTTConnection, func() TestResult {
+		return c.testMQTTStage(ctx)
+	}) {
 		return
 	}
-	sendResult(TestResult{
-		Success: true,
-		Stage:   MessagePublish.String(),
-		Message: "Successfully published test message",
+
+	// Stage 4: Message Publishing
+	runStage(MessagePublish, func() TestResult {
+		return c.testPublishStage(ctx)
 	})
 }
 
