@@ -126,7 +126,9 @@
         broker: '{{.Settings.Realtime.MQTT.Broker}}',
         topic: '{{.Settings.Realtime.MQTT.Topic}}',
         username: '{{.Settings.Realtime.MQTT.Username}}',
-        password: '{{.Settings.Realtime.MQTT.Password}}'
+        password: '{{.Settings.Realtime.MQTT.Password}}',
+        testResults: [],
+        isTesting: false
     },
     mqttSettingsOpen: false,
     showTooltip: null,
@@ -135,7 +137,11 @@
         this.hasChanges = false;
     }
 }" x-init="
-    $watch('mqtt', (value) => { hasChanges = true }, { deep: true });
+    $watch('mqtt.enabled', () => hasChanges = true);
+    $watch('mqtt.broker', () => hasChanges = true);
+    $watch('mqtt.topic', () => hasChanges = true);
+    $watch('mqtt.username', () => hasChanges = true);
+    $watch('mqtt.password', () => hasChanges = true);
 ">
 
     <!-- control collapse element open state and label visibility -->
@@ -182,7 +188,7 @@
                     <span class="label-text">MQTT Broker</span>
                     <span class="help-icon" @mouseenter="showTooltip = 'mqttBroker'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
-                <input type="text" id="mqttBroker" name="mqtt.broker" x-model="mqtt.broker" 
+                <input type="text" id="mqttBroker" name="realtime.mqtt.broker" x-model="mqtt.broker" 
                        class="input input-sm input-bordered w-full" placeholder="mqtt://localhost:1883">
                 <div x-show="showTooltip === 'mqttBroker'" x-cloak class="tooltip">
                     MQTT broker URL (e.g., mqtt://localhost:1883)
@@ -194,7 +200,7 @@
                     <span class="label-text">MQTT Topic</span>
                     <span class="help-icon" @mouseenter="showTooltip = 'mqttTopic'" @mouseleave="showTooltip = null">ⓘ</span>
                 </label>
-                <input type="text" id="mqttTopic" name="mqtt.topic" x-model="mqtt.topic" 
+                <input type="text" id="mqttTopic" name="realtime.mqtt.topic" x-model="mqtt.topic" 
                        class="input input-sm input-bordered w-full" placeholder="birdnet/detections">
                 <div x-show="showTooltip === 'mqttTopic'" x-cloak class="tooltip">
                     MQTT topic to publish detections to
@@ -233,6 +239,100 @@
                 "placeholder" ""
                 "tooltip" "The MQTT password."
                 }}
+
+            <!-- MQTT Test Button and Results -->
+            <div class="mt-4 space-y-4">
+                <button type="button" 
+                    class="btn btn-sm btn-primary" 
+                    x-bind:disabled="!mqtt.enabled || !mqtt.broker || mqtt.isTesting"
+                    x-bind:title="
+                        !mqtt.enabled ? 'MQTT must be enabled to test' :
+                        !mqtt.broker ? 'MQTT broker must be specified' :
+                        mqtt.isTesting ? 'Test in progress...' : 'Test MQTT connection'
+                    "
+                    x-on:click="
+                        mqtt.isTesting = true;
+                        mqtt.testResults = [];
+                        fetch('/mqtt/test', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-Token': CSRF_TOKEN
+                            },
+                            body: JSON.stringify({
+                                enabled: mqtt.enabled,
+                                broker: mqtt.broker,
+                                topic: mqtt.topic,
+                                username: mqtt.username,
+                                password: mqtt.password
+                            })
+                        })
+                            .then(response => {
+                                if (!response.ok) {
+                                    throw new Error(`HTTP error! status: ${response.status}`);
+                                }
+                                return response.json();
+                            })
+                            .then(data => {
+                                mqtt.testResults = data;
+                            })
+                            .catch(error => {
+                                mqtt.testResults = [{
+                                    success: false,
+                                    stage: 'Error',
+                                    message: 'Failed to perform MQTT test',
+                                    error: error.message
+                                }];
+                            })
+                            .finally(() => {
+                                mqtt.isTesting = false;
+                            })
+                    ">
+                    <span x-show="!mqtt.isTesting">Test MQTT Connection</span>
+                    <span x-show="mqtt.isTesting">Testing...</span>
+                </button>
+
+                <!-- Test Results -->
+                <div x-show="mqtt.testResults.length > 0" class="space-y-2" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform -translate-y-2" x-transition:enter-end="opacity-100 transform translate-y-0">
+                    <h4 class="font-semibold">Test Results:</h4>
+                    <template x-for="result in mqtt.testResults" :key="result.stage">
+                        <div class="p-2 rounded" 
+                             x-bind:class="result.success ? 'bg-base-200' : 'bg-base-200'"
+                             x-transition:enter="transition ease-out duration-200"
+                             x-transition:enter-start="opacity-0 transform scale-95"
+                             x-transition:enter-end="opacity-100 transform scale-100">
+                            <div class="flex items-center space-x-2">
+                                <span x-show="result.success">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                    </svg>
+                                </span>
+                                <span x-show="!result.success">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-error" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                    </svg>
+                                </span>
+                                <span x-text="result.stage"></span>
+                            </div>
+                            <template x-if="result.success">
+                                <div class="text-sm mt-1" x-text="result.message"></div>
+                            </template>
+                            <template x-if="!result.success">
+                                <div class="space-y-2 mt-1">
+                                    <div class="text-sm" x-text="result.message.split('\n\n')[0]"></div>
+                                    <div class="text-sm text-error" x-text="result.message.split('\n\n')[1]"></div>
+                                    <div class="text-sm mt-2" x-text="result.message.split('\n\n')[2]" x-show="result.message.split('\n\n')[2]"></div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                    <!-- Add reminder note after successful test -->
+                    <div x-show="mqtt.testResults.every(result => result.success)" class="mt-4 p-2 bg-info text-info-content rounded">
+                        Please remember to save settings to apply the changes permanently.
+                    </div>
+                </div>
+
+            </div>
 
         </div>
     </div>

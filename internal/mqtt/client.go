@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/url"
 	"sync"
@@ -30,6 +31,7 @@ type client struct {
 	reconnectTimer  *time.Timer
 	reconnectStop   chan struct{}
 	metrics         *metrics.MQTTMetrics
+	controlChan     chan string // Channel for control signals
 }
 
 // NewClient creates a new MQTT client with the provided configuration.
@@ -39,12 +41,21 @@ func NewClient(settings *conf.Settings, metrics *telemetry.Metrics) (Client, err
 	config.ClientID = settings.Main.Name
 	config.Username = settings.Realtime.MQTT.Username
 	config.Password = settings.Realtime.MQTT.Password
+	config.Topic = settings.Realtime.MQTT.Topic
 
 	return &client{
 		config:        config,
 		reconnectStop: make(chan struct{}),
 		metrics:       metrics.MQTT,
+		controlChan:   nil, // Will be set externally when needed
 	}, nil
+}
+
+// SetControlChannel sets the control channel for the client
+func (c *client) SetControlChannel(ch chan string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.controlChan = ch
 }
 
 // Connect attempts to establish a connection to the MQTT broker.
@@ -222,12 +233,12 @@ func (c *client) Disconnect() {
 }
 
 func (c *client) onConnect(client mqtt.Client) {
-	fmt.Printf("Connected to MQTT broker: %s\n", c.config.Broker)
+	log.Printf("✅ Connected to MQTT broker: %s", c.config.Broker)
 	c.metrics.UpdateConnectionStatus(true)
 }
 
 func (c *client) onConnectionLost(client mqtt.Client, err error) {
-	fmt.Printf("Connection to MQTT broker lost: %s, error: %v\n", c.config.Broker, err)
+	log.Printf("❌ Connection to MQTT broker lost: %s, error: %v", c.config.Broker, err)
 	c.metrics.UpdateConnectionStatus(false)
 	c.metrics.IncrementErrors()
 	c.startReconnectTimer()
@@ -259,13 +270,13 @@ func (c *client) reconnectWithBackoff() {
 			cancel()
 
 			if err == nil {
-				fmt.Println("Successfully reconnected to MQTT broker")
+				log.Printf("✅ Successfully reconnected to MQTT broker")
 				return
 			}
 
 			c.metrics.IncrementErrors()
-			fmt.Printf("Failed to reconnect to MQTT broker: %s\n", err)
-			fmt.Printf("Retrying in %v\n", backoff)
+			log.Printf("❌ Failed to reconnect to MQTT broker: %s", err)
+			log.Printf("🔄 Retrying in %v", backoff)
 
 			timer := time.NewTimer(backoff)
 			select {

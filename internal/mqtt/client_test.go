@@ -121,7 +121,7 @@ func TestMQTTClient(t *testing.T) {
 	t.Run("Metrics Collection", testMetricsCollection)
 	t.Run("Context Cancellation", testContextCancellation)
 	t.Run("Timeout Handling", testTimeoutHandling)
-	t.Run("DNS Resolution", testDNSResolution)
+	t.Run("DNS Resolution", testDNSResolutionForTest)
 }
 
 // testBasicFunctionality verifies the basic operations of the MQTT client:
@@ -573,8 +573,8 @@ func testTimeoutHandling(t *testing.T) {
 	})
 }
 
-// testDNSResolution verifies that the client properly handles DNS resolution scenarios
-func testDNSResolution(t *testing.T) {
+// testDNSResolutionForTest verifies that the client properly handles DNS resolution scenarios
+func testDNSResolutionForTest(t *testing.T) {
 	t.Run("DNS Resolution Timeout", func(t *testing.T) {
 		mqttClient, _ := createTestClient(t, "tcp://very-long-non-existent-domain-name.com:1883")
 

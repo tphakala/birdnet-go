@@ -84,6 +84,15 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		h.controlChan <- "rebuild_range_filter"
 	}
 
+	// Check if MQTT settings have changed
+	if mqttSettingsChanged(&oldSettings, settings) {
+		h.SSE.SendNotification(Notification{
+			Message: "Reconfiguring MQTT connection...",
+			Type:    "info",
+		})
+		h.controlChan <- "reconfigure_mqtt"
+	}
+
 	// Check if RTSP settings were included in the form and have changed
 	if hasRTSPSettings(formParams) && rtspSettingsChanged(&oldSettings, settings) {
 		h.SSE.SendNotification(Notification{
@@ -679,4 +688,13 @@ func hasRTSPSettings(formParams map[string][]string) bool {
 		}
 	}
 	return false
+}
+
+// Check if MQTT settings have changed
+func mqttSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return oldSettings.Realtime.MQTT.Enabled != currentSettings.Realtime.MQTT.Enabled ||
+		oldSettings.Realtime.MQTT.Broker != currentSettings.Realtime.MQTT.Broker ||
+		oldSettings.Realtime.MQTT.Topic != currentSettings.Realtime.MQTT.Topic ||
+		oldSettings.Realtime.MQTT.Username != currentSettings.Realtime.MQTT.Username ||
+		oldSettings.Realtime.MQTT.Password != currentSettings.Realtime.MQTT.Password
 }

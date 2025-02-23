@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/shirou/gopsutil/v3/host"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
@@ -129,11 +128,11 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		birdImageCache = nil
 	}
 
-	// Start worker pool for processing detections
-	processor.New(settings, dataStore, bn, metrics, birdImageCache)
+	// Initialize processor
+	proc := processor.New(settings, dataStore, bn, metrics, birdImageCache)
 
 	// Initialize and start the HTTP server
-	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan)
+	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan, proc)
 	httpServer.Start()
 
 	// Initialize the wait group to wait for all goroutines to finish
@@ -166,7 +165,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	startTelemetryEndpoint(&wg, settings, metrics, quitChan)
 
 	// start control monitor for hot reloads
-	startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager)
+	startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc)
 
 	// start quit signal monitor
 	monitorCtrlC(quitChan)
@@ -359,86 +358,9 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 }
 
 // startControlMonitor handles various control signals for realtime analysis mode
-func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager) {
-	go func() {
-		for {
-			select {
-			case signal := <-controlChan:
-				switch signal {
-				case "rebuild_range_filter":
-					if err := birdnet.BuildRangeFilter(bn); err != nil {
-						log.Printf("\033[31m❌ Error handling range filter rebuild: %v\033[0m", err)
-						notificationChan <- handlers.Notification{
-							Message: fmt.Sprintf("Failed to rebuild range filter: %v", err),
-							Type:    "error",
-						}
-					} else {
-						log.Printf("\033[32m🔄 Range filter rebuilt successfully\033[0m")
-						notificationChan <- handlers.Notification{
-							Message: "Range filter rebuilt successfully",
-							Type:    "success",
-						}
-					}
-				case "reload_birdnet":
-					if err := bn.ReloadModel(); err != nil {
-						log.Printf("\033[31m❌ Error reloading BirdNET model: %v\033[0m", err)
-						notificationChan <- handlers.Notification{
-							Message: fmt.Sprintf("Failed to reload BirdNET model: %v", err),
-							Type:    "error",
-						}
-					} else {
-						log.Printf("\033[32m✅ BirdNET model reloaded successfully\033[0m")
-						notificationChan <- handlers.Notification{
-							Message: "BirdNET model reloaded successfully",
-							Type:    "success",
-						}
-						// Rebuild range filter after model reload
-						if err := birdnet.BuildRangeFilter(bn); err != nil {
-							log.Printf("\033[31m❌ Error rebuilding range filter after model reload: %v\033[0m", err)
-							notificationChan <- handlers.Notification{
-								Message: fmt.Sprintf("Failed to rebuild range filter: %v", err),
-								Type:    "error",
-							}
-						} else {
-							log.Printf("\033[32m✅ Range filter rebuilt successfully\033[0m")
-							notificationChan <- handlers.Notification{
-								Message: "Range filter rebuilt successfully",
-								Type:    "success",
-							}
-						}
-					}
-				case "reconfigure_rtsp_sources":
-					log.Printf("\033[32m🔄 Reconfiguring RTSP sources...\033[0m")
-					settings := conf.Setting()
-
-					// Prepare the list of active sources
-					var sources []string
-					if len(settings.Realtime.RTSP.URLs) > 0 {
-						sources = append(sources, settings.Realtime.RTSP.URLs...)
-					}
-					if settings.Realtime.Audio.Source != "" {
-						sources = append(sources, "malgo")
-					}
-
-					// Update the analysis buffer monitors
-					bufferManager.UpdateMonitors(sources)
-
-					// Reconfigure RTSP streams
-					myaudio.ReconfigureRTSPStreams(settings, wg, quitChan, restartChan, audioLevelChan)
-
-					log.Printf("\033[32m✅ RTSP sources reconfigured successfully\033[0m")
-					notificationChan <- handlers.Notification{
-						Message: "Audio capture reconfigured successfully",
-						Type:    "success",
-					}
-				default:
-					log.Printf("Received unknown control signal: %v", signal)
-				}
-			case <-quitChan:
-				return
-			}
-		}
-	}()
+func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor) {
+	monitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc)
+	monitor.Start()
 }
 
 // initializeBuffers handles initialization of all audio-related buffers
