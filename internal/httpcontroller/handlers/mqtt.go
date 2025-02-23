@@ -89,19 +89,13 @@ func (h *Handlers) TestMQTT(c echo.Context) error {
 	// Start test in a goroutine
 	go func() {
 		defer close(resultChan)
-		for _, result := range mqttClient.TestConnection(ctx) {
-			select {
-			case <-ctx.Done():
-				return
-			case resultChan <- result:
-			}
-		}
+		mqttClient.TestConnection(ctx, resultChan)
 	}()
 
 	// Stream results to client
 	enc := json.NewEncoder(c.Response())
 	for result := range resultChan {
-		// Enhance result with troubleshooting hints
+		// Modify the result enhancement to handle progress messages
 		if !result.Success {
 			hint := generateTroubleshootingHint(result, settings.Realtime.MQTT.Broker)
 			if hint != "" {
@@ -109,8 +103,13 @@ func (h *Handlers) TestMQTT(c echo.Context) error {
 					result.Message,
 					result.Error,
 					hint)
-				result.Error = "" // Clear the error since we included it in the message
+				result.Error = ""
 			}
+		} else {
+			// Explicitly mark progress messages
+			result.IsProgress = strings.Contains(strings.ToLower(result.Message), "running") ||
+				strings.Contains(strings.ToLower(result.Message), "testing") ||
+				strings.Contains(strings.ToLower(result.Message), "establishing")
 		}
 
 		if err := enc.Encode(result); err != nil {

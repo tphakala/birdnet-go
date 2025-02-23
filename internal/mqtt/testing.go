@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"strings"
 	"time"
@@ -13,12 +14,46 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
+// Test configuration for artificial delays and failures
+// for UI testing
+var (
+	// Set to true to enable artificial delays and random failures
+	TestMode = false
+	// Internal flag to enable random failures (for testing UI behavior)
+	randomFailureMode = false
+	// Probability of failure for each stage (0.0 - 1.0)
+	FailureProbability = 0.5
+	// Min and max artificial delay in milliseconds
+	MinDelay = 500
+	MaxDelay = 3000
+)
+
+// simulateDelay adds an artificial delay
+func simulateDelay() {
+	if !TestMode {
+		return
+	}
+	delay := rand.Intn(MaxDelay-MinDelay) + MinDelay
+	time.Sleep(time.Duration(delay) * time.Millisecond)
+}
+
+// simulateFailure returns true if the test should fail
+func simulateFailure() bool {
+	if !TestMode || !randomFailureMode {
+		return false
+	}
+	return rand.Float64() < FailureProbability
+}
+
 // TestResult represents the result of an MQTT test
 type TestResult struct {
-	Success bool   `json:"success"`
-	Stage   string `json:"stage"`
-	Message string `json:"message"`
-	Error   string `json:"error,omitempty"`
+	Success    bool   `json:"success"`
+	Stage      string `json:"stage"`
+	Message    string `json:"message"`
+	Error      string `json:"error,omitempty"`
+	IsProgress bool   `json:"isProgress,omitempty"`
+	State      string `json:"state,omitempty"`     // Current state: running, completed, failed, timeout
+	Timestamp  string `json:"timestamp,omitempty"` // ISO8601 timestamp of the result
 }
 
 // TestStage represents a stage in the MQTT test process
@@ -47,12 +82,55 @@ func (s TestStage) String() string {
 	}
 }
 
-// TestConnection performs a multi-stage test of the MQTT connection and functionality
-func (c *client) TestConnection(ctx context.Context) []TestResult {
-	var results []TestResult
+// isIPAddress checks if the given host is an IP address
+func isIPAddress(host string) bool {
+	// Remove protocol prefix if present
+	if strings.Contains(host, "://") {
+		parts := strings.Split(host, "://")
+		host = parts[1]
+	}
 
+	// Remove port if present
+	if strings.Contains(host, ":") {
+		host = strings.Split(host, ":")[0]
+	}
+
+	// Try to parse as IP address
+	ip := net.ParseIP(host)
+	return ip != nil
+}
+
+// TestConnection performs a multi-stage test of the MQTT connection and functionality
+func (c *client) TestConnection(ctx context.Context, resultChan chan<- TestResult) {
 	// Helper function to send a result
 	sendResult := func(result TestResult) {
+		// Mark progress messages
+		result.IsProgress = strings.Contains(strings.ToLower(result.Message), "running") ||
+			strings.Contains(strings.ToLower(result.Message), "testing") ||
+			strings.Contains(strings.ToLower(result.Message), "establishing") ||
+			strings.Contains(strings.ToLower(result.Message), "initializing")
+
+		// Set state based on result
+		if result.State != "" {
+			// Keep existing state if explicitly set
+		} else if result.Error != "" {
+			result.State = "failed"
+			result.Success = false
+			result.IsProgress = false
+		} else if result.IsProgress {
+			result.State = "running"
+		} else if result.Success {
+			result.State = "completed"
+		} else if strings.Contains(strings.ToLower(result.Error), "timeout") ||
+			strings.Contains(strings.ToLower(result.Error), "deadline exceeded") {
+			result.State = "timeout"
+		} else {
+			result.State = "failed"
+		}
+
+		// Add timestamp
+		result.Timestamp = time.Now().Format(time.RFC3339)
+
 		// Log the result with emoji
 		emoji := "❌"
 		if result.Success {
@@ -66,14 +144,12 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 		}
 		log.Printf("%s %s: %s", emoji, result.Stage, logMsg)
 
-		// Ensure we don't overwrite previous results for the same stage
-		for i, r := range results {
-			if r.Stage == result.Stage {
-				results[i] = result
-				return
-			}
+		// Send result to channel
+		select {
+		case <-ctx.Done():
+			return
+		case resultChan <- result:
 		}
-		results = append(results, result)
 	}
 
 	// Check context before starting
@@ -83,117 +159,60 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 			Stage:   "Test Setup",
 			Message: "Test cancelled",
 			Error:   err.Error(),
+			State:   "timeout",
 		})
-		return results
+		return
 	}
 
-	// Check if MQTT service is enabled and running in BirdNET-Go
-	if !c.IsConnected() {
-		// Try to connect first to ensure MQTT service is running
-		if err := c.Connect(ctx); err != nil {
-			// If connection fails, we need to reconfigure MQTT service
-			sendResult(TestResult{
-				Success: false,
-				Stage:   "Service Check",
-				Message: "MQTT service not running, attempting to start...",
-			})
-
-			// Send reconfiguration signal through control channel
-			if c.controlChan != nil {
-				select {
-				case c.controlChan <- "reconfigure_mqtt":
-				case <-ctx.Done():
-					sendResult(TestResult{
-						Success: false,
-						Stage:   "Service Start",
-						Message: "Test cancelled while reconfiguring service",
-						Error:   ctx.Err().Error(),
-					})
-					return results
-				}
-
-				// Try to reconnect with retries
-				maxRetries := 3
-				retryDelay := 1 * time.Second
-
-				for i := 0; i < maxRetries; i++ {
-					select {
-					case <-ctx.Done():
-						sendResult(TestResult{
-							Success: false,
-							Stage:   "Service Start",
-							Message: "Test cancelled during retry attempts",
-							Error:   ctx.Err().Error(),
-						})
-						return results
-					case <-time.After(retryDelay):
-					}
-
-					if err := c.Connect(ctx); err == nil {
-						sendResult(TestResult{
-							Success: true,
-							Stage:   "Service Start",
-							Message: "Successfully started MQTT service",
-						})
-						break
-					}
-					retryDelay *= 2 // Exponential backoff
-					if i == maxRetries-1 {
-						sendResult(TestResult{
-							Success: false,
-							Stage:   "Service Start",
-							Error:   "Maximum retry attempts reached",
-							Message: "Failed to start MQTT service",
-						})
-						return results
-					}
-				}
-			} else {
-				sendResult(TestResult{
-					Success: false,
-					Stage:   "Service Start",
-					Error:   "Control channel not available",
-					Message: "Cannot start MQTT service automatically",
-				})
-				return results
-			}
-		}
-	}
-
-	// Stage 1: DNS Resolution
+	// Extract broker host for testing
 	brokerHost := extractHost(c.config.Broker)
-	dnsCtx, dnsCancel := context.WithTimeout(ctx, 5*time.Second)
-	defer dnsCancel()
+	isIP := isIPAddress(brokerHost)
 
-	sendResult(TestResult{
-		Success: true,
-		Stage:   "DNS Resolution",
-		Message: fmt.Sprintf("Running DNS resolution test for %s...", brokerHost),
-	})
+	// Stage 1: DNS Resolution (skip if IP address)
+	if !isIP {
+		dnsCtx, dnsCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer dnsCancel()
 
-	if result := testDNSResolution(dnsCtx, brokerHost); !result.Success {
-		sendResult(result)
-		return results
-	} else {
-		sendResult(result)
+		sendResult(TestResult{
+			Success: true,
+			Stage:   "DNS Resolution",
+			Message: fmt.Sprintf("Running DNS resolution test for %s...", brokerHost),
+		})
+
+		if result := testDNSResolution(dnsCtx, brokerHost); !result.Success {
+			sendResult(result)
+			return
+		}
+		sendResult(TestResult{
+			Success: true,
+			Stage:   DNSResolution.String(),
+			Message: fmt.Sprintf("Successfully resolved hostname: %s", brokerHost),
+		})
 	}
 
 	// Stage 2: TCP Connection
 	tcpCtx, tcpCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer tcpCancel()
 
+	// First send the "running test" message
 	sendResult(TestResult{
 		Success: true,
-		Stage:   "TCP Connection",
-		Message: fmt.Sprintf("Testing TCP connection to %s...", c.config.Broker),
+		Stage:   TCPConnection.String(),
+		Message: fmt.Sprintf("Running TCP connection test for %s...", c.config.Broker),
 	})
 
+	// Then perform the actual test
 	if result := testTCPConnection(tcpCtx, c.config.Broker); !result.Success {
 		sendResult(result)
-		return results
-	} else {
-		sendResult(result)
+		return
 	}
+
+	// Finally send success message
+	sendResult(TestResult{
+		Success: true,
+		Stage:   TCPConnection.String(),
+		Message: fmt.Sprintf("Successfully established TCP connection to %s", c.config.Broker),
+	})
 
 	// Stage 3: MQTT Connection
 	if !c.IsConnected() {
@@ -206,6 +225,18 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 			Message: fmt.Sprintf("Establishing MQTT connection to %s...", c.config.Broker),
 		})
 
+		simulateDelay()
+
+		if simulateFailure() {
+			sendResult(TestResult{
+				Success: false,
+				Stage:   MQTTConnection.String(),
+				Error:   "simulated MQTT connection failure",
+				Message: "Failed to connect to MQTT broker",
+			})
+			return
+		}
+
 		if err := c.Connect(mqttCtx); err != nil {
 			sendResult(TestResult{
 				Success: false,
@@ -213,7 +244,7 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 				Error:   err.Error(),
 				Message: "Failed to connect to MQTT broker",
 			})
-			return results
+			return
 		}
 	}
 	sendResult(TestResult{
@@ -234,16 +265,28 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 
 	if result := c.publishTestMessage(pubCtx); !result.Success {
 		sendResult(result)
-		return results
-	} else {
-		sendResult(result)
+		return
 	}
-
-	return results
+	sendResult(TestResult{
+		Success: true,
+		Stage:   MessagePublish.String(),
+		Message: "Successfully published test message",
+	})
 }
 
 // publishTestMessage publishes a test message using a mock Whooper Swan detection
 func (c *client) publishTestMessage(ctx context.Context) TestResult {
+	simulateDelay()
+
+	if simulateFailure() {
+		return TestResult{
+			Success: false,
+			Stage:   MessagePublish.String(),
+			Error:   "simulated message publishing failure",
+			Message: "Failed to publish test message",
+		}
+	}
+
 	// Create a mock detection for Whooper Swan
 	mockNote := datastore.Note{
 		Time:           time.Now().Format(time.RFC3339),
@@ -299,6 +342,17 @@ func constructTestTopic(baseTopic string) string {
 
 // testDNSResolution tests DNS resolution for the broker hostname
 func testDNSResolution(ctx context.Context, host string) TestResult {
+	simulateDelay()
+
+	if simulateFailure() {
+		return TestResult{
+			Success: false,
+			Stage:   DNSResolution.String(),
+			Error:   "simulated DNS resolution failure",
+			Message: fmt.Sprintf("Failed to resolve hostname: %s", host),
+		}
+	}
+
 	// Create a channel for the DNS lookup result
 	resultChan := make(chan error, 1)
 
@@ -336,6 +390,17 @@ func testDNSResolution(ctx context.Context, host string) TestResult {
 
 // testTCPConnection tests TCP connection to the broker
 func testTCPConnection(ctx context.Context, broker string) TestResult {
+	simulateDelay()
+
+	if simulateFailure() {
+		return TestResult{
+			Success: false,
+			Stage:   TCPConnection.String(),
+			Error:   "simulated TCP connection failure",
+			Message: fmt.Sprintf("Failed to establish TCP connection to %s", broker),
+		}
+	}
+
 	// Extract host and port from broker URL
 	hostPort := extractHostPort(broker)
 
