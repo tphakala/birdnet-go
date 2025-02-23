@@ -33,6 +33,8 @@ func NewSSEHandler() *SSEHandler {
 	}
 }
 
+// ServeSSE handles Server-Sent Events connections
+// API: GET /api/v1/sse
 func (h *SSEHandler) ServeSSE(c echo.Context) error {
 	h.Debug("SSE: New connection request from %s", c.Request().RemoteAddr)
 

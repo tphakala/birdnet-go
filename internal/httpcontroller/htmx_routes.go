@@ -88,14 +88,14 @@ func (s *Server) initRoutes() {
 
 	// Partial routes (HTMX responses)
 	s.partialRoutes = map[string]PartialRouteConfig{
-		"/detections":         {Path: "/detections", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.Detections)},
-		"/detections/recent":  {Path: "/detections/recent", TemplateName: "recentDetections", Title: "Recent Detections", Handler: h.WithErrorHandling(h.RecentDetections)},
-		"/detections/details": {Path: "/detections/details", TemplateName: "detectionDetails", Title: "Detection Details", Handler: h.WithErrorHandling(h.DetectionDetails)},
-		"/top-birds":          {Path: "/top-birds", TemplateName: "birdsTableHTML", Title: "Top Birds", Handler: h.WithErrorHandling(h.TopBirds)},
-		"/notes":              {Path: "/notes", TemplateName: "notes", Title: "All Notes", Handler: h.WithErrorHandling(h.GetAllNotes)},
-		"/media/spectrogram":  {Path: "/media/spectrogram", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.ServeSpectrogram)},
-		"/media/audio":        {Path: "/media/audio", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.ServeAudioClip)},
-		"/login":              {Path: "/login", TemplateName: "login", Title: "Login", Handler: h.WithErrorHandling(s.handleLoginPage)},
+		"/api/v1/detections":         {Path: "/api/v1/detections", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.Detections)},
+		"/api/v1/detections/recent":  {Path: "/api/v1/detections/recent", TemplateName: "recentDetections", Title: "Recent Detections", Handler: h.WithErrorHandling(h.RecentDetections)},
+		"/api/v1/detections/details": {Path: "/api/v1/detections/details", TemplateName: "detectionDetails", Title: "Detection Details", Handler: h.WithErrorHandling(h.DetectionDetails)},
+		"/api/v1/top-birds":          {Path: "/api/v1/top-birds", TemplateName: "birdsTableHTML", Title: "Top Birds", Handler: h.WithErrorHandling(h.TopBirds)},
+		"/api/v1/notes":              {Path: "/api/v1/notes", TemplateName: "notes", Title: "All Notes", Handler: h.WithErrorHandling(h.GetAllNotes)},
+		"/api/v1/media/spectrogram":  {Path: "/api/v1/media/spectrogram", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.ServeSpectrogram)},
+		"/api/v1/media/audio":        {Path: "/api/v1/media/audio", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.ServeAudioClip)},
+		"/login":                     {Path: "/login", TemplateName: "login", Title: "Login", Handler: h.WithErrorHandling(s.handleLoginPage)},
 	}
 
 	// Set up partial routes
@@ -103,7 +103,7 @@ func (s *Server) initRoutes() {
 		s.Echo.GET(route.Path, func(c echo.Context) error {
 			// If the request is a hx-request or media request, call the partial route handler
 			if c.Request().Header.Get("HX-Request") != "" ||
-				strings.HasPrefix(c.Request().URL.Path, "/media/") {
+				strings.HasPrefix(c.Request().URL.Path, "/api/v1/media/") {
 				return route.Handler(c)
 			} else {
 				// Call the full page route handler
@@ -112,30 +112,27 @@ func (s *Server) initRoutes() {
 		})
 	}
 
-	// s.Echo.POST("/login", s.handleBasicAuthLogin)
-	// s.Echo.GET("/logout", s.handleLogout)
-
 	// Special routes
-	s.Echo.GET("/sse", s.Handlers.SSE.ServeSSE)
-	s.Echo.GET("/audio-level", s.Handlers.WithErrorHandling(s.Handlers.AudioLevelSSE))
-	s.Echo.POST("/settings/save", h.WithErrorHandling(h.SaveSettings), s.AuthMiddleware)
-	s.Echo.GET("/settings/audio/get", h.WithErrorHandling(h.GetAudioDevices), s.AuthMiddleware)
+	s.Echo.GET("/api/v1/sse", s.Handlers.SSE.ServeSSE)
+	s.Echo.GET("/api/v1/audio-level", s.Handlers.WithErrorHandling(s.Handlers.AudioLevelSSE))
+	s.Echo.POST("/api/v1/settings/save", h.WithErrorHandling(h.SaveSettings), s.AuthMiddleware)
+	s.Echo.GET("/api/v1/settings/audio/get", h.WithErrorHandling(h.GetAudioDevices), s.AuthMiddleware)
 
 	// Add DELETE method for detection deletion
-	s.Echo.DELETE("/detections/delete", h.WithErrorHandling(h.DeleteDetection), s.AuthMiddleware)
+	s.Echo.DELETE("/api/v1/detections/delete", h.WithErrorHandling(h.DeleteDetection), s.AuthMiddleware)
 
 	// Add POST method for ignoring species
-	s.Echo.POST("/detections/ignore", h.WithErrorHandling(h.IgnoreSpecies), s.AuthMiddleware)
+	s.Echo.POST("/api/v1/detections/ignore", h.WithErrorHandling(h.IgnoreSpecies), s.AuthMiddleware)
 
 	// Add POST method for reviewing detections
-	s.Echo.POST("/detections/review", h.WithErrorHandling(h.ReviewDetection), s.AuthMiddleware)
+	s.Echo.POST("/api/v1/detections/review", h.WithErrorHandling(h.ReviewDetection), s.AuthMiddleware)
 
 	// Add POST method for locking/unlocking detections
-	s.Echo.POST("/detections/lock", h.WithErrorHandling(h.LockDetection), s.AuthMiddleware)
+	s.Echo.POST("/api/v1/detections/lock", h.WithErrorHandling(h.LockDetection), s.AuthMiddleware)
 
 	// Add GET method for testing MQTT connection
-	s.Echo.GET("/mqtt/test", h.WithErrorHandling(h.TestMQTT), s.AuthMiddleware)
-	s.Echo.POST("/mqtt/test", h.WithErrorHandling(h.TestMQTT), s.AuthMiddleware)
+	s.Echo.GET("/api/v1/mqtt/test", h.WithErrorHandling(h.TestMQTT), s.AuthMiddleware)
+	s.Echo.POST("/api/v1/mqtt/test", h.WithErrorHandling(h.TestMQTT), s.AuthMiddleware)
 
 	// Setup Error handler
 	s.Echo.HTTPErrorHandler = func(err error, c echo.Context) {

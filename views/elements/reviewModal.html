@@ -30,7 +30,7 @@
       {{if .ClipName}}
       <div class="relative">
         <!-- Spectrogram Image -->
-        <img loading="lazy" src="/media/spectrogram?clip={{.ClipName}}"
+        <img loading="lazy" src="/api/v1/media/spectrogram?clip={{.ClipName}}"
              alt="Spectrogram" class="w-full h-auto rounded-md shadow-sm">
       </div>
       {{else}}
@@ -42,7 +42,7 @@
     </div>
 
     <!-- Review Form -->
-    <form hx-post="/detections/review" 
+    <form hx-post="/api/v1/detections/review" 
           hx-target="this"
           hx-swap="none"
           id="reviewForm{{.ID}}"

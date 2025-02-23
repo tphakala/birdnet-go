@@ -38,6 +38,7 @@ type NoteWithWeather struct {
 }
 
 // ListDetections handles requests for hourly, species-specific, and search detections
+// API: GET /api/v1/detections
 func (h *Handlers) Detections(c echo.Context) error {
 	req := new(DetectionRequest)
 	if err := c.Bind(req); err != nil {
@@ -168,7 +169,8 @@ func (h *Handlers) Detections(c echo.Context) error {
 	return nil
 }
 
-// getNoteHandler retrieves a single note from the database and renders it.
+// DetectionDetails retrieves a single detection from the database and renders it.
+// API: GET /api/v1/detections/details
 func (h *Handlers) DetectionDetails(c echo.Context) error {
 	noteID := c.QueryParam("id")
 	if noteID == "" {
@@ -210,6 +212,7 @@ func (h *Handlers) DetectionDetails(c echo.Context) error {
 }
 
 // RecentDetections handles requests for the latest detections.
+// API: GET /api/v1/detections/recent
 func (h *Handlers) RecentDetections(c echo.Context) error {
 	h.Debug("RecentDetections: Starting handler")
 
@@ -317,6 +320,7 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 }
 
 // DeleteDetection handles the deletion of a detection and its associated files
+// API: DELETE /api/v1/detections/delete
 func (h *Handlers) DeleteDetection(c echo.Context) error {
 	id := c.QueryParam("id")
 
@@ -481,6 +485,7 @@ func (h *Handlers) processComment(noteID uint, comment string, maxRetries int, b
 }
 
 // processReview handles the review status update and related operations
+// API: POST /api/v1/detections/review
 func (h *Handlers) processReview(noteID uint, verified string, lockDetection bool, maxRetries int, baseDelay time.Duration) error {
 	h.Debug("processReview: Starting review process for note ID %d", noteID)
 	h.Debug("processReview: Verified status: %s", verified)
@@ -585,6 +590,8 @@ func (h *Handlers) processReview(noteID uint, verified string, lockDetection boo
 	return lastErr
 }
 
+// ReviewDetection handles the review status update and related operations
+// API: POST /api/v1/detections/review
 func (h *Handlers) ReviewDetection(c echo.Context) error {
 	id := c.FormValue("id")
 	if id == "" {
@@ -657,6 +664,7 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 }
 
 // LockDetection handles the locking and unlocking of detections
+// API: POST /api/v1/detections/lock
 func (h *Handlers) LockDetection(c echo.Context) error {
 	id := c.QueryParam("id")
 	if id == "" {
