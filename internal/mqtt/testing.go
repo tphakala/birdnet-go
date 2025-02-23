@@ -50,6 +50,16 @@ func (s TestStage) String() string {
 func (c *client) TestConnection(ctx context.Context) []TestResult {
 	var results []TestResult
 
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return []TestResult{{
+			Success: false,
+			Stage:   "Test Setup",
+			Message: "Test cancelled",
+			Error:   err.Error(),
+		}}
+	}
+
 	// Check if MQTT service is enabled and running in BirdNET-Go
 	if !c.IsConnected() {
 		// Try to connect first to ensure MQTT service is running
@@ -63,14 +73,33 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 
 			// Send reconfiguration signal through control channel
 			if c.controlChan != nil {
-				c.controlChan <- "reconfigure_mqtt"
+				select {
+				case c.controlChan <- "reconfigure_mqtt":
+				case <-ctx.Done():
+					return append(results, TestResult{
+						Success: false,
+						Stage:   "Service Start",
+						Message: "Test cancelled while reconfiguring service",
+						Error:   ctx.Err().Error(),
+					})
+				}
 
 				// Try to reconnect with retries
 				maxRetries := 3
 				retryDelay := 1 * time.Second
 
 				for i := 0; i < maxRetries; i++ {
-					time.Sleep(retryDelay)
+					select {
+					case <-ctx.Done():
+						return append(results, TestResult{
+							Success: false,
+							Stage:   "Service Start",
+							Message: "Test cancelled during retry attempts",
+							Error:   ctx.Err().Error(),
+						})
+					case <-time.After(retryDelay):
+					}
+
 					if err := c.Connect(ctx); err == nil {
 						results = append(results, TestResult{
 							Success: true,
@@ -104,14 +133,18 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 
 	// Stage 1: DNS Resolution
 	brokerHost := extractHost(c.config.Broker)
-	if result := testDNSResolution(brokerHost); !result.Success {
+	dnsCtx, dnsCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer dnsCancel()
+	if result := testDNSResolution(dnsCtx, brokerHost); !result.Success {
 		return append(results, result)
 	} else {
 		results = append(results, result)
 	}
 
 	// Stage 2: TCP Connection
-	if result := testTCPConnection(c.config.Broker); !result.Success {
+	tcpCtx, tcpCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer tcpCancel()
+	if result := testTCPConnection(tcpCtx, c.config.Broker); !result.Success {
 		return append(results, result)
 	} else {
 		results = append(results, result)
@@ -119,7 +152,9 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 
 	// Stage 3: MQTT Connection
 	if !c.IsConnected() {
-		if err := c.Connect(ctx); err != nil {
+		mqttCtx, mqttCancel := context.WithTimeout(ctx, 10*time.Second)
+		defer mqttCancel()
+		if err := c.Connect(mqttCtx); err != nil {
 			results = append(results, TestResult{
 				Success: false,
 				Stage:   MQTTConnection.String(),
@@ -136,7 +171,9 @@ func (c *client) TestConnection(ctx context.Context) []TestResult {
 	})
 
 	// Stage 4: Test Message Publishing
-	if result := c.publishTestMessage(ctx); !result.Success {
+	pubCtx, pubCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer pubCancel()
+	if result := c.publishTestMessage(pubCtx); !result.Success {
 		return append(results, result)
 	} else {
 		results = append(results, result)
@@ -201,16 +238,35 @@ func constructTestTopic(baseTopic string) string {
 }
 
 // testDNSResolution tests DNS resolution for the broker hostname
-func testDNSResolution(host string) TestResult {
-	_, err := net.LookupHost(host)
-	if err != nil {
+func testDNSResolution(ctx context.Context, host string) TestResult {
+	// Create a channel for the DNS lookup result
+	resultChan := make(chan error, 1)
+
+	go func() {
+		_, err := net.LookupHost(host)
+		resultChan <- err
+	}()
+
+	// Wait for either the context to be done or the lookup to complete
+	select {
+	case <-ctx.Done():
 		return TestResult{
 			Success: false,
 			Stage:   DNSResolution.String(),
-			Error:   err.Error(),
-			Message: fmt.Sprintf("Failed to resolve hostname: %s", host),
+			Error:   "DNS resolution timeout",
+			Message: fmt.Sprintf("DNS resolution for %s timed out", host),
+		}
+	case err := <-resultChan:
+		if err != nil {
+			return TestResult{
+				Success: false,
+				Stage:   DNSResolution.String(),
+				Error:   err.Error(),
+				Message: fmt.Sprintf("Failed to resolve hostname: %s", host),
+			}
 		}
 	}
+
 	return TestResult{
 		Success: true,
 		Stage:   DNSResolution.String(),
@@ -219,20 +275,41 @@ func testDNSResolution(host string) TestResult {
 }
 
 // testTCPConnection tests TCP connection to the broker
-func testTCPConnection(broker string) TestResult {
+func testTCPConnection(ctx context.Context, broker string) TestResult {
 	// Extract host and port from broker URL
 	hostPort := extractHostPort(broker)
 
-	conn, err := net.DialTimeout("tcp", hostPort, 5*time.Second)
-	if err != nil {
+	// Create a channel for the connection result
+	resultChan := make(chan error, 1)
+
+	go func() {
+		var d net.Dialer
+		conn, err := d.DialContext(ctx, "tcp", hostPort)
+		if err == nil {
+			conn.Close()
+		}
+		resultChan <- err
+	}()
+
+	// Wait for either the context to be done or the connection to complete
+	select {
+	case <-ctx.Done():
 		return TestResult{
 			Success: false,
 			Stage:   TCPConnection.String(),
-			Error:   err.Error(),
-			Message: fmt.Sprintf("Failed to establish TCP connection to %s", hostPort),
+			Error:   "TCP connection timeout",
+			Message: fmt.Sprintf("TCP connection to %s timed out", hostPort),
+		}
+	case err := <-resultChan:
+		if err != nil {
+			return TestResult{
+				Success: false,
+				Stage:   TCPConnection.String(),
+				Error:   err.Error(),
+				Message: fmt.Sprintf("Failed to establish TCP connection to %s", hostPort),
+			}
 		}
 	}
-	defer conn.Close()
 
 	return TestResult{
 		Success: true,
