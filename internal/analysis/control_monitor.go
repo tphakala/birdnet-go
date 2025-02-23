@@ -119,10 +119,13 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 		return
 	}
 
+	// First, safely disconnect any existing client
+	cm.proc.DisconnectMQTTClient()
+
 	// If MQTT is enabled, initialize and connect
 	if settings.Realtime.MQTT.Enabled {
 		var err error
-		cm.proc.MqttClient, err = mqtt.NewClient(settings, cm.proc.Metrics)
+		newClient, err := mqtt.NewClient(settings, cm.proc.Metrics)
 		if err != nil {
 			log.Printf("\033[31m❌ Error creating MQTT client: %v\033[0m", err)
 			cm.notifyError("Failed to create MQTT client", err)
@@ -130,7 +133,7 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := cm.proc.MqttClient.Connect(ctx); err != nil {
+		if err := newClient.Connect(ctx); err != nil {
 			cancel()
 			log.Printf("\033[31m❌ Error connecting to MQTT broker: %v\033[0m", err)
 			cm.notifyError("Failed to connect to MQTT broker", err)
@@ -138,12 +141,12 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 		}
 		cancel()
 
+		// Safely set the new client
+		cm.proc.SetMQTTClient(newClient)
+
 		log.Printf("\033[32m✅ MQTT connection configured successfully\033[0m")
 		cm.notifySuccess("MQTT connection configured successfully")
-	} else if cm.proc.MqttClient != nil {
-		// If MQTT is disabled, disconnect if client exists
-		cm.proc.MqttClient.Disconnect()
-		cm.proc.MqttClient = nil
+	} else {
 		log.Printf("\033[32m✅ MQTT connection disabled\033[0m")
 		cm.notifySuccess("MQTT connection disabled")
 	}
