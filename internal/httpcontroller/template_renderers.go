@@ -70,7 +70,7 @@ func (s *Server) setupTemplateRenderer() {
 	funcMap := s.GetTemplateFunctions()
 
 	// Parse all templates from the ViewsFs
-	tmpl, err := template.New("").Funcs(funcMap).ParseFS(ViewsFs, "views/*.html", "views/*/*.html", "views/*/*/*.html")
+	tmpl, err := template.New("").Funcs(funcMap).ParseFS(ViewsFs, "views/*/*.html", "views/*/*/*.html")
 	if err != nil {
 		s.Echo.Logger.Fatal(err)
 	}
