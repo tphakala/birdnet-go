@@ -78,10 +78,7 @@ check_network() {
 
     # Now ensure curl is available for further tests
     ensure_curl
-
-    # Continue with existing HTTP/HTTPS checks...
-    local test_hosts=("github.com" "raw.githubusercontent.com" "ghcr.io")
-    
+     
     # HTTP/HTTPS Check
     print_message "\n📡 Testing HTTP/HTTPS connectivity..." "$YELLOW"
     local urls=(
@@ -1154,25 +1151,10 @@ EOF
 
 # Function to handle container update process
 handle_container_update() {
-    local current_version
-    local target_version
     local service_needs_update
-    
-    current_version=$(get_container_version "ghcr.io/tphakala/birdnet-go")
-    target_version="$BIRDNET_GO_VERSION"
     service_needs_update=$(check_systemd_service)
     
-    print_message "🔍 Current version: " "$YELLOW" "nonewline"
-    print_message "$current_version" "$NC"
-    print_message "🎯 Target version: " "$YELLOW" "nonewline"
-    print_message "$target_version" "$NC"
-    
-    if [ "$current_version" = "$target_version" ] && [ "$service_needs_update" = "false" ]; then
-        print_message "✅ BirdNET-Go is already up to date" "$GREEN"
-        return 0
-    fi
-    
-    print_message "🔄 Update required" "$YELLOW"
+    print_message "🔄 Checking for updates..." "$YELLOW"
     
     # Stop the service and container
     print_message "🛑 Stopping BirdNET-Go service..." "$YELLOW"
@@ -1192,7 +1174,7 @@ handle_container_update() {
     fi
     
     # Pull new image
-    print_message "📥 Pulling new image..." "$YELLOW"
+    print_message "📥 Pulling latest nightly image..." "$YELLOW"
     if ! docker pull "${BIRDNET_GO_IMAGE}"; then
         print_message "❌ Failed to pull new image" "$RED"
         return 1
