@@ -129,24 +129,7 @@
         password: '{{.Settings.Realtime.MQTT.Password}}',
         testResults: [],
         isTesting: false,
-        currentTestStage: null,
-        testStageOrder: [
-            'Starting Test',
-            'Service Check',
-            'Service Start',
-            'DNS Resolution',
-            'TCP Connection', 
-            'MQTT Connection',
-            'Message Publishing'
-        ],
-        isProgressMessage(message) {
-            const lowerMsg = message.toLowerCase();
-            return lowerMsg.includes('running') || 
-                   lowerMsg.includes('testing') || 
-                   lowerMsg.includes('establishing') || 
-                   lowerMsg.includes('initializing') ||
-                   lowerMsg.includes('attempting to start');
-        }
+        currentTestStage: null
     },
     mqttSettingsOpen: false,
     showTooltip: null,
@@ -314,267 +297,18 @@
                 "tooltip" "The MQTT password."
                 }}
 
-            <!-- MQTT Test Button and Results -->
-            <div class="mt-4 space-y-4">
-                <button type="button" 
-                    class="btn btn-sm btn-primary" 
-                    x-bind:disabled="!mqtt.enabled || !mqtt.broker || mqtt.isTesting"
-                    x-bind:title="
-                        !mqtt.enabled ? 'MQTT must be enabled to test' :
-                        !mqtt.broker ? 'MQTT broker must be specified' :
-                        mqtt.isTesting ? 'Test in progress...' : 'Test MQTT connection'
-                    "
-                    x-bind:aria-label="
-                        !mqtt.enabled ? 'MQTT must be enabled to test' :
-                        !mqtt.broker ? 'MQTT broker must be specified' :
-                        mqtt.isTesting ? 'Test in progress...' : 'Test MQTT connection'
-                    "
-                    aria-live="polite"
-                    x-on:click="
-                        mqtt.isTesting = true;
-                        mqtt.currentTestStage = 'Starting Test';
-                        mqtt.testResults = [{
-                            success: true,
-                            stage: 'Starting Test',
-                            message: 'Initializing MQTT connection test...'
-                        }];
-                        
-                        // Create a timeout promise
-                        const timeoutPromise = new Promise((_, reject) => {
-                            setTimeout(() => reject(new Error('Test timeout after 15 seconds')), 15000);
-                        });
-
-                        // Create the fetch promise
-                        const fetchPromise = fetch('/api/v1/mqtt/test', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRF-Token': CSRF_TOKEN
-                            },
-                            body: JSON.stringify({
-                                enabled: mqtt.enabled,
-                                broker: mqtt.broker,
-                                topic: mqtt.topic,
-                                username: mqtt.username,
-                                password: mqtt.password
-                            })
-                        });
-
-                        // Race between fetch and timeout
-                        Promise.race([fetchPromise, timeoutPromise])
-                            .then(response => {
-                                if (!response.ok) {
-                                    throw new Error(`HTTP error! status: ${response.status}`);
-                                }
-                                const reader = response.body.getReader();
-                                const decoder = new TextDecoder();
-                                let buffer = '';
-
-                                return new ReadableStream({
-                                    start(controller) {
-                                        function push() {
-                                            reader.read().then(({done, value}) => {
-                                                if (done) {
-                                                    controller.close();
-                                                    return;
-                                                }
-
-                                                buffer += decoder.decode(value, {stream: true});
-                                                const lines = buffer.split('\n');
-                                                buffer = lines.pop(); // Keep the incomplete line
-
-                                                lines.forEach(line => {
-                                                    if (line.trim()) {
-                                                        try {
-                                                            const result = JSON.parse(line);
-                                                            mqtt.currentTestStage = result.stage;
-                                                            
-                                                            // Find existing result for this stage
-                                                            const existingIndex = mqtt.testResults.findIndex(r => r.stage === result.stage);
-                                                            
-                                                            // Determine if this is a progress message
-                                                            const isProgress = mqtt.isProgressMessage(result.message);
-                                                            
-                                                            // Set the state based on the result
-                                                            const state = result.state ? result.state :  // Use existing state if provided
-                                                                result.error ? 'failed' :
-                                                                isProgress ? 'running' :
-                                                                result.success ? 'completed' :
-                                                                'failed';
-
-                                                            const updatedResult = {
-                                                                ...result,
-                                                                isProgress: isProgress && !result.error,  // Progress state is false if there's an error
-                                                                state,
-                                                                success: result.error ? false : result.success
-                                                            };
-                                                            
-                                                            if (existingIndex >= 0) {
-                                                                // Update existing result
-                                                                mqtt.testResults[existingIndex] = updatedResult;
-                                                            } else {
-                                                                // Add new result
-                                                                mqtt.testResults.push(updatedResult);
-                                                            }
-
-                                                            // Also update previous stages to completed if this is a new stage
-                                                            if (!isProgress && result.success && !result.error) {
-                                                                const currentStageIndex = mqtt.testStageOrder.indexOf(result.stage);
-                                                                mqtt.testResults.forEach((r, idx) => {
-                                                                    const stageIndex = mqtt.testStageOrder.indexOf(r.stage);
-                                                                    if (stageIndex < currentStageIndex && r.state === 'running') {
-                                                                        mqtt.testResults[idx] = {
-                                                                            ...r,
-                                                                            state: 'completed',
-                                                                            isProgress: false
-                                                                        };
-                                                                    }
-                                                                });
-                                                            }
-                                                            
-                                                            // Sort results according to stage order
-                                                            mqtt.testResults.sort((a, b) => 
-                                                                mqtt.testStageOrder.indexOf(a.stage) - mqtt.testStageOrder.indexOf(b.stage)
-                                                            );
-                                                        } catch (e) {
-                                                            console.error('Failed to parse test result:', e);
-                                                        }
-                                                    }
-                                                });
-
-                                                controller.enqueue(value);
-                                                push();
-                                            }).catch(error => {
-                                                controller.error(error);
-                                            });
-                                        }
-
-                                        push();
-                                    }
-                                });
-                            })
-                            .catch(error => {
-                                const errorMessage = error.message === 'Test timeout after 15 seconds'
-                                    ? 'The test took too long to complete. Please check your broker connection and try again.'
-                                    : 'Failed to perform MQTT test';
-                                
-                                mqtt.testResults = [{
-                                    success: false,
-                                    stage: 'Error',
-                                    message: errorMessage,
-                                    error: error.message
-                                }];
-                                mqtt.currentTestStage = null;
-                            })
-                            .finally(() => {
-                                mqtt.isTesting = false;
-                                mqtt.currentTestStage = null;
-                            })
-                    ">
-                    <span x-show="!mqtt.isTesting">Test MQTT Connection</span>
-                    <span x-show="mqtt.isTesting">Testing...</span>
-                </button>
-
-                <!-- Test Results -->
-                <div x-show="mqtt.testResults.length > 0" 
-                     class="space-y-2" 
-                     role="region" 
-                     aria-label="MQTT Test Results"
-                     aria-live="polite">
-                    <h4 class="font-semibold">Test Results:</h4>
-                    <template x-for="(result, index) in mqtt.testResults" :key="result.stage + '-' + index + '-' + result.state">
-                        <div class="p-2 rounded" 
-                             x-bind:class="{
-                                'bg-base-200': result.success && !result.error,
-                                'bg-error/10': !result.success || result.error,
-                                'border-l-4': true,
-                                'border-info': result.state === 'running' && !result.error,
-                                'border-success': result.state === 'completed' && !result.error,
-                                'border-error': result.state === 'failed' || result.state === 'timeout' || result.error
-                             }"
-                             role="status"
-                             x-bind:aria-label="result.stage + ' test ' + (result.success ? 'succeeded' : 'failed')">
-                            <div class="flex items-center space-x-2">
-                                <!-- Icon Container -->
-                                <div class="w-5 h-5 flex-shrink-0">
-                                    <!-- Pending/Running Icon -->
-                                    <svg x-show="result.state === 'running' && !result.error" 
-                                         xmlns="http://www.w3.org/2000/svg" 
-                                         class="text-info animate-spin" 
-                                         viewBox="0 0 24 24" 
-                                         fill="none"
-                                         aria-hidden="true">
-                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    <!-- Success Icon -->
-                                    <svg x-show="result.state === 'completed' && !result.error" 
-                                         xmlns="http://www.w3.org/2000/svg" 
-                                         class="text-success" 
-                                         viewBox="0 0 20 20" 
-                                         fill="currentColor"
-                                         aria-hidden="true">
-                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                                    </svg>
-                                    <!-- Error Icon -->
-                                    <svg x-show="result.state === 'failed' || result.state === 'timeout' || result.error" 
-                                         xmlns="http://www.w3.org/2000/svg" 
-                                         class="text-error" 
-                                         viewBox="0 0 20 20" 
-                                         fill="currentColor"
-                                         aria-hidden="true">
-                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                                    </svg>
-                                </div>
-                                <!-- Stage Name and Status -->
-                                <div class="flex flex-col">
-                                    <span class="font-medium" x-text="result.stage"></span>
-                                    <span x-show="result.state === 'running' && !result.error" 
-                                          class="text-xs text-info">
-                                        In Progress...
-                                    </span>
-                                    <span x-show="result.state === 'timeout'" 
-                                          class="text-xs text-error">
-                                        Timed Out
-                                    </span>
-                                </div>
-                            </div>
-                            <!-- Result Messages -->
-                            <template x-if="result.success && !result.error">
-                                <div class="text-sm mt-1 ml-7" x-text="result.message"></div>
-                            </template>
-                            <template x-if="!result.success || result.error">
-                                <div class="space-y-2 mt-1 ml-7">
-                                    <div class="text-sm" x-text="result.message"></div>
-                                    <div x-show="result.error" class="text-sm text-error" x-text="result.error"></div>
-                                    <div x-show="result.hint" class="text-sm mt-2" x-text="result.hint"></div>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
-                    <!-- Add reminder note after successful test -->
-                    <div x-show="!mqtt.isTesting && 
-                               mqtt.testResults.length > 0 &&
-                               mqtt.testResults.every(result => result.success) && 
-                               mqtt.testResults.some(result => result.stage === 'Message Publishing') &&
-                               mqtt.testResults[mqtt.testResults.length - 1].stage === 'Message Publishing'" 
-                         class="mt-4 p-2 bg-base-200 text-base-content rounded"
-                         role="alert"
-                         aria-label="Save settings reminder">
-                        <div class="flex items-center space-x-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" 
-                                 class="h-5 w-5 text-info" 
-                                 viewBox="0 0 20 20" 
-                                 fill="currentColor">
-                                <path fill-rule="evenodd" 
-                                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" 
-                                      clip-rule="evenodd" />
-                            </svg>
-                            <span>Please remember to save settings to apply the changes permanently.</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <!-- Multi-Stage Operation Component for MQTT Connection Test -->
+            {{template "multiStageOperation" dict
+                "operationName" "MQTT Connection Test"
+                "apiEndpoint" "/api/v1/mqtt/test"
+                "stageOrder" "['Starting Test', 'Service Check', 'Service Start', 'DNS Resolution', 'TCP Connection', 'MQTT Connection', 'Message Publishing']"
+                "buttonText" "Test MQTT Connection"
+                "buttonLoadingText" "Testing..."
+                "buttonDisabledCondition" "!mqtt.enabled || !mqtt.broker || isRunning"
+                "buttonTooltipMap" "!mqtt.enabled ? 'MQTT must be enabled to test' : !mqtt.broker ? 'MQTT broker must be specified' : isRunning ? 'Test in progress...' : 'Test MQTT connection'"
+                "payload" "{enabled: mqtt.enabled, broker: mqtt.broker, topic: mqtt.topic, username: mqtt.username, password: mqtt.password}"
+                "completionMessage" "Please remember to save settings to apply the changes permanently."
+            }}
         </div>
     </div>
 </div>
@@ -788,5 +522,8 @@
     </div>
 </div>
 <!-- Weather Settings end -->
+
+<!-- Include Alpine.js component scripts -->
+<script src="/assets/js/components/multiStageOperation.js"></script>
 
 {{end}}
