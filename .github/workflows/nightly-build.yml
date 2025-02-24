@@ -210,6 +210,12 @@ jobs:
             ghcr.io/${{ env.REPO }}:nightly-amd64-${DATE} \
             ghcr.io/${{ env.REPO }}:nightly-arm64-${DATE}
           docker manifest push ghcr.io/${{ env.REPO }}:nightly-${DATE}
+
+          # Create and push the nightly manifest
+          docker manifest create ghcr.io/${{ env.REPO }}:nightly \
+            ghcr.io/${{ env.REPO }}:nightly-amd64 \
+            ghcr.io/${{ env.REPO }}:nightly-arm64
+          docker manifest push ghcr.io/${{ env.REPO }}:nightly
           
           # Add inspect commands for debugging
           echo "Inspecting available images..."
