@@ -30,65 +30,40 @@
 
     <!-- control collapse element open state and label visibility -->
     <input type="checkbox" id="birdweatherSettingsOpen"
-        x-on:change="birdweatherSettingsOpen = !birdweatherSettingsOpen" />
+        x-on:change="birdweatherSettingsOpen = !birdweatherSettingsOpen"
+        aria-controls="birdweatherSettingsContent"
+        aria-expanded="true" />
 
-    <div class="collapse-title settings-section-header" id="birdweatherHeader">
-        <div class="flex items-center">
-            <label for="birdweatherSettingsOpen" class="cursor-pointer" aria-label="BirdWeather Settings">BirdWeather</label>
-            <div x-show="hasChanges" x-cloak class="settings-changed-badge" role="status" aria-label="Settings changed">
-                <span class="badge">
-                    <span>changed</span>
-                </span>
-            </div>
-        </div>
-        <p class="settings-section-description" id="birdweatherDescription">Upload detections to BirdWeather</p>
-    </div>
+    {{template "sectionHeader" dict
+        "id" "birdweather"
+        "title" "BirdWeather"
+        "description" "Upload detections to BirdWeather"}}
 
-    <!-- disabled for now
-    <div class="p-4 pt-0" x-show="!birdweatherSettingsOpen">
-        <label class="cursor-pointer" for="birdweatherSettingsOpen">
-            <span>Configure BirdWeather integration</span>
-        </label>
-    </div>-->
+    <div class="collapse-content" 
+         id="birdweatherSettingsContent" 
+         role="group" 
+         aria-labelledby="birdweatherDescription">
+        {{template "checkbox" dict
+            "id" "birdweatherEnabled"
+            "model" "birdweather.enabled"
+            "name" "realtime.birdweather.enabled"
+            "label" "Enable BirdWeather Uploads"
+            "tooltip" "Enable or disable uploads to BirdWeather service."}}
 
-    <div class="collapse-content" role="group" aria-labelledby="birdweatherDescription">
-        <div class="form-control relative">
-            <label class="label cursor-pointer justify-start" for="birdweatherEnabled">
-                <input type="checkbox" id="birdweatherEnabled" name="realtime.birdweather.enabled"
-                    x-model="birdweather.enabled" class="checkbox checkbox-primary checkbox-xs mr-2"
-                    aria-describedby="birdweatherEnabledTooltip">
-                <input type="hidden" name="realtime.birdweather.enabled" value="false">
-                <span class="label-text">Enable BirdWeather Uploads</span>
-                <span class="help-icon" 
-                    @mouseenter="showTooltip = 'birdweatherEnabled'" 
-                    @mouseleave="showTooltip = null"
-                    role="button"
-                    aria-label="Show help"
-                    tabindex="0">ⓘ</span>
-            </label>
-            <div x-show="showTooltip === 'birdweatherEnabled'" x-cloak class="tooltip" id="birdweatherEnabledTooltip" role="tooltip">
-                Enable or disable uploads to BirdWeather service.
-            </div>
-        </div>
+        <div x-show="birdweather.enabled"
+             id="birdweatherOptionsGroup"
+             role="group"
+             aria-label="BirdWeather Additional Settings">
 
-        <div x-show="birdweather.enabled">
+            {{template "checkbox" dict
+                "id" "birdweatherDebug"
+                "model" "birdweather.debug"
+                "name" "realtime.birdweather.debug"
+                "label" "Debug Mode"
+                "tooltip" "Enable debug mode for additional logging information."}}
 
-            <div class="form-control relative">
-                <label class="label cursor-pointer justify-start" for="birdweatherDebug">
-                    <input type="checkbox" id="birdweatherDebug" name="realtime.birdweather.debug"
-                        x-model="birdweather.debug" class="checkbox checkbox-primary checkbox-xs mr-2">
-                    <input type="hidden" name="realtime.birdweather.debug" value="false">
-                    <span class="label-text">Debug Mode</span>
-                    <span class="help-icon" @mouseenter="showTooltip = 'birdweatherDebug'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
-                </label>
-                <div x-show="showTooltip === 'birdweatherDebug'" x-cloak class="tooltip">
-                    Enable debug mode for additional logging information.
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {{template "passwordField" dict
+            
+            {{template "passwordField" dict
                 "id" "birdweatherId"
                 "model" "birdweather.id"
                 "name" "realtime.birdweather.id"
@@ -96,21 +71,17 @@
                 "tooltip" "Your unique BirdWeather token."
                 }}
 
-                <div class="form-control relative">
-                    <label class="label justify-start" for="birdweatherThreshold">
-                        <span class="label-text">Upload Threshold</span>
-                        <span class="help-icon"
-                            @mouseenter="showTooltip = 'birdweatherThreshold'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <input type="number" id="birdweatherThreshold" name="realtime.birdweather.threshold"
-                        x-model="birdweather.threshold" step="0.01" min="0" max="1"
-                        class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'birdweatherThreshold'" x-cloak class="tooltip">
-                        Minimum confidence threshold for uploading predictions to BirdWeather.
-                    </div>
-                </div>
+            {{template "numberField" dict
+                "id" "birdweatherThreshold"
+                "model" "birdweather.threshold"
+                "name" "realtime.birdweather.threshold"
+                "label" "Upload Threshold"
+                "step" "0.01"
+                "min" "0"
+                "max" "1"
+                "tooltip" "Minimum confidence threshold for uploading predictions to BirdWeather."
+                }}
 
-            </div>
         </div>
     </div>
 </div>
@@ -173,120 +144,49 @@
            aria-controls="mqttSettingsContent"
            aria-expanded="true" />
 
-    <div class="collapse-title settings-section-header" id="mqttHeader">
-        <div class="flex items-center">
-            <label for="mqttSettingsOpen" class="cursor-pointer" aria-label="MQTT Settings Section">MQTT</label>
-            <div x-show="hasChanges" 
-                 x-cloak 
-                 class="settings-changed-badge" 
-                 role="status" 
-                 aria-label="Settings have been modified">
-                <span class="badge">
-                    <span>changed</span>
-                </span>
-            </div>
-        </div>
-        <p class="settings-section-description" id="mqttDescription">Configure MQTT broker connection</p>
-    </div>
+    {{template "sectionHeader" dict
+        "id" "mqtt"
+        "title" "MQTT"
+        "description" "Configure MQTT broker connection"}}
 
     <div class="collapse-content" 
          id="mqttSettingsContent"
          role="group" 
          aria-labelledby="mqttDescription">
-        <div class="form-control relative">
-            <label class="label cursor-pointer justify-start" for="mqttEnabled">
-                <input type="checkbox" 
-                       id="mqttEnabled" 
-                       name="realtime.mqtt.enabled" 
-                       x-model="mqtt.enabled"
-                       class="checkbox checkbox-primary checkbox-xs mr-2"
-                       aria-describedby="mqttEnabledTooltip">
-                <input type="hidden" name="realtime.mqtt.enabled" value="false">
-                <span class="label-text">Enable MQTT Integration</span>
-                <button type="button"
-                        class="help-icon" 
-                        @mouseenter="showTooltip = 'mqttEnabled'" 
-                        @mouseleave="showTooltip = null"
-                        aria-label="Show help for MQTT integration"
-                        aria-expanded="false"
-                        aria-controls="mqttEnabledTooltip">ⓘ</button>
-            </label>
-            <div x-show="showTooltip === 'mqttEnabled'" 
-                 x-cloak 
-                 class="tooltip" 
-                 id="mqttEnabledTooltip" 
-                 role="tooltip">
-                Enable or disable integration with MQTT service.
-            </div>
-        </div>
+        {{template "checkbox" dict
+            "id" "mqttEnabled"
+            "model" "mqtt.enabled"
+            "name" "realtime.mqtt.enabled"
+            "label" "Enable MQTT Integration"
+            "tooltip" "Enable or disable integration with MQTT service."}}
 
         <div x-show="mqtt.enabled" 
              id="mqttSettings"
              role="group" 
              aria-label="MQTT Connection Settings">
 
-            <div class="settings-form-group">
-                <label class="justify-start" for="mqttBroker">
-                    <span class="label-text">MQTT Broker</span>
-                    <button type="button"
-                            class="help-icon" 
-                            @mouseenter="showTooltip = 'mqttBroker'" 
-                            @mouseleave="showTooltip = null"
-                            aria-label="Show help for MQTT broker"
-                            aria-expanded="false"
-                            aria-controls="mqttBrokerTooltip">ⓘ</button>
-                </label>
-                <input type="text" 
-                       id="mqttBroker" 
-                       name="realtime.mqtt.broker" 
-                       x-model="mqtt.broker" 
-                       class="input input-sm input-bordered w-full" 
-                       placeholder="mqtt://localhost:1883"
-                       aria-describedby="mqttBrokerTooltip">
-                <div x-show="showTooltip === 'mqttBroker'" 
-                     x-cloak 
-                     class="tooltip" 
-                     id="mqttBrokerTooltip" 
-                     role="tooltip">
-                    MQTT broker URL (e.g., mqtt://localhost:1883)
-                </div>
-            </div>
+            {{template "textField" dict
+                "id" "mqttBroker"
+                "model" "mqtt.broker"
+                "name" "realtime.mqtt.broker"
+                "label" "MQTT Broker"
+                "placeholder" "mqtt://localhost:1883"
+                "tooltip" "MQTT broker URL (e.g., mqtt://localhost:1883)"}}
 
-            <div class="settings-form-group">
-                <label class="justify-start" for="mqttTopic">
-                    <span class="label-text">MQTT Topic</span>
-                    <span class="help-icon" @mouseenter="showTooltip = 'mqttTopic'" @mouseleave="showTooltip = null">ⓘ</span>
-                </label>
-                <input type="text" id="mqttTopic" name="realtime.mqtt.topic" x-model="mqtt.topic" 
-                       class="input input-sm input-bordered w-full" placeholder="birdnet/detections">
-                <div x-show="showTooltip === 'mqttTopic'" x-cloak class="tooltip">
-                    MQTT topic to publish detections to
-                </div>
-            </div>
+            {{template "textField" dict
+                "id" "mqttTopic"
+                "model" "mqtt.topic"
+                "name" "realtime.mqtt.topic"
+                "label" "MQTT Topic"
+                "placeholder" "birdnet/detections"
+                "tooltip" "MQTT topic to publish detections to"}}
 
-            <div class="form-control relative">
-                <label class="label justify-start" for="mqttUsername">
-                    <span class="label-text">Username</span>
-                    <span class="help-icon" @mouseenter="showTooltip = 'mqttUsername'"
-                        @mouseleave="showTooltip = null">ⓘ</span>
-                </label>
-                <input type="text" id="mqttUsername" name="realtime.mqtt.username" x-model="mqtt.username"
-                    class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'mqttUsername'" x-cloak class="tooltip">
-                    The MQTT username.
-                </div>
-            </div>
-
-            <!--div class="form-control relative">
-                <label class="label justify-start" for="mqttPassword">
-                    <span class="label-text">Password</span>
-                    <span class="help-icon" @mouseenter="showTooltip = 'mqttPassword'" @mouseleave="showTooltip = null">ⓘ</span>
-                </label>
-                <input type="password" id="mqttPassword" name="realtime.mqtt.password" x-model="mqtt.password" class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'mqttPassword'" x-cloak class="absolute left-0 bottom-full mb-2 p-2 bg-gray-100 text-sm rounded shadow-md z-50">
-                    The MQTT password.
-                </div>
-            </div -->
+            {{template "textField" dict
+                "id" "mqttUsername"
+                "model" "mqtt.username"
+                "name" "realtime.mqtt.username"
+                "label" "Username"
+                "tooltip" "The MQTT username."}}
 
             {{template "passwordField" dict
                 "id" "mqttPassword"
@@ -294,8 +194,7 @@
                 "name" "realtime.mqtt.password"
                 "label" "Password"
                 "placeholder" ""
-                "tooltip" "The MQTT password."
-                }}
+                "tooltip" "The MQTT password."}}
 
             <!-- Multi-Stage Operation Component for MQTT Connection Test -->
             {{template "multiStageOperation" dict
@@ -315,7 +214,10 @@
 <!-- MQTT Settings end -->
 
 <!-- Telemetry Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+     role="region" 
+     aria-labelledby="telemetryHeader"
+     x-data="{ 
     telemetry: {
         enabled: {{.Settings.Realtime.Telemetry.Enabled}},
         listen: '{{.Settings.Realtime.Telemetry.Listen}}'
@@ -331,61 +233,39 @@
 ">
 
     <!-- control collapse element open state and label visibility -->
-    <input type="checkbox" id="telemetrySettingsOpen" x-on:change="telemetrySettingsOpen = !telemetrySettingsOpen" />
+    <input type="checkbox" 
+           id="telemetrySettingsOpen" 
+           x-on:change="telemetrySettingsOpen = !telemetrySettingsOpen" 
+           aria-controls="telemetrySettingsContent"
+           aria-expanded="true" />
 
-    <div class="collapse-title settings-section-header">
-        <div class="flex items-center">
-            <label for="telemetrySettingsOpen" class="cursor-pointer">Telemetry</label>
-            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
-                <span class="badge">
-                    <span>changed</span>
-                </span>
-            </div>
-        </div>
-        <p class="settings-section-description">Monitor BirdNET-Go's performance and bird detection metrics through
-            Prometheus-compatible endpoint</p>
-    </div>
+    {{template "sectionHeader" dict
+        "id" "telemetry"
+        "title" "Telemetry"
+        "description" "Monitor BirdNET-Go's performance and bird detection metrics through Prometheus-compatible endpoint"}}
 
-    <!-- disabled for now
-    <div class="p-4 pt-0" x-show="!telemetrySettingsOpen">
-        <label class="cursor-pointer" for="telemetrySettingsOpen">
-            <span>Configure Telemetry integration</span>
-        </label>
-    </div>-->
+    <div class="collapse-content"
+         id="telemetrySettingsContent"
+         role="group" 
+         aria-labelledby="telemetryDescription">
+        {{template "checkbox" dict
+            "id" "telemetryEnabled"
+            "model" "telemetry.enabled"
+            "name" "realtime.telemetry.enabled"
+            "label" "Enable Telemetry Integration"
+            "tooltip" "Enable or disable integration with Telemetry service."}}
 
-    <div class="collapse-content">
-        <div class="form-control relative">
-            <label class="label cursor-pointer justify-start" for="telemetryEnabled">
-                <input type="checkbox" id="telemetryEnabled" name="realtime.telemetry.enabled"
-                    x-model="telemetry.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
-                <input type="hidden" name="realtime.telemetry.enabled" value="false">
-                <span class="label-text">Enable Telemetry Integration</span>
-                <span class="help-icon" @mouseenter="showTooltip = 'telemetryEnabled'"
-                    @mouseleave="showTooltip = null">ⓘ</span>
-            </label>
-            <div x-show="showTooltip === 'telemetryEnabled'" x-cloak class="tooltip">
-                Enable or disable integration with Telemetry service.
-            </div>
-        </div>
+        <div x-show="telemetry.enabled"
+             id="telemetrySettings"
+             role="group"
+             aria-label="Telemetry Connection Settings">
 
-        <div x-show="telemetry.enabled">
-
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-                <div class="form-control relative">
-                    <label class="label justify-start" for="telemetryListen">
-                        <span class="label-text">Listen Address</span>
-                        <span class="help-icon"
-                            @mouseenter="showTooltip = 'telemetryListen'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <input type="text" id="telemetryListen" name="realtime.telemetry.listen" x-model="telemetry.listen"
-                        class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'telemetryListen'" x-cloak class="tooltip">
-                        The IP address and port to listen on (e.g., 0.0.0.0:8090).
-                    </div>
-                </div>
-
-            </div>
+            {{template "textField" dict
+                "id" "telemetryListen"
+                "model" "telemetry.listen"
+                "name" "realtime.telemetry.listen"
+                "label" "Listen Address"
+                "tooltip" "The IP address and port to listen on (e.g., 0.0.0.0:8090)."}}
 
         </div>
     </div>
@@ -393,7 +273,10 @@
 <!-- Telemetry Settings end -->
 
 <!-- Weather Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" x-data="{ 
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+     role="region" 
+     aria-labelledby="weatherHeader"
+     x-data="{ 
     weather: {
         provider: '{{.Settings.Realtime.Weather.Provider}}',
         debug: {{.Settings.Realtime.Weather.Debug}},
@@ -416,62 +299,57 @@
 ">
 
     <!-- control collapse element open state and label visibility -->
-    <input type="checkbox" id="weatherSettingsOpen" x-on:change="weatherSettingsOpen = !weatherSettingsOpen" />
+    <input type="checkbox" 
+           id="weatherSettingsOpen" 
+           x-on:change="weatherSettingsOpen = !weatherSettingsOpen"
+           aria-controls="weatherSettingsContent"
+           aria-expanded="true" />
 
-    <div class="collapse-title settings-section-header">
-        <div class="flex items-center">
-            <label for="weatherSettingsOpen" class="cursor-pointer">Weather</label>
-            <div x-show="hasChanges" x-cloak class="settings-changed-badge">
-                <span class="badge">
-                    <span>changed</span>
-                </span>
-            </div>
-        </div>
-        <p class="settings-section-description">Configure weather data collection</p>
-    </div>
+    {{template "sectionHeader" dict
+        "id" "weather"
+        "title" "Weather"
+        "description" "Configure weather data collection"}}
 
-    <div class="collapse-content">
+    <div class="collapse-content"
+         id="weatherSettingsContent"
+         role="group" 
+         aria-labelledby="weatherDescription">
         <!-- Weather Provider Selection -->
-        <div class="form-control relative">
-            <label class="label justify-start" for="weatherProvider">
-                <span class="label-text">Weather Provider</span>
-                <span class="help-icon" @mouseenter="showTooltip = 'weatherProvider'" @mouseleave="showTooltip = null">ⓘ</span>
-            </label>
-            <select id="weatherProvider" name="realtime.weather.provider" x-model="weather.provider" class="select select-bordered select-sm w-full">
-                <option value="none">None</option>
-                <option value="yrno">Yr.no</option>
-                <option value="openweather">OpenWeather</option>
-            </select>
-            <div x-show="showTooltip === 'weatherProvider'" x-cloak class="tooltip">
-                Select the weather data provider or choose 'None' to disable weather data collection.
-            </div>
-        </div>
+        {{template "selectField" dict
+            "id" "weatherProvider"
+            "model" "weather.provider"
+            "name" "realtime.weather.provider"
+            "label" "Weather Provider"
+            "tooltip" "Select the weather data provider or choose 'None' to disable weather data collection."
+            "options" (dict
+                "none" "None"
+                "yrno" "Yr.no"
+                "openweather" "OpenWeather"
+            )}}
 
-        <!-- none Specific Note -->
-        <div x-show="weather.provider === 'none'" class="mt-4">
-            <div class="mt-4 p-4 bg-base-200 rounded-lg text-sm">
-                <p>No weather data will be retrieved.</p>
-            </div>
-        </div>
+        <!-- Provider-specific notes -->
+        {{template "noteField" dict
+            "condition" "weather.provider === 'none'"
+            "content" "<p>No weather data will be retrieved.</p>"}}
 
-        <!-- Yr.no Specific Note -->
-        <div x-show="weather.provider === 'yrno'" class="mt-4">
-            <div class="mt-4 p-4 bg-base-200 rounded-lg text-sm">
-                <p>Weather forecast data is provided by Yr.no, a joint service by the Norwegian Meteorological Institute (met.no) and the Norwegian Broadcasting Corporation (NRK).</p>
-                <p class="mt-2">Yr is a free weather data service. For more information, visit <a href="https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr" class="link link-primary" target="_blank" rel="noopener noreferrer">Yr.no</a>.</p>
-            </div>
-        </div>
+        {{template "noteField" dict
+            "condition" "weather.provider === 'yrno'"
+            "content" "<p>Weather forecast data is provided by Yr.no, a joint service by the Norwegian Meteorological Institute (met.no) and the Norwegian Broadcasting Corporation (NRK).</p><p class=\"mt-2\">Yr is a free weather data service. For more information, visit <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>.</p>"}}
 
-        <!-- OpenWeather Specific Note -->
-        <div x-show="weather.provider === 'openweather'" class="mt-4">
-            <div class="mt-4 p-4 bg-base-200 rounded-lg text-sm">
-                <p>Use of OpenWeather requires an API key, sign up for a free API key at <a href="https://home.openweathermap.org/users/sign_up" class="link link-primary" target="_blank" rel="noopener noreferrer">OpenWeather</a>.</p>
-            </div>
-        </div>
+        {{template "noteField" dict
+            "condition" "weather.provider === 'openweather'"
+            "content" "<p>Use of OpenWeather requires an API key, sign up for a free API key at <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.</p>"}}
 
-        <div x-show="weather.provider !== 'none'">
+        <div x-show="weather.provider !== 'none'"
+             id="weatherProviderSettings"
+             role="group"
+             aria-label="Weather Provider Settings">
             <!-- OpenWeather Specific Settings -->
-            <div x-show="weather.provider === 'openweather'" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+            <div x-show="weather.provider === 'openweather'" 
+                 id="openWeatherSettings"
+                 role="group"
+                 aria-label="OpenWeather Settings"
+                 class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                 {{template "passwordField" dict
                 "id" "openWeatherApiKey"
                 "model" "weather.openWeather.apiKey"
@@ -480,42 +358,33 @@
                 "tooltip" "Your OpenWeather API key. Keep this secret!"
                 }}
 
-                <div class="form-control relative">
-                    <label class="label justify-start" for="openWeatherEndpoint">
-                        <span class="label-text">API Endpoint</span>
-                        <span class="help-icon" @mouseenter="showTooltip = 'openWeatherEndpoint'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <input type="text" id="openWeatherEndpoint" name="realtime.weather.openweather.endpoint" x-model="weather.openWeather.endpoint" class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'openWeatherEndpoint'" x-cloak class="tooltip">
-                        The OpenWeather API endpoint URL.
-                    </div>
-                </div>
+                {{template "textField" dict
+                "id" "openWeatherEndpoint"
+                "model" "weather.openWeather.endpoint"
+                "name" "realtime.weather.openweather.endpoint"
+                "label" "API Endpoint" 
+                "tooltip" "The OpenWeather API endpoint URL."
+                }}
 
-                <div class="form-control relative">
-                    <label class="label justify-start" for="openWeatherUnits">
-                        <span class="label-text">Units of Measurement</span>
-                        <span class="help-icon" @mouseenter="showTooltip = 'openWeatherUnits'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <select id="openWeatherUnits" name="realtime.weather.openweather.units" x-model="weather.openWeather.units" class="select select-bordered select-sm w-full">
-                        <option value="standard">Standard</option>
-                        <option value="metric">Metric</option>
-                        <option value="imperial">Imperial</option>
-                    </select>
-                    <div x-show="showTooltip === 'openWeatherUnits'" x-cloak class="tooltip">
-                        Choose the units system for weather data.
-                    </div>
-                </div>
+                {{template "selectField" dict
+                "id" "openWeatherUnits"
+                "model" "weather.openWeather.units"
+                "name" "realtime.weather.openweather.units"
+                "label" "Units of Measurement"
+                "tooltip" "Choose the units system for weather data."
+                "options" (dict
+                    "standard" "Standard"
+                    "metric" "Metric"
+                    "imperial" "Imperial"
+                )}}
 
-                <div class="form-control relative">
-                    <label class="label justify-start" for="openWeatherLanguage">
-                        <span class="label-text">Language</span>
-                        <span class="help-icon" @mouseenter="showTooltip = 'openWeatherLanguage'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <input type="text" id="openWeatherLanguage" name="realtime.weather.openweather.language" x-model="weather.openWeather.language" class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'openWeatherLanguage'" x-cloak class="tooltip">
-                        Language code for the API response (e.g., 'en' for English).
-                    </div>
-                </div>
+                {{template "textField" dict
+                "id" "openWeatherLanguage"
+                "model" "weather.openWeather.language"
+                "name" "realtime.weather.openweather.language"
+                "label" "Language"
+                "tooltip" "Language code for the API response (e.g., 'en' for English)."
+                }}
             </div>
 
         </div>
