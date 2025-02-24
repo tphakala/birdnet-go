@@ -1,0 +1,131 @@
+{{define "multiStageOperation"}}
+<!-- Multi-Stage Operation Component 
+     Params:
+     - .operationName: Name of the operation (for display)
+     - .apiEndpoint: API endpoint to call
+     - .payload: JSON payload to send
+     - .stageOrder: Array of stage names in order
+     - .buttonText: Text to display on the trigger button
+     - .buttonLoadingText: Text to display on the button while running
+     - .buttonDisabledCondition: Alpine expression for disabling the button
+     - .buttonTooltipMap: Map of conditions to tooltips
+     - .showCompletionMessage: Whether to show a completion message
+     - .completionMessage: Message to show on successful completion
+-->
+<div x-data="multiStageOperation({
+    operationName: '{{.operationName}}',
+    apiEndpoint: '{{.apiEndpoint}}',
+    csrfToken: CSRF_TOKEN,
+    stageOrder: {{.stageOrder}},
+    timeoutDuration: {{if .timeoutDuration}}{{.timeoutDuration}}{{else}}15000{{end}}
+})" class="mt-4 space-y-4">
+    <button type="button" 
+        class="btn btn-sm btn-primary" 
+        x-bind:disabled="{{if .buttonDisabledCondition}}{{.buttonDisabledCondition}}{{else}}isRunning{{end}}"
+        x-bind:title="{{if .buttonTooltipMap}}{{.buttonTooltipMap}}{{else}}isRunning ? 'Operation in progress...' : 'Start operation'{{end}}"
+        x-bind:aria-label="{{if .buttonTooltipMap}}{{.buttonTooltipMap}}{{else}}isRunning ? 'Operation in progress...' : 'Start operation'{{end}}"
+        aria-live="polite"
+        x-on:click="start({{if .payload}}{{.payload}}{{else}}{}{{end}}
+        {{if .options}}, {{.options}}{{end}})">
+        <span x-show="!isRunning">{{if .buttonText}}{{.buttonText}}{{else}}Start Operation{{end}}</span>
+        <span x-show="isRunning">{{if .buttonLoadingText}}{{.buttonLoadingText}}{{else}}Processing...{{end}}</span>
+    </button>
+
+    <!-- Results -->
+    <div x-show="results.length > 0" 
+         class="space-y-2" 
+         role="region" 
+         aria-label="{{.operationName}} Results"
+         aria-live="polite">
+        <h4 class="font-semibold">{{if .resultsTitle}}{{.resultsTitle}}{{else}}Results{{end}}:</h4>
+        <template x-for="(result, index) in results" :key="result.stage + '-' + index + '-' + result.state">
+            <div class="p-2 rounded" 
+                 x-bind:class="{
+                    'bg-base-200': result.success && !result.error,
+                    'bg-error/10': !result.success || result.error,
+                    'border-l-4': true,
+                    'border-info': result.state === 'running' && !result.error,
+                    'border-success': result.state === 'completed' && !result.error,
+                    'border-error': result.state === 'failed' || result.state === 'timeout' || result.error
+                 }"
+                 role="status"
+                 x-bind:aria-label="result.stage + ' ' + (result.success ? 'succeeded' : 'failed')">
+                <div class="flex items-center space-x-2">
+                    <!-- Icon Container -->
+                    <div class="w-5 h-5 flex-shrink-0">
+                        <!-- Running/Progress Icon -->
+                        <svg x-show="result.state === 'running' && !result.error" 
+                             xmlns="http://www.w3.org/2000/svg" 
+                             class="text-info animate-spin" 
+                             viewBox="0 0 24 24" 
+                             fill="none"
+                             aria-hidden="true">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <!-- Success Icon -->
+                        <svg x-show="result.state === 'completed' && !result.error" 
+                             xmlns="http://www.w3.org/2000/svg" 
+                             class="text-success" 
+                             viewBox="0 0 20 20" 
+                             fill="currentColor"
+                             aria-hidden="true">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                        </svg>
+                        <!-- Error Icon -->
+                        <svg x-show="result.state === 'failed' || result.state === 'timeout' || result.error" 
+                             xmlns="http://www.w3.org/2000/svg" 
+                             class="text-error" 
+                             viewBox="0 0 20 20" 
+                             fill="currentColor"
+                             aria-hidden="true">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <!-- Stage Name and Status -->
+                    <div class="flex flex-col">
+                        <span class="font-medium" x-text="result.stage"></span>
+                        <span x-show="result.state === 'running' && !result.error" 
+                              class="text-xs text-info">
+                            In Progress...
+                        </span>
+                        <span x-show="result.state === 'timeout'" 
+                              class="text-xs text-error">
+                            Timed Out
+                        </span>
+                    </div>
+                </div>
+                <!-- Result Messages -->
+                <template x-if="result.success && !result.error">
+                    <div class="text-sm mt-1 ml-7" x-text="result.message"></div>
+                </template>
+                <template x-if="!result.success || result.error">
+                    <div class="space-y-2 mt-1 ml-7">
+                        <div class="text-sm" x-text="result.message"></div>
+                        <div x-show="result.error" class="text-sm text-error" x-text="result.error"></div>
+                        <div x-show="result.hint" class="text-sm mt-2" x-text="result.hint"></div>
+                    </div>
+                </template>
+            </div>
+        </template>
+        
+        <!-- Success Completion Message (optional) -->
+        <div x-show="{{if .showCompletionMessage}}{{.showCompletionMessage}}{{else}}isCompleteSuccess(){{end}}" 
+             class="mt-4 p-2 bg-base-200 text-base-content rounded"
+             role="alert"
+             aria-label="Operation successful">
+            <div class="flex items-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" 
+                     class="h-5 w-5 text-info" 
+                     viewBox="0 0 20 20" 
+                     fill="currentColor">
+                    <path fill-rule="evenodd" 
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" 
+                          clip-rule="evenodd" />
+                </svg>
+                <span>{{if .completionMessage}}{{.completionMessage}}{{else}}Operation completed successfully.{{end}}</span>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}} 
