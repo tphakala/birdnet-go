@@ -91,7 +91,8 @@ check_network() {
     )
     
     for url in "${urls[@]}"; do
-        local http_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$url")
+        local http_code
+        http_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$url")
         if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
             print_message "✅ HTTPS connection successful to $url (HTTP $http_code)" "$GREEN"
         else
@@ -300,7 +301,8 @@ check_directory() {
 # Function to check if there is enough disk space for Docker image
 check_docker_space() {
     local required_space=2000000  # 2GB in KB
-    local available_space=$(df -k /var/lib/docker | awk 'NR==2 {print $4}')
+    local available_space
+    available_space=$(df -k /var/lib/docker | awk 'NR==2 {print $4}')
     
     if [ "$available_space" -lt "$required_space" ]; then
         print_message "❌ Insufficient disk space for Docker image" "$RED"
@@ -367,7 +369,8 @@ download_base_config() {
         
         if [[ "$response" =~ ^[Yy]$ ]]; then
             # Create backup with timestamp
-            local backup_file="${CONFIG_FILE}.$(date '+%Y%m%d_%H%M%S').backup"
+            local backup_file
+            backup_file="${CONFIG_FILE}.$(date '+%Y%m%d_%H%M%S').backup"
             cp "$CONFIG_FILE" "$backup_file"
             print_message "✅ Backup created: " "$GREEN" "nonewline"
             print_message "$backup_file" "$NC"
@@ -489,7 +492,6 @@ configure_sound_card() {
         
         # Create arrays to store device information
         declare -a devices
-        declare -a device_names
         local default_selection=0
         
         # Capture arecord output to a variable first
@@ -565,8 +567,6 @@ configure_sound_card() {
                     ((index++))
                 fi
             done <<< "$(arecord -l)"
-
-            local alsa_hw="hw:${card_num},${device_num}"  # Use actual card and device numbers
             
             ALSA_CARD="$friendly_name"
             print_message "✅ Selected capture device: " "$GREEN" "nonewline"
@@ -994,7 +994,8 @@ start_birdnet_go() {
 # Function to detect Raspberry Pi model
 detect_rpi_model() {
     if [ -f /proc/device-tree/model ]; then
-        local model=$(tr -d '\0' < /proc/device-tree/model)
+        local model
+        model=$(tr -d '\0' < /proc/device-tree/model)
         case "$model" in
             *"Raspberry Pi 5"*)
                 print_message "✅ Detected Raspberry Pi 5" "$GREEN"
