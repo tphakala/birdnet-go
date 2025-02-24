@@ -1,0 +1,32 @@
+{{define "selectField"}}
+<div class="form-control relative">
+    <label class="label justify-start {{if .class}}{{.class}}{{end}}" for="{{.id}}">
+        <span class="label-text">{{.label}}</span>
+        <span class="help-icon" 
+              @mouseenter="showTooltip = '{{.id}}'" 
+              @mouseleave="showTooltip = null"
+              aria-label="Show help for {{.label}}"
+              role="button"
+              tabindex="0">ⓘ</span>
+    </label>
+    <select id="{{.id}}" 
+            name="{{.name}}" 
+            x-model="{{.model}}" 
+            class="select select-bordered select-sm w-full"
+            {{if .placeholder}}placeholder="{{.placeholder}}"{{end}}
+            {{if .pattern}}pattern="{{.pattern}}"{{end}}
+            {{if .disabled}}:disabled="{{.disabled}}"{{end}}
+            aria-describedby="{{.id}}Tooltip">
+        {{range $value, $label := .options}}
+            <option value="{{$value}}">{{$label}}</option>
+        {{end}}
+    </select>
+    <div x-show="showTooltip === '{{.id}}'" 
+         x-cloak 
+         class="tooltip" 
+         id="{{.id}}Tooltip" 
+         role="tooltip">
+        {{.tooltip}}
+    </div>
+</div>
+{{end}} 

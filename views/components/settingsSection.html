@@ -1,0 +1,33 @@
+{{define "settingsSection"}}
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+     role="region" 
+     aria-labelledby="{{.id}}Header"
+     x-data="{ 
+        {{.dataModel}},
+        {{.id}}SettingsOpen: false,
+        showTooltip: null,
+        hasChanges: false,
+        resetChanges() {
+            this.hasChanges = false;
+            {{if .customReset}}{{.customReset}}{{end}}
+        }
+    }" 
+    x-init="{{.initScript}}">
+
+    <!-- control collapse element open state and label visibility -->
+    <input type="checkbox" id="{{.id}}SettingsOpen"
+        x-on:change="{{.id}}SettingsOpen = !{{.id}}SettingsOpen" />
+
+    {{template "sectionHeader" dict
+        "id" .id
+        "title" .title
+        "description" .description}}
+
+    <div class="collapse-content" 
+         id="{{.id}}SettingsContent"
+         role="group" 
+         aria-labelledby="{{.id}}Description">
+        {{.content}}
+    </div>
+</div>
+{{end}} 
