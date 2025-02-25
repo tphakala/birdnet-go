@@ -5,6 +5,8 @@ window.speciesComponentMixin = {
     /**
      * Mixin for species list components
      * Provides functions for updating predictions, adding species, and managing lists
+     * @param {string} listType - The type of list to handle (e.g., 'Include', 'Exclude', 'Species')
+     * @returns {Object} - Alpine.js mixin with methods for handling species lists
      */
     speciesListMixin: function(listType) {
         return {
@@ -12,29 +14,87 @@ window.speciesComponentMixin = {
             newSpecies: '',
             predictions: [],
             editIndex: null,
-            editValue: '',
+            editSpecies: '',
+            showEditSpecies: false,
             hasChanges: false,
+
+            /**
+             * Gets the current species list based on the component structure
+             * Components can override this to provide their specific list structure
+             * @returns {Array} - The current species list
+             */
+            getSpeciesList() {
+                // Default implementation for species settings structure
+                if (this.speciesSettings && this.speciesSettings[listType]) {
+                    return this.speciesSettings[listType];
+                }
+                // Dog bark filter structure
+                else if (this.dogBarkFilter && this.dogBarkFilter.species) {
+                    return this.dogBarkFilter.species;
+                }
+                // Fallback empty array
+                return [];
+            },
+            
+            /**
+             * Updates the species list with a new value
+             * Components can override this to implement specific update logic
+             * @param {Array} newList - The updated species list
+             */
+            setSpeciesList(newList) {
+                // Default implementation for species settings structure
+                if (this.speciesSettings && this.speciesSettings[listType]) {
+                    this.speciesSettings[listType] = newList;
+                }
+                // Dog bark filter structure
+                else if (this.dogBarkFilter) {
+                    this.dogBarkFilter.species = newList;
+                }
+                
+                // Mark changes
+                this.hasChanges = true;
+                
+                // Allow components to implement additional logic after modifications
+                if (typeof this.afterModification === 'function') {
+                    this.afterModification();
+                }
+            },
+            
+            /**
+             * Hook called after modifications to the species list
+             * Components can override this to implement additional logic
+             */
+            afterModification() {
+                // Placeholder for component-specific logic
+                // By default, just ensure hasChanges is set
+                this.hasChanges = true;
+            },
 
             /**
              * Updates filtered predictions based on input
              * @param {string} input - The input text to filter by
-             * @param {string} listType - The type of list (e.g., 'Include', 'Exclude')
+             * @param {string} [specificListType] - Optional override for the list type
              */
-            updatePredictions(input, listType) {
+            updatePredictions(input, specificListType) {
                 if (!input) {
                     this.predictions = [];
                     return;
                 }
                 
+                const targetListType = specificListType || listType;
+                
                 // Get the appropriate source list based on list type
-                const sourceList = this.getSourceList(listType);
+                const sourceList = this.getSourceList(targetListType);
                 if (!sourceList || sourceList.length === 0) {
                     this.predictions = [];
                     return;
                 }
                 
+                // Get the current species list
+                const existingSpecies = this.getSpeciesList();
+                
                 // Filter out species that are already in the list (case insensitive)
-                const existingSpeciesLower = this.speciesSettings[listType].map(s => s.toLowerCase());
+                const existingSpeciesLower = existingSpecies.map(s => s.toLowerCase());
                 const inputLower = input.toLowerCase();
                 
                 this.predictions = sourceList
@@ -46,61 +106,135 @@ window.speciesComponentMixin = {
             },
             
             /**
-             * Add a species to the specified list
-             * @param {string} list - The list to add to (e.g., 'Include', 'Exclude')
+             * Add a species to the list
+             * @param {string} [specificList] - Optional override for the list type
              */
-            addSpecies(list) {
-                const newSpecies = this['new' + list + 'Species'].trim();
-                if (!newSpecies) return;
+            addSpecies(specificList) {
+                const targetList = specificList || listType;
                 
-                // Check if species already exists (case insensitive)
-                const newSpeciesLower = newSpecies.toLowerCase();
-                const exists = this.speciesSettings[list].some(s => s.toLowerCase() === newSpeciesLower);
-                
-                if (!exists) {
-                    this.speciesSettings[list].push(newSpecies);
-                    this.hasChanges = true;
+                // Get input value based on context
+                let newSpeciesValue;
+                if (this['new' + targetList + 'Species'] !== undefined) {
+                    newSpeciesValue = this['new' + targetList + 'Species'].trim();
+                } else {
+                    newSpeciesValue = this.newSpecies.trim();
                 }
                 
-                // Always clear input and predictions
-                this['new' + list + 'Species'] = '';
+                if (!newSpeciesValue) {
+                    return; // Don't add empty strings
+                }
+                
+                // Get the current species list
+                const currentList = this.getSpeciesList();
+                
+                // Check if species already exists (case insensitive)
+                const newSpeciesLower = newSpeciesValue.toLowerCase();
+                const exists = currentList.some(s => s.toLowerCase() === newSpeciesLower);
+                
+                if (!exists) {
+                    // Create a new list with the added species
+                    const updatedList = [...currentList, newSpeciesValue];
+                    
+                    // Update the list
+                    this.setSpeciesList(updatedList);
+                }
+                
+                // Clear input based on context
+                if (this['new' + targetList + 'Species'] !== undefined) {
+                    this['new' + targetList + 'Species'] = '';
+                } else {
+                    this.newSpecies = '';
+                }
+                
+                // Always clear predictions
                 this.predictions = [];
             },
             
             /**
-             * Remove a species from the specified list
-             * @param {string} list - The list to remove from
-             * @param {string|number} item - The species to remove or its index
+             * Remove a species from the list
+             * @param {Event|number} event - Event with detail.index or direct index number
+             * @param {string} [specificList] - Optional override for the list type
+             * @param {string} [item] - Optional specific item to remove (by value not index)
              */
-            removeSpecies(list, item) {
-                if (typeof item === 'number') {
-                    // Remove by index
-                    this.speciesSettings[list].splice(item, 1);
-                } else {
-                    // Remove by value
-                    this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== item);
+            removeSpecies(event, specificList, item) {
+                // Handle removal by direct value
+                if (item !== undefined) {
+                    const currentList = this.getSpeciesList();
+                    const updatedList = currentList.filter(s => s !== item);
+                    this.setSpeciesList(updatedList);
+                    return;
                 }
-                this.hasChanges = true;
+                
+                // Extract index from event or use directly if it's a number
+                let index;
+                if (typeof event === 'object') {
+                    // If it's an event from the window event dispatch
+                    if (event.detail && event.detail.index !== undefined) {
+                        index = event.detail.index;
+                    }
+                } else {
+                    // If it's a direct index
+                    index = event;
+                }
+                
+                if (index !== undefined) {
+                    const currentList = this.getSpeciesList();
+                    // Create a new list without the item at the specified index
+                    const updatedList = [...currentList];
+                    updatedList.splice(index, 1);
+                    this.setSpeciesList(updatedList);
+                }
             },
             
             /**
              * Start editing a species
-             * @param {number} index - The index of the species to edit
+             * @param {Event|number} event - Event with detail.index or direct index number
              */
-            startEdit(index) {
-                this.editIndex = index;
-                this.editValue = this.speciesSettings[listType][index];
+            startEdit(event) {
+                // Extract index from event or use directly if it's a number
+                let index;
+                if (typeof event === 'object') {
+                    // If it's an event from the window event dispatch
+                    if (event.detail && event.detail.index !== undefined) {
+                        index = event.detail.index;
+                    }
+                } else {
+                    // If it's a direct index
+                    index = event;
+                }
+                
+                if (index !== undefined) {
+                    const currentList = this.getSpeciesList();
+                    
+                    if (currentList[index]) {
+                        this.editIndex = index;
+                        this.editSpecies = currentList[index];
+                        this.showEditSpecies = true;
+                    }
+                }
             },
             
             /**
              * Save edited species
              */
             saveEdit() {
-                if (this.editIndex !== null && this.editValue.trim()) {
-                    this.speciesSettings[listType][this.editIndex] = this.editValue.trim();
-                    this.hasChanges = true;
-                    this.cancelEdit();
+                if (this.editIndex !== null && this.editSpecies && this.editSpecies.trim()) {
+                    const currentList = this.getSpeciesList();
+                    const newValue = this.editSpecies.trim();
+                    const oldValue = currentList[this.editIndex];
+                    
+                    // Only update if value has changed
+                    if (oldValue !== newValue) {
+                        const updatedList = [...currentList];
+                        updatedList[this.editIndex] = newValue;
+                        this.setSpeciesList(updatedList);
+                    }
                 }
+                
+                // Reset edit state
+                this.editIndex = null;
+                this.editSpecies = '';
+                this.showEditSpecies = false;
             },
             
             /**
@@ -108,15 +242,19 @@ window.speciesComponentMixin = {
              */
             cancelEdit() {
                 this.editIndex = null;
-                this.editValue = '';
+                this.editSpecies = '';
+                this.showEditSpecies = false;
             },
             
             /**
              * Helper method to determine the appropriate source list
              * Override this in your component as needed
+             * @param {string} type - The type of list to get source data for
+             * @returns {Array} - The source list of species
              */
-            getSourceList(listType) {
-                return listType === 'Include' ? this.allSpecies : this.filteredSpecies;
+            getSourceList(type) {
+                // Components should override this method to provide the correct source list
+                return this.allSpecies || this.filteredSpecies || this.allowedSpecies || [];
             },
             
             /**
