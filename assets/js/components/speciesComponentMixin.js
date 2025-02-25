@@ -167,14 +167,23 @@ window.speciesComponentMixin = {
                 
                 // Extract index from event or use directly if it's a number
                 let index;
+                let eventListType;
+                
                 if (typeof event === 'object') {
                     // If it's an event from the window event dispatch
-                    if (event.detail && event.detail.index !== undefined) {
+                    if (event.detail) {
                         index = event.detail.index;
+                        eventListType = event.detail.listType;
                     }
                 } else {
                     // If it's a direct index
                     index = event;
+                }
+                
+                // Check if the list type matches (if a list type was provided)
+                const targetListType = specificList || listType;
+                if (eventListType && eventListType !== targetListType) {
+                    return; // Skip if list types don't match
                 }
                 
                 if (index !== undefined) {
@@ -193,14 +202,22 @@ window.speciesComponentMixin = {
             startEdit(event) {
                 // Extract index from event or use directly if it's a number
                 let index;
+                let eventListType;
+                
                 if (typeof event === 'object') {
                     // If it's an event from the window event dispatch
-                    if (event.detail && event.detail.index !== undefined) {
+                    if (event.detail) {
                         index = event.detail.index;
+                        eventListType = event.detail.listType;
                     }
                 } else {
                     // If it's a direct index
                     index = event;
+                }
+                
+                // Check if the list type matches (if a list type was provided)
+                if (eventListType && eventListType !== listType) {
+                    return; // Skip if list types don't match
                 }
                 
                 if (index !== undefined) {
