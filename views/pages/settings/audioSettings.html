@@ -105,17 +105,10 @@ x-init="
            aria-controls="audioCaptureContent"
            x-on:change="audioCaptureSettingsOpen = !audioCaptureSettingsOpen" />
 
-    <div class="collapse-title settings-section-header" id="audioCaptureHeader">
-        <div class="flex items-center">
-            <label for="audioCaptureSettingsOpen" class="cursor-pointer">Audio Capture</label>
-            <div x-show="hasChanges" x-cloak class="settings-changed-badge" aria-live="polite">
-                <span class="badge" role="status">
-                    <span>changed</span>
-                </span>
-            </div>
-        </div>
-        <p class="settings-section-description">Set audio capture source, sound card or RTSP stream</p>
-    </div>
+    {{template "sectionHeader" dict
+        "id" "audioCapture"
+        "title" "Audio Capture"
+        "description" "Set audio capture source, sound card or RTSP stream"}}
 
     <div class="collapse-content" id="audioCaptureContent">
 
@@ -365,17 +358,11 @@ x-init="
          }
      ">
     <input type="checkbox" id="audioExportSettingsOpen" x-on:change="audioExportSettingsOpen = !audioExportSettingsOpen" />
-    <div class="collapse-title settings-section-header" id="audioExportHeader">
-        <div class="flex items-center">
-            <label for="audioExportSettingsOpen" class="cursor-pointer">Audio Export</label>
-            <div x-show="hasChanges" x-cloak class="settings-changed-badge" aria-live="polite">
-                <span class="badge" role="status">
-                    <span>changed</span>
-                </span>
-            </div>
-        </div>
-        <p class="settings-section-description">Configure audio clip saving for identified bird calls</p>
-    </div>
+
+    {{template "sectionHeader" dict
+        "id" "audioExport"
+        "title" "Audio Export"
+        "description" "Configure audio clip saving for identified bird calls"}}
 
     <div class="collapse-content">
         <div class="form-control relative">
@@ -493,17 +480,11 @@ x-init="
          $watch('audioRetention', (value) => { hasChanges = true }, { deep: true });
      ">
     <input type="checkbox" id="audioRetentionSettingsOpen" x-on:change="audioRetentionSettingsOpen = !audioRetentionSettingsOpen" />
-    <div class="collapse-title settings-section-header" id="audioRetentionHeader">
-        <div class="flex items-center">
-            <label for="audioRetentionSettingsOpen" class="cursor-pointer">Audio Clip Retention</label>
-            <div x-show="hasChanges" x-cloak class="settings-changed-badge" aria-live="polite">
-                <span class="badge" role="status">
-                    <span>changed</span>
-                </span>
-            </div>
-        </div>
-        <p class="settings-section-description">Configure audio clip cleanup</p>
-    </div>
+
+    {{template "sectionHeader" dict
+        "id" "audioRetention"
+        "title" "Audio Clip Retention"
+        "description" "Configure audio clip cleanup"}}
 
     <div class="collapse-content">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
