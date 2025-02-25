@@ -43,6 +43,7 @@
          id="birdweatherSettingsContent" 
          role="group" 
          aria-labelledby="birdweatherDescription">
+
         {{template "checkbox" dict
             "id" "birdweatherEnabled"
             "model" "birdweather.enabled"
@@ -51,17 +52,10 @@
             "tooltip" "Enable or disable uploads to BirdWeather service."}}
 
         <div x-show="birdweather.enabled"
+             class="grid grid-cols-1 md:grid-cols-2 gap-x-6"
              id="birdweatherOptionsGroup"
              role="group"
              aria-label="BirdWeather Additional Settings">
-
-            {{template "checkbox" dict
-                "id" "birdweatherDebug"
-                "model" "birdweather.debug"
-                "name" "realtime.birdweather.debug"
-                "label" "Debug Mode"
-                "tooltip" "Enable debug mode for additional logging information."}}
-
             
             {{template "passwordField" dict
                 "id" "birdweatherId"
@@ -153,6 +147,7 @@
          id="mqttSettingsContent"
          role="group" 
          aria-labelledby="mqttDescription">
+
         {{template "checkbox" dict
             "id" "mqttEnabled"
             "model" "mqtt.enabled"
@@ -160,7 +155,8 @@
             "label" "Enable MQTT Integration"
             "tooltip" "Enable or disable integration with MQTT service."}}
 
-        <div x-show="mqtt.enabled" 
+        <div x-show="mqtt.enabled"
+             class="grid grid-cols-1 md:grid-cols-2 gap-x-6"
              id="mqttSettings"
              role="group" 
              aria-label="MQTT Connection Settings">
@@ -248,6 +244,7 @@
          id="telemetrySettingsContent"
          role="group" 
          aria-labelledby="telemetryDescription">
+
         {{template "checkbox" dict
             "id" "telemetryEnabled"
             "model" "telemetry.enabled"
@@ -256,6 +253,7 @@
             "tooltip" "Enable or disable integration with Telemetry service."}}
 
         <div x-show="telemetry.enabled"
+             class="grid grid-cols-1 md:grid-cols-2 gap-x-6"
              id="telemetrySettings"
              role="group"
              aria-label="Telemetry Connection Settings">
@@ -314,6 +312,7 @@
          id="weatherSettingsContent"
          role="group" 
          aria-labelledby="weatherDescription">
+
         <!-- Weather Provider Selection -->
         {{template "selectField" dict
             "id" "weatherProvider"

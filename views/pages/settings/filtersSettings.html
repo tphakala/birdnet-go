@@ -52,6 +52,7 @@ x-init="
             "tooltip" "Enables detection of human voices, if detected discards bird detection to protect privacy"}}
 
         <div x-show="privacyFilter.enabled"
+             class="grid grid-cols-1 md:grid-cols-2 gap-x-6"
              id="privacyFilterOptionsGroup"
              role="group"
              aria-label="Privacy Filter Additional Settings">
@@ -156,6 +157,7 @@ x-init="
             "tooltip" "Filters out dog barks to reduce false positives in bird detection."}}
 
         <div x-show="dogBarkFilter.enabled"
+             class="grid grid-cols-1 md:grid-cols-2 gap-x-6"
              id="dogBarkFilterOptionsGroup"
              role="group"
              aria-label="Dog Bark Filter Additional Settings">
