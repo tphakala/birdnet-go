@@ -5,6 +5,7 @@ Usage:
 - editMode: "editMode variable name" (optional)
 - editValue: "editValue variable name" (optional)
 - editIndex: "editIndex variable name" (optional)
+- listType: "listTypeValue" (optional - to differentiate between multiple lists)
 - onRemove: "removeFunction" (function to call for removal)
 - onEdit: "editFunction" (optional - function to call for edit)
 - onSave: "saveFunction" (optional - function for saving edits)
@@ -34,9 +35,9 @@ Usage:
             <div class="flex-shrink-0">
                 <!-- Actions -->
                 {{if .actionTemplate}}
-                <div x-data="{ index: index, item: item }" 
-                     @edit-species.window="if($event.detail.index === index) { {{if .onEdit}}{{.onEdit}}{{end}} }" 
-                     @remove-species.window="if($event.detail.index === index) { {{.onRemove}} }">
+                <div x-data="{ index: index, item: item, listType: {{if .listType}}{{.listType}}{{else}}null{{end}} }" 
+                     @edit-species.window="if($event.detail.index === index && ($event.detail.listType === listType || !$event.detail.listType)) { {{if .onEdit}}{{.onEdit}}{{end}} }" 
+                     @remove-species.window="if($event.detail.index === index && ($event.detail.listType === listType || !$event.detail.listType)) { {{.onRemove}} }">
                     {{/* Use includeTemplate function instead of template directive */}}
                     {{with includeTemplate .actionTemplate .}}{{.}}{{end}}
                 </div>
