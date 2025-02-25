@@ -3,6 +3,10 @@
 <!-- Hidden input to always submit the template name -->
 <input type="hidden" name="templateName" value="{{.TemplateName}}">
 
+<!-- Add script imports for species components -->
+<script src="/assets/js/components/speciesUtils.js?v={{.Settings.Version}}"></script>
+<script src="/assets/js/components/speciesComponentMixin.js?v={{.Settings.Version}}"></script>
+
 <!-- Privacy Filter start -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3"
      role="region" 
@@ -90,11 +94,18 @@ x-init="
     predictions: [],
     allowedSpecies: {{getIncludedSpecies | toJSON}},
     
+    // Inherit methods from the mixin
+    ...window.speciesComponentMixin.speciesListMixin('Species'),
+    
+    // Initialize the state tracking
     checkForChanges() {
         if (!this.initialState) return false;
-        
         const currentState = JSON.stringify(this.dogBarkFilter);
         return currentState !== this.initialState;
+    },
+    
+    updateChanges() {
+        this.hasChanges = this.checkForChanges();
     },
     
     resetChanges() {
@@ -102,123 +113,20 @@ x-init="
         this.initialState = JSON.stringify(this.dogBarkFilter);
     },
     
-    addSpecies() {
-        if (!this.dogBarkFilter.species) {
-            this.dogBarkFilter.species = [];
-        }
-        if (this.newSpecies.trim()) {
-            // Check if species already exists (case insensitive)
-            const newSpeciesLower = this.newSpecies.trim().toLowerCase();
-            const exists = this.dogBarkFilter.species.some(s => s.toLowerCase() === newSpeciesLower);
-            
-            if (!exists) {
-                this.dogBarkFilter.species.push(this.newSpecies.trim());
-                this.updateChanges();
-            }
-            
-            // Always clear input and predictions
-            this.newSpecies = '';
-            this.predictions = [];
-        }
+    // Only override what's absolutely necessary
+    // Override getSourceList to return our filtered species list
+    getSourceList() {
+        return this.allowedSpecies;
     },
     
-    removeSpecies(event) {
-        // Extract index from event or use directly if it's a number
-        let index;
-        if (typeof event === 'object') {
-            // If it's an event from the window event dispatch
-            if (event.detail && event.detail.index !== undefined) {
-                index = event.detail.index;
-            } 
-            // If it's passed as the $event variable from Alpine
-            else if (event.target && event.type) {
-                // Just get the index from the component data
-                return;
-            }
-        } else {
-            // If it's a direct index
-            index = event;
-        }
-        
-        if (index !== undefined) {
-            this.dogBarkFilter.species.splice(index, 1);
-            this.updateChanges();
-        }
+    // Override getSpeciesList to return our specific data structure
+    getSpeciesList() {
+        return this.dogBarkFilter.species;
     },
     
-    startEdit(event) {
-        // Extract index from event or use directly if it's a number
-        let index;
-        if (typeof event === 'object') {
-            // If it's an event from the window event dispatch
-            if (event.detail && event.detail.index !== undefined) {
-                index = event.detail.index;
-            } 
-            // If it's passed as the $event variable from Alpine
-            else if (event.target && event.type) {
-                // Just get the index from the component data
-                return;
-            }
-        } else {
-            // If it's a direct index
-            index = event;
-        }
-        
-        if (index !== undefined) {
-            this.editIndex = index;
-            this.editSpecies = this.dogBarkFilter.species[index];
-            this.showEditSpecies = true;
-        }
-    },
-    
-    saveEdit() {
-        if (this.editIndex !== null && this.editSpecies.trim()) {
-            const oldValue = this.dogBarkFilter.species[this.editIndex];
-            const newValue = this.editSpecies.trim();
-            
-            // Only update if value has changed
-            if (oldValue !== newValue) {
-                this.dogBarkFilter.species[this.editIndex] = newValue;
-                this.updateChanges();
-            }
-            
-            this.editIndex = null;
-            this.editSpecies = '';
-            this.showEditSpecies = false;
-        }
-    },
-    
-    cancelEdit() {
-        this.editIndex = null;
-        this.editSpecies = '';
-        this.showEditSpecies = false;
-    },
-    
-    updateChanges() {
-        this.hasChanges = this.checkForChanges();
-    },
-    
-    updatePredictions(input) {
-        if (!this.allowedSpecies || this.allowedSpecies.length === 0) {
-            this.predictions = [];
-            return;
-        }
-
-        if (!input) {
-            this.predictions = [];
-            return;
-        }
-        
-        // Filter out species that are already in the list (case insensitive)
-        const existingSpeciesLower = this.dogBarkFilter.species.map(s => s.toLowerCase());
-        const inputLower = input.toLowerCase();
-        
-        this.predictions = this.allowedSpecies
-            .filter(species => {
-                const speciesLower = species.toLowerCase();
-                return speciesLower.includes(inputLower) && !existingSpeciesLower.includes(speciesLower);
-            })
-            .slice(0, 5); // limit to 5 suggestions
+    // Hook for after modification to update our change tracking
+    afterModification() {
+        this.updateChanges();
     }
 }" x-init="
     initialState = JSON.stringify(dogBarkFilter);
@@ -314,7 +222,7 @@ x-init="
                 "inputModel" "newSpecies"
                 "predictions" "predictions"
                 "onInput" "updatePredictions($event.target.value)"
-                "onAdd" "addSpecies"
+                "onAdd" "addSpecies()"
                 "placeholder" "Add new species"
                 "inputId" "dogbark-species-input"
                 "responsive" true}}

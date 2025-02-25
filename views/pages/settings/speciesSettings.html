@@ -119,6 +119,9 @@
         hasChanges: false,
         predictions: [],
         filteredSpecies: [],
+        editIndex: null,
+        editSpecies: '',
+        showEditSpecies: false,
         
         // Inherit methods from the mixin
         ...window.speciesComponentMixin.speciesListMixin('Exclude'),
@@ -140,7 +143,7 @@
         },
         
         // Override getSourceList from the mixin
-        getSourceList(listType) {
+        getSourceList(type) {
             return this.filteredSpecies;
         }
     }" 
@@ -166,7 +169,13 @@
             <div class="space-y-2">
                 {{template "speciesList" dict
                     "species" "speciesSettings.Exclude"
-                    "onRemove" "$event.preventDefault(); removeSpecies('Exclude', speciesSettings.Exclude[$event.detail ? $event.detail.index : index])"
+                    "editIndex" "editIndex"
+                    "editValue" "editSpecies"
+                    "editMode" "showEditSpecies"
+                    "onRemove" "removeSpecies($event)"
+                    "onEdit" "startEdit($event)" 
+                    "onSave" "saveEdit"
+                    "onCancel" "cancelEdit"
                     "actionTemplate" "speciesListActionMenu"}}
             </div>
 
@@ -199,6 +208,10 @@
         predictions: [],
         allSpecies: [],
         filteredSpecies: [],
+        editIndex: null,
+        editSpecies: '',
+        showEditSpecies: false,
+        
         async init() {
             // Use app version for cache busting
             const appVersion = '{{.Settings.Version}}';
@@ -219,21 +232,13 @@
         currentSpecies: '',
         currentActionIndex: null,
         currentAction: { type: 'ExecuteCommand', command: '', parameters: '' },
+        
+        // Reset change tracking
         resetChanges() {
             this.hasChanges = false;
         },
-        addSpecies(list) {
-            const newSpecies = this['new' + list + 'Species'].trim();
-            if (newSpecies && !this.speciesSettings[list].includes(newSpecies)) {
-                this.speciesSettings[list].push(newSpecies);
-                this['new' + list + 'Species'] = '';
-                this.hasChanges = true;
-            }
-        },
-        removeSpecies(list, species) {
-            this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== species);
-            this.hasChanges = true;
-        },
+        
+        // Custom config methods
         addConfig() {
             if (this.newSpeciesConfig && !this.speciesSettings.Config[this.newSpeciesConfig]) {
                 this.speciesSettings.Config[this.newSpeciesConfig] = {
@@ -247,10 +252,12 @@
                 this.predictions = [];
             }
         },
+        
         removeConfig(species) {
             delete this.speciesSettings.Config[species];
             this.hasChanges = true;
         },
+        
         openActionsModal(species) {
             this.currentSpecies = species;
             
@@ -269,6 +276,7 @@
             
             this.showActionsModal = true;
         },
+        
         saveAction() {
             if (!this.speciesSettings.Config[this.currentSpecies]) {
                 this.speciesSettings.Config[this.currentSpecies] = {
@@ -289,17 +297,20 @@
             this.hasChanges = true;
             this.closeActionsModal();
         },
+        
         closeActionsModal() {
             this.showActionsModal = false;
         },
-        updatePredictions(input, listType) {
+        
+        // Use shared mixin's updatePredictions method for predictions
+        updatePredictions(input) {
             if (!input) {
                 this.predictions = [];
                 return;
             }
             
             // Use different species list based on whether we're including or excluding
-            const sourceList = listType === 'Include' ? this.allSpecies : this.filteredSpecies;
+            const sourceList = this.allSpecies || this.filteredSpecies;
             const inputLower = input.toLowerCase();
             
             // For config, filter out species that already have a configuration
@@ -313,6 +324,11 @@
                 })
                 .slice(0, 5);
         },
+        
+        // Helper method to determine the source list
+        getSourceList() {
+            return this.allSpecies || this.filteredSpecies;
+        }
     }" 
     x-init="init(); $watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
     x-cloak>
@@ -361,7 +377,7 @@
                     <input type="text" 
                         id="speciesConfigInput"
                         x-model="newSpeciesConfig" 
-                        @input="updatePredictions($event.target.value, 'Include')" 
+                        @input="updatePredictions($event.target.value)" 
                         list="species-config-suggestions"
                         placeholder="Species" 
                         class="input input-bordered input-sm w-full" 
@@ -487,8 +503,6 @@
         </div>
 
         <!-- Hidden inputs -->
-        
-        
         <input type="hidden" name="realtime.species.config" :value="JSON.stringify(speciesSettings.Config)">
     </div>
 </div>
