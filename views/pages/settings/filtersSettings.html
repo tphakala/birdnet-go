@@ -72,6 +72,7 @@ x-init="
      role="region" 
      aria-labelledby="dogBarkFilterHeader"
      x-data="{ 
+    initialState: null,
     dogBarkFilter: {
         debug: {{.Settings.Realtime.DogBarkFilter.Debug}},
         enabled: {{.Settings.Realtime.DogBarkFilter.Enabled}},
@@ -82,58 +83,146 @@ x-init="
     newSpecies: '',
     editIndex: null,
     editSpecies: '',
+    showEditSpecies: false,
     filteringSettingsOpen: false,
     showTooltip: null,
     hasChanges: false,
     predictions: [],
     allowedSpecies: {{getIncludedSpecies | toJSON}},
+    
+    checkForChanges() {
+        if (!this.initialState) return false;
+        
+        const currentState = JSON.stringify(this.dogBarkFilter);
+        return currentState !== this.initialState;
+    },
+    
     resetChanges() {
         this.hasChanges = false;
+        this.initialState = JSON.stringify(this.dogBarkFilter);
     },
+    
     addSpecies() {
         if (!this.dogBarkFilter.species) {
             this.dogBarkFilter.species = [];
         }
         if (this.newSpecies.trim()) {
-            this.dogBarkFilter.species.push(this.newSpecies.trim());
+            // Check if species already exists (case insensitive)
+            const newSpeciesLower = this.newSpecies.trim().toLowerCase();
+            const exists = this.dogBarkFilter.species.some(s => s.toLowerCase() === newSpeciesLower);
+            
+            if (!exists) {
+                this.dogBarkFilter.species.push(this.newSpecies.trim());
+                this.updateChanges();
+            }
+            
+            // Always clear input and predictions
             this.newSpecies = '';
-            this.hasChanges = true;
             this.predictions = [];
         }
     },
-    removeSpecies(index) {
-        this.dogBarkFilter.species.splice(index, 1);
-        this.hasChanges = true;
-    },
-    startEdit(index) {
-        this.editIndex = index;
-        this.editSpecies = this.dogBarkFilter.species[index];
-    },
-    saveEdit() {
-        if (this.editSpecies.trim()) {
-            this.dogBarkFilter.species[this.editIndex] = this.editSpecies.trim();
-            this.editIndex = null;
-            this.editSpecies = '';
-            this.hasChanges = true;
+    
+    removeSpecies(event) {
+        // Extract index from event or use directly if it's a number
+        let index;
+        if (typeof event === 'object') {
+            // If it's an event from the window event dispatch
+            if (event.detail && event.detail.index !== undefined) {
+                index = event.detail.index;
+            } 
+            // If it's passed as the $event variable from Alpine
+            else if (event.target && event.type) {
+                // Just get the index from the component data
+                return;
+            }
+        } else {
+            // If it's a direct index
+            index = event;
+        }
+        
+        if (index !== undefined) {
+            this.dogBarkFilter.species.splice(index, 1);
+            this.updateChanges();
         }
     },
+    
+    startEdit(event) {
+        // Extract index from event or use directly if it's a number
+        let index;
+        if (typeof event === 'object') {
+            // If it's an event from the window event dispatch
+            if (event.detail && event.detail.index !== undefined) {
+                index = event.detail.index;
+            } 
+            // If it's passed as the $event variable from Alpine
+            else if (event.target && event.type) {
+                // Just get the index from the component data
+                return;
+            }
+        } else {
+            // If it's a direct index
+            index = event;
+        }
+        
+        if (index !== undefined) {
+            this.editIndex = index;
+            this.editSpecies = this.dogBarkFilter.species[index];
+            this.showEditSpecies = true;
+        }
+    },
+    
+    saveEdit() {
+        if (this.editIndex !== null && this.editSpecies.trim()) {
+            const oldValue = this.dogBarkFilter.species[this.editIndex];
+            const newValue = this.editSpecies.trim();
+            
+            // Only update if value has changed
+            if (oldValue !== newValue) {
+                this.dogBarkFilter.species[this.editIndex] = newValue;
+                this.updateChanges();
+            }
+            
+            this.editIndex = null;
+            this.editSpecies = '';
+            this.showEditSpecies = false;
+        }
+    },
+    
     cancelEdit() {
         this.editIndex = null;
         this.editSpecies = '';
+        this.showEditSpecies = false;
     },
-    updatePredictions() {
+    
+    updateChanges() {
+        this.hasChanges = this.checkForChanges();
+    },
+    
+    updatePredictions(input) {
         if (!this.allowedSpecies || this.allowedSpecies.length === 0) {
             this.predictions = [];
             return;
         }
 
-        const input = this.newSpecies.toLowerCase();
+        if (!input) {
+            this.predictions = [];
+            return;
+        }
+        
+        // Filter out species that are already in the list (case insensitive)
+        const existingSpeciesLower = this.dogBarkFilter.species.map(s => s.toLowerCase());
+        const inputLower = input.toLowerCase();
+        
         this.predictions = this.allowedSpecies
-            .filter(species => species.toLowerCase().includes(input))
+            .filter(species => {
+                const speciesLower = species.toLowerCase();
+                return speciesLower.includes(inputLower) && !existingSpeciesLower.includes(speciesLower);
+            })
             .slice(0, 5); // limit to 5 suggestions
     }
 }" x-init="
-    $watch('dogBarkFilter', () => { hasChanges = true }, { deep: true });
+    initialState = JSON.stringify(dogBarkFilter);
+    $watch('dogBarkFilter', () => { updateChanges(); }, { deep: true });
 ">
     <!-- control collapse element open state and label visibility -->
     <input type="checkbox" id="dogBarkFilterSettingsOpen"
@@ -183,11 +272,11 @@ x-init="
 
         </div>
 
-        <!-- Dog Bark Species List -->
+        <!-- Dog Bark Filter Species List -->
         <div class="form-control mt-6" x-show="dogBarkFilter.enabled"
              id="dogBarkSpeciesList"
              role="group"
-             aria-label="Dog Bark Species List">
+             aria-label="Dog Bark Filter Species List">
             <label class="label justify-start">
                 <span class="label-text">Dog Bark Species List</span>
                 <span class="help-icon"
@@ -198,51 +287,37 @@ x-init="
                 List of species to filter out as potential dog barks
             </div>
 
-            <!-- Dog Bark Species List -->
-            <div class="space-y-2">
-                <template x-for="(species, index) in dogBarkFilter.species" :key="index">
-                    <div class="settings-list-item">
-                        <div class="flex-grow">
-                            <span x-show="editIndex !== index" 
-                                  @click="startEdit(index)" 
-                                  x-text="species"
-                                  class="text-sm cursor-pointer hover:underline"></span>
-                            <input x-show="editIndex === index" 
-                                   x-model="editSpecies" 
-                                   @keyup.enter="saveEdit"
-                                   @keyup.escape="cancelEdit"
-                                   class="input input-sm input-bordered w-full" />
-                        </div>
-                        <div class="flex-shrink-0">
-                            <div class="btn-group">
-                                <button type="button" @click="saveEdit" 
-                                        x-show="editIndex === index" 
-                                        class="btn btn-xs">Save</button>
-                                <button type="button" @click="cancelEdit" 
-                                        x-show="editIndex === index" 
-                                        class="btn btn-xs">Cancel</button>
-                                <button type="button" @click="removeSpecies(index)" 
-                                        class="btn btn-xs">Remove</button>
-                            </div>
-                        </div>
-                    </div>
-                </template>
+            <!-- Dog Bark Filter Species List -->
+            <div class="space-y-2" role="list" aria-label="Dog Bark Filter Species List">
+                {{template "speciesList" dict
+                    "species" "dogBarkFilter.species"
+                    "editIndex" "editIndex"
+                    "editValue" "editSpecies"
+                    "editMode" "showEditSpecies"
+                    "onRemove" "removeSpecies($event)"
+                    "onEdit" "startEdit($event)"
+                    "onSave" "saveEdit"
+                    "onCancel" "cancelEdit"
+                    "actionTemplate" "speciesListActionMenu"}}
+            </div>
+
+            <!-- Unsaved Changes Indicator -->
+            <div x-show="hasChanges" class="mt-2 text-xs text-info flex items-center gap-1" x-cloak>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Unsaved changes</span>
             </div>
 
             <!-- Add New Species -->
-            <div class="settings-input-group">
-                <input type="text" 
-                       x-model="newSpecies" 
-                       @input="updatePredictions()" 
-                       list="species-suggestions"
-                       placeholder="Add new species">
-                <datalist id="species-suggestions">
-                    <template x-for="suggestion in predictions" :key="suggestion">
-                        <option :value="suggestion"></option>
-                    </template>
-                </datalist>
-                <button type="button" @click="addSpecies()">Add</button>
-            </div>
+            {{template "speciesInput" dict
+                "inputModel" "newSpecies"
+                "predictions" "predictions"
+                "onInput" "updatePredictions($event.target.value)"
+                "onAdd" "addSpecies"
+                "placeholder" "Add new species"
+                "inputId" "dogbark-species-input"
+                "responsive" true}}
             <input type="hidden" name="realtime.dogbarkfilter.species" :value="JSON.stringify(dogBarkFilter.species)" />
         </div>
     </div>

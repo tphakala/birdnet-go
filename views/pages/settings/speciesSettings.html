@@ -3,6 +3,10 @@
 <!-- Hidden input to always submit the template name -->
 <input type="hidden" name="templateName" value="{{.TemplateName}}">
 
+<!-- Add script imports for species components -->
+<script src="/assets/js/components/speciesUtils.js?v={{.Settings.Version}}"></script>
+<script src="/assets/js/components/speciesComponentMixin.js?v={{.Settings.Version}}"></script>
+
 <!-- First div - Include Species -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
     role="region" 
@@ -20,6 +24,10 @@
         predictions: [],
         allSpecies: [],
         filteredSpecies: [],
+        
+        // Inherit methods from the mixin
+        ...window.speciesComponentMixin.speciesListMixin('Include'),
+        
         async init() {
             this.allSpecies = [];
             this.filteredSpecies = [];
@@ -49,37 +57,11 @@
                 localStorage.setItem('filteredSpecies', JSON.stringify(this.filteredSpecies));
             }
         },
-        async updatePredictions(input, listType) {
-            if (!input) {
-                this.predictions = [];
-                return;
-            }
-            
-            await this.loadSpeciesData();
-            
-            const sourceList = listType === 'Include' ? this.allSpecies : this.filteredSpecies;
-            
-            this.predictions = sourceList
-                .filter(species => 
-                    species.toLowerCase().includes(input.toLowerCase())
-                )
-                .slice(0, 5);
-        },
-        resetChanges() {
-            this.hasChanges = false;
-        },
-        addSpecies(list) {
-            const newSpecies = this['new' + list + 'Species'].trim();
-            if (newSpecies && !this.speciesSettings[list].includes(newSpecies)) {
-                this.speciesSettings[list].push(newSpecies);
-                this['new' + list + 'Species'] = '';
-                this.hasChanges = true;
-            }
-        },
-        removeSpecies(list, species) {
-            this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== species);
-            this.hasChanges = true;
-        },
+        
+        // Override getSourceList from the mixin
+        getSourceList(listType) {
+            return listType === 'Include' ? this.allSpecies : this.filteredSpecies;
+        }
     }" 
     x-init="init(); $watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
     x-cloak>
@@ -88,64 +70,37 @@
         id="includeSpeciesSettingsOpen" 
         x-on:change="speciesSettingsOpen = !speciesSettingsOpen"
         aria-expanded="true" />
-        
-    <div class="collapse-title settings-section-header">
-        <div class="flex items-center">
-            <label for="includeSpeciesSettingsOpen" class="cursor-pointer">Always Include Species</label>
-            <div x-show="hasChanges" 
-                x-cloak 
-                class="settings-changed-badge"
-                role="status" 
-                aria-live="polite">
-                <span class="badge">
-                    <span>changed</span>
-                </span>
-            </div>
-        </div>
-        <p class="settings-section-description" id="include-species-description">
-            Species in this list will always be included in range of detected species
-        </p>
-    </div>
+
+    {{template "sectionHeader" dict
+        "id" "includeSpecies"
+        "title" "Always Include Species"
+        "description" "Species in this list will always be included in range of detected species"}}
 
     <div class="collapse-content" aria-describedby="include-species-description">
         <div class="settings-form-group">
             <!-- Include species list -->
             <div class="space-y-2" role="list" aria-label="Included species">
-                <template x-for="(species, index) in speciesSettings.Include" :key="index">
-                    <div class="settings-list-item" role="listitem">
-                        <div class="flex-grow">
-                            <span x-text="species" class="text-sm"></span>
-                        </div>
-                        <div class="flex-shrink-0">
-                            <button type="button" 
-                                @click="removeSpecies('Include', species)" 
-                                class="btn btn-xs"
-                                aria-label="Remove species from include list">Remove</button>
-                        </div>
-                    </div>
-                </template>
+                {{template "speciesList" dict
+                    "species" "speciesSettings.Include"
+                    "editIndex" "editIndex"
+                    "editValue" "editSpecies"
+                    "editMode" "showEditSpecies"
+                    "onRemove" "removeSpecies($event)"
+                    "onEdit" "startEdit($event)"
+                    "onSave" "saveEdit"
+                    "onCancel" "cancelEdit"
+                    "actionTemplate" "speciesListActionMenu"}}
             </div>
 
             <!-- Include species input -->
-            <div class="settings-input-group">
-                <label for="includeSpeciesInput" class="sr-only">Add species to include list</label>
-                <input type="text" 
-                    id="includeSpeciesInput"
-                    x-model="newIncludeSpecies" 
-                    @input="updatePredictions(newIncludeSpecies, 'Include')" 
-                    list="include-species-suggestions"
-                    placeholder="Add species to include"
-                    aria-label="Enter species name to include"
-                    aria-describedby="include-species-suggestions">
-                <datalist id="include-species-suggestions">
-                    <template x-for="species in predictions" :key="species">
-                        <option :value="species"></option>
-                    </template>
-                </datalist>
-                <button type="button" 
-                    @click="addSpecies('Include')"
-                    aria-label="Add species to include list">Add</button>
-            </div>
+            {{template "speciesInput" dict
+                "inputModel" "newIncludeSpecies"
+                "predictions" "predictions"
+                "onInput" "updatePredictions($event.target.value, 'Include')"
+                "onAdd" "$event.preventDefault(); addSpecies('Include')"
+                "placeholder" "Add species to include"
+                "inputId" "include-species-input"
+                "responsive" true}}
         </div>
         <input type="hidden" name="realtime.species.include" :value="JSON.stringify(speciesSettings.Include)">
     </div>
@@ -164,6 +119,10 @@
         hasChanges: false,
         predictions: [],
         filteredSpecies: [],
+        
+        // Inherit methods from the mixin
+        ...window.speciesComponentMixin.speciesListMixin('Exclude'),
+        
         async init() {
             // Use app version for cache busting
             const appVersion = '{{.Settings.Version}}';
@@ -179,36 +138,11 @@
                 localStorage.setItem('allSpeciesVersion', '{{.Settings.Version}}');
             }
         },
-        resetChanges() {
-            this.hasChanges = false;
-        },
-        addSpecies(list) {
-            const newSpecies = this['new' + list + 'Species'].trim();
-            if (newSpecies && !this.speciesSettings[list].includes(newSpecies)) {
-                this.speciesSettings[list].push(newSpecies);
-                this['new' + list + 'Species'] = '';
-                this.hasChanges = true;
-            }
-        },
-        removeSpecies(list, species) {
-            this.speciesSettings[list] = this.speciesSettings[list].filter(s => s !== species);
-            this.hasChanges = true;
-        },
-        updatePredictions(input, listType) {
-            if (!input) {
-                this.predictions = [];
-                return;
-            }
-            
-            // For exclude list, always use filteredSpecies
-            const sourceList = this.filteredSpecies;
-            
-            this.predictions = sourceList
-                .filter(species => 
-                    species.toLowerCase().includes(input.toLowerCase())
-                )
-                .slice(0, 5);
-        },
+        
+        // Override getSourceList from the mixin
+        getSourceList(listType) {
+            return this.filteredSpecies;
+        }
     }" 
     x-init="init(); $watch('speciesSettings', () => { hasChanges = true }, { deep: true })"
     x-cloak>
@@ -217,22 +151,11 @@
         id="excludeSpeciesSettingsOpen" 
         x-on:change="speciesSettingsOpen = !speciesSettingsOpen"
         aria-expanded="true" />
-        
-    <div class="collapse-title text-xl font-medium">
-        <div class="flex items-center">
-            <label for="excludeSpeciesSettingsOpen" class="cursor-pointer">Always Exclude Species</label>
-            <div class="ml-2" 
-                x-show="hasChanges" 
-                x-cloak
-                role="status" 
-                aria-live="polite">
-                <span class="badge badge-primary badge-sm changed-badge">
-                    <span class="text-xs mb-0.5">changed</span>
-                </span>
-            </div>
-        </div>
-        <p class="text-sm text-gray-500" id="exclude-species-description">Species in this list will be excluded from detection</p>
-    </div>
+
+    {{template "sectionHeader" dict
+        "id" "excludeSpecies"
+        "title" "Always Exclude Species"
+        "description" "Species in this list will always be excluded from detection"}}
 
     <div class="collapse-content">
         <!-- Always Exclude Species section -->
@@ -241,33 +164,21 @@
 
             <!-- Exclude species list -->
             <div class="space-y-2">
-                <template x-for="(species, index) in speciesSettings.Exclude" :key="index">
-                    <div class="settings-list-item">
-                        <div class="flex-grow">
-                            <span x-text="species" class="text-sm"></span>
-                        </div>
-                        <div class="flex-shrink-0">
-                            <button type="button" @click="removeSpecies('Exclude', species)" 
-                                    class="btn btn-xs">Remove</button>
-                        </div>
-                    </div>
-                </template>
+                {{template "speciesList" dict
+                    "species" "speciesSettings.Exclude"
+                    "onRemove" "$event.preventDefault(); removeSpecies('Exclude', speciesSettings.Exclude[$event.detail ? $event.detail.index : index])"
+                    "actionTemplate" "speciesListActionMenu"}}
             </div>
 
             <!-- Exclude species input -->
-            <div class="settings-input-group">
-                <input type="text" 
-                       x-model="newExcludeSpecies" 
-                       @input="updatePredictions(newExcludeSpecies, 'Exclude')" 
-                       list="exclude-species-suggestions"
-                       placeholder="Add species to exclude">
-                <datalist id="exclude-species-suggestions">
-                    <template x-for="species in predictions" :key="species">
-                        <option :value="species"></option>
-                    </template>
-                </datalist>
-                <button type="button" @click="addSpecies('Exclude')">Add</button>
-            </div>
+            {{template "speciesInput" dict
+                "inputModel" "newExcludeSpecies"
+                "predictions" "predictions"
+                "onInput" "updatePredictions($event.target.value, 'Exclude')"
+                "onAdd" "$event.preventDefault(); addSpecies('Exclude')"
+                "placeholder" "Add species to exclude"
+                "inputId" "exclude-species-input"
+                "responsive" false}}
         </div>
         <input type="hidden" name="realtime.species.exclude" :value="JSON.stringify(speciesSettings.Exclude)">
     </div>
@@ -332,6 +243,8 @@
                 this.newSpeciesConfig = '';
                 this.newThreshold = 0.5;
                 this.hasChanges = true;
+                // Clear predictions after adding
+                this.predictions = [];
             }
         },
         removeConfig(species) {
@@ -387,11 +300,17 @@
             
             // Use different species list based on whether we're including or excluding
             const sourceList = listType === 'Include' ? this.allSpecies : this.filteredSpecies;
+            const inputLower = input.toLowerCase();
+            
+            // For config, filter out species that already have a configuration
+            const existingConfigs = Object.keys(this.speciesSettings.Config).map(s => s.toLowerCase());
             
             this.predictions = sourceList
-                .filter(species => 
-                    species.toLowerCase().includes(input.toLowerCase())
-                )
+                .filter(species => {
+                    const speciesLower = species.toLowerCase();
+                    // Check if the species contains the input text AND doesn't already have a config
+                    return speciesLower.includes(inputLower) && !existingConfigs.includes(speciesLower);
+                })
                 .slice(0, 5);
         },
     }" 
@@ -402,22 +321,11 @@
         id="speciesSettingsOpen" 
         x-on:change="speciesSettingsOpen = !speciesSettingsOpen"
         aria-expanded="true" />
-        
-    <div class="collapse-title text-xl font-medium">
-        <div class="flex items-center">
-            <label for="speciesSettingsOpen" class="cursor-pointer">Custom Species Configuration</label>
-            <div class="ml-2" 
-                x-show="hasChanges" 
-                x-cloak
-                role="status" 
-                aria-live="polite">
-                <span class="badge badge-primary badge-sm changed-badge">
-                    <span class="text-xs mb-0.5">changed</span>
-                </span>
-            </div>
-        </div>
-        <p class="text-sm text-gray-500" id="species-configuration-description">Species specific threshold values and actions</p>
-    </div>    
+
+    {{template "sectionHeader" dict
+        "id" "speciesConfig"
+        "title" "Custom Species Configuration"
+        "description" "Species specific threshold values and actions"}}
 
     <div class="collapse-content">
         <!-- Custom Species Configuration section -->                
@@ -449,20 +357,22 @@
 
             <!-- Custom configuration input -->
             <div class="flex items-center mt-2">
-                <input type="text" 
-                    id="speciesConfigInput"
-                    x-model="newSpeciesConfig" 
-                    @input="updatePredictions(newSpeciesConfig)" 
-                    list="species-suggestions"
-                    placeholder="Species" 
-                    class="input input-bordered input-sm flex-grow" 
-                    aria-label="Enter species name"
-                    aria-describedby="species-suggestions" />
-                <datalist id="species-suggestions">
-                    <template x-for="species in predictions" :key="species">
-                        <option :value="species"></option>
-                    </template>
-                </datalist>
+                <div class="relative flex-grow">
+                    <input type="text" 
+                        id="speciesConfigInput"
+                        x-model="newSpeciesConfig" 
+                        @input="updatePredictions($event.target.value, 'Include')" 
+                        list="species-config-suggestions"
+                        placeholder="Species" 
+                        class="input input-bordered input-sm w-full" 
+                        aria-label="Enter species name"
+                        aria-describedby="species-suggestions" />
+                    <datalist id="species-config-suggestions">
+                        <template x-for="species in predictions" :key="species">
+                            <option :value="species"></option>
+                        </template>
+                    </datalist>
+                </div>
                 <input type="number" 
                     id="thresholdInput"
                     x-model.number="newThreshold" 
