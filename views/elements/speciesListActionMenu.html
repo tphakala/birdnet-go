@@ -1,0 +1,83 @@
+{{define "speciesListActionMenu"}}
+<div class="dropdown" 
+     x-data="{ 
+       open: false,
+       dropdownPosition: 'dropdown-end',
+       updatePosition() {
+         this.$nextTick(() => {
+           const menu = this.$refs.menu;
+           const button = this.$refs.button;
+           if (!menu || !button) return;
+           
+           const buttonRect = button.getBoundingClientRect();
+           const spaceBelow = window.innerHeight - buttonRect.bottom;
+           const spaceAbove = buttonRect.top;
+           const menuHeight = menu.offsetHeight;
+           
+           // Position menu relative to viewport
+           menu.style.position = 'fixed';
+           menu.style.zIndex = '50';
+           
+           // Determine vertical position
+           if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+             menu.style.bottom = (window.innerHeight - buttonRect.top + 8) + 'px';
+             menu.style.top = 'auto';
+           } else {
+             menu.style.top = (buttonRect.bottom + 8) + 'px';
+             menu.style.bottom = 'auto';
+           }
+           
+           // Always align menu's right edge with button's right edge
+           menu.style.left = 'auto';
+           menu.style.right = (window.innerWidth - buttonRect.right) + 'px';
+         });
+       }
+     }"
+     class="relative">
+  <button x-ref="button"
+          @click.prevent.stop="open = !open; if (open) updatePosition()"
+          type="button"
+          class="btn btn-ghost btn-xs">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+    </svg>
+  </button>
+  <ul x-show="open"
+      x-ref="menu"
+      @click.away="open = false"
+      x-transition:enter="transition ease-out duration-200"
+      x-transition:enter-start="opacity-0 scale-95"
+      x-transition:enter-end="opacity-100 scale-100"
+      x-transition:leave="transition ease-in duration-150"
+      x-transition:leave-start="opacity-100 scale-100"
+      x-transition:leave-end="opacity-0 scale-95"
+      class="fixed menu p-2 shadow-lg bg-base-100 rounded-box w-36 border border-base-300"
+      style="display: none;">
+    <li>
+      <a href="#" 
+         class="text-sm"
+         @click.prevent.stop="open = false; $dispatch('edit-species', { index: index })">
+        <div class="flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
+            <path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.262a1.75 1.75 0 0 0 0-2.474Z" />
+            <path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9A.75.75 0 0 1 14 9v2.25A2.75 2.75 0 0 1 11.25 14h-6.5A2.75 2.75 0 0 1 2 11.25v-6.5A2.75 2.75 0 0 1 4.75 2H7a.75.75 0 0 1 0 1.5H4.75Z" />
+          </svg>               
+          <span>Edit</span>
+        </div>
+      </a>
+    </li>
+    <li>
+      <a href="#" 
+         class="text-sm"
+         @click.prevent.stop="open = false; $dispatch('remove-species', { index: index })">
+        <div class="flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
+            <path fill-rule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.285a1.5 1.5 0 0 0 1.493-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5ZM6.05 6a.75.75 0 0 1 .787.713l.275 5.5a.75.75 0 0 1-1.498.075l-.275-5.5A.75.75 0 0 1 6.05 6Zm3.9 0a.75.75 0 0 1 .712.787l-.275 5.5a.75.75 0 0 1-1.498-.075l.275-5.5a.75.75 0 0 1 .786-.711Z" clip-rule="evenodd" />
+          </svg>          
+          <span>Remove</span>
+        </div>
+      </a>
+    </li>
+  </ul>
+</div>
+{{end}} 

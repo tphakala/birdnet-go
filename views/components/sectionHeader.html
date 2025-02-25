@@ -3,7 +3,7 @@
     <div class="flex items-center">
         <label for="{{.id}}SettingsOpen" class="cursor-pointer" aria-label="{{.title}} Settings">{{.title}}</label>
         <div x-show="hasChanges" x-cloak class="settings-changed-badge" role="status" aria-label="Settings changed">
-            <span class="badge">
+            <span class="badge badge-primary badge-sm changed-badge">
                 <span>changed</span>
             </span>
         </div>

@@ -4881,10 +4881,6 @@ html:has(.drawer-toggle:checked) {
   bottom: 1.25rem;
 }
 
-.bottom-full {
-  bottom: 100%;
-}
-
 .left-0 {
   left: 0px;
 }
@@ -5188,6 +5184,10 @@ html:has(.drawer-toggle:checked) {
 
 .w-4 {
   width: 1rem;
+}
+
+.w-40 {
+  width: 10rem;
 }
 
 .w-5 {
@@ -6313,10 +6313,6 @@ html {
   color: rgb(37 99 235 / var(--tw-text-opacity));
 }
 
-.hover\:underline:hover {
-  text-decoration-line: underline;
-}
-
 .focus\:outline-none:focus {
   outline: 2px solid transparent;
   outline-offset: 2px;
@@ -6515,6 +6511,10 @@ html {
     width: 75%;
   }
 
+  .md\:w-36 {
+    width: 9rem;
+  }
+
   .md\:w-\[calc\(50\%-0\.75rem\)\] {
     width: calc(50% - 0.75rem);
   }
@@ -6529,6 +6529,10 @@ html {
 
   .md\:grid-cols-5 {
     grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .md\:flex-row {
+    flex-direction: row;
   }
 
   .md\:justify-end {

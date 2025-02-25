@@ -1,0 +1,53 @@
+{{define "speciesList"}}
+{{/* 
+Usage:
+- species: "speciesArray" (array of species names or objects)
+- editMode: "editMode variable name" (optional)
+- editValue: "editValue variable name" (optional)
+- editIndex: "editIndex variable name" (optional)
+- onRemove: "removeFunction" (function to call for removal)
+- onEdit: "editFunction" (optional - function to call for edit)
+- onSave: "saveFunction" (optional - function for saving edits)
+- onCancel: "cancelFunction" (optional - function for canceling edits)
+- actionTemplate: "templateName" (optional - custom action template)
+- itemClass: "custom-class" (optional - additional class for items)
+*/}}
+<div class="space-y-2">
+    <template x-for="(item, index) in {{.species}}" :key="index">
+        <div class="settings-list-item flex items-center justify-between p-2 rounded-md bg-base-200 {{.itemClass}}">
+            <div class="flex-grow">
+                <!-- Display mode -->
+                <span x-show="{{if .editIndex}}{{.editIndex}} !== index{{else}}true{{end}}" 
+                      x-text="{{if .customDisplay}}{{.customDisplay}}(item){{else}}item{{end}}"
+                      class="text-sm"></span>
+                
+                <!-- Edit mode -->
+                {{if and .editMode .editValue .onSave}}
+                <input x-show="{{.editIndex}} === index" 
+                       x-model="{{.editValue}}" 
+                       @keyup.enter="{{.onSave}}"
+                       @keyup.escape="{{.onCancel}}"
+                       @blur="{{.onSave}}"
+                       class="input input-sm input-bordered w-full" />
+                {{end}}
+            </div>
+            <div class="flex-shrink-0">
+                <!-- Actions -->
+                {{if .actionTemplate}}
+                <div x-data="{ index: index, item: item }" 
+                     @edit-species.window="if($event.detail.index === index) { {{if .onEdit}}{{.onEdit}}{{end}} }" 
+                     @remove-species.window="if($event.detail.index === index) { {{.onRemove}} }">
+                    {{/* Use includeTemplate function instead of template directive */}}
+                    {{with includeTemplate .actionTemplate .}}{{.}}{{end}}
+                </div>
+                {{else}}
+                <button type="button" 
+                        @click.prevent="{{.onRemove}}" 
+                        class="btn btn-xs"
+                        aria-label="Remove item">Remove</button>
+                {{end}}
+            </div>
+        </div>
+    </template>
+</div>
+{{end}} 
