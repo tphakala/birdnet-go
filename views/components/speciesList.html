@@ -37,7 +37,9 @@ Usage:
                 {{if .actionTemplate}}
                 <div x-data="{ index: index, item: item, listType: {{if .listType}}{{.listType}}{{else}}null{{end}} }" 
                      @edit-species.window="if($event.detail.index === index && ($event.detail.listType === listType || !$event.detail.listType)) { {{if .onEdit}}{{.onEdit}}{{end}} }" 
-                     @remove-species.window="if($event.detail.index === index && ($event.detail.listType === listType || !$event.detail.listType)) { {{.onRemove}} }">
+                     @remove-species.window="if($event.detail.index === index && ($event.detail.listType === listType || !$event.detail.listType)) { {{.onRemove}} }"
+                     @save-edit-species.window="if($event.detail.index === index && ($event.detail.listType === listType || !$event.detail.listType)) { {{if .onSave}}{{.onSave}}($event){{end}} }"
+                     @cancel-edit-species.window="if($event.detail.index === index && ($event.detail.listType === listType || !$event.detail.listType)) { {{if .onCancel}}{{.onCancel}}($event){{end}} }">
                     {{/* Use includeTemplate function instead of template directive */}}
                     {{with includeTemplate .actionTemplate .}}{{.}}{{end}}
                 </div>

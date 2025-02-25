@@ -233,8 +233,18 @@ window.speciesComponentMixin = {
             
             /**
              * Save edited species
+             * @param {Event|undefined} event - Optional event object from dispatch
              */
-            saveEdit() {
+            saveEdit(event) {
+                // Handle event from dispatch if provided
+                if (event && event.detail) {
+                    const eventListType = event.detail.listType;
+                    // Check if the list type matches
+                    if (eventListType && eventListType !== listType) {
+                        return; // Skip if list types don't match
+                    }
+                }
+                
                 if (this.editIndex !== null && this.editSpecies && this.editSpecies.trim()) {
                     const currentList = this.getSpeciesList();
                     const newValue = this.editSpecies.trim();
@@ -256,11 +266,27 @@ window.speciesComponentMixin = {
             
             /**
              * Cancel editing
+             * @param {Event|undefined} event - Optional event object from dispatch
              */
-            cancelEdit() {
+            cancelEdit(event) {
+                // Handle event from dispatch if provided
+                if (event && event.detail) {
+                    const eventListType = event.detail.listType;
+                    // Check if the list type matches
+                    if (eventListType && eventListType !== listType) {
+                        return; // Skip if list types don't match
+                    }
+                }
+                
+                // Properly reset all edit state
                 this.editIndex = null;
                 this.editSpecies = '';
                 this.showEditSpecies = false;
+                
+                // Also unfocus any active input elements to ensure clean state
+                if (document.activeElement && document.activeElement.tagName === 'INPUT') {
+                    document.activeElement.blur();
+                }
             },
             
             /**
