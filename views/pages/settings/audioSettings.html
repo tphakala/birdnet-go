@@ -193,15 +193,12 @@ x-init="
         <div class="text-lg font-medium pt-4 pb-2">Audio Filters</div>
 
         <div class="form-control relative">
-            <label class="label justify-start" for="audioFiltersEnabled">
-                <input type="checkbox" id="audioFiltersEnabled" name="realtime.audio.equalizer.enabled" x-model="audioCapture.equalizer.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
-                <input type="hidden" name="realtime.audio.equalizer.enabled" value="false">
-                <span class="label-text">Enable Audio Equalizer</span>
-                <span class="help-icon" @mouseenter="showTooltip = 'audioEqualizerEnabled'" @mouseleave="showTooltip = null">ⓘ</span>
-            </label>
-            <div x-show="showTooltip === 'audioEqualizerEnabled'" x-cloak class="tooltip">
-                Enable or disable audio equalizer.
-            </div>
+            {{template "checkbox" dict
+                "id" "audioFiltersEnabled"
+                "model" "audioCapture.equalizer.enabled"
+                "name" "realtime.audio.equalizer.enabled"
+                "label" "Enable Audio Equalizer"
+                "tooltip" "Enable or disable audio equalizer."}}
             
             <div x-show="audioCapture.equalizer.enabled" x-cloak>
                 <!-- Existing filters -->
@@ -365,92 +362,61 @@ x-init="
         "description" "Configure audio clip saving for identified bird calls"}}
 
     <div class="collapse-content">
-        <div class="form-control relative">
-            <label class="label cursor-pointer justify-start" for="audioExportEnabled">
-                <input type="checkbox" id="audioExportEnabled" name="realtime.audio.export.enabled" x-model="audioExport.enabled" class="checkbox checkbox-primary checkbox-xs mr-2">
-                <input type="hidden" name="realtime.audio.export.enabled" value="false">
-                <span class="label-text">Enable Audio Export</span>
-                <span class="help-icon" @mouseenter="showTooltip = 'audioExportEnabled'" @mouseleave="showTooltip = null">ⓘ</span>
-            </label>
-            <div x-show="showTooltip === 'audioExportEnabled'" x-cloak class="tooltip">
-                Enable or disable audio export for identified bird calls.
-            </div>
-        </div>
+        
+        {{template "checkbox" dict
+            "id" "audioExportEnabled"
+            "model" "audioExport.enabled"
+            "name" "realtime.audio.export.enabled"
+            "label" "Enable Audio Export"
+            "tooltip" "Enable or disable audio export for identified bird calls."}}
 
         <div x-show="audioExport.enabled">
-            <div class="form-control relative">
-                <label class="label cursor-pointer justify-start" for="audioExportDebug">
-                    <input type="checkbox" id="audioExportDebug" name="realtime.audio.export.debug" x-model="audioExport.debug" class="checkbox checkbox-primary checkbox-xs mr-2">
-                    <input type="hidden" name="realtime.audio.export.debug" value="false">
-                    <span class="label-text">Enable Debug Mode</span>
-                    <span class="help-icon" @mouseenter="showTooltip = 'audioExportDebug'" @mouseleave="showTooltip = null">ⓘ</span>
-                </label>
-                <div x-show="showTooltip === 'audioExportDebug'" x-cloak class="tooltip">
-                    Enable debug mode for audio export.
-                </div>
-            </div>
+
+            {{template "checkbox" dict
+                "id" "audioExportDebug"
+                "model" "audioExport.debug"
+                "name" "realtime.audio.export.debug"
+                "label" "Enable Debug Mode"
+                "tooltip" "Enable debug mode for audio export."}}
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div class="form-control relative">
-                    <label class="label justify-start" for="audioExportPath">
-                        <span class="label-text">Export Path</span>
-                        <span class="help-icon" @mouseenter="showTooltip = 'audioExportPath'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <input type="text" id="audioExportPath" name="realtime.audio.export.path" x-model="audioExport.path" class="input input-bordered input-sm w-full">
-                    <div x-show="showTooltip === 'audioExportPath'" x-cloak class="tooltip">
-                        Path to the audio clip export directory.
-                    </div>
-                </div>
+                {{template "textField" dict
+                    "id" "audioExportPath"
+                    "model" "audioExport.path"
+                    "name" "realtime.audio.export.path"
+                    "label" "Export Path"
+                    "tooltip" "Path to the audio clip export directory."}}
 
                 <!-- Export Type -->
                 <div class="form-control relative">
-                    <label class="label justify-start" for="audioExportType">
-                        <span class="label-text">Export Type</span>
-                        <span class="help-icon" @mouseenter="showTooltip = 'audioExportType'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>                  
-                    <select id="audioExportType" name="realtime.audio.export.type" 
-                            x-model="audioExport.type" 
-                            class="select select-bordered select-sm w-full"
-                            :disabled="!ffmpegAvailable">
-                        <option value="wav">wav</option>
-                        <option value="flac" x-show="ffmpegAvailable">flac</option>
-                        <option value="aac" x-show="ffmpegAvailable">aac</option>
-                        <option value="opus" x-show="ffmpegAvailable">opus</option>
-                        <option value="mp3" x-show="ffmpegAvailable">mp3</option>
-                    </select>
-                    <div x-show="showTooltip === 'audioExportType'" x-cloak class="tooltip">
-                        Type of audio file to export. AAC is recommended for general use, it has good compression and is widely supported. MP3 only for legacy reasons. FFmpeg is required for formats other than WAV.
-                    </div>
+                    
+                    {{template "selectField" dict
+                        "id" "audioExportType"
+                        "model" "audioExport.type"
+                        "name" "realtime.audio.export.type"
+                        "label" "Export Type"
+                        "tooltip" "Type of audio file to export. AAC is recommended for general use, it has good compression and is widely supported. MP3 only for legacy reasons. FFmpeg is required for formats other than WAV."
+                        "options" (dict
+                            "wav" "WAV"
+                            "flac" "FLAC"
+                            "aac" "AAC"
+                            "opus" "Opus"
+                            "mp3" "MP3"
+                        )}}                        
+
                 </div>
 
                 <!-- Bitrate -->
-                <div class="form-control relative">
-                    <label class="label justify-start" for="audioExportBitrate">
-                        <span class="label-text">Bitrate</span>
-                        <span class="help-icon" @mouseenter="showTooltip = 'audioExportBitrate'" @mouseleave="showTooltip = null">ⓘ</span>
-                    </label>
-                    <input type="text" id="audioExportBitrate" name="realtime.audio.export.bitrate" 
-                           x-model="audioExport.bitrate" 
-                           class="input input-bordered input-sm w-full" 
-                           placeholder="Bitrate (e.g. 128k)"
-                           :disabled="!ffmpegAvailable || !['aac', 'opus', 'mp3'].includes(audioExport.type)"
-                           :class="{'opacity-50 cursor-not-allowed': !ffmpegAvailable || !['aac', 'opus', 'mp3'].includes(audioExport.type)}"
-                           @input="
-                               let value = $event.target.value.replace(/[^0-9k]/g, '');
-                               if (!value.endsWith('k')) {
-                                   value = value.replace('k', '') + 'k';
-                               }
-                               let numValue = parseInt(value);
-                               if (!isNaN(numValue) && numValue >= 32 && numValue <= 320) {
-                                   audioExport.bitrate = value;
-                               } else if (value === 'k') {
-                                   audioExport.bitrate = '128k';
-                               }
-                           ">
-                    <div x-show="showTooltip === 'audioExportBitrate'" x-cloak class="tooltip">
-                        Bitrate for compressed audio export in kbps. Only applicable for AAC, Opus, and MP3 formats when FFmpeg is available.
-                    </div>
-                </div>
+                {{template "textField" dict
+                    "id" "audioExportBitrate"
+                    "model" "audioExport.bitrate"
+                    "name" "realtime.audio.export.bitrate"
+                    "label" "Bitrate"
+                    "placeholder" "Bitrate (e.g. 128k)"
+                    "disabled" "!ffmpegAvailable || !['aac', 'opus', 'mp3'].includes(audioExport.type)"
+                    "classes" "{'opacity-50 cursor-not-allowed': !ffmpegAvailable || !['aac', 'opus', 'mp3'].includes(audioExport.type)}"
+                    "events" "@input='let value = $event.target.value.replace(/[^0-9k]/g, \"\"); if (!value.endsWith(\"k\")) { value = value.replace(\"k\", \"\") + \"k\"; } let numValue = parseInt(value); if (!isNaN(numValue) && numValue >= 32 && numValue <= 320) { audioExport.bitrate = value; } else if (value === \"k\") { audioExport.bitrate = \"128k\"; }'"
+                    "tooltip" "Bitrate for compressed audio export in kbps. Only applicable for AAC, Opus, and MP3 formats when FFmpeg is available."}}
 
             </div>
         </div>
@@ -488,60 +454,53 @@ x-init="
 
     <div class="collapse-content">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
             <!-- Retention Policy -->
             <div class="form-control relative">
-                <label class="label justify-start" for="audioRetentionPolicy">
-                    <span class="label-text">Retention Policy</span>
-                    <span class="help-icon" @mouseenter="showTooltip = 'audioRetentionPolicy'" @mouseleave="showTooltip = null">ⓘ</span>
-                </label>
-                <select id="audioRetentionPolicy" name="realtime.audio.export.retention.policy" 
-                        x-model="audioRetention.policy" class="select select-bordered select-sm w-full">
-                    <option value="none">None</option>
-                    <option value="age">Age</option>
-                    <option value="usage">Usage</option>
-                </select>
-                <div x-show="showTooltip === 'audioRetentionPolicy'" x-cloak class="tooltip">
-                    Retention policy for audio clips.
-                </div>
+                {{template "selectField" dict
+                    "id" "audioRetentionPolicy"
+                    "model" "audioRetention.policy"
+                    "name" "realtime.audio.export.retention.policy"
+                    "label" "Retention Policy"
+                    "tooltip" "Retention policy for audio clips."
+                    "options" (dict
+                        "none" "None"
+                        "age" "Age"
+                        "usage" "Usage"
+                    )}}
             </div>
 
             <!-- Max Age -->
             <div class="form-control relative" x-show="audioRetention.policy === 'age'">
-                <label class="label justify-start" for="audioRetentionMaxAge">
-                    <span class="label-text">Max Age (h for hours, d for days, w for weeks, m for months, y for years)</span>
-                    <span class="help-icon" @mouseenter="showTooltip = 'audioRetentionMaxAge'" @mouseleave="showTooltip = null">ⓘ</span>
-                </label>
-                <input type="text" id="audioRetentionMaxAge" name="realtime.audio.export.retention.maxage" x-model="audioRetention.maxage" class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'audioRetentionMaxAge'" x-cloak class="tooltip">
-                    Maximum age of clips to keep before starting evictions.
-                </div>
+                {{template "textField" dict
+                    "id" "audioRetentionMaxAge"
+                    "model" "audioRetention.maxage"
+                    "name" "realtime.audio.export.retention.maxage"
+                    "label" "Max Age"
+                    "tooltip" "Maximum age of clips to keep before starting evictions (h for hours, d for days, w for weeks, m for months, y for years)"}}
             </div>
 
             <!-- Max Usage -->
             <div class="form-control relative" x-show="audioRetention.policy === 'usage'">
-                <label class="label justify-start" for="audioRetentionMaxUsage">
-                    <span class="label-text">Max Usage (percentage)</span>
-                    <span class="help-icon" @mouseenter="showTooltip = 'audioRetentionMaxUsage'" @mouseleave="showTooltip = null">ⓘ</span>
-                </label>
-                <input type="text" id="audioRetentionMaxUsage" name="realtime.audio.export.retention.maxusage" x-model="audioRetention.maxusage"
-                @input="if (!audioRetention.maxusage.endsWith('%') && !isNaN(audioRetention.maxusage)) audioRetention.maxusage += '%'"
-                class="input input-bordered input-sm w-full">
-
-                <div x-show="showTooltip === 'audioRetentionMaxUsage'" x-cloak class="tooltip">
-                    Maximum disk usage percentage or size to trigger evictions (e.g., '80%').
-                </div>
+                {{template "textField" dict
+                    "id" "audioRetentionMaxUsage"
+                    "model" "audioRetention.maxusage"
+                    "name" "realtime.audio.export.retention.maxusage"
+                    "label" "Max Usage (percentage)"
+                    "events" "@input=\"if (!audioRetention.maxusage.endsWith('%') && !isNaN(audioRetention.maxusage)) audioRetention.maxusage += '%'\""
+                    "tooltip" "Maximum disk usage percentage or size to trigger evictions (e.g., '80%')."}}
             </div>
 
             <!-- Minimum Clips -->
             <div class="form-control relative" x-show="audioRetention.policy !== 'none'">
-                <label class="label justify-start" for="audioRetentionMinClips">
-                    <span class="label-text">Minimum Clips</span>
-                    <span class="help-icon" @mouseenter="showTooltip = 'audioRetentionMinClips'" @mouseleave="showTooltip = null">ⓘ</span>
-                </label>
-                <input type="number" id="audioRetentionMinClips" name="realtime.audio.export.retention.minclips" x-model="audioRetention.minclips" min="1" class="input input-bordered input-sm w-full">
-                <div x-show="showTooltip === 'audioRetentionMinClips'" x-cloak class="tooltip">
-                    Minimum number of clips per species to keep before starting evictions.
-                </div>
+
+                {{template "numberField" dict
+                    "id" "audioRetentionMinClips"
+                    "model" "audioRetention.minclips"
+                    "name" "realtime.audio.export.retention.minclips"
+                    "label" "Minimum Clips"
+                    "tooltip" "Minimum number of clips per species to keep before starting evictions."}}
+
             </div>
         </div>
     </div>
