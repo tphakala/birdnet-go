@@ -92,23 +92,7 @@
         }
         
         this.handleNotification = (notification) => {
-            const id = Date.now() + Math.random();
-            this.notifications.push({ 
-                id: id, 
-                message: notification.message, 
-                type: notification.type,
-                removing: false
-            });
-            
-            setTimeout(() => {
-                const index = this.notifications.findIndex(n => n.id === id);
-                if (index !== -1) {
-                    this.notifications[index].removing = true;
-                    setTimeout(() => {
-                        this.notifications = this.notifications.filter(n => n.id !== id);
-                    }, 300);
-                }
-            }, 5000);
+            this._createNotification(notification);
         };
         
         window.SSEManager.subscribe(this.handleNotification);
@@ -139,14 +123,16 @@
         }
         return visibleFieldsValid;
     },
-    addNotification(message, type = 'info') {
+    _createNotification(notification) {
         const id = Date.now() + Math.random();
-        this.notifications.push({ 
-            id: id, 
-            message: message, 
-            type: type,
+        const notificationObj = { 
+            id: id,
+            message: notification.message, 
+            type: notification.type || 'info',
             removing: false
-        });
+        };
+        
+        this.notifications.push(notificationObj);
         
         setTimeout(() => {
             const index = this.notifications.findIndex(n => n.id === id);
@@ -157,6 +143,9 @@
                 }, 300);
             }
         }, 5000);
+    },
+    addNotification(message, type = 'info') {
+        this._createNotification({ message, type });
     },
     saveSettings() {
         const form = document.getElementById('settingsForm');
