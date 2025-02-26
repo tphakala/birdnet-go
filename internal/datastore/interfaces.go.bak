@@ -926,3 +926,31 @@ func (ds *DataStore) CountHourlyDetections(date, hour string, duration int) (int
 
 	return count, nil
 }
+
+// GetSpeciesSummaryData retrieves species summary data from the database.
+func (ds *DataStore) GetSpeciesSummaryData() ([]SpeciesSummaryData, error) {
+	var summaryData []SpeciesSummaryData
+	err := ds.DB.Find(&summaryData).Error
+	return summaryData, err
+}
+
+// GetHourlyAnalyticsData retrieves hourly analytics data for a specific date and species.
+func (ds *DataStore) GetHourlyAnalyticsData(date string, species string) ([]HourlyAnalyticsData, error) {
+	var analyticsData []HourlyAnalyticsData
+	err := ds.DB.Where("date = ? AND species = ?", date, species).Find(&analyticsData).Error
+	return analyticsData, err
+}
+
+// GetDailyAnalyticsData retrieves daily analytics data for a specific date range and species.
+func (ds *DataStore) GetDailyAnalyticsData(startDate, endDate string, species string) ([]DailyAnalyticsData, error) {
+	var analyticsData []DailyAnalyticsData
+	err := ds.DB.Where("date BETWEEN ? AND ? AND species = ?", startDate, endDate, species).Find(&analyticsData).Error
+	return analyticsData, err
+}
+
+// GetDetectionTrends retrieves detection trends for a given period and limit.
+func (ds *DataStore) GetDetectionTrends(period string, limit int) ([]DailyAnalyticsData, error) {
+	var analyticsData []DailyAnalyticsData
+	err := ds.DB.Where("date BETWEEN ? AND ?", period, period).Limit(limit).Find(&analyticsData).Error
+	return analyticsData, err
+}

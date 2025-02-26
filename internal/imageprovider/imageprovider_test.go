@@ -170,6 +170,18 @@ func (m *mockStore) GetLockedNotesClipPaths() ([]string, error)             { re
 func (m *mockStore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
 	return 0, nil
 }
+func (m *mockStore) GetDailyAnalyticsData(startDate, endDate string, species string) ([]datastore.DailyAnalyticsData, error) {
+	return []datastore.DailyAnalyticsData{}, nil
+}
+func (m *mockStore) GetDetectionTrends(period string, limit int) ([]datastore.DailyAnalyticsData, error) {
+	return []datastore.DailyAnalyticsData{}, nil
+}
+func (m *mockStore) GetHourlyAnalyticsData(date string, species string) ([]datastore.HourlyAnalyticsData, error) {
+	return []datastore.HourlyAnalyticsData{}, nil
+}
+func (m *mockStore) GetSpeciesSummaryData() ([]datastore.SpeciesSummaryData, error) {
+	return []datastore.SpeciesSummaryData{}, nil
+}
 
 // mockFailingStore is a mock implementation that simulates database failures
 type mockFailingStore struct {
@@ -206,6 +218,34 @@ func (m *mockFailingStore) GetAllImageCaches() ([]datastore.ImageCache, error) {
 		return nil, fmt.Errorf("simulated database error")
 	}
 	return m.mockStore.GetAllImageCaches()
+}
+
+func (m *mockFailingStore) GetDailyAnalyticsData(startDate, endDate string, species string) ([]datastore.DailyAnalyticsData, error) {
+	if m.failGetAllCache {
+		return nil, fmt.Errorf("simulated database error")
+	}
+	return m.mockStore.GetDailyAnalyticsData(startDate, endDate, species)
+}
+
+func (m *mockFailingStore) GetDetectionTrends(period string, limit int) ([]datastore.DailyAnalyticsData, error) {
+	if m.failGetAllCache {
+		return nil, fmt.Errorf("simulated database error")
+	}
+	return m.mockStore.GetDetectionTrends(period, limit)
+}
+
+func (m *mockFailingStore) GetHourlyAnalyticsData(date string, species string) ([]datastore.HourlyAnalyticsData, error) {
+	if m.failGetAllCache {
+		return nil, fmt.Errorf("simulated database error")
+	}
+	return m.mockStore.GetHourlyAnalyticsData(date, species)
+}
+
+func (m *mockFailingStore) GetSpeciesSummaryData() ([]datastore.SpeciesSummaryData, error) {
+	if m.failGetAllCache {
+		return nil, fmt.Errorf("simulated database error")
+	}
+	return m.mockStore.GetSpeciesSummaryData()
 }
 
 // TestBirdImageCache tests the BirdImageCache implementation

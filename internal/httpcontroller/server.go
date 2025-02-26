@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	"github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
@@ -37,6 +38,7 @@ type Server struct {
 	controlChan       chan string
 	notificationChan  chan handlers.Notification
 	Processor         *processor.Processor
+	APIV2             *api.Controller // Our new JSON API
 
 	// Page and partial routes
 	pageRoutes    map[string]PageRouteConfig
@@ -157,6 +159,29 @@ func (s *Server) initializeServer() {
 	s.initLogger()
 	s.configureMiddleware()
 	s.initRoutes()
+
+	// Initialize the JSON API v2
+	s.Debug("Initializing JSON API v2")
+	s.APIV2 = api.InitializeAPI(
+		s.Echo,
+		s.DS,
+		s.Settings,
+		s.BirdImageCache,
+		s.SunCalc,
+		s.controlChan,
+		log.Default(),
+	)
+
+	// Add the server to Echo context for API v2 authentication
+	s.Echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			// Add server as a context value for API v2 to access authentication methods
+			if strings.HasPrefix(c.Path(), "/api/v2/") {
+				c.Set("server", s)
+			}
+			return next(c)
+		}
+	})
 }
 
 // configureDefaultSettings sets default values for server settings.
