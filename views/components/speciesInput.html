@@ -22,8 +22,8 @@ Usage:
                class="input input-sm input-bordered w-full">
         
         <datalist id="{{if .inputId}}{{.inputId}}-suggestions{{else}}species-suggestions{{end}}">
-            <template x-for="suggestion in {{.predictions}}" :key="suggestion">
-                <option :value="suggestion"></option>
+            <template x-for="species in {{.predictions}}" :key="species">
+                <option :value="species"></option>
             </template>
         </datalist>
     </div>
