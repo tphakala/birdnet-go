@@ -60,7 +60,7 @@
         this.hasChanges = true;
     },
     fetchAudioDevices() {
-        fetch('/settings/audio/get')
+        fetch('/api/v1/settings/audio/get')
             .then(response => response.json())
             .then(data => {
                 this.audioDevices = data;
@@ -146,19 +146,16 @@ x-init="
         <!-- RTSP Source start -->
         <div class="text-lg font-medium pt-4 pb-2">RTSP Source</div>
 
-        <div class="form-control relative">
-            <label class="label justify-start" for="rtspTransport">
-                <span class="label-text">RTSP Transport Protocol</span>
-                <span class="help-icon" @mouseenter="showTooltip = 'rtspTransport'" @mouseleave="showTooltip = null">ⓘ</span>
-            </label>
-            <select id="rtspTransport" name="realtime.rtsp.transport" x-model="audioCapture.rtsp.transport" class="select select-bordered select-sm w-full">
-                <option value="tcp">TCP</option>
-                <option value="udp">UDP</option>
-            </select>
-            <div x-show="showTooltip === 'rtspTransport'" x-cloak class="tooltip">
-                Choose the RTSP transport protocol.
-            </div>
-        </div>
+        {{template "selectField" dict
+            "id" "rtspTransport"
+            "model" "audioCapture.rtsp.transport"
+            "name" "realtime.rtsp.transport"
+            "label" "RTSP Transport Protocol"
+            "tooltip" "Choose the RTSP transport protocol."
+            "options" (dict
+                "tcp" "TCP"
+                "udp" "UDP"
+            )}}
 
         <!-- RTSP Stream URLs start -->
         <div class="form-control relative">
