@@ -1,0 +1,37 @@
+{{define "speciesInput"}}
+{{/* 
+Usage:
+- inputModel: "newSpeciesVar" (the variable holding input text)
+- predictions: "predictionsArray" (array of suggestions)
+- onInput: "updatePredictionsFunction" (function to call when input changes)
+- onAdd: "addSpeciesFunction" (function to call when adding)
+- placeholder: "Add new species" (optional - custom placeholder)
+- inputId: "custom-id" (optional - custom ID for the input)
+- buttonText: "Add" (optional - custom button text)
+- responsive: true (optional - whether to use responsive layout)
+*/}}
+<div class="mt-4 flex {{if .responsive}}flex-col md:flex-row{{else}}flex-row{{end}} gap-2">
+    <div class="relative w-full">
+        <input type="text" 
+               id="{{if .inputId}}{{.inputId}}{{else}}species-input{{end}}"
+               x-model="{{.inputModel}}" 
+               @input="{{.onInput}}"
+               @keyup.enter="{{.onAdd}}"
+               list="{{if .inputId}}{{.inputId}}-suggestions{{else}}species-suggestions{{end}}"
+               placeholder="{{if .placeholder}}{{.placeholder}}{{else}}Add new species{{end}}"
+               class="input input-sm input-bordered w-full">
+        
+        <datalist id="{{if .inputId}}{{.inputId}}-suggestions{{else}}species-suggestions{{end}}">
+            <template x-for="species in {{.predictions}}" :key="species">
+                <option :value="species"></option>
+            </template>
+        </datalist>
+    </div>
+    
+    <button type="button" 
+            @click.prevent="{{.onAdd}}" 
+            class="btn btn-primary btn-sm {{if .responsive}}w-full md:w-36{{else}}w-36{{end}}">
+        {{if .buttonText}}{{.buttonText}}{{else}}Add{{end}}
+    </button>
+</div>
+{{end}} 

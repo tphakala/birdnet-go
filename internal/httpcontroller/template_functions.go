@@ -2,6 +2,7 @@
 package httpcontroller
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -63,6 +64,14 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 				}
 			}
 			return false
+		},
+		"includeTemplate": func(name string, data interface{}) (template.HTML, error) {
+			var buf bytes.Buffer
+			err := s.Echo.Renderer.(*TemplateRenderer).templates.ExecuteTemplate(&buf, name, data)
+			if err != nil {
+				return "", err
+			}
+			return template.HTML(buf.String()), nil
 		},
 	}
 }

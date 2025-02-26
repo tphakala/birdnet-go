@@ -92,23 +92,7 @@
         }
         
         this.handleNotification = (notification) => {
-            const id = Date.now() + Math.random();
-            this.notifications.push({ 
-                id: id, 
-                message: notification.message, 
-                type: notification.type,
-                removing: false
-            });
-            
-            setTimeout(() => {
-                const index = this.notifications.findIndex(n => n.id === id);
-                if (index !== -1) {
-                    this.notifications[index].removing = true;
-                    setTimeout(() => {
-                        this.notifications = this.notifications.filter(n => n.id !== id);
-                    }, 300);
-                }
-            }, 5000);
+            this._createNotification(notification);
         };
         
         window.SSEManager.subscribe(this.handleNotification);
@@ -139,6 +123,30 @@
         }
         return visibleFieldsValid;
     },
+    _createNotification(notification) {
+        const id = Date.now() + Math.random();
+        const notificationObj = { 
+            id: id,
+            message: notification.message, 
+            type: notification.type || 'info',
+            removing: false
+        };
+        
+        this.notifications.push(notificationObj);
+        
+        setTimeout(() => {
+            const index = this.notifications.findIndex(n => n.id === id);
+            if (index !== -1) {
+                this.notifications[index].removing = true;
+                setTimeout(() => {
+                    this.notifications = this.notifications.filter(n => n.id !== id);
+                }, 300);
+            }
+        }, 5000);
+    },
+    addNotification(message, type = 'info') {
+        this._createNotification({ message, type });
+    },
     saveSettings() {
         const form = document.getElementById('settingsForm');
         const formData = new FormData(form);
@@ -160,13 +168,30 @@
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
+            // Check the content type before trying to parse as JSON
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                return response.json();
+            } else {
+                // For non-JSON responses, just return a success object
+                return { success: true };
+            }
+        })
+        .then(data => {
+            // Success notification comes from SSE, no need to manually add it here
+            
+            // Reset all hasChanges flags
+            this.resetComponentChanges();
+            
+            // Check if security settings changed, which requires a page reload
             const security = Alpine.store('security');
             if (security?.hasChanges) {
+                security.hasChanges = false;
                 setTimeout(() => {
+                    this.addNotification('Security settings changed, reloading page...', 'info');
                     setTimeout(() => window.location.reload(), 1500);
-                }, 50);
+                }, 500);
             } else {
-                this.resetComponentChanges();
                 this.saving = false;
             }
         })
@@ -177,9 +202,28 @@
         });
     },
     resetComponentChanges() {
+        // Reset the main hasChanges flag
+        this.hasChanges = false;
+        
+        // Reset Alpine store flags
+        if (Alpine.store('security')) {
+            Alpine.store('security').hasChanges = false;
+        }
+        
+        // Reset individual component hasChanges flags
         this.$root.querySelectorAll('[x-data]').forEach(el => {
-            if (el._x_resetChanges && typeof el._x_resetChanges === 'function') {
-                el._x_resetChanges();
+            if (el._x_dataStack && el._x_dataStack.length > 0) {
+                const data = el._x_dataStack[0];
+                
+                // Reset hasChanges flag if exists
+                if ('hasChanges' in data) {
+                    data.hasChanges = false;
+                }
+                
+                // Call resetChanges method if exists
+                if (el._x_resetChanges && typeof el._x_resetChanges === 'function') {
+                    el._x_resetChanges();
+                }
             }
         });
     }

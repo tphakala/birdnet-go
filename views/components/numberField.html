@@ -1,0 +1,31 @@
+{{define "numberField"}}
+<div class="form-control relative mt-1">
+    <label class="label justify-start {{if .class}}{{.class}}{{end}}" for="{{.id}}">
+        <span class="label-text">{{.label}}</span>
+        <span class="help-icon" 
+              @mouseenter="showTooltip = '{{.id}}'" 
+              @mouseleave="showTooltip = null"
+              aria-label="Show help for {{.label}}"
+              role="button"
+              tabindex="0">ⓘ</span>
+    </label>
+    <input type="number" 
+           id="{{.id}}" 
+           name="{{.name}}" 
+           x-model="{{.model}}" 
+           class="input input-bordered input-sm w-full"
+           {{if .step}}step="{{.step}}"{{else}}step="1"{{end}}
+           {{if .min}}min="{{.min}}"{{end}}
+           {{if .max}}max="{{.max}}"{{end}}
+           {{if .placeholder}}placeholder="{{.placeholder}}"{{end}}
+           {{if .disabled}}:disabled="{{.disabled}}"{{end}}
+           aria-describedby="{{.id}}Tooltip">
+    <div x-show="showTooltip === '{{.id}}'" 
+         x-cloak 
+         class="tooltip" 
+         id="{{.id}}Tooltip" 
+         role="tooltip">
+        {{.tooltip}}
+    </div>
+</div>
+{{end}} 
