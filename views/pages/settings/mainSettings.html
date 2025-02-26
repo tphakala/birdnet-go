@@ -114,6 +114,9 @@
                 "model" "birdnet.sensitivity"
                 "name" "birdnet.sensitivity"
                 "label" "Sensitivity"
+                "min" "0.5"
+                "max" "1.5"
+                "step" "0.1"
                 "tooltip" "Detection sensitivity. Higher values result in higher sensitivity. Values in 0.5, 1.5."}}
 
             {{template "numberField" dict
@@ -121,6 +124,9 @@
                 "model" "birdnet.threshold"
                 "name" "birdnet.threshold"
                 "label" "Threshold"
+                "min" "0.01"
+                "max" "0.99"
+                "step" "0.01"
                 "tooltip" "Minimum confidence threshold. Values in 0.01, 0.99."}}
 
             {{template "numberField" dict
@@ -128,6 +134,9 @@
                 "model" "birdnet.overlap"
                 "name" "birdnet.overlap"
                 "label" "Overlap"
+                "min" "0.0"
+                "max" "2.9"
+                "step" "0.1"
                 "tooltip" "Overlap of prediction segments. Values in 0.0, 2.9."}}
 
             {{template "selectField" dict
@@ -209,6 +218,9 @@
                 "model" "dynamicThreshold.min"
                 "name" "realtime.dynamicthreshold.min"
                 "label" "Minimum Dynamic Threshold"
+                "min" "0.0"
+                "max" "0.99"
+                "step" "0.01"
                 "tooltip" "The minimum value to which the dynamic threshold can be lowered. This ensures that the threshold does not drop below an unwanted level."}}
 
             <!-- Dynamic Threshold Expire Time -->
@@ -217,6 +229,9 @@
                 "model" "dynamicThreshold.validHours"
                 "name" "realtime.dynamicthreshold.validhours"
                 "label" "Dynamic Threshold Expire Time (Hours)"
+                "min" "0"
+                "max" "1000"
+                "step" "1"
                 "tooltip" "The number of hours during which the dynamic threshold adjustments remain valid. After this period, the dynamic threshold is reset."}}
 
         </div>
@@ -259,6 +274,9 @@
                     "model" "birdnet.latitude"
                     "name" "birdnet.latitude"
                     "label" "Latitude"
+                    "min" "-90.0"
+                    "max" "90.0"
+                    "step" "0.01"
                     "tooltip" "Station location latitude, used to limit bird species to those propable in the region."}}
  
                 <!-- Longitude -->
@@ -267,6 +285,9 @@
                     "model" "birdnet.longitude"
                     "name" "birdnet.longitude"
                     "label" "Longitude"
+                    "min" "-180.0"
+                    "max" "180.0"
+                    "step" "0.01"
                     "tooltip" "Station location longitude, used to limit bird species to those propable in the region."}}
 
                 <!-- Range Filter Model -->
@@ -287,6 +308,9 @@
                     "model" "rangeFilter.threshold"
                     "name" "birdnet.rangefilter.threshold"
                     "label" "Threshold"
+                    "min" "0.0"
+                    "max" "0.99"
+                    "step" "0.01"
                     "tooltip" "Confidence level determining which identifications are considered valid, e.g. a threshold of 0.7 means only detections with higher than 70% confidence score are accepted."}}
 
             </div>
@@ -390,35 +414,17 @@
         aria-labelledby="outputDescription">
 
         <!-- Database Type -->
-        <div class="settings-form-group">
-            <label class="justify-start" 
-                for="databaseType" 
-                id="databaseTypeLabel">
-                <span class="label-text">Select Database Type</span>
-                <span class="help-icon" 
-                    role="button"
-                    aria-label="Show help text for database type"
-                    @mouseenter="showTooltip = 'databaseType'" 
-                    @mouseleave="showTooltip = null">ⓘ</span>
-            </label>
-            <select id="databaseType" 
-                x-model="outputType" 
-                name="output.type"
-                aria-labelledby="databaseTypeLabel"
-                aria-describedby="databaseTypeTooltip"
-                class="select select-sm select-bordered w-full">
-                <option value="sqlite">SQLite</option>
-                <option value="mysql">MySQL</option>
-            </select>
-            <div x-show="showTooltip === 'databaseType'" 
-                id="databaseTypeTooltip"
-                x-cloak 
-                class="tooltip"
-                role="tooltip"
-                aria-live="polite">
-                Database type for storing detections: SQLite or MySQL
-            </div>
-        </div>
+
+        {{template "selectField" dict
+            "id" "databaseType"
+            "model" "outputType"
+            "name" "output.type"
+            "label" "Select Database Type"
+            "tooltip" "Select the database type to use for storing detections."
+            "options" (dict
+                "sqlite" "SQLite"
+                "mysql" "MySQL"
+            )}}
 
         {{template "noteField" dict
             "condition" "outputType === 'sqlite'"
