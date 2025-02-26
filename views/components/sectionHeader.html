@@ -1,0 +1,13 @@
+{{define "sectionHeader"}}
+<div class="collapse-title settings-section-header" id="{{.id}}Header">
+    <div class="flex items-center">
+        <label for="{{.id}}SettingsOpen" class="cursor-pointer" aria-label="{{.title}} Settings">{{.title}}</label>
+        <div x-show="hasChanges" x-cloak class="settings-changed-badge" role="status" aria-label="Settings changed">
+            <span class="badge badge-primary badge-sm changed-badge">
+                <span>changed</span>
+            </span>
+        </div>
+    </div>
+    <p class="settings-section-description" id="{{.id}}Description">{{.description}}</p>
+</div>
+{{end}} 

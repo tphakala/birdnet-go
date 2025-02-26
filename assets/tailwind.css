@@ -1124,13 +1124,6 @@ html {
   flex-grow: 1;
 }
 
-.card-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 0.5rem;
-}
-
 .card figure {
   display: flex;
   align-items: center;
@@ -2375,6 +2368,15 @@ input.tab:checked + .tab-content,
   --alert-bg-mix: var(--fallback-b1,oklch(var(--b1)/1));
 }
 
+.badge-neutral {
+  --tw-border-opacity: 1;
+  border-color: var(--fallback-n,oklch(var(--n)/var(--tw-border-opacity)));
+  --tw-bg-opacity: 1;
+  background-color: var(--fallback-n,oklch(var(--n)/var(--tw-bg-opacity)));
+  --tw-text-opacity: 1;
+  color: var(--fallback-nc,oklch(var(--nc)/var(--tw-text-opacity)));
+}
+
 .badge-primary {
   --tw-border-opacity: 1;
   border-color: var(--fallback-p,oklch(var(--p)/var(--tw-border-opacity)));
@@ -2407,6 +2409,11 @@ input.tab:checked + .tab-content,
   background-color: var(--fallback-b2,oklch(var(--b2)/var(--tw-bg-opacity)));
   --tw-text-opacity: 1;
   color: var(--fallback-bc,oklch(var(--bc)/var(--tw-text-opacity)));
+}
+
+.badge-outline.badge-neutral {
+  --tw-text-opacity: 1;
+  color: var(--fallback-n,oklch(var(--n)/var(--tw-text-opacity)));
 }
 
 .badge-outline.badge-primary {
@@ -4888,10 +4895,6 @@ html:has(.drawer-toggle:checked) {
   bottom: 1.25rem;
 }
 
-.bottom-full {
-  bottom: 100%;
-}
-
 .left-0 {
   left: 0px;
 }
@@ -5185,6 +5188,10 @@ html:has(.drawer-toggle:checked) {
   width: 6rem;
 }
 
+.w-28 {
+  width: 7rem;
+}
+
 .w-3 {
   width: 0.75rem;
 }
@@ -5195,6 +5202,10 @@ html:has(.drawer-toggle:checked) {
 
 .w-4 {
   width: 1rem;
+}
+
+.w-40 {
+  width: 10rem;
 }
 
 .w-5 {
@@ -6320,10 +6331,6 @@ html {
   color: rgb(37 99 235 / var(--tw-text-opacity));
 }
 
-.hover\:underline:hover {
-  text-decoration-line: underline;
-}
-
 .focus\:outline-none:focus {
   outline: 2px solid transparent;
   outline-offset: 2px;
@@ -6522,8 +6529,8 @@ html {
     width: 75%;
   }
 
-  .md\:w-\[calc\(50\%-0\.75rem\)\] {
-    width: calc(50% - 0.75rem);
+  .md\:w-36 {
+    width: 9rem;
   }
 
   .md\:grid-cols-2 {
@@ -6538,6 +6545,10 @@ html {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
+  .md\:flex-row {
+    flex-direction: row;
+  }
+
   .md\:justify-end {
     justify-content: flex-end;
   }
@@ -6550,10 +6561,6 @@ html {
 
   .lg\:w-4\/5 {
     width: 80%;
-  }
-
-  .lg\:grid-cols-2 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .lg\:grid-cols-3 {
