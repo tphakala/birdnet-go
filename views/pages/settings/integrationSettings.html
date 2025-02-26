@@ -349,41 +349,39 @@
                  role="group"
                  aria-label="OpenWeather Settings"
                  class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                 
                 {{template "passwordField" dict
-                "id" "openWeatherApiKey"
-                "model" "weather.openWeather.apiKey"
-                "name" "realtime.weather.openweather.apikey"
-                "label" "API Key"
-                "tooltip" "Your OpenWeather API key. Keep this secret!"
-                }}
+                    "id" "openWeatherApiKey"
+                    "model" "weather.openWeather.apiKey"
+                    "name" "realtime.weather.openweather.apikey"
+                    "label" "API Key"
+                    "tooltip" "Your OpenWeather API key. Keep this secret!"}}
 
                 {{template "textField" dict
-                "id" "openWeatherEndpoint"
-                "model" "weather.openWeather.endpoint"
-                "name" "realtime.weather.openweather.endpoint"
-                "label" "API Endpoint" 
-                "tooltip" "The OpenWeather API endpoint URL."
-                }}
+                    "id" "openWeatherEndpoint"
+                    "model" "weather.openWeather.endpoint"
+                    "name" "realtime.weather.openweather.endpoint"
+                    "label" "API Endpoint" 
+                    "tooltip" "The OpenWeather API endpoint URL."}}
 
                 {{template "selectField" dict
-                "id" "openWeatherUnits"
-                "model" "weather.openWeather.units"
-                "name" "realtime.weather.openweather.units"
-                "label" "Units of Measurement"
-                "tooltip" "Choose the units system for weather data."
-                "options" (dict
-                    "standard" "Standard"
-                    "metric" "Metric"
-                    "imperial" "Imperial"
-                )}}
+                    "id" "openWeatherUnits"
+                    "model" "weather.openWeather.units"
+                    "name" "realtime.weather.openweather.units"
+                    "label" "Units of Measurement"
+                    "tooltip" "Choose the units system for weather data."
+                    "options" (dict
+                        "standard" "Standard"
+                        "metric" "Metric"
+                        "imperial" "Imperial"
+                    )}}
 
                 {{template "textField" dict
-                "id" "openWeatherLanguage"
-                "model" "weather.openWeather.language"
-                "name" "realtime.weather.openweather.language"
-                "label" "Language"
-                "tooltip" "Language code for the API response (e.g., 'en' for English)."
-                }}
+                    "id" "openWeatherLanguage"
+                    "model" "weather.openWeather.language"
+                    "name" "realtime.weather.openweather.language"
+                    "label" "Language"
+                    "tooltip" "Language code for the API response (e.g., 'en' for English)."}}
             </div>
 
         </div>

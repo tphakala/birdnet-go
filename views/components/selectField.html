@@ -17,8 +17,16 @@
             {{if .pattern}}pattern="{{.pattern}}"{{end}}
             {{if .disabled}}:disabled="{{.disabled}}"{{end}}
             aria-describedby="{{.id}}Tooltip">
-        {{range $value, $label := .options}}
-            <option value="{{$value}}">{{$label}}</option>
+        {{if .locales}}
+            {{/* Handle locales slice */}}
+            {{range .locales}}
+                <option value="{{.Code}}">{{.Name}} ({{.Code}})</option>
+            {{end}}
+        {{else}}
+            {{/* Handle standard map options */}}
+            {{range $value, $label := .options}}
+                <option value="{{$value}}">{{$label}}</option>
+            {{end}}
         {{end}}
     </select>
     <div x-show="showTooltip === '{{.id}}'" 
