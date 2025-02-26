@@ -26,7 +26,7 @@ require (
 	github.com/spf13/viper v1.19.0
 	github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3
 	github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e
-	golang.org/x/crypto v0.33.0
+	golang.org/x/crypto v0.34.0
 	golang.org/x/net v0.35.0
 	golang.org/x/term v0.29.0
 	golang.org/x/text v0.22.0
