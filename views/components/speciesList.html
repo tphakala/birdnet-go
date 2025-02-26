@@ -15,16 +15,28 @@ Usage:
 */}}
 <div class="space-y-2">
     <template x-for="(item, index) in {{.species}}" :key="index">
-        <div class="settings-list-item flex items-center justify-between p-2 rounded-md bg-base-200 {{.itemClass}}">
+        <div class="settings-list-item flex items-center justify-between p-2 rounded-md bg-base-200 {{.itemClass}}"
+             x-data="{ 
+                 isEditing: false, 
+                 checkEditState() { 
+                     {{if .editIndex}}
+                     this.isEditing = {{.editIndex}} === index;
+                     {{else}}
+                     this.isEditing = false;
+                     {{end}}
+                 }
+             }"
+             x-init="checkEditState()"
+             {{if .editIndex}}@edit-update.window="checkEditState()"{{end}}>
             <div class="flex-grow">
                 <!-- Display mode -->
-                <span x-show="{{if .editIndex}}{{.editIndex}} !== index{{else}}true{{end}}" 
+                <span x-show="!isEditing" 
                       x-text="{{if .customDisplay}}{{.customDisplay}}(item){{else}}item{{end}}"
                       class="text-sm"></span>
                 
                 <!-- Edit mode -->
                 {{if and .editMode .editValue .onSave}}
-                <input x-show="{{.editIndex}} === index" 
+                <input x-show="isEditing" 
                        x-model="{{.editValue}}" 
                        @keyup.enter="{{.onSave}}"
                        @keyup.escape="{{.onCancel}}"
@@ -35,7 +47,11 @@ Usage:
             <div class="flex-shrink-0">
                 <!-- Actions -->
                 {{if .actionTemplate}}
-                <div x-data="{ index: index, item: item, listType: {{if .listType}}{{.listType}}{{else}}null{{end}} }" 
+                <div x-data="{ 
+                       index: index, 
+                       item: item, 
+                       listType: {{if .listType}}{{.listType}}{{else}}null{{end}}
+                     }" 
                      @edit-species.window="if($event.detail.index === index && ($event.detail.listType === listType || !$event.detail.listType)) { {{if .onEdit}}{{.onEdit}}{{end}} }" 
                      @remove-species.window="if($event.detail.index === index && ($event.detail.listType === listType || !$event.detail.listType)) { {{.onRemove}} }"
                      @save-edit-species.window="if($event.detail.index === index && ($event.detail.listType === listType || !$event.detail.listType)) { {{if .onSave}}{{.onSave}}($event){{end}} }"
@@ -46,7 +62,7 @@ Usage:
                 {{else}}
                 <button type="button" 
                         @click.prevent="{{.onRemove}}" 
-                        class="btn btn-xs"
+                        class="btn btn-sm"
                         aria-label="Remove item">Remove</button>
                 {{end}}
             </div>
