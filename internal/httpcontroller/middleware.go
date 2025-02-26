@@ -179,6 +179,10 @@ func isProtectedRoute(path string) bool {
 		strings.HasPrefix(path, "/api/v1/detections/review") ||
 		strings.HasPrefix(path, "/api/v1/detections/lock") ||
 		strings.HasPrefix(path, "/api/v1/mqtt/") ||
+		strings.HasPrefix(path, "/api/v2/system/") || // Protect all system API routes
+		strings.HasPrefix(path, "/api/v2/settings/") ||
+		strings.HasPrefix(path, "/api/v2/control/") ||
+		strings.HasPrefix(path, "/api/v2/integrations/") ||
 		strings.HasPrefix(path, "/logout")
 }
 
