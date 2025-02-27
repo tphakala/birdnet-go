@@ -9,6 +9,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/patrickmn/go-cache"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -27,6 +28,7 @@ type Controller struct {
 	controlChan         chan string
 	speciesExcludeMutex sync.RWMutex // Mutex for species exclude list operations
 	settingsMutex       sync.RWMutex // Mutex for settings operations
+	detectionCache      *cache.Cache // Cache for detection queries
 }
 
 // New creates a new API controller

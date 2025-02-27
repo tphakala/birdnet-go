@@ -150,8 +150,10 @@ func validateSettingsData(settings *conf.Settings) error {
 
 	// Validate WebServer settings - fix for port type
 	// Check if we can convert the port to an integer
-	portInt := 0
-	var err error
+	var (
+		portInt int
+		err     error
+	)
 
 	// If the port is a string (as indicated by the linter error), convert it to int
 	switch v := interface{}(settings.WebServer.Port).(type) {
@@ -203,100 +205,174 @@ func updateAllowedFieldsRecursivelyWithTracking(
 		fieldName := currentValue.Type().Field(i).Name
 		currentField := currentValue.Field(i)
 
-		// Check if this field exists in the updated struct
+		// Get updated field and skip if not valid
 		updatedField := updatedValue.FieldByName(fieldName)
 		if !updatedField.IsValid() {
 			continue
 		}
 
-		// Get JSON tag name for more readable logging
-		jsonTag := currentValue.Type().Field(i).Tag.Get("json")
-		if jsonTag == "" {
-			jsonTag = fieldName
-		} else {
-			// Extract the name part before any comma in the json tag
-			if commaIdx := strings.Index(jsonTag, ","); commaIdx > 0 {
-				jsonTag = jsonTag[:commaIdx]
-			}
+		// Get field info (path and json tag)
+		fieldPath, jsonTag := getFieldInfo(currentValue, i, fieldName, prefix)
+
+		// Process the field based on permissions and type
+		if err := processField(currentField, updatedField, fieldName, fieldPath, jsonTag,
+			allowedFields, skippedFields); err != nil {
+			return err
 		}
+	}
 
-		// Build the full path to this field
-		fieldPath := fieldName
-		if prefix != "" {
-			fieldPath = prefix + "." + fieldName
+	return nil
+}
+
+// getFieldInfo extracts path and JSON tag information for a field
+func getFieldInfo(valueType reflect.Value, fieldIndex int, fieldName, prefix string) (fieldPath, jsonTag string) {
+	// Get JSON tag name for more readable logging
+	jsonTag = valueType.Type().Field(fieldIndex).Tag.Get("json")
+	if jsonTag == "" {
+		jsonTag = fieldName
+	} else {
+		// Extract the name part before any comma in the json tag
+		if commaIdx := strings.Index(jsonTag, ","); commaIdx > 0 {
+			jsonTag = jsonTag[:commaIdx]
 		}
+	}
 
-		// Check if this field is in the allowed fields map
-		allowedSubfields, isAllowed := allowedFields[fieldName].(map[string]interface{})
+	// Build the full path to this field
+	fieldPath = fieldName
+	if prefix != "" {
+		fieldPath = prefix + "." + fieldName
+	}
 
-		if !isAllowed {
-			// If it's a bool in the map, it means the whole field is allowed (if true)
-			isAllowedBool, isBool := allowedFields[fieldName].(bool)
-			if !isBool || !isAllowedBool {
-				// Field is explicitly not allowed to be updated
-				*skippedFields = append(*skippedFields, fieldPath)
-				continue // Skip this field
-			}
+	return fieldPath, jsonTag
+}
 
-			// The entire field is allowed to be updated
-			if currentField.CanSet() {
-				// Check if we need to validate this field
-				validationErr := validateField(fieldName, updatedField.Interface())
-				if validationErr != nil {
-					return fmt.Errorf("validation failed for field %s: %w", jsonTag, validationErr)
-				}
-				currentField.Set(updatedField)
-			}
-			continue
+// processField handles a single field based on its permissions and type
+func processField(
+	currentField, updatedField reflect.Value,
+	fieldName, fieldPath, jsonTag string,
+	allowedFields map[string]interface{},
+	skippedFields *[]string,
+) error {
+	// Check field permissions
+	allowedSubfields, isAllowedAsMap := allowedFields[fieldName].(map[string]interface{})
+
+	if !isAllowedAsMap {
+		// Handle field based on permission (if it's a simple boolean permission)
+		return handleFieldPermission(currentField, updatedField, fieldName, fieldPath, jsonTag,
+			allowedFields, skippedFields)
+	}
+
+	// Handle field based on its type (struct, pointer, or primitive)
+	return handleFieldByType(currentField, updatedField, fieldName, fieldPath, jsonTag,
+		allowedSubfields, skippedFields)
+}
+
+// handleFieldPermission processes a field based on its permission settings
+func handleFieldPermission(
+	currentField, updatedField reflect.Value,
+	fieldName, fieldPath, jsonTag string,
+	allowedFields map[string]interface{},
+	skippedFields *[]string,
+) error {
+	// If it's a bool in the map, it means the whole field is allowed (if true)
+	isAllowedBool, isBool := allowedFields[fieldName].(bool)
+	if !isBool || !isAllowedBool {
+		// Field is explicitly not allowed to be updated
+		*skippedFields = append(*skippedFields, fieldPath)
+		return nil // Skip this field
+	}
+
+	// The entire field is allowed to be updated
+	if currentField.CanSet() {
+		// Check if we need to validate this field
+		validationErr := validateField(fieldName, updatedField.Interface())
+		if validationErr != nil {
+			return fmt.Errorf("validation failed for field %s: %w", jsonTag, validationErr)
 		}
+		currentField.Set(updatedField)
+	}
 
-		// For struct fields, recursively update allowed subfields
-		if currentField.Kind() == reflect.Struct && updatedField.Kind() == reflect.Struct {
-			if err := updateAllowedFieldsRecursivelyWithTracking(
-				currentField,
-				updatedField,
+	return nil
+}
+
+// handleFieldByType processes a field based on its type (struct, pointer, or primitive)
+func handleFieldByType(
+	currentField, updatedField reflect.Value,
+	fieldName, fieldPath, jsonTag string,
+	allowedSubfields map[string]interface{},
+	skippedFields *[]string,
+) error {
+	// For struct fields
+	if currentField.Kind() == reflect.Struct && updatedField.Kind() == reflect.Struct {
+		return handleStructField(currentField, updatedField, fieldPath, allowedSubfields, skippedFields)
+	}
+
+	// For fields that are pointers to structs
+	if currentField.Kind() == reflect.Ptr && updatedField.Kind() == reflect.Ptr {
+		return handlePointerField(currentField, updatedField, fieldPath, allowedSubfields, skippedFields)
+	}
+
+	// For primitive fields or other types
+	return handlePrimitiveField(currentField, updatedField, fieldName, jsonTag)
+}
+
+// handleStructField handles struct fields recursively
+func handleStructField(
+	currentField, updatedField reflect.Value,
+	fieldPath string,
+	allowedSubfields map[string]interface{},
+	skippedFields *[]string,
+) error {
+	return updateAllowedFieldsRecursivelyWithTracking(
+		currentField,
+		updatedField,
+		allowedSubfields,
+		skippedFields,
+		fieldPath,
+	)
+}
+
+// handlePointerField handles pointer fields, including nil pointer cases
+func handlePointerField(
+	currentField, updatedField reflect.Value,
+	fieldPath string,
+	allowedSubfields map[string]interface{},
+	skippedFields *[]string,
+) error {
+	// Create a new struct if current is nil but updated is not
+	if currentField.IsNil() && !updatedField.IsNil() {
+		newStruct := reflect.New(currentField.Type().Elem())
+		currentField.Set(newStruct)
+	}
+
+	// If both pointers are non-nil and point to structs, update recursively
+	if !currentField.IsNil() && !updatedField.IsNil() {
+		if currentField.Elem().Kind() == reflect.Struct && updatedField.Elem().Kind() == reflect.Struct {
+			return updateAllowedFieldsRecursivelyWithTracking(
+				currentField.Elem(),
+				updatedField.Elem(),
 				allowedSubfields,
 				skippedFields,
 				fieldPath,
-			); err != nil {
-				return err
-			}
-			continue
+			)
 		}
+	}
 
-		// For fields that are pointers to structs
-		if currentField.Kind() == reflect.Ptr && updatedField.Kind() == reflect.Ptr {
-			if currentField.IsNil() && !updatedField.IsNil() {
-				// Create a new struct of the appropriate type
-				newStruct := reflect.New(currentField.Type().Elem())
-				currentField.Set(newStruct)
-			}
+	return nil
+}
 
-			if !currentField.IsNil() && !updatedField.IsNil() {
-				if currentField.Elem().Kind() == reflect.Struct && updatedField.Elem().Kind() == reflect.Struct {
-					if err := updateAllowedFieldsRecursivelyWithTracking(
-						currentField.Elem(),
-						updatedField.Elem(),
-						allowedSubfields,
-						skippedFields,
-						fieldPath,
-					); err != nil {
-						return err
-					}
-				}
-			}
-			continue
+// handlePrimitiveField handles primitive fields (int, string, etc.)
+func handlePrimitiveField(
+	currentField, updatedField reflect.Value,
+	fieldName, jsonTag string,
+) error {
+	if currentField.CanSet() {
+		// Check if we need to validate this field
+		validationErr := validateField(fieldName, updatedField.Interface())
+		if validationErr != nil {
+			return fmt.Errorf("validation failed for field %s: %w", jsonTag, validationErr)
 		}
-
-		// Update primitive fields or slices that are in the allowed list
-		if currentField.CanSet() {
-			// Check if we need to validate this field
-			validationErr := validateField(fieldName, updatedField.Interface())
-			if validationErr != nil {
-				return fmt.Errorf("validation failed for field %s: %w", jsonTag, validationErr)
-			}
-			currentField.Set(updatedField)
-		}
+		currentField.Set(updatedField)
 	}
 
 	return nil
