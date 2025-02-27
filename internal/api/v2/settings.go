@@ -393,7 +393,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 	if len(reconfigActions) > 0 {
 		go func(actions []string) {
 			for _, action := range actions {
-				c.Debug(fmt.Sprintf("Asynchronously executing action: %s", action))
+				c.Debug("Asynchronously executing action: " + action)
 				c.controlChan <- action
 				// Add a small delay between actions to avoid overwhelming the system
 				time.Sleep(100 * time.Millisecond)

@@ -170,13 +170,13 @@ func (m *mockStore) GetLockedNotesClipPaths() ([]string, error)             { re
 func (m *mockStore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
 	return 0, nil
 }
-func (m *mockStore) GetDailyAnalyticsData(startDate, endDate string, species string) ([]datastore.DailyAnalyticsData, error) {
+func (m *mockStore) GetDailyAnalyticsData(startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
 	return []datastore.DailyAnalyticsData{}, nil
 }
 func (m *mockStore) GetDetectionTrends(period string, limit int) ([]datastore.DailyAnalyticsData, error) {
 	return []datastore.DailyAnalyticsData{}, nil
 }
-func (m *mockStore) GetHourlyAnalyticsData(date string, species string) ([]datastore.HourlyAnalyticsData, error) {
+func (m *mockStore) GetHourlyAnalyticsData(date, species string) ([]datastore.HourlyAnalyticsData, error) {
 	return []datastore.HourlyAnalyticsData{}, nil
 }
 func (m *mockStore) GetSpeciesSummaryData() ([]datastore.SpeciesSummaryData, error) {
@@ -220,7 +220,7 @@ func (m *mockFailingStore) GetAllImageCaches() ([]datastore.ImageCache, error) {
 	return m.mockStore.GetAllImageCaches()
 }
 
-func (m *mockFailingStore) GetDailyAnalyticsData(startDate, endDate string, species string) ([]datastore.DailyAnalyticsData, error) {
+func (m *mockFailingStore) GetDailyAnalyticsData(startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
 	if m.failGetAllCache {
 		return nil, fmt.Errorf("simulated database error")
 	}
@@ -234,7 +234,7 @@ func (m *mockFailingStore) GetDetectionTrends(period string, limit int) ([]datas
 	return m.mockStore.GetDetectionTrends(period, limit)
 }
 
-func (m *mockFailingStore) GetHourlyAnalyticsData(date string, species string) ([]datastore.HourlyAnalyticsData, error) {
+func (m *mockFailingStore) GetHourlyAnalyticsData(date, species string) ([]datastore.HourlyAnalyticsData, error) {
 	if m.failGetAllCache {
 		return nil, fmt.Errorf("simulated database error")
 	}
