@@ -480,7 +480,7 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 	devices, err := myaudio.ListAudioSources()
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to list audio devices: %v", err)
-		c.Debug(errorMsg)
+		c.Debug("%s", errorMsg)
 
 		// Add more detailed diagnostics
 		diagnostics["error_details"] = errorMsg
