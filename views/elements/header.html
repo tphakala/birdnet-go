@@ -18,7 +18,7 @@
                 name="search"
                 aria-label="Search detections"
                 placeholder="Search detections"
-                hx-get="/detections?queryType=search"
+                hx-get="/api/v1/detections?queryType=search"
                 hx-params="search"
                 hx-trigger="keyup[isNotArrowKey(event)] delay:200ms, change delay:200ms" 
                 hx-target="#mainContent"
