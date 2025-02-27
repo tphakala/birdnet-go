@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -471,7 +472,14 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 	// Use the shared lock helper
 	note, err := c.checkAndHandleLock(idStr, true)
 	if err != nil {
-		return c.HandleError(ctx, err, err.Error(), http.StatusConflict)
+		// Check error type to determine the appropriate status code
+		if strings.Contains(err.Error(), "failed to check lock status") {
+			// Database error during lock check should be 500
+			return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
+		} else {
+			// Lock conflicts should be 409
+			return c.HandleError(ctx, err, err.Error(), http.StatusConflict)
+		}
 	}
 
 	// Parse request
