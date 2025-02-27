@@ -8,7 +8,9 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// AuthMiddleware middleware function for API routes that require authentication
+// CombinedAuthMiddleware middleware function that supports both bearer token
+// authentication (for API clients) and session-based authentication (for web UI)
+// This provides a unified authentication layer for all types of requests.
 func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 		// Check if this is an API request with Authorization header (for Svelte UI)
@@ -51,9 +53,11 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		// For browser/web UI requests, check for authenticated session
+		// When no Authorization header is present, we fall back to session-based authentication
+		// which is typically handled through cookies set during login
 		authenticated := false
 
-		// If authentication is enabled, check that it passes the requirements
+		// Get server from context to check authentication status
 		server := ctx.Get("server")
 		if server != nil {
 			// Try to use server's authentication methods
@@ -61,9 +65,17 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 				IsAccessAllowed(c echo.Context) bool
 				isAuthenticationEnabled(c echo.Context) bool
 			}); ok {
-				if !s.isAuthenticationEnabled(ctx) || s.IsAccessAllowed(ctx) {
+				// Two distinct checks:
+				// 1. If authentication is globally disabled across the application, allow access
+				// 2. If authentication is enabled, check if this specific session has valid credentials
+				if !s.isAuthenticationEnabled(ctx) {
+					// Authentication is disabled globally, so all requests are allowed
+					authenticated = true
+				} else if s.IsAccessAllowed(ctx) {
+					// Authentication is enabled, and this session has valid credentials
 					authenticated = true
 				}
+				// Otherwise, authentication is required but not provided
 			}
 		}
 

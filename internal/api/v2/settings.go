@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -86,7 +87,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 	}
 
-	// Store old settings for comparison
+	// Create a backup of current settings for rollback if needed
 	oldSettings := *settings
 
 	// Parse the request body
@@ -95,25 +96,210 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
+	// Verify the request body contains valid data
+	if err := validateSettingsData(&updatedSettings); err != nil {
+		return c.HandleError(ctx, err, "Invalid settings data", http.StatusBadRequest)
+	}
+
 	// Update only the fields that are allowed to be changed
 	// This ensures that runtime-only fields are not overwritten
-	if err := updateAllowedSettings(settings, &updatedSettings); err != nil {
+	skippedFields, err := updateAllowedSettingsWithTracking(settings, &updatedSettings)
+	if err != nil {
+		// Log which fields were attempted to be updated but were protected
+		if len(skippedFields) > 0 {
+			c.Debug("Protected fields that were skipped in update: %s", strings.Join(skippedFields, ", "))
+		}
 		return c.HandleError(ctx, err, "Failed to update settings", http.StatusInternalServerError)
 	}
 
 	// Check if any important settings have changed and trigger actions as needed
 	if err := c.handleSettingsChanges(&oldSettings, settings); err != nil {
-		return c.HandleError(ctx, err, "Failed to apply settings changes", http.StatusInternalServerError)
+		// Attempt to rollback changes if applying them failed
+		*settings = oldSettings
+		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
 	// Save settings to disk
 	if err := conf.SaveSettings(); err != nil {
-		return c.HandleError(ctx, err, "Failed to save settings", http.StatusInternalServerError)
+		// Attempt to rollback changes if saving failed
+		*settings = oldSettings
+		return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
-	return ctx.JSON(http.StatusOK, map[string]string{
-		"message": "Settings updated successfully",
+	return ctx.JSON(http.StatusOK, map[string]interface{}{
+		"message":       "Settings updated successfully",
+		"skippedFields": skippedFields,
 	})
+}
+
+// validateSettingsData performs basic validation on the settings data
+func validateSettingsData(settings *conf.Settings) error {
+	// Check for null settings
+	if settings == nil {
+		return fmt.Errorf("settings cannot be null")
+	}
+
+	// Validate BirdNET settings
+	if settings.BirdNET.Latitude < -90 || settings.BirdNET.Latitude > 90 {
+		return fmt.Errorf("latitude must be between -90 and 90")
+	}
+
+	if settings.BirdNET.Longitude < -180 || settings.BirdNET.Longitude > 180 {
+		return fmt.Errorf("longitude must be between -180 and 180")
+	}
+
+	// Validate WebServer settings - fix for port type
+	// Check if we can convert the port to an integer
+	portInt := 0
+	var err error
+
+	// If the port is a string (as indicated by the linter error), convert it to int
+	switch v := interface{}(settings.WebServer.Port).(type) {
+	case int:
+		portInt = v
+	case string:
+		portInt, err = strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("invalid port number: %v", v)
+		}
+	default:
+		return fmt.Errorf("port has an unsupported type: %T", v)
+	}
+
+	if portInt < 1 || portInt > 65535 {
+		return fmt.Errorf("port must be between 1 and 65535")
+	}
+
+	// Add additional validation for other fields as needed
+
+	return nil
+}
+
+// updateAllowedSettingsWithTracking updates only the allowed fields and returns a list of skipped fields
+func updateAllowedSettingsWithTracking(current, updated *conf.Settings) ([]string, error) {
+	var skippedFields []string
+	err := updateAllowedFieldsRecursivelyWithTracking(
+		reflect.ValueOf(current).Elem(),
+		reflect.ValueOf(updated).Elem(),
+		getAllowedFieldMap(),
+		&skippedFields,
+		"",
+	)
+	return skippedFields, err
+}
+
+// updateAllowedFieldsRecursivelyWithTracking handles recursive field updates and tracks skipped fields
+func updateAllowedFieldsRecursivelyWithTracking(
+	currentValue, updatedValue reflect.Value,
+	allowedFields map[string]interface{},
+	skippedFields *[]string,
+	prefix string,
+) error {
+	if currentValue.Kind() != reflect.Struct || updatedValue.Kind() != reflect.Struct {
+		return fmt.Errorf("both values must be structs")
+	}
+
+	for i := 0; i < currentValue.NumField(); i++ {
+		fieldName := currentValue.Type().Field(i).Name
+		currentField := currentValue.Field(i)
+
+		// Check if this field exists in the updated struct
+		updatedField := updatedValue.FieldByName(fieldName)
+		if !updatedField.IsValid() {
+			continue
+		}
+
+		// Get JSON tag name for more readable logging
+		jsonTag := currentValue.Type().Field(i).Tag.Get("json")
+		if jsonTag == "" {
+			jsonTag = fieldName
+		} else {
+			// Extract the name part before any comma in the json tag
+			if commaIdx := strings.Index(jsonTag, ","); commaIdx > 0 {
+				jsonTag = jsonTag[:commaIdx]
+			}
+		}
+
+		// Build the full path to this field
+		fieldPath := fieldName
+		if prefix != "" {
+			fieldPath = prefix + "." + fieldName
+		}
+
+		// Check if this field is in the allowed fields map
+		allowedSubfields, isAllowed := allowedFields[fieldName].(map[string]interface{})
+
+		if !isAllowed {
+			// If it's a bool in the map, it means the whole field is allowed (if true)
+			isAllowedBool, isBool := allowedFields[fieldName].(bool)
+			if !isBool || !isAllowedBool {
+				// Field is explicitly not allowed to be updated
+				*skippedFields = append(*skippedFields, fieldPath)
+				continue // Skip this field
+			}
+
+			// The entire field is allowed to be updated
+			if currentField.CanSet() {
+				// Check if we need to validate this field
+				validationErr := validateField(fieldName, updatedField.Interface())
+				if validationErr != nil {
+					return fmt.Errorf("validation failed for field %s: %w", jsonTag, validationErr)
+				}
+				currentField.Set(updatedField)
+			}
+			continue
+		}
+
+		// For struct fields, recursively update allowed subfields
+		if currentField.Kind() == reflect.Struct && updatedField.Kind() == reflect.Struct {
+			if err := updateAllowedFieldsRecursivelyWithTracking(
+				currentField,
+				updatedField,
+				allowedSubfields,
+				skippedFields,
+				fieldPath,
+			); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// For fields that are pointers to structs
+		if currentField.Kind() == reflect.Ptr && updatedField.Kind() == reflect.Ptr {
+			if currentField.IsNil() && !updatedField.IsNil() {
+				// Create a new struct of the appropriate type
+				newStruct := reflect.New(currentField.Type().Elem())
+				currentField.Set(newStruct)
+			}
+
+			if !currentField.IsNil() && !updatedField.IsNil() {
+				if currentField.Elem().Kind() == reflect.Struct && updatedField.Elem().Kind() == reflect.Struct {
+					if err := updateAllowedFieldsRecursivelyWithTracking(
+						currentField.Elem(),
+						updatedField.Elem(),
+						allowedSubfields,
+						skippedFields,
+						fieldPath,
+					); err != nil {
+						return err
+					}
+				}
+			}
+			continue
+		}
+
+		// Update primitive fields or slices that are in the allowed list
+		if currentField.CanSet() {
+			// Check if we need to validate this field
+			validationErr := validateField(fieldName, updatedField.Interface())
+			if validationErr != nil {
+				return fmt.Errorf("validation failed for field %s: %w", jsonTag, validationErr)
+			}
+			currentField.Set(updatedField)
+		}
+	}
+
+	return nil
 }
 
 // UpdateSectionSettings handles PATCH /api/v2/settings/:section
@@ -132,7 +318,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 	}
 
-	// Store old settings for comparison
+	// Create a backup of current settings for rollback if needed
 	oldSettings := *settings
 
 	// Parse the request body
@@ -141,24 +327,252 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
+	// Validate that the request body contains valid JSON
+	var tempValue interface{}
+	if err := json.Unmarshal(requestBody, &tempValue); err != nil {
+		return c.HandleError(ctx, err, "Invalid JSON in request body", http.StatusBadRequest)
+	}
+
 	// Update the specific section
-	if err := updateSettingsSection(settings, section, requestBody); err != nil {
+	var skippedFields []string
+	if err := updateSettingsSectionWithTracking(settings, section, requestBody, &skippedFields); err != nil {
+		// Log which fields were attempted to be updated but were protected
+		if len(skippedFields) > 0 {
+			c.Debug("Protected fields that were skipped in update of section %s: %s", section, strings.Join(skippedFields, ", "))
+		}
 		return c.HandleError(ctx, err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
 	}
 
 	// Check if any important settings have changed and trigger actions as needed
 	if err := c.handleSettingsChanges(&oldSettings, settings); err != nil {
-		return c.HandleError(ctx, err, "Failed to apply settings changes", http.StatusInternalServerError)
+		// Attempt to rollback changes if applying them failed
+		*settings = oldSettings
+		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
 	// Save settings to disk
 	if err := conf.SaveSettings(); err != nil {
-		return c.HandleError(ctx, err, "Failed to save settings", http.StatusInternalServerError)
+		// Attempt to rollback changes if saving failed
+		*settings = oldSettings
+		return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
-	return ctx.JSON(http.StatusOK, map[string]string{
-		"message": fmt.Sprintf("%s settings updated successfully", section),
+	return ctx.JSON(http.StatusOK, map[string]interface{}{
+		"message":       fmt.Sprintf("%s settings updated successfully", section),
+		"skippedFields": skippedFields,
 	})
+}
+
+// updateSettingsSectionWithTracking updates a specific section of the settings and tracks skipped fields
+func updateSettingsSectionWithTracking(settings *conf.Settings, section string, data json.RawMessage, skippedFields *[]string) error {
+	section = strings.ToLower(section)
+
+	var tempValue interface{}
+	if err := json.Unmarshal(data, &tempValue); err != nil {
+		return fmt.Errorf("invalid JSON for section %s: %w", section, err)
+	}
+
+	// For each section, we need to:
+	// 1. Unmarshal the data into a temporary struct
+	// 2. Apply the allowed field map restrictions
+	// 3. Update the actual settings section
+
+	switch section {
+	case "birdnet":
+		// Create a temporary copy for filtering
+		tempSettings := settings.BirdNET
+
+		// Apply the allowed fields filter using reflection
+		if err := json.Unmarshal(data, &tempSettings); err != nil {
+			return err
+		}
+
+		// Get the allowed fields for this section
+		allowedFieldsMap := getAllowedFieldMap()
+		birdnetAllowedFields, _ := allowedFieldsMap["BirdNET"].(map[string]interface{})
+
+		// Apply the allowed fields filter using reflection
+		if err := updateAllowedFieldsRecursivelyWithTracking(
+			reflect.ValueOf(&settings.BirdNET).Elem(),
+			reflect.ValueOf(&tempSettings).Elem(),
+			birdnetAllowedFields,
+			skippedFields,
+			"BirdNET",
+		); err != nil {
+			return err
+		}
+		return nil
+
+	case "webserver":
+		// Create a temporary copy for filtering
+		webServerSettings := settings.WebServer
+
+		// Unmarshal data into the temporary copy
+		if err := json.Unmarshal(data, &webServerSettings); err != nil {
+			return err
+		}
+
+		allowedFieldsMap := getAllowedFieldMap()
+		webserverAllowedFields, _ := allowedFieldsMap["WebServer"].(map[string]interface{})
+
+		if err := updateAllowedFieldsRecursivelyWithTracking(
+			reflect.ValueOf(&settings.WebServer).Elem(),
+			reflect.ValueOf(&webServerSettings).Elem(),
+			webserverAllowedFields,
+			skippedFields,
+			"WebServer",
+		); err != nil {
+			return err
+		}
+		return nil
+
+	case "security":
+		// Security settings are sensitive and should have very limited updateable fields
+		// For now, we're not allowing direct updates to security settings via the API
+		return fmt.Errorf("direct updates to security section are not supported for security reasons")
+
+	case "main":
+		// Create a temporary copy for filtering
+		mainSettings := settings.Main
+
+		// Unmarshal data into the temporary copy
+		if err := json.Unmarshal(data, &mainSettings); err != nil {
+			return err
+		}
+
+		// Here you would define which Main fields can be updated
+		// For now, we'll use an empty map to prevent any updates
+		mainFields := []string{"Main settings cannot be updated via API"}
+		*skippedFields = append(*skippedFields, mainFields...)
+		return fmt.Errorf("main settings cannot be updated via API")
+
+	case "audio":
+		// Create a temporary copy for filtering
+		audioSettings := settings.Realtime.Audio
+
+		// Unmarshal data into the temporary copy
+		if err := json.Unmarshal(data, &audioSettings); err != nil {
+			return err
+		}
+
+		allowedFieldsMap := getAllowedFieldMap()
+		realtimeAllowedFields, _ := allowedFieldsMap["Realtime"].(map[string]interface{})
+		audioAllowedFields, _ := realtimeAllowedFields["Audio"].(map[string]interface{})
+
+		if err := updateAllowedFieldsRecursivelyWithTracking(
+			reflect.ValueOf(&settings.Realtime.Audio).Elem(),
+			reflect.ValueOf(&audioSettings).Elem(),
+			audioAllowedFields,
+			skippedFields,
+			"Realtime.Audio",
+		); err != nil {
+			return err
+		}
+		return nil
+
+	case "mqtt":
+		// Validate MQTT settings before applying
+		mqttSettings := settings.Realtime.MQTT
+
+		// Unmarshal data into the temporary copy
+		if err := json.Unmarshal(data, &mqttSettings); err != nil {
+			return err
+		}
+
+		// Perform any additional validation on MQTT settings
+		// For example, checking broker URL format, etc.
+		if mqttSettings.Enabled && mqttSettings.Broker == "" {
+			return fmt.Errorf("broker is required when MQTT is enabled")
+		}
+
+		// MQTT is allowed to be fully replaced according to getAllowedFieldMap
+		settings.Realtime.MQTT = mqttSettings
+		return nil
+
+	case "rtsp":
+		// Validate RTSP settings before applying
+		rtspSettings := settings.Realtime.RTSP
+
+		// Unmarshal data into the temporary copy
+		if err := json.Unmarshal(data, &rtspSettings); err != nil {
+			return err
+		}
+
+		// Perform any additional validation on RTSP settings
+		// For example, validating URLs format
+		for i, url := range rtspSettings.URLs {
+			if url == "" {
+				return fmt.Errorf("RTSP URL at index %d cannot be empty", i)
+			}
+
+			// Basic URL validation - could be more thorough
+			if !strings.HasPrefix(url, "rtsp://") {
+				return fmt.Errorf("RTSP URL at index %d must start with rtsp://", i)
+			}
+		}
+
+		// RTSP is allowed to be fully replaced according to getAllowedFieldMap
+		settings.Realtime.RTSP = rtspSettings
+		return nil
+
+	case "species":
+		// Create a temporary copy
+		speciesSettings := settings.Realtime.Species
+
+		// Unmarshal data into the temporary copy
+		if err := json.Unmarshal(data, &speciesSettings); err != nil {
+			return err
+		}
+
+		allowedFieldsMap := getAllowedFieldMap()
+		realtimeAllowedFields, _ := allowedFieldsMap["Realtime"].(map[string]interface{})
+		speciesAllowedFields, _ := realtimeAllowedFields["Species"].(map[string]interface{})
+
+		if err := updateAllowedFieldsRecursivelyWithTracking(
+			reflect.ValueOf(&settings.Realtime.Species).Elem(),
+			reflect.ValueOf(&speciesSettings).Elem(),
+			speciesAllowedFields,
+			skippedFields,
+			"Realtime.Species",
+		); err != nil {
+			return err
+		}
+		return nil
+
+	// Add similar protection for other sections
+	case "dashboard":
+		// For now, allowing full updates to dashboard settings
+		// This could be enhanced with specific field restrictions
+		tempDashboardSettings := settings.Realtime.Dashboard
+		if err := json.Unmarshal(data, &tempDashboardSettings); err != nil {
+			return err
+		}
+		settings.Realtime.Dashboard = tempDashboardSettings
+		return nil
+
+	case "weather":
+		// For now, allowing full updates to weather settings
+		// This could be enhanced with specific field restrictions
+		tempWeatherSettings := settings.Realtime.Weather
+		if err := json.Unmarshal(data, &tempWeatherSettings); err != nil {
+			return err
+		}
+		settings.Realtime.Weather = tempWeatherSettings
+		return nil
+
+	case "birdweather":
+		// For now, allowing full updates to birdweather settings
+		// This could be enhanced with specific field restrictions
+		tempBirdweatherSettings := settings.Realtime.Birdweather
+		if err := json.Unmarshal(data, &tempBirdweatherSettings); err != nil {
+			return err
+		}
+		settings.Realtime.Birdweather = tempBirdweatherSettings
+		return nil
+
+	default:
+		return fmt.Errorf("unknown settings section: %s", section)
+	}
 }
 
 // Helper functions
@@ -220,6 +634,9 @@ func updateAllowedFieldsRecursively(currentValue, updatedValue reflect.Value, al
 		return fmt.Errorf("both values must be structs")
 	}
 
+	// Track fields that were skipped for logging purposes
+	var skippedFields []string
+
 	for i := 0; i < currentValue.NumField(); i++ {
 		fieldName := currentValue.Type().Field(i).Name
 		currentField := currentValue.Field(i)
@@ -230,6 +647,17 @@ func updateAllowedFieldsRecursively(currentValue, updatedValue reflect.Value, al
 			continue
 		}
 
+		// Get JSON tag name for more readable logging
+		jsonTag := currentValue.Type().Field(i).Tag.Get("json")
+		if jsonTag == "" {
+			jsonTag = fieldName
+		} else {
+			// Extract the name part before any comma in the json tag
+			if commaIdx := strings.Index(jsonTag, ","); commaIdx > 0 {
+				jsonTag = jsonTag[:commaIdx]
+			}
+		}
+
 		// Check if this field is in the allowed fields map
 		allowedSubfields, isAllowed := allowedFields[fieldName].(map[string]interface{})
 
@@ -237,11 +665,18 @@ func updateAllowedFieldsRecursively(currentValue, updatedValue reflect.Value, al
 			// If it's a bool in the map, it means the whole field is allowed (if true)
 			isAllowedBool, isBool := allowedFields[fieldName].(bool)
 			if !isBool || !isAllowedBool {
+				// Field is explicitly not allowed to be updated
+				skippedFields = append(skippedFields, jsonTag)
 				continue // Skip this field
 			}
 
 			// The entire field is allowed to be updated
 			if currentField.CanSet() {
+				// Check if we need to validate this field
+				validationErr := validateField(fieldName, updatedField.Interface())
+				if validationErr != nil {
+					return fmt.Errorf("validation failed for field %s: %w", jsonTag, validationErr)
+				}
 				currentField.Set(updatedField)
 			}
 			continue
@@ -275,7 +710,57 @@ func updateAllowedFieldsRecursively(currentValue, updatedValue reflect.Value, al
 
 		// Update primitive fields or slices that are in the allowed list
 		if currentField.CanSet() {
+			// Check if we need to validate this field
+			validationErr := validateField(fieldName, updatedField.Interface())
+			if validationErr != nil {
+				return fmt.Errorf("validation failed for field %s: %w", jsonTag, validationErr)
+			}
 			currentField.Set(updatedField)
+		}
+	}
+
+	// Log skipped fields for debugging purposes
+	if len(skippedFields) > 0 {
+		// Using fmt.Sprintf here as we don't have direct access to the logger
+		// This would ideally be replaced with proper logging
+		fmt.Printf("Settings update: Skipped protected fields: %s\n", strings.Join(skippedFields, ", "))
+	}
+
+	return nil
+}
+
+// validateField performs validation on specific fields that require extra checks
+// Returns nil if validation passes, error otherwise
+func validateField(fieldName string, value interface{}) error {
+	switch fieldName {
+	case "Port":
+		// Validate port is in valid range
+		if port, ok := value.(int); ok {
+			if port < 1 || port > 65535 {
+				return fmt.Errorf("port must be between 1 and 65535")
+			}
+		}
+	case "Latitude":
+		// Validate latitude range
+		if lat, ok := value.(float64); ok {
+			if lat < -90 || lat > 90 {
+				return fmt.Errorf("latitude must be between -90 and 90")
+			}
+		}
+	case "Longitude":
+		// Validate longitude range
+		if lng, ok := value.(float64); ok {
+			if lng < -180 || lng > 180 {
+				return fmt.Errorf("longitude must be between -180 and 180")
+			}
+		}
+	case "Password":
+		// For sensitive fields like passwords, perform additional validation
+		// For example, you could check minimum length, complexity, etc.
+		if pass, ok := value.(string); ok {
+			if pass != "" && len(pass) < 8 {
+				return fmt.Errorf("password must be at least 8 characters long")
+			}
 		}
 	}
 
@@ -285,6 +770,14 @@ func updateAllowedFieldsRecursively(currentValue, updatedValue reflect.Value, al
 // getAllowedFieldMap returns a map of fields that are allowed to be updated
 // The structure uses nested maps to represent the structure of the settings
 // true means the whole field is allowed, a nested map means only specific subfields are allowed
+//
+// IMPORTANT: This is a critical security mechanism for preventing sensitive or runtime-only
+// fields from being modified via the API. When adding new fields to the Settings struct:
+//  1. Fields NOT in this map will be automatically protected (default deny)
+//  2. Add new user-configurable fields explicitly to this map
+//  3. NEVER add sensitive data fields (credentials, tokens, etc.) or runtime-state fields here
+//     unless they are explicitly designed to be configured via the API
+//  4. For nested structures, use nested maps to allow only specific subfields
 func getAllowedFieldMap() map[string]interface{} {
 	return map[string]interface{}{
 		"BirdNET": map[string]interface{}{
@@ -321,36 +814,6 @@ func getAllowedFieldMap() map[string]interface{} {
 				"Config":  true,
 			},
 		},
-	}
-}
-
-// updateSettingsSection updates a specific section of the settings
-func updateSettingsSection(settings *conf.Settings, section string, data json.RawMessage) error {
-	section = strings.ToLower(section)
-
-	switch section {
-	case "birdnet":
-		return json.Unmarshal(data, &settings.BirdNET)
-	case "webserver":
-		return json.Unmarshal(data, &settings.WebServer)
-	case "security":
-		return json.Unmarshal(data, &settings.Security)
-	case "main":
-		return json.Unmarshal(data, &settings.Main)
-	case "audio":
-		return json.Unmarshal(data, &settings.Realtime.Audio)
-	case "dashboard":
-		return json.Unmarshal(data, &settings.Realtime.Dashboard)
-	case "weather":
-		return json.Unmarshal(data, &settings.Realtime.Weather)
-	case "mqtt":
-		return json.Unmarshal(data, &settings.Realtime.MQTT)
-	case "birdweather":
-		return json.Unmarshal(data, &settings.Realtime.Birdweather)
-	case "species":
-		return json.Unmarshal(data, &settings.Realtime.Species)
-	default:
-		return fmt.Errorf("unknown settings section: %s", section)
 	}
 }
 

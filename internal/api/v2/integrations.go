@@ -16,18 +16,18 @@ import (
 
 // MQTTStatus represents the current status of the MQTT connection
 type MQTTStatus struct {
-	Connected bool   `json:"connected"`
-	Broker    string `json:"broker"`
-	Topic     string `json:"topic"`
-	ClientID  string `json:"client_id"`
-	LastError string `json:"last_error,omitempty"`
+	Connected bool   `json:"connected"`            // Whether the MQTT client is currently connected to the broker
+	Broker    string `json:"broker"`               // The URI of the MQTT broker (e.g., tcp://mqtt.example.com:1883)
+	Topic     string `json:"topic"`                // The topic pattern used for publishing/subscribing to MQTT messages
+	ClientID  string `json:"client_id"`            // The unique identifier used by this client when connecting to the broker
+	LastError string `json:"last_error,omitempty"` // Most recent error message, if any connection issues occurred
 }
 
 // MQTTTestResult represents the result of an MQTT connection test
 type MQTTTestResult struct {
-	Success     bool   `json:"success"`
-	Message     string `json:"message"`
-	ElapsedTime int64  `json:"elapsed_time_ms,omitempty"`
+	Success     bool   `json:"success"`                   // Whether the connection test was successful
+	Message     string `json:"message"`                   // Human-readable description of the test result
+	ElapsedTime int64  `json:"elapsed_time_ms,omitempty"` // Time taken to complete the test in milliseconds
 }
 
 // initIntegrationsRoutes registers all integration-related API endpoints
@@ -85,12 +85,12 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 				status.Connected = connected
 			case <-time.After(2 * time.Second):
 				c.logger.Printf("Timeout waiting for MQTT status response")
-				status.LastError = "Timeout waiting for status"
+				status.LastError = "error:timeout:mqtt_status_response" // Standardized error code format
 			}
 		default:
 			// Channel is full or blocked
 			c.logger.Printf("Control channel is not accepting messages")
-			status.LastError = "Control system busy"
+			status.LastError = "error:unavailable:control_system" // Standardized error code format
 		}
 	} else if mqttConfig.Enabled {
 		// If control channel is not available but MQTT is enabled,
@@ -108,14 +108,16 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 				status.Connected = err == nil && tempClient.IsConnected()
 
 				if err != nil {
-					status.LastError = err.Error()
+					status.LastError = fmt.Sprintf("error:connection:mqtt_broker:%s", err.Error()) // Standardized error code format
 				}
 
 				// Disconnect the temporary client
 				tempClient.Disconnect()
 			} else {
-				status.LastError = err.Error()
+				status.LastError = fmt.Sprintf("error:client:mqtt_client_creation:%s", err.Error()) // Standardized error code format
 			}
+		} else {
+			status.LastError = fmt.Sprintf("error:metrics:initialization:%s", err.Error()) // Standardized error code format
 		}
 	}
 
@@ -264,6 +266,8 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 }
 
 // writeJSONResponse writes a JSON response to the client
+// NOTE: For most cases, consider using Echo's built-in ctx.JSON(httpStatus, data) instead
+// This function is primarily useful for streaming or special encoding scenarios
 func (c *Controller) writeJSONResponse(ctx echo.Context, data interface{}) error {
 	encoder := json.NewEncoder(ctx.Response())
 	return encoder.Encode(data)
