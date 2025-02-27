@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -24,14 +25,22 @@ func (c *Controller) initSettingsRoutes() {
 	settingsGroup := c.Group.Group("/settings", c.AuthMiddleware)
 
 	// Routes for settings
+	// GET /api/v2/settings - Retrieves all application settings
 	settingsGroup.GET("", c.GetAllSettings)
+	// GET /api/v2/settings/:section - Retrieves settings for a specific section (e.g., birdnet, webserver)
 	settingsGroup.GET("/:section", c.GetSectionSettings)
+	// PUT /api/v2/settings - Updates multiple settings sections with complete replacement
 	settingsGroup.PUT("", c.UpdateSettings)
+	// PATCH /api/v2/settings/:section - Updates a specific settings section with partial replacement
 	settingsGroup.PATCH("/:section", c.UpdateSectionSettings)
 }
 
 // GetAllSettings handles GET /api/v2/settings
 func (c *Controller) GetAllSettings(ctx echo.Context) error {
+	// Acquire read lock to ensure settings aren't being modified during read
+	c.settingsMutex.RLock()
+	defer c.settingsMutex.RUnlock()
+
 	settings := conf.Setting()
 	if settings == nil {
 		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
@@ -43,6 +52,10 @@ func (c *Controller) GetAllSettings(ctx echo.Context) error {
 
 // GetSectionSettings handles GET /api/v2/settings/:section
 func (c *Controller) GetSectionSettings(ctx echo.Context) error {
+	// Acquire read lock to ensure settings aren't being modified during read
+	c.settingsMutex.RLock()
+	defer c.settingsMutex.RUnlock()
+
 	section := ctx.Param("section")
 	if section == "" {
 		return c.HandleError(ctx, fmt.Errorf("section not specified"), "Section parameter is required", http.StatusBadRequest)
@@ -64,6 +77,10 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 
 // UpdateSettings handles PUT /api/v2/settings
 func (c *Controller) UpdateSettings(ctx echo.Context) error {
+	// Acquire write lock to prevent concurrent settings updates
+	c.settingsMutex.Lock()
+	defer c.settingsMutex.Unlock()
+
 	settings := conf.Setting()
 	if settings == nil {
 		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
@@ -101,6 +118,10 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 
 // UpdateSectionSettings handles PATCH /api/v2/settings/:section
 func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
+	// Acquire write lock to prevent concurrent settings updates
+	c.settingsMutex.Lock()
+	defer c.settingsMutex.Unlock()
+
 	section := ctx.Param("section")
 	if section == "" {
 		return c.HandleError(ctx, fmt.Errorf("section not specified"), "Section parameter is required", http.StatusBadRequest)
@@ -189,48 +210,118 @@ func getSettingsSection(settings *conf.Settings, section string) (interface{}, e
 
 // updateAllowedSettings updates only the fields that are allowed to be changed
 func updateAllowedSettings(current, updated *conf.Settings) error {
-	// TODO: Implement a more comprehensive update mechanism
-	// For now, we'll do a simplified update of main sections
+	// Use reflection to dynamically update fields
+	return updateAllowedFieldsRecursively(reflect.ValueOf(current).Elem(), reflect.ValueOf(updated).Elem(), getAllowedFieldMap())
+}
 
-	// Update BirdNET settings
-	current.BirdNET.Locale = updated.BirdNET.Locale
-	current.BirdNET.Threads = updated.BirdNET.Threads
-	current.BirdNET.ModelPath = updated.BirdNET.ModelPath
-	current.BirdNET.LabelPath = updated.BirdNET.LabelPath
-	current.BirdNET.UseXNNPACK = updated.BirdNET.UseXNNPACK
-	current.BirdNET.Latitude = updated.BirdNET.Latitude
-	current.BirdNET.Longitude = updated.BirdNET.Longitude
+// updateAllowedFieldsRecursively handles recursive field updates using reflection
+func updateAllowedFieldsRecursively(currentValue, updatedValue reflect.Value, allowedFields map[string]interface{}) error {
+	if currentValue.Kind() != reflect.Struct || updatedValue.Kind() != reflect.Struct {
+		return fmt.Errorf("both values must be structs")
+	}
 
-	// Update WebServer settings
-	current.WebServer.Port = updated.WebServer.Port
-	current.WebServer.Debug = updated.WebServer.Debug
+	for i := 0; i < currentValue.NumField(); i++ {
+		fieldName := currentValue.Type().Field(i).Name
+		currentField := currentValue.Field(i)
 
-	// Update Realtime settings (selectively)
-	current.Realtime.Interval = updated.Realtime.Interval
-	current.Realtime.ProcessingTime = updated.Realtime.ProcessingTime
+		// Check if this field exists in the updated struct
+		updatedField := updatedValue.FieldByName(fieldName)
+		if !updatedField.IsValid() {
+			continue
+		}
 
-	// Update Audio settings (selectively)
-	current.Realtime.Audio.Source = updated.Realtime.Audio.Source
-	current.Realtime.Audio.Export.Enabled = updated.Realtime.Audio.Export.Enabled
-	current.Realtime.Audio.Export.Path = updated.Realtime.Audio.Export.Path
-	current.Realtime.Audio.Export.Type = updated.Realtime.Audio.Export.Type
-	current.Realtime.Audio.Export.Bitrate = updated.Realtime.Audio.Export.Bitrate
+		// Check if this field is in the allowed fields map
+		allowedSubfields, isAllowed := allowedFields[fieldName].(map[string]interface{})
 
-	// Update EQ settings
-	current.Realtime.Audio.Equalizer = updated.Realtime.Audio.Equalizer
+		if !isAllowed {
+			// If it's a bool in the map, it means the whole field is allowed (if true)
+			isAllowedBool, isBool := allowedFields[fieldName].(bool)
+			if !isBool || !isAllowedBool {
+				continue // Skip this field
+			}
 
-	// Update MQTT settings
-	current.Realtime.MQTT = updated.Realtime.MQTT
+			// The entire field is allowed to be updated
+			if currentField.CanSet() {
+				currentField.Set(updatedField)
+			}
+			continue
+		}
 
-	// Update RTSP settings
-	current.Realtime.RTSP = updated.Realtime.RTSP
+		// For struct fields, recursively update allowed subfields
+		if currentField.Kind() == reflect.Struct && updatedField.Kind() == reflect.Struct {
+			if err := updateAllowedFieldsRecursively(currentField, updatedField, allowedSubfields); err != nil {
+				return err
+			}
+			continue
+		}
 
-	// Update Species settings
-	current.Realtime.Species.Include = updated.Realtime.Species.Include
-	current.Realtime.Species.Exclude = updated.Realtime.Species.Exclude
-	current.Realtime.Species.Config = updated.Realtime.Species.Config
+		// For fields that are pointers to structs
+		if currentField.Kind() == reflect.Ptr && updatedField.Kind() == reflect.Ptr {
+			if currentField.IsNil() && !updatedField.IsNil() {
+				// Create a new struct of the appropriate type
+				newStruct := reflect.New(currentField.Type().Elem())
+				currentField.Set(newStruct)
+			}
+
+			if !currentField.IsNil() && !updatedField.IsNil() {
+				if currentField.Elem().Kind() == reflect.Struct && updatedField.Elem().Kind() == reflect.Struct {
+					if err := updateAllowedFieldsRecursively(currentField.Elem(), updatedField.Elem(), allowedSubfields); err != nil {
+						return err
+					}
+				}
+			}
+			continue
+		}
+
+		// Update primitive fields or slices that are in the allowed list
+		if currentField.CanSet() {
+			currentField.Set(updatedField)
+		}
+	}
 
 	return nil
+}
+
+// getAllowedFieldMap returns a map of fields that are allowed to be updated
+// The structure uses nested maps to represent the structure of the settings
+// true means the whole field is allowed, a nested map means only specific subfields are allowed
+func getAllowedFieldMap() map[string]interface{} {
+	return map[string]interface{}{
+		"BirdNET": map[string]interface{}{
+			"Locale":     true,
+			"Threads":    true,
+			"ModelPath":  true,
+			"LabelPath":  true,
+			"UseXNNPACK": true,
+			"Latitude":   true,
+			"Longitude":  true,
+		},
+		"WebServer": map[string]interface{}{
+			"Port":  true,
+			"Debug": true,
+		},
+		"Realtime": map[string]interface{}{
+			"Interval":       true,
+			"ProcessingTime": true,
+			"Audio": map[string]interface{}{
+				"Source": true,
+				"Export": map[string]interface{}{
+					"Enabled": true,
+					"Path":    true,
+					"Type":    true,
+					"Bitrate": true,
+				},
+				"Equalizer": true,
+			},
+			"MQTT": true, // Allow complete update of MQTT settings
+			"RTSP": true, // Allow complete update of RTSP settings
+			"Species": map[string]interface{}{
+				"Include": true,
+				"Exclude": true,
+				"Config":  true,
+			},
+		},
+	}
 }
 
 // updateSettingsSection updates a specific section of the settings
@@ -265,34 +356,49 @@ func updateSettingsSection(settings *conf.Settings, section string, data json.Ra
 
 // handleSettingsChanges checks if important settings have changed and triggers appropriate actions
 func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Settings) error {
+	// Create a slice to track which reconfigurations need to be performed
+	var reconfigActions []string
+
 	// Check BirdNET settings
 	if birdnetSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("BirdNET settings changed, triggering reload")
-		c.controlChan <- "reload_birdnet"
+		reconfigActions = append(reconfigActions, "reload_birdnet")
 	}
 
 	// Check range filter settings
 	if rangeFilterSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("Range filter settings changed, triggering rebuild")
-		c.controlChan <- "rebuild_range_filter"
+		reconfigActions = append(reconfigActions, "rebuild_range_filter")
 	}
 
 	// Check MQTT settings
 	if mqttSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("MQTT settings changed, triggering reconfiguration")
-		c.controlChan <- "reconfigure_mqtt"
+		reconfigActions = append(reconfigActions, "reconfigure_mqtt")
 	}
 
 	// Check RTSP settings
 	if rtspSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("RTSP settings changed, triggering reconfiguration")
-		c.controlChan <- "reconfigure_rtsp_sources"
+		reconfigActions = append(reconfigActions, "reconfigure_rtsp_sources")
 	}
 
 	// Check audio device settings
 	if audioDeviceSettingChanged(oldSettings, currentSettings) {
 		c.Debug("Audio device changed. A restart will be required.")
 		// No action here as restart is manual
+	}
+
+	// Trigger reconfigurations asynchronously
+	if len(reconfigActions) > 0 {
+		go func(actions []string) {
+			for _, action := range actions {
+				c.Debug(fmt.Sprintf("Asynchronously executing action: %s", action))
+				c.controlChan <- action
+				// Add a small delay between actions to avoid overwhelming the system
+				time.Sleep(100 * time.Millisecond)
+			}
+		}(reconfigActions)
 	}
 
 	return nil

@@ -4,6 +4,7 @@ package api
 import (
 	"log"
 	"net/http"
+	"sync"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -15,14 +16,16 @@ import (
 
 // Controller manages the API routes and handlers
 type Controller struct {
-	Echo           *echo.Echo
-	Group          *echo.Group
-	DS             datastore.Interface
-	Settings       *conf.Settings
-	BirdImageCache *imageprovider.BirdImageCache
-	SunCalc        *suncalc.SunCalc
-	logger         *log.Logger
-	controlChan    chan string
+	Echo                *echo.Echo
+	Group               *echo.Group
+	DS                  datastore.Interface
+	Settings            *conf.Settings
+	BirdImageCache      *imageprovider.BirdImageCache
+	SunCalc             *suncalc.SunCalc
+	logger              *log.Logger
+	controlChan         chan string
+	speciesExcludeMutex sync.RWMutex // Mutex for species exclude list operations
+	settingsMutex       sync.RWMutex // Mutex for settings operations
 }
 
 // New creates a new API controller

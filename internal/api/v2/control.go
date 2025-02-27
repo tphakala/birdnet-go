@@ -30,6 +30,13 @@ const (
 	ActionRebuildFilter   = "rebuild_filter"
 )
 
+// Control channel signals
+const (
+	SignalRestartAnalysis = "restart_analysis"
+	SignalReloadModel     = "reload_birdnet"
+	SignalRebuildFilter   = "rebuild_range_filter"
+)
+
 // initControlRoutes registers all control-related API endpoints
 func (c *Controller) initControlRoutes() {
 	// Create control API group with auth middleware
@@ -68,13 +75,13 @@ func (c *Controller) GetAvailableActions(ctx echo.Context) error {
 func (c *Controller) RestartAnalysis(ctx echo.Context) error {
 	if c.controlChan == nil {
 		return c.HandleError(ctx, fmt.Errorf("control channel not initialized"),
-			"Control interface not available", http.StatusInternalServerError)
+			"System control interface not available - server may need to be restarted", http.StatusInternalServerError)
 	}
 
 	c.Debug("API requested analysis restart")
 
 	// Send restart signal
-	c.controlChan <- "restart_analysis"
+	c.controlChan <- SignalRestartAnalysis
 
 	return ctx.JSON(http.StatusOK, ControlResult{
 		Success:   true,
@@ -89,13 +96,13 @@ func (c *Controller) RestartAnalysis(ctx echo.Context) error {
 func (c *Controller) ReloadModel(ctx echo.Context) error {
 	if c.controlChan == nil {
 		return c.HandleError(ctx, fmt.Errorf("control channel not initialized"),
-			"Control interface not available", http.StatusInternalServerError)
+			"System control interface not available - server may need to be restarted", http.StatusInternalServerError)
 	}
 
 	c.Debug("API requested model reload")
 
 	// Send reload signal
-	c.controlChan <- "reload_birdnet"
+	c.controlChan <- SignalReloadModel
 
 	return ctx.JSON(http.StatusOK, ControlResult{
 		Success:   true,
@@ -110,13 +117,13 @@ func (c *Controller) ReloadModel(ctx echo.Context) error {
 func (c *Controller) RebuildFilter(ctx echo.Context) error {
 	if c.controlChan == nil {
 		return c.HandleError(ctx, fmt.Errorf("control channel not initialized"),
-			"Control interface not available", http.StatusInternalServerError)
+			"System control interface not available - server may need to be restarted", http.StatusInternalServerError)
 	}
 
 	c.Debug("API requested species filter rebuild")
 
 	// Send rebuild filter signal
-	c.controlChan <- "rebuild_range_filter"
+	c.controlChan <- SignalRebuildFilter
 
 	return ctx.JSON(http.StatusOK, ControlResult{
 		Success:   true,

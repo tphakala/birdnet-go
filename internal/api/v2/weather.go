@@ -3,6 +3,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -10,11 +11,11 @@ import (
 
 // DailyWeatherResponse represents the API response for daily weather data
 type DailyWeatherResponse struct {
-	Date     string `json:"date"`
-	Sunrise  int64  `json:"sunrise"`
-	Sunset   int64  `json:"sunset"`
-	Country  string `json:"country,omitempty"`
-	CityName string `json:"city_name,omitempty"`
+	Date     string    `json:"date"`
+	Sunrise  time.Time `json:"sunrise"`
+	Sunset   time.Time `json:"sunset"`
+	Country  string    `json:"country,omitempty"`
+	CityName string    `json:"city_name,omitempty"`
 }
 
 // HourlyWeatherResponse represents the API response for hourly weather data
@@ -47,6 +48,12 @@ func (c *Controller) initWeatherRoutes() {
 	// Create weather API group
 	weatherGroup := c.Group.Group("/weather")
 
+	// TODO: Consider adding authentication middleware to protect these endpoints
+	// Example: weatherGroup.Use(middlewares.RequireAuth())
+
+	// TODO: Consider implementing rate limiting for these endpoints to prevent abuse
+	// Example: weatherGroup.Use(middlewares.RateLimit(100, time.Hour))
+
 	// Daily weather routes
 	weatherGroup.GET("/daily/:date", c.GetDailyWeather)
 
@@ -78,8 +85,8 @@ func (c *Controller) GetDailyWeather(ctx echo.Context) error {
 	// Convert to response format
 	response := DailyWeatherResponse{
 		Date:     dailyEvents.Date,
-		Sunrise:  dailyEvents.Sunrise,
-		Sunset:   dailyEvents.Sunset,
+		Sunrise:  time.Unix(dailyEvents.Sunrise, 0),
+		Sunset:   time.Unix(dailyEvents.Sunset, 0),
 		Country:  dailyEvents.Country,
 		CityName: dailyEvents.CityName,
 	}
@@ -99,6 +106,37 @@ func (c *Controller) GetHourlyWeatherForDay(ctx echo.Context) error {
 	hourlyWeather, err := c.DS.GetHourlyWeather(date)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get hourly weather data", http.StatusInternalServerError)
+	}
+
+	// Check if we got any data
+	if len(hourlyWeather) == 0 {
+		// Log this event for monitoring purposes
+		ctx.Logger().Infof("No hourly weather data found for date: %s", date)
+
+		// Determine if this is a valid date but with no data, or potentially a future date
+		requestedDate, parseErr := time.Parse("2006-01-02", date)
+		if parseErr == nil {
+			today := time.Now()
+			if requestedDate.After(today) {
+				// Future date
+				return ctx.JSON(http.StatusOK, struct {
+					Message string                  `json:"message"`
+					Data    []HourlyWeatherResponse `json:"data"`
+				}{
+					Message: "No weather data available for future date",
+					Data:    []HourlyWeatherResponse{},
+				})
+			}
+		}
+
+		// Valid past date with no data
+		return ctx.JSON(http.StatusOK, struct {
+			Message string                  `json:"message"`
+			Data    []HourlyWeatherResponse `json:"data"`
+		}{
+			Message: "No weather data found for the specified date",
+			Data:    []HourlyWeatherResponse{},
+		})
 	}
 
 	// Convert to response format
@@ -124,7 +162,11 @@ func (c *Controller) GetHourlyWeatherForDay(ctx echo.Context) error {
 		})
 	}
 
-	return ctx.JSON(http.StatusOK, response)
+	return ctx.JSON(http.StatusOK, struct {
+		Data []HourlyWeatherResponse `json:"data"`
+	}{
+		Data: response,
+	})
 }
 
 // GetHourlyWeatherForHour handles GET /api/v2/weather/hourly/:date/:hour
@@ -137,6 +179,12 @@ func (c *Controller) GetHourlyWeatherForHour(ctx echo.Context) error {
 		return c.HandleError(ctx, echo.NewHTTPError(http.StatusBadRequest), "Date and hour parameters are required", http.StatusBadRequest)
 	}
 
+	// Parse the requested hour to an integer
+	requestedHour, err := strconv.Atoi(hour)
+	if err != nil {
+		return c.HandleError(ctx, echo.NewHTTPError(http.StatusBadRequest), "Invalid hour format", http.StatusBadRequest)
+	}
+
 	// Get hourly weather data for the day
 	hourlyWeather, err := c.DS.GetHourlyWeather(date)
 	if err != nil {
@@ -147,8 +195,10 @@ func (c *Controller) GetHourlyWeatherForHour(ctx echo.Context) error {
 	var targetHourData *HourlyWeatherResponse
 	for i := range hourlyWeather {
 		hw := &hourlyWeather[i]
-		hourStr := hw.Time.Format("15")
-		if hourStr == hour {
+		storedHourStr := hw.Time.Format("15")
+		storedHour, _ := strconv.Atoi(storedHourStr)
+
+		if storedHour == requestedHour {
 			response := HourlyWeatherResponse{
 				Time:        hw.Time.Format("15:04:05"),
 				Temperature: hw.Temperature,
@@ -208,8 +258,8 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 	// Convert daily data to response format
 	dailyResponse := DailyWeatherResponse{
 		Date:     dailyEvents.Date,
-		Sunrise:  dailyEvents.Sunrise,
-		Sunset:   dailyEvents.Sunset,
+		Sunrise:  time.Unix(dailyEvents.Sunrise, 0),
+		Sunset:   time.Unix(dailyEvents.Sunset, 0),
 		Country:  dailyEvents.Country,
 		CityName: dailyEvents.CityName,
 	}
@@ -228,28 +278,33 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 	detectionTime, err := time.Parse("2006-01-02 15:04:05", detectionTimeStr)
 	if err != nil {
 		// Use the hour to find weather if exact time parsing fails
-		for i := range hourlyWeather {
-			hw := &hourlyWeather[i]
-			hourStr := hw.Time.Format("15")
-			if hourStr == hour {
-				closestHourlyData = HourlyWeatherResponse{
-					Time:        hw.Time.Format("15:04:05"),
-					Temperature: hw.Temperature,
-					FeelsLike:   hw.FeelsLike,
-					TempMin:     hw.TempMin,
-					TempMax:     hw.TempMax,
-					Pressure:    hw.Pressure,
-					Humidity:    hw.Humidity,
-					Visibility:  hw.Visibility,
-					WindSpeed:   hw.WindSpeed,
-					WindDeg:     hw.WindDeg,
-					WindGust:    hw.WindGust,
-					Clouds:      hw.Clouds,
-					WeatherMain: hw.WeatherMain,
-					WeatherDesc: hw.WeatherDesc,
-					WeatherIcon: hw.WeatherIcon,
+		requestedHour, parseErr := strconv.Atoi(hour)
+		if parseErr == nil {
+			for i := range hourlyWeather {
+				hw := &hourlyWeather[i]
+				storedHourStr := hw.Time.Format("15")
+				storedHour, _ := strconv.Atoi(storedHourStr)
+
+				if storedHour == requestedHour {
+					closestHourlyData = HourlyWeatherResponse{
+						Time:        hw.Time.Format("15:04:05"),
+						Temperature: hw.Temperature,
+						FeelsLike:   hw.FeelsLike,
+						TempMin:     hw.TempMin,
+						TempMax:     hw.TempMax,
+						Pressure:    hw.Pressure,
+						Humidity:    hw.Humidity,
+						Visibility:  hw.Visibility,
+						WindSpeed:   hw.WindSpeed,
+						WindDeg:     hw.WindDeg,
+						WindGust:    hw.WindGust,
+						Clouds:      hw.Clouds,
+						WeatherMain: hw.WeatherMain,
+						WeatherDesc: hw.WeatherDesc,
+						WeatherIcon: hw.WeatherIcon,
+					}
+					break
 				}
-				break
 			}
 		}
 	} else {
@@ -322,8 +377,8 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 	}{
 		Daily: DailyWeatherResponse{
 			Date:     dailyEvents.Date,
-			Sunrise:  dailyEvents.Sunrise,
-			Sunset:   dailyEvents.Sunset,
+			Sunrise:  time.Unix(dailyEvents.Sunrise, 0),
+			Sunset:   time.Unix(dailyEvents.Sunset, 0),
 			Country:  dailyEvents.Country,
 			CityName: dailyEvents.CityName,
 		},

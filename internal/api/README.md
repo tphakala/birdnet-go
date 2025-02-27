@@ -4,7 +4,7 @@ This package implements the HTTP-based RESTful API for the BirdNET-Go applicatio
 
 ## Package Structure
 
-```
+```text
 internal/api/
 └── v2/
     ├── analytics.go       - Analytics and statistics endpoints
@@ -138,6 +138,32 @@ Handlers follow a consistent pattern:
    ```go
    return ctx.JSON(http.StatusOK, detection)
    ```
+
+### Settings Management
+
+The API includes comprehensive endpoints for managing application settings:
+
+1. **Settings Routes**:
+   - `GET /api/v2/settings` - Retrieves all application settings
+   - `GET /api/v2/settings/:section` - Retrieves settings for a specific section (e.g., birdnet, webserver)
+   - `PUT /api/v2/settings` - Updates multiple settings sections with complete replacement
+   - `PATCH /api/v2/settings/:section` - Updates a specific settings section with partial replacement
+
+2. **Concurrency Safety**:
+   - All settings operations are protected by a read-write mutex
+   - Read operations acquire a read lock, allowing concurrent reads
+   - Write operations acquire a write lock, ensuring exclusive access
+   - This prevents race conditions when multiple clients update settings simultaneously
+
+3. **Dynamic Field Updates**:
+   - Settings updates use reflection to safely update only allowed fields
+   - Updates can be applied at any nesting level in the settings structure
+   - The allowed fields map defines which settings can be modified via the API
+
+4. **Asynchronous Reconfigurations**:
+   - When important settings change, reconfigurations are triggered asynchronously
+   - This prevents long-running operations from blocking API responses
+   - A small delay is added between configuration actions to avoid overwhelming the system
 
 ### Best Practices for API Development
 

@@ -54,6 +54,8 @@ type DetectionResponse struct {
 		WindDeg     int     `json:"wind_deg,omitempty"`
 		IsDaytime   bool    `json:"is_daytime,omitempty"`
 	} `json:"weather,omitempty"`
+	// Weather error information
+	WeatherError string `json:"weather_error,omitempty"`
 }
 
 // DetectionRequest represents the query parameters for listing detections
@@ -103,47 +105,17 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	// Get notes based on query type
 	switch queryType {
 	case "hourly":
-		notes, err = c.DS.GetHourlyDetections(date, hour, duration, numResults, offset)
-		if err != nil {
-			return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		}
-		totalCount, err := c.DS.CountHourlyDetections(date, hour, duration)
-		if err != nil {
-			return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		}
-		totalResults = totalCount
+		notes, totalResults, err = c.getHourlyDetections(date, hour, duration, numResults, offset)
 	case "species":
-		notes, err = c.DS.SpeciesDetections(species, date, hour, duration, false, numResults, offset)
-		if err != nil {
-			return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		}
-		totalCount, err := c.DS.CountSpeciesDetections(species, date, hour, duration)
-		if err != nil {
-			return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		}
-		totalResults = totalCount
+		notes, totalResults, err = c.getSpeciesDetections(species, date, hour, duration, numResults, offset)
 	case "search":
-		notes, err = c.DS.SearchNotes(search, false, numResults, offset)
-		if err != nil {
-			return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		}
-		totalCount, err := c.DS.CountSearchResults(search)
-		if err != nil {
-			return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		}
-		totalResults = totalCount
+		notes, totalResults, err = c.getSearchDetections(search, numResults, offset)
 	default: // "all" or any other value
-		// Use the datastore.SearchNotes method with an empty query to get all notes
-		notes, err = c.DS.SearchNotes("", false, numResults, offset)
-		if err != nil {
-			return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		}
-		// Estimate total by counting
-		totalResults = int64(len(notes))
-		if len(notes) == numResults {
-			// If we got exactly the number requested, there may be more
-			totalResults = int64(offset + numResults + 1) // This is an estimate
-		}
+		notes, totalResults, err = c.getAllDetections(numResults, offset)
+	}
+
+	if err != nil {
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
 	// Convert notes to response format
@@ -203,6 +175,69 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, response)
 }
 
+// getHourlyDetections handles hourly query type logic
+func (c *Controller) getHourlyDetections(date, hour string, duration, numResults, offset int) ([]datastore.Note, int64, error) {
+	notes, err := c.DS.GetHourlyDetections(date, hour, duration, numResults, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	totalCount, err := c.DS.CountHourlyDetections(date, hour, duration)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return notes, totalCount, nil
+}
+
+// getSpeciesDetections handles species query type logic
+func (c *Controller) getSpeciesDetections(species, date, hour string, duration, numResults, offset int) ([]datastore.Note, int64, error) {
+	notes, err := c.DS.SpeciesDetections(species, date, hour, duration, false, numResults, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	totalCount, err := c.DS.CountSpeciesDetections(species, date, hour, duration)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return notes, totalCount, nil
+}
+
+// getSearchDetections handles search query type logic
+func (c *Controller) getSearchDetections(search string, numResults, offset int) ([]datastore.Note, int64, error) {
+	notes, err := c.DS.SearchNotes(search, false, numResults, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	totalCount, err := c.DS.CountSearchResults(search)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return notes, totalCount, nil
+}
+
+// getAllDetections handles default/all query type logic
+func (c *Controller) getAllDetections(numResults, offset int) ([]datastore.Note, int64, error) {
+	// Use the datastore.SearchNotes method with an empty query to get all notes
+	notes, err := c.DS.SearchNotes("", false, numResults, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Estimate total by counting
+	totalResults := int64(len(notes))
+	if len(notes) == numResults {
+		// If we got exactly the number requested, there may be more
+		totalResults = int64(offset + numResults + 1) // This is an estimate
+	}
+
+	return notes, totalResults, nil
+}
+
 // GetDetection returns a single detection by ID
 func (c *Controller) GetDetection(ctx echo.Context) error {
 	id := ctx.Param("id")
@@ -256,7 +291,10 @@ func (c *Controller) GetDetection(ctx echo.Context) error {
 				// Parse detection time
 				detectionTimeStr := note.Date + " " + note.Time
 				detectionTime, timeParseErr := time.Parse("2006-01-02 15:04:05", detectionTimeStr)
-				if timeParseErr == nil {
+				if timeParseErr != nil {
+					// Add error information to the response instead of silently failing
+					detection.WeatherError = fmt.Sprintf("Could not parse detection time: %v", timeParseErr)
+				} else {
 					// Get the closest hourly weather reading
 					var closestWeather *datastore.HourlyWeather
 					var closestDiff time.Duration = 24 * time.Hour
@@ -304,9 +342,15 @@ func (c *Controller) GetDetection(ctx echo.Context) error {
 							WindDeg:     closestWeather.WindDeg,
 							IsDaytime:   isDaytime,
 						}
+					} else {
+						detection.WeatherError = "No weather data available for the detection time"
 					}
 				}
+			} else {
+				detection.WeatherError = "No hourly weather data available for the date"
 			}
+		} else {
+			detection.WeatherError = fmt.Sprintf("No daily weather events available: %v", err)
 		}
 	}
 
@@ -376,7 +420,7 @@ func (c *Controller) DeleteDetection(ctx echo.Context) error {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	return ctx.NoContent(http.StatusNoContent)
+	return ctx.JSON(http.StatusOK, map[string]string{"status": "success"})
 }
 
 // ReviewDetection updates a detection with verification status and optional comment
@@ -481,14 +525,26 @@ func (c *Controller) addToIgnoredSpecies(note *datastore.Note, verified, ignoreS
 	return nil
 }
 
-// addSpeciesToIgnoredList adds a species to the ignore list
+// addSpeciesToIgnoredList adds a species to the ignore list with proper concurrency control.
+// It uses a mutex to ensure thread-safety when multiple requests try to modify the
+// excluded species list simultaneously. The function:
+// 1. Locks the controller's mutex to prevent concurrent modifications
+// 2. Gets the latest settings from the settings package
+// 3. Checks if the species is already in the excluded list
+// 4. If not excluded, creates a copy of the exclude list to avoid race conditions
+// 5. Adds the species to the new list and updates the settings
+// 6. Saves the settings using the package's thread-safe function
 func (c *Controller) addSpeciesToIgnoredList(species string) error {
 	if species == "" {
 		return nil
 	}
 
-	// Get the current settings
-	settings := c.Settings
+	// Use the controller's mutex to protect this operation
+	c.speciesExcludeMutex.Lock()
+	defer c.speciesExcludeMutex.Unlock()
+
+	// Access the latest settings using the settings accessor function
+	settings := conf.GetSettings()
 
 	// Check if species is already in the excluded list
 	isExcluded := false
@@ -501,9 +557,17 @@ func (c *Controller) addSpeciesToIgnoredList(species string) error {
 
 	// If not already excluded, add it
 	if !isExcluded {
-		settings.Realtime.Species.Exclude = append(settings.Realtime.Species.Exclude, species)
+		// Create a copy of the current exclude list to avoid race conditions
+		newExcludeList := make([]string, len(settings.Realtime.Species.Exclude))
+		copy(newExcludeList, settings.Realtime.Species.Exclude)
 
-		// Save settings
+		// Add the new species to the list
+		newExcludeList = append(newExcludeList, species)
+
+		// Update the settings with the new list
+		settings.Realtime.Species.Exclude = newExcludeList
+
+		// Save settings using the package function that handles concurrency
 		if err := conf.SaveSettings(); err != nil {
 			return fmt.Errorf("failed to save settings: %w", err)
 		}
