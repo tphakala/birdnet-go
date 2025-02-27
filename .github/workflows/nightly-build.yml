@@ -173,7 +173,6 @@ jobs:
           platforms: ${{ matrix.platform }}
           build-args: |
             BUILD_VERSION=${{ steps.get_version.outputs.version }}
-            CACHEBUST=${{ github.run_id }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
