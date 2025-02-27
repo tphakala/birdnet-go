@@ -93,7 +93,7 @@ func (ds *DataStore) GetSpeciesSummaryData() ([]SpeciesSummaryData, error) {
 }
 
 // GetHourlyAnalyticsData retrieves detection counts grouped by hour
-func (ds *DataStore) GetHourlyAnalyticsData(date string, species string) ([]HourlyAnalyticsData, error) {
+func (ds *DataStore) GetHourlyAnalyticsData(date, species string) ([]HourlyAnalyticsData, error) {
 	var analytics []HourlyAnalyticsData
 	hourFormat := ds.GetHourFormat()
 
@@ -121,7 +121,7 @@ func (ds *DataStore) GetHourlyAnalyticsData(date string, species string) ([]Hour
 }
 
 // GetDailyAnalyticsData retrieves detection counts grouped by day
-func (ds *DataStore) GetDailyAnalyticsData(startDate, endDate string, species string) ([]DailyAnalyticsData, error) {
+func (ds *DataStore) GetDailyAnalyticsData(startDate, endDate, species string) ([]DailyAnalyticsData, error) {
 	var analytics []DailyAnalyticsData
 
 	// Base query
@@ -131,11 +131,12 @@ func (ds *DataStore) GetDailyAnalyticsData(startDate, endDate string, species st
 		Order("date")
 
 	// Apply date range filter
-	if startDate != "" && endDate != "" {
+	switch {
+	case startDate != "" && endDate != "":
 		query = query.Where("date >= ? AND date <= ?", startDate, endDate)
-	} else if startDate != "" {
+	case startDate != "":
 		query = query.Where("date >= ?", startDate)
-	} else if endDate != "" {
+	case endDate != "":
 		query = query.Where("date <= ?", endDate)
 	}
 
