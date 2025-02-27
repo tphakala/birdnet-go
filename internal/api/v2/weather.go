@@ -39,8 +39,9 @@ type HourlyWeatherResponse struct {
 
 // DetectionWeatherResponse represents weather data associated with a detection
 type DetectionWeatherResponse struct {
-	Daily  DailyWeatherResponse  `json:"daily"`
-	Hourly HourlyWeatherResponse `json:"hourly"`
+	Daily     DailyWeatherResponse  `json:"daily"`
+	Hourly    HourlyWeatherResponse `json:"hourly"`
+	IsDaytime bool                  `json:"is_daytime"`
 }
 
 // initWeatherRoutes registers all weather-related API endpoints
@@ -243,7 +244,12 @@ func (c *Controller) GetHourlyWeatherForHour(ctx echo.Context) error {
 }
 
 // GetWeatherForDetection handles GET /api/v2/weather/detection/:id
-// Retrieves weather data associated with a specific detection
+// Retrieves weather data associated with a specific detection.
+//
+// This is the preferred endpoint for retrieving weather data for a detection.
+// Frontend applications should first request detection data from the detections API,
+// then use this endpoint to separately retrieve the associated weather data.
+// This allows for more efficient data loading and keeps concerns separated.
 func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 	id := ctx.Param("id")
 	if id == "" {
@@ -286,6 +292,9 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 
 	// Find the closest hourly weather to the detection time
 	var closestHourlyData HourlyWeatherResponse
+
+	// Default isDaytime value
+	isDaytime := false
 
 	// Parse detection time
 	detectionTimeStr := date + " " + note.Time
@@ -354,12 +363,20 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 				}
 			}
 		}
+
+		// Determine if it's daytime based on sunrise/sunset
+		if dailyEvents.Sunrise > 0 && dailyEvents.Sunset > 0 {
+			// Convert detection time to Unix timestamp
+			detectionUnix := detectionTime.Unix()
+			isDaytime = detectionUnix >= dailyEvents.Sunrise && detectionUnix <= dailyEvents.Sunset
+		}
 	}
 
 	// Build the combined response
 	response := DetectionWeatherResponse{
-		Daily:  dailyResponse,
-		Hourly: closestHourlyData,
+		Daily:     dailyResponse,
+		Hourly:    closestHourlyData,
+		IsDaytime: isDaytime,
 	}
 
 	return ctx.JSON(http.StatusOK, response)

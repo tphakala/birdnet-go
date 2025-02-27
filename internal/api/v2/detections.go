@@ -15,6 +15,10 @@ import (
 // initDetectionRoutes registers all detection-related API endpoints
 func (c *Controller) initDetectionRoutes() {
 	// Detection endpoints - publicly accessible
+	//
+	// Note: Detection data is decoupled from weather data by design.
+	// To get weather information for a specific detection, use the
+	// /api/v2/weather/detection/:id endpoint after fetching the detection.
 	c.Group.GET("/detections", c.GetDetections)
 	c.Group.GET("/detections/:id", c.GetDetection)
 	c.Group.GET("/detections/recent", c.GetRecentDetections)
@@ -42,20 +46,6 @@ type DetectionResponse struct {
 	Verified       string   `json:"verified"`
 	Locked         bool     `json:"locked"`
 	Comments       []string `json:"comments,omitempty"`
-	// Weather information
-	WeatherData *struct {
-		Temperature float64 `json:"temperature,omitempty"`
-		FeelsLike   float64 `json:"feels_like,omitempty"`
-		WeatherMain string  `json:"weather_main,omitempty"`
-		WeatherDesc string  `json:"weather_desc,omitempty"`
-		WeatherIcon string  `json:"weather_icon,omitempty"`
-		Humidity    int     `json:"humidity,omitempty"`
-		WindSpeed   float64 `json:"wind_speed,omitempty"`
-		WindDeg     int     `json:"wind_deg,omitempty"`
-		IsDaytime   bool    `json:"is_daytime,omitempty"`
-	} `json:"weather,omitempty"`
-	// Weather error information
-	WeatherError string `json:"weather_error,omitempty"`
 }
 
 // DetectionRequest represents the query parameters for listing detections
@@ -280,81 +270,6 @@ func (c *Controller) GetDetection(ctx echo.Context) error {
 			comments = append(comments, comment.Entry)
 		}
 		detection.Comments = comments
-	}
-
-	// Get weather data for the detection time
-	includeWeather := ctx.QueryParam("include_weather")
-	if includeWeather == "true" || includeWeather == "1" {
-		// Get daily weather data
-		dailyEvents, err := c.DS.GetDailyEvents(note.Date)
-		if err == nil {
-			// Get hourly weather data for the day
-			hourlyWeather, err := c.DS.GetHourlyWeather(note.Date)
-			if err == nil && len(hourlyWeather) > 0 {
-				// Parse detection time
-				detectionTimeStr := note.Date + " " + note.Time
-				detectionTime, timeParseErr := time.Parse("2006-01-02 15:04:05", detectionTimeStr)
-				if timeParseErr != nil {
-					// Add error information to the response instead of silently failing
-					detection.WeatherError = fmt.Sprintf("Could not parse detection time: %v", timeParseErr)
-				} else {
-					// Get the closest hourly weather reading
-					var closestWeather *datastore.HourlyWeather
-					var closestDiff time.Duration = 24 * time.Hour
-
-					for i := range hourlyWeather {
-						diff := hourlyWeather[i].Time.Sub(detectionTime)
-						if diff < 0 {
-							diff = -diff // Get absolute value
-						}
-
-						if diff < closestDiff {
-							closestDiff = diff
-							closestWeather = &hourlyWeather[i]
-						}
-					}
-
-					if closestWeather != nil {
-						// Determine if it's daytime based on sunrise/sunset
-						isDaytime := false
-						if dailyEvents.Sunrise > 0 && dailyEvents.Sunset > 0 {
-							// Convert detection time to Unix timestamp
-							detectionUnix := detectionTime.Unix()
-							isDaytime = detectionUnix >= dailyEvents.Sunrise && detectionUnix <= dailyEvents.Sunset
-						}
-
-						// Add weather data to the response
-						detection.WeatherData = &struct {
-							Temperature float64 `json:"temperature,omitempty"`
-							FeelsLike   float64 `json:"feels_like,omitempty"`
-							WeatherMain string  `json:"weather_main,omitempty"`
-							WeatherDesc string  `json:"weather_desc,omitempty"`
-							WeatherIcon string  `json:"weather_icon,omitempty"`
-							Humidity    int     `json:"humidity,omitempty"`
-							WindSpeed   float64 `json:"wind_speed,omitempty"`
-							WindDeg     int     `json:"wind_deg,omitempty"`
-							IsDaytime   bool    `json:"is_daytime,omitempty"`
-						}{
-							Temperature: closestWeather.Temperature,
-							FeelsLike:   closestWeather.FeelsLike,
-							WeatherMain: closestWeather.WeatherMain,
-							WeatherDesc: closestWeather.WeatherDesc,
-							WeatherIcon: closestWeather.WeatherIcon,
-							Humidity:    closestWeather.Humidity,
-							WindSpeed:   closestWeather.WindSpeed,
-							WindDeg:     closestWeather.WindDeg,
-							IsDaytime:   isDaytime,
-						}
-					} else {
-						detection.WeatherError = "No weather data available for the detection time"
-					}
-				}
-			} else {
-				detection.WeatherError = "No hourly weather data available for the date"
-			}
-		} else {
-			detection.WeatherError = fmt.Sprintf("No daily weather events available: %v", err)
-		}
 	}
 
 	return ctx.JSON(http.StatusOK, detection)

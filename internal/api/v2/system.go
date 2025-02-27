@@ -2,9 +2,12 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -56,6 +59,21 @@ type DiskInfo struct {
 	Used       uint64  `json:"used"`
 	Free       uint64  `json:"free"`
 	UsagePerc  float64 `json:"usage_percent"`
+	// Fields added for more comprehensive disk info
+	InodesTotal     uint64  `json:"inodes_total,omitempty"`         // Total number of inodes (Unix-like only)
+	InodesUsed      uint64  `json:"inodes_used,omitempty"`          // Number of used inodes (Unix-like only)
+	InodesFree      uint64  `json:"inodes_free,omitempty"`          // Number of free inodes (Unix-like only)
+	InodesUsagePerc float64 `json:"inodes_usage_percent,omitempty"` // Percentage of inodes used (Unix-like only)
+	ReadBytes       uint64  `json:"read_bytes,omitempty"`           // Total number of bytes read
+	WriteBytes      uint64  `json:"write_bytes,omitempty"`          // Total number of bytes written
+	ReadCount       uint64  `json:"read_count,omitempty"`           // Total number of read operations
+	WriteCount      uint64  `json:"write_count,omitempty"`          // Total number of write operations
+	ReadTime        uint64  `json:"read_time,omitempty"`            // Time spent reading (in milliseconds)
+	WriteTime       uint64  `json:"write_time,omitempty"`           // Time spent writing (in milliseconds)
+	IOBusyPerc      float64 `json:"io_busy_percent,omitempty"`      // Percentage of time the disk was busy with I/O operations
+	IOTime          uint64  `json:"io_time,omitempty"`              // Total time spent on I/O operations (in milliseconds)
+	IsRemote        bool    `json:"is_remote"`                      // Whether the filesystem is a network mount
+	IsReadOnly      bool    `json:"is_read_only"`                   // Whether the filesystem is mounted as read-only
 }
 
 // AudioDeviceInfo wraps the myaudio.AudioDeviceInfo struct for API responses
@@ -211,6 +229,23 @@ func (c *Controller) GetDiskInfo(ctx echo.Context) error {
 	// Create slice to hold disk info
 	disks := []DiskInfo{}
 
+	// Try to get IO counters for all disks
+	ioCounters, ioErr := disk.IOCounters()
+	if ioErr != nil {
+		c.Debug("Failed to get IO counters: %v", ioErr)
+		// Continue without IO metrics
+	}
+
+	// Get host info for uptime calculation
+	hostInfo, err := host.Info()
+	var uptimeMs uint64 = 0
+	if err != nil {
+		c.Debug("Failed to get host information for uptime: %v", err)
+	} else {
+		// Convert uptime to milliseconds for IO busy calculation
+		uptimeMs = hostInfo.Uptime * 1000
+	}
+
 	// Process each partition
 	for _, partition := range partitions {
 		// Skip special filesystems
@@ -218,36 +253,124 @@ func (c *Controller) GetDiskInfo(ctx echo.Context) error {
 			continue
 		}
 
+		// Create disk info with default values
+		diskInfo := DiskInfo{
+			Device:     partition.Device,
+			Mountpoint: partition.Mountpoint,
+			Fstype:     partition.Fstype,
+			IsRemote:   isRemoteFilesystem(partition.Fstype),
+			IsReadOnly: isReadOnlyMount(partition.Opts),
+		}
+
 		// Get usage statistics
 		usage, err := disk.Usage(partition.Mountpoint)
 		if err != nil {
 			c.Debug("Failed to get usage for %s: %v", partition.Mountpoint, err)
 			// Add partial information to indicate the disk exists but usage couldn't be determined
-			disks = append(disks, DiskInfo{
-				Device:     partition.Device,
-				Mountpoint: partition.Mountpoint,
-				Fstype:     partition.Fstype,
-				Total:      0,
-				Used:       0,
-				Free:       0,
-				UsagePerc:  0,
-			})
-			continue
+			diskInfo.Total = 0
+			diskInfo.Used = 0
+			diskInfo.Free = 0
+			diskInfo.UsagePerc = 0
+		} else {
+			// Add usage metrics
+			diskInfo.Total = usage.Total
+			diskInfo.Used = usage.Used
+			diskInfo.Free = usage.Free
+			diskInfo.UsagePerc = usage.UsedPercent
+
+			// Add inode usage statistics if available (usually only on Unix-like systems)
+			if usage.InodesTotal > 0 {
+				diskInfo.InodesTotal = usage.InodesTotal
+				diskInfo.InodesUsed = usage.InodesUsed
+				diskInfo.InodesFree = usage.InodesFree
+				diskInfo.InodesUsagePerc = usage.InodesUsedPercent
+			}
+		}
+
+		// Add IO metrics if available
+		deviceName := getDeviceBaseName(partition.Device)
+		if counter, exists := ioCounters[deviceName]; exists {
+			diskInfo.ReadBytes = counter.ReadBytes
+			diskInfo.WriteBytes = counter.WriteBytes
+			diskInfo.ReadCount = counter.ReadCount
+			diskInfo.WriteCount = counter.WriteCount
+			diskInfo.ReadTime = counter.ReadTime
+			diskInfo.WriteTime = counter.WriteTime
+			diskInfo.IOTime = counter.IoTime
+
+			// Calculate I/O busy percentage if uptime is available
+			if uptimeMs > 0 && counter.IoTime > 0 {
+				// IoTime is the time spent doing I/Os (ms)
+				diskInfo.IOBusyPerc = float64(counter.IoTime) / float64(uptimeMs) * 100
+
+				// Cap at 100% (in case of measurement anomalies)
+				if diskInfo.IOBusyPerc > 100 {
+					diskInfo.IOBusyPerc = 100
+				}
+			} else if counter.ReadTime > 0 || counter.WriteTime > 0 {
+				// Alternative calculation using read/write times if IoTime is not available
+				// This is less accurate but provides a reasonable approximation
+				totalIOTime := counter.ReadTime + counter.WriteTime
+				if uptimeMs > 0 {
+					diskInfo.IOBusyPerc = float64(totalIOTime) / float64(uptimeMs) * 100
+
+					// Cap at 100%
+					if diskInfo.IOBusyPerc > 100 {
+						diskInfo.IOBusyPerc = 100
+					}
+				}
+			}
 		}
 
 		// Add disk info to response
-		disks = append(disks, DiskInfo{
-			Device:     partition.Device,
-			Mountpoint: partition.Mountpoint,
-			Fstype:     partition.Fstype,
-			Total:      usage.Total,
-			Used:       usage.Used,
-			Free:       usage.Free,
-			UsagePerc:  usage.UsedPercent,
-		})
+		disks = append(disks, diskInfo)
 	}
 
 	return ctx.JSON(http.StatusOK, disks)
+}
+
+// getDeviceBaseName extracts the base device name (e.g., "sda" from "/dev/sda1")
+func getDeviceBaseName(device string) string {
+	// First get the basename (remove directory path)
+	base := filepath.Base(device)
+
+	// Then remove any numbers at the end (partition numbers)
+	for i := len(base) - 1; i >= 0; i-- {
+		if base[i] < '0' || base[i] > '9' {
+			if i < len(base)-1 {
+				return base[:i+1]
+			}
+			return base
+		}
+	}
+	return base
+}
+
+// isRemoteFilesystem returns true if the filesystem is a network mount
+func isRemoteFilesystem(fstype string) bool {
+	remoteFsTypes := map[string]bool{
+		"nfs":        true,
+		"nfs4":       true,
+		"cifs":       true,
+		"smbfs":      true,
+		"sshfs":      true,
+		"fuse.sshfs": true,
+		"afs":        true,
+		"9p":         true,
+		"ncpfs":      true,
+	}
+	return remoteFsTypes[fstype]
+}
+
+// isReadOnlyMount returns true if the filesystem is mounted as read-only
+func isReadOnlyMount(opts []string) bool {
+	// Look for read-only option in the mount options
+	for _, opt := range opts {
+		if opt == "ro" {
+			return true
+		}
+	}
+	return false
 }
 
 // GetAudioDevices handles GET /api/v2/system/audio/devices
@@ -300,18 +423,50 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 		Channels:   1,     // Assuming mono as per the capture.go implementation
 	}
 
+	// Diagnostic information map
+	diagnostics := map[string]interface{}{
+		"os":                runtime.GOOS,
+		"check_time":        time.Now().Format(time.RFC3339),
+		"error_details":     nil,
+		"device_found":      false,
+		"available_devices": []string{},
+	}
+
 	// Try to get additional device info and validate the device exists
 	devices, err := myaudio.ListAudioSources()
 	if err != nil {
-		c.Debug("Failed to list audio devices: %v", err)
+		errorMsg := fmt.Sprintf("Failed to list audio devices: %v", err)
+		c.Debug(errorMsg)
+
+		// Add more detailed diagnostics
+		diagnostics["error_details"] = errorMsg
+
+		// OS-specific additional checks
+		switch runtime.GOOS {
+		case "windows":
+			diagnostics["note"] = "On Windows, check that audio drivers are properly installed and the device is not disabled in Sound settings"
+		case "darwin":
+			diagnostics["note"] = "On macOS, check System Preferences > Sound and ensure the device has proper permissions"
+		case "linux":
+			diagnostics["note"] = "On Linux, check if PulseAudio/ALSA is running and the user has proper permissions"
+		}
+
 		// Still return the configured device, but note that we couldn't verify it exists
 		return ctx.JSON(http.StatusOK, map[string]interface{}{
-			"device":   activeDevice,
-			"active":   true,
-			"verified": false,
-			"message":  "Device configured but could not verify if it exists",
+			"device":      activeDevice,
+			"active":      true,
+			"verified":    false,
+			"message":     "Device configured but could not verify if it exists",
+			"diagnostics": diagnostics,
 		})
 	}
+
+	// Populate available devices for diagnostics
+	availableDevices := make([]string, len(devices))
+	for i, device := range devices {
+		availableDevices[i] = device.Name
+	}
+	diagnostics["available_devices"] = availableDevices
 
 	// Check if the configured device exists in the system
 	deviceFound := false
@@ -319,25 +474,35 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 		if device.Name == deviceName {
 			activeDevice.ID = device.ID
 			deviceFound = true
+			diagnostics["device_found"] = true
 			break
 		}
 	}
 
 	if !deviceFound {
 		// Device is configured but not found on the system
+		errorMsg := "Configured audio device not found on the system"
+		diagnostics["suggested_action"] = "Check if the device is properly connected and recognized by the system"
+
+		if len(devices) > 0 {
+			diagnostics["suggestion"] = fmt.Sprintf("Consider using one of the available devices: %s", strings.Join(availableDevices, ", "))
+		}
+
 		return ctx.JSON(http.StatusOK, map[string]interface{}{
-			"device":   activeDevice,
-			"active":   true,
-			"verified": false,
-			"message":  "Configured audio device not found on the system",
+			"device":      activeDevice,
+			"active":      true,
+			"verified":    false,
+			"message":     errorMsg,
+			"diagnostics": diagnostics,
 		})
 	}
 
 	// Device is configured and verified to exist
 	return ctx.JSON(http.StatusOK, map[string]interface{}{
-		"device":   activeDevice,
-		"active":   true,
-		"verified": true,
+		"device":      activeDevice,
+		"active":      true,
+		"verified":    true,
+		"diagnostics": diagnostics,
 	})
 }
 

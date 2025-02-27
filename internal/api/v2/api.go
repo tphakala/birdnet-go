@@ -2,8 +2,8 @@
 package api
 
 import (
+	"crypto/rand"
 	"log"
-	"math/rand"
 	"net/http"
 	"sync"
 
@@ -101,7 +101,9 @@ func (c *Controller) initRoutes() {
 // HealthCheck handles the API health check endpoint
 func (c *Controller) HealthCheck(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, map[string]string{
-		"status": "healthy",
+		"status":     "healthy",
+		"version":    c.Settings.Version,
+		"build_date": c.Settings.BuildDate,
 	})
 }
 
@@ -126,14 +128,21 @@ func NewErrorResponse(err error, message string, code int) *ErrorResponse {
 	}
 }
 
-// generateCorrelationID creates a unique identifier for error tracking
+// generateCorrelationID creates a unique identifier for error tracking using cryptographic randomness
+// for better security and uniqueness guarantees across all platforms
 func generateCorrelationID() string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	const length = 8
 
 	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		// Fall back to a default ID if crypto/rand fails
+		return "ERR-RAND"
+	}
+
+	// Map the random bytes to charset characters
 	for i := range b {
-		b[i] = charset[byte(rand.Intn(len(charset)))]
+		b[i] = charset[int(b[i])%len(charset)]
 	}
 	return string(b)
 }
