@@ -57,6 +57,11 @@ type Interface interface {
 	GetAllImageCaches() ([]ImageCache, error)
 	GetLockedNotesClipPaths() ([]string, error)
 	CountHourlyDetections(date, hour string, duration int) (int64, error)
+	// Analytics methods
+	GetSpeciesSummaryData() ([]SpeciesSummaryData, error)
+	GetHourlyAnalyticsData(date string, species string) ([]HourlyAnalyticsData, error)
+	GetDailyAnalyticsData(startDate, endDate string, species string) ([]DailyAnalyticsData, error)
+	GetDetectionTrends(period string, limit int) ([]DailyAnalyticsData, error)
 }
 
 // DataStore implements StoreInterface using a GORM database.
