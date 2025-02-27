@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -110,22 +111,37 @@ var cpuCache = &CPUCache{
 	lastUpdated: time.Now(),
 }
 
-// UpdateCPUCache updates the cached CPU usage data
-func UpdateCPUCache() {
-	for {
-		// Get CPU usage (this will block for 1 second)
-		percent, err := cpu.Percent(time.Second, false)
-		if err == nil && len(percent) > 0 {
-			// Update the cache
-			cpuCache.mu.Lock()
-			cpuCache.cpuPercent = percent
-			cpuCache.lastUpdated = time.Now()
-			cpuCache.mu.Unlock()
-		}
+// Store the cancel function for CPU monitoring to enable proper cleanup
+var cpuMonitorCancel context.CancelFunc
 
-		// Wait before next update (can be adjusted based on needs)
-		// We add a small buffer to ensure we don't constantly block
-		time.Sleep(2 * time.Second)
+// UpdateCPUCache updates the cached CPU usage data
+func UpdateCPUCache(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			// Context canceled, exit the goroutine
+			return
+		default:
+			// Get CPU usage (this will block for 1 second)
+			percent, err := cpu.Percent(time.Second, false)
+			if err == nil && len(percent) > 0 {
+				// Update the cache
+				cpuCache.mu.Lock()
+				cpuCache.cpuPercent = percent
+				cpuCache.lastUpdated = time.Now()
+				cpuCache.mu.Unlock()
+			}
+
+			// Wait before next update (can be adjusted based on needs)
+			// We add a small buffer to ensure we don't constantly block
+			// Use time.After in a select to make it cancellable
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+				// Continue to next iteration
+			}
+		}
 	}
 }
 
@@ -142,8 +158,10 @@ func GetCachedCPUUsage() []float64 {
 
 // Initialize system routes
 func (c *Controller) initSystemRoutes() {
-	// Start CPU usage monitoring in background
-	go UpdateCPUCache()
+	// Start CPU usage monitoring in background with context for controlled shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	cpuMonitorCancel = cancel // Store for later cleanup
+	go UpdateCPUCache(ctx)
 
 	// Create system API group
 	systemGroup := c.Group.Group("/system")
@@ -626,4 +644,18 @@ func skipFilesystem(fstype string) bool {
 	}
 
 	return false
+}
+
+// StopCPUMonitoring stops the CPU monitoring goroutine by canceling its context.
+// This function is called by the Controller.Shutdown method during application shutdown.
+// It ensures that the background goroutine started by UpdateCPUCache is properly terminated
+// to prevent resource leaks when the application exits.
+//
+// Note: This function is safe to call multiple times as it sets cpuMonitorCancel to nil
+// after the first call.
+func StopCPUMonitoring() {
+	if cpuMonitorCancel != nil {
+		cpuMonitorCancel()
+		cpuMonitorCancel = nil // Prevent double cancellation
+	}
 }

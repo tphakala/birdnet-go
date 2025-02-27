@@ -12,6 +12,8 @@ import (
 )
 
 // InitializeAPI sets up the JSON API endpoints in the provided Echo instance
+// The returned Controller has a Shutdown method that should be called during application shutdown
+// to properly clean up resources and stop background goroutines
 func InitializeAPI(
 	e *echo.Echo,
 	ds datastore.Interface,

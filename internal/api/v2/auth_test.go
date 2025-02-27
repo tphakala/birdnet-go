@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"errors"
@@ -27,16 +28,21 @@ type SecurityManager interface {
 // MockSecurityManager implements a mock for the authentication system
 type MockSecurityManager struct {
 	mock.Mock
+	mu sync.Mutex // Added mutex for concurrent safety
 }
 
 // Validate the token
 func (m *MockSecurityManager) ValidateToken(token string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	args := m.Called(token)
 	return args.Bool(0), args.Error(1)
 }
 
 // Generate a new token
 func (m *MockSecurityManager) GenerateToken(username string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	args := m.Called(username)
 	return args.String(0), args.Error(1)
 }
@@ -44,6 +50,7 @@ func (m *MockSecurityManager) GenerateToken(username string) (string, error) {
 // MockServer implements the interfaces required for auth testing
 type MockServer struct {
 	mock.Mock
+	mu          sync.Mutex // Added mutex for concurrent safety
 	AuthEnabled bool
 	ValidTokens map[string]bool
 	Password    string
@@ -52,6 +59,9 @@ type MockServer struct {
 
 // ValidateAccessToken validates an access token
 func (m *MockServer) ValidateAccessToken(token string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// First check if we have a direct mock expectation
 	if m.Mock.ExpectedCalls != nil {
 		for _, call := range m.Mock.ExpectedCalls {
@@ -73,31 +83,60 @@ func (m *MockServer) ValidateAccessToken(token string) bool {
 
 // IsAccessAllowed checks if access is allowed
 func (m *MockServer) IsAccessAllowed(c echo.Context) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	args := m.Called(c)
 	return args.Bool(0)
 }
 
 // isAuthenticationEnabled checks if authentication is enabled
 func (m *MockServer) isAuthenticationEnabled(c echo.Context) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.AuthEnabled
 }
 
 // AuthenticateBasic performs basic authentication
 func (m *MockServer) AuthenticateBasic(c echo.Context, username, password string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	args := m.Called(c, username, password)
 	return args.Bool(0)
 }
 
 // GetUsername returns the authenticated username
 func (m *MockServer) GetUsername(c echo.Context) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	args := m.Called(c)
 	return args.String(0)
 }
 
 // GetAuthMethod returns the authentication method
 func (m *MockServer) GetAuthMethod(c echo.Context) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	args := m.Called(c)
 	return args.String(0)
+}
+
+// extractTokenFromContext is a utility function to consistently extract tokens
+// from either context or authorization header
+func extractTokenFromContext(c echo.Context) string {
+	// First check if token was set directly in context
+	if tokenVal := c.Get("token"); tokenVal != nil {
+		if token, ok := tokenVal.(string); ok {
+			return token
+		}
+	}
+
+	// Next, try to extract from Authorization header (Bearer token)
+	authHeader := c.Request().Header.Get("Authorization")
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		return strings.TrimPrefix(authHeader, "Bearer ")
+	}
+
+	return ""
 }
 
 // TestAuthMiddleware tests the authentication middleware
@@ -163,6 +202,14 @@ func TestAuthMiddleware(t *testing.T) {
 			token:          "error-token",
 			validateReturn: false,
 			validateError:  errors.New("validation error"),
+			expectStatus:   http.StatusUnauthorized,
+			serverSetup:    nil,
+		},
+		{
+			name:           "Syntactically corrupted token",
+			token:          "invalid.jwt.format-missing-segments",
+			validateReturn: false,
+			validateError:  errors.New("invalid token format"),
 			expectStatus:   http.StatusUnauthorized,
 			serverSetup:    nil,
 		},
@@ -350,47 +397,6 @@ func TestLogin(t *testing.T) {
 	}
 }
 
-// ValidateToken implements a test token validation function directly within test context
-func validateToken(c echo.Context, token string) (bool, error) {
-	// Get server from context which should contain our mock
-	server := c.Get("server")
-	if server == nil {
-		return false, errors.New("server not available in context")
-	}
-
-	// Try to use the mock server's security manager
-	if mockServer, ok := server.(*MockServer); ok && mockServer.Security != nil {
-		return mockServer.Security.ValidateToken(token)
-	}
-
-	return false, errors.New("validation failed")
-}
-
-// mockValidateToken is an implementation for the test handler
-func mockValidateToken(c echo.Context) error {
-	token := c.Get("token").(string)
-
-	if token == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "Token is required")
-	}
-
-	valid, err := validateToken(c, token)
-
-	// Handle specific error types
-	switch {
-	case err != nil && err.Error() == "token expired":
-		return echo.NewHTTPError(http.StatusUnauthorized, "Token expired")
-	case err != nil && err.Error() == "missing claims":
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid token format")
-	case !valid:
-		return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token")
-	}
-
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"valid": true,
-	})
-}
-
 // TestValidateToken tests the token validation endpoint
 func TestValidateToken(t *testing.T) {
 	// Setup
@@ -403,6 +409,47 @@ func TestValidateToken(t *testing.T) {
 	mockServer := new(MockServer)
 	mockServer.AuthEnabled = true
 	mockServer.Security = mockSecurity
+
+	// validateToken is now defined within test scope to keep the package-level namespace clean
+	validateToken := func(c echo.Context, token string) (bool, error) {
+		// Get server from context which should contain our mock
+		server := c.Get("server")
+		if server == nil {
+			return false, errors.New("server not available in context")
+		}
+
+		// Try to use the mock server's security manager
+		if mockServer, ok := server.(*MockServer); ok && mockServer.Security != nil {
+			return mockServer.Security.ValidateToken(token)
+		}
+
+		return false, errors.New("validation failed")
+	}
+
+	// mockValidateToken is now using the common token extraction utility
+	mockValidateToken := func(c echo.Context) error {
+		token := extractTokenFromContext(c)
+
+		if token == "" {
+			return echo.NewHTTPError(http.StatusBadRequest, "Token is required")
+		}
+
+		valid, err := validateToken(c, token)
+
+		// Handle specific error types
+		switch {
+		case err != nil && err.Error() == "token expired":
+			return echo.NewHTTPError(http.StatusUnauthorized, "Token expired")
+		case err != nil && err.Error() == "missing claims":
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid token format")
+		case !valid:
+			return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token")
+		}
+
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"valid": true,
+		})
+	}
 
 	// Test cases
 	testCases := []struct {
@@ -461,6 +508,14 @@ func TestValidateToken(t *testing.T) {
 			expectStatus:   http.StatusUnauthorized,
 			expectMessage:  "Invalid token",
 		},
+		{
+			name:           "Malformed JWT token",
+			token:          "not.a.valid.jwt.token",
+			validateReturn: false,
+			validateError:  errors.New("malformed token"),
+			expectStatus:   http.StatusUnauthorized,
+			expectMessage:  "Invalid token",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -476,13 +531,21 @@ func TestValidateToken(t *testing.T) {
 				mockServer.On("ValidateAccessToken", tc.token).Return(tc.validateReturn).Once()
 			}
 
-			// Create a request
+			// Create a request - test both ways of providing the token
 			req := httptest.NewRequest(http.MethodPost, "/api/v2/auth/validate", http.NoBody)
+
+			// Randomly alternate between setting token in header vs context to test both pathways
+			if tc.name == "Valid token" || tc.name == "Invalid token" || tc.name == "Malformed JWT token" {
+				req.Header.Set("Authorization", "Bearer "+tc.token)
+			}
+
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 
-			// Add token to context
-			c.Set("token", tc.token)
+			// Set the token in context (for test cases not using Authorization header)
+			if tc.name != "Valid token" && tc.name != "Invalid token" && tc.name != "Malformed JWT token" {
+				c.Set("token", tc.token)
+			}
 
 			// Set the mock server in the context
 			c.Set("server", mockServer)

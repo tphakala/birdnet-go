@@ -80,10 +80,28 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		if !authenticated {
-			// Return JSON error for API calls
-			return ctx.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "Authentication required",
-			})
+			// Determine if request is from a browser or an API client
+			// Browsers typically include "text/html" in their Accept header
+			acceptHeader := ctx.Request().Header.Get("Accept")
+			isBrowserRequest := strings.Contains(acceptHeader, "text/html")
+
+			if isBrowserRequest {
+				// For browser requests, redirect to login page
+				loginPath := "/login"
+
+				// Optionally store the original URL for post-login redirect
+				originURL := ctx.Request().URL.String()
+				if originURL != loginPath && !strings.Contains(originURL, "login") {
+					loginPath += "?redirect=" + originURL
+				}
+
+				return ctx.Redirect(http.StatusFound, loginPath)
+			} else {
+				// For API clients, return JSON error response
+				return ctx.JSON(http.StatusUnauthorized, map[string]string{
+					"error": "Authentication required",
+				})
+			}
 		}
 
 		return next(ctx)
