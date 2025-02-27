@@ -18,6 +18,7 @@ internal/api/
     ├── integration.go     - External integration framework
     ├── integrations.go    - External service integrations
     ├── media.go           - Media (images, audio) management
+    ├── middleware.go      - Custom middleware functions
     ├── settings.go        - Application settings management
     ├── streams.go         - Real-time data streaming
     ├── system.go          - System information and monitoring
@@ -47,6 +48,7 @@ The API implements authentication via:
 - Login/logout functionality
 - Session-based authentication
 - Auth middleware for protected endpoints
+- Bearer token support for programmatic API access
 
 Protected endpoints require authentication, while some endpoints like health checks and basic detection queries are publicly accessible.
 
@@ -87,6 +89,11 @@ Protected endpoints require authentication, while some endpoints like health che
 - Weather conditions for detections
 - Daylight information
 
+### Real-time Data Streaming
+
+- WebSocket connections for live detection updates
+- Event-based notification system
+
 ## API Design Principles
 
 ### Route Organization
@@ -112,6 +119,21 @@ The API follows a consistent pattern for organizing routes:
    // Protected routes
    detectionGroup := c.Group.Group("/detections", c.AuthMiddleware)
    ```
+
+### Middleware Implementation
+
+The API uses a combination of standard Echo middleware and custom middleware for specific functionality:
+
+1. **Standard Middleware**:
+   - Logger - For request logging
+   - Recover - For panic recovery
+   - CORS - For cross-origin resource sharing
+
+2. **Custom Middleware**:
+   - AuthMiddleware - Handles both session-based and token-based authentication
+   - Rate limiting for public endpoints
+
+Middleware is defined in the dedicated `middleware.go` file to maintain clean separation of concerns.
 
 ### Handler Implementation
 
@@ -187,6 +209,7 @@ The API includes comprehensive endpoints for managing application settings:
    - Use standardized response formats across all handlers
    - Include proper HTTP status codes
    - Return appropriate error messages with helpful context
+   - Include correlation IDs for error tracking
 
 ## Error Handling
 
@@ -196,9 +219,12 @@ The API provides standardized error responses:
 {
   "error": "Error type or source",
   "message": "Human-readable error message",
-  "code": 400
+  "code": 400,
+  "correlation_id": "ab12xy89"
 }
 ```
+
+The correlation ID allows tracking specific errors across logs and systems.
 
 ## Developer Usage
 
@@ -262,6 +288,13 @@ The API is designed to be compatible with Linux, macOS, and Windows. File paths 
 When working with the API code, be mindful of these important considerations:
 
 ### Security Best Practices
+
+#### Authentication and Authorization
+
+- Always use the `AuthMiddleware` for protected routes
+- Validate tokens properly with appropriate expiration and refresh mechanics
+- Use proper session management for browser-based access
+- Implement fine-grained authorization checks within handlers
 
 #### Path Traversal Protection
 
@@ -493,9 +526,19 @@ Each module has corresponding test files (`*_test.go`) for unit testing. Run tes
 go test -v ./internal/api/v2/...
 ```
 
+### Testing Best Practices
+
+1. **Mock Dependencies**: Use mock implementations of datastore and other dependencies
+2. **Test Both Success and Failure Paths**: Ensure error handling works correctly
+3. **Validate Response Structures**: Ensure JSON responses match expected formats
+4. **Test Middleware Behavior**: Verify auth middleware correctly allows/denies requests
+5. **Use Table-Driven Tests**: For testing multiple input scenarios
+
 ## Security Considerations
 
 - All sensitive endpoints require authentication
 - Use HTTPS in production
 - The API implements CORS middleware
-- Authentication is required for system control operations 
+- Authentication is required for system control operations
+- Properly manage API tokens with appropriate expiration policies
+- Implement rate limiting for public endpoints 
