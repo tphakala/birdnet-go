@@ -72,8 +72,11 @@ func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 	}
 
 	// Check if the file exists
-	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		return c.HandleError(ctx, err, "Audio file not found", http.StatusNotFound)
+	if _, err := os.Stat(fullPath); err != nil {
+		if os.IsNotExist(err) {
+			return c.HandleError(ctx, err, "Audio file not found", http.StatusNotFound)
+		}
+		return c.HandleError(ctx, err, "Error accessing audio file", http.StatusInternalServerError)
 	}
 
 	// Serve the file
@@ -102,8 +105,11 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	}
 
 	// Check if the audio file exists
-	if _, err := os.Stat(audioPath); os.IsNotExist(err) {
-		return c.HandleError(ctx, err, "Audio file not found", http.StatusNotFound)
+	if _, err := os.Stat(audioPath); err != nil {
+		if os.IsNotExist(err) {
+			return c.HandleError(ctx, err, "Audio file not found", http.StatusNotFound)
+		}
+		return c.HandleError(ctx, err, "Error accessing audio file", http.StatusInternalServerError)
 	}
 
 	// Get the base filename without extension
@@ -119,11 +125,15 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	}
 
 	// Check if the spectrogram already exists
-	if _, err := os.Stat(spectrogramPath); os.IsNotExist(err) {
-		// Spectrogram doesn't exist, generate it
-		spectrogramPath, err = c.generateSpectrogram(audioPath, width)
-		if err != nil {
-			return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
+	if _, err := os.Stat(spectrogramPath); err != nil {
+		if os.IsNotExist(err) {
+			// Spectrogram doesn't exist, generate it
+			spectrogramPath, err = c.generateSpectrogram(audioPath, width)
+			if err != nil {
+				return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
+			}
+		} else {
+			return c.HandleError(ctx, err, "Error accessing spectrogram file", http.StatusInternalServerError)
 		}
 	}
 

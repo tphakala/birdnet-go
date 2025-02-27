@@ -204,8 +204,9 @@ func TestGetDailyAnalytics(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-// TestGetTrends tests the detection trends functionality
-func TestGetTrends(t *testing.T) {
+// TestGetDailyAnalyticsWithoutSpecies tests the daily analytics endpoint when no species is provided
+// This tests the aggregated data behavior, which represents detection trends across all species
+func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
 	// Setup
 	e, mockDS, controller := setupTestEnvironment()
 

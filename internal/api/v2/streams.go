@@ -32,7 +32,11 @@ var (
 	upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		// Allow all origins for now - this should be restricted in production
+		// TODO: In production, this should be restricted to only allow specific origins
+		// For example: CheckOrigin: func(r *http.Request) bool {
+		//   origin := r.Header.Get("Origin")
+		//   return isAllowedOrigin(origin)
+		// }
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
 )
@@ -120,8 +124,9 @@ func (c *Controller) HandleNotificationsStream(ctx echo.Context) error {
 
 // registerClient registers a WebSocket client with the appropriate stream manager
 func (c *Controller) registerClient(client *Client) {
-	// In a real implementation, this would add the client to a map of active clients
-	// and set up the necessary event handling
+	// TODO: Implement proper client registration with the stream manager
+	// TODO: Add client to a map of active clients with proper synchronization
+	// TODO: Set up necessary event handling for broadcasting messages
 	c.Debug("Client %s connected to %s stream", client.clientID, client.streamType)
 
 	// This is where you would register with a stream manager that would

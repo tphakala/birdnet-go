@@ -5,6 +5,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -294,12 +295,39 @@ func TestHealthCheck(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 
 		// Parse response body
-		var response map[string]string
+		var response map[string]interface{}
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
 
 		// Check response content
 		assert.Equal(t, "healthy", response["status"])
+
+		// Future extensions - these fields may be added later
+		// If they exist, they should have the correct type
+		if version, exists := response["version"]; exists {
+			assert.IsType(t, "", version, "version should be a string")
+		}
+
+		if env, exists := response["environment"]; exists {
+			assert.IsType(t, "", env, "environment should be a string")
+		}
+
+		if uptime, exists := response["uptime"]; exists {
+			// Uptime could be represented as a number (seconds) or as a formatted string
+			switch v := uptime.(type) {
+			case float64:
+				assert.GreaterOrEqual(t, v, float64(0), "uptime should be non-negative")
+			case string:
+				assert.NotEmpty(t, v, "uptime string should not be empty")
+			default:
+				assert.Fail(t, "uptime should be a number or string")
+			}
+		}
+
+		// If additional system metrics are added
+		if metrics, exists := response["metrics"]; exists {
+			assert.IsType(t, map[string]interface{}{}, metrics, "metrics should be an object")
+		}
 	}
 }
 
@@ -369,6 +397,43 @@ func TestGetRecentDetections(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
+// TestGetRecentDetectionsError tests error handling in the recent detections endpoint
+func TestGetRecentDetectionsError(t *testing.T) {
+	// Setup
+	e, mockDS, controller := setupTestEnvironment()
+
+	// Setup mock to return an error
+	mockError := gorm.ErrRecordNotFound
+	mockDS.On("GetLastDetections", 10).Return([]datastore.Note{}, mockError)
+
+	// Create a request to the recent detections endpoint
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/recent?limit=10", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/detections/recent")
+	c.QueryParams().Set("limit", "10")
+
+	// Test - we expect the controller to handle the error and return an HTTP error
+	controller.GetRecentDetections(c)
+
+	// We should get an error response
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+
+	// Parse error response
+	var errorResponse map[string]interface{}
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &errorResponse)
+	assert.NoError(t, jsonErr)
+
+	// Check error response content
+	assert.Contains(t, errorResponse, "error")
+	assert.Contains(t, errorResponse, "message")
+	assert.Contains(t, errorResponse, "code")
+	assert.Equal(t, float64(http.StatusInternalServerError), errorResponse["code"])
+
+	// Verify mock expectations
+	mockDS.AssertExpectations(t)
+}
+
 // TestDeleteDetection tests the delete detection endpoint
 func TestDeleteDetection(t *testing.T) {
 	// Setup
@@ -395,15 +460,9 @@ func TestDeleteDetection(t *testing.T) {
 	// Test
 	if assert.NoError(t, handler(c)) {
 		// Check response
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		// Parse response body
-		var response map[string]interface{}
-		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
-
-		// Check response content
-		assert.Equal(t, "success", response["status"])
+		assert.Equal(t, http.StatusNoContent, rec.Code)
+		// No content should be returned with 204 status
+		assert.Empty(t, rec.Body.String())
 	}
 
 	// Verify mock expectations
@@ -460,6 +519,121 @@ func TestReviewDetection(t *testing.T) {
 
 	// Verify mock expectations
 	mockDS.AssertExpectations(t)
+}
+
+// TestReviewDetectionConcurrency tests concurrency handling in the review detection endpoint
+func TestReviewDetectionConcurrency(t *testing.T) {
+	// Setup
+	e, mockDS, controller := setupTestEnvironment()
+
+	// Create review request
+	reviewRequest := map[string]interface{}{
+		"correct": true,
+		"comment": "This is a correct identification",
+	}
+
+	// Convert to JSON
+	jsonData, err := json.Marshal(reviewRequest)
+	assert.NoError(t, err)
+
+	// Scenario 1: Note is already locked by another user
+	t.Run("NoteLocked", func(t *testing.T) {
+		// Reset mock
+		mockDS = new(MockDataStore)
+		controller.DS = mockDS
+
+		// Mock note is already locked
+		mockDS.On("IsNoteLocked", "1").Return(true, nil)
+
+		// Note: We don't expect SaveNoteReview to be called when note is locked
+
+		// Create a request
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/1/review",
+			bytes.NewReader(jsonData))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/api/v2/detections/:id/review")
+		c.SetParamNames("id")
+		c.SetParamValues("1")
+
+		// Test
+		controller.ReviewDetection(c)
+
+		// Should return conflict or forbidden status
+		assert.Equal(t, http.StatusConflict, rec.Code)
+
+		// Parse response
+		var response map[string]interface{}
+		jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+		assert.NoError(t, jsonErr)
+
+		// Verify response indicates locked resource
+		assert.Contains(t, response["message"], "locked")
+
+		// Verify expectations - SaveNoteReview should not have been called
+		mockDS.AssertNotCalled(t, "SaveNoteReview", mock.Anything)
+	})
+
+	// Scenario 2: Database error during lock check
+	t.Run("LockCheckError", func(t *testing.T) {
+		// Reset mock
+		mockDS = new(MockDataStore)
+		controller.DS = mockDS
+
+		// Mock database error during lock check
+		dbErr := errors.New("database error")
+		mockDS.On("IsNoteLocked", "1").Return(false, dbErr)
+
+		// Create request
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/1/review",
+			bytes.NewReader(jsonData))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/api/v2/detections/:id/review")
+		c.SetParamNames("id")
+		c.SetParamValues("1")
+
+		// Test
+		controller.ReviewDetection(c)
+
+		// Should return error status
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+
+		// Verify expectations - SaveNoteReview should not have been called
+		mockDS.AssertNotCalled(t, "SaveNoteReview", mock.Anything)
+	})
+
+	// Scenario 3: Race condition when locking note
+	t.Run("RaceCondition", func(t *testing.T) {
+		// Reset mock
+		mockDS = new(MockDataStore)
+		controller.DS = mockDS
+
+		// Mock race condition: note is not locked in check but fails to acquire lock
+		mockDS.On("IsNoteLocked", "1").Return(false, nil)
+		mockDS.On("LockNote", "1").Return(errors.New("concurrent access"))
+
+		// Create request
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/1/review",
+			bytes.NewReader(jsonData))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/api/v2/detections/:id/review")
+		c.SetParamNames("id")
+		c.SetParamValues("1")
+
+		// Test
+		controller.ReviewDetection(c)
+
+		// Should return conflict status
+		assert.Equal(t, http.StatusConflict, rec.Code)
+
+		// Verify expectations - SaveNoteReview should not have been called
+		mockDS.AssertNotCalled(t, "SaveNoteReview", mock.Anything)
+	})
 }
 
 // Add more test functions for other endpoints as needed

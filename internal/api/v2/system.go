@@ -74,7 +74,9 @@ type ActiveAudioDevice struct {
 	Channels   int    `json:"channels"`
 }
 
+// Use monotonic clock for start time
 var startTime = time.Now()
+var startMonotonicTime = time.Now() // This inherently includes monotonic clock reading
 
 // AuthMiddleware middleware function for system routes that require authentication
 func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
@@ -147,8 +149,8 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 		hostname = "unknown"
 	}
 
-	// Calculate app uptime
-	appUptime := int64(time.Since(startTime).Seconds())
+	// Calculate app uptime using monotonic clock to avoid system time changes
+	appUptime := int64(time.Since(startMonotonicTime).Seconds())
 
 	// Create response
 	info := SystemInfo{
@@ -274,6 +276,12 @@ func (c *Controller) GetAudioDevices(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to list audio devices", http.StatusInternalServerError)
 	}
 
+	// Check if no devices were found
+	if len(devices) == 0 {
+		c.Debug("No audio devices found on the system")
+		return ctx.JSON(http.StatusOK, []AudioDeviceInfo{}) // Return empty array instead of null
+	}
+
 	// Convert to API response format
 	apiDevices := make([]AudioDeviceInfo, len(devices))
 	for i, device := range devices {
@@ -292,14 +300,15 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 	// Get active audio device from settings
 	deviceName := c.Settings.Realtime.Audio.Source
 
-	// Find device info if not empty
+	// Check if no device is configured
 	if deviceName == "" {
-		return ctx.JSON(http.StatusOK, map[string]string{
+		return ctx.JSON(http.StatusOK, map[string]interface{}{
+			"active":  false,
 			"message": "No audio device currently active",
 		})
 	}
 
-	// Create response with available information
+	// Create response with default values
 	activeDevice := ActiveAudioDevice{
 		Name:       deviceName,
 		SampleRate: 48000, // Standard BirdNET sample rate
@@ -307,51 +316,121 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 		Channels:   1,     // Assuming mono as per the capture.go implementation
 	}
 
-	// Try to get additional device info
+	// Try to get additional device info and validate the device exists
 	devices, err := myaudio.ListAudioSources()
-	if err == nil {
-		for _, device := range devices {
-			if device.Name == deviceName {
-				activeDevice.ID = device.ID
-				break
-			}
+	if err != nil {
+		c.Debug("Failed to list audio devices: %v", err)
+		// Still return the configured device, but note that we couldn't verify it exists
+		return ctx.JSON(http.StatusOK, map[string]interface{}{
+			"device":   activeDevice,
+			"active":   true,
+			"verified": false,
+			"message":  "Device configured but could not verify if it exists",
+		})
+	}
+
+	// Check if the configured device exists in the system
+	deviceFound := false
+	for _, device := range devices {
+		if device.Name == deviceName {
+			activeDevice.ID = device.ID
+			deviceFound = true
+			break
 		}
 	}
 
-	return ctx.JSON(http.StatusOK, activeDevice)
+	if !deviceFound {
+		// Device is configured but not found on the system
+		return ctx.JSON(http.StatusOK, map[string]interface{}{
+			"device":   activeDevice,
+			"active":   true,
+			"verified": false,
+			"message":  "Configured audio device not found on the system",
+		})
+	}
+
+	// Device is configured and verified to exist
+	return ctx.JSON(http.StatusOK, map[string]interface{}{
+		"device":   activeDevice,
+		"active":   true,
+		"verified": true,
+	})
 }
 
 // Helper functions
 
+// FileSystemCategory represents categories of filesystems that should be handled similarly
+type FileSystemCategory string
+
+const (
+	// System filesystems related to OS functionality
+	SystemFS FileSystemCategory = "system"
+	// Virtual filesystems that don't represent physical storage
+	VirtualFS FileSystemCategory = "virtual"
+	// Temporary filesystems that don't persist data
+	TempFS FileSystemCategory = "temp"
+	// Special filesystems with specific purposes
+	SpecialFS FileSystemCategory = "special"
+)
+
+// fsTypeCategories maps filesystem types to their categories
+var fsTypeCategories = map[string]FileSystemCategory{
+	// System filesystems
+	"sysfs":      SystemFS,
+	"proc":       SystemFS,
+	"procfs":     SystemFS,
+	"devfs":      SystemFS,
+	"devtmpfs":   SystemFS,
+	"debugfs":    SystemFS,
+	"securityfs": SystemFS,
+	"kernfs":     SystemFS,
+
+	// Virtual filesystems
+	"fusectl":   VirtualFS,
+	"fuse":      VirtualFS,
+	"fuseblk":   VirtualFS,
+	"overlay":   VirtualFS,
+	"overlayfs": VirtualFS,
+
+	// Temporary filesystems
+	"tmpfs": TempFS,
+	"ramfs": TempFS,
+
+	// Special filesystems
+	"devpts":      SpecialFS,
+	"hugetlbfs":   SpecialFS,
+	"mqueue":      SpecialFS,
+	"cgroup":      SpecialFS,
+	"cgroupfs":    SpecialFS,
+	"cgroupfs2":   SpecialFS,
+	"pstore":      SpecialFS,
+	"binfmt_misc": SpecialFS,
+	"bpf":         SpecialFS,
+	"tracefs":     SpecialFS,
+	"configfs":    SpecialFS,
+	"autofs":      SpecialFS,
+	"efivarfs":    SpecialFS,
+	"rpc_pipefs":  SpecialFS,
+}
+
 // skipFilesystem returns true if the filesystem type should be skipped
 func skipFilesystem(fstype string) bool {
-	// List of filesystem types to skip
-	skippedTypes := map[string]bool{
-		"devfs":       true,
-		"devtmpfs":    true,
-		"proc":        true,
-		"procfs":      true,
-		"sysfs":       true,
-		"debugfs":     true,
-		"fusectl":     true,
-		"securityfs":  true,
-		"devpts":      true,
-		"hugetlbfs":   true,
-		"cgroup":      true,
-		"cgroupfs":    true,
-		"mqueue":      true,
-		"pstore":      true,
-		"binfmt_misc": true,
-		"bpf":         true,
-		"tracefs":     true,
-		"configfs":    true,
-		"autofs":      true,
-		"tmpfs":       true, // Skip tmpfs mounts
-		"efivarfs":    true,
-		"overlay":     true,
-		"fuse":        true,
-		"rpc_pipefs":  true,
-		"ramfs":       true,
+	// Check if we have a category for this filesystem type
+	if _, exists := fsTypeCategories[fstype]; exists {
+		return true
 	}
-	return skippedTypes[fstype]
+
+	// Additional checks for common patterns in filesystem types
+	// that might indicate a virtual or system filesystem
+	if len(fstype) >= 2 {
+		// Check for common filesystem type prefixes
+		commonPrefixes := []string{"fuse", "cgroup", "proc", "sys", "dev"}
+		for _, prefix := range commonPrefixes {
+			if len(fstype) >= len(prefix) && fstype[:len(prefix)] == prefix {
+				return true
+			}
+		}
+	}
+
+	return false
 }
