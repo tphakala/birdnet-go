@@ -8,12 +8,16 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/patrickmn/go-cache"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
 // initDetectionRoutes registers all detection-related API endpoints
 func (c *Controller) initDetectionRoutes() {
+	// Initialize the cache with a 5-minute default expiration and 10-minute cleanup interval
+	c.detectionCache = cache.New(5*time.Minute, 10*time.Minute)
+
 	// Detection endpoints - publicly accessible
 	//
 	// Note: Detection data is decoupled from weather data by design.
@@ -170,6 +174,19 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 
 // getHourlyDetections handles hourly query type logic
 func (c *Controller) getHourlyDetections(date, hour string, duration, numResults, offset int) ([]datastore.Note, int64, error) {
+	// Generate a cache key based on parameters
+	cacheKey := fmt.Sprintf("hourly:%s:%s:%d:%d:%d", date, hour, duration, numResults, offset)
+
+	// Check if data is in cache
+	if cachedData, found := c.detectionCache.Get(cacheKey); found {
+		cachedResult := cachedData.(struct {
+			Notes []datastore.Note
+			Total int64
+		})
+		return cachedResult.Notes, cachedResult.Total, nil
+	}
+
+	// If not in cache, query the database
 	notes, err := c.DS.GetHourlyDetections(date, hour, duration, numResults, offset)
 	if err != nil {
 		return nil, 0, err
@@ -180,11 +197,30 @@ func (c *Controller) getHourlyDetections(date, hour string, duration, numResults
 		return nil, 0, err
 	}
 
+	// Cache the results
+	c.detectionCache.Set(cacheKey, struct {
+		Notes []datastore.Note
+		Total int64
+	}{notes, totalCount}, cache.DefaultExpiration)
+
 	return notes, totalCount, nil
 }
 
 // getSpeciesDetections handles species query type logic
 func (c *Controller) getSpeciesDetections(species, date, hour string, duration, numResults, offset int) ([]datastore.Note, int64, error) {
+	// Generate a cache key based on parameters
+	cacheKey := fmt.Sprintf("species:%s:%s:%s:%d:%d:%d", species, date, hour, duration, numResults, offset)
+
+	// Check if data is in cache
+	if cachedData, found := c.detectionCache.Get(cacheKey); found {
+		cachedResult := cachedData.(struct {
+			Notes []datastore.Note
+			Total int64
+		})
+		return cachedResult.Notes, cachedResult.Total, nil
+	}
+
+	// If not in cache, query the database
 	notes, err := c.DS.SpeciesDetections(species, date, hour, duration, false, numResults, offset)
 	if err != nil {
 		return nil, 0, err
@@ -195,11 +231,30 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 		return nil, 0, err
 	}
 
+	// Cache the results
+	c.detectionCache.Set(cacheKey, struct {
+		Notes []datastore.Note
+		Total int64
+	}{notes, totalCount}, cache.DefaultExpiration)
+
 	return notes, totalCount, nil
 }
 
 // getSearchDetections handles search query type logic
 func (c *Controller) getSearchDetections(search string, numResults, offset int) ([]datastore.Note, int64, error) {
+	// Generate a cache key based on parameters
+	cacheKey := fmt.Sprintf("search:%s:%d:%d", search, numResults, offset)
+
+	// Check if data is in cache
+	if cachedData, found := c.detectionCache.Get(cacheKey); found {
+		cachedResult := cachedData.(struct {
+			Notes []datastore.Note
+			Total int64
+		})
+		return cachedResult.Notes, cachedResult.Total, nil
+	}
+
+	// If not in cache, query the database
 	notes, err := c.DS.SearchNotes(search, false, numResults, offset)
 	if err != nil {
 		return nil, 0, err
@@ -210,11 +265,29 @@ func (c *Controller) getSearchDetections(search string, numResults, offset int) 
 		return nil, 0, err
 	}
 
+	// Cache the results
+	c.detectionCache.Set(cacheKey, struct {
+		Notes []datastore.Note
+		Total int64
+	}{notes, totalCount}, cache.DefaultExpiration)
+
 	return notes, totalCount, nil
 }
 
 // getAllDetections handles default/all query type logic
 func (c *Controller) getAllDetections(numResults, offset int) ([]datastore.Note, int64, error) {
+	// Generate a cache key based on parameters
+	cacheKey := fmt.Sprintf("all:%d:%d", numResults, offset)
+
+	// Check if data is in cache
+	if cachedData, found := c.detectionCache.Get(cacheKey); found {
+		cachedResult := cachedData.(struct {
+			Notes []datastore.Note
+			Total int64
+		})
+		return cachedResult.Notes, cachedResult.Total, nil
+	}
+
 	// Use the datastore.SearchNotes method with an empty query to get all notes
 	notes, err := c.DS.SearchNotes("", false, numResults, offset)
 	if err != nil {
@@ -227,6 +300,12 @@ func (c *Controller) getAllDetections(numResults, offset int) ([]datastore.Note,
 		// If we got exactly the number requested, there may be more
 		totalResults = int64(offset + numResults + 1) // This is an estimate
 	}
+
+	// Cache the results
+	c.detectionCache.Set(cacheKey, struct {
+		Notes []datastore.Note
+		Total int64
+	}{notes, totalResults}, cache.DefaultExpiration)
 
 	return notes, totalResults, nil
 }
@@ -338,35 +417,61 @@ func (c *Controller) DeleteDetection(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to delete detection", http.StatusInternalServerError)
 	}
 
+	// Invalidate cache after deletion
+	c.invalidateDetectionCache()
+
 	return ctx.NoContent(http.StatusNoContent)
 }
 
-// ReviewDetection updates a detection with verification status and optional comment
-func (c *Controller) ReviewDetection(ctx echo.Context) error {
-	idStr := ctx.Param("id")
+// invalidateDetectionCache clears the detection cache to ensure fresh data
+// is fetched on subsequent requests. This should be called after any
+// operation that modifies detection data.
+func (c *Controller) invalidateDetectionCache() {
+	// Clear all cached detection data to ensure fresh results
+	c.detectionCache.Flush()
+}
+
+// checkAndHandleLock verifies if a detection is locked and manages lock state
+// Returns the note and error if any
+func (c *Controller) checkAndHandleLock(idStr string, shouldLock bool) (*datastore.Note, error) {
+	// Get the note
 	note, err := c.DS.Get(idStr)
 	if err != nil {
-		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		return nil, fmt.Errorf("detection not found: %w", err)
 	}
 
-	// Check if the note is locked
+	// Check if the note is already locked in memory
 	if note.Locked {
-		return c.HandleError(ctx, fmt.Errorf("detection is locked"), "Detection is locked", http.StatusConflict)
+		return nil, fmt.Errorf("detection is locked")
 	}
 
 	// Check if the note is locked in the database
 	isLocked, err := c.DS.IsNoteLocked(idStr)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to check lock status", http.StatusInternalServerError)
+		return nil, fmt.Errorf("failed to check lock status: %w", err)
 	}
 	if isLocked {
-		return c.HandleError(ctx, fmt.Errorf("detection is locked"), "Detection is locked", http.StatusConflict)
+		return nil, fmt.Errorf("detection is locked")
 	}
 
-	// Try to acquire lock
-	err = c.DS.LockNote(idStr)
+	// If we should lock the note, try to acquire lock
+	if shouldLock {
+		if err := c.DS.LockNote(idStr); err != nil {
+			return nil, fmt.Errorf("failed to acquire lock: %w", err)
+		}
+	}
+
+	return &note, nil
+}
+
+// ReviewDetection updates a detection with verification status and optional comment
+func (c *Controller) ReviewDetection(ctx echo.Context) error {
+	idStr := ctx.Param("id")
+
+	// Use the shared lock helper
+	note, err := c.checkAndHandleLock(idStr, true)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to acquire lock", http.StatusConflict)
+		return c.HandleError(ctx, err, err.Error(), http.StatusConflict)
 	}
 
 	// Parse request
@@ -403,10 +508,13 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 		}
 
 		// Handle ignored species
-		if err := c.addToIgnoredSpecies(&note, req.Verified, req.IgnoreSpecies); err != nil {
+		if err := c.addToIgnoredSpecies(note, req.Verified, req.IgnoreSpecies); err != nil {
 			return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
 		}
 	}
+
+	// Invalidate cache after modification
+	c.invalidateDetectionCache()
 
 	// Return success response with 200 OK status
 	return ctx.JSON(http.StatusOK, map[string]string{
@@ -417,9 +525,11 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 // LockDetection locks or unlocks a detection
 func (c *Controller) LockDetection(ctx echo.Context) error {
 	idStr := ctx.Param("id")
-	note, err := c.DS.Get(idStr)
+
+	// Use the shared lock helper without acquiring a lock
+	note, err := c.checkAndHandleLock(idStr, false)
 	if err != nil {
-		return ctx.JSON(http.StatusNotFound, map[string]string{"error": "Detection not found"})
+		return ctx.JSON(http.StatusConflict, map[string]string{"error": err.Error()})
 	}
 
 	// Parse request
@@ -433,6 +543,9 @@ func (c *Controller) LockDetection(ctx echo.Context) error {
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("Failed to update lock status: %v", err)})
 	}
+
+	// Invalidate cache after changing lock status
+	c.invalidateDetectionCache()
 
 	return ctx.NoContent(http.StatusNoContent)
 }

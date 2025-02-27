@@ -318,12 +318,7 @@ func TestLogin(t *testing.T) {
 
 			// Use the correct test password for comparison
 			// This pattern avoids hardcoding the actual password in the test code
-			if tc.expectSuccess {
-				controller.Settings.Security.BasicAuth.Password = testPassword
-			} else {
-				// Ensure we have a different password for negative tests
-				controller.Settings.Security.BasicAuth.Password = testPassword
-			}
+			controller.Settings.Security.BasicAuth.Password = testPassword
 
 			// Call login handler
 			err := controller.Login(c)
@@ -382,11 +377,12 @@ func mockValidateToken(c echo.Context) error {
 	valid, err := validateToken(c, token)
 
 	// Handle specific error types
-	if err != nil && err.Error() == "token expired" {
+	switch {
+	case err != nil && err.Error() == "token expired":
 		return echo.NewHTTPError(http.StatusUnauthorized, "Token expired")
-	} else if err != nil && err.Error() == "missing claims" {
+	case err != nil && err.Error() == "missing claims":
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid token format")
-	} else if !valid {
+	case !valid:
 		return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token")
 	}
 

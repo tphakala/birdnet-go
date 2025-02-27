@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -96,8 +97,54 @@ type ActiveAudioDevice struct {
 var startTime = time.Now()
 var startMonotonicTime = time.Now() // This inherently includes monotonic clock reading
 
+// CPUCache holds the cached CPU usage data
+type CPUCache struct {
+	mu          sync.RWMutex
+	cpuPercent  []float64
+	lastUpdated time.Time
+}
+
+// Global CPU cache instance
+var cpuCache = &CPUCache{
+	cpuPercent:  []float64{0}, // Initialize with 0 value
+	lastUpdated: time.Now(),
+}
+
+// UpdateCPUCache updates the cached CPU usage data
+func UpdateCPUCache() {
+	for {
+		// Get CPU usage (this will block for 1 second)
+		percent, err := cpu.Percent(time.Second, false)
+		if err == nil && len(percent) > 0 {
+			// Update the cache
+			cpuCache.mu.Lock()
+			cpuCache.cpuPercent = percent
+			cpuCache.lastUpdated = time.Now()
+			cpuCache.mu.Unlock()
+		}
+
+		// Wait before next update (can be adjusted based on needs)
+		// We add a small buffer to ensure we don't constantly block
+		time.Sleep(2 * time.Second)
+	}
+}
+
+// GetCachedCPUUsage returns the cached CPU usage
+func GetCachedCPUUsage() []float64 {
+	cpuCache.mu.RLock()
+	defer cpuCache.mu.RUnlock()
+
+	// Return a copy to avoid race conditions
+	result := make([]float64, len(cpuCache.cpuPercent))
+	copy(result, cpuCache.cpuPercent)
+	return result
+}
+
 // Initialize system routes
 func (c *Controller) initSystemRoutes() {
+	// Start CPU usage monitoring in background
+	go UpdateCPUCache()
+
 	// Create system API group
 	systemGroup := c.Group.Group("/system")
 
@@ -165,11 +212,8 @@ func (c *Controller) GetResourceInfo(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get swap information", http.StatusInternalServerError)
 	}
 
-	// Get CPU usage
-	cpuPercent, err := cpu.Percent(time.Second, false) // Average of all cores over 1 second
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to get CPU information", http.StatusInternalServerError)
-	}
+	// Get CPU usage from cache instead of blocking
+	cpuPercent := GetCachedCPUUsage()
 
 	// Get process information (current process)
 	proc, err := process.NewProcess(int32(os.Getpid()))

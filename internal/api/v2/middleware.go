@@ -46,7 +46,7 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 				})
 			} else {
 				c.Debug("Cannot validate token, server interface doesn't have ValidateAccessToken method")
-				return ctx.JSON(http.StatusUnauthorized, map[string]string{
+				return ctx.JSON(http.StatusInternalServerError, map[string]string{
 					"error": "Authentication service unavailable",
 				})
 			}

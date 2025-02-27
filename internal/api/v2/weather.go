@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
 // DailyWeatherResponse represents the API response for daily weather data
@@ -69,6 +70,18 @@ func (c *Controller) initWeatherRoutes() {
 	weatherGroup.GET("/latest", c.GetLatestWeather)
 }
 
+// buildDailyWeatherResponse creates a DailyWeatherResponse from a DailyEvents struct
+// This helper function reduces code duplication and simplifies maintenance
+func (c *Controller) buildDailyWeatherResponse(dailyEvents datastore.DailyEvents) DailyWeatherResponse {
+	return DailyWeatherResponse{
+		Date:     dailyEvents.Date,
+		Sunrise:  time.Unix(dailyEvents.Sunrise, 0),
+		Sunset:   time.Unix(dailyEvents.Sunset, 0),
+		Country:  dailyEvents.Country,
+		CityName: dailyEvents.CityName,
+	}
+}
+
 // GetDailyWeather handles GET /api/v2/weather/daily/:date
 // Retrieves daily weather data for a specific date
 func (c *Controller) GetDailyWeather(ctx echo.Context) error {
@@ -83,14 +96,8 @@ func (c *Controller) GetDailyWeather(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get daily weather data", http.StatusInternalServerError)
 	}
 
-	// Convert to response format
-	response := DailyWeatherResponse{
-		Date:     dailyEvents.Date,
-		Sunrise:  time.Unix(dailyEvents.Sunrise, 0),
-		Sunset:   time.Unix(dailyEvents.Sunset, 0),
-		Country:  dailyEvents.Country,
-		CityName: dailyEvents.CityName,
-	}
+	// Convert to response format using the helper function
+	response := c.buildDailyWeatherResponse(dailyEvents)
 
 	return ctx.JSON(http.StatusOK, response)
 }
@@ -275,14 +282,8 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get daily weather data", http.StatusInternalServerError)
 	}
 
-	// Convert daily data to response format
-	dailyResponse := DailyWeatherResponse{
-		Date:     dailyEvents.Date,
-		Sunrise:  time.Unix(dailyEvents.Sunrise, 0),
-		Sunset:   time.Unix(dailyEvents.Sunset, 0),
-		Country:  dailyEvents.Country,
-		CityName: dailyEvents.CityName,
-	}
+	// Convert daily data to response format using the helper function
+	dailyResponse := c.buildDailyWeatherResponse(dailyEvents)
 
 	// Get hourly weather data
 	hourlyWeather, err := c.DS.GetHourlyWeather(date)
@@ -430,14 +431,9 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 		c.logger.Printf("WARN: [Weather API] Failed to get daily weather data for date %s: %v (endpoint=GetLatestWeather)",
 			date, err)
 	} else {
-		// Add daily data to response if available
-		response.Daily = &DailyWeatherResponse{
-			Date:     dailyEvents.Date,
-			Sunrise:  time.Unix(dailyEvents.Sunrise, 0),
-			Sunset:   time.Unix(dailyEvents.Sunset, 0),
-			Country:  dailyEvents.Country,
-			CityName: dailyEvents.CityName,
-		}
+		// Add daily data to response if available using the helper function
+		dailyResponse := c.buildDailyWeatherResponse(dailyEvents)
+		response.Daily = &dailyResponse
 	}
 
 	return ctx.JSON(http.StatusOK, response)
