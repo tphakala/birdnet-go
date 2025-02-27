@@ -23,7 +23,7 @@ jobs:
         run: make check-tensorflow
 
       - name: Download tflite_c
-        run: make download-tflite
+        run: make download-tflite-linux-amd64
 
       - name: Set environment variables for CGO
         run: |
