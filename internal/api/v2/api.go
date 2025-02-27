@@ -63,17 +63,8 @@ func (c *Controller) initRoutes() {
 	// Health check endpoint - publicly accessible
 	c.Group.GET("/health", c.HealthCheck)
 
-	// Detection endpoints - publicly accessible
-	c.Group.GET("/detections", c.GetDetections)
-	c.Group.GET("/detections/:id", c.GetDetection)
-	c.Group.GET("/detections/recent", c.GetRecentDetections)
-
-	// Protected detection management endpoints
-	detectionGroup := c.Group.Group("/detections", c.AuthMiddleware)
-	detectionGroup.DELETE("/:id", c.DeleteDetection)
-	detectionGroup.POST("/:id/review", c.ReviewDetection)
-	detectionGroup.POST("/:id/lock", c.LockDetection)
-	detectionGroup.POST("/ignore", c.IgnoreSpecies)
+	// Initialize detection routes
+	c.initDetectionRoutes()
 
 	// Analytics routes - for statistics and data analysis
 	c.initAnalyticsRoutes()

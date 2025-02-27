@@ -14,7 +14,7 @@ import (
 )
 
 // safeFilenamePattern defines the acceptable characters for filenames
-var safeFilenamePattern = regexp.MustCompile(`^[a-zA-Z0-9_\-\.]+$`)
+var safeFilenamePattern = regexp.MustCompile(`^[a-zA-Z0-9_\-.]+$`)
 
 // Initialize media routes
 func (c *Controller) initMediaRoutes() {

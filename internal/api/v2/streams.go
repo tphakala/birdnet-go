@@ -46,6 +46,7 @@ type Client struct {
 	lastSeen   time.Time
 	closed     bool
 	mu         sync.Mutex
+	logger     *log.Logger
 }
 
 // initStreamRoutes registers all stream-related API endpoints
@@ -74,6 +75,7 @@ func (c *Controller) HandleAudioLevelStream(ctx echo.Context) error {
 		clientID:   ctx.Request().RemoteAddr,
 		streamType: "audio-level",
 		lastSeen:   time.Now(),
+		logger:     c.logger,
 	}
 
 	// Register client with global audio level clients map
@@ -103,6 +105,7 @@ func (c *Controller) HandleNotificationsStream(ctx echo.Context) error {
 		clientID:   ctx.Request().RemoteAddr,
 		streamType: "notifications",
 		lastSeen:   time.Now(),
+		logger:     c.logger,
 	}
 
 	// Register client with global notifications clients map
@@ -133,6 +136,11 @@ func (c *Controller) unregisterClient(client *Client) {
 
 // writePump pumps messages from the application to the WebSocket connection
 func (client *Client) writePump() {
+	// Ensure logger is available or use a default one
+	if client.logger == nil {
+		client.logger = log.New(log.Writer(), "websocket: ", log.LstdFlags)
+	}
+
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
@@ -142,32 +150,57 @@ func (client *Client) writePump() {
 	for {
 		select {
 		case message, ok := <-client.send:
-			client.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := client.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				client.logger.Printf("Failed to set write deadline: %v", err)
+				return
+			}
+
 			if !ok {
 				// The hub closed the channel
-				client.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				if err := client.conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
+					client.logger.Printf("Error writing close message: %v", err)
+				}
 				return
 			}
 
 			w, err := client.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
+				client.logger.Printf("Error getting writer: %v", err)
 				return
 			}
-			w.Write(message)
+
+			if _, err := w.Write(message); err != nil {
+				client.logger.Printf("Error writing message: %v", err)
+				return
+			}
 
 			// Add queued messages to the current WebSocket message
 			n := len(client.send)
 			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-client.send)
+				if _, err := w.Write([]byte{'\n'}); err != nil {
+					client.logger.Printf("Error writing delimiter: %v", err)
+					return
+				}
+
+				chunk := <-client.send
+				if _, err := w.Write(chunk); err != nil {
+					client.logger.Printf("Error writing chunk: %v", err)
+					return
+				}
 			}
 
 			if err := w.Close(); err != nil {
+				client.logger.Printf("Error closing writer: %v", err)
 				return
 			}
 		case <-ticker.C:
-			client.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := client.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				client.logger.Printf("Failed to set write deadline for ping: %v", err)
+				return
+			}
+
 			if err := client.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				client.logger.Printf("Error writing ping message: %v", err)
 				return
 			}
 		}
@@ -176,6 +209,9 @@ func (client *Client) writePump() {
 
 // readPump pumps messages from the WebSocket connection to the hub
 func (client *Client) readPump(logger *log.Logger) {
+	// Store the logger in the client for consistency
+	client.logger = logger
+
 	defer func() {
 		client.mu.Lock()
 		client.closed = true
@@ -184,12 +220,19 @@ func (client *Client) readPump(logger *log.Logger) {
 	}()
 
 	client.conn.SetReadLimit(maxMessageSize)
-	client.conn.SetReadDeadline(time.Now().Add(pongWait))
+	if err := client.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+		client.logger.Printf("Failed to set initial read deadline: %v", err)
+		return
+	}
+
 	client.conn.SetPongHandler(func(string) error {
 		client.mu.Lock()
 		client.lastSeen = time.Now()
 		client.mu.Unlock()
-		client.conn.SetReadDeadline(time.Now().Add(pongWait))
+		if err := client.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+			client.logger.Printf("Failed to set read deadline: %v", err)
+			return err
+		}
 		return nil
 	})
 

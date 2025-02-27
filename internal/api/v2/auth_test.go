@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"errors"
+
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -96,7 +98,7 @@ func TestAuthMiddleware(t *testing.T) {
 			}
 
 			// Create a request
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/protected", nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/protected", http.NoBody)
 			if tc.token != "" {
 				req.Header.Set("Authorization", "Bearer "+tc.token)
 			}
@@ -108,13 +110,15 @@ func TestAuthMiddleware(t *testing.T) {
 			err := h(c)
 
 			// Check result
-			if tc.expectStatus == http.StatusOK {
+			switch tc.expectStatus {
+			case http.StatusOK:
 				assert.NoError(t, err)
 				assert.Equal(t, http.StatusOK, rec.Code)
 				assert.Equal(t, "success", rec.Body.String())
-			} else {
+			default:
 				assert.NotEqual(t, "success", rec.Body.String())
-				if httpErr, ok := err.(*echo.HTTPError); ok {
+				var httpErr *echo.HTTPError
+				if errors.As(err, &httpErr) {
 					assert.Equal(t, tc.expectStatus, httpErr.Code)
 				}
 			}
@@ -208,7 +212,8 @@ func TestLogin(t *testing.T) {
 			// Check result
 			assert.NoError(t, err)
 
-			if tc.expectSuccess {
+			switch tc.expectSuccess {
+			case true:
 				assert.Equal(t, http.StatusOK, rec.Code)
 
 				// Check response body
@@ -217,7 +222,7 @@ func TestLogin(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, true, response["success"])
 				assert.Equal(t, tc.username, response["username"])
-			} else {
+			case false:
 				assert.Equal(t, http.StatusUnauthorized, rec.Code)
 
 				// Check response body
@@ -309,7 +314,7 @@ func TestValidateToken(t *testing.T) {
 			}
 
 			// Create a request
-			req := httptest.NewRequest(http.MethodPost, "/api/v2/auth/validate", nil)
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/auth/validate", http.NoBody)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 
@@ -329,12 +334,9 @@ func TestValidateToken(t *testing.T) {
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
 				assert.NoError(t, err)
 				assert.Equal(t, true, response["valid"])
-			} else if tc.expectStatus == http.StatusBadRequest {
-				if httpErr, ok := err.(*echo.HTTPError); ok {
-					assert.Equal(t, tc.expectStatus, httpErr.Code)
-				}
 			} else {
-				if httpErr, ok := err.(*echo.HTTPError); ok {
+				var httpErr *echo.HTTPError
+				if errors.As(err, &httpErr) {
 					assert.Equal(t, tc.expectStatus, httpErr.Code)
 				}
 			}

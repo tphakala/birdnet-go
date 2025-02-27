@@ -12,6 +12,21 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
+// initDetectionRoutes registers all detection-related API endpoints
+func (c *Controller) initDetectionRoutes() {
+	// Detection endpoints - publicly accessible
+	c.Group.GET("/detections", c.GetDetections)
+	c.Group.GET("/detections/:id", c.GetDetection)
+	c.Group.GET("/detections/recent", c.GetRecentDetections)
+
+	// Protected detection management endpoints
+	detectionGroup := c.Group.Group("/detections", c.AuthMiddleware)
+	detectionGroup.DELETE("/:id", c.DeleteDetection)
+	detectionGroup.POST("/:id/review", c.ReviewDetection)
+	detectionGroup.POST("/:id/lock", c.LockDetection)
+	detectionGroup.POST("/ignore", c.IgnoreSpecies)
+}
+
 // DetectionResponse represents a detection in the API response
 type DetectionResponse struct {
 	ID             uint     `json:"id"`

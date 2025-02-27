@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"errors"
+
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -48,7 +50,7 @@ func TestGetSpeciesSummary(t *testing.T) {
 	mockDS.On("GetSpeciesSummaryData").Return(mockSummaryData, nil)
 
 	// Create a request
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -105,7 +107,7 @@ func TestGetHourlyAnalytics(t *testing.T) {
 	mockDS.On("GetHourlyAnalyticsData", date, species).Return(mockHourlyData, nil)
 
 	// Create a request
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/hourly?date=2023-01-01&species=Turdus+migratorius", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/hourly?date=2023-01-01&species=Turdus+migratorius", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetPath("/api/v2/analytics/hourly")
@@ -166,7 +168,7 @@ func TestGetDailyAnalytics(t *testing.T) {
 
 	// Create a request
 	req := httptest.NewRequest(http.MethodGet,
-		"/api/v2/analytics/daily?start_date=2023-01-01&end_date=2023-01-07&species=Turdus+migratorius", nil)
+		"/api/v2/analytics/daily?start_date=2023-01-01&end_date=2023-01-07&species=Turdus+migratorius", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetPath("/api/v2/analytics/daily")
@@ -231,7 +233,7 @@ func TestGetTrends(t *testing.T) {
 
 	// Create a request
 	req := httptest.NewRequest(http.MethodGet,
-		"/api/v2/analytics/daily?start_date=2023-01-01&end_date=2023-01-07", nil)
+		"/api/v2/analytics/daily?start_date=2023-01-01&end_date=2023-01-07", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetPath("/api/v2/analytics/daily")
@@ -319,7 +321,7 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create a request
-			req := httptest.NewRequest(http.MethodGet, tc.endpoint, nil)
+			req := httptest.NewRequest(http.MethodGet, tc.endpoint, http.NoBody)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 			c.SetPath(tc.endpoint)
@@ -333,7 +335,8 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 			err := tc.handler(c)
 
 			// Check if error handling works as expected
-			if httpErr, ok := err.(*echo.HTTPError); ok {
+			var httpErr *echo.HTTPError
+			if errors.As(err, &httpErr) {
 				assert.Equal(t, tc.expectCode, httpErr.Code)
 			} else {
 				assert.Equal(t, tc.expectCode, rec.Code)
