@@ -32,6 +32,31 @@ tasks:
   default:
     deps: [labels-zip, native-target]
 
+  # Task for running tests
+  test:
+    desc: Run tests for the application
+    cmds:
+      - go test ./... {{.TEST_FLAGS}}
+    vars:
+      TEST_FLAGS: '{{default "" .CLI_ARGS}}'
+
+  # Task for running tests with verbose output
+  test-verbose:
+    desc: Run tests with verbose output
+    cmds:
+      - task: test
+        vars: {CLI_ARGS: "-v"}
+
+  # Task for running tests with coverage report
+  test-coverage:
+    desc: Run tests with coverage report
+    cmds:
+      - mkdir -p coverage
+      - go test ./... -coverprofile=coverage/coverage.out {{.TEST_FLAGS}}
+      - go tool cover -html=coverage/coverage.out -o coverage/coverage.html
+    vars:
+      TEST_FLAGS: '{{default "" .CLI_ARGS}}'
+
   native-target:
     cmds:
       - task: "{{OS}}_{{ARCH}}"
