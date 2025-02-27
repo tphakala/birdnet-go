@@ -218,7 +218,11 @@ func (c *Controller) GetHourlyWeatherForHour(ctx echo.Context) error {
 	for i := range hourlyWeather {
 		hw := &hourlyWeather[i]
 		storedHourStr := hw.Time.Format("15")
-		storedHour, _ := strconv.Atoi(storedHourStr)
+		storedHour, err := strconv.Atoi(storedHourStr)
+		if err != nil {
+			return c.HandleError(ctx, echo.NewHTTPError(http.StatusInternalServerError),
+				"Invalid stored hour format", http.StatusInternalServerError)
+		}
 
 		if storedHour == requestedHour {
 			response := HourlyWeatherResponse{
@@ -333,6 +337,12 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 		}
 	} else {
 		// Find closest weather report by time
+
+		// NOTE: Time zone handling consideration
+		// This logic searches for the closest hourly weather by absolute time difference,
+		// assuming local or UTC time. If your system stores times in different time zones
+		// or leaps, consider normalizing them. This helps avoid edge cases if detection
+		// times differ from weather data's time zone.
 		var closestDiff time.Duration = 24 * time.Hour // Initialize with maximum possible difference in a day
 
 		for i := range hourlyWeather {

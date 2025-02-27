@@ -69,35 +69,40 @@ func (c *Controller) initRoutes() {
 	// Health check endpoint - publicly accessible
 	c.Group.GET("/health", c.HealthCheck)
 
-	// Initialize detection routes
-	c.initDetectionRoutes()
+	// Initialize route groups with proper error handling and logging
+	routeInitializers := []struct {
+		name string
+		fn   func()
+	}{
+		{"detection routes", c.initDetectionRoutes},
+		{"analytics routes", c.initAnalyticsRoutes},
+		{"weather routes", c.initWeatherRoutes},
+		{"system routes", c.initSystemRoutes},
+		{"settings routes", c.initSettingsRoutes},
+		{"stream routes", c.initStreamRoutes},
+		{"integration routes", c.initIntegrationsRoutes},
+		{"control routes", c.initControlRoutes},
+		{"auth routes", c.initAuthRoutes},
+		{"media routes", c.initMediaRoutes},
+	}
 
-	// Analytics routes - for statistics and data analysis
-	c.initAnalyticsRoutes()
+	for _, initializer := range routeInitializers {
+		c.Debug("Initializing %s...", initializer.name)
 
-	// Weather routes - for weather data and detection conditions
-	c.initWeatherRoutes()
+		// Use a deferred function to recover from panics during route initialization
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					c.logger.Printf("PANIC during %s initialization: %v", initializer.name, r)
+				}
+			}()
 
-	// System routes (for hardware and software information) - protected
-	c.initSystemRoutes()
+			// Call the initializer
+			initializer.fn()
 
-	// Settings routes (for application configuration) - protected
-	c.initSettingsRoutes()
-
-	// Stream routes (for real-time data) - protected
-	c.initStreamRoutes()
-
-	// Integration routes (for external services) - protected
-	c.initIntegrationsRoutes()
-
-	// Control routes (for application control) - protected
-	c.initControlRoutes()
-
-	// Authentication routes - partially protected based on their implementation
-	c.initAuthRoutes()
-
-	// Initialize media routes - protected
-	c.initMediaRoutes()
+			c.Debug("Successfully initialized %s", initializer.name)
+		}()
+	}
 }
 
 // HealthCheck handles the API health check endpoint
@@ -107,6 +112,17 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 		"version":    c.Settings.Version,
 		"build_date": c.Settings.BuildDate,
 	})
+}
+
+// Shutdown performs cleanup of all resources used by the API controller
+// This should be called when the application is shutting down
+func (c *Controller) Shutdown() {
+	// Call shutdown methods of individual components
+	// Currently, only the system component needs cleanup
+	StopCPUMonitoring()
+
+	// Log shutdown
+	c.Debug("API Controller shutting down, CPU monitoring stopped")
 }
 
 // Error response structure
