@@ -34,6 +34,49 @@ func (m *MockSecurityManager) GenerateToken(username string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+// MockServer implements the interfaces required for auth testing
+type MockServer struct {
+	mock.Mock
+	AuthEnabled bool
+	ValidTokens map[string]bool
+	Password    string
+}
+
+// ValidateAccessToken validates an access token
+func (m *MockServer) ValidateAccessToken(token string) bool {
+	args := m.Called(token)
+	return args.Bool(0)
+}
+
+// IsAccessAllowed checks if access is allowed
+func (m *MockServer) IsAccessAllowed(c echo.Context) bool {
+	args := m.Called(c)
+	return args.Bool(0)
+}
+
+// isAuthenticationEnabled checks if authentication is enabled
+func (m *MockServer) isAuthenticationEnabled(c echo.Context) bool {
+	return m.AuthEnabled
+}
+
+// AuthenticateBasic performs basic authentication
+func (m *MockServer) AuthenticateBasic(c echo.Context, username, password string) bool {
+	args := m.Called(c, username, password)
+	return args.Bool(0)
+}
+
+// GetUsername returns the authenticated username
+func (m *MockServer) GetUsername(c echo.Context) string {
+	args := m.Called(c)
+	return args.String(0)
+}
+
+// GetAuthMethod returns the authentication method
+func (m *MockServer) GetAuthMethod(c echo.Context) string {
+	args := m.Called(c)
+	return args.String(0)
+}
+
 // TestAuthMiddleware tests the authentication middleware
 func TestAuthMiddleware(t *testing.T) {
 	// Setup
@@ -41,6 +84,10 @@ func TestAuthMiddleware(t *testing.T) {
 
 	// Set up the security manager with a mock
 	mockSecurity := new(MockSecurityManager)
+
+	// Create a mock server
+	mockServer := new(MockServer)
+	mockServer.AuthEnabled = true
 
 	// Store original security manager implementation
 	originalValidateToken := validateTokenFunc
@@ -87,9 +134,16 @@ func TestAuthMiddleware(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup mock expectations
+			// Reset mock and set expectations
+			mockServer = new(MockServer)
+			mockServer.AuthEnabled = true
+
 			if tc.token != "" {
 				mockSecurity.On("ValidateToken", tc.token).Return(tc.validateReturn, tc.validateError).Once()
+				mockServer.On("ValidateAccessToken", tc.token).Return(tc.validateReturn).Once()
+			} else {
+				// For the "No token" case, IsAccessAllowed will be called
+				mockServer.On("IsAccessAllowed", mock.Anything).Return(false).Once()
 			}
 
 			// Create a test handler that will be called if middleware passes
@@ -104,6 +158,9 @@ func TestAuthMiddleware(t *testing.T) {
 			}
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
+
+			// Set the mock server in the context
+			c.Set("server", mockServer)
 
 			// Call the middleware
 			h := controller.AuthMiddleware(testHandler)
@@ -133,6 +190,10 @@ func TestLogin(t *testing.T) {
 
 	// Set up the security manager with a mock
 	mockSecurity := new(MockSecurityManager)
+
+	// Create a mock server
+	mockServer := new(MockServer)
+	mockServer.AuthEnabled = true
 
 	// Store original security manager implementation
 	originalGenerateToken := generateTokenFunc
@@ -185,9 +246,16 @@ func TestLogin(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Reset mock server for each test case
+			mockServer = new(MockServer)
+			mockServer.AuthEnabled = true
+
 			// Setup mock expectations
 			if tc.expectSuccess {
 				mockSecurity.On("GenerateToken", tc.username).Return(tc.expectToken, tc.tokenError).Once()
+				mockServer.On("AuthenticateBasic", mock.Anything, tc.username, tc.password).Return(true).Once()
+			} else {
+				mockServer.On("AuthenticateBasic", mock.Anything, tc.username, tc.password).Return(false).Once()
 			}
 
 			// Create login request body
@@ -198,6 +266,9 @@ func TestLogin(t *testing.T) {
 			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
+
+			// Set the mock server in the context
+			c.Set("server", mockServer)
 
 			// Set right settings for test
 			if tc.password == "password" {
@@ -263,6 +334,10 @@ func TestValidateToken(t *testing.T) {
 	// Set up the security manager with a mock
 	mockSecurity := new(MockSecurityManager)
 
+	// Create mock server
+	mockServer := new(MockServer)
+	mockServer.AuthEnabled = true
+
 	// Store original security manager implementation
 	originalValidateToken := validateTokenFunc
 	// Override the function for testing
@@ -308,9 +383,14 @@ func TestValidateToken(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Reset mock server
+			mockServer = new(MockServer)
+			mockServer.AuthEnabled = true
+
 			// Setup mock expectations
 			if tc.token != "" {
 				mockSecurity.On("ValidateToken", tc.token).Return(tc.validateReturn, tc.validateError).Once()
+				mockServer.On("ValidateAccessToken", tc.token).Return(tc.validateReturn).Once()
 			}
 
 			// Create a request
@@ -320,6 +400,9 @@ func TestValidateToken(t *testing.T) {
 
 			// Add token to context
 			c.Set("token", tc.token)
+
+			// Set the mock server in the context
+			c.Set("server", mockServer)
 
 			// Call validate handler using our mock function
 			err := mockValidateToken(c)

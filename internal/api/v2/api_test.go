@@ -254,6 +254,17 @@ func (m *MockDataStore) GetDetectionTrends(period string, limit int) ([]datastor
 	return args.Get(0).([]datastore.DailyAnalyticsData), args.Error(1)
 }
 
+// MockImageProvider is a mock implementation of imageprovider.ImageProvider interface
+type MockImageProvider struct {
+	mock.Mock
+}
+
+// Fetch implements the ImageProvider interface
+func (m *MockImageProvider) Fetch(scientificName string) (imageprovider.BirdImage, error) {
+	args := m.Called(scientificName)
+	return args.Get(0).(imageprovider.BirdImage), args.Error(1)
+}
+
 // Setup function to create a test environment
 func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller) {
 	t.Helper()
@@ -279,8 +290,21 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 	// Create a test logger
 	logger := log.New(os.Stdout, "API TEST: ", log.LstdFlags)
 
-	// Mock the image cache constructor
-	birdImageCache := &imageprovider.BirdImageCache{}
+	// Create a mock ImageProvider for testing
+	mockImageProvider := new(MockImageProvider)
+
+	// Set default behavior to return an empty bird image for any species
+	emptyBirdImage := imageprovider.BirdImage{
+		URL:            "https://example.com/empty.jpg",
+		ScientificName: "Test Species",
+	}
+	mockImageProvider.On("Fetch", mock.Anything).Return(emptyBirdImage, nil)
+
+	// Create a properly initialized BirdImageCache with the mock provider
+	birdImageCache := &imageprovider.BirdImageCache{
+		// We can only set exported fields, so we'll use SetImageProvider method instead
+	}
+	birdImageCache.SetImageProvider(mockImageProvider)
 
 	// Mock the sun calculator constructor
 	sunCalc := &suncalc.SunCalc{}
@@ -404,9 +428,9 @@ func TestGetRecentDetections(t *testing.T) {
 		// Check response content
 		assert.Len(t, response, 2)
 		assert.Equal(t, float64(1), response[0]["id"])
-		assert.Equal(t, "American Robin", response[0]["common_name"])
+		assert.Equal(t, "American Robin", response[0]["commonName"])
 		assert.Equal(t, float64(2), response[1]["id"])
-		assert.Equal(t, "Blue Jay", response[1]["common_name"])
+		assert.Equal(t, "Blue Jay", response[1]["commonName"])
 	}
 
 	// Verify mock expectations
@@ -456,6 +480,12 @@ func TestDeleteDetection(t *testing.T) {
 	e, mockDS, controller := setupTestEnvironment(t)
 
 	// Setup mock expectations
+	// Mock the Get call first, which happens before Delete in the handler
+	mockNote := datastore.Note{
+		ID:     1,
+		Locked: false,
+	}
+	mockDS.On("Get", "1").Return(mockNote, nil)
 	mockDS.On("Delete", "1").Return(nil)
 
 	// Create a request to the delete detection endpoint
@@ -490,8 +520,10 @@ func TestDeleteDetectionNotFound(t *testing.T) {
 	// Setup
 	e, mockDS, controller := setupTestEnvironment(t)
 
-	// Setup mock expectations to return a record not found error
-	mockDS.On("Delete", "999").Return(gorm.ErrRecordNotFound)
+	// Setup mock expectations
+	// Only mock the Get call to return record not found
+	mockDS.On("Get", "999").Return(datastore.Note{}, gorm.ErrRecordNotFound)
+	// No Delete call should happen in this case since the handler returns early with a 404
 
 	// Create a request to the delete detection endpoint
 	req := httptest.NewRequest(http.MethodDelete, "/api/v2/detections/999", http.NoBody)
@@ -511,6 +543,7 @@ func TestDeleteDetectionNotFound(t *testing.T) {
 
 	// We should get an error or error response
 	assert.NotEqual(t, http.StatusNoContent, rec.Code)
+	assert.Equal(t, http.StatusNotFound, rec.Code) // Specifically expect 404 Not Found
 
 	// Parse error response if it's a JSON response
 	if rec.Header().Get(echo.HeaderContentType) == echo.MIMEApplicationJSON {
@@ -532,6 +565,14 @@ func TestDeleteDetectionDatabaseError(t *testing.T) {
 	e, mockDS, controller := setupTestEnvironment(t)
 
 	// Setup mock expectations to return a database error
+	// First mock Get to return a valid note
+	mockNote := datastore.Note{
+		ID:     1,
+		Locked: false,
+	}
+	mockDS.On("Get", "1").Return(mockNote, nil)
+
+	// Then mock Delete to return a database error
 	dbErr := errors.New("database connection lost")
 	mockDS.On("Delete", "1").Return(dbErr)
 
@@ -575,16 +616,27 @@ func TestReviewDetection(t *testing.T) {
 
 	// Create review request
 	reviewRequest := map[string]interface{}{
-		"correct": true,
-		"comment": "This is a correct identification",
+		"correct":  true,
+		"comment":  "This is a correct identification",
+		"verified": "correct",
 	}
 
 	// Convert to JSON
 	jsonData, err := json.Marshal(reviewRequest)
 	assert.NoError(t, err)
 
-	// Setup mock expectations for IsNoteLocked and SaveNoteReview
+	// Setup mock expectations
+	// First mock Get to return a valid note
+	mockNote := datastore.Note{
+		ID:     1,
+		Locked: false,
+	}
+	mockDS.On("Get", "1").Return(mockNote, nil)
+
+	// Then mock the other method calls
 	mockDS.On("IsNoteLocked", "1").Return(false, nil)
+	mockDS.On("LockNote", "1").Return(nil)
+	mockDS.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
 	mockDS.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
 
 	// Create a request to the review detection endpoint
@@ -693,6 +745,13 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 		mockDS = new(MockDataStore)
 		controller.DS = mockDS
 
+		// Mock Get to return a valid note
+		mockNote := datastore.Note{
+			ID:     1,
+			Locked: true,
+		}
+		mockDS.On("Get", "1").Return(mockNote, nil)
+
 		// Mock note is already locked
 		mockDS.On("IsNoteLocked", "1").Return(true, nil)
 
@@ -732,9 +791,20 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 		mockDS = new(MockDataStore)
 		controller.DS = mockDS
 
+		// Create mock note
+		mockNote := datastore.Note{
+			ID:     1,
+			Locked: false,
+		}
+		// Add expectation for Get method
+		mockDS.On("Get", "1").Return(mockNote, nil)
+
 		// Mock database error during lock check
 		dbErr := errors.New("database error")
 		mockDS.On("IsNoteLocked", "1").Return(false, dbErr)
+
+		// Add expectation for SaveNoteComment
+		mockDS.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
 
 		// Create request
 		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/1/review",
@@ -762,9 +832,20 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 		mockDS = new(MockDataStore)
 		controller.DS = mockDS
 
+		// Create mock note
+		mockNote := datastore.Note{
+			ID:     1,
+			Locked: false,
+		}
+		// Add expectation for Get method
+		mockDS.On("Get", "1").Return(mockNote, nil)
+
 		// Mock race condition: note is not locked in check but fails to acquire lock
 		mockDS.On("IsNoteLocked", "1").Return(false, nil)
 		mockDS.On("LockNote", "1").Return(errors.New("concurrent access"))
+
+		// Add expectation for SaveNoteComment
+		mockDS.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
 
 		// Create request
 		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/1/review",
