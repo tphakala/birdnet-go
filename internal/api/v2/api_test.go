@@ -119,7 +119,7 @@ func (m *MockDataStore) SaveNoteComment(comment *datastore.NoteComment) error {
 	return args.Error(0)
 }
 
-func (m *MockDataStore) UpdateNoteComment(commentID string, entry string) error {
+func (m *MockDataStore) UpdateNoteComment(commentID, entry string) error {
 	args := m.Called(commentID, entry)
 	return args.Error(0)
 }
@@ -224,12 +224,12 @@ func (m *MockDataStore) GetSpeciesSummaryData() ([]datastore.SpeciesSummaryData,
 	return args.Get(0).([]datastore.SpeciesSummaryData), args.Error(1)
 }
 
-func (m *MockDataStore) GetHourlyAnalyticsData(date string, species string) ([]datastore.HourlyAnalyticsData, error) {
+func (m *MockDataStore) GetHourlyAnalyticsData(date, species string) ([]datastore.HourlyAnalyticsData, error) {
 	args := m.Called(date, species)
 	return args.Get(0).([]datastore.HourlyAnalyticsData), args.Error(1)
 }
 
-func (m *MockDataStore) GetDailyAnalyticsData(startDate, endDate string, species string) ([]datastore.DailyAnalyticsData, error) {
+func (m *MockDataStore) GetDailyAnalyticsData(startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
 	args := m.Called(startDate, endDate, species)
 	return args.Get(0).([]datastore.DailyAnalyticsData), args.Error(1)
 }
@@ -283,7 +283,7 @@ func TestHealthCheck(t *testing.T) {
 	e, _, controller := setupTestEnvironment()
 
 	// Create a request to the health check endpoint
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/health", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetPath("/api/v2/health")
@@ -341,7 +341,7 @@ func TestGetRecentDetections(t *testing.T) {
 	mockDS.On("GetLastDetections", 10).Return(mockNotes, nil)
 
 	// Create a request to the recent detections endpoint
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/recent?limit=10", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/recent?limit=10", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetPath("/api/v2/detections/recent")
@@ -378,7 +378,7 @@ func TestDeleteDetection(t *testing.T) {
 	mockDS.On("Delete", "1").Return(nil)
 
 	// Create a request to the delete detection endpoint
-	req := httptest.NewRequest(http.MethodDelete, "/api/v2/detections/1", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v2/detections/1", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetPath("/api/v2/detections/:id")
@@ -470,7 +470,7 @@ func TestHandleError(t *testing.T) {
 	e, _, controller := setupTestEnvironment()
 
 	// Create a request context
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/health", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
