@@ -173,6 +173,13 @@ download-tflite:
 	fi
 	$(call ensure_tflite_symlinks,$(TFLITE_LIB_DIR),$(call get_lib_filename,$(TARGET)))
 
+# Download tflite_c library for linux_amd64
+download-tflite-linux-amd64:
+	wget -q https://github.com/tphakala/tflite_c/releases/download/$(TFLITE_VERSION)/tflite_c_linux_amd64.tar.gz -P ./
+	tar -xzf tflite_c_linux_amd64.tar.gz -C .
+	sudo mv libtensorflowlite_c.so $(TFLITE_LIB_DIR)/
+	rm -f tflite_c_linux_amd64.tar.gz
+
 # Download assets
 download-assets:
 	@echo "Downloading latest versions of Leaflet, htmx, Alpine.js, and Tailwind CSS"
