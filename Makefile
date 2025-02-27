@@ -175,10 +175,10 @@ download-tflite:
 
 # Download tflite_c library for linux_amd64
 download-tflite-linux-amd64:
-	wget -q https://github.com/tphakala/tflite_c/releases/download/$(TFLITE_VERSION)/tflite_c_linux_amd64.tar.gz -P ./
-	tar -xzf tflite_c_linux_amd64.tar.gz -C .
-	sudo mv libtensorflowlite_c.so $(TFLITE_LIB_DIR)/
-	rm -f tflite_c_linux_amd64.tar.gz
+	wget -q https://github.com/tphakala/tflite_c/releases/download/$(TFLITE_VERSION)/tflite_c_$(TFLITE_VERSION)_linux_amd64.tar.gz -P ./
+	tar -xzf tflite_c_$(TFLITE_VERSION)_linux_amd64.tar.gz -C .
+	sudo mv libtensorflowlite_c.so.2.17.1 $(TFLITE_LIB_DIR)/libtensorflowlite_c.so
+	rm -f tflite_c_$(TFLITE_VERSION)_linux_amd64.tar.gz
 
 # Download assets
 download-assets:
