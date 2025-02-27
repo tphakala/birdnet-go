@@ -1389,11 +1389,17 @@ done
 # Install missing packages in a single command
 if [ -n "${TO_INSTALL}" ]; then
     print_message "🔧 Installing missing packages: ${TO_INSTALL}" "$YELLOW"
-    if sudo apt install -qq -y "${TO_INSTALL}"; then
+    if sudo apt install -q -y "${TO_INSTALL}"; then
         print_message "✅ All packages installed successfully" "$GREEN"
     else
-        print_message "❌ Failed to install some packages" "$RED"
-        exit 1
+        print_message "⚠️ Package installation failed, retrying with new apt update and install..." "$YELLOW"
+        # Retry with apt update first
+        if sudo apt update && sudo apt install -q -y "${TO_INSTALL}"; then
+            print_message "✅ All packages installed successfully after update" "$GREEN"
+        else
+            print_message "❌ Failed to install some packages even after apt update" "$RED"
+            exit 1
+        fi
     fi
 fi
 
