@@ -197,8 +197,18 @@ func (c *Controller) GetResourceInfo(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get process information", http.StatusInternalServerError)
 	}
 
-	procMem, _ := proc.MemoryInfo()
-	procCPU, _ := proc.CPUPercent()
+	procMem, err := proc.MemoryInfo()
+	if err != nil {
+		c.Debug("Failed to get process memory info: %v", err)
+		// Continue with nil procMem, handled below
+	}
+
+	procCPU, err := proc.CPUPercent()
+	if err != nil {
+		c.Debug("Failed to get process CPU info: %v", err)
+		// Will use 0 as default value
+		procCPU = 0
+	}
 
 	// Convert process memory to MB for readability
 	var procMemMB float64
@@ -250,6 +260,16 @@ func (c *Controller) GetDiskInfo(ctx echo.Context) error {
 		usage, err := disk.Usage(partition.Mountpoint)
 		if err != nil {
 			c.Debug("Failed to get usage for %s: %v", partition.Mountpoint, err)
+			// Add partial information to indicate the disk exists but usage couldn't be determined
+			disks = append(disks, DiskInfo{
+				Device:     partition.Device,
+				Mountpoint: partition.Mountpoint,
+				Fstype:     partition.Fstype,
+				Total:      0,
+				Used:       0,
+				Free:       0,
+				UsagePerc:  0,
+			})
 			continue
 		}
 
@@ -303,8 +323,10 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 	// Check if no device is configured
 	if deviceName == "" {
 		return ctx.JSON(http.StatusOK, map[string]interface{}{
-			"active":  false,
-			"message": "No audio device currently active",
+			"device":   nil,
+			"active":   false,
+			"verified": false,
+			"message":  "No audio device currently active",
 		})
 	}
 

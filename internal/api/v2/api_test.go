@@ -24,6 +24,20 @@ import (
 )
 
 // MockDataStore implements the datastore.Interface for testing
+// This is a complete implementation of the interface, which can make tests verbose.
+// For specific test scenarios, consider using a partial mock instead, for example:
+//
+//	func TestSomeSpecificFeature(t *testing.T) {
+//	    // Create a partial mock that only implements needed methods
+//	    mockDS := &MockDataStore{}
+//	    // Only set expectations for methods this test actually calls
+//	    mockDS.On("GetLastDetections", 10).Return(mockNotes, nil)
+//	    // No need to implement every method of the interface
+//	}
+//
+// Alternatively, consider splitting the datastore.Interface into smaller
+// interfaces based on functional areas (e.g., NoteReader, NoteWriter, ReviewManager)
+// and then compose them as needed in your application and tests.
 type MockDataStore struct {
 	mock.Mock
 }
@@ -241,7 +255,9 @@ func (m *MockDataStore) GetDetectionTrends(period string, limit int) ([]datastor
 }
 
 // Setup function to create a test environment
-func setupTestEnvironment() (*echo.Echo, *MockDataStore, *Controller) {
+func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller) {
+	t.Helper()
+
 	// Create Echo instance
 	e := echo.New()
 
@@ -281,7 +297,7 @@ func setupTestEnvironment() (*echo.Echo, *MockDataStore, *Controller) {
 // TestHealthCheck tests the health check endpoint
 func TestHealthCheck(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment()
+	e, _, controller := setupTestEnvironment(t)
 
 	// Create a request to the health check endpoint
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/health", http.NoBody)
@@ -334,7 +350,7 @@ func TestHealthCheck(t *testing.T) {
 // TestGetRecentDetections tests the recent detections endpoint
 func TestGetRecentDetections(t *testing.T) {
 	// Setup
-	e, mockDS, controller := setupTestEnvironment()
+	e, mockDS, controller := setupTestEnvironment(t)
 
 	// Create mock data
 	now := time.Now()
@@ -400,7 +416,7 @@ func TestGetRecentDetections(t *testing.T) {
 // TestGetRecentDetectionsError tests error handling in the recent detections endpoint
 func TestGetRecentDetectionsError(t *testing.T) {
 	// Setup
-	e, mockDS, controller := setupTestEnvironment()
+	e, mockDS, controller := setupTestEnvironment(t)
 
 	// Setup mock to return an error
 	mockError := gorm.ErrRecordNotFound
@@ -437,7 +453,7 @@ func TestGetRecentDetectionsError(t *testing.T) {
 // TestDeleteDetection tests the delete detection endpoint
 func TestDeleteDetection(t *testing.T) {
 	// Setup
-	e, mockDS, controller := setupTestEnvironment()
+	e, mockDS, controller := setupTestEnvironment(t)
 
 	// Setup mock expectations
 	mockDS.On("Delete", "1").Return(nil)
@@ -469,10 +485,93 @@ func TestDeleteDetection(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
+// TestDeleteDetectionNotFound tests the delete detection endpoint when record is not found
+func TestDeleteDetectionNotFound(t *testing.T) {
+	// Setup
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	// Setup mock expectations to return a record not found error
+	mockDS.On("Delete", "999").Return(gorm.ErrRecordNotFound)
+
+	// Create a request to the delete detection endpoint
+	req := httptest.NewRequest(http.MethodDelete, "/api/v2/detections/999", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/detections/:id")
+	c.SetParamNames("id")
+	c.SetParamValues("999")
+
+	// Bypass auth middleware
+	handler := func(c echo.Context) error {
+		return controller.DeleteDetection(c)
+	}
+
+	// Test
+	handler(c)
+
+	// We should get an error or error response
+	assert.NotEqual(t, http.StatusNoContent, rec.Code)
+
+	// Parse error response if it's a JSON response
+	if rec.Header().Get(echo.HeaderContentType) == echo.MIMEApplicationJSON {
+		var errorResponse map[string]interface{}
+		jsonErr := json.Unmarshal(rec.Body.Bytes(), &errorResponse)
+		if jsonErr == nil {
+			// Check error response content
+			assert.Contains(t, errorResponse, "error")
+		}
+	}
+
+	// Verify mock expectations
+	mockDS.AssertExpectations(t)
+}
+
+// TestDeleteDetectionDatabaseError tests the delete detection endpoint when a database error occurs
+func TestDeleteDetectionDatabaseError(t *testing.T) {
+	// Setup
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	// Setup mock expectations to return a database error
+	dbErr := errors.New("database connection lost")
+	mockDS.On("Delete", "1").Return(dbErr)
+
+	// Create a request to the delete detection endpoint
+	req := httptest.NewRequest(http.MethodDelete, "/api/v2/detections/1", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/detections/:id")
+	c.SetParamNames("id")
+	c.SetParamValues("1")
+
+	// Bypass auth middleware
+	handler := func(c echo.Context) error {
+		return controller.DeleteDetection(c)
+	}
+
+	// Test
+	handler(c)
+
+	// We should get an error status
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+
+	// Parse error response
+	var errorResponse map[string]interface{}
+	jsonErr := json.Unmarshal(rec.Body.Bytes(), &errorResponse)
+	assert.NoError(t, jsonErr)
+
+	// Check error response content
+	assert.Contains(t, errorResponse, "error")
+	assert.Contains(t, errorResponse, "code")
+	assert.Equal(t, float64(http.StatusInternalServerError), errorResponse["code"])
+
+	// Verify mock expectations
+	mockDS.AssertExpectations(t)
+}
+
 // TestReviewDetection tests the review detection endpoint
 func TestReviewDetection(t *testing.T) {
 	// Setup
-	e, mockDS, controller := setupTestEnvironment()
+	e, mockDS, controller := setupTestEnvironment(t)
 
 	// Create review request
 	reviewRequest := map[string]interface{}{
@@ -522,9 +621,61 @@ func TestReviewDetection(t *testing.T) {
 }
 
 // TestReviewDetectionConcurrency tests concurrency handling in the review detection endpoint
+// Note: This test simulates concurrency scenarios by mocking different responses,
+// but does not test actual concurrent execution with multiple goroutines.
+//
+// For a true concurrency stress test, consider implementing something like:
+//
+//	func TestTrueConcurrentAccess(t *testing.T) {
+//	    // Setup with real test server
+//	    ts := httptest.NewServer(controller.e)
+//	    defer ts.Close()
+//
+//	    // Create a wait group to synchronize goroutines
+//	    var wg sync.WaitGroup
+//	    numConcurrent := 10
+//	    wg.Add(numConcurrent)
+//
+//	    // Create a barrier to ensure goroutines start roughly at the same time
+//	    var barrier sync.WaitGroup
+//	    barrier.Add(1)
+//
+//	    // Track results
+//	    var successes, failures int32
+//
+//	    // Launch concurrent requests
+//	    for i := 0; i < numConcurrent; i++ {
+//	        go func() {
+//	            defer wg.Done()
+//
+//	            // Wait for the barrier to be lifted
+//	            barrier.Wait()
+//
+//	            // Make the request
+//	            resp, err := http.Post(ts.URL+"/api/v2/detections/1/review",
+//	                "application/json", strings.NewReader(`{"correct":true}`))
+//
+//	            if err == nil && resp.StatusCode == http.StatusOK {
+//	                atomic.AddInt32(&successes, 1)
+//	            } else {
+//	                atomic.AddInt32(&failures, 1)
+//	            }
+//	        }()
+//	    }
+//
+//	    // Lift the barrier to start all goroutines roughly simultaneously
+//	    barrier.Done()
+//
+//	    // Wait for all goroutines to complete
+//	    wg.Wait()
+//
+//	    // Check results - exactly one should succeed, others should get conflict
+//	    assert.Equal(t, int32(1), successes)
+//	    assert.Equal(t, int32(numConcurrent-1), failures)
+//	}
 func TestReviewDetectionConcurrency(t *testing.T) {
 	// Setup
-	e, mockDS, controller := setupTestEnvironment()
+	e, mockDS, controller := setupTestEnvironment(t)
 
 	// Create review request
 	reviewRequest := map[string]interface{}{
@@ -641,7 +792,7 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 // TestHandleError tests error handling functionality
 func TestHandleError(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment()
+	e, _, controller := setupTestEnvironment(t)
 
 	// Create a request context
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/health", http.NoBody)

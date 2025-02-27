@@ -37,7 +37,7 @@ func (m *MockSecurityManager) GenerateToken(username string) (string, error) {
 // TestAuthMiddleware tests the authentication middleware
 func TestAuthMiddleware(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment()
+	e, _, controller := setupTestEnvironment(t)
 
 	// Set up the security manager with a mock
 	mockSecurity := new(MockSecurityManager)
@@ -129,7 +129,7 @@ func TestAuthMiddleware(t *testing.T) {
 // TestLogin tests the login endpoint
 func TestLogin(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment()
+	e, _, controller := setupTestEnvironment(t)
 
 	// Set up the security manager with a mock
 	mockSecurity := new(MockSecurityManager)
@@ -258,7 +258,7 @@ func mockValidateToken(c echo.Context) error {
 // TestValidateToken tests the token validation endpoint
 func TestValidateToken(t *testing.T) {
 	// Setup
-	e, _, _ := setupTestEnvironment()
+	e, _, _ := setupTestEnvironment(t)
 
 	// Set up the security manager with a mock
 	mockSecurity := new(MockSecurityManager)

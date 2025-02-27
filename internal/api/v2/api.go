@@ -3,6 +3,7 @@ package api
 
 import (
 	"log"
+	"math/rand"
 	"net/http"
 	"sync"
 
@@ -106,24 +107,42 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 
 // Error response structure
 type ErrorResponse struct {
-	Error   string `json:"error"`
-	Message string `json:"message"`
-	Code    int    `json:"code"`
+	Error         string `json:"error"`
+	Message       string `json:"message"`
+	Code          int    `json:"code"`
+	CorrelationID string `json:"correlation_id"` // Unique identifier for tracking this error
 }
 
 // NewErrorResponse creates a new API error response
 func NewErrorResponse(err error, message string, code int) *ErrorResponse {
+	// Generate a random correlation ID (8 characters should be sufficient)
+	correlationID := generateCorrelationID()
+
 	return &ErrorResponse{
-		Error:   err.Error(),
-		Message: message,
-		Code:    code,
+		Error:         err.Error(),
+		Message:       message,
+		Code:          code,
+		CorrelationID: correlationID,
 	}
+}
+
+// generateCorrelationID creates a unique identifier for error tracking
+func generateCorrelationID() string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	const length = 8
+
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[byte(rand.Intn(len(charset)))]
+	}
+	return string(b)
 }
 
 // HandleError constructs and returns an appropriate error response
 func (c *Controller) HandleError(ctx echo.Context, err error, message string, code int) error {
-	c.logger.Printf("API Error: %s: %v", message, err)
-	return ctx.JSON(code, NewErrorResponse(err, message, code))
+	errorResp := NewErrorResponse(err, message, code)
+	c.logger.Printf("API Error [%s]: %s: %v", errorResp.CorrelationID, message, err)
+	return ctx.JSON(code, errorResp)
 }
 
 // Debug logs debug messages when debug mode is enabled
