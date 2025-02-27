@@ -78,44 +78,6 @@ type ActiveAudioDevice struct {
 var startTime = time.Now()
 var startMonotonicTime = time.Now() // This inherently includes monotonic clock reading
 
-// AuthMiddleware middleware function for system routes that require authentication
-func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(ctx echo.Context) error {
-		// Check if this is an API request with Authorization header (for Svelte UI)
-		if ctx.Request().Header.Get("Authorization") != "" {
-			// TODO: Implement proper token-based authentication when Svelte UI is developed
-			// For now, we'll assume any request with Authorization header is authenticated
-			return next(ctx)
-		}
-
-		// For browser/web UI requests, check for authenticated session
-		authenticated := false
-
-		// If authentication is enabled, check that it passes the requirements
-		server := ctx.Get("server")
-		if server != nil {
-			// Try to use server's authentication methods
-			if s, ok := server.(interface {
-				IsAccessAllowed(c echo.Context) bool
-				isAuthenticationEnabled(c echo.Context) bool
-			}); ok {
-				if !s.isAuthenticationEnabled(ctx) || s.IsAccessAllowed(ctx) {
-					authenticated = true
-				}
-			}
-		}
-
-		if !authenticated {
-			// Return JSON error for API calls
-			return ctx.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "Authentication required",
-			})
-		}
-
-		return next(ctx)
-	}
-}
-
 // Initialize system routes
 func (c *Controller) initSystemRoutes() {
 	// Create system API group
