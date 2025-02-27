@@ -724,67 +724,44 @@ func updateAllowedFieldsRecursively(currentValue, updatedValue reflect.Value, al
 		}
 
 		// Get JSON tag name for more readable logging
-		jsonTag := currentValue.Type().Field(i).Tag.Get("json")
-		if jsonTag == "" {
-			jsonTag = fieldName
-		} else {
-			// Extract the name part before any comma in the json tag
-			if commaIdx := strings.Index(jsonTag, ","); commaIdx > 0 {
-				jsonTag = jsonTag[:commaIdx]
-			}
+		_, jsonTag := getFieldInfo(currentValue, i, fieldName, "")
+
+		// Process the field based on permissions and type
+		if err := processFieldLegacy(currentField, updatedField, fieldName, jsonTag,
+			allowedFields, &skippedFields); err != nil {
+			return err
+		}
+	}
+
+	// Log skipped fields for debugging purposes
+	if len(skippedFields) > 0 {
+		// Using fmt.Sprintf here as we don't have direct access to the logger
+		fmt.Printf("Settings update: Skipped protected fields: %s\n", strings.Join(skippedFields, ", "))
+	}
+
+	return nil
+}
+
+// processFieldLegacy handles a single field based on its permissions and type for the legacy function
+func processFieldLegacy(
+	currentField, updatedField reflect.Value,
+	fieldName, jsonTag string,
+	allowedFields map[string]interface{},
+	skippedFields *[]string,
+) error {
+	// Check if this field is in the allowed fields map
+	allowedSubfields, isAllowed := allowedFields[fieldName].(map[string]interface{})
+
+	if !isAllowed {
+		// If it's a bool in the map, it means the whole field is allowed (if true)
+		isAllowedBool, isBool := allowedFields[fieldName].(bool)
+		if !isBool || !isAllowedBool {
+			// Field is explicitly not allowed to be updated
+			*skippedFields = append(*skippedFields, jsonTag)
+			return nil // Skip this field
 		}
 
-		// Check if this field is in the allowed fields map
-		allowedSubfields, isAllowed := allowedFields[fieldName].(map[string]interface{})
-
-		if !isAllowed {
-			// If it's a bool in the map, it means the whole field is allowed (if true)
-			isAllowedBool, isBool := allowedFields[fieldName].(bool)
-			if !isBool || !isAllowedBool {
-				// Field is explicitly not allowed to be updated
-				skippedFields = append(skippedFields, jsonTag)
-				continue // Skip this field
-			}
-
-			// The entire field is allowed to be updated
-			if currentField.CanSet() {
-				// Check if we need to validate this field
-				validationErr := validateField(fieldName, updatedField.Interface())
-				if validationErr != nil {
-					return fmt.Errorf("validation failed for field %s: %w", jsonTag, validationErr)
-				}
-				currentField.Set(updatedField)
-			}
-			continue
-		}
-
-		// For struct fields, recursively update allowed subfields
-		if currentField.Kind() == reflect.Struct && updatedField.Kind() == reflect.Struct {
-			if err := updateAllowedFieldsRecursively(currentField, updatedField, allowedSubfields); err != nil {
-				return err
-			}
-			continue
-		}
-
-		// For fields that are pointers to structs
-		if currentField.Kind() == reflect.Ptr && updatedField.Kind() == reflect.Ptr {
-			if currentField.IsNil() && !updatedField.IsNil() {
-				// Create a new struct of the appropriate type
-				newStruct := reflect.New(currentField.Type().Elem())
-				currentField.Set(newStruct)
-			}
-
-			if !currentField.IsNil() && !updatedField.IsNil() {
-				if currentField.Elem().Kind() == reflect.Struct && updatedField.Elem().Kind() == reflect.Struct {
-					if err := updateAllowedFieldsRecursively(currentField.Elem(), updatedField.Elem(), allowedSubfields); err != nil {
-						return err
-					}
-				}
-			}
-			continue
-		}
-
-		// Update primitive fields or slices that are in the allowed list
+		// The entire field is allowed to be updated
 		if currentField.CanSet() {
 			// Check if we need to validate this field
 			validationErr := validateField(fieldName, updatedField.Interface())
@@ -793,13 +770,38 @@ func updateAllowedFieldsRecursively(currentValue, updatedValue reflect.Value, al
 			}
 			currentField.Set(updatedField)
 		}
+		return nil
 	}
 
-	// Log skipped fields for debugging purposes
-	if len(skippedFields) > 0 {
-		// Using fmt.Sprintf here as we don't have direct access to the logger
-		// This would ideally be replaced with proper logging
-		fmt.Printf("Settings update: Skipped protected fields: %s\n", strings.Join(skippedFields, ", "))
+	// For struct fields, recursively update allowed subfields
+	if currentField.Kind() == reflect.Struct && updatedField.Kind() == reflect.Struct {
+		return updateAllowedFieldsRecursively(currentField, updatedField, allowedSubfields)
+	}
+
+	// For fields that are pointers to structs
+	if currentField.Kind() == reflect.Ptr && updatedField.Kind() == reflect.Ptr {
+		if currentField.IsNil() && !updatedField.IsNil() {
+			// Create a new struct of the appropriate type
+			newStruct := reflect.New(currentField.Type().Elem())
+			currentField.Set(newStruct)
+		}
+
+		if !currentField.IsNil() && !updatedField.IsNil() {
+			if currentField.Elem().Kind() == reflect.Struct && updatedField.Elem().Kind() == reflect.Struct {
+				return updateAllowedFieldsRecursively(currentField.Elem(), updatedField.Elem(), allowedSubfields)
+			}
+		}
+		return nil
+	}
+
+	// Update primitive fields or slices that are in the allowed list
+	if currentField.CanSet() {
+		// Check if we need to validate this field
+		validationErr := validateField(fieldName, updatedField.Interface())
+		if validationErr != nil {
+			return fmt.Errorf("validation failed for field %s: %w", jsonTag, validationErr)
+		}
+		currentField.Set(updatedField)
 	}
 
 	return nil
