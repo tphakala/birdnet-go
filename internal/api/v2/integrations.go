@@ -66,6 +66,15 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 		// The actual message format should match what your control monitor expects
 		statusReqChan := make(chan bool, 1)
 
+		// NOTE: There appears to be an issue here - statusReqChan is created locally
+		// but there's no mechanism visible in this function to write to it.
+		// This means the select below may always timeout after 2 seconds.
+		//
+		// TODO: Ensure that:
+		// 1. The component handling "mqtt:status" messages has access to this channel
+		// 2. That component writes the connection status to statusReqChan
+		// 3. Consider passing statusReqChan to the control system or using a response channel pattern
+
 		// We assume the controller has a method to handle "mqtt:status" commands
 		// and will respond with the connection status
 		select {
@@ -161,6 +170,15 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 	// Create a done channel to signal when the client disconnects
 	doneChan := make(chan struct{})
 
+	// Use sync.Once to ensure doneChan is closed exactly once
+	var closeOnce sync.Once
+	// Helper function to safely close the doneChan
+	safeDoneClose := func() {
+		closeOnce.Do(func() {
+			close(doneChan)
+		})
+	}
+
 	// Mutex for safe writing to response
 	var writeMu sync.Mutex
 
@@ -219,8 +237,8 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 			c.logger.Printf("Error encoding MQTT test result: %v", err)
 			writeMu.Unlock()
 
-			// Signal that the HTTP client has disconnected
-			close(doneChan)
+			// Signal that the HTTP client has disconnected using sync.Once
+			safeDoneClose()
 
 			// Cancel the test context to stop ongoing tests
 			cancel()
@@ -233,7 +251,8 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 		select {
 		case <-httpCtx.Done():
 			c.Debug("HTTP client disconnected during test")
-			close(doneChan)
+			// Use sync.Once to safely close the channel
+			safeDoneClose()
 			cancel() // Cancel the test context
 			return nil
 		default:

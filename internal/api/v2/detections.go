@@ -88,9 +88,12 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	offset, _ := strconv.Atoi(ctx.QueryParam("offset"))
 	queryType := ctx.QueryParam("queryType") // "hourly", "species", "search", or "all"
 
-	// Set default values
+	// Set default values and enforce maximum limit
 	if numResults <= 0 {
 		numResults = 100
+	} else if numResults > 1000 {
+		// Enforce a maximum limit to prevent excessive loads
+		numResults = 1000
 	}
 
 	// Set default duration
@@ -420,7 +423,7 @@ func (c *Controller) DeleteDetection(ctx echo.Context) error {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	return ctx.JSON(http.StatusOK, map[string]string{"status": "success"})
+	return ctx.NoContent(http.StatusNoContent)
 }
 
 // ReviewDetection updates a detection with verification status and optional comment
@@ -501,15 +504,26 @@ func (c *Controller) LockDetection(ctx echo.Context) error {
 	return ctx.NoContent(http.StatusNoContent)
 }
 
+// IgnoreSpeciesRequest represents the request body for ignoring a species
+type IgnoreSpeciesRequest struct {
+	CommonName string `json:"common_name"`
+}
+
 // IgnoreSpecies adds a species to the ignored list
 func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
-	commonName := ctx.QueryParam("common_name")
-	if commonName == "" {
+	// Parse request body
+	req := &IgnoreSpeciesRequest{}
+	if err := ctx.Bind(req); err != nil {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
+	}
+
+	// Validate request
+	if req.CommonName == "" {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Missing species name"})
 	}
 
 	// Add to ignored species list
-	err := c.addSpeciesToIgnoredList(commonName)
+	err := c.addSpeciesToIgnoredList(req.CommonName)
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}

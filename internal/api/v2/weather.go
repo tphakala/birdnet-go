@@ -110,15 +110,24 @@ func (c *Controller) GetHourlyWeatherForDay(ctx echo.Context) error {
 
 	// Check if we got any data
 	if len(hourlyWeather) == 0 {
-		// Log this event for monitoring purposes
-		ctx.Logger().Infof("No hourly weather data found for date: %s", date)
+		// Create structured log information as a formatted message
+		logInfo := "No hourly weather data found for date: " + date
+		reason := "missing_data"
 
 		// Determine if this is a valid date but with no data, or potentially a future date
 		requestedDate, parseErr := time.Parse("2006-01-02", date)
 		if parseErr == nil {
 			today := time.Now()
+
 			if requestedDate.After(today) {
 				// Future date
+				reason = "future_date"
+				logInfo = "No hourly weather data available for future date: " + date
+
+				// Log at warning level since this might indicate a client issue
+				c.logger.Printf("WARN: [Weather API] %s (reason=%s, endpoint=GetHourlyWeatherForDay)",
+					logInfo, reason)
+
 				return ctx.JSON(http.StatusOK, struct {
 					Message string                  `json:"message"`
 					Data    []HourlyWeatherResponse `json:"data"`
@@ -127,9 +136,14 @@ func (c *Controller) GetHourlyWeatherForDay(ctx echo.Context) error {
 					Data:    []HourlyWeatherResponse{},
 				})
 			}
+		} else {
+			logInfo += " (invalid date format, parse error: " + parseErr.Error() + ")"
 		}
 
-		// Valid past date with no data
+		// Log at warning level since missing data might indicate a system issue
+		c.logger.Printf("WARN: [Weather API] %s (reason=%s, endpoint=GetHourlyWeatherForDay)",
+			logInfo, reason)
+
 		return ctx.JSON(http.StatusOK, struct {
 			Message string                  `json:"message"`
 			Data    []HourlyWeatherResponse `json:"data"`
@@ -363,25 +377,15 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 	// Get the date from the latest weather
 	date := latestWeather.Time.Format("2006-01-02")
 
-	// Get daily weather data for this date
-	dailyEvents, err := c.DS.GetDailyEvents(date)
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to get daily weather data", http.StatusInternalServerError)
-	}
-
-	// Build the response
+	// Build response with hourly data
 	response := struct {
-		Daily  DailyWeatherResponse  `json:"daily"`
+		Daily  *DailyWeatherResponse `json:"daily"`
 		Hourly HourlyWeatherResponse `json:"hourly"`
 		Time   string                `json:"timestamp"`
 	}{
-		Daily: DailyWeatherResponse{
-			Date:     dailyEvents.Date,
-			Sunrise:  time.Unix(dailyEvents.Sunrise, 0),
-			Sunset:   time.Unix(dailyEvents.Sunset, 0),
-			Country:  dailyEvents.Country,
-			CityName: dailyEvents.CityName,
-		},
+		// Initialize with nil daily data, will be populated if available
+		Daily: nil,
+		// Always include hourly data since we have it
 		Hourly: HourlyWeatherResponse{
 			Time:        latestWeather.Time.Format("15:04:05"),
 			Temperature: latestWeather.Temperature,
@@ -400,6 +404,23 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 			WeatherIcon: latestWeather.WeatherIcon,
 		},
 		Time: time.Now().Format(time.RFC3339),
+	}
+
+	// Try to get daily weather data for this date
+	dailyEvents, err := c.DS.GetDailyEvents(date)
+	if err != nil {
+		// Log the error but continue with partial response
+		c.logger.Printf("WARN: [Weather API] Failed to get daily weather data for date %s: %v (endpoint=GetLatestWeather)",
+			date, err)
+	} else {
+		// Add daily data to response if available
+		response.Daily = &DailyWeatherResponse{
+			Date:     dailyEvents.Date,
+			Sunrise:  time.Unix(dailyEvents.Sunrise, 0),
+			Sunset:   time.Unix(dailyEvents.Sunset, 0),
+			Country:  dailyEvents.Country,
+			CityName: dailyEvents.CityName,
+		}
 	}
 
 	return ctx.JSON(http.StatusOK, response)

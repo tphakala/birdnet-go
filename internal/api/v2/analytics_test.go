@@ -19,7 +19,7 @@ import (
 // TestGetSpeciesSummary tests the species summary endpoint
 func TestGetSpeciesSummary(t *testing.T) {
 	// Setup
-	e, mockDS, controller := setupTestEnvironment()
+	e, mockDS, controller := setupTestEnvironment(t)
 
 	// Create mock data
 	firstSeen := time.Now().AddDate(0, -1, 0)
@@ -86,7 +86,7 @@ func TestGetSpeciesSummary(t *testing.T) {
 // TestGetHourlyAnalytics tests the hourly analytics endpoint
 func TestGetHourlyAnalytics(t *testing.T) {
 	// Setup
-	e, mockDS, controller := setupTestEnvironment()
+	e, mockDS, controller := setupTestEnvironment(t)
 
 	// Create mock data
 	date := "2023-01-01"
@@ -145,7 +145,7 @@ func TestGetHourlyAnalytics(t *testing.T) {
 // TestGetDailyAnalytics tests the daily analytics endpoint
 func TestGetDailyAnalytics(t *testing.T) {
 	// Setup
-	e, mockDS, controller := setupTestEnvironment()
+	e, mockDS, controller := setupTestEnvironment(t)
 
 	// Create mock data
 	startDate := "2023-01-01"
@@ -208,7 +208,7 @@ func TestGetDailyAnalytics(t *testing.T) {
 // This tests the aggregated data behavior, which represents detection trends across all species
 func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
 	// Setup
-	e, mockDS, controller := setupTestEnvironment()
+	e, mockDS, controller := setupTestEnvironment(t)
 
 	// Create mock data
 	startDate := "2023-01-01"
@@ -269,7 +269,7 @@ func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
 // TestGetInvalidAnalyticsRequests tests analytics endpoints with invalid parameters
 func TestGetInvalidAnalyticsRequests(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment()
+	e, _, controller := setupTestEnvironment(t)
 
 	// Test cases
 	testCases := []struct {
