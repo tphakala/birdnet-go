@@ -369,7 +369,7 @@ func (c *Controller) GetRecentDetections(ctx echo.Context) error {
 
 	notes, err := c.DS.GetLastDetections(limit)
 	if err != nil {
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return c.HandleError(ctx, err, "Failed to get recent detections", http.StatusInternalServerError)
 	}
 
 	detections := []DetectionResponse{}
@@ -410,17 +410,17 @@ func (c *Controller) DeleteDetection(ctx echo.Context) error {
 	idStr := ctx.Param("id")
 	note, err := c.DS.Get(idStr)
 	if err != nil {
-		return ctx.JSON(http.StatusNotFound, map[string]string{"error": "Detection not found"})
+		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
 	}
 
 	// Check if the note is locked
 	if note.Locked {
-		return ctx.JSON(http.StatusForbidden, map[string]string{"error": "Detection is locked"})
+		return c.HandleError(ctx, fmt.Errorf("detection is locked"), "Detection is locked", http.StatusForbidden)
 	}
 
 	err = c.DS.Delete(idStr)
 	if err != nil {
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return c.HandleError(ctx, err, "Failed to delete detection", http.StatusInternalServerError)
 	}
 
 	return ctx.NoContent(http.StatusNoContent)
@@ -431,18 +431,33 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 	idStr := ctx.Param("id")
 	note, err := c.DS.Get(idStr)
 	if err != nil {
-		return ctx.JSON(http.StatusNotFound, map[string]string{"error": "Detection not found"})
+		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
 	}
 
 	// Check if the note is locked
 	if note.Locked {
-		return ctx.JSON(http.StatusForbidden, map[string]string{"error": "Detection is locked"})
+		return c.HandleError(ctx, fmt.Errorf("detection is locked"), "Detection is locked", http.StatusConflict)
+	}
+
+	// Check if the note is locked in the database
+	isLocked, err := c.DS.IsNoteLocked(idStr)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to check lock status", http.StatusInternalServerError)
+	}
+	if isLocked {
+		return c.HandleError(ctx, fmt.Errorf("detection is locked"), "Detection is locked", http.StatusConflict)
+	}
+
+	// Try to acquire lock
+	err = c.DS.LockNote(idStr)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to acquire lock", http.StatusConflict)
 	}
 
 	// Parse request
 	req := &DetectionRequest{}
 	if err := ctx.Bind(req); err != nil {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
+		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
 	}
 
 	// Handle comment if provided
@@ -450,7 +465,7 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 		// Save comment using the datastore method for adding comments
 		err = c.AddComment(note.ID, req.Comment)
 		if err != nil {
-			return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("Failed to add comment: %v", err)})
+			return c.HandleError(ctx, err, fmt.Sprintf("Failed to add comment: %v", err), http.StatusInternalServerError)
 		}
 	}
 
@@ -463,22 +478,25 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 		case "false_positive":
 			verified = false
 		default:
-			return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid verification status"})
+			return c.HandleError(ctx, fmt.Errorf("invalid verification status"), "Invalid verification status", http.StatusBadRequest)
 		}
 
 		// Save review using the datastore method for reviews
 		err = c.AddReview(note.ID, verified)
 		if err != nil {
-			return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("Failed to update verification: %v", err)})
+			return c.HandleError(ctx, err, fmt.Sprintf("Failed to update verification: %v", err), http.StatusInternalServerError)
 		}
 
 		// Handle ignored species
 		if err := c.addToIgnoredSpecies(&note, req.Verified, req.IgnoreSpecies); err != nil {
-			return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
 		}
 	}
 
-	return ctx.NoContent(http.StatusNoContent)
+	// Return success response with 200 OK status
+	return ctx.JSON(http.StatusOK, map[string]string{
+		"status": "success",
+	})
 }
 
 // LockDetection locks or unlocks a detection

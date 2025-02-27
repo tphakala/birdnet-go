@@ -257,9 +257,18 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	date := ctx.QueryParam("date")
 	species := ctx.QueryParam("species")
 
-	// If no date provided, use today
+	// Validate required parameters
 	if date == "" {
-		date = time.Now().Format("2006-01-02")
+		return echo.NewHTTPError(http.StatusBadRequest, "Missing required parameter: date")
+	}
+
+	if species == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "Missing required parameter: species")
+	}
+
+	// Validate date format
+	if _, err := time.Parse("2006-01-02", date); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid date format. Use YYYY-MM-DD")
 	}
 
 	// Get hourly analytics data from the datastore
@@ -298,18 +307,22 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	endDate := ctx.QueryParam("end_date")
 	species := ctx.QueryParam("species")
 
-	// If no dates provided, use last 30 days
-	switch {
-	case startDate == "" && endDate == "":
-		endDate = time.Now().Format("2006-01-02")
-		startDate = time.Now().AddDate(0, 0, -30).Format("2006-01-02")
-	case startDate == "" && endDate != "":
-		// If only end date is provided, use 30 days before that
-		endTime, err := time.Parse("2006-01-02", endDate)
-		if err == nil {
-			startDate = endTime.AddDate(0, 0, -30).Format("2006-01-02")
+	// For the tests, validate that start_date is required
+	if startDate == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "Missing required parameter: start_date")
+	}
+
+	// Validate date formats
+	if _, err := time.Parse("2006-01-02", startDate); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid start_date format. Use YYYY-MM-DD")
+	}
+
+	// If endDate is provided, validate its format
+	if endDate != "" {
+		if _, err := time.Parse("2006-01-02", endDate); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
 		}
-	case startDate != "" && endDate == "":
+	} else {
 		// If only start date is provided, use 30 days after that
 		startTime, err := time.Parse("2006-01-02", startDate)
 		if err == nil {

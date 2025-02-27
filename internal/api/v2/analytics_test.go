@@ -124,18 +124,26 @@ func TestGetHourlyAnalytics(t *testing.T) {
 		// Check response
 		assert.Equal(t, http.StatusOK, rec.Code)
 
-		// Parse response body
-		var response []map[string]interface{}
+		// Parse response body - the actual implementation returns a single object, not an array
+		var response map[string]interface{}
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
 
 		// Check response content
-		assert.Len(t, response, 2)
-		assert.Equal(t, float64(0), response[0]["hour"])
-		assert.Equal(t, float64(5), response[0]["count"])
+		assert.Equal(t, date, response["date"])
+		assert.Equal(t, species, response["species"])
 
-		assert.Equal(t, float64(1), response[1]["hour"])
-		assert.Equal(t, float64(3), response[1]["count"])
+		// Check the counts array
+		counts, ok := response["counts"].([]interface{})
+		assert.True(t, ok, "Expected counts to be an array")
+		assert.Len(t, counts, 24, "Expected 24 hours in counts array")
+
+		// Check specific hour counts that were set in our mock
+		assert.Equal(t, float64(5), counts[0], "Hour 0 should have 5 counts")
+		assert.Equal(t, float64(3), counts[1], "Hour 1 should have 3 counts")
+
+		// Check the total
+		assert.Equal(t, float64(8), response["total"], "Total should be sum of all counts")
 	}
 
 	// Verify mock expectations
@@ -186,18 +194,31 @@ func TestGetDailyAnalytics(t *testing.T) {
 		// Check response
 		assert.Equal(t, http.StatusOK, rec.Code)
 
-		// Parse response body
-		var response []map[string]interface{}
+		// Parse response body - the actual implementation returns an object with a 'data' array
+		var response map[string]interface{}
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
 
-		// Check response content
-		assert.Len(t, response, 2)
-		assert.Equal(t, "2023-01-01", response[0]["date"])
-		assert.Equal(t, float64(12), response[0]["count"])
+		// Check response metadata
+		assert.Equal(t, startDate, response["start_date"])
+		assert.Equal(t, endDate, response["end_date"])
+		assert.Equal(t, species, response["species"])
+		assert.Equal(t, float64(20), response["total"]) // 12 + 8 = 20
 
-		assert.Equal(t, "2023-01-02", response[1]["date"])
-		assert.Equal(t, float64(8), response[1]["count"])
+		// Check data array
+		data, ok := response["data"].([]interface{})
+		assert.True(t, ok, "Expected data to be an array")
+		assert.Len(t, data, 2, "Expected 2 items in data array")
+
+		// Check first data item
+		item1 := data[0].(map[string]interface{})
+		assert.Equal(t, "2023-01-01", item1["date"])
+		assert.Equal(t, float64(12), item1["count"])
+
+		// Check second data item
+		item2 := data[1].(map[string]interface{})
+		assert.Equal(t, "2023-01-02", item2["date"])
+		assert.Equal(t, float64(8), item2["count"])
 	}
 
 	// Verify mock expectations
