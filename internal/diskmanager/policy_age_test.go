@@ -111,7 +111,7 @@ func TestAgeBasedFilesAfterFilter(t *testing.T) {
 
 	for _, ext := range fileTypes {
 		filePath := filepath.Join(testDir, fmt.Sprintf("owl_80p_20210102T150405Z%s", ext))
-		if err := os.WriteFile(filePath, []byte("test content"), 0644); err != nil {
+		if err := os.WriteFile(filePath, []byte("test content"), 0o644); err != nil {
 			t.Fatalf("Failed to create test file: %v", err)
 		}
 	}
