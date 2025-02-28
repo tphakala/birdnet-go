@@ -108,6 +108,13 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 // parseFileInfo parses the file information from the file path and os.FileInfo
 func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 	name := filepath.Base(info.Name())
+
+	// Check if the file extension is allowed
+	ext := filepath.Ext(name)
+	if !contains(allowedFileTypes, ext) {
+		return FileInfo{}, fmt.Errorf("file type not eligible for cleanup operation: %s", ext)
+	}
+
 	parts := strings.Split(name, "_")
 	if len(parts) < 3 {
 		return FileInfo{}, errors.New("invalid file name format")
@@ -123,7 +130,12 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 		return FileInfo{}, err
 	}
 
-	timestamp, err := time.Parse("20060102T150405Z", strings.TrimSuffix(timestampStr, ".wav"))
+	// Extract the extension from timestampStr
+	ext = filepath.Ext(timestampStr)
+	// Remove the extension to parse the timestamp correctly
+	timestampStr = strings.TrimSuffix(timestampStr, ext)
+
+	timestamp, err := time.Parse("20060102T150405Z", timestampStr)
 	if err != nil {
 		return FileInfo{}, err
 	}
