@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -149,27 +148,21 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 
 	// Check for existing connection
 	if _, exists := activeSSEConnections.LoadOrStore(clientIP, time.Now()); exists {
-		if h.debug {
-			log.Printf("AudioLevelSSE: Rejected duplicate connection from %s", clientIP)
-		}
+		h.Logger.Debug("AudioLevelSSE: Rejected duplicate connection", "client_ip", clientIP)
 		return c.NoContent(http.StatusTooManyRequests)
 	}
 
 	// Cleanup connection on exit
 	defer func() {
 		activeSSEConnections.Delete(clientIP)
-		if h.debug {
-			log.Printf("AudioLevelSSE: Cleaned up connection for %s", clientIP)
-		}
+		h.Logger.Debug("AudioLevelSSE: Cleaned up connection", "client_ip", clientIP)
 	}()
 
 	// Start connection timeout timer
 	timeout := time.NewTimer(connectionTimeout)
 	defer timeout.Stop()
 
-	if h.debug {
-		log.Printf("AudioLevelSSE: New connection from %s", clientIP)
-	}
+	h.Logger.Debug("AudioLevelSSE: New connection", "client_ip", clientIP)
 
 	// Set up SSE headers
 	initializeSSEHeaders(c)
@@ -188,30 +181,27 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 
 	// Send initial empty update to establish connection
 	if err := sendLevelsUpdate(c, levels); err != nil {
-		log.Printf("AudioLevelSSE: Error sending initial update: %v", err)
+		h.Logger.Error("AudioLevelSSE: Error sending initial update", "error", err)
 		return err
 	}
 
 	for {
 		select {
 		case <-timeout.C:
-			if h.debug {
-				log.Printf("AudioLevelSSE: Connection timeout for %s", clientIP)
-			}
+			h.Logger.Debug("AudioLevelSSE: Connection timeout", "client_ip", clientIP)
 			return nil
 
 		case <-c.Request().Context().Done():
-			if h.debug {
-				log.Printf("AudioLevelSSE: Client disconnected: %s", clientIP)
-			}
+			h.Logger.Debug("AudioLevelSSE: Client disconnected", "client_ip", clientIP)
 			return nil
 
 		case audioData := <-h.AudioLevelChan:
-			if h.debug {
-				if time.Since(lastLogTime) > 5*time.Second {
-					log.Printf("AudioLevelSSE: Received audio data from source %s: %+v", audioData.Source, audioData)
-					lastLogTime = time.Now()
-				}
+			if time.Since(lastLogTime) > 5*time.Second {
+				h.Logger.Debug("AudioLevelSSE: Received audio data",
+					"source", audioData.Source,
+					"level", audioData.Level,
+					"name", audioData.Name)
+				lastLogTime = time.Now()
 			}
 
 			h.updateAudioLevels(audioData, levels, lastUpdateTime, lastNonZeroTime, h.Server.IsAccessAllowed(c), inactivityThreshold)
@@ -219,7 +209,7 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 			// Only send updates if enough time has passed (rate limiting)
 			if time.Since(lastSentTime) >= 50*time.Millisecond {
 				if err := sendLevelsUpdate(c, levels); err != nil {
-					log.Printf("AudioLevelSSE: Error sending update: %v", err)
+					h.Logger.Error("AudioLevelSSE: Error sending update", "error", err)
 					return err
 				}
 				lastSentTime = time.Now()
@@ -228,7 +218,7 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 		case <-activityCheck.C:
 			if updated := checkSourceActivity(levels, lastUpdateTime, lastNonZeroTime, inactivityThreshold); updated {
 				if err := sendLevelsUpdate(c, levels); err != nil {
-					log.Printf("AudioLevelSSE: Error sending update: %v", err)
+					h.Logger.Error("AudioLevelSSE: Error sending update", "error", err)
 					return err
 				}
 			}
@@ -236,9 +226,7 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 		case <-heartbeat.C:
 			// Send a comment as heartbeat
 			if _, err := fmt.Fprintf(c.Response(), ": heartbeat %d\n\n", time.Now().Unix()); err != nil {
-				if h.debug {
-					log.Printf("AudioLevelSSE: Heartbeat error: %v", err)
-				}
+				h.Logger.Error("AudioLevelSSE: Heartbeat error", "error", err)
 				return err
 			}
 			c.Response().Flush()

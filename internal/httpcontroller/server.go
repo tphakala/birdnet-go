@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strings"
 
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -81,7 +81,20 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 	})
 
 	s.initializeServer()
+
+	// Set the logger in handlers after it's initialized
+	if s.Logger != nil {
+		s.Handlers.SetLogger(s.Logger)
+	}
+
 	return s
+}
+
+// configureDefaultSettings sets default values for server settings.
+func configureDefaultSettings(settings *conf.Settings) {
+	if settings.WebServer.Port == "" {
+		settings.WebServer.Port = "8080"
+	}
 }
 
 // Start begins listening and serving HTTP requests.
@@ -112,7 +125,7 @@ func (s *Server) Start() {
 		}
 	}()
 
-	go handleServerError(errChan)
+	go s.handleServerError(errChan)
 
 	fmt.Printf("HTTP server started on port %s (AutoTLS: %v)\n", s.Settings.WebServer.Port, s.Settings.Security.AutoTLS)
 }
@@ -184,84 +197,27 @@ func (s *Server) initializeServer() {
 	})
 }
 
-// configureDefaultSettings sets default values for server settings.
-func configureDefaultSettings(settings *conf.Settings) {
-	if settings.WebServer.Port == "" {
-		settings.WebServer.Port = "8080"
+// isDevMode checks if the application is running in development mode
+func (s *Server) isDevMode() bool {
+	// Check for environment variable first
+	envVal := strings.ToLower(os.Getenv("BIRDNET_GO_DEV"))
+	if envVal == "true" || envVal == "1" || envVal == "yes" {
+		return true
 	}
+
+	// Fall back to configuration setting
+	return s.Settings.WebServer.Debug
 }
 
 // handleServerError listens for server errors and handles them.
-func handleServerError(errChan chan error) {
+func (s *Server) handleServerError(errChan chan error) {
 	for err := range errChan {
-		log.Printf("Server error: %v", err)
-		// Additional error handling logic here
-	}
-}
-
-// initLogger initializes the custom logger.
-func (s *Server) initLogger() {
-	if !s.Settings.WebServer.Log.Enabled {
-		fmt.Println("Logging disabled")
-		return
-	}
-
-	fileHandler := &logger.DefaultFileHandler{}
-	if err := fileHandler.Open(s.Settings.WebServer.Log.Path); err != nil {
-		log.Fatal(err) // Use standard log here as logger isn't initialized yet
-	}
-
-	// Convert conf.RotationType to logger.RotationType
-	var loggerRotationType logger.RotationType
-	switch s.Settings.WebServer.Log.Rotation {
-	case conf.RotationDaily:
-		loggerRotationType = logger.RotationDaily
-	case conf.RotationWeekly:
-		loggerRotationType = logger.RotationWeekly
-	case conf.RotationSize:
-		loggerRotationType = logger.RotationSize
-	default:
-		log.Fatal("Invalid rotation type")
-	}
-
-	// Create rotation settings
-	rotationSettings := logger.Settings{
-		RotationType: loggerRotationType,
-		MaxSize:      s.Settings.WebServer.Log.MaxSize,
-		RotationDay:  s.Settings.WebServer.Log.RotationDay,
-	}
-
-	s.Logger = logger.NewLogger(map[string]logger.LogOutput{
-		"web":    logger.FileOutput{Handler: fileHandler},
-		"stdout": logger.StdoutOutput{},
-	}, true, rotationSettings)
-
-	// Set Echo's Logger to use the custom logger
-	s.Echo.Logger.SetOutput(s.Logger)
-
-	// Set Echo's logging format
-	s.Echo.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
-		LogURI:      true,
-		LogStatus:   true,
-		LogRemoteIP: true,
-		LogMethod:   true,
-		LogError:    true,
-		HandleError: true,
-		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
-			// Use your custom logger here
-			s.Logger.Info("web", "%s %v %s %d %v", v.RemoteIP, v.Method, v.URI, v.Status, v.Error)
-			return nil
-		},
-	}))
-}
-
-// Debug logs debug messages if debug mode is enabled
-func (s *Server) Debug(format string, v ...interface{}) {
-	if s.Settings.WebServer.Debug {
-		if len(v) == 0 {
-			log.Print(format)
+		if s.Logger != nil {
+			s.Logger.Error("Server error", "error", err)
 		} else {
-			log.Printf(format, v...)
+			// Fallback to standard log if logger isn't initialized yet
+			log.Printf("Server error: %v", err)
 		}
+		// Additional error handling logic here
 	}
 }

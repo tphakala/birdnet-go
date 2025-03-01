@@ -34,6 +34,18 @@ var (
 	ErrPathTraversal     = errors.New("path traversal attempt detected")
 )
 
+// debugLogging controls whether debug logs are emitted from media.go
+// This can be toggled since media operations can be very verbose
+var debugLogging = true
+
+// mediaDebug logs a debug message if media debug logging is enabled
+func (h *Handlers) mediaDebug(msg string, fields ...interface{}) {
+	// Only log if debugLogging is enabled AND we have a logger
+	if debugLogging && h.Logger != nil {
+		h.Logger.Debug(msg, fields...)
+	}
+}
+
 // sanitizeClipName performs sanity checks on the clip name and ensures it's a relative path
 func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 	// Check if the clip name is empty
@@ -46,7 +58,7 @@ func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error decoding clip name: %w", err)
 	}
-	h.Debug("sanitizeClipName: Decoded clip name: %s", decodedClipName)
+	h.mediaDebug("sanitizeClipName: Decoded clip name", "clip_name", decodedClipName)
 
 	// Check the length of the decoded clip name
 	if len(decodedClipName) > MaxClipNameLength {
@@ -55,7 +67,7 @@ func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 
 	// Check for allowed characters
 	if !regexp.MustCompile(AllowedCharacters).MatchString(decodedClipName) {
-		h.Debug("sanitizeClipName: Invalid characters in clip name: %s", decodedClipName)
+		h.mediaDebug("sanitizeClipName: Invalid characters in clip name", "clip_name", decodedClipName)
 		return "", ErrInvalidCharacters
 	}
 
@@ -65,7 +77,7 @@ func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 	// Convert to forward slashes and normalize multiple separators
 	cleanPath = strings.ReplaceAll(cleanPath, "\\", "/")
 	cleanPath = strings.ReplaceAll(cleanPath, "//", "/")
-	h.Debug("sanitizeClipName: Cleaned path: %s", cleanPath)
+	h.mediaDebug("sanitizeClipName: Cleaned path", "path", cleanPath)
 
 	// Get absolute paths for comparison
 	exportPath := conf.Setting().Realtime.Audio.Export.Path
@@ -83,7 +95,9 @@ func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 
 	// Check if the resolved path is within the export directory
 	if !strings.HasPrefix(absPath, absExportPath) {
-		h.Debug("sanitizeClipName: Path traversal attempt detected - path resolves outside export directory: %s", absPath)
+		h.mediaDebug("sanitizeClipName: Path traversal attempt detected",
+			"path", absPath,
+			"export_path", absExportPath)
 		return "", ErrPathTraversal
 	}
 
@@ -92,13 +106,13 @@ func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 	if strings.HasPrefix(prefixLower, "clips/") {
 		cleanPath = cleanPath[6:] // Remove "clips/" (6 characters)
 	}
-	h.Debug("sanitizeClipName: Path after removing clips prefix: %s", cleanPath)
+	h.mediaDebug("sanitizeClipName: Path after removing clips prefix", "path", cleanPath)
 
 	// If the path is absolute, make it relative to the export path
 	if filepath.IsAbs(cleanPath) {
-		h.Debug("sanitizeClipName: Found absolute path: %s", cleanPath)
+		h.mediaDebug("sanitizeClipName: Found absolute path", "path", cleanPath)
 		exportPath := conf.Setting().Realtime.Audio.Export.Path
-		h.Debug("sanitizeClipName: Export path from settings: %s", exportPath)
+		h.mediaDebug("sanitizeClipName: Export path from settings", "export_path", exportPath)
 
 		// Case-insensitive check for Windows compatibility
 		if runtime.GOOS == "windows" {
@@ -118,7 +132,7 @@ func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 				return "", fmt.Errorf("invalid path: absolute path not under export directory")
 			}
 		}
-		h.Debug("sanitizeClipName: Converted to relative path: %s", cleanPath)
+		h.mediaDebug("sanitizeClipName: Converted to relative path", "path", cleanPath)
 	}
 
 	// Check final path length including the export path
@@ -129,7 +143,7 @@ func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 
 	// Convert to forward slashes for web URLs
 	cleanPath = filepath.ToSlash(cleanPath)
-	h.Debug("sanitizeClipName: Final path with forward slashes: %s", cleanPath)
+	h.mediaDebug("sanitizeClipName: Final path with forward slashes", "path", cleanPath)
 
 	return cleanPath, nil
 }
@@ -222,75 +236,75 @@ func (h *Handlers) ThumbnailAttribution(scientificName string) template.HTML {
 // ServeSpectrogram serves or generates a spectrogram for a given clip.
 // API: GET /api/v1/media/spectrogram
 func (h *Handlers) ServeSpectrogram(c echo.Context) error {
-	h.Debug("ServeSpectrogram: Handler called with URL: %s", c.Request().URL.String())
+	h.mediaDebug("ServeSpectrogram: Handler called", "url", c.Request().URL.String())
 
 	// Extract clip name from the query parameters
 	clipName := c.QueryParam("clip")
-	h.Debug("ServeSpectrogram: Raw clip name from query: %s", clipName)
+	h.mediaDebug("ServeSpectrogram: Raw clip name from query", "clip", clipName)
 
 	// Sanitize the clip name
 	sanitizedClipName, err := h.sanitizeClipName(clipName)
 	if err != nil {
-		h.Debug("ServeSpectrogram: Error sanitizing clip name: %v", err)
+		h.mediaDebug("ServeSpectrogram: Error sanitizing clip name", "error", err)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
-	h.Debug("ServeSpectrogram: Sanitized clip name: %s", sanitizedClipName)
+	h.mediaDebug("ServeSpectrogram: Sanitized clip name", "clip", sanitizedClipName)
 
 	// Get the full path to the audio file using consistent path handling
 	fullPath := getFullPath(sanitizedClipName)
-	h.Debug("ServeSpectrogram: Full audio path: %s", fullPath)
+	h.mediaDebug("ServeSpectrogram: Full audio path", "path", fullPath)
 
 	// Verify that the audio file exists
 	exists, err := fileExists(fullPath)
 	if err != nil {
-		h.Debug("ServeSpectrogram: Error checking audio file: %v", err)
+		h.mediaDebug("ServeSpectrogram: Error checking audio file", "error", err)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 	if !exists {
-		h.Debug("ServeSpectrogram: Audio file not found: %s", fullPath)
+		h.mediaDebug("ServeSpectrogram: Audio file not found", "path", fullPath)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
-	h.Debug("ServeSpectrogram: Audio file exists at: %s", fullPath)
+	h.mediaDebug("ServeSpectrogram: Audio file exists", "path", fullPath)
 
 	// Construct the path to the spectrogram image
 	spectrogramPath, err := h.getSpectrogramPath(fullPath, 400) // Assuming 400px width
 	if err != nil {
-		h.Debug("ServeSpectrogram: Error getting spectrogram path: %v", err)
+		h.mediaDebug("ServeSpectrogram: Error getting spectrogram path", "error", err)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
-	h.Debug("ServeSpectrogram: Final spectrogram path: %s", spectrogramPath)
+	h.mediaDebug("ServeSpectrogram: Final spectrogram path", "path", spectrogramPath)
 
 	// Verify the spectrogram exists
 	exists, err = fileExists(spectrogramPath)
 	if err != nil {
-		h.Debug("ServeSpectrogram: Error checking spectrogram file: %v", err)
+		h.mediaDebug("ServeSpectrogram: Error checking spectrogram file", "error", err)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 	if !exists {
-		h.Debug("ServeSpectrogram: Spectrogram file not found, attempting to create it")
+		h.mediaDebug("ServeSpectrogram: Spectrogram file not found, attempting to create it")
 		// Try to create the spectrogram
 		if err := createSpectrogramWithSoX(fullPath, spectrogramPath, 400); err != nil {
-			h.Debug("ServeSpectrogram: Failed to create spectrogram: %v", err)
+			h.mediaDebug("ServeSpectrogram: Failed to create spectrogram", "error", err)
 			c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 			return c.File("assets/images/spectrogram-placeholder.svg")
 		}
-		h.Debug("ServeSpectrogram: Successfully created spectrogram at: %s", spectrogramPath)
+		h.mediaDebug("ServeSpectrogram: Successfully created spectrogram", "path", spectrogramPath)
 	}
 
 	// Final check if the spectrogram exists after potential creation
 	exists, _ = fileExists(spectrogramPath)
 	if !exists {
-		h.Debug("ServeSpectrogram: Spectrogram still not found after creation attempt: %s", spectrogramPath)
+		h.mediaDebug("ServeSpectrogram: Spectrogram still not found after creation attempt", "path", spectrogramPath)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 
-	h.Debug("ServeSpectrogram: Serving spectrogram file: %s", spectrogramPath)
+	h.mediaDebug("ServeSpectrogram: Serving spectrogram file", "path", spectrogramPath)
 	// Set the correct Content-Type header for PNG images
 	c.Response().Header().Set(echo.HeaderContentType, "image/png")
 	c.Response().Header().Set("Cache-Control", "public, max-age=2592000, immutable") // Cache spectrograms for 30 days
@@ -301,11 +315,11 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 func (h *Handlers) getSpectrogramPath(audioFileName string, width int) (string, error) {
 	// Clean the audio file path first
 	audioFileName = filepath.Clean(audioFileName)
-	h.Debug("getSpectrogramPath: Input audio path: %s", audioFileName)
+	h.mediaDebug("getSpectrogramPath: Input audio path", "path", audioFileName)
 
 	// Get the export path
 	exportPath := conf.Setting().Realtime.Audio.Export.Path
-	h.Debug("getSpectrogramPath: Export path: %s", exportPath)
+	h.mediaDebug("getSpectrogramPath: Export path", "path", exportPath)
 
 	// Convert both paths to forward slashes for consistent comparison
 	audioFileNameSlash := strings.ReplaceAll(audioFileName, "\\", "/")
@@ -316,45 +330,45 @@ func (h *Handlers) getSpectrogramPath(audioFileName string, width int) (string, 
 		// If the path doesn't already include the export path, add it
 		audioFileName = filepath.Clean(filepath.Join(exportPath, audioFileName))
 	}
-	h.Debug("getSpectrogramPath: Full audio path: %s", audioFileName)
+	h.mediaDebug("getSpectrogramPath: Full audio path", "path", audioFileName)
 
 	// Generate file paths using the same directory as the audio file
 	dir := filepath.Dir(audioFileName)
-	h.Debug("getSpectrogramPath: Directory path: %s", dir)
+	h.mediaDebug("getSpectrogramPath: Directory path", "dir", dir)
 
 	baseNameWithoutExt := strings.TrimSuffix(filepath.Base(audioFileName), filepath.Ext(audioFileName))
-	h.Debug("getSpectrogramPath: Base name without extension: %s", baseNameWithoutExt)
+	h.mediaDebug("getSpectrogramPath: Base name without extension", "basename", baseNameWithoutExt)
 
 	spectrogramFileName := fmt.Sprintf("%s_%dpx.png", baseNameWithoutExt, width)
-	h.Debug("getSpectrogramPath: Spectrogram filename: %s", spectrogramFileName)
+	h.mediaDebug("getSpectrogramPath: Spectrogram filename", "filename", spectrogramFileName)
 
 	// Join paths using OS-specific separators and clean the result
 	spectrogramPath := filepath.Clean(filepath.Join(dir, spectrogramFileName))
-	h.Debug("getSpectrogramPath: Final spectrogram path: %s", spectrogramPath)
+	h.mediaDebug("getSpectrogramPath: Final spectrogram path", "path", spectrogramPath)
 
 	// Check if the spectrogram already exists
 	exists, err := fileExists(spectrogramPath)
 	if err != nil {
-		h.Debug("getSpectrogramPath: Error checking spectrogram existence: %v", err)
+		h.mediaDebug("getSpectrogramPath: Error checking spectrogram existence", "error", err)
 		return "", fmt.Errorf("error checking spectrogram file: %w", err)
 	}
 	if exists {
-		h.Debug("getSpectrogramPath: Existing spectrogram found at: %s", spectrogramPath)
+		h.mediaDebug("getSpectrogramPath: Existing spectrogram found", "path", spectrogramPath)
 		return spectrogramPath, nil
 	}
-	h.Debug("getSpectrogramPath: No existing spectrogram found at: %s", spectrogramPath)
+	h.mediaDebug("getSpectrogramPath: No existing spectrogram found", "path", spectrogramPath)
 
 	// Check if the original audio file exists
 	exists, err = fileExists(audioFileName)
 	if err != nil {
-		h.Debug("getSpectrogramPath: Error checking audio file: %v", err)
+		h.mediaDebug("getSpectrogramPath: Error checking audio file", "error", err)
 		return "", fmt.Errorf("error checking audio file: %w", err)
 	}
 	if !exists {
-		h.Debug("getSpectrogramPath: Audio file does not exist at: %s", audioFileName)
+		h.mediaDebug("getSpectrogramPath: Audio file does not exist", "path", audioFileName)
 		return "", fmt.Errorf("audio file does not exist: %s", audioFileName)
 	}
-	h.Debug("getSpectrogramPath: Audio file exists at: %s", audioFileName)
+	h.mediaDebug("getSpectrogramPath: Audio file exists", "path", audioFileName)
 
 	return spectrogramPath, nil
 }
@@ -597,61 +611,65 @@ func sanitizeContentDispositionFilename(filename string) string {
 // ServeAudioClip serves an audio clip file
 // API: GET /api/v1/media/audio
 func (h *Handlers) ServeAudioClip(c echo.Context) error {
-	h.Debug("ServeAudioClip: Starting to handle request for path: %s", c.Request().URL.String())
+	h.mediaDebug("ServeAudioClip: Starting to handle request", "path", c.Request().URL.String())
 
 	// Extract clip name from the query parameters
 	clipName := c.QueryParam("clip")
-	h.Debug("ServeAudioClip: Raw clip name from query: %s", clipName)
+	h.mediaDebug("ServeAudioClip: Raw clip name from query", "clip", clipName)
 
 	// Sanitize the clip name
 	sanitizedClipName, err := h.sanitizeClipName(clipName)
 	if err != nil {
-		h.Debug("ServeAudioClip: Error sanitizing clip name: %v", err)
+		h.mediaDebug("ServeAudioClip: Error sanitizing clip name", "error", err)
 		c.Response().Header().Set(echo.HeaderContentType, "text/plain")
 		return c.String(http.StatusNotFound, "Audio file not found")
 	}
-	h.Debug("ServeAudioClip: Sanitized clip name: %s", sanitizedClipName)
+	h.mediaDebug("ServeAudioClip: Sanitized clip name", "clip", sanitizedClipName)
 
 	// Get the full path to the audio file
 	fullPath := getFullPath(sanitizedClipName)
-	h.Debug("ServeAudioClip: Full path: %s", fullPath)
+	h.mediaDebug("ServeAudioClip: Full path", "path", fullPath)
 
 	// Verify that the full path is within the export directory
 	absFullPath, err := filepath.Abs(fullPath)
 	if err != nil {
-		h.Debug("ServeAudioClip: Error obtaining absolute path: %v", err)
+		h.mediaDebug("ServeAudioClip: Error obtaining absolute path", "error", err)
 		return c.String(http.StatusInternalServerError, "Internal server error")
 	}
 	absExportPath, err := filepath.Abs(conf.Setting().Realtime.Audio.Export.Path)
 	if err != nil {
-		h.Debug("ServeAudioClip: Error obtaining absolute export path: %v", err)
+		h.mediaDebug("ServeAudioClip: Error obtaining absolute export path", "error", err)
 		return c.String(http.StatusInternalServerError, "Internal server error")
 	}
 	if !strings.HasPrefix(absFullPath, absExportPath) {
-		h.Debug("ServeAudioClip: Resolved path outside export directory: %s", absFullPath)
+		h.mediaDebug("ServeAudioClip: Resolved path outside export directory",
+			"path", absFullPath,
+			"export_path", absExportPath)
 		return c.String(http.StatusForbidden, "Forbidden")
 	}
 
 	// Check if the file exists
 	if _, err := os.Stat(fullPath); err != nil {
 		if os.IsNotExist(err) {
-			h.Debug("ServeAudioClip: Audio file not found: %s", fullPath)
+			h.mediaDebug("ServeAudioClip: Audio file not found", "path", fullPath)
 		} else {
-			h.Debug("ServeAudioClip: Error checking audio file: %v", err)
+			h.mediaDebug("ServeAudioClip: Error checking audio file", "error", err)
 		}
 		c.Response().Header().Set(echo.HeaderContentType, "text/plain")
 		return c.String(http.StatusNotFound, "Audio file not found")
 	}
-	h.Debug("ServeAudioClip: File exists at path: %s", fullPath)
+	h.mediaDebug("ServeAudioClip: File exists at path", "path", fullPath)
 
 	// Get the filename for Content-Disposition
 	filename := filepath.Base(sanitizedClipName)
 	safeFilename := sanitizeContentDispositionFilename(filename)
-	h.Debug("ServeAudioClip: Using filename for disposition: %s (safe: %s)", filename, safeFilename)
+	h.mediaDebug("ServeAudioClip: Using filename for disposition",
+		"filename", filename,
+		"safe_filename", safeFilename)
 
 	// Get MIME type
 	mimeType := getAudioMimeType(fullPath)
-	h.Debug("ServeAudioClip: MIME type for file: %s", mimeType)
+	h.mediaDebug("ServeAudioClip: MIME type for file", "mime_type", mimeType)
 
 	// Set response headers
 	c.Response().Header().Set(echo.HeaderContentType, mimeType)
@@ -663,12 +681,12 @@ func (h *Handlers) ServeAudioClip(c echo.Context) error {
 			safeFilename,
 			safeFilename))
 
-	h.Debug("ServeAudioClip: Set headers - Content-Type: %s, Content-Disposition: %s",
-		c.Response().Header().Get(echo.HeaderContentType),
-		c.Response().Header().Get(echo.HeaderContentDisposition))
+	h.mediaDebug("ServeAudioClip: Set headers",
+		"content_type", c.Response().Header().Get(echo.HeaderContentType),
+		"disposition", c.Response().Header().Get(echo.HeaderContentDisposition))
 
 	// Serve the file
-	h.Debug("ServeAudioClip: Attempting to serve file: %s", fullPath)
+	h.mediaDebug("ServeAudioClip: Attempting to serve file", "path", fullPath)
 	return c.File(fullPath)
 }
 
