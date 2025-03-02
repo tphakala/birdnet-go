@@ -84,12 +84,12 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 			case connected := <-statusReqChan:
 				status.Connected = connected
 			case <-time.After(2 * time.Second):
-				c.logger.Printf("Timeout waiting for MQTT status response")
+				c.LogfWarn("Timeout waiting for MQTT status response")
 				status.LastError = "error:timeout:mqtt_status_response" // Standardized error code format
 			}
 		default:
 			// Channel is full or blocked
-			c.logger.Printf("Control channel is not accepting messages")
+			c.LogfWarn("Control channel is not accepting messages")
 			status.LastError = "error:unavailable:control_system" // Standardized error code format
 		}
 	} else if mqttConfig.Enabled {
@@ -224,7 +224,7 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 
 			// Write final result to response if possible
 			if err := c.writeJSONResponse(ctx, finalResult); err != nil {
-				c.logger.Printf("Error writing final MQTT test result: %v", err)
+				c.LogfError("Error writing final MQTT test result: %v", err)
 			}
 		}
 	}()
@@ -236,7 +236,7 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 	for result := range resultChan {
 		writeMu.Lock()
 		if err := encoder.Encode(result); err != nil {
-			c.logger.Printf("Error encoding MQTT test result: %v", err)
+			c.LogfError("Error encoding MQTT test result: %v", err)
 			writeMu.Unlock()
 
 			// Signal that the HTTP client has disconnected using sync.Once

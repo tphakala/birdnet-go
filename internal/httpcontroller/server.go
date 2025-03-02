@@ -3,7 +3,6 @@ package httpcontroller
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"strings"
@@ -86,6 +85,62 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 	if s.Logger != nil {
 		s.Handlers.SetLogger(s.Logger)
 	}
+
+	return s
+}
+
+// NewWithLogger initializes a new HTTP server with an explicit logger.
+// This is the preferred constructor as it ensures proper logger hierarchy.
+func NewWithLogger(settings *conf.Settings, dataStore datastore.Interface, birdImageCache *imageprovider.BirdImageCache, audioLevelChan chan myaudio.AudioLevelData, controlChan chan string, proc *processor.Processor, parentLogger *logger.Logger) *Server {
+	configureDefaultSettings(settings)
+
+	// Create a server-specific logger
+	var serverLogger *logger.Logger
+	if parentLogger != nil {
+		serverLogger = parentLogger.Named("server")
+	} else {
+		// Fall back to global logger with proper naming if no parent logger provided
+		serverLogger = logger.Named("server")
+	}
+
+	s := &Server{
+		Echo:              echo.New(),
+		DS:                dataStore,
+		Settings:          settings,
+		BirdImageCache:    birdImageCache,
+		AudioLevelChan:    audioLevelChan,
+		DashboardSettings: &settings.Realtime.Dashboard,
+		OAuth2Server:      security.NewOAuth2Server(),
+		CloudflareAccess:  security.NewCloudflareAccess(),
+		controlChan:       controlChan,
+		notificationChan:  make(chan handlers.Notification, 10),
+		Processor:         proc,
+		Logger:            serverLogger,
+	}
+
+	// Configure an IP extractor
+	s.Echo.IPExtractor = echo.ExtractIPFromXFFHeader()
+
+	// Initialize SunCalc for calculating sun event times
+	s.SunCalc = suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
+
+	// Initialize handlers with a child logger
+	s.Handlers = handlers.New(s.DS, s.Settings, s.DashboardSettings, s.BirdImageCache, nil, s.SunCalc, s.AudioLevelChan, s.OAuth2Server, s.controlChan, s.notificationChan, s)
+
+	// Set our custom logger in the handlers
+	s.Handlers.SetLogger(s.Logger.Named("handlers"))
+
+	// Add processor middleware
+	s.Echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			c.Set("processor", s.Processor)
+			return next(c)
+		}
+	})
+
+	s.initializeServer()
+
+	serverLogger.Info("HTTP server initialized", "port", s.Settings.WebServer.Port)
 
 	return s
 }
@@ -188,7 +243,7 @@ func (s *Server) initializeServer() {
 		s.BirdImageCache,
 		s.SunCalc,
 		s.controlChan,
-		log.Default(),
+		s.Logger.Named("api.v2"),
 	)
 
 	// Add the server to Echo context for API v2 authentication

@@ -2,6 +2,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -133,8 +134,10 @@ func (c *Controller) GetHourlyWeatherForDay(ctx echo.Context) error {
 				logInfo = "No hourly weather data available for future date: " + date
 
 				// Log at warning level since this might indicate a client issue
-				c.logger.Printf("WARN: [Weather API] %s (reason=%s, endpoint=GetHourlyWeatherForDay)",
-					logInfo, reason)
+				c.logger.Warn("Weather API issue",
+					"message", fmt.Sprintf("%s", logInfo),
+					"reason", reason,
+					"endpoint", "GetHourlyWeatherForDay")
 
 				return ctx.JSON(http.StatusOK, struct {
 					Message string                  `json:"message"`
@@ -149,8 +152,10 @@ func (c *Controller) GetHourlyWeatherForDay(ctx echo.Context) error {
 		}
 
 		// Log at warning level since missing data might indicate a system issue
-		c.logger.Printf("WARN: [Weather API] %s (reason=%s, endpoint=GetHourlyWeatherForDay)",
-			logInfo, reason)
+		c.logger.Warn("Weather API issue",
+			"message", fmt.Sprintf("%s", logInfo),
+			"reason", reason,
+			"endpoint", "GetHourlyWeatherForDay")
 
 		return ctx.JSON(http.StatusOK, struct {
 			Message string                  `json:"message"`
@@ -438,8 +443,10 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 	dailyEvents, err := c.DS.GetDailyEvents(date)
 	if err != nil {
 		// Log the error but continue with partial response
-		c.logger.Printf("WARN: [Weather API] Failed to get daily weather data for date %s: %v (endpoint=GetLatestWeather)",
-			date, err)
+		c.logger.Warn("Failed to get daily weather data",
+			"date", date,
+			"error", err,
+			"endpoint", "GetLatestWeather")
 	} else {
 		// Add daily data to response if available using the helper function
 		dailyResponse := c.buildDailyWeatherResponse(dailyEvents)

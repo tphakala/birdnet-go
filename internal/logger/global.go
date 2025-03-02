@@ -24,9 +24,6 @@ func InitGlobal(config Config) error {
 		// Force disable caller information for the global logger
 		configCopy.DisableCaller = true
 
-		// Log what we're doing
-		fmt.Printf("DEBUG: InitGlobal forcing DisableCaller=true (original value: %v)\n", config.DisableCaller)
-
 		// Use the modified config
 		defaultLogger, errDefaultLogger = NewLogger(configCopy)
 	})
@@ -42,9 +39,6 @@ func GetGlobal() *Logger {
 
 		// Force disable caller information for the global logger
 		config.DisableCaller = true
-
-		// Log the configuration that's being used
-		fmt.Printf("DEBUG: Setting up global logger with DisableCaller=%v\n", config.DisableCaller)
 
 		defaultLogger, errDefaultLogger = NewLogger(config)
 		if errDefaultLogger != nil {

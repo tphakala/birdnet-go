@@ -87,6 +87,11 @@ func initialize() error {
 		return fmt.Errorf("error initializing logger: %w", err)
 	}
 
+	// Create a named root logger for the application
+	// This can be used later for passing to components
+	appLogger := logger.Named("birdnet")
+	appLogger.Info("BirdNET-Go starting", "version", viper.GetString("version"))
+
 	return nil
 }
 

@@ -53,6 +53,15 @@ type Client struct {
 	logger     *log.Logger
 }
 
+// logf is a helper for Client to log messages with the standard logger
+func (client *Client) logf(format string, args ...interface{}) {
+	if client.logger != nil {
+		client.logger.Printf(format, args...)
+	} else {
+		log.Printf(format, args...)
+	}
+}
+
 // initStreamRoutes registers all stream-related API endpoints
 func (c *Controller) initStreamRoutes() {
 	// Create streams API group with auth middleware
@@ -68,7 +77,7 @@ func (c *Controller) HandleAudioLevelStream(ctx echo.Context) error {
 	// Upgrade HTTP connection to WebSocket
 	conn, err := upgrader.Upgrade(ctx.Response(), ctx.Request(), nil)
 	if err != nil {
-		c.logger.Printf("Error upgrading connection to WebSocket: %v", err)
+		c.LogfError("Error upgrading connection to WebSocket: %v", err)
 		return err
 	}
 
@@ -79,7 +88,7 @@ func (c *Controller) HandleAudioLevelStream(ctx echo.Context) error {
 		clientID:   ctx.Request().RemoteAddr,
 		streamType: "audio-level",
 		lastSeen:   time.Now(),
-		logger:     c.logger,
+		logger:     log.Default(),
 	}
 
 	// Register client with global audio level clients map
@@ -88,7 +97,7 @@ func (c *Controller) HandleAudioLevelStream(ctx echo.Context) error {
 
 	// Start goroutines for reading and writing
 	go client.writePump()
-	go client.readPump(c.logger)
+	go client.readPump(log.Default())
 
 	return nil
 }
@@ -98,7 +107,7 @@ func (c *Controller) HandleNotificationsStream(ctx echo.Context) error {
 	// Upgrade HTTP connection to WebSocket
 	conn, err := upgrader.Upgrade(ctx.Response(), ctx.Request(), nil)
 	if err != nil {
-		c.logger.Printf("Error upgrading connection to WebSocket: %v", err)
+		c.LogfError("Error upgrading connection to WebSocket: %v", err)
 		return err
 	}
 
@@ -109,7 +118,7 @@ func (c *Controller) HandleNotificationsStream(ctx echo.Context) error {
 		clientID:   ctx.Request().RemoteAddr,
 		streamType: "notifications",
 		lastSeen:   time.Now(),
-		logger:     c.logger,
+		logger:     log.Default(),
 	}
 
 	// Register client with global notifications clients map
@@ -117,7 +126,7 @@ func (c *Controller) HandleNotificationsStream(ctx echo.Context) error {
 
 	// Start goroutines for reading and writing
 	go client.writePump()
-	go client.readPump(c.logger)
+	go client.readPump(log.Default())
 
 	return nil
 }
@@ -156,26 +165,26 @@ func (client *Client) writePump() {
 		select {
 		case message, ok := <-client.send:
 			if err := client.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
-				client.logger.Printf("Failed to set write deadline: %v", err)
+				client.logf("Failed to set write deadline: %v", err)
 				return
 			}
 
 			if !ok {
 				// The hub closed the channel
 				if err := client.conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
-					client.logger.Printf("Error writing close message: %v", err)
+					client.logf("Error writing close message: %v", err)
 				}
 				return
 			}
 
 			w, err := client.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
-				client.logger.Printf("Error getting writer: %v", err)
+				client.logf("Error getting writer: %v", err)
 				return
 			}
 
 			if _, err := w.Write(message); err != nil {
-				client.logger.Printf("Error writing message: %v", err)
+				client.logf("Error writing message: %v", err)
 				return
 			}
 
@@ -183,29 +192,29 @@ func (client *Client) writePump() {
 			n := len(client.send)
 			for i := 0; i < n; i++ {
 				if _, err := w.Write([]byte{'\n'}); err != nil {
-					client.logger.Printf("Error writing delimiter: %v", err)
+					client.logf("Error writing delimiter: %v", err)
 					return
 				}
 
 				chunk := <-client.send
 				if _, err := w.Write(chunk); err != nil {
-					client.logger.Printf("Error writing chunk: %v", err)
+					client.logf("Error writing chunk: %v", err)
 					return
 				}
 			}
 
 			if err := w.Close(); err != nil {
-				client.logger.Printf("Error closing writer: %v", err)
+				client.logf("Error closing writer: %v", err)
 				return
 			}
 		case <-ticker.C:
 			if err := client.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
-				client.logger.Printf("Failed to set write deadline for ping: %v", err)
+				client.logf("Failed to set write deadline for ping: %v", err)
 				return
 			}
 
 			if err := client.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				client.logger.Printf("Error writing ping message: %v", err)
+				client.logf("Error writing ping message: %v", err)
 				return
 			}
 		}
@@ -226,7 +235,7 @@ func (client *Client) readPump(logger *log.Logger) {
 
 	client.conn.SetReadLimit(maxMessageSize)
 	if err := client.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
-		client.logger.Printf("Failed to set initial read deadline: %v", err)
+		client.logf("Failed to set initial read deadline: %v", err)
 		return
 	}
 
@@ -235,7 +244,7 @@ func (client *Client) readPump(logger *log.Logger) {
 		client.lastSeen = time.Now()
 		client.mu.Unlock()
 		if err := client.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
-			client.logger.Printf("Failed to set read deadline: %v", err)
+			client.logf("Failed to set read deadline: %v", err)
 			return err
 		}
 		return nil

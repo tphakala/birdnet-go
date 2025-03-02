@@ -3,7 +3,7 @@ package api
 
 import (
 	"crypto/rand"
-	"log"
+	"fmt"
 	"net/http"
 	"sync"
 
@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -24,7 +25,7 @@ type Controller struct {
 	Settings            *conf.Settings
 	BirdImageCache      *imageprovider.BirdImageCache
 	SunCalc             *suncalc.SunCalc
-	logger              *log.Logger
+	logger              *logger.Logger
 	controlChan         chan string
 	speciesExcludeMutex sync.RWMutex // Mutex for species exclude list operations
 	settingsMutex       sync.RWMutex // Mutex for settings operations
@@ -34,11 +35,7 @@ type Controller struct {
 // New creates a new API controller
 func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
-	controlChan chan string, logger *log.Logger) *Controller {
-
-	if logger == nil {
-		logger = log.Default()
-	}
+	controlChan chan string, logger *logger.Logger) *Controller {
 
 	c := &Controller{
 		Echo:           e,
@@ -93,7 +90,9 @@ func (c *Controller) initRoutes() {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					c.logger.Printf("PANIC during %s initialization: %v", initializer.name, r)
+					c.logger.Error("Panic during route initialization",
+						"route", initializer.name,
+						"error", r)
 				}
 			}()
 
@@ -114,6 +113,38 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 	})
 }
 
+// InitializeAPI sets up the JSON API endpoints in the provided Echo instance
+// The returned Controller has a Shutdown method that should be called during application shutdown
+// to properly clean up resources and stop background goroutines
+func InitializeAPI(
+	e *echo.Echo,
+	ds datastore.Interface,
+	settings *conf.Settings,
+	birdImageCache *imageprovider.BirdImageCache,
+	sunCalc *suncalc.SunCalc,
+	controlChan chan string,
+	loggerInstance *logger.Logger,
+) *Controller {
+	// Get a named API logger
+	var apiLogger *logger.Logger
+
+	if loggerInstance != nil {
+		// Use the provided logger and create a component-specific logger
+		apiLogger = loggerInstance.Named("api.v2")
+	} else {
+		// Use the global logger if no specific logger was provided
+		apiLogger = logger.Named("api.v2")
+	}
+
+	// Create new API controller with our structured logger
+	apiController := New(e, ds, settings, birdImageCache, sunCalc, controlChan, apiLogger)
+
+	// Log API initialization using the structured logger
+	apiLogger.Info("JSON API v2 initialized", "endpoint", "/api/v2")
+
+	return apiController
+}
+
 // Shutdown performs cleanup of all resources used by the API controller
 // This should be called when the application is shutting down
 func (c *Controller) Shutdown() {
@@ -121,8 +152,8 @@ func (c *Controller) Shutdown() {
 	// Currently, only the system component needs cleanup
 	StopCPUMonitoring()
 
-	// Log shutdown
-	c.Debug("API Controller shutting down, CPU monitoring stopped")
+	// Log shutdown using structured logger
+	c.logger.Debug("API Controller shutting down", "message", "CPU monitoring stopped")
 }
 
 // Error response structure
@@ -168,13 +199,53 @@ func generateCorrelationID() string {
 // HandleError constructs and returns an appropriate error response
 func (c *Controller) HandleError(ctx echo.Context, err error, message string, code int) error {
 	errorResp := NewErrorResponse(err, message, code)
-	c.logger.Printf("API Error [%s]: %s: %v", errorResp.CorrelationID, message, err)
+
+	c.logger.Error("API error",
+		"correlation_id", errorResp.CorrelationID,
+		"message", message,
+		"error", err,
+		"code", code)
+
 	return ctx.JSON(code, errorResp)
 }
 
 // Debug logs debug messages when debug mode is enabled
 func (c *Controller) Debug(format string, v ...interface{}) {
-	if c.Settings.WebServer.Debug {
-		c.logger.Printf(format, v...)
+	if !c.Settings.WebServer.Debug {
+		return
 	}
+
+	// Format the values if needed
+	var msg string
+	if len(v) > 0 {
+		msg = fmt.Sprintf(format, v...)
+	} else {
+		msg = format
+	}
+
+	c.logger.Debug(msg)
+}
+
+// LogfError is a helper for logging errors with Printf-style formatting using the structured logger
+func (c *Controller) LogfError(format string, v ...interface{}) {
+	c.logger.Error(fmt.Sprintf(format, v...))
+}
+
+// LogfWarn is a helper for logging warnings with Printf-style formatting using the structured logger
+func (c *Controller) LogfWarn(format string, v ...interface{}) {
+	c.logger.Warn(fmt.Sprintf(format, v...))
+}
+
+// LogfInfo is a helper for logging info with Printf-style formatting using the structured logger
+func (c *Controller) LogfInfo(format string, v ...interface{}) {
+	c.logger.Info(fmt.Sprintf(format, v...))
+}
+
+// LogfDebug is a helper for logging debug messages with Printf-style formatting using the structured logger
+func (c *Controller) LogfDebug(format string, v ...interface{}) {
+	if !c.Settings.WebServer.Debug {
+		return
+	}
+
+	c.logger.Debug(fmt.Sprintf(format, v...))
 }
