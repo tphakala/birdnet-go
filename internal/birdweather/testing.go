@@ -259,7 +259,7 @@ func runTest(ctx context.Context, stage TestStage, test birdweatherTest) TestRes
 	case SoundscapeUpload:
 		message = fmt.Sprintf("Successfully uploaded test soundscape (0.5 second silent audio) to BirdWeather. This recording should appear on your BirdWeather station at %s.", time.Now().Format("Jan 2, 2006 at 15:04:05"))
 	case DetectionPost:
-		message = fmt.Sprintf("Successfully posted test detection to BirdWeather: Whooper Swan (Cygnus cygnus) with unlikely confidence.")
+		message = "Successfully posted test detection to BirdWeather: Whooper Swan (Cygnus cygnus) with unlikely confidence."
 	default:
 		message = fmt.Sprintf("Successfully completed %s", stage)
 	}
