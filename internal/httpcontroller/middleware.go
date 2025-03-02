@@ -8,8 +8,10 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/security"
 )
 
@@ -26,8 +28,42 @@ func (s *Server) configureMiddleware() {
 	s.Echo.Use(s.VaryHeaderMiddleware())
 }
 
+// getMiddlewareLogger creates a component-specific middleware logger
+func (s *Server) getMiddlewareLogger(component string) *logger.Logger {
+	if s.Logger == nil {
+		return nil
+	}
+	return s.Logger.Named("middleware." + component)
+}
+
+// getRequestLogger creates a request-specific logger with connection ID and client IP
+func (s *Server) getRequestLogger(componentLogger *logger.Logger, c echo.Context) *logger.Logger {
+	if componentLogger == nil {
+		return nil
+	}
+
+	// Generate a short unique ID for this request if not already present
+	requestID := c.Request().Header.Get("X-Request-ID")
+	if requestID == "" {
+		requestID = uuid.New().String()[:8]
+		c.Request().Header.Set("X-Request-ID", requestID)
+	}
+
+	clientIP := s.RealIP(c)
+
+	return componentLogger.With(
+		"request_id", requestID,
+		"client_ip", clientIP,
+		"method", c.Request().Method,
+		"path", c.Request().URL.Path,
+	)
+}
+
 // CSRFMiddleware configures CSRF protection for the server
 func (s *Server) CSRFMiddleware() echo.MiddlewareFunc {
+	// Create a component-specific logger
+	csrfLogger := s.getMiddlewareLogger("csrf")
+
 	config := middleware.CSRFConfig{
 		TokenLookup:    "header:X-CSRF-Token,form:_csrf",
 		CookieName:     "csrf",
@@ -49,12 +85,24 @@ func (s *Server) CSRFMiddleware() echo.MiddlewareFunc {
 				path == "/api/v1/oauth2/callback"
 		},
 		ErrorHandler: func(err error, c echo.Context) error {
-			s.Debug("🚨 CSRF ERROR: Rejected request")
-			s.Debug("🔍 Request Method: %s, Path: %s", c.Request().Method, c.Request().URL.Path)
-			s.Debug("📌 CSRF Token in Header: %s", c.Request().Header.Get("X-CSRF-Token"))
-			s.Debug("📌 CSRF Token in Form: %s", c.FormValue("_csrf"))
-			s.Debug("📝 All Cookies: %s", c.Request().Header.Get("Cookie"))
-			s.Debug("💡 Error Details: %v", err)
+			// Get a request-specific logger
+			reqLogger := s.getRequestLogger(csrfLogger, c)
+
+			if reqLogger != nil {
+				reqLogger.Error("CSRF token validation failed",
+					"token_header", c.Request().Header.Get("X-CSRF-Token"),
+					"token_form", c.FormValue("_csrf"),
+					"cookies", c.Request().Header.Get("Cookie"),
+					"error", err)
+			} else if s.isDevMode() {
+				s.Debug("🚨 CSRF ERROR: Rejected request")
+				s.Debug("🔍 Request Method: %s, Path: %s", c.Request().Method, c.Request().URL.Path)
+				s.Debug("📌 CSRF Token in Header: %s", c.Request().Header.Get("X-CSRF-Token"))
+				s.Debug("📌 CSRF Token in Form: %s", c.FormValue("_csrf"))
+				s.Debug("📝 All Cookies: %s", c.Request().Header.Get("Cookie"))
+				s.Debug("💡 Error Details: %v", err)
+			}
+
 			return echo.NewHTTPError(http.StatusForbidden, "Invalid CSRF token")
 		},
 	}
@@ -79,15 +127,26 @@ func (s *Server) GzipMiddleware() echo.MiddlewareFunc {
 
 // CacheControlMiddleware sets appropriate cache control headers based on the request path
 func (s *Server) CacheControlMiddleware() echo.MiddlewareFunc {
+	// Create a component-specific logger
+	cacheLogger := s.getMiddlewareLogger("cache")
+
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			// Get a request-specific logger
+			reqLogger := s.getRequestLogger(cacheLogger, c)
+
 			// Skip cache control for HTMX requests
 			if c.Request().Header.Get("HX-Request") != "" {
 				return next(c)
 			}
 
 			path := c.Request().URL.Path
-			s.Debug("CacheControlMiddleware: Processing request for path: %s", path)
+
+			if reqLogger != nil && s.isDevMode() {
+				reqLogger.Debug("Processing request", "path", path)
+			} else if s.isDevMode() {
+				s.Debug("CacheControlMiddleware: Processing request for path: %s", path)
+			}
 
 			switch {
 			case strings.HasSuffix(path, ".css"), strings.HasSuffix(path, ".js"), strings.HasSuffix(path, ".html"):
@@ -100,10 +159,20 @@ func (s *Server) CacheControlMiddleware() echo.MiddlewareFunc {
 				c.Response().Header().Set("Cache-Control", "no-store")
 				c.Response().Header().Set("X-Content-Type-Options", "nosniff")
 				c.Response().Header().Set("Accept-Ranges", "bytes")
-				s.Debug("CacheControlMiddleware: Set headers for audio file: %s", path)
+
+				if reqLogger != nil && s.isDevMode() {
+					reqLogger.Debug("Set headers for audio file")
+				} else if s.isDevMode() {
+					s.Debug("CacheControlMiddleware: Set headers for audio file: %s", path)
+				}
 			case strings.HasPrefix(path, "/api/v1/media/spectrogram"):
 				c.Response().Header().Set("Cache-Control", "public, max-age=2592000, immutable") // Cache spectrograms for 30 days
-				s.Debug("CacheControlMiddleware: Set headers for spectrogram: %s", path)
+
+				if reqLogger != nil && s.isDevMode() {
+					reqLogger.Debug("Set headers for spectrogram")
+				} else if s.isDevMode() {
+					s.Debug("CacheControlMiddleware: Set headers for spectrogram: %s", path)
+				}
 			case strings.HasPrefix(path, "/api/v1/"):
 				c.Response().Header().Set("Cache-Control", "no-store")
 				c.Response().Header().Set("Pragma", "no-cache")
@@ -114,7 +183,11 @@ func (s *Server) CacheControlMiddleware() echo.MiddlewareFunc {
 
 			err := next(c)
 			if err != nil {
-				s.Debug("CacheControlMiddleware: Error processing request: %v", err)
+				if reqLogger != nil {
+					reqLogger.Error("Error processing request", "error", err)
+				} else if s.isDevMode() {
+					s.Debug("CacheControlMiddleware: Error processing request: %v", err)
+				}
 			}
 			return err
 		}
@@ -141,21 +214,41 @@ func (s *Server) VaryHeaderMiddleware() echo.MiddlewareFunc {
 
 // AuthMiddleware checks if the user is authenticated and if the request is protected
 func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	// Create a component-specific logger
+	authLogger := s.getMiddlewareLogger("auth")
+
 	return func(c echo.Context) error {
+		// Get a request-specific logger
+		reqLogger := s.getRequestLogger(authLogger, c)
+
 		if isProtectedRoute(c.Path()) {
 			// Check for Cloudflare bypass
 			if s.CloudflareAccess.IsEnabled(c) {
+				if reqLogger != nil && s.isDevMode() {
+					reqLogger.Debug("Cloudflare access enabled, bypassing authentication")
+				}
 				return next(c)
 			}
 
 			// Check if authentication is required for this IP
-			if s.OAuth2Server.IsAuthenticationEnabled(s.RealIP(c)) {
+			clientIP := s.RealIP(c)
+			if s.OAuth2Server.IsAuthenticationEnabled(clientIP) {
 				if !s.IsAccessAllowed(c) {
 					redirectPath := url.QueryEscape(c.Request().URL.Path)
 					// Validate redirect path against whitelist
 					if !isValidRedirect(redirectPath) {
+						if reqLogger != nil {
+							reqLogger.Warn("Invalid redirect path", "redirect", redirectPath)
+						}
 						redirectPath = "/"
 					}
+
+					if reqLogger != nil {
+						reqLogger.Info("Authentication required, redirecting",
+							"redirect_to", "/login?redirect="+redirectPath,
+							"is_htmx", c.Request().Header.Get("HX-Request") == "true")
+					}
+
 					if c.Request().Header.Get("HX-Request") == "true" {
 						c.Response().Header().Set("HX-Redirect", "/login?redirect="+redirectPath)
 						return c.String(http.StatusUnauthorized, "")
@@ -163,11 +256,9 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 					return c.Redirect(http.StatusFound, "/login?redirect="+redirectPath)
 				}
 			}
-
 		}
 		return next(c)
 	}
-
 }
 
 // isProtectedRoute checks if the request is protected
