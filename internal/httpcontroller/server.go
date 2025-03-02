@@ -127,7 +127,7 @@ func (s *Server) Start() {
 
 	go s.handleServerError(errChan)
 
-	fmt.Printf("HTTP server started on port %s (AutoTLS: %v)\n", s.Settings.WebServer.Port, s.Settings.Security.AutoTLS)
+	s.Logger.Info("HTTP server started", "port", s.Settings.WebServer.Port, "autotls", s.Settings.Security.AutoTLS)
 }
 
 func (s *Server) isAuthenticationEnabled(c echo.Context) bool {
@@ -220,9 +220,6 @@ func (s *Server) handleServerError(errChan chan error) {
 	for err := range errChan {
 		if s.Logger != nil {
 			s.Logger.Error("Server error", "error", err)
-		} else {
-			// Fallback to standard log if logger isn't initialized yet
-			log.Printf("Server error: %v", err)
 		}
 		// Additional error handling logic here
 	}

@@ -56,43 +56,16 @@ func (s *Server) initLogger() {
 	// Check if we're in development mode
 	devMode := s.isDevMode()
 
-	// Create the logger config
-	config := logger.Config{
-		Level:         "",    // Let the logger package decide based on development mode
-		JSON:          false, // Use console format for readability
-		Development:   devMode,
-		FilePath:      s.Settings.WebServer.Log.Path,
-		DisableColor:  s.Settings.WebServer.Log.Path != "" && !devMode, // Colors in dev console
-		DisableCaller: true,                                            // Disable caller information
-	}
-
 	if devMode {
 		fmt.Println("Logger initialized in DEVELOPMENT mode (debug level enabled)")
 	}
 
-	// Create rotation config based on server settings
-	rotationConfig := logger.RotationConfig{
-		MaxSize:    int(s.Settings.WebServer.Log.MaxSize),
-		MaxBackups: 5,  // Default to 5 backups
-		MaxAge:     30, // Default to 30 days
-		Compress:   true,
-	}
+	// Use the global logger with a component name instead of creating a new one
+	// This ensures consistent logging behavior across the application
+	s.Logger = logger.GetGlobal().Named("http")
 
-	var err error
-
-	// Initialize logger with unified method
-	if s.Settings.WebServer.Log.Path != "" {
-		// If file path is provided, pass rotation config
-		// Note: In development mode, this will create a tee logger (console AND file)
-		// In production mode, this will create a file-only logger
-		s.Logger, err = logger.NewLogger(config, rotationConfig)
-	} else {
-		// Console-only logger (no rotation config needed)
-		s.Logger, err = logger.NewLogger(config)
-	}
-
-	if err != nil {
-		log.Fatalf("Failed to initialize logger: %v", err)
+	if s.Logger == nil {
+		log.Fatal("Failed to get global logger")
 	}
 
 	// Create a writer adapter for Echo's logger

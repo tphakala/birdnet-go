@@ -75,21 +75,17 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 func initialize() error {
 	// Initialize the global logger
 	config := logger.Config{
-		Level:        viper.GetString("log.level"),
-		Development:  viper.GetBool("debug"),
-		FilePath:     viper.GetString("log.path"),
-		JSON:         viper.GetBool("log.json"),
-		DisableColor: viper.GetBool("log.disable_color"),
+		Level:         viper.GetString("log.level"),
+		Development:   viper.GetBool("debug"),
+		FilePath:      viper.GetString("log.path"),
+		JSON:          viper.GetBool("log.json"),
+		DisableColor:  viper.GetBool("log.disable_color"),
+		DisableCaller: true,
 	}
 
 	if err := logger.InitGlobal(config); err != nil {
 		return fmt.Errorf("error initializing logger: %w", err)
 	}
-
-	// Log initialization success
-	logger.Info("BirdNET-Go initialized",
-		"version", viper.GetString("version"),
-		"build_date", viper.GetString("build_date"))
 
 	return nil
 }

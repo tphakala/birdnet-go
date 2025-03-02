@@ -117,11 +117,6 @@ func (s *Server) setupTemplateRenderer() {
 
 	// Set the custom renderer
 	s.Echo.Renderer = renderer
-
-	// Log successful initialization
-	if componentLogger != nil {
-		componentLogger.Info("Template renderer initialized successfully")
-	}
 }
 
 // RenderContent renders the content template with the given data
