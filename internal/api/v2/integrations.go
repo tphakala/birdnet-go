@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
@@ -30,6 +31,15 @@ type MQTTTestResult struct {
 	ElapsedTime int64  `json:"elapsed_time_ms,omitempty"` // Time taken to complete the test in milliseconds
 }
 
+// BirdWeatherStatus represents the current status of the BirdWeather integration
+type BirdWeatherStatus struct {
+	Enabled          bool    `json:"enabled"`              // Whether BirdWeather integration is enabled
+	StationID        string  `json:"station_id"`           // The BirdWeather station ID
+	Threshold        float64 `json:"threshold"`            // The confidence threshold for reporting detections
+	LocationAccuracy float64 `json:"location_accuracy"`    // The location accuracy in meters
+	LastError        string  `json:"last_error,omitempty"` // Most recent error message, if any issues occurred
+}
+
 // initIntegrationsRoutes registers all integration-related API endpoints
 func (c *Controller) initIntegrationsRoutes() {
 	// Create integrations API group with auth middleware
@@ -40,8 +50,12 @@ func (c *Controller) initIntegrationsRoutes() {
 	mqttGroup.GET("/status", c.GetMQTTStatus)
 	mqttGroup.POST("/test", c.TestMQTTConnection)
 
+	// BirdWeather routes
+	bwGroup := integrationsGroup.Group("/birdweather")
+	bwGroup.GET("/status", c.GetBirdWeatherStatus)
+	bwGroup.POST("/test", c.TestBirdWeatherConnection)
+
 	// Other integration routes could be added here:
-	// - BirdWeather
 	// - Weather APIs
 	// - External media storage
 }
@@ -51,6 +65,7 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 	// Get MQTT configuration from settings
 	mqttConfig := c.Settings.Realtime.MQTT
 
+	// Prepare status response
 	status := MQTTStatus{
 		Connected: false, // Default to not connected
 		Broker:    mqttConfig.Broker,
@@ -58,39 +73,39 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 		ClientID:  c.Settings.Main.Name, // Use the application name as client ID
 	}
 
-	// Check if there's an active MQTT client we can query
+	// If MQTT is not enabled, return status as-is
+	if !mqttConfig.Enabled {
+		return ctx.JSON(http.StatusOK, status)
+	}
+
+	// Check if we have an active MQTT connection through the control channel
 	if c.controlChan != nil {
 		c.Debug("Requesting MQTT status check")
 
-		// Send a status request through the control channel
-		// The actual message format should match what your control monitor expects
-		statusReqChan := make(chan bool, 1)
+		// Create a temporary MQTT client to check connection status
+		metrics, err := telemetry.NewMetrics()
+		if err == nil {
+			tempClient, err := mqtt.NewClient(c.Settings, metrics)
+			if err == nil {
+				// Use a short timeout to check connection
+				testCtx, cancel := context.WithTimeout(ctx.Request().Context(), 3*time.Second)
+				defer cancel()
 
-		// NOTE: There appears to be an issue here - statusReqChan is created locally
-		// but there's no mechanism visible in this function to write to it.
-		// This means the select below may always timeout after 2 seconds.
-		//
-		// TODO: Ensure that:
-		// 1. The component handling "mqtt:status" messages has access to this channel
-		// 2. That component writes the connection status to statusReqChan
-		// 3. Consider passing statusReqChan to the control system or using a response channel pattern
+				// Try to connect and set status based on result
+				err = tempClient.Connect(testCtx)
+				status.Connected = err == nil && tempClient.IsConnected()
 
-		// We assume the controller has a method to handle "mqtt:status" commands
-		// and will respond with the connection status
-		select {
-		case c.controlChan <- "mqtt:status":
-			// Wait for response with timeout
-			select {
-			case connected := <-statusReqChan:
-				status.Connected = connected
-			case <-time.After(2 * time.Second):
-				c.logger.Printf("Timeout waiting for MQTT status response")
-				status.LastError = "error:timeout:mqtt_status_response" // Standardized error code format
+				if err != nil {
+					status.LastError = fmt.Sprintf("error:connection:mqtt_broker:%s", err.Error()) // Standardized error code format
+				}
+
+				// Disconnect the temporary client
+				tempClient.Disconnect()
+			} else {
+				status.LastError = fmt.Sprintf("error:client:mqtt_client_creation:%s", err.Error()) // Standardized error code format
 			}
-		default:
-			// Channel is full or blocked
-			c.logger.Printf("Control channel is not accepting messages")
-			status.LastError = "error:unavailable:control_system" // Standardized error code format
+		} else {
+			status.LastError = fmt.Sprintf("error:metrics:initialization:%s", err.Error()) // Standardized error code format
 		}
 	} else if mqttConfig.Enabled {
 		// If control channel is not available but MQTT is enabled,
@@ -120,6 +135,25 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 			status.LastError = fmt.Sprintf("error:metrics:initialization:%s", err.Error()) // Standardized error code format
 		}
 	}
+
+	return ctx.JSON(http.StatusOK, status)
+}
+
+// GetBirdWeatherStatus handles GET /api/v2/integrations/birdweather/status
+func (c *Controller) GetBirdWeatherStatus(ctx echo.Context) error {
+	// Get BirdWeather configuration from settings
+	bwConfig := c.Settings.Realtime.Birdweather
+
+	// Prepare status response
+	status := BirdWeatherStatus{
+		Enabled:          bwConfig.Enabled,
+		StationID:        bwConfig.ID,
+		Threshold:        bwConfig.Threshold,
+		LocationAccuracy: bwConfig.LocationAccuracy,
+	}
+
+	// For now, we just return the configuration status
+	// In the future, we could add checks for client status here
 
 	return ctx.JSON(http.StatusOK, status)
 }
@@ -237,6 +271,141 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 		writeMu.Lock()
 		if err := encoder.Encode(result); err != nil {
 			c.logger.Printf("Error encoding MQTT test result: %v", err)
+			writeMu.Unlock()
+
+			// Signal that the HTTP client has disconnected using sync.Once
+			safeDoneClose()
+
+			// Cancel the test context to stop ongoing tests
+			cancel()
+			return nil
+		}
+		ctx.Response().Flush()
+		writeMu.Unlock()
+
+		// Check if HTTP context is done (client disconnected)
+		select {
+		case <-httpCtx.Done():
+			c.Debug("HTTP client disconnected during test")
+			// Use sync.Once to safely close the channel
+			safeDoneClose()
+			cancel() // Cancel the test context
+			return nil
+		default:
+			// Continue processing
+		}
+	}
+
+	return nil
+}
+
+// TestBirdWeatherConnection handles POST /api/v2/integrations/birdweather/test
+func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
+	// Get BirdWeather configuration from settings
+	bwConfig := c.Settings.Realtime.Birdweather
+
+	if !bwConfig.Enabled {
+		return ctx.JSON(http.StatusOK, map[string]interface{}{
+			"success": false,
+			"message": "BirdWeather integration is not enabled in settings",
+			"state":   "failed",
+		})
+	}
+
+	// Validate BirdWeather configuration
+	if bwConfig.ID == "" {
+		return ctx.JSON(http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"message": "BirdWeather station ID not configured",
+			"state":   "failed",
+		})
+	}
+
+	// Create test BirdWeather client with the current configuration
+	client, err := birdweather.New(c.Settings)
+	if err != nil {
+		return ctx.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"success": false,
+			"message": fmt.Sprintf("Failed to create BirdWeather client: %v", err),
+			"state":   "failed",
+		})
+	}
+
+	// Prepare for testing
+	ctx.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	ctx.Response().WriteHeader(http.StatusOK)
+
+	// Channel for test results
+	resultChan := make(chan birdweather.TestResult)
+
+	// Create a done channel to signal when the client disconnects
+	doneChan := make(chan struct{})
+
+	// Use sync.Once to ensure doneChan is closed exactly once
+	var closeOnce sync.Once
+	// Helper function to safely close the doneChan
+	safeDoneClose := func() {
+		closeOnce.Do(func() {
+			close(doneChan)
+		})
+	}
+
+	// Mutex for safe writing to response
+	var writeMu sync.Mutex
+
+	// Create context with timeout that also gets cancelled if HTTP client disconnects
+	httpCtx := ctx.Request().Context()
+	testCtx, cancel := context.WithTimeout(httpCtx, 30*time.Second)
+	defer cancel()
+
+	// Run the test in a goroutine
+	go func() {
+		defer close(resultChan)
+		startTime := time.Now()
+
+		// Start the test
+		client.TestConnection(testCtx, resultChan)
+
+		// Calculate elapsed time
+		elapsedTime := time.Since(startTime).Milliseconds()
+
+		// Clean up client resources
+		client.Close()
+
+		// Send final result with elapsed time if the client is still connected
+		select {
+		case <-doneChan:
+			// HTTP client has disconnected, no need to send final result
+			c.Debug("HTTP client disconnected, skipping final result")
+		case <-testCtx.Done():
+			// Test timed out or was cancelled
+			c.Debug("Test context cancelled: %v", testCtx.Err())
+		default:
+			// Still connected, send final result
+			writeMu.Lock()
+			defer writeMu.Unlock()
+
+			// Format final response
+			finalResult := map[string]interface{}{
+				"elapsed_time_ms": elapsedTime,
+				"state":           "completed",
+			}
+
+			// Write final result to response if possible
+			if err := c.writeJSONResponse(ctx, finalResult); err != nil {
+				c.logger.Printf("Error writing final BirdWeather test result: %v", err)
+			}
+		}
+	}()
+
+	// Feed streaming results to client
+	encoder := json.NewEncoder(ctx.Response())
+
+	// Stream results to client until done
+	for result := range resultChan {
+		writeMu.Lock()
+		if err := encoder.Encode(result); err != nil {
+			c.logger.Printf("Error encoding BirdWeather test result: %v", err)
 			writeMu.Unlock()
 
 			// Signal that the HTTP client has disconnected using sync.Once

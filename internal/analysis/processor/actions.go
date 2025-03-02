@@ -199,6 +199,11 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 		return nil
 	}
 
+	// Early check if BirdWeather is still enabled in settings
+	if !a.Settings.Realtime.Birdweather.Enabled {
+		return nil // Silently exit if BirdWeather was disabled after this action was created
+	}
+
 	// Add threshold check here
 	if a.Note.Confidence < float64(a.Settings.Realtime.Birdweather.Threshold) {
 		if a.Settings.Debug {
@@ -208,11 +213,17 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 		return nil
 	}
 
+	// Safe check for nil BwClient
 	if a.BwClient == nil {
 		return fmt.Errorf("BirdWeather client is not initialized")
 	}
 
-	if err := a.BwClient.Publish(&a.Note, a.pcmData); err != nil {
+	// Copy data locally to reduce lock duration if needed
+	note := a.Note
+	pcmData := a.pcmData
+
+	// Try to publish with appropriate error handling
+	if err := a.BwClient.Publish(&note, pcmData); err != nil {
 		log.Printf("error uploading to BirdWeather: %s\n", err)
 		return err
 	} else if a.Settings.Debug {

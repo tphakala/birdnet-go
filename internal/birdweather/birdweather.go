@@ -300,3 +300,24 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) error {
 
 	return nil
 }
+
+// Close properly cleans up the BwClient resources
+// Currently this just cancels any pending HTTP requests
+func (b *BwClient) Close() {
+	if b.HTTPClient != nil && b.HTTPClient.Transport != nil {
+		// If the transport implements the CloseIdleConnections method, call it
+		type transporter interface {
+			CloseIdleConnections()
+		}
+		if transport, ok := b.HTTPClient.Transport.(transporter); ok {
+			transport.CloseIdleConnections()
+		}
+
+		// Cancel any in-flight requests by using a new client
+		b.HTTPClient = nil
+	}
+
+	if b.Settings.Realtime.Birdweather.Debug {
+		log.Println("BirdWeather client closed")
+	}
+}

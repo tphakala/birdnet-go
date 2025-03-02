@@ -134,6 +134,10 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/api/v1/mqtt/test", h.WithErrorHandling(h.TestMQTT), s.AuthMiddleware)
 	s.Echo.POST("/api/v1/mqtt/test", h.WithErrorHandling(h.TestMQTT), s.AuthMiddleware)
 
+	// Add GET and POST methods for testing BirdWeather connection
+	s.Echo.GET("/api/v1/birdweather/test", h.WithErrorHandling(h.TestBirdWeather), s.AuthMiddleware)
+	s.Echo.POST("/api/v1/birdweather/test", h.WithErrorHandling(h.TestBirdWeather), s.AuthMiddleware)
+
 	// Setup Error handler
 	s.Echo.HTTPErrorHandler = func(err error, c echo.Context) {
 		if handleErr := s.Handlers.HandleError(err, c); handleErr != nil {

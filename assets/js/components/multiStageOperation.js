@@ -142,6 +142,20 @@ document.addEventListener('alpine:init', () => {
                                                         });
                                                     }
                                                     
+                                                    // Always complete the "Starting Test" stage when any other stage begins
+                                                    // This ensures we don't have a stuck "Starting Test" if the first real stage fails
+                                                    if (result.stage !== "Starting Test" && !isProgress) {
+                                                        const startingTestIndex = this.results.findIndex(r => r.stage === "Starting Test");
+                                                        if (startingTestIndex >= 0 && this.results[startingTestIndex].state === "running") {
+                                                            this.results[startingTestIndex] = {
+                                                                ...this.results[startingTestIndex],
+                                                                state: 'completed',
+                                                                isProgress: false,
+                                                                message: "Initialization complete"
+                                                            };
+                                                        }
+                                                    }
+                                                    
                                                     // Sort results according to stage order
                                                     this.results.sort((a, b) => 
                                                         this.stageOrder.indexOf(a.stage) - this.stageOrder.indexOf(b.stage)
