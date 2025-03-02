@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/k3a/html2text"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/net/html"
 	"golang.org/x/time/rate"
 )
@@ -24,6 +24,7 @@ type wikiMediaProvider struct {
 	debug      bool
 	limiter    *rate.Limiter
 	maxRetries int
+	logger     *logger.Logger
 }
 
 // wikiMediaAuthor represents the author information for a Wikipedia image.
@@ -43,12 +44,16 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 		return nil, fmt.Errorf("failed to create mwclient: %w", err)
 	}
 
+	// Use the global logger with a component name
+	componentLogger := logger.GetGlobal().Named("imageprovider.wikipedia")
+
 	// Rate limit: 10 requests per second with burst of 10
 	return &wikiMediaProvider{
 		client:     client,
 		debug:      settings.Realtime.Dashboard.Thumbnails.Debug,
 		limiter:    rate.NewLimiter(rate.Limit(10), 10),
 		maxRetries: 3,
+		logger:     componentLogger,
 	}, nil
 }
 
@@ -57,9 +62,12 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 func (l *wikiMediaProvider) queryWithRetry(reqID string, params map[string]string) (*jason.Object, error) {
 	var lastErr error
 	for attempt := 0; attempt < l.maxRetries; attempt++ {
-		if l.debug {
-			log.Printf("[%s] Debug: API request attempt %d", reqID, attempt+1)
+		if l.debug && l.logger != nil {
+			l.logger.Debug("API request attempt",
+				"request_id", reqID,
+				"attempt", attempt+1)
 		}
+
 		// Wait for rate limiter
 		err := l.limiter.Wait(context.Background())
 		if err != nil {
@@ -72,8 +80,11 @@ func (l *wikiMediaProvider) queryWithRetry(reqID string, params map[string]strin
 		}
 
 		lastErr = err
-		if l.debug {
-			log.Printf("Debug: API request attempt %d failed: %v", attempt+1, err)
+		if l.debug && l.logger != nil {
+			l.logger.Debug("API request failed",
+				"request_id", reqID,
+				"attempt", attempt+1,
+				"error", err)
 		}
 
 		// Wait before retry (exponential backoff)
@@ -86,236 +97,307 @@ func (l *wikiMediaProvider) queryWithRetry(reqID string, params map[string]strin
 // queryAndGetFirstPage queries Wikipedia with given parameters and returns the first page hit.
 // It handles the API request and response parsing.
 func (l *wikiMediaProvider) queryAndGetFirstPage(reqID string, params map[string]string) (*jason.Object, error) {
-	if l.debug {
-		log.Printf("[%s] Debug: Querying Wikipedia API with params: %v", reqID, params)
+	if l.debug && l.logger != nil {
+		l.logger.Debug("Querying Wikipedia API",
+			"request_id", reqID,
+			"params", fmt.Sprintf("%v", params))
 	}
 
 	resp, err := l.queryWithRetry(reqID, params)
 	if err != nil {
-		if l.debug {
-			log.Printf("Debug: Wikipedia API query failed after retries: %v", err)
+		if l.debug && l.logger != nil {
+			l.logger.Debug("Wikipedia API query failed",
+				"request_id", reqID,
+				"error", err)
 		}
 		return nil, fmt.Errorf("failed to query Wikipedia: %w", err)
 	}
 
-	if l.debug {
-		if obj, err := resp.Object(); err == nil {
-			log.Printf("[%s] Debug: Raw Wikipedia API response: %v", reqID, obj)
-		}
+	if l.debug && l.logger != nil {
+		l.logger.Debug("Raw Wikipedia API response",
+			"request_id", reqID,
+			"response", fmt.Sprintf("%v", resp))
 	}
 
 	pages, err := resp.GetObjectArray("query", "pages")
 	if err != nil {
-		if l.debug {
-			log.Printf("[%s] Debug: Failed to parse Wikipedia response pages: %v", reqID, err)
+		if l.debug && l.logger != nil {
+			l.logger.Debug("Failed to parse Wikipedia response pages",
+				"request_id", reqID,
+				"error", err)
+
 			if obj, err := resp.Object(); err == nil {
-				log.Printf("[%s] Debug: Response structure: %v", reqID, obj)
+				l.logger.Debug("Response structure",
+					"request_id", reqID,
+					"structure", fmt.Sprintf("%v", obj))
 			}
 		}
-		return nil, fmt.Errorf("failed to get pages from response: %w", err)
+		return nil, fmt.Errorf("no pages in response: %w", err)
 	}
 
-	if l.debug {
-		if firstPage, err := pages[0].Object(); err == nil {
-			log.Printf("[%s] Debug: First page content: %v", reqID, firstPage)
-			log.Printf("[%s] Debug: Successfully retrieved Wikipedia page", reqID)
+	if len(pages) > 0 {
+		firstPage := pages[0]
+		if l.debug && l.logger != nil {
+			l.logger.Debug("First page content",
+				"request_id", reqID,
+				"content", fmt.Sprintf("%v", firstPage))
+			l.logger.Debug("Successfully retrieved Wikipedia page",
+				"request_id", reqID)
+		}
+		return firstPage, nil
+	}
+
+	if l.debug && l.logger != nil {
+		l.logger.Debug("No pages found in Wikipedia response",
+			"request_id", reqID,
+			"params", fmt.Sprintf("%v", params))
+
+		if obj, err := resp.Object(); err == nil {
+			l.logger.Debug("Full response structure",
+				"request_id", reqID,
+				"structure", fmt.Sprintf("%v", obj))
 		}
 	}
 
-	if len(pages) == 0 {
-		if l.debug {
-			log.Printf("Debug: No pages found in Wikipedia response for params: %v", params)
-			if obj, err := resp.Object(); err == nil {
-				log.Printf("Debug: Full response structure: %v", obj)
-			}
-		}
-		return nil, fmt.Errorf("no pages found for request: %v", params)
-	}
-
-	return pages[0], nil
+	return nil, fmt.Errorf("no pages found in response")
 }
 
-// fetch retrieves the bird image for a given scientific name.
-// It queries for the thumbnail and author information, then constructs a BirdImage.
+// Fetch retrieves an image for the given species from Wikipedia.
 func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
-	reqID := uuid.New().String()[:8] // Using first 8 chars for brevity
-	if l.debug {
-		log.Printf("[%s] Debug: Starting Wikipedia fetch for species: %s", reqID, scientificName)
+	// Create a request ID for tracing
+	reqID := uuid.New().String()[:8]
+
+	if l.debug && l.logger != nil {
+		l.logger.Debug("Starting Wikipedia fetch",
+			"request_id", reqID,
+			"species", scientificName)
 	}
 
+	// First get the thumbnail URL
 	thumbnailURL, thumbnailSourceFile, err := l.queryThumbnail(reqID, scientificName)
 	if err != nil {
-		if l.debug {
-			log.Printf("[%s] Debug: Failed to fetch thumbnail for %s: %v", reqID, scientificName, err)
+		if l.debug && l.logger != nil {
+			l.logger.Debug("Failed to fetch thumbnail",
+				"request_id", reqID,
+				"species", scientificName,
+				"error", err)
 		}
-		return BirdImage{}, err // Pass through the user-friendly error from queryThumbnail
+		return BirdImage{}, fmt.Errorf("failed to fetch image: %w", err)
 	}
 
-	if l.debug {
-		log.Printf("[%s] Debug: Successfully retrieved thumbnail - URL: %s, File: %s", reqID, thumbnailURL, thumbnailSourceFile)
-		log.Printf("[%s] Debug: Thumbnail source file: %s", reqID, thumbnailSourceFile)
+	if l.debug && l.logger != nil {
+		l.logger.Debug("Successfully retrieved thumbnail",
+			"request_id", reqID,
+			"url", thumbnailURL,
+			"file", thumbnailSourceFile)
+		l.logger.Debug("Thumbnail source file",
+			"request_id", reqID,
+			"file", thumbnailSourceFile)
 	}
 
+	// Then get author info for attribution
 	authorInfo, err := l.queryAuthorInfo(reqID, thumbnailSourceFile)
 	if err != nil {
-		if l.debug {
-			log.Printf("[%s] Debug: Failed to fetch author info for %s: %v", reqID, scientificName, err)
+		if l.debug && l.logger != nil {
+			l.logger.Debug("Failed to fetch author info",
+				"request_id", reqID,
+				"species", scientificName,
+				"error", err)
 		}
-		// Don't expose internal error to user, use a generic message
-		return BirdImage{}, fmt.Errorf("unable to retrieve image attribution for species: %s", scientificName)
+		// Return the image anyway, just without attribution
+		return BirdImage{
+			URL:            thumbnailURL,
+			ScientificName: scientificName,
+			CachedAt:       time.Now(),
+		}, nil
 	}
 
-	if l.debug {
-		log.Printf("[%s] Debug: Successfully retrieved author info for %s - Author: %s", reqID, scientificName, authorInfo.name)
+	if l.debug && l.logger != nil {
+		l.logger.Debug("Successfully retrieved author info",
+			"request_id", reqID,
+			"species", scientificName,
+			"author", authorInfo.name)
 	}
 
 	return BirdImage{
-		URL:         thumbnailURL,
-		AuthorName:  authorInfo.name,
-		AuthorURL:   authorInfo.URL,
-		LicenseName: authorInfo.licenseName,
-		LicenseURL:  authorInfo.licenseURL,
+		URL:            thumbnailURL,
+		ScientificName: scientificName,
+		LicenseName:    authorInfo.licenseName,
+		LicenseURL:     authorInfo.licenseURL,
+		AuthorName:     authorInfo.name,
+		AuthorURL:      authorInfo.URL,
+		CachedAt:       time.Now(),
 	}, nil
 }
 
-// queryThumbnail queries Wikipedia for the thumbnail image of the given scientific name.
-// It returns the URL and file name of the thumbnail.
+// queryThumbnail queries Wikipedia for a thumbnail image of the given species.
 func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string) (url, fileName string, err error) {
-	if l.debug {
-		log.Printf("[%s] Debug: Querying thumbnail for species: %s", reqID, scientificName)
+	if l.debug && l.logger != nil {
+		l.logger.Debug("Querying thumbnail",
+			"request_id", reqID,
+			"species", scientificName)
 	}
 
+	// Build query parameters to search for the species page
 	params := map[string]string{
 		"action":      "query",
 		"prop":        "pageimages",
-		"piprop":      "thumbnail|name",
-		"pilicense":   "free",
+		"format":      "json",
+		"piprop":      "original",
 		"titles":      scientificName,
-		"pithumbsize": "400",
-		"redirects":   "",
+		"redirects":   "1",
+		"pithumbsize": "500",
 	}
 
 	page, err := l.queryAndGetFirstPage(reqID, params)
 	if err != nil {
-		if l.debug {
-			log.Printf("Debug: Failed to query thumbnail page: %v", err)
+		if l.debug && l.logger != nil {
+			l.logger.Debug("Failed to query thumbnail page",
+				"request_id", reqID,
+				"error", err)
 		}
-		return "", "", fmt.Errorf("no Wikipedia page found for species: %s", scientificName)
+		return "", "", fmt.Errorf("failed to find image for species: %s", scientificName)
 	}
 
-	url, err = page.GetString("thumbnail", "source")
+	// Extract thumbnail URL from page
+	originalObj, err := page.GetObject("original")
 	if err != nil {
-		if l.debug {
-			log.Printf("Debug: Failed to extract thumbnail URL: %v", err)
+		if l.debug && l.logger != nil {
+			l.logger.Debug("Failed to extract thumbnail URL",
+				"request_id", reqID,
+				"error", err)
 		}
-		return "", "", fmt.Errorf("no free-license image available for species: %s", scientificName)
+		return "", "", fmt.Errorf("no image found for species: %s", scientificName)
 	}
 
-	fileName, err = page.GetString("pageimage")
+	thumbnailURL, err := originalObj.GetString("source")
 	if err != nil {
-		if l.debug {
-			log.Printf("Debug: Failed to extract thumbnail filename: %v", err)
+		if l.debug && l.logger != nil {
+			l.logger.Debug("Failed to extract thumbnail filename",
+				"request_id", reqID,
+				"error", err)
 		}
-		return "", "", fmt.Errorf("image metadata not available for species: %s", scientificName)
+		return "", "", fmt.Errorf("no image found for species: %s", scientificName)
 	}
 
-	if l.debug {
-		log.Printf("[%s] Debug: Successfully retrieved thumbnail - URL: %s, File: %s", reqID, url, fileName)
-		log.Printf("[%s] Debug: Successfully retrieved thumbnail URL: %s", reqID, url)
-		log.Printf("[%s] Debug: Thumbnail source file: %s", reqID, fileName)
+	// Extract filename from URL (we need it for attribution queries)
+	parts := strings.Split(thumbnailURL, "/")
+	fileName = parts[len(parts)-1]
+
+	if l.debug && l.logger != nil {
+		l.logger.Debug("Successfully retrieved thumbnail",
+			"request_id", reqID,
+			"url", url,
+			"file", fileName)
+		l.logger.Debug("Successfully retrieved thumbnail URL",
+			"request_id", reqID,
+			"url", thumbnailURL)
+		l.logger.Debug("Thumbnail source file",
+			"request_id", reqID,
+			"file", fileName)
 	}
 
-	return url, fileName, nil
+	return thumbnailURL, fileName, nil
 }
 
-// queryAuthorInfo queries Wikipedia for the author information of the given thumbnail URL.
-// It returns a wikiMediaAuthor struct containing the author and license information.
+// queryAuthorInfo queries Wikipedia for author information for the given image.
 func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailURL string) (*wikiMediaAuthor, error) {
-	if l.debug {
-		log.Printf("[%s] Debug: Querying author info for thumbnail: %s", reqID, thumbnailURL)
+	if l.debug && l.logger != nil {
+		l.logger.Debug("Querying author info",
+			"request_id", reqID,
+			"thumbnail", thumbnailURL)
 	}
 
+	// Build query parameters for image info
 	params := map[string]string{
-		"action":    "query",
-		"prop":      "imageinfo",
-		"iiprop":    "extmetadata",
-		"titles":    "File:" + thumbnailURL,
-		"redirects": "",
+		"action":              "query",
+		"prop":                "imageinfo",
+		"format":              "json",
+		"iiprop":              "extmetadata",
+		"titles":              "File:" + thumbnailURL,
+		"iiextmetadatafilter": "Artist|LicenseUrl|LicenseShortName",
 	}
 
 	page, err := l.queryAndGetFirstPage(reqID, params)
 	if err != nil {
-		if l.debug {
-			log.Printf("Debug: Failed to query author info page: %v", err)
+		if l.debug && l.logger != nil {
+			l.logger.Debug("Failed to query author info page",
+				"request_id", reqID,
+				"error", err)
 		}
-		// Return default author info instead of error
-		return &wikiMediaAuthor{
-			name:        "Unknown Author",
-			URL:         "",
-			licenseName: "Unknown",
-			licenseURL:  "",
-		}, nil
+		return nil, fmt.Errorf("failed to retrieve author info: %w", err)
 	}
 
-	if l.debug {
-		if obj, err := page.Object(); err == nil {
-			log.Printf("Debug: Processing image info response: %v", obj)
-		}
-	}
-
+	// Extract metadata
 	imageInfo, err := page.GetObjectArray("imageinfo")
+	if err != nil || len(imageInfo) == 0 {
+		if l.debug && l.logger != nil {
+			l.logger.Debug("Processing image info response",
+				"request_id", reqID,
+				"response", fmt.Sprintf("%v", page))
+		}
+	}
+
+	if len(imageInfo) == 0 {
+		if l.debug && l.logger != nil {
+			l.logger.Debug("Failed to extract image info",
+				"request_id", reqID,
+				"error", err)
+			l.logger.Debug("Page content",
+				"request_id", reqID,
+				"content", fmt.Sprintf("%v", page))
+		}
+		return nil, fmt.Errorf("no image info found")
+	}
+
+	// Handle case where no image info is found
+	extmetadata, err := imageInfo[0].GetObject("extmetadata")
 	if err != nil {
-		if l.debug {
-			log.Printf("Debug: Failed to extract image info: %v", err)
-			if obj, err := page.Object(); err == nil {
-				log.Printf("Debug: Page content: %v", obj)
+		if l.debug && l.logger != nil {
+			l.logger.Debug("No image info found",
+				"request_id", reqID,
+				"thumbnail", thumbnailURL)
+		}
+		return nil, fmt.Errorf("no metadata found")
+	}
+
+	// Extract artist info from HTML
+	var artistName, artistURL string
+	artist, err := extmetadata.GetObject("Artist")
+	if err == nil {
+		artistHTML, err := artist.GetString("value")
+		if err == nil {
+			artistURL, artistName, err = extractArtistInfo(artistHTML)
+			if err != nil {
+				// Use the plain text as fallback
+				artistName = html2text.HTML2Text(artistHTML)
 			}
 		}
-		return nil, fmt.Errorf("failed to get image info from response: %w", err)
-	}
-	if len(imageInfo) == 0 {
-		if l.debug {
-			log.Printf("Debug: No image info found for thumbnail: %s", thumbnailURL)
-		}
-		return nil, fmt.Errorf("no image info found for thumbnail URL: %s", thumbnailURL)
 	}
 
-	extMetadata, err := imageInfo[0].GetObject("extmetadata")
-	if err != nil {
-		// Return default author info instead of error
-		return &wikiMediaAuthor{
-			name:        "Unknown Author",
-			URL:         "",
-			licenseName: "Unknown",
-			licenseURL:  "",
-		}, nil
-	}
-
-	// Get license info with fallbacks
-	licenseName := "Unknown"
-	if ln, err := extMetadata.GetString("LicenseShortName", "value"); err == nil {
-		licenseName = ln
-	}
-
-	licenseURL := ""
-	if lu, err := extMetadata.GetString("LicenseUrl", "value"); err == nil {
-		licenseURL = lu
-	}
-
-	// Get artist info with fallback
-	artistName := "Unknown Author"
-	artistURL := ""
-
-	if artistHref, err := extMetadata.GetString("Artist", "value"); err == nil {
-		href, text, err := extractArtistInfo(artistHref)
-		if err == nil {
-			artistName = text
-			artistURL = href
+	// Extract license info
+	var licenseName, licenseURL string
+	license, err := extmetadata.GetObject("LicenseShortName")
+	if err == nil {
+		licenseName, err = license.GetString("value")
+		if err != nil {
+			licenseName = "Unknown License"
 		}
 	}
 
-	if l.debug {
-		log.Printf("[%s] Debug: Successfully extracted author info - Name: %s, URL: %s", reqID, artistName, artistURL)
+	licenseUrlObj, err := extmetadata.GetObject("LicenseUrl")
+	if err == nil {
+		licenseURL, err = licenseUrlObj.GetString("value")
+		if err != nil {
+			licenseURL = ""
+		}
+	}
+
+	if l.debug && l.logger != nil {
+		l.logger.Debug("Successfully extracted author info",
+			"request_id", reqID,
+			"author_name", artistName,
+			"author_url", artistURL)
 	}
 
 	return &wikiMediaAuthor{

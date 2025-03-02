@@ -2,7 +2,6 @@
 package diskmanager
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -19,6 +18,11 @@ type Policy struct {
 
 // UsageBasedCleanup cleans up old audio files based on the configuration and monitors for quit signals
 func UsageBasedCleanup(quitChan chan struct{}, db Interface) error {
+	// Initialize logger if it hasn't been initialized
+	if diskLogger == nil {
+		InitLogger()
+	}
+
 	settings := conf.Setting()
 
 	debug := settings.Realtime.Audio.Export.Retention.Debug
@@ -32,7 +36,9 @@ func UsageBasedCleanup(quitChan chan struct{}, db Interface) error {
 	}
 
 	if debug {
-		log.Printf("Starting cleanup process. Base directory: %s, Threshold: %.1f%%", baseDir, threshold)
+		diskLogger.Debug("Starting cleanup process",
+			"base_dir", baseDir,
+			"threshold", threshold)
 	}
 
 	// Check handle disk usage
@@ -43,7 +49,9 @@ func UsageBasedCleanup(quitChan chan struct{}, db Interface) error {
 
 	if diskUsage > threshold {
 		if debug {
-			log.Printf("Disk usage %.1f%% is above the %.1f%% threshold. Cleanup needed.", diskUsage, threshold)
+			diskLogger.Debug("Disk usage above threshold",
+				"usage", diskUsage,
+				"threshold", threshold)
 		}
 
 		// Get the list of audio files, limited to allowed file types defined in file_utils.go
@@ -65,13 +73,20 @@ func UsageBasedCleanup(quitChan chan struct{}, db Interface) error {
 		// Perform the cleanup
 		return performCleanup(files, baseDir, threshold, minClipsPerSpecies, speciesMonthCount, debug, quitChan)
 	} else if debug {
-		log.Printf("Disk usage %.1f%% is below the %.1f%% threshold. No cleanup needed.", diskUsage, threshold)
+		diskLogger.Debug("Disk usage below threshold, no cleanup needed",
+			"usage", diskUsage,
+			"threshold", threshold)
 	}
 
 	return nil
 }
 
 func performCleanup(files []FileInfo, baseDir string, threshold float64, minClipsPerSpecies int, speciesMonthCount map[string]map[string]int, debug bool, quitChan chan struct{}) error {
+	// Initialize logger if it hasn't been initialized
+	if diskLogger == nil {
+		InitLogger()
+	}
+
 	// Delete files until disk usage is below the threshold or 100 files have been deleted
 	deletedFiles := 0
 	maxDeletions := 1000
@@ -80,13 +95,13 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 	for _, file := range files {
 		select {
 		case <-quitChan:
-			log.Println("Received quit signal, ending cleanup run.")
+			diskLogger.Info("Received quit signal, ending cleanup run")
 			return nil
 		default:
 			// Skip locked files
 			if file.Locked {
 				if debug {
-					log.Printf("Skipping locked file: %s", file.Path)
+					diskLogger.Debug("Skipping locked file", "path", file.Path)
 				}
 				continue
 			}
@@ -107,22 +122,30 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 			}
 
 			if debug {
-				log.Printf("Species %s has %d clips in %s", file.Species, speciesMonthCount[file.Species][subDir], subDir)
+				diskLogger.Debug("Species clip count",
+					"species", file.Species,
+					"count", speciesMonthCount[file.Species][subDir],
+					"directory", subDir)
 			}
 
 			if speciesMonthCount[file.Species][subDir] <= minClipsPerSpecies {
 				if debug {
-					log.Printf("Species clip count for %s in %s/%s is below the minimum threshold (%d). Skipping file deletion.", file.Species, month, subDir, minClipsPerSpecies)
+					diskLogger.Debug("Species clip count below minimum threshold, skipping deletion",
+						"species", file.Species,
+						"month", month,
+						"directory", subDir,
+						"min_threshold", minClipsPerSpecies)
 				}
 				continue
 			}
 			if debug {
-				log.Printf("Deleting file: %s", file.Path)
+				diskLogger.Debug("Deleting file", "path", file.Path)
 			}
 
 			// Delete the file deemed for cleanup
 			err = os.Remove(file.Path)
 			if err != nil {
+				diskLogger.Error("Failed to remove file", "path", file.Path, "error", err)
 				return err
 			}
 
@@ -134,7 +157,10 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 			totalFreedSpace += file.Size
 
 			if debug {
-				log.Printf("File deleted. %d clips left for species %s in %s", speciesMonthCount[file.Species][subDir], file.Species, subDir)
+				diskLogger.Debug("File deleted",
+					"remaining_clips", speciesMonthCount[file.Species][subDir],
+					"species", file.Species,
+					"directory", subDir)
 			}
 
 			// Yield to other goroutines
@@ -143,15 +169,22 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 	}
 
 	if debug {
-		log.Printf("Usage retention policy applied, total files deleted: %d", deletedFiles)
+		diskLogger.Info("Usage retention policy applied",
+			"files_deleted", deletedFiles,
+			"space_freed", totalFreedSpace)
 	}
 
 	return nil
 }
 
 func sortFiles(files []FileInfo, debug bool) map[string]map[string]int {
+	// Initialize logger if it hasn't been initialized
+	if diskLogger == nil {
+		InitLogger()
+	}
+
 	if debug {
-		log.Printf("Sorting files by cleanup priority.")
+		diskLogger.Debug("Sorting files by cleanup priority")
 	}
 
 	// Count the number of files for each species in each subdirectory
@@ -192,7 +225,7 @@ func sortFiles(files []FileInfo, debug bool) map[string]map[string]int {
 	})
 
 	if debug {
-		log.Printf("Files sorted.")
+		diskLogger.Debug("Files sorted")
 	}
 
 	return speciesMonthCount

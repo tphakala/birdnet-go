@@ -3,14 +3,14 @@ package imageprovider
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"fmt" // Kept for interface compatibility
 	"sync"
 	"time"
 	"unsafe"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"github.com/tphakala/birdnet-go/internal/telemetry/metrics"
 )
@@ -38,7 +38,7 @@ type BirdImageCache struct {
 	metrics      *metrics.ImageProviderMetrics
 	debug        bool
 	store        datastore.Interface
-	logger       *log.Logger
+	logger       *logger.Logger
 	quit         chan struct{} // Channel to signal shutdown
 	Initializing sync.Map      // Track which species are being initialized
 }
@@ -69,8 +69,9 @@ const (
 
 // startCacheRefresh starts the background cache refresh routine
 func (c *BirdImageCache) startCacheRefresh(quit chan struct{}) {
-	if c.debug {
-		log.Printf("Debug: Starting cache refresh routine with TTL of %v", defaultCacheTTL)
+	if c.debug && c.logger != nil {
+		c.logger.Debug("Starting cache refresh routine",
+			"ttl", defaultCacheTTL)
 	}
 
 	go func() {
@@ -83,8 +84,8 @@ func (c *BirdImageCache) startCacheRefresh(quit chan struct{}) {
 		for {
 			select {
 			case <-quit:
-				if c.debug {
-					log.Printf("Debug: Stopping cache refresh routine")
+				if c.debug && c.logger != nil {
+					c.logger.Debug("Stopping cache refresh routine")
 				}
 				return
 			case <-ticker.C:
@@ -103,14 +104,16 @@ func (c *BirdImageCache) refreshStaleEntries() {
 	// Get all cached entries
 	entries, err := c.store.GetAllImageCaches()
 	if err != nil {
-		if c.debug {
-			log.Printf("Debug: Failed to get cached entries for refresh: %v", err)
+		if c.debug && c.logger != nil {
+			c.logger.Debug("Failed to get cached entries for refresh",
+				"error", err)
 		}
 		return
 	}
 
-	if c.debug {
-		log.Printf("Debug: Checking %d entries for staleness", len(entries))
+	if c.debug && c.logger != nil {
+		c.logger.Debug("Checking entries for staleness",
+			"count", len(entries))
 	}
 
 	// Find stale entries
@@ -118,22 +121,25 @@ func (c *BirdImageCache) refreshStaleEntries() {
 	cutoff := time.Now().Add(-defaultCacheTTL)
 	for i := range entries {
 		if entries[i].CachedAt.Before(cutoff) {
-			if c.debug {
-				log.Printf("Debug: Found stale entry: %s (CachedAt: %v)", entries[i].ScientificName, entries[i].CachedAt)
+			if c.debug && c.logger != nil {
+				c.logger.Debug("Found stale entry",
+					"species", entries[i].ScientificName,
+					"cached_at", entries[i].CachedAt)
 			}
 			staleEntries = append(staleEntries, entries[i].ScientificName)
 		}
 	}
 
 	if len(staleEntries) == 0 {
-		if c.debug {
-			log.Printf("Debug: No stale entries found")
+		if c.debug && c.logger != nil {
+			c.logger.Debug("No stale entries found")
 		}
 		return
 	}
 
-	if c.debug {
-		log.Printf("Debug: Found %d stale cache entries to refresh", len(staleEntries))
+	if c.debug && c.logger != nil {
+		c.logger.Debug("Found stale cache entries to refresh",
+			"count", len(staleEntries))
 	}
 
 	// Process stale entries in batches with rate limiting
@@ -157,14 +163,16 @@ func (c *BirdImageCache) refreshStaleEntries() {
 
 // refreshEntry refreshes a single cache entry
 func (c *BirdImageCache) refreshEntry(scientificName string) {
-	if c.debug {
-		log.Printf("Debug: Refreshing cache entry for %s", scientificName)
+	if c.debug && c.logger != nil {
+		c.logger.Debug("Refreshing cache entry",
+			"species", scientificName)
 	}
 
 	// Check if provider is set
 	if c.provider == nil {
-		if c.debug {
-			log.Printf("Debug: No provider available for %s", scientificName)
+		if c.debug && c.logger != nil {
+			c.logger.Debug("No provider available",
+				"species", scientificName)
 		}
 		return
 	}
@@ -172,8 +180,10 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 	// Fetch new image
 	birdImage, err := c.provider.Fetch(scientificName)
 	if err != nil {
-		if c.debug {
-			log.Printf("Debug: Failed to refresh image for %s: %v", scientificName, err)
+		if c.debug && c.logger != nil {
+			c.logger.Debug("Failed to refresh image",
+				"species", scientificName,
+				"error", err)
 		}
 		return
 	}
@@ -201,20 +211,23 @@ func (c *BirdImageCache) Close() error {
 func InitCache(e ImageProvider, t *telemetry.Metrics, store datastore.Interface) *BirdImageCache {
 	settings := conf.Setting()
 
+	// Use the global logger with a component name
+	componentLogger := logger.GetGlobal().Named("imageprovider.cache")
+
 	quit := make(chan struct{})
 	cache := &BirdImageCache{
 		provider: e,
 		metrics:  t.ImageProvider,
 		debug:    settings.Realtime.Dashboard.Thumbnails.Debug,
 		store:    store,
-		logger:   log.Default(),
+		logger:   componentLogger,
 		quit:     quit,
 	}
 
 	// Load cached images into memory only if store is available
 	if store != nil {
-		if err := cache.loadCachedImages(); err != nil && cache.debug {
-			log.Printf("Debug: Error loading cached images: %v", err)
+		if err := cache.loadCachedImages(); err != nil && cache.debug && cache.logger != nil {
+			cache.logger.Debug("Error loading cached images", "error", err)
 		}
 	}
 
@@ -227,16 +240,19 @@ func InitCache(e ImageProvider, t *telemetry.Metrics, store datastore.Interface)
 // loadFromDBCache loads a BirdImage from the database cache
 func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, error) {
 	if c.store == nil {
-		if c.debug {
-			log.Printf("Debug: Database store not available, skipping cache load for %s", scientificName)
+		if c.debug && c.logger != nil {
+			c.logger.Debug("Database store not available, skipping cache load",
+				"species", scientificName)
 		}
 		return nil, nil
 	}
 
 	cached, err := c.store.GetImageCache(scientificName)
 	if err != nil {
-		if c.debug {
-			log.Printf("Debug: Failed to get image from cache for %s: %v", scientificName, err)
+		if c.debug && c.logger != nil {
+			c.logger.Debug("Failed to get image from cache",
+				"species", scientificName,
+				"error", err)
 		}
 		return nil, nil
 	}
@@ -259,8 +275,9 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 // saveToDB saves a BirdImage to the database cache with retries
 func (c *BirdImageCache) saveToDB(image *BirdImage) {
 	if c.store == nil {
-		if c.debug {
-			log.Printf("Debug: Database store not available, skipping cache save for %s", image.ScientificName)
+		if c.debug && c.logger != nil {
+			c.logger.Debug("Database store not available, skipping cache save",
+				"species", image.ScientificName)
 		}
 		return
 	}
@@ -276,8 +293,10 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 	}
 
 	if err := c.store.SaveImageCache(cached); err != nil {
-		if c.debug {
-			log.Printf("Debug: Failed to save image to cache for %s: %v", image.ScientificName, err)
+		if c.debug && c.logger != nil {
+			c.logger.Debug("Failed to save image to cache",
+				"species", image.ScientificName,
+				"error", err)
 		}
 		// Continue without caching
 	}
@@ -286,16 +305,16 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 // loadCachedImages loads all cached images from database into memory
 func (c *BirdImageCache) loadCachedImages() error {
 	if c.store == nil {
-		if c.debug {
-			log.Printf("Debug: Database store not available, starting with empty cache")
+		if c.debug && c.logger != nil {
+			c.logger.Debug("Database store not available, starting with empty cache")
 		}
 		return nil
 	}
 
 	cached, err := c.store.GetAllImageCaches()
 	if err != nil {
-		if c.debug {
-			log.Printf("Debug: Failed to load cached images: %v", err)
+		if c.debug && c.logger != nil {
+			c.logger.Debug("Failed to load cached images", "error", err)
 		}
 		return nil // Continue with empty cache
 	}
@@ -337,8 +356,9 @@ func (c *BirdImageCache) tryInitialize(scientificName string) (BirdImage, bool, 
 
 		// Check if provider is set
 		if c.provider == nil {
-			if c.debug {
-				log.Printf("Debug: No image provider available for: %s", scientificName)
+			if c.debug && c.logger != nil {
+				c.logger.Debug("No image provider available",
+					"species", scientificName)
 			}
 			return BirdImage{}, false, fmt.Errorf("image provider not available")
 		}
@@ -354,8 +374,9 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 	// Check memory cache first for quick return
 	if value, ok := c.dataMap.Load(scientificName); ok {
 		if image, ok := value.(*BirdImage); ok {
-			if c.debug {
-				log.Printf("Debug: Found image in memory cache for: %s", scientificName)
+			if c.debug && c.logger != nil {
+				c.logger.Debug("Found image in memory cache",
+					"species", scientificName)
 			}
 			if c.metrics != nil {
 				c.metrics.IncrementCacheHits()
@@ -373,8 +394,9 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 	for initAttempts < maxAttempts {
 		// Check if we've exceeded total time
 		if time.Since(startTime) > maxTotalTime {
-			if c.debug {
-				log.Printf("Debug: Total time exceeded for %s, proceeding with direct fetch", scientificName)
+			if c.debug && c.logger != nil {
+				c.logger.Debug("Total time exceeded, proceeding with direct fetch",
+					"species", scientificName)
 			}
 			break
 		}
@@ -390,8 +412,9 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 		// Check if the entry is now in cache before trying again
 		if value, ok := c.dataMap.Load(scientificName); ok {
 			if image, ok := value.(*BirdImage); ok {
-				if c.debug {
-					log.Printf("Debug: Found image in memory cache for: %s after waiting", scientificName)
+				if c.debug && c.logger != nil {
+					c.logger.Debug("Found image in memory cache after waiting",
+						"species", scientificName)
 				}
 				if c.metrics != nil {
 					c.metrics.IncrementCacheHits()
@@ -399,8 +422,10 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 				return *image, nil
 			}
 		}
-		if c.debug {
-			log.Printf("Debug: Initialization wait timeout for %s, attempt %d", scientificName, initAttempts+1)
+		if c.debug && c.logger != nil {
+			c.logger.Debug("Initialization wait timeout",
+				"species", scientificName,
+				"attempt", initAttempts+1)
 		}
 		timer.Stop()
 		initAttempts++
@@ -432,8 +457,9 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 	select {
 	case <-ctx.Done():
 		// Instead of returning an error, try one last direct fetch
-		if c.debug {
-			log.Printf("Debug: Context timeout, attempting direct fetch for: %s", scientificName)
+		if c.debug && c.logger != nil {
+			c.logger.Debug("Context timeout, attempting direct fetch",
+				"species", scientificName)
 		}
 		return c.fetchAndStore(scientificName)
 	case <-done:
@@ -443,8 +469,9 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 
 // fetchAndStore handles the fetching and storing of an image
 func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error) {
-	if c.debug {
-		log.Printf("Debug: Fetching image for species: %s", scientificName)
+	if c.debug && c.logger != nil {
+		c.logger.Debug("Fetching image for species",
+			"species", scientificName)
 	}
 
 	startTime := time.Now()
@@ -497,8 +524,6 @@ func (c *BirdImageCache) updateMetrics() {
 	if c.metrics != nil {
 		size := float64(c.MemoryUsage())
 		c.metrics.SetCacheSize(size)
-	} else {
-		log.Println("Warning: Unable to update metrics, ImageProviderMetrics is nil")
 	}
 }
 
@@ -511,20 +536,24 @@ func CreateDefaultCache(metrics *telemetry.Metrics, store datastore.Interface) (
 	}
 
 	settings := conf.Setting()
+
+	// Use the global logger with a component name
+	componentLogger := logger.GetGlobal().Named("imageprovider.cache")
+
 	quit := make(chan struct{})
 	cache := &BirdImageCache{
 		provider: provider,
 		metrics:  metrics.ImageProvider,
 		debug:    settings.Realtime.Dashboard.Thumbnails.Debug,
 		store:    store,
-		logger:   log.Default(),
+		logger:   componentLogger,
 		quit:     quit,
 	}
 
 	// Load cached images into memory only if store is available
 	if store != nil {
-		if err := cache.loadCachedImages(); err != nil && cache.debug {
-			log.Printf("Debug: Error loading cached images: %v", err)
+		if err := cache.loadCachedImages(); err != nil && cache.debug && cache.logger != nil {
+			cache.logger.Debug("Error loading cached images", "error", err)
 		}
 	}
 

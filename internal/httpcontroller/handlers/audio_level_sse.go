@@ -3,12 +3,14 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
@@ -17,6 +19,48 @@ var (
 	activeSSEConnections sync.Map
 	connectionTimeout    = 65 * time.Second // slightly longer than client retry
 )
+
+// getAudioConnectionLogger creates a connection-specific logger with the connection ID and client IP as fields
+func (h *Handlers) getAudioConnectionLogger(connectionID, clientIP string) *logger.Logger {
+	if h.Logger == nil {
+		return nil
+	}
+
+	// Create a component-specific logger for audio levels with connection ID and client IP as permanent fields
+	return h.Logger.Named("sse.audio.level").With(
+		"connection_id", connectionID,
+		"client_ip", clientIP,
+	)
+}
+
+// getAudioSourceLogger creates a source-specific logger
+func (h *Handlers) getAudioSourceLogger(connectionLogger *logger.Logger, source string) *logger.Logger {
+	if connectionLogger == nil {
+		return nil
+	}
+
+	// Create a source-specific logger as a child of the connection logger
+	// This creates a full hierarchy like: sse.audio.source.malgo or sse.audio.source.rtsp
+	var sourcePath string
+	switch {
+	case source == "malgo":
+		sourcePath = "source.malgo"
+	case strings.HasPrefix(source, "rtsp://"):
+		sourcePath = "source.rtsp"
+	default:
+		sourcePath = "source.unknown"
+	}
+
+	return connectionLogger.Named(sourcePath)
+}
+
+// abs returns the absolute value of a float64
+func abs(x float64) float64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
 
 // initializeSSEHeaders sets up the necessary headers for SSE connection
 func initializeSSEHeaders(c echo.Context) {
@@ -86,39 +130,84 @@ func isSourceInactive(source string, now time.Time, lastUpdateTime, lastNonZeroT
 
 // updateAudioLevels processes new audio data and updates the levels map
 func (h *Handlers) updateAudioLevels(audioData myaudio.AudioLevelData, levels map[string]myaudio.AudioLevelData,
-	lastUpdateTime, lastNonZeroTime map[string]time.Time, isAuthenticated bool, inactivityThreshold time.Duration) {
+	lastUpdateTime, lastNonZeroTime map[string]time.Time, isAuthenticated bool, inactivityThreshold time.Duration,
+	connLogger *logger.Logger) {
 
 	now := time.Now()
 
-	if audioData.Source == "malgo" {
-		if isAuthenticated {
-			audioData.Name = h.Settings.Realtime.Audio.Source
-		} else {
-			audioData.Name = "audio-source-1"
-		}
-	} else {
-		if isAuthenticated {
-			audioData.Name = cleanRTSPUrl(audioData.Source)
-		} else {
-			for i, url := range h.Settings.Realtime.RTSP.URLs {
-				if url == audioData.Source {
-					audioData.Name = fmt.Sprintf("camera-%d", i+1)
-					break
-				}
-			}
-		}
+	// Get a source-specific logger if we have a connection logger
+	var sourceLogger *logger.Logger
+	if connLogger != nil {
+		sourceLogger = h.getAudioSourceLogger(connLogger, audioData.Source)
 	}
 
 	// Update activity times
 	lastUpdateTime[audioData.Source] = now
-	if audioData.Level > 0 {
-		lastNonZeroTime[audioData.Source] = now
+
+	// Check for new audio activity
+	previousLevel := 0
+	if prevData, exists := levels[audioData.Source]; exists {
+		previousLevel = prevData.Level
 	}
 
+	significantChange := abs(float64(previousLevel-audioData.Level)) > 20
+
+	// Set the name based on source and authentication status
+	switch {
+	case audioData.Source == "malgo" && isAuthenticated:
+		audioData.Name = h.Settings.Realtime.Audio.Source
+	case audioData.Source == "malgo" && !isAuthenticated:
+		audioData.Name = "audio-source-1"
+	case isAuthenticated:
+		audioData.Name = cleanRTSPUrl(audioData.Source)
+	default:
+		// For RTSP sources when not authenticated
+		for i, url := range h.Settings.Realtime.RTSP.URLs {
+			if url == audioData.Source {
+				audioData.Name = fmt.Sprintf("camera-%d", i+1)
+				break
+			}
+		}
+	}
+
+	if audioData.Level > 0 {
+		lastNonZeroTime[audioData.Source] = now
+
+		// Log audio level activity for non-zero levels when source logger is available
+		if sourceLogger != nil && audioData.Level > 30 && significantChange {
+			sourceLogger.Debug("Audio activity detected",
+				"level", audioData.Level,
+				"previous_level", previousLevel,
+				"name", audioData.Name)
+		}
+	}
+
+	// Check if the source is inactive
+	sourceInactive := isSourceInactive(audioData.Source, now, lastUpdateTime, lastNonZeroTime, inactivityThreshold)
+
 	// Keep the current level unless the source is truly inactive
-	if !isSourceInactive(audioData.Source, now, lastUpdateTime, lastNonZeroTime, inactivityThreshold) {
+	if !sourceInactive {
+		// Log significant changes
+		if sourceLogger != nil && significantChange {
+			direction := "decreased"
+			if audioData.Level > previousLevel {
+				direction = "increased"
+			}
+
+			sourceLogger.Debug("Significant level change",
+				"previous", previousLevel,
+				"current", audioData.Level,
+				"direction", direction)
+		}
+
 		levels[audioData.Source] = audioData
 	} else {
+		if sourceLogger != nil && levels[audioData.Source].Level > 0 {
+			sourceLogger.Debug("Source became inactive",
+				"previous_level", levels[audioData.Source].Level,
+				"inactive_time_s", int(now.Sub(lastNonZeroTime[audioData.Source]).Seconds()))
+		}
+
 		audioData.Level = 0
 		levels[audioData.Source] = audioData
 	}
@@ -126,17 +215,34 @@ func (h *Handlers) updateAudioLevels(audioData myaudio.AudioLevelData, levels ma
 
 // checkSourceActivity checks all sources for inactivity and updates their levels if needed
 func checkSourceActivity(levels map[string]myaudio.AudioLevelData, lastUpdateTime, lastNonZeroTime map[string]time.Time,
-	inactivityThreshold time.Duration) bool {
+	inactivityThreshold time.Duration, connLogger *logger.Logger) bool {
 
 	now := time.Now()
 	updated := false
+	inactiveSources := 0
 
 	for source, data := range levels {
-		if isSourceInactive(source, now, lastUpdateTime, lastNonZeroTime, inactivityThreshold) && data.Level != 0 {
-			data.Level = 0
-			levels[source] = data
-			updated = true
+		if !isSourceInactive(source, now, lastUpdateTime, lastNonZeroTime, inactivityThreshold) || data.Level == 0 {
+			continue
 		}
+
+		data.Level = 0
+		levels[source] = data
+		updated = true
+		inactiveSources++
+
+		if connLogger != nil {
+			sourceLogger := connLogger.Named("source." + source)
+			sourceLogger.Debug("Auto-marked as inactive",
+				"reason", "activity_timeout",
+				"last_activity_s", int(now.Sub(lastNonZeroTime[source]).Seconds()))
+		}
+	}
+
+	if updated && connLogger != nil {
+		connLogger.Debug("Inactive sources detected",
+			"inactive_count", inactiveSources,
+			"total_sources", len(levels))
 	}
 
 	return updated
@@ -146,104 +252,240 @@ func checkSourceActivity(levels map[string]myaudio.AudioLevelData, lastUpdateTim
 // API: GET /api/v1/audio-level
 func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 	clientIP := c.RealIP()
+	connectionID := uuid.New().String()[:8] // Generate a unique ID for this connection
 
-	// Check for existing connection
-	if _, exists := activeSSEConnections.LoadOrStore(clientIP, time.Now()); exists {
-		if h.debug {
-			log.Printf("AudioLevelSSE: Rejected duplicate connection from %s", clientIP)
-		}
-		return c.NoContent(http.StatusTooManyRequests)
+	// Get a connection-specific logger
+	connLogger := h.getAudioConnectionLogger(connectionID, clientIP)
+
+	// Check for duplicate connections
+	if err := h.checkDuplicateConnection(clientIP, connLogger); err != nil {
+		return err
 	}
 
-	// Cleanup connection on exit
-	defer func() {
-		activeSSEConnections.Delete(clientIP)
-		if h.debug {
-			log.Printf("AudioLevelSSE: Cleaned up connection for %s", clientIP)
-		}
-	}()
-
-	// Start connection timeout timer
-	timeout := time.NewTimer(connectionTimeout)
-	defer timeout.Stop()
-
-	if h.debug {
-		log.Printf("AudioLevelSSE: New connection from %s", clientIP)
-	}
+	// Setup connection and defer cleanup
+	h.logConnectionEstablished(clientIP, connLogger)
+	defer h.cleanupConnection(clientIP, connLogger)
 
 	// Set up SSE headers
 	initializeSSEHeaders(c)
 
-	// Create tickers for heartbeat and activity check
+	// Initialize connection state
+	connState := h.initializeConnectionState(c, connLogger)
+
+	// Send initial empty update to establish connection
+	if err := sendLevelsUpdate(c, connState.levels); err != nil {
+		h.logError("Error sending initial update", err, connLogger)
+		return err
+	}
+
+	// Run the main event loop
+	return h.runEventLoop(c, connState, clientIP, connLogger)
+}
+
+// ConnectionState holds the state data for an SSE connection
+type ConnectionState struct {
+	levels          map[string]myaudio.AudioLevelData
+	lastUpdateTime  map[string]time.Time
+	lastNonZeroTime map[string]time.Time
+	lastLogTime     time.Time
+	lastSentTime    time.Time
+	startTime       time.Time
+	messageCount    int
+	totalSources    int
+}
+
+// checkDuplicateConnection checks if there's already a connection from this IP
+func (h *Handlers) checkDuplicateConnection(clientIP string, connLogger *logger.Logger) error {
+	if _, exists := activeSSEConnections.LoadOrStore(clientIP, time.Now()); exists {
+		if connLogger != nil {
+			connLogger.Warn("Rejected duplicate connection")
+		} else {
+			h.LogWarn("Rejected duplicate connection", "client_ip", clientIP)
+		}
+		return echo.NewHTTPError(http.StatusTooManyRequests)
+	}
+	return nil
+}
+
+// logConnectionEstablished logs when a new connection is established
+func (h *Handlers) logConnectionEstablished(clientIP string, connLogger *logger.Logger) {
+	if connLogger != nil {
+		connLogger.Info("New connection established")
+	} else {
+		h.LogInfo("New connection", "client_ip", clientIP)
+	}
+}
+
+// cleanupConnection removes the connection from tracking and logs it
+func (h *Handlers) cleanupConnection(clientIP string, connLogger *logger.Logger) {
+	activeSSEConnections.Delete(clientIP)
+	if connLogger != nil {
+		connLogger.Info("Connection closed")
+	} else {
+		h.LogDebug("Cleaned up connection", "client_ip", clientIP)
+	}
+}
+
+// initializeConnectionState creates and initializes the connection state
+func (h *Handlers) initializeConnectionState(c echo.Context, connLogger *logger.Logger) *ConnectionState {
+	levels, lastUpdateTime, lastNonZeroTime := h.initializeLevelsData(h.Server.IsAccessAllowed(c))
+	return &ConnectionState{
+		levels:          levels,
+		lastUpdateTime:  lastUpdateTime,
+		lastNonZeroTime: lastNonZeroTime,
+		lastLogTime:     time.Now(),
+		lastSentTime:    time.Now(),
+		startTime:       time.Now(),
+		messageCount:    0,
+		totalSources:    len(levels),
+	}
+}
+
+// logError logs an error with the appropriate logger
+func (h *Handlers) logError(message string, err error, connLogger *logger.Logger) {
+	if connLogger != nil {
+		connLogger.Error(message, "error", err)
+	} else {
+		h.LogError(message, err)
+	}
+}
+
+// runEventLoop handles the main event processing loop for the SSE connection
+func (h *Handlers) runEventLoop(c echo.Context, state *ConnectionState, clientIP string, connLogger *logger.Logger) error {
+	// Create tickers and timers
+	timeout := time.NewTimer(connectionTimeout)
+	defer timeout.Stop()
+
 	heartbeat := time.NewTicker(10 * time.Second)
 	defer heartbeat.Stop()
+
 	activityCheck := time.NewTicker(1 * time.Second)
 	defer activityCheck.Stop()
 
-	// Initialize data structures
+	// Define the inactivity threshold
 	const inactivityThreshold = 15 * time.Second
-	levels, lastUpdateTime, lastNonZeroTime := h.initializeLevelsData(h.Server.IsAccessAllowed(c))
-	lastLogTime := time.Now()
-	lastSentTime := time.Now()
-
-	// Send initial empty update to establish connection
-	if err := sendLevelsUpdate(c, levels); err != nil {
-		log.Printf("AudioLevelSSE: Error sending initial update: %v", err)
-		return err
-	}
 
 	for {
 		select {
 		case <-timeout.C:
-			if h.debug {
-				log.Printf("AudioLevelSSE: Connection timeout for %s", clientIP)
-			}
-			return nil
+			return h.handleTimeout(state, clientIP, connLogger)
 
 		case <-c.Request().Context().Done():
-			if h.debug {
-				log.Printf("AudioLevelSSE: Client disconnected: %s", clientIP)
-			}
-			return nil
+			return h.handleClientDisconnect(state, clientIP, connLogger)
 
 		case audioData := <-h.AudioLevelChan:
-			if h.debug {
-				if time.Since(lastLogTime) > 5*time.Second {
-					log.Printf("AudioLevelSSE: Received audio data from source %s: %+v", audioData.Source, audioData)
-					lastLogTime = time.Now()
-				}
-			}
-
-			h.updateAudioLevels(audioData, levels, lastUpdateTime, lastNonZeroTime, h.Server.IsAccessAllowed(c), inactivityThreshold)
-
-			// Only send updates if enough time has passed (rate limiting)
-			if time.Since(lastSentTime) >= 50*time.Millisecond {
-				if err := sendLevelsUpdate(c, levels); err != nil {
-					log.Printf("AudioLevelSSE: Error sending update: %v", err)
-					return err
-				}
-				lastSentTime = time.Now()
+			if err := h.handleAudioData(c, state, audioData, inactivityThreshold, clientIP, connLogger); err != nil {
+				return err
 			}
 
 		case <-activityCheck.C:
-			if updated := checkSourceActivity(levels, lastUpdateTime, lastNonZeroTime, inactivityThreshold); updated {
-				if err := sendLevelsUpdate(c, levels); err != nil {
-					log.Printf("AudioLevelSSE: Error sending update: %v", err)
-					return err
-				}
+			if err := h.handleActivityCheck(c, state, inactivityThreshold, connLogger); err != nil {
+				return err
 			}
 
 		case <-heartbeat.C:
-			// Send a comment as heartbeat
-			if _, err := fmt.Fprintf(c.Response(), ": heartbeat %d\n\n", time.Now().Unix()); err != nil {
-				if h.debug {
-					log.Printf("AudioLevelSSE: Heartbeat error: %v", err)
-				}
+			if err := h.handleHeartbeat(c, state, connLogger); err != nil {
 				return err
 			}
-			c.Response().Flush()
 		}
 	}
+}
+
+// handleTimeout handles connection timeout
+func (h *Handlers) handleTimeout(state *ConnectionState, clientIP string, connLogger *logger.Logger) error {
+	if connLogger != nil {
+		connLogger.Info("Connection timeout",
+			"duration_ms", time.Since(state.startTime).Milliseconds(),
+			"messages_sent", state.messageCount)
+	} else {
+		h.LogDebug("Connection timeout", "client_ip", clientIP)
+	}
+	return nil
+}
+
+// handleClientDisconnect handles client disconnection
+func (h *Handlers) handleClientDisconnect(state *ConnectionState, clientIP string, connLogger *logger.Logger) error {
+	if connLogger != nil {
+		connLogger.Info("Client disconnected",
+			"duration_ms", time.Since(state.startTime).Milliseconds(),
+			"messages_sent", state.messageCount)
+	} else {
+		h.LogDebug("Client disconnected", "client_ip", clientIP)
+	}
+	return nil
+}
+
+// handleAudioData processes incoming audio level data
+func (h *Handlers) handleAudioData(c echo.Context, state *ConnectionState, audioData myaudio.AudioLevelData,
+	inactivityThreshold time.Duration, clientIP string, connLogger *logger.Logger) error {
+
+	// Only log details occasionally to avoid flooding logs
+	if time.Since(state.lastLogTime) > 5*time.Second {
+		if connLogger != nil {
+			connLogger.Debug("Processing audio data",
+				"source", audioData.Source,
+				"level", audioData.Level,
+				"name", audioData.Name)
+		} else {
+			h.LogDebug("Received audio data",
+				"client_ip", clientIP,
+				"source", audioData.Source,
+				"level", audioData.Level,
+				"name", audioData.Name)
+		}
+		state.lastLogTime = time.Now()
+	}
+
+	h.updateAudioLevels(audioData, state.levels, state.lastUpdateTime, state.lastNonZeroTime,
+		h.Server.IsAccessAllowed(c), inactivityThreshold, connLogger)
+
+	// Only send updates if enough time has passed (rate limiting)
+	if time.Since(state.lastSentTime) >= 50*time.Millisecond {
+		if err := sendLevelsUpdate(c, state.levels); err != nil {
+			h.logError("Error sending update", err, connLogger)
+			return err
+		}
+		state.messageCount++
+		state.lastSentTime = time.Now()
+	}
+
+	return nil
+}
+
+// handleActivityCheck checks source activity and sends updates if needed
+func (h *Handlers) handleActivityCheck(c echo.Context, state *ConnectionState,
+	inactivityThreshold time.Duration, connLogger *logger.Logger) error {
+
+	if updated := checkSourceActivity(state.levels, state.lastUpdateTime, state.lastNonZeroTime, inactivityThreshold, connLogger); updated {
+		if err := sendLevelsUpdate(c, state.levels); err != nil {
+			h.logError("Error sending update", err, connLogger)
+			return err
+		}
+		state.messageCount++
+	}
+
+	return nil
+}
+
+// handleHeartbeat sends a heartbeat and logs connection stats
+func (h *Handlers) handleHeartbeat(c echo.Context, state *ConnectionState, connLogger *logger.Logger) error {
+	// Send a comment as heartbeat
+	if _, err := fmt.Fprintf(c.Response(), ": heartbeat %d\n\n", time.Now().Unix()); err != nil {
+		h.logError("Heartbeat error", err, connLogger)
+		return err
+	}
+
+	// Log connection stats on heartbeat occasionally
+	if connLogger != nil && time.Since(state.startTime) > 30*time.Second {
+		connLogger.Debug("Connection stats",
+			"duration_s", int(time.Since(state.startTime).Seconds()),
+			"messages_sent", state.messageCount,
+			"sources", state.totalSources,
+			"msg_per_min", float64(state.messageCount)/(time.Since(state.startTime).Minutes()))
+	}
+
+	c.Response().Flush()
+	return nil
 }
 
 // sendLevelsUpdate sends the current levels data to the client

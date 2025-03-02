@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"net/http"
 	"os"
@@ -14,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/weather"
 	"gorm.io/gorm"
 )
@@ -163,7 +163,10 @@ func (h *Handlers) Detections(c echo.Context) error {
 	// Render the list detections template with the data
 	err = c.Render(http.StatusOK, "listDetections", data)
 	if err != nil {
-		log.Printf("Failed to render listDetections template: %v", err)
+		detectionLogger := h.getDetectionLogger("list")
+		if detectionLogger != nil {
+			detectionLogger.Error("Failed to render listDetections template", "error", err)
+		}
 		return h.NewHandlerError(err, "Failed to render template", http.StatusInternalServerError)
 	}
 	return nil
@@ -172,14 +175,25 @@ func (h *Handlers) Detections(c echo.Context) error {
 // DetectionDetails retrieves a single detection from the database and renders it.
 // API: GET /api/v1/detections/details
 func (h *Handlers) DetectionDetails(c echo.Context) error {
+	// Get a component-specific logger
+	detailsLogger := h.getDetectionLogger("details")
+
 	noteID := c.QueryParam("id")
 	if noteID == "" {
+		if detailsLogger != nil {
+			detailsLogger.Warn("Empty note ID provided")
+		}
 		return h.NewHandlerError(fmt.Errorf("empty note ID"), "Note ID is required", http.StatusBadRequest)
 	}
 
 	// Retrieve the note from the database
 	note, err := h.DS.Get(noteID)
 	if err != nil {
+		if detailsLogger != nil {
+			detailsLogger.Error("Failed to retrieve note",
+				"note_id", noteID,
+				"error", err)
+		}
 		return h.NewHandlerError(err, "Failed to retrieve note", http.StatusInternalServerError)
 	}
 
@@ -189,7 +203,11 @@ func (h *Handlers) DetectionDetails(c echo.Context) error {
 	// Generate the spectrogram path for the note
 	spectrogramPath, err := h.getSpectrogramPath(note.ClipName, width)
 	if err != nil {
-		h.logError(&HandlerError{Err: err, Message: fmt.Sprintf("Error generating spectrogram for %s", note.ClipName), Code: http.StatusInternalServerError})
+		if detailsLogger != nil {
+			detailsLogger.Error("Error generating spectrogram",
+				"clip_name", note.ClipName,
+				"error", err)
+		}
 		spectrogramPath = "" // Set to empty string to avoid breaking the template
 	}
 
@@ -205,27 +223,80 @@ func (h *Handlers) DetectionDetails(c echo.Context) error {
 	// render the detectionDetails template with the data
 	err = c.Render(http.StatusOK, "detectionDetails", data)
 	if err != nil {
-		log.Printf("Failed to render detectionDetails template: %v", err)
+		detectionLogger := h.getDetectionLogger("details")
+		if detectionLogger != nil {
+			detectionLogger.Error("Failed to render detectionDetails template", "error", err)
+		}
 		return h.NewHandlerError(err, "Failed to render template", http.StatusInternalServerError)
 	}
+
+	if detailsLogger != nil && h.debug {
+		detailsLogger.Debug("Successfully rendered detection details",
+			"note_id", noteID,
+			"common_name", note.CommonName)
+	}
 	return nil
+}
+
+// getDetectionLogger returns a component-specific logger for detection operations
+func (h *Handlers) getDetectionLogger(subComponent string) *logger.Logger {
+	if h.Logger == nil {
+		return nil
+	}
+
+	loggerName := "detections"
+	if subComponent != "" {
+		loggerName += "." + subComponent
+	}
+
+	return h.Logger.Named(loggerName)
+}
+
+// Debug is a helper method for logging debug messages
+// Deprecated: Use structured logging methods instead
+func (h *Handlers) Debug(format string, v ...interface{}) {
+	if h.debug {
+		if h.Logger != nil {
+			// When using structured logging, convert the format string to a message
+			// and add any arguments as context fields
+			if len(v) == 0 {
+				h.Logger.Debug(format)
+			} else {
+				// For backward compatibility, format the message
+				formattedMsg := fmt.Sprintf(format, v...)
+				h.Logger.Debug(formattedMsg)
+			}
+		}
+	}
 }
 
 // RecentDetections handles requests for the latest detections.
 // API: GET /api/v1/detections/recent
 func (h *Handlers) RecentDetections(c echo.Context) error {
-	h.Debug("RecentDetections: Starting handler")
+	// Get a component-specific logger
+	recentLogger := h.getDetectionLogger("recent")
+
+	if recentLogger != nil && h.debug {
+		recentLogger.Debug("Starting handler")
+	}
 
 	numDetections := parseNumDetections(c.QueryParam("numDetections"), 10)
-	h.Debug("RecentDetections: Fetching %d detections", numDetections)
+
+	if recentLogger != nil && h.debug {
+		recentLogger.Debug("Fetching detections", "count", numDetections)
+	}
 
 	notes, err := h.DS.GetLastDetections(numDetections)
 	if err != nil {
-		h.Debug("RecentDetections: Error fetching detections: %v", err)
+		if recentLogger != nil {
+			recentLogger.Error("Failed to fetch detections", "error", err)
+		}
 		return h.NewHandlerError(err, "Failed to fetch recent detections", http.StatusInternalServerError)
 	}
 
-	h.Debug("RecentDetections: Found %d detections", len(notes))
+	if recentLogger != nil && h.debug {
+		recentLogger.Debug("Found detections", "count", len(notes))
+	}
 
 	data := struct {
 		Notes             []datastore.Note
@@ -241,14 +312,23 @@ func (h *Handlers) RecentDetections(c echo.Context) error {
 		},
 	}
 
-	h.Debug("RecentDetections: Rendering template")
+	if recentLogger != nil && h.debug {
+		recentLogger.Debug("Rendering template")
+	}
+
 	err = c.Render(http.StatusOK, "recentDetections", data)
 	if err != nil {
-		h.Debug("RecentDetections: Error rendering template: %v", err)
+		if recentLogger != nil {
+			recentLogger.Error("Failed to render template",
+				"template", "recentDetections",
+				"error", err)
+		}
 		return h.NewHandlerError(err, "Failed to render template", http.StatusInternalServerError)
 	}
 
-	h.Debug("RecentDetections: Successfully completed")
+	if recentLogger != nil && h.debug {
+		recentLogger.Debug("Successfully completed")
+	}
 	return nil
 }
 
@@ -280,7 +360,18 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 		// Get sun events for the note's date (SunCalc will use its internal cache)
 		sunEvents, err := h.SunCalc.GetSunEventTimes(noteTime)
 		if err != nil {
-			log.Printf("Failed to get sun events for date %s: %v", notes[i].Date, err)
+			detectionLogger := h.getDetectionLogger("weather")
+			if detectionLogger != nil {
+				detectionLogger.Error("Failed to get sun events",
+					"date", notes[i].Date,
+					"error", err)
+			}
+			notesWithWeather[i] = NoteWithWeather{
+				Note:      notes[i],
+				Weather:   nil,
+				TimeOfDay: weather.Day,
+			}
+			continue
 		}
 
 		// Create a NoteWithWeather object
@@ -296,7 +387,12 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 			if _, exists := weatherCache[notes[i].Date]; !exists {
 				hourlyWeather, err := h.DS.GetHourlyWeather(notes[i].Date)
 				if err != nil {
-					log.Printf("Failed to fetch hourly weather for date %s: %v", notes[i].Date, err)
+					detectionLogger := h.getDetectionLogger("weather")
+					if detectionLogger != nil {
+						detectionLogger.Error("Failed to fetch hourly weather",
+							"date", notes[i].Date,
+							"error", err)
+					}
 				}
 				weatherCache[notes[i].Date] = hourlyWeather
 			}
@@ -322,9 +418,15 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 // DeleteDetection handles the deletion of a detection and its associated files
 // API: DELETE /api/v1/detections/delete
 func (h *Handlers) DeleteDetection(c echo.Context) error {
+	// Get a component-specific logger
+	deleteLogger := h.getDetectionLogger("delete")
+
 	id := c.QueryParam("id")
 
 	if id == "" {
+		if deleteLogger != nil {
+			deleteLogger.Warn("Missing detection ID")
+		}
 		h.SSE.SendNotification(Notification{
 			Message: "Missing detection ID",
 			Type:    "error",
@@ -335,7 +437,11 @@ func (h *Handlers) DeleteDetection(c echo.Context) error {
 	// Get the clip path before deletion
 	clipPath, err := h.DS.GetNoteClipPath(id)
 	if err != nil {
-		h.Debug("Failed to get clip path: %v", err)
+		if deleteLogger != nil {
+			deleteLogger.Error("Failed to get clip path",
+				"detection_id", id,
+				"error", err)
+		}
 		h.SSE.SendNotification(Notification{
 			Message: fmt.Sprintf("Failed to get clip path: %v", err),
 			Type:    "error",
@@ -345,7 +451,11 @@ func (h *Handlers) DeleteDetection(c echo.Context) error {
 
 	// Delete the note from the database
 	if err := h.DS.Delete(id); err != nil {
-		h.Debug("Failed to delete note %s: %v", id, err)
+		if deleteLogger != nil {
+			deleteLogger.Error("Failed to delete note",
+				"detection_id", id,
+				"error", err)
+		}
 		h.SSE.SendNotification(Notification{
 			Message: fmt.Sprintf("Failed to delete note: %v", err),
 			Type:    "error",
@@ -358,18 +468,28 @@ func (h *Handlers) DeleteDetection(c echo.Context) error {
 		// Delete audio file
 		audioPath := fmt.Sprintf("%s/%s", h.Settings.Realtime.Audio.Export.Path, clipPath)
 		if err := os.Remove(audioPath); err != nil && !os.IsNotExist(err) {
-			h.Debug("Failed to delete audio file %s: %v", audioPath, err)
+			if deleteLogger != nil {
+				deleteLogger.Warn("Failed to delete audio file",
+					"path", audioPath,
+					"error", err)
+			}
 		}
 
 		// Delete spectrogram file
 		spectrogramPath := fmt.Sprintf("%s/%s.png", h.Settings.Realtime.Audio.Export.Path, strings.TrimSuffix(clipPath, ".wav"))
 		if err := os.Remove(spectrogramPath); err != nil && !os.IsNotExist(err) {
-			h.Debug("Failed to delete spectrogram file %s: %v", spectrogramPath, err)
+			if deleteLogger != nil {
+				deleteLogger.Warn("Failed to delete spectrogram file",
+					"path", spectrogramPath,
+					"error", err)
+			}
 		}
 	}
 
 	// Log the successful deletion
-	h.Debug("Successfully deleted detection %s", id)
+	if deleteLogger != nil {
+		deleteLogger.Info("Successfully deleted detection", "detection_id", id)
+	}
 
 	// Send success notification
 	h.SSE.SendNotification(Notification{
@@ -385,12 +505,25 @@ func (h *Handlers) DeleteDetection(c echo.Context) error {
 
 // handleSpeciesExclusion handles the logic for managing species in the exclusion list
 func (h *Handlers) handleSpeciesExclusion(note *datastore.Note, verified, ignoreSpecies string) error {
+	// Get a component-specific logger
+	exclusionLogger := h.getDetectionLogger("species-exclusion")
+
 	settings := conf.Setting()
 
 	if verified == "false_positive" && ignoreSpecies != "" {
+		if exclusionLogger != nil && h.debug {
+			exclusionLogger.Debug("Processing species exclusion",
+				"species", ignoreSpecies,
+				"action", "add_to_exclude")
+		}
+
 		// Check if species is already excluded
 		for _, s := range settings.Realtime.Species.Exclude {
 			if s == ignoreSpecies {
+				if exclusionLogger != nil && h.debug {
+					exclusionLogger.Debug("Species already in exclusion list",
+						"species", ignoreSpecies)
+				}
 				return nil
 			}
 		}
@@ -398,9 +531,18 @@ func (h *Handlers) handleSpeciesExclusion(note *datastore.Note, verified, ignore
 		// Add to excluded list
 		settings.Realtime.Species.Exclude = append(settings.Realtime.Species.Exclude, ignoreSpecies)
 		if err := conf.SaveSettings(); err != nil {
+			if exclusionLogger != nil {
+				exclusionLogger.Error("Failed to save settings",
+					"species", ignoreSpecies,
+					"error", err)
+			}
 			return fmt.Errorf("failed to save settings: %w", err)
 		}
 
+		if exclusionLogger != nil && h.debug {
+			exclusionLogger.Debug("Species added to exclusion list",
+				"species", ignoreSpecies)
+		}
 		h.SSE.SendNotification(Notification{
 			Message: fmt.Sprintf("%s added to ignore list", ignoreSpecies),
 			Type:    "success",
@@ -409,6 +551,10 @@ func (h *Handlers) handleSpeciesExclusion(note *datastore.Note, verified, ignore
 		// Check if species is in exclude list
 		for _, s := range settings.Realtime.Species.Exclude {
 			if s == note.CommonName {
+				if exclusionLogger != nil {
+					exclusionLogger.Warn("Species marked as correct but is in exclusion list",
+						"species", note.CommonName)
+				}
 				h.SSE.SendNotification(Notification{
 					Message: fmt.Sprintf("%s is currently in ignore list. You may want to remove it from Settings.", note.CommonName),
 					Type:    "warning",
@@ -425,6 +571,9 @@ func (h *Handlers) processComment(noteID uint, comment string, maxRetries int, b
 	if comment == "" {
 		return nil
 	}
+
+	// Get a component-specific logger for comment operations
+	commentLogger := h.getDetectionLogger("comments")
 
 	// Validate comment
 	if len(comment) > 1000 {
@@ -469,7 +618,13 @@ func (h *Handlers) processComment(noteID uint, comment string, maxRetries int, b
 		if err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
 				delay := baseDelay * time.Duration(attempt+1)
-				h.Debug("Database locked during comment save, retrying in %v (attempt %d/%d)", delay, attempt+1, maxRetries)
+				if commentLogger != nil {
+					commentLogger.Warn("Database locked during comment save, retrying",
+						"note_id", noteID,
+						"attempt", attempt+1,
+						"max_retries", maxRetries,
+						"delay_ms", delay.Milliseconds())
+				}
 				time.Sleep(delay)
 				lastErr = err
 				continue
@@ -478,102 +633,61 @@ func (h *Handlers) processComment(noteID uint, comment string, maxRetries int, b
 		}
 
 		// If we get here, the transaction was successful
+		if commentLogger != nil && h.debug {
+			commentLogger.Debug("Comment saved successfully",
+				"note_id", noteID)
+		}
 		return nil
 	}
 
+	if commentLogger != nil {
+		commentLogger.Error("Failed to save comment after retries",
+			"note_id", noteID,
+			"max_retries", maxRetries,
+			"last_error", lastErr)
+	}
 	return lastErr
 }
 
 // processReview handles the review status update and related operations
 // API: POST /api/v1/detections/review
 func (h *Handlers) processReview(noteID uint, verified string, lockDetection bool, maxRetries int, baseDelay time.Duration) error {
-	h.Debug("processReview: Starting review process for note ID %d", noteID)
-	h.Debug("processReview: Verified status: %s", verified)
-	h.Debug("processReview: Lock detection: %v", lockDetection)
+	// Get a component-specific logger for review operations
+	reviewLogger := h.getDetectionLogger("review")
+
+	if reviewLogger != nil && h.debug {
+		reviewLogger.Debug("Starting review process",
+			"note_id", noteID,
+			"verified", verified,
+			"lock_detection", lockDetection)
+	}
 
 	// Validate review status if provided
 	if verified != "" && verified != "correct" && verified != "false_positive" {
 		return fmt.Errorf("invalid verification status")
 	}
 
+	return h.executeWithRetry(func() error {
+		return h.updateNoteReviewAndLock(noteID, verified, lockDetection, reviewLogger)
+	}, maxRetries, baseDelay, reviewLogger, noteID)
+}
+
+// executeWithRetry executes the provided function with retry logic for database locks
+func (h *Handlers) executeWithRetry(operation func() error, maxRetries int, baseDelay time.Duration,
+	logger *logger.Logger, noteID uint) error {
+
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		err := h.DS.Transaction(func(tx *gorm.DB) error {
-			// Get note and existing review in a transaction
-			note, err := h.DS.Get(strconv.FormatUint(uint64(noteID), 10))
-			if err != nil {
-				h.Debug("processReview: Failed to retrieve note: %v", err)
-				return fmt.Errorf("failed to retrieve note: %w", err)
-			}
-			h.Debug("processReview: Retrieved note, current lock status: %v", note.Lock != nil)
-
-			// Check if note is locked and trying to mark as false positive
-			if note.Lock != nil && verified == "false_positive" {
-				h.Debug("processReview: Attempt to mark locked note as false positive")
-				return fmt.Errorf("cannot mark locked detection as false positive - unlock it first")
-			}
-
-			// Only process review status if it's provided
-			if verified != "" {
-				// Handle species exclusion
-				if err := h.handleSpeciesExclusion(&note, verified, ""); err != nil {
-					h.Debug("processReview: Failed to handle species exclusion: %v", err)
-					return err
-				}
-
-				// Create or update the review using upsert
-				review := &datastore.NoteReview{
-					NoteID:    noteID,
-					Verified:  verified,
-					CreatedAt: time.Now(),
-					UpdatedAt: time.Now(),
-				}
-
-				// Use upsert operation for the review
-				if err := tx.Where("note_id = ?", noteID).
-					Assign(*review).
-					FirstOrCreate(review).Error; err != nil {
-					h.Debug("processReview: Failed to save review: %v", err)
-					return fmt.Errorf("failed to save review: %w", err)
-				}
-				h.Debug("processReview: Review saved successfully")
-			}
-
-			// Handle lock state changes
-			if verified == "correct" || verified == "" { // Also handle lock changes when no review status is provided
-				h.Debug("processReview: Handling lock state, lockDetection=%v", lockDetection)
-				if lockDetection {
-					// Lock the detection
-					lock := &datastore.NoteLock{
-						NoteID:   noteID,
-						LockedAt: time.Now(),
-					}
-
-					// Use upsert operation within the same transaction
-					if err := tx.Where("note_id = ?", noteID).
-						Assign(*lock).
-						FirstOrCreate(lock).Error; err != nil {
-						h.Debug("processReview: Failed to lock note: %v", err)
-						return fmt.Errorf("failed to lock note: %w", err)
-					}
-					h.Debug("processReview: Note locked successfully")
-				} else {
-					// Remove lock if exists
-					if err := tx.Where("note_id = ?", noteID).Delete(&datastore.NoteLock{}).Error; err != nil {
-						h.Debug("processReview: Failed to unlock note: %v", err)
-						return fmt.Errorf("failed to unlock note: %w", err)
-					}
-					h.Debug("processReview: Note unlocked successfully")
-				}
-			}
-
-			return nil
-		})
-
-		if err != nil {
+		if err := operation(); err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
 				delay := baseDelay * time.Duration(attempt+1)
-				h.Debug("processReview: Database locked, retrying in %v (attempt %d/%d)", delay, attempt+1, maxRetries)
+				if logger != nil {
+					logger.Warn("Database locked, retrying",
+						"note_id", noteID,
+						"attempt", attempt+1,
+						"max_retries", maxRetries,
+						"delay_ms", delay.Milliseconds())
+				}
 				time.Sleep(delay)
 				lastErr = err
 				continue
@@ -581,18 +695,179 @@ func (h *Handlers) processReview(noteID uint, verified string, lockDetection boo
 			return err
 		}
 
-		// If we get here, the transaction was successful
-		h.Debug("processReview: Transaction completed successfully")
+		// If we get here, the operation was successful
+		if logger != nil && h.debug {
+			logger.Debug("Transaction completed successfully", "note_id", noteID)
+		}
 		return nil
 	}
 
-	h.Debug("processReview: All attempts failed, last error: %v", lastErr)
+	if logger != nil {
+		logger.Error("All attempts failed",
+			"note_id", noteID,
+			"max_retries", maxRetries,
+			"last_error", lastErr)
+	}
 	return lastErr
+}
+
+// updateNoteReviewAndLock handles the database transaction for updating note review and lock status
+func (h *Handlers) updateNoteReviewAndLock(noteID uint, verified string, lockDetection bool,
+	reviewLogger *logger.Logger) error {
+
+	return h.DS.Transaction(func(tx *gorm.DB) error {
+		// Get note in a transaction
+		note, err := h.DS.Get(strconv.FormatUint(uint64(noteID), 10))
+		if err != nil {
+			if reviewLogger != nil {
+				reviewLogger.Error("Failed to retrieve note",
+					"note_id", noteID,
+					"error", err)
+			}
+			return fmt.Errorf("failed to retrieve note: %w", err)
+		}
+
+		if reviewLogger != nil && h.debug {
+			reviewLogger.Debug("Retrieved note",
+				"note_id", noteID,
+				"is_locked", note.Lock != nil)
+		}
+
+		// Process verification status if provided
+		if verified != "" {
+			if err := h.processVerificationStatus(tx, &note, noteID, verified, reviewLogger); err != nil {
+				return err
+			}
+		}
+
+		// Process lock state if applicable
+		if verified == "correct" || verified == "" {
+			if err := h.processLockState(tx, noteID, lockDetection, reviewLogger); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
+// processVerificationStatus handles the verification status update
+func (h *Handlers) processVerificationStatus(tx *gorm.DB, note *datastore.Note, noteID uint,
+	verified string, reviewLogger *logger.Logger) error {
+
+	// Check if note is locked and trying to mark as false positive
+	if note.Lock != nil && verified == "false_positive" {
+		if reviewLogger != nil {
+			reviewLogger.Warn("Attempt to mark locked note as false positive",
+				"note_id", noteID,
+				"common_name", note.CommonName)
+		}
+		return fmt.Errorf("cannot mark locked detection as false positive - unlock it first")
+	}
+
+	// Handle species exclusion
+	if err := h.handleSpeciesExclusion(note, verified, ""); err != nil {
+		if reviewLogger != nil {
+			reviewLogger.Error("Failed to handle species exclusion",
+				"common_name", note.CommonName,
+				"error", err)
+		}
+		return err
+	}
+
+	// Create or update the review
+	review := &datastore.NoteReview{
+		NoteID:    noteID,
+		Verified:  verified,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	// Use upsert operation for the review
+	if err := tx.Where("note_id = ?", noteID).
+		Assign(*review).
+		FirstOrCreate(review).Error; err != nil {
+		if reviewLogger != nil {
+			reviewLogger.Error("Failed to save review",
+				"note_id", noteID,
+				"error", err)
+		}
+		return fmt.Errorf("failed to save review: %w", err)
+	}
+
+	if reviewLogger != nil && h.debug {
+		reviewLogger.Debug("Review saved successfully", "note_id", noteID)
+	}
+
+	return nil
+}
+
+// processLockState handles the lock state update
+func (h *Handlers) processLockState(tx *gorm.DB, noteID uint, lockDetection bool,
+	reviewLogger *logger.Logger) error {
+
+	if reviewLogger != nil && h.debug {
+		reviewLogger.Debug("Handling lock state",
+			"note_id", noteID,
+			"lock_detection", lockDetection)
+	}
+
+	if lockDetection {
+		return h.createLock(tx, noteID, reviewLogger)
+	}
+	return h.removeLock(tx, noteID, reviewLogger)
+}
+
+// createLock adds a lock to a note
+func (h *Handlers) createLock(tx *gorm.DB, noteID uint, reviewLogger *logger.Logger) error {
+	// Lock the detection
+	lock := &datastore.NoteLock{
+		NoteID:   noteID,
+		LockedAt: time.Now(),
+	}
+
+	// Use upsert operation
+	if err := tx.Where("note_id = ?", noteID).
+		Assign(*lock).
+		FirstOrCreate(lock).Error; err != nil {
+		if reviewLogger != nil {
+			reviewLogger.Error("Failed to lock note",
+				"note_id", noteID,
+				"error", err)
+		}
+		return fmt.Errorf("failed to lock note: %w", err)
+	}
+
+	if reviewLogger != nil && h.debug {
+		reviewLogger.Debug("Note locked successfully", "note_id", noteID)
+	}
+	return nil
+}
+
+// removeLock removes a lock from a note
+func (h *Handlers) removeLock(tx *gorm.DB, noteID uint, reviewLogger *logger.Logger) error {
+	// Remove lock if exists
+	if err := tx.Where("note_id = ?", noteID).Delete(&datastore.NoteLock{}).Error; err != nil {
+		if reviewLogger != nil {
+			reviewLogger.Error("Failed to unlock note",
+				"note_id", noteID,
+				"error", err)
+		}
+		return fmt.Errorf("failed to unlock note: %w", err)
+	}
+
+	if reviewLogger != nil && h.debug {
+		reviewLogger.Debug("Note unlocked successfully", "note_id", noteID)
+	}
+	return nil
 }
 
 // ReviewDetection handles the review status update and related operations
 // API: POST /api/v1/detections/review
 func (h *Handlers) ReviewDetection(c echo.Context) error {
+	// Get a component-specific logger
+	reviewLogger := h.getDetectionLogger("review-handler")
+
 	id := c.FormValue("id")
 	if id == "" {
 		return h.NewHandlerError(fmt.Errorf("no ID provided"), "Missing detection ID", http.StatusBadRequest)
@@ -608,11 +883,14 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 	lockDetection := c.FormValue("lock_detection") == "true"
 	ignoreSpecies := c.FormValue("ignore_species")
 
-	h.Debug("ReviewDetection: Processing review for note ID %d", noteID)
-	h.Debug("ReviewDetection: Verified status: %s", verified)
-	h.Debug("ReviewDetection: Lock detection: %v", lockDetection)
-	h.Debug("ReviewDetection: Lock detection form value: %s", c.FormValue("lock_detection"))
-	h.Debug("ReviewDetection: Ignore species: %s", ignoreSpecies)
+	if reviewLogger != nil && h.debug {
+		reviewLogger.Debug("Processing review",
+			"note_id", noteID,
+			"verified", verified,
+			"lock_detection", lockDetection,
+			"lock_detection_value", c.FormValue("lock_detection"),
+			"ignore_species", ignoreSpecies)
+	}
 
 	// Retry configuration for SQLite locking
 	maxRetries := 5
@@ -620,7 +898,11 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 
 	// Handle comment first (this doesn't require review status)
 	if err := h.processComment(uint(noteID), comment, maxRetries, baseDelay); err != nil {
-		h.Debug("ReviewDetection: Failed to process comment: %v", err)
+		if reviewLogger != nil {
+			reviewLogger.Error("Failed to process comment",
+				"note_id", noteID,
+				"error", err)
+		}
 		h.SSE.SendNotification(Notification{
 			Message: fmt.Sprintf("Failed to process comment: %v", err),
 			Type:    "error",
@@ -630,9 +912,17 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 
 	// Handle species exclusion if provided
 	if verified == "false_positive" && ignoreSpecies != "" {
-		h.Debug("ReviewDetection: Processing species exclusion for %s", ignoreSpecies)
+		if reviewLogger != nil && h.debug {
+			reviewLogger.Debug("Processing species exclusion",
+				"species", ignoreSpecies)
+		}
+
 		if err := h.handleSpeciesExclusion(nil, verified, ignoreSpecies); err != nil {
-			h.Debug("ReviewDetection: Failed to handle species exclusion: %v", err)
+			if reviewLogger != nil {
+				reviewLogger.Error("Failed to handle species exclusion",
+					"species", ignoreSpecies,
+					"error", err)
+			}
 			h.SSE.SendNotification(Notification{
 				Message: fmt.Sprintf("Failed to handle species exclusion: %v", err),
 				Type:    "error",
@@ -643,7 +933,11 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 
 	// Handle review status if provided
 	if err := h.processReview(uint(noteID), verified, lockDetection, maxRetries, baseDelay); err != nil {
-		h.Debug("ReviewDetection: Failed to process review: %v", err)
+		if reviewLogger != nil {
+			reviewLogger.Error("Failed to process review",
+				"note_id", noteID,
+				"error", err)
+		}
 		h.SSE.SendNotification(Notification{
 			Message: fmt.Sprintf("Failed to process review: %v", err),
 			Type:    "error",
@@ -653,6 +947,12 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 
 	if verified != "" {
 		// Send success notification
+		if reviewLogger != nil && h.debug {
+			reviewLogger.Debug("Review saved successfully",
+				"note_id", noteID,
+				"verified", verified,
+				"lock_detection", lockDetection)
+		}
 		h.SSE.SendNotification(Notification{
 			Message: "Review saved successfully",
 			Type:    "success",
@@ -666,8 +966,14 @@ func (h *Handlers) ReviewDetection(c echo.Context) error {
 // LockDetection handles the locking and unlocking of detections
 // API: POST /api/v1/detections/lock
 func (h *Handlers) LockDetection(c echo.Context) error {
+	// Get a component-specific logger
+	lockLogger := h.getDetectionLogger("lock-handler")
+
 	id := c.QueryParam("id")
 	if id == "" {
+		if lockLogger != nil {
+			lockLogger.Error("Missing detection ID")
+		}
 		h.SSE.SendNotification(Notification{
 			Message: "Missing detection ID",
 			Type:    "error",
@@ -678,6 +984,11 @@ func (h *Handlers) LockDetection(c echo.Context) error {
 	// Get the current note first to have the species name for messages
 	note, err := h.DS.Get(id)
 	if err != nil {
+		if lockLogger != nil {
+			lockLogger.Error("Failed to get detection",
+				"id", id,
+				"error", err)
+		}
 		h.SSE.SendNotification(Notification{
 			Message: fmt.Sprintf("Failed to get detection: %v", err),
 			Type:    "error",
@@ -695,11 +1006,23 @@ func (h *Handlers) LockDetection(c echo.Context) error {
 	// Check current lock status first
 	isLocked, err := h.DS.IsNoteLocked(id)
 	if err != nil {
+		if lockLogger != nil {
+			lockLogger.Error("Failed to check lock status",
+				"id", id,
+				"error", err)
+		}
 		h.SSE.SendNotification(Notification{
 			Message: fmt.Sprintf("Failed to check lock status: %v", err),
 			Type:    "error",
 		})
 		return h.NewHandlerError(err, "Failed to check lock status", http.StatusInternalServerError)
+	}
+
+	if lockLogger != nil && h.debug {
+		lockLogger.Debug("Processing lock operation",
+			"id", id,
+			"species", note.CommonName,
+			"current_lock_status", isLocked)
 	}
 
 	// Attempt the lock operation with retries
@@ -720,10 +1043,22 @@ func (h *Handlers) LockDetection(c echo.Context) error {
 		if err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
 				delay := baseDelay * time.Duration(attempt+1)
-				h.Debug("Database locked during lock operation, retrying in %v (attempt %d/%d)", delay, attempt+1, maxRetries)
+				if lockLogger != nil {
+					lockLogger.Warn("Database locked during lock operation, retrying",
+						"id", id,
+						"attempt", attempt+1,
+						"max_retries", maxRetries,
+						"delay_ms", delay.Milliseconds())
+				}
 				time.Sleep(delay)
 				lastErr = err
 				continue
+			}
+			if lockLogger != nil {
+				lockLogger.Error("Failed to process lock operation",
+					"id", id,
+					"is_locked", isLocked,
+					"error", err)
 			}
 			h.SSE.SendNotification(Notification{
 				Message: err.Error(),
@@ -738,6 +1073,12 @@ func (h *Handlers) LockDetection(c echo.Context) error {
 
 	// Check if all retries failed
 	if lastErr != nil {
+		if lockLogger != nil {
+			lockLogger.Error("Failed after all retries",
+				"id", id,
+				"max_retries", maxRetries,
+				"last_error", lastErr)
+		}
 		h.SSE.SendNotification(Notification{
 			Message: fmt.Sprintf("Failed after %d attempts: %v", maxRetries, lastErr),
 			Type:    "error",
@@ -746,6 +1087,12 @@ func (h *Handlers) LockDetection(c echo.Context) error {
 	}
 
 	// Send success notification
+	if lockLogger != nil && h.debug {
+		lockLogger.Debug("Lock operation successful",
+			"id", id,
+			"species", note.CommonName,
+			"action", map[bool]string{true: "unlock", false: "lock"}[isLocked])
+	}
 	h.SSE.SendNotification(Notification{
 		Message: message,
 		Type:    "success",

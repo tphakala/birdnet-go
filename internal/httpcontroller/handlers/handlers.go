@@ -7,12 +7,14 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"strings"
 	"sync"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
@@ -36,6 +38,7 @@ type Handlers struct {
 	CloudflareAccess  *security.CloudflareAccess
 	debug             bool
 	Server            interface{ IsAccessAllowed(c echo.Context) bool }
+	Logger            *logger.Logger // Our custom logger
 }
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.
@@ -53,7 +56,7 @@ func (e *HandlerError) Error() string {
 // baseHandler provides common functionality for all handlers.
 type baseHandler struct {
 	errorHandler func(error) *HandlerError
-	logger       *log.Logger
+	logger       *log.Logger // Keep for backward compatibility
 }
 
 // newHandlerError creates a new HandlerError with the given parameters.
@@ -77,22 +80,75 @@ func (bh *baseHandler) logInfo(message string) {
 	bh.logger.Printf("Info: %s", message)
 }
 
+// LogDebug logs a debug message using the custom logger if available, otherwise uses standard logger
+func (h *Handlers) LogDebug(msg string, fields ...interface{}) {
+	if h.Logger != nil {
+		h.Logger.Debug(msg, fields...)
+	} else {
+		h.baseHandler.logInfo("DEBUG: " + msg)
+	}
+}
+
+// LogInfo logs an info message using the custom logger if available, otherwise uses standard logger
+func (h *Handlers) LogInfo(msg string, fields ...interface{}) {
+	if h.Logger != nil {
+		h.Logger.Info(msg, fields...)
+	} else {
+		h.baseHandler.logInfo(msg)
+	}
+}
+
+// LogWarn logs a warning message using the custom logger if available, otherwise uses standard logger
+func (h *Handlers) LogWarn(msg string, fields ...interface{}) {
+	if h.Logger != nil {
+		h.Logger.Warn(msg, fields...)
+	} else {
+		h.baseHandler.logInfo("WARN: " + msg)
+	}
+}
+
+// LogError logs an error message using the custom logger if available, otherwise uses standard logger
+func (h *Handlers) LogError(msg string, err error, fields ...interface{}) {
+	if h.Logger != nil {
+		if err != nil {
+			h.Logger.Error(msg, append(fields, "error", err)...)
+		} else {
+			h.Logger.Error(msg, fields...)
+		}
+	} else {
+		if err != nil {
+			h.baseHandler.logError(&HandlerError{
+				Err:     err,
+				Message: msg,
+				Code:    http.StatusInternalServerError,
+			})
+		} else {
+			h.baseHandler.logInfo("ERROR: " + msg)
+		}
+	}
+}
+
 // New creates a new Handlers instance with the given dependencies.
-func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server, controlChan chan string, notificationChan chan Notification, server interface{ IsAccessAllowed(c echo.Context) bool }) *Handlers {
-	if logger == nil {
-		logger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard,
+	birdImageCache *imageprovider.BirdImageCache, stdLogger *log.Logger, sunCalc *suncalc.SunCalc,
+	audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server,
+	controlChan chan string, notificationChan chan Notification,
+	server interface{ IsAccessAllowed(c echo.Context) bool }) *Handlers {
+
+	if stdLogger == nil {
+		stdLogger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
 
-	return &Handlers{
+	handlers := &Handlers{
 		baseHandler: baseHandler{
 			errorHandler: defaultErrorHandler,
-			logger:       logger,
+			logger:       stdLogger,
 		},
 		DS:                ds,
 		Settings:          settings,
 		DashboardSettings: dashboardSettings,
 		BirdImageCache:    birdImageCache,
-		SSE:               NewSSEHandler(),
+		SSE:               nil, // Initialize later with logger
 		SunCalc:           sunCalc,
 		AudioLevelChan:    audioLevelChan,
 		OAuth2Server:      oauth2Server,
@@ -101,6 +157,19 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		CloudflareAccess:  security.NewCloudflareAccess(),
 		debug:             settings.Debug,
 		Server:            server,
+		// Logger will be set separately
+	}
+
+	return handlers
+}
+
+// SetLogger sets the custom logger for the handlers
+func (h *Handlers) SetLogger(logger *logger.Logger) {
+	h.Logger = logger
+
+	// Now that we have the logger, initialize the SSE handler with it
+	if h.SSE == nil {
+		h.SSE = NewSSEHandler(logger)
 	}
 }
 
@@ -140,6 +209,57 @@ func (h *Handlers) HandleError(err error, c echo.Context) error {
 		}
 	}
 
+	// Get request-specific details for logging
+	requestID := c.Request().Header.Get("X-Request-ID")
+	if requestID == "" {
+		requestID = c.Response().Header().Get("X-Request-ID")
+	}
+	clientIP := c.RealIP()
+	path := c.Request().URL.Path
+	method := c.Request().Method
+
+	// Log the error using our custom logger if available
+	if h.Logger != nil {
+		// Create an error-specific logger with component hierarchy
+		errorLogger := h.Logger.Named("http.error")
+
+		// Get a shortened stack trace (limit to 5 frames for readability)
+		stackTrace := limitStackTrace(string(debug.Stack()), 5)
+
+		// Include all relevant fields for debugging
+		fields := []interface{}{
+			"code", he.Code,
+			"message", he.Message,
+			"error", he.Err,
+			"path", path,
+			"method", method,
+			"client_ip", clientIP,
+		}
+
+		// Only include request ID if it exists
+		if requestID != "" {
+			fields = append(fields, "request_id", requestID)
+		}
+
+		// Only include stack trace for server errors
+		if he.Code >= 500 {
+			fields = append(fields, "stacktrace", stackTrace)
+		}
+
+		// Log at appropriate level based on status code
+		switch {
+		case he.Code >= 500:
+			errorLogger.Error("Server error occurred", fields...)
+		case he.Code >= 400:
+			errorLogger.Warn("Client error occurred", fields...)
+		default:
+			errorLogger.Info("Request error", fields...)
+		}
+	} else {
+		// Fallback to the base handler logger
+		h.baseHandler.logError(he)
+	}
+
 	// Check if headers have already been sent
 	if c.Response().Committed {
 		return nil
@@ -177,6 +297,22 @@ func (h *Handlers) HandleError(err error, c echo.Context) error {
 
 	// Render the template
 	return c.Render(he.Code, template, errorData)
+}
+
+// limitStackTrace reduces the stack trace to a given number of frames for readability
+func limitStackTrace(stackTrace string, maxFrames int) string {
+	lines := strings.Split(stackTrace, "\n")
+	if len(lines) <= maxFrames*2 {
+		return stackTrace
+	}
+
+	// Take the first line (which has the error) plus maxFrames*2 lines (each frame has 2 lines in Go stack traces)
+	truncatedLines := make([]string, 0, maxFrames*2+2)                   // Pre-allocate capacity
+	truncatedLines = append(truncatedLines, lines[0])                    // Add first line (error message)
+	truncatedLines = append(truncatedLines, lines[1:(maxFrames*2)+1]...) // Add stack frames
+	truncatedLines = append(truncatedLines, fmt.Sprintf("... %d more frames omitted ...", (len(lines)-(maxFrames*2+1))/2))
+
+	return strings.Join(truncatedLines, "\n")
 }
 
 // getErrorTemplate returns the appropriate error template name based on the error code

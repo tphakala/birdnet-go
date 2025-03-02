@@ -1,130 +1,203 @@
 // logger.go
+// Package logger provides a unified logging system built on top of zap.
+//
+// Key features:
+// - Unified single-method initialization with NewLogger()
+// - Support for console and file output with rotation
+// - Development mode with debug level and additional information
+// - Structured logging with fields
+// - Automatic color support for console output
+//
+// Usage:
+//
+//	config := logger.Config{
+//	    Level:       "info",
+//	    Development: true,
+//	    FilePath:    "/path/to/logfile.log",
+//	}
+//
+//	// For console-only logging
+//	log, err := logger.NewLogger(config)
+//
+//	// For file logging with rotation
+//	rotationConfig := logger.RotationConfig{
+//	    MaxSize:    100, // MB
+//	    MaxBackups: 5,
+//	    MaxAge:     30,  // days
+//	    Compress:   true,
+//	}
+//	log, err := logger.NewLogger(config, rotationConfig)
 package logger
 
 import (
 	"fmt"
+	"log"
 	"os"
-	"strings"
-	"time"
+	"path/filepath"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// Log level constants.
-const (
-	INFO = iota
-	WARNING
-	ERROR
-	DEBUG
-)
-
-type Log struct {
-	Level   int
-	Time    time.Time
-	Message string
-}
-
+// Logger is the main logger struct that wraps zap.Logger
 type Logger struct {
-	Outputs map[string]LogOutput
-	Prefix  bool
+	zap    *zap.Logger
+	sugar  *zap.SugaredLogger
+	config Config
 }
 
-type LogOutput interface {
-	WriteLog(log Log, prefix bool)
+// Debug logs a message at the debug level
+func (l *Logger) Debug(msg string, fields ...interface{}) {
+	l.sugar.Debugw(msg, fields...)
 }
 
-type StdoutOutput struct{}
-
-func (s StdoutOutput) WriteLog(log Log, prefix bool) {
-	logMessage := formatLog(log, prefix)
-	fmt.Fprint(os.Stdout, logMessage)
+// Info logs a message at the info level
+func (l *Logger) Info(msg string, fields ...interface{}) {
+	l.sugar.Infow(msg, fields...)
 }
 
-type FileOutput struct {
-	Handler FileHandler
+// Warn logs a message at the warn level
+func (l *Logger) Warn(msg string, fields ...interface{}) {
+	l.sugar.Warnw(msg, fields...)
 }
 
-func (f FileOutput) WriteLog(log Log, prefix bool) {
-	if f.Handler == nil {
-		fmt.Println("File handler not initialized")
-		return
+// Error logs a message at the error level
+func (l *Logger) Error(msg string, fields ...interface{}) {
+	l.sugar.Errorw(msg, fields...)
+}
+
+// Fatal logs a message at the fatal level and then calls os.Exit(1)
+func (l *Logger) Fatal(msg string, fields ...interface{}) {
+	l.sugar.Fatalw(msg, fields...)
+}
+
+// NewLogger creates a new logger with the given configuration.
+// This is a unified initialization method for all logger types.
+func NewLogger(config Config, rotationConfig ...RotationConfig) (*Logger, error) {
+	// Log development mode status
+	if config.Development {
+		log.Println("🚨 Development mode enabled")
 	}
-	logMessage := formatLog(log, prefix)
-	_, err := f.Handler.Write([]byte(logMessage))
-	if err != nil {
-		fmt.Printf("Error writing log: %s\n", err)
-	}
-}
 
-func formatLog(log Log, prefix bool) string {
-	formattedMessage := log.Message
-	if !strings.HasSuffix(formattedMessage, "\n") {
-		formattedMessage += "\n"
-	}
+	// Determine the log level using the helper function
+	level := GetLogLevel(config)
 
-	if prefix {
-		level := [...]string{"INFO", "WARNING", "ERROR", "DEBUG"}[log.Level]
-		return fmt.Sprintf("[%s] [%s] %s", log.Time.Format(time.RFC3339), level, formattedMessage)
-	}
-	return formattedMessage
-}
+	var zapLogger *zap.Logger
 
-func NewLogger(outputs map[string]LogOutput, prefix bool, rotationSettings Settings) *Logger {
-	for _, output := range outputs {
-		if fileOutput, ok := output.(FileOutput); ok {
-			if defaultHandler, ok := fileOutput.Handler.(*DefaultFileHandler); ok {
-				defaultHandler.settings = rotationSettings
-			}
+	// Get options from config
+	opts := GetZapOptions(config)
+
+	// Determine logger type based on configuration
+	switch {
+	case config.FilePath != "" && config.Development:
+		// Case 1: Development mode with file path - use tee logger (console AND file)
+		// Always prioritize development mode with tee logger when file path is provided
+		// Default rotation config if not provided
+		rc := DefaultRotationConfig()
+		if len(rotationConfig) > 0 {
+			rc = rotationConfig[0]
 		}
+
+		// Get encoder configs for console and file
+		consoleEncoderConfig := GetEncoderConfig(config, true) // true for console
+		fileEncoderConfig := GetEncoderConfig(config, false)   // false for file
+
+		// Create encoders
+		consoleEncoder := CreateEncoder(config, consoleEncoderConfig)
+		fileEncoder := CreateEncoder(config, fileEncoderConfig)
+
+		// Console output
+		consoleOutput := zapcore.AddSync(os.Stdout)
+
+		// Ensure directory exists
+		dir := filepath.Dir(config.FilePath)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("failed to create log directory: %w", err)
+		}
+
+		// File output with rotation
+		fileOutput := zapcore.AddSync(&lumberjack.Logger{
+			Filename:   config.FilePath,
+			MaxSize:    rc.MaxSize,
+			MaxBackups: rc.MaxBackups,
+			MaxAge:     rc.MaxAge,
+			Compress:   rc.Compress,
+		})
+
+		// Create cores
+		consoleCore := zapcore.NewCore(consoleEncoder, consoleOutput, zap.NewAtomicLevelAt(level))
+		fileCore := zapcore.NewCore(fileEncoder, fileOutput, zap.NewAtomicLevelAt(level))
+
+		// Combine cores
+		core := zapcore.NewTee(consoleCore, fileCore)
+		zapLogger = zap.New(core, opts...)
+
+	case config.FilePath != "" && len(rotationConfig) > 0:
+		// Case 2: File output with rotation configuration (non-development mode)
+		// Get encoder config for file
+		encoderConfig := GetEncoderConfig(config, false) // false for file
+
+		// Create encoder
+		encoder := CreateEncoder(config, encoderConfig)
+
+		// Create the core
+		core, coreErr := CreateRotatingFileCore(config.FilePath, encoder, level, rotationConfig[0])
+		if coreErr != nil {
+			return nil, coreErr
+		}
+
+		// Create logger
+		zapLogger = zap.New(core, opts...)
+
+	default:
+		// Case 3: Simple logger (console only)
+		// Get encoder config for console
+		encoderConfig := GetEncoderConfig(config, true) // true for console
+
+		// Create encoder
+		encoder := CreateEncoder(config, encoderConfig)
+
+		// Create output
+		output := zapcore.AddSync(os.Stdout)
+
+		// Create core
+		core := zapcore.NewCore(encoder, output, zap.NewAtomicLevelAt(level))
+		zapLogger = zap.New(core, opts...)
 	}
 
 	return &Logger{
-		Outputs: outputs,
-		Prefix:  prefix,
+		zap:    zapLogger,
+		sugar:  zapLogger.Sugar(),
+		config: config,
+	}, nil
+}
+
+// Named returns a new logger with the given name
+func (l *Logger) Named(name string) *Logger {
+	return &Logger{
+		zap:    l.zap.Named(name),
+		sugar:  l.zap.Named(name).Sugar(),
+		config: l.config,
 	}
 }
 
-func (l *Logger) Write(p []byte) (n int, err error) {
-	message := string(p)
-	for _, output := range l.Outputs {
-		log := Log{
-			Level:   INFO,
-			Time:    time.Now(),
-			Message: message,
-		}
-		output.WriteLog(log, l.Prefix)
-	}
-	return len(p), nil
-}
-
-func (l *Logger) Log(channel, message string, level int) {
-	if output, exists := l.Outputs[channel]; exists {
-		log := Log{
-			Level:   level,
-			Time:    time.Now(),
-			Message: message,
-		}
-		output.WriteLog(log, l.Prefix)
-	} else {
-		fmt.Fprintf(os.Stderr, "Unknown log channel: %s\n", channel)
+// With returns a new logger with the given fields added to the logging context
+func (l *Logger) With(fields ...interface{}) *Logger {
+	return &Logger{
+		zap:    l.zap,
+		sugar:  l.sugar.With(fields...),
+		config: l.config,
 	}
 }
 
-func (l *Logger) Info(channel, format string, a ...interface{}) {
-	l.log(channel, INFO, format, a...)
+// Sync flushes any buffered log entries
+func (l *Logger) Sync() error {
+	return l.zap.Sync()
 }
 
-func (l *Logger) Warning(channel, format string, a ...interface{}) {
-	l.log(channel, WARNING, format, a...)
-}
-
-func (l *Logger) Error(channel, format string, a ...interface{}) {
-	l.log(channel, ERROR, format, a...)
-}
-
-func (l *Logger) Debug(channel, format string, a ...interface{}) {
-	l.log(channel, DEBUG, format, a...)
-}
-
-func (l *Logger) log(channel string, level int, format string, a ...interface{}) {
-	message := fmt.Sprintf(format, a...)
-	l.Log(channel, message, level)
+// GetZapLogger returns the underlying zap.Logger
+// Useful if you need to use Zap directly
+func (l *Logger) GetZapLogger() *zap.Logger {
+	return l.zap
 }

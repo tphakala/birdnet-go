@@ -5,13 +5,14 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // allowedFileTypes is the list of file extensions that are allowed to be deleted
@@ -32,8 +33,21 @@ type Interface interface {
 	GetLockedNotesClipPaths() ([]string, error)
 }
 
+// diskLogger is a named logger for disk operations
+var diskLogger *logger.Logger
+
+// InitLogger initializes the diskmanager logger
+func InitLogger() {
+	diskLogger = logger.GetGlobal().Named("diskmanager")
+}
+
 // LoadPolicy loads the cleanup policies from a CSV file
 func LoadPolicy(policyFile string) (*Policy, error) {
+	// Initialize logger if it hasn't been initialized
+	if diskLogger == nil {
+		InitLogger()
+	}
+
 	file, err := os.Open(policyFile)
 	if err != nil {
 		return nil, err
@@ -67,6 +81,11 @@ func LoadPolicy(policyFile string) (*Policy, error) {
 
 // GetAudioFiles returns a list of audio files in the directory and its subdirectories
 func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug bool) ([]FileInfo, error) {
+	// Initialize logger if it hasn't been initialized
+	if diskLogger == nil {
+		InitLogger()
+	}
+
 	var files []FileInfo
 
 	// Get list of protected clips from database
@@ -76,7 +95,7 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 	}
 
 	if debug {
-		log.Printf("Found %d protected clips", len(lockedClips))
+		diskLogger.Debug("Found protected clips", "count", len(lockedClips))
 	}
 
 	err = filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
@@ -161,6 +180,11 @@ func contains(slice []string, item string) bool {
 
 // WriteSortedFilesToFile writes the sorted list of files to a text file for investigation
 func WriteSortedFilesToFile(files []FileInfo, filePath string) error {
+	// Initialize logger if it hasn't been initialized
+	if diskLogger == nil {
+		InitLogger()
+	}
+
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
@@ -180,7 +204,7 @@ func WriteSortedFilesToFile(files []FileInfo, filePath string) error {
 		return fmt.Errorf("failed to sync file: %w", err)
 	}
 
-	log.Printf("Sorted files have been written to %s", filePath)
+	diskLogger.Info("Sorted files written", "file_path", filePath)
 	return nil
 }
 
