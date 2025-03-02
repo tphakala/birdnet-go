@@ -56,123 +56,202 @@ func checkWritePermission(path string) error {
 }
 
 // createBackup creates a timestamped backup of the SQLite database file
-func (s *SQLiteStore) createBackup(dbPath string) error {
-	// Check if source database exists
+func createBackup(dbPath string) error {
+	// Only create a backup if the file exists
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		return nil // No need to backup if database doesn't exist yet
+		return nil
 	}
 
-	// Get database file size
-	dbInfo, err := os.Stat(dbPath)
-	if err != nil {
-		return fmt.Errorf("failed to get database file info: %w", err)
-	}
-
-	// Check available disk space
-	availableSpace, err := getDiskSpace(dbPath)
-	if err != nil {
-		return err
-	}
-
-	requiredSpace := uint64(dbInfo.Size()) + 1024*1024 // Add 1MB buffer
-
-	if availableSpace < requiredSpace {
-		return fmt.Errorf("insufficient disk space for backup. Required: %d bytes, Available: %d bytes", requiredSpace, availableSpace)
-	}
-
-	// Check if we have write permissions in the backup directory
-	if err := checkWritePermission(dbPath); err != nil {
-		return err
-	}
-
-	// Create timestamp for backup file
+	// Create timestamp for backup filename
 	timestamp := time.Now().Format("20060102_150405")
-	backupPath := fmt.Sprintf("%s.backup_%s", dbPath, timestamp)
+	backupPath := fmt.Sprintf("%s.backup.%s", dbPath, timestamp)
 
 	// Open source file
 	source, err := os.Open(dbPath)
 	if err != nil {
-		return fmt.Errorf("failed to open source database: %w", err)
+		return fmt.Errorf("failed to open source file: %w", err)
 	}
 	defer source.Close()
 
-	// Create backup file
+	// Create destination file
 	destination, err := os.Create(backupPath)
 	if err != nil {
 		return fmt.Errorf("failed to create backup file: %w", err)
 	}
 	defer destination.Close()
 
-	// Copy the file
-	if _, err := io.Copy(destination, source); err != nil {
-		return fmt.Errorf("failed to copy database: %w", err)
+	// Copy the contents
+	_, err = io.Copy(destination, source)
+	if err != nil {
+		return fmt.Errorf("failed to copy file: %w", err)
 	}
 
-	log.Printf("Created database backup: %s", backupPath)
 	return nil
 }
 
 // Open initializes the SQLite database connection
-func (s *SQLiteStore) Open() error {
-	// Get database path from settings
-	dbPath := s.Settings.Output.SQLite.Path
-
-	// Create database directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		return fmt.Errorf("failed to create database directory: %w", err)
-	}
-
-	// Configure GORM logger
-	gormLogger := createGormLogger()
-
-	// Open SQLite database with GORM
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
-		Logger: gormLogger,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to open SQLite database: %w", err)
-	}
-
-	// Set SQLite pragmas for better performance
-	sqlDB, err := db.DB()
-	if err != nil {
-		return fmt.Errorf("failed to get underlying *sql.DB: %w", err)
-	}
-
-	// Set pragmas
-	pragmas := []string{
-		"PRAGMA foreign_keys=ON",    // required for foreign key constraints
-		"PRAGMA journal_mode=WAL",   // faster writes
-		"PRAGMA synchronous=NORMAL", // faster writes
-		"PRAGMA cache_size=-4000",   // increase cache size
-		"PRAGMA temp_store=MEMORY",  // faster writes
-	}
-
-	for _, pragma := range pragmas {
-		if _, err := sqlDB.Exec(pragma); err != nil {
-			log.Printf("Warning: Failed to set pragma %s: %v", pragma, err)
-		}
-	}
-
-	// Store the database connection
-	s.DB = db
-
-	// Perform auto-migration
-	if err := performAutoMigration(db, s.Settings.Debug, "SQLite", dbPath); err != nil {
+func (store *SQLiteStore) Open() error {
+	if err := validateSQLiteConfig(); err != nil {
 		return err
 	}
 
-	return nil
+	// Get a component-specific logger
+	sqliteLogger := store.getDbLogger("sqlite")
+
+	dbPath := store.Settings.Output.SQLite.Path
+	if dbPath == "" {
+		// Use default path: config directory + filename
+		configDirs, err := conf.GetDefaultConfigPaths()
+		if err != nil {
+			if sqliteLogger != nil {
+				sqliteLogger.Error("Failed to get config paths", "error", err)
+			}
+			return fmt.Errorf("failed to get config paths: %w", err)
+		}
+
+		if len(configDirs) == 0 {
+			return fmt.Errorf("no config directories found")
+		}
+
+		dbPath = filepath.Join(configDirs[0], "birdnet.db")
+	}
+
+	// Make sure the parent directory exists
+	parentDir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(parentDir, 0o755); err != nil {
+		if sqliteLogger != nil {
+			sqliteLogger.Error("Failed to create parent directory",
+				"path", parentDir,
+				"error", err)
+		}
+		return fmt.Errorf("failed to create parent directory %s: %w", parentDir, err)
+	}
+
+	// Check if we have write permissions
+	if err := checkWritePermission(dbPath); err != nil {
+		if sqliteLogger != nil {
+			sqliteLogger.Error("No write permission",
+				"path", dbPath,
+				"error", err)
+		}
+		return fmt.Errorf("no write permission for %s: %w", dbPath, err)
+	}
+
+	// Check if there is enough disk space
+	requiredSpace := uint64(100 * 1024 * 1024) // 100 MB
+	availableSpace, err := getDiskSpace(dbPath)
+	if err != nil {
+		if sqliteLogger != nil {
+			sqliteLogger.Warn("Failed to get disk space",
+				"path", dbPath,
+				"error", err)
+		} else {
+			log.Printf("Warning: Failed to get disk space: %v", err)
+		}
+	} else if availableSpace < requiredSpace {
+		if sqliteLogger != nil {
+			sqliteLogger.Warn("Low disk space",
+				"path", dbPath,
+				"available_mb", availableSpace/1024/1024,
+				"required_mb", requiredSpace/1024/1024)
+		} else {
+			log.Printf("Warning: Low disk space (%d MB available, %d MB required)", availableSpace/1024/1024, requiredSpace/1024/1024)
+		}
+	}
+
+	// Create a backup of the database if it exists and is larger than 1 MB
+	if _, err := os.Stat(dbPath); err == nil {
+		fi, err := os.Stat(dbPath)
+		if err == nil && fi.Size() > 1024*1024 {
+			if err := createBackup(dbPath); err != nil {
+				if sqliteLogger != nil {
+					sqliteLogger.Warn("Failed to create database backup",
+						"path", dbPath,
+						"error", err)
+				} else {
+					log.Printf("Warning: Failed to create database backup: %v", err)
+				}
+			}
+		}
+	}
+
+	// Create a new GORM logger
+	newLogger := createGormLogger(store.Logger)
+
+	// Configure the SQLite database
+	config := &gorm.Config{
+		Logger: newLogger,
+	}
+
+	// Open the SQLite database
+	db, err := gorm.Open(sqlite.Open(dbPath+"?_journal=WAL&_timeout=5000"), config)
+	if err != nil {
+		if sqliteLogger != nil {
+			sqliteLogger.Error("Failed to open SQLite database",
+				"path", dbPath,
+				"error", err)
+		} else {
+			log.Printf("Failed to open SQLite database: %v\n", err)
+		}
+		return fmt.Errorf("failed to open SQLite database: %w", err)
+	}
+
+	// Set connection pool settings
+	sqlDB, err := db.DB()
+	if err != nil {
+		if sqliteLogger != nil {
+			sqliteLogger.Error("Failed to get database connection",
+				"error", err)
+		} else {
+			log.Printf("Failed to get database connection: %v\n", err)
+		}
+		return fmt.Errorf("failed to get database connection: %w", err)
+	}
+
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetMaxOpenConns(50)
+	sqlDB.SetConnMaxLifetime(time.Hour)
+
+	store.DB = db
+	return performAutoMigration(db, store.Settings.Debug, "SQLite", dbPath, store.Logger)
 }
 
 // Close closes the SQLite database connection
-func (s *SQLiteStore) Close() error {
-	if s.DB != nil {
-		sqlDB, err := s.DB.DB()
-		if err != nil {
-			return fmt.Errorf("failed to get underlying *sql.DB: %w", err)
+func (store *SQLiteStore) Close() error {
+	// Get a component-specific logger
+	sqliteLogger := store.getDbLogger("sqlite")
+
+	// Ensure that the store's DB field is not nil to avoid a panic
+	if store.DB == nil {
+		if sqliteLogger != nil {
+			sqliteLogger.Error("Database connection is not initialized")
 		}
-		return sqlDB.Close()
+		return fmt.Errorf("database connection is not initialized")
+	}
+
+	// Retrieve the generic database object from the GORM DB object
+	sqlDB, err := store.DB.DB()
+	if err != nil {
+		if sqliteLogger != nil {
+			sqliteLogger.Error("Failed to retrieve generic DB object", "error", err)
+		} else {
+			log.Printf("Failed to retrieve generic DB object: %v\n", err)
+		}
+		return err
+	}
+
+	// Close the generic database object, which closes the underlying SQL database connection
+	if err := sqlDB.Close(); err != nil {
+		if sqliteLogger != nil {
+			sqliteLogger.Error("Failed to close SQLite database", "error", err)
+		} else {
+			log.Printf("Failed to close SQLite database: %v\n", err)
+		}
+		return err
+	}
+
+	if sqliteLogger != nil && store.Settings.Debug {
+		sqliteLogger.Debug("SQLite database connection closed successfully")
 	}
 	return nil
 }

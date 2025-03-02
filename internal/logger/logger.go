@@ -101,9 +101,7 @@ func (l *Logger) Fatal(msg string, fields ...interface{}) {
 func NewLogger(config Config, rotationConfig ...RotationConfig) (*Logger, error) {
 	// Log development mode status
 	if config.Development {
-		log.Println("🚨 DEBUG: Development mode enabled")
-	} else {
-		log.Println("🚨 DEBUG: Development mode disabled")
+		log.Println("🚨 Development mode enabled")
 	}
 
 	// Determine the log level

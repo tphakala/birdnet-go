@@ -11,8 +11,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // StoreInterface abstracts the underlying database implementation and defines the interface for database operations.
@@ -62,14 +63,30 @@ type Interface interface {
 	GetHourlyAnalyticsData(date string, species string) ([]HourlyAnalyticsData, error)
 	GetDailyAnalyticsData(startDate, endDate string, species string) ([]DailyAnalyticsData, error)
 	GetDetectionTrends(period string, limit int) ([]DailyAnalyticsData, error)
+	SetLogger(logger *logger.Logger)
 }
 
 // DataStore implements StoreInterface using a GORM database.
 type DataStore struct {
-	DB *gorm.DB // GORM database instance
+	DB     *gorm.DB       // GORM database instance
+	Logger *logger.Logger // Structured logger
 }
 
-// NewDataStore creates a new DataStore instance based on the provided configuration context.
+// SetLogger sets the logger for the DataStore
+func (ds *DataStore) SetLogger(logger *logger.Logger) {
+	ds.Logger = logger
+}
+
+// getDbLogger returns a component-specific logger for database operations
+func (ds *DataStore) getDbLogger(operation string) *logger.Logger {
+	if ds.Logger == nil {
+		return nil
+	}
+
+	return ds.Logger.Named("db." + operation)
+}
+
+// New creates a new DataStore instance based on the provided configuration context.
 func New(settings *conf.Settings) Interface {
 	switch {
 	case settings.Output.SQLite.Enabled:
@@ -90,6 +107,9 @@ func New(settings *conf.Settings) Interface {
 func (ds *DataStore) Save(note *Note, results []Results) error {
 	// Generate a unique transaction ID (first 8 chars of UUID)
 	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
+
+	// Get a transaction-specific logger
+	txLogger := ds.getDbLogger("save")
 
 	// Retry configuration
 	maxRetries := 5
@@ -146,7 +166,15 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 		if err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
 				delay := baseDelay * time.Duration(attempt+1)
-				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				if txLogger != nil {
+					txLogger.Warn("Database locked, retrying transaction",
+						"tx_id", txID,
+						"attempt", attempt+1,
+						"max_attempts", maxRetries,
+						"delay_ms", delay.Milliseconds())
+				} else {
+					log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				}
 				time.Sleep(delay)
 				lastErr = err
 				continue
@@ -156,14 +184,25 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 
 		// Log if retry count is not 0 and transaction was successful
 		if attempt > 0 {
-			log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
+			if txLogger != nil {
+				txLogger.Info("Database transaction successful after retries",
+					"tx_id", txID,
+					"attempts", attempt+1)
+			} else {
+				log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
+			}
 		}
 
 		// If we get here, the transaction was successful
 		return nil
 	}
 
-	// If we've exhausted all retries
+	if txLogger != nil {
+		txLogger.Error("All transaction attempts failed",
+			"tx_id", txID,
+			"max_attempts", maxRetries,
+			"error", lastErr)
+	}
 	return fmt.Errorf("[%s] failed after %d attempts: %w", txID, maxRetries, lastErr)
 }
 
@@ -593,7 +632,7 @@ func (ds *DataStore) GetNoteReview(noteID string) (*NoteReview, error) {
 
 	// Use Session to temporarily modify logger config for this query
 	err = ds.DB.Session(&gorm.Session{
-		Logger: ds.DB.Logger.LogMode(logger.Silent),
+		Logger: ds.DB.Logger.LogMode(gormlogger.Silent),
 	}).Where("note_id = ?", id).First(&review).Error
 
 	if err != nil {
@@ -767,6 +806,9 @@ func (ds *DataStore) LockNote(noteID string) error {
 	// Generate a unique transaction ID (first 8 chars of UUID)
 	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
 
+	// Get a lock-specific logger
+	lockLogger := ds.getDbLogger("lock")
+
 	// Retry configuration
 	maxRetries := 5
 	baseDelay := 500 * time.Millisecond
@@ -786,7 +828,16 @@ func (ds *DataStore) LockNote(noteID string) error {
 		if result.Error != nil {
 			if strings.Contains(strings.ToLower(result.Error.Error()), "database is locked") {
 				delay := baseDelay * time.Duration(attempt+1)
-				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				if lockLogger != nil {
+					lockLogger.Warn("Database locked, retrying lock operation",
+						"tx_id", txID,
+						"note_id", noteID,
+						"attempt", attempt+1,
+						"max_attempts", maxRetries,
+						"delay_ms", delay.Milliseconds())
+				} else {
+					log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				}
 				time.Sleep(delay)
 				lastErr = result.Error
 				continue
@@ -796,11 +847,25 @@ func (ds *DataStore) LockNote(noteID string) error {
 
 		// If we get here, the transaction was successful
 		if attempt > 0 {
-			log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
+			if lockLogger != nil {
+				lockLogger.Info("Lock operation successful after retries",
+					"tx_id", txID,
+					"note_id", noteID,
+					"attempts", attempt+1)
+			} else {
+				log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
+			}
 		}
 		return nil
 	}
 
+	if lockLogger != nil {
+		lockLogger.Error("All lock attempts failed",
+			"tx_id", txID,
+			"note_id", noteID,
+			"max_attempts", maxRetries,
+			"error", lastErr)
+	}
 	return fmt.Errorf("[%s] failed after %d attempts: %w", txID, maxRetries, lastErr)
 }
 
@@ -813,6 +878,9 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 
 	// Generate a unique transaction ID (first 8 chars of UUID)
 	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
+
+	// Get an unlock-specific logger
+	unlockLogger := ds.getDbLogger("unlock")
 
 	// Retry configuration
 	maxRetries := 5
@@ -834,7 +902,16 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 		if result.Error != nil {
 			if strings.Contains(strings.ToLower(result.Error.Error()), "database is locked") {
 				delay := baseDelay * time.Duration(attempt+1)
-				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				if unlockLogger != nil {
+					unlockLogger.Warn("Database locked, retrying unlock operation",
+						"tx_id", txID,
+						"note_id", noteID,
+						"attempt", attempt+1,
+						"max_attempts", maxRetries,
+						"delay_ms", delay.Milliseconds())
+				} else {
+					log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				}
 				time.Sleep(delay)
 				lastErr = result.Error
 				continue
@@ -844,11 +921,25 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 
 		// If we get here, the transaction was successful
 		if attempt > 0 {
-			log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
+			if unlockLogger != nil {
+				unlockLogger.Info("Unlock operation successful after retries",
+					"tx_id", txID,
+					"note_id", noteID,
+					"attempts", attempt+1)
+			} else {
+				log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
+			}
 		}
 		return nil
 	}
 
+	if unlockLogger != nil {
+		unlockLogger.Error("All unlock attempts failed",
+			"tx_id", txID,
+			"note_id", noteID,
+			"max_attempts", maxRetries,
+			"error", lastErr)
+	}
 	return fmt.Errorf("[%s] failed after %d attempts: %w", txID, maxRetries, lastErr)
 }
 
@@ -856,7 +947,7 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 func (ds *DataStore) GetImageCache(scientificName string) (*ImageCache, error) {
 	var cache ImageCache
 	// Use Session to disable logging for this query
-	err := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
+	err := ds.DB.Session(&gorm.Session{Logger: gormlogger.Default.LogMode(gormlogger.Silent)}).
 		Where("scientific_name = ?", scientificName).First(&cache).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -873,7 +964,7 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 		return fmt.Errorf("cache cannot be nil")
 	}
 
-	result := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
+	result := ds.DB.Session(&gorm.Session{Logger: gormlogger.Default.LogMode(gormlogger.Silent)}).
 		Where("scientific_name = ?", cache.ScientificName).
 		Assign(*cache).
 		FirstOrCreate(cache)
@@ -887,7 +978,7 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 // GetAllImageCaches retrieves all image cache entries
 func (ds *DataStore) GetAllImageCaches() ([]ImageCache, error) {
 	var caches []ImageCache
-	if err := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
+	if err := ds.DB.Session(&gorm.Session{Logger: gormlogger.Default.LogMode(gormlogger.Silent)}).
 		Find(&caches).Error; err != nil {
 		return nil, fmt.Errorf("error getting all image caches: %w", err)
 	}
