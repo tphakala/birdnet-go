@@ -13,7 +13,6 @@ This package provides a lightweight wrapper around Uber's Zap logging library to
 - Context-based logging with fields
 - Named loggers for different components
 - File output support with rotation capabilities (using lumberjack)
-- **Unified initialization** with a single function for all logger types
 
 ## Package Organization
 
@@ -21,7 +20,6 @@ The logger package is organized into several files for maintainability:
 
 - **config.go** - Configuration structures and helpers
 - **logger.go** - Core logger implementation
-- **global.go** - Global logger instance and functions
 - **rotation.go** - Log rotation functionality
 - **testing.go** - Testing utilities and helpers
 
@@ -33,22 +31,29 @@ The logger package is organized into several files for maintainability:
 import "github.com/tphakala/birdnet-go/internal/logger"
 ```
 
-### Use the global logger
+### Create and use a logger
 
-The package provides global functions for common logging operations:
+The package provides a simple way to create and use a logger:
 
 ```go
-// These use the default global logger
-logger.Info("Application starting", "version", "1.0.0")
-logger.Debug("Debug information", "details", details)
-logger.Warn("Resource running low", "resource", "memory", "available", "10MB")
-logger.Error("Operation failed", "error", err)
-logger.Fatal("Cannot continue execution", "error", err) // Also calls os.Exit(1)
+// Create a new logger with default configuration
+config := logger.DefaultConfig()
+log, err := logger.NewLogger(config)
+if err != nil {
+    // handle error
+}
+
+// Use the logger
+log.Info("Application starting", "version", "1.0.0")
+log.Debug("Debug information", "details", details)
+log.Warn("Resource running low", "resource", "memory", "available", "10MB")
+log.Error("Operation failed", "error", err)
+log.Fatal("Cannot continue execution", "error", err) // Also calls os.Exit(1)
 ```
 
 ### Create a custom logger
 
-You can create a custom configured logger with the unified initialization method:
+You can create a custom configured logger:
 
 ```go
 // Use helper methods for common configurations
@@ -82,9 +87,9 @@ if config.FilePath != "" {
 log.Info("Using custom logger")
 ```
 
-### Configure the global logger
+### Share a logger across components
 
-You can initialize the global logger with your custom configuration:
+Create a root logger and share it across your application:
 
 ```go
 config := logger.Config{
@@ -95,13 +100,19 @@ config := logger.Config{
     DisableColor: true,
 }
 
-err := logger.InitGlobal(config)
+// Create a root logger
+rootLogger, err := logger.NewLogger(config)
 if err != nil {
     // handle error
 }
 
-// Now global functions will use your configuration
-logger.Info("Application started with custom global logger")
+// Pass it to components
+component1 := NewComponent1(rootLogger.Named("component1"))
+component2 := NewComponent2(rootLogger.Named("component2"))
+
+// Components can use their loggers
+// component1.DoSomething() will log with "component1" prefix
+// component2.DoSomething() will log with "component2" prefix
 ```
 
 ### Structured Logging
@@ -110,7 +121,7 @@ The logger supports structured logging with key-value pairs:
 
 ```go
 // Add structured context to logs
-logger.Info("User logged in", 
+log.Info("User logged in", 
     "user_id", 123, 
     "username", "johnsmith", 
     "login_source", "web",
@@ -123,12 +134,13 @@ You can create named loggers for different components:
 
 ```go
 // Create a named logger
-authLogger := logger.Named("auth")
+authLogger := log.Named("auth")
 authLogger.Info("User authenticated", "user_id", userId)
 
-// Or with the custom logger
+// You can create nested names
 httpLogger := log.Named("http")
-httpLogger.Info("Request processed", "method", "GET", "path", "/api/users")
+apiLogger := httpLogger.Named("api") // Will log as "http.api"
+apiLogger.Info("Request processed", "method", "GET", "path", "/api/users")
 ```
 
 ### With Context
@@ -137,7 +149,7 @@ You can add persistent context to loggers:
 
 ```go
 // Create a logger with context
-userLogger := logger.With("user_id", userId, "session_id", sessionId)
+userLogger := log.With("user_id", userId, "session_id", sessionId)
 
 // These fields will be included in every log message
 userLogger.Info("Profile updated")
@@ -241,16 +253,16 @@ go test github.com/tphakala/birdnet-go/internal/logger -v
 
 1. **Don't forget to Sync**:
    ```go
-   defer logger.Sync() // Flushes buffers on program exit
+   defer log.Sync() // Flushes buffers on program exit
    ```
 
 2. **Use structured logging consistently**:
    ```go
    // Good
-   logger.Info("User created", "id", user.ID, "name", user.Name)
+   log.Info("User created", "id", user.ID, "name", user.Name)
    
    // Avoid
-   logger.Info(fmt.Sprintf("User created: id=%d, name=%s", user.ID, user.Name))
+   log.Info(fmt.Sprintf("User created: id=%d, name=%s", user.ID, user.Name))
    ```
 
 3. **Use appropriate log levels**:
@@ -262,8 +274,8 @@ go test github.com/tphakala/birdnet-go/internal/logger -v
    
 4. **Create component-specific loggers**:
    ```go
-   dbLogger := logger.Named("database")
-   authLogger := logger.Named("auth")
+   dbLogger := log.Named("database")
+   authLogger := log.Named("auth")
    ```
 
 5. **Use helper functions for common configurations**:
@@ -291,7 +303,7 @@ All logging methods (Debug, Info, Warn, Error, Fatal) automatically:
 
 ```go
 // Original code
-logger.Info("User authenticated", 
+log.Info("User authenticated", 
     "username", "john.doe",
     "token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "session_id", "abcdef123456")
@@ -339,12 +351,12 @@ To maintain a unified logging approach across your application, follow these bes
 
 ### 1. Initialize the Logger at the Component Level
 
-Instead of initializing the global logger at the application's entry point, initialize it in the component that needs it first. This helps avoid circular dependencies between packages:
+Initialize logger instances in the components that need them and pass them to child components:
 
 ```go
 // In a component package (e.g., realtime.go)
 func SomeFunction(settings *conf.Settings) error {
-    // Initialize the global logger if not already initialized
+    // Create a logger instance with configuration from settings
     config := logger.Config{
         Level:         viper.GetString("log.level"),
         Development:   settings.Debug,
@@ -354,12 +366,13 @@ func SomeFunction(settings *conf.Settings) error {
         DisableCaller: true,
     }
 
-    if err := logger.InitGlobal(config); err != nil {
+    log, err := logger.NewLogger(config)
+    if err != nil {
         return fmt.Errorf("error initializing logger: %w", err)
     }
     
     // Create a root application logger that will be the parent for all component loggers
-    appLogger := logger.Named("app")
+    appLogger := log.Named("app")
     appLogger.Info("Application starting", "version", viper.GetString("version"))
     
     // Create a component-specific logger as a child of the app logger
@@ -372,12 +385,12 @@ func SomeFunction(settings *conf.Settings) error {
 }
 ```
 
-Here's a real-world example from our application's real-time analysis module:
+Here's a real-world example from the application's real-time analysis module:
 
 ```go
 // From internal/analysis/realtime.go
 func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
-    // Initialize the global logger
+    // Initialize a new logger instance
     config := logger.Config{
         Level:         viper.GetString("log.level"),
         Development:   settings.Debug,
@@ -387,27 +400,24 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
         DisableCaller: true,
     }
 
-    if err := logger.InitGlobal(config); err != nil {
+    // Create a new logger instance, this will be passed to all components
+    logger, err := logger.NewLogger(config)
+    if err != nil {
         return fmt.Errorf("error initializing logger: %w", err)
     }
 
-    // Create an app-level logger first
-    appLogger := logger.Named("birdnet")
-    appLogger.Info("BirdNET-Go starting", "version", viper.GetString("version"))
-    
     // Create a component logger for the realtime analyzer
-    analyzerLogger := appLogger.Named("analyzer")
-    analyzerLogger.Info("Starting real-time analysis")
+    coreLogger := logger.Named("core")
+    coreLogger.Info("Starting real-time analysis")
     
     // Rest of the function...
 }
 ```
 
 This approach ensures that:
-1. The logger is initialized before it's used
-2. Circular dependencies are avoided
-3. Each component gets a properly named logger
-4. The logger hierarchy reflects the application structure
+1. Each component gets a properly configured logger instance
+2. The logger hierarchy reflects the application structure
+3. Dependencies between components are explicit
 
 ### 2. Use Dependency Injection for Component Loggers
 
@@ -416,14 +426,8 @@ Always use constructor injection to pass loggers to components:
 ```go
 // Component constructor with logger injection
 func NewComponent(parentLogger *logger.Logger) *Component {
-    // If a nil logger is provided, fall back to the global logger
-    // but always create a properly named logger for the component
-    var componentLogger *logger.Logger
-    if parentLogger == nil {
-        componentLogger = logger.Named("component")
-    } else {
-        componentLogger = parentLogger.Named("component")
-    }
+    // Create a properly named logger for the component
+    componentLogger := parentLogger.Named("component")
     
     return &Component{
         logger: componentLogger,
@@ -431,7 +435,7 @@ func NewComponent(parentLogger *logger.Logger) *Component {
 }
 ```
 
-Here's a concrete example from our HTTP server component:
+Here's a concrete example from the HTTP server component:
 
 ```go
 // From internal/httpcontroller/server.go
@@ -440,13 +444,7 @@ func NewWithLogger(settings *conf.Settings, dataStore datastore.Interface,
     controlChan chan string, proc *processor.Processor, parentLogger *logger.Logger) *Server {
     
     // Create a server-specific logger
-    var serverLogger *logger.Logger
-    if parentLogger != nil {
-        serverLogger = parentLogger.Named("server")
-    } else {
-        // Fall back to global logger with proper naming if no parent logger provided
-        serverLogger = logger.Named("server")
-    }
+    serverLogger := parentLogger.Named("server")
     
     s := &Server{
         // Other fields...
@@ -456,11 +454,8 @@ func NewWithLogger(settings *conf.Settings, dataStore datastore.Interface,
     // Initialize child components with child loggers
     s.Handlers = handlers.New(
         // Other parameters...
-        nil,  // The handler's logger will be set below
+        serverLogger.Named("handlers"),  // Pass a child logger to handlers
     )
-    
-    // Set our custom logger in the handlers
-    s.Handlers.SetLogger(s.Logger.Named("handlers"))
     
     // Rest of initialization...
     return s
@@ -481,7 +476,7 @@ authLogger := v1Logger.Named("auth")
 authLogger := parentLogger.Named("api.v1.auth")
 ```
 
-Example from our API initialization:
+Example from API initialization:
 
 ```go
 // From internal/httpcontroller/server.go
@@ -521,99 +516,23 @@ requestLogger.Info("Processing request")
 requestLogger.Info("Request completed", "duration_ms", duration)
 ```
 
-### 5. Avoid Logger Fallbacks
-
-Components should always have a properly initialized logger. Checking for nil loggers and falling back to the global logger is unnecessary and creates inconsistent logging patterns:
-
-```go
-// DON'T DO THIS:
-func (c *Component) LogInfo(msg string, fields ...interface{}) {
-    if c.logger != nil {
-        c.logger.Info(msg, fields...)
-    } else {
-        // Fall back to global logger
-        logger.Info(msg, fields...)
-    }
-}
-
-// INSTEAD, ensure loggers are always properly initialized:
-func NewComponent(logger *logger.Logger) *Component {
-    // If no logger is provided, get a named logger from the global instance
-    if logger == nil {
-        logger = logger.Named("component")
-    } else {
-        // Still use the component name for consistency in hierarchical logging
-        logger = logger.Named("component")
-    }
-    
-    return &Component{
-        logger: logger,
-    }
-}
-
-// Then simply use the component's logger directly:
-func (c *Component) DoSomething() {
-    c.logger.Info("Operation started")
-    // ...
-    c.logger.Info("Operation completed")
-}
-```
-
-Real-world example from our HTTP server initialization:
-
-```go
-// From internal/httpcontroller/server_logger.go
-func (s *Server) initLogger() {
-    // ...
-    
-    // Only initialize logger if not already set
-    // This allows NewWithLogger to set a proper parent logger
-    if s.Logger == nil {
-        // Use the global logger with a component name instead of creating a new one
-        // This ensures consistent logging behavior across the application
-        s.Logger = logger.GetGlobal().Named("http")
-        
-        if s.Logger == nil {
-            log.Fatal("Failed to get global logger")
-        }
-    }
-    
-    // ...
-}
-```
-
-### 6. Use Component-Specific Helper Methods
-
-Create component-specific logging methods to ensure consistent logging:
-
-```go
-func (s *Server) createRequestLogger(c echo.Context) *logger.Logger {
-    requestID := c.Response().Header().Get("X-Request-ID")
-    return s.logger.With(
-        "request_id", requestID,
-        "client_ip", c.RealIP(),
-        "method", c.Request().Method,
-        "path", c.Path(),
-    )
-}
-```
-
-### 7. Complete Example: Logger Propagation Through Components
+### 5. Complete Example: Logger Propagation Through Components
 
 Here's a complete example of propagating a logger through multiple components:
 
 ```go
 // Application initialization
 func main() {
-    // Initialize global logger
+    // Create a root logger
     config := logger.DefaultConfig()
-    if err := logger.InitGlobal(config); err != nil {
+    rootLogger, err := logger.NewLogger(config)
+    if err != nil {
         log.Fatalf("Failed to initialize logger: %v", err)
     }
-    defer logger.Sync()
+    defer rootLogger.Sync()
     
-    // Create the root application logger
-    appLogger := logger.Named("app")
+    // Create the named application logger
+    appLogger := rootLogger.Named("app")
     
     // Create a server component with the app logger
     server := NewServer(appLogger.Named("server"))
@@ -629,10 +548,6 @@ type Server struct {
 }
 
 func NewServer(logger *logger.Logger) *Server {
-    if logger == nil {
-        logger = logger.Named("server")
-    }
-    
     // Create API with a sub-logger
     api := NewAPI(logger.Named("api"))
     
@@ -648,245 +563,40 @@ type API struct {
 }
 
 func NewAPI(logger *logger.Logger) *API {
-    // Ensure there's always a valid logger
-    if logger == nil {
-        logger = logger.Named("api")
-    } else {
-        logger = logger.Named("api")
-    }
-    
     return &API{
         logger: logger,
     }
 }
 ```
 
-### 8. Migrating from Global Logger to Dependency Injection
+### 6. Handling Nil Loggers
 
-When refactoring an existing application to use proper logger dependency injection:
-
-1. **Start at the application entry point**:
-   ```go
-   // In your main or initialization function
-   appLogger := logger.Named("app")
-   ```
-
-2. **Add logger parameters to constructors**:
-   ```go
-   // Before
-   func NewComponent(config Config) *Component
-   
-   // After
-   func NewComponent(config Config, logger *logger.Logger) *Component
-   ```
-
-3. **Maintain backward compatibility** by providing overloaded constructors:
-   ```go
-   // Legacy constructor
-   func New(settings *conf.Settings, ...) *Server {
-       // Create instance without explicit logger
-       return NewWithLogger(settings, ..., nil)
-   }
-   
-   // New constructor with logger parameter
-   func NewWithLogger(settings *conf.Settings, ..., parentLogger *logger.Logger) *Server {
-       // Create server with proper logger hierarchy
-   }
-   ```
-
-4. **Gradually replace global logger usage** with component loggers:
-   ```go
-   // Before
-   logger.Info("Operation completed", "duration", duration)
-   
-   // After
-   s.logger.Info("Operation completed", "duration", duration)
-   ```
-
-5. **Update component initialization methods** to respect logger hierarchy:
-   ```go
-   // Example from our server's logger initialization
-   func (s *Server) initLogger() {
-       // Only initialize if not already provided by constructor
-       if s.Logger == nil {
-           s.Logger = logger.GetGlobal().Named("http")
-       }
-       
-       // The rest of the method that uses s.Logger
-       // ...
-   }
-   ```
-
-This migration approach allows for incremental improvements without breaking existing code.
-
-## Common Issues and Solutions
-
-### 1. Logger is nil
-
-**Problem**: When using a logger from a component, you get a nil pointer panic:
-```
-panic: runtime error: invalid memory address or nil pointer dereference
-```
-
-**Solution**: Always initialize a component's logger, even when a parent logger is not provided:
+To ensure robustness, handle cases where a nil logger might be passed:
 
 ```go
-func NewComponent(parentLogger *logger.Logger) *Component {
-    var componentLogger *logger.Logger
-    if parentLogger == nil {
-        // Fall back to a named global logger
-        componentLogger = logger.Named("component")
+func NewComponent(logger *logger.Logger) *Component {
+    // Create a new logger if none is provided
+    if logger == nil {
+        // Create a new default logger
+        config := logger.DefaultConfig()
+        newLogger, err := logger.NewLogger(config)
+        if err != nil {
+            // Fall back to standard log in the worst case
+            log.Println("Warning: Failed to create logger, using standard log")
+            // You might want to create a wrapper around standard log that
+            // implements the same interface as your logger
+        } else {
+            logger = newLogger.Named("component")
+        }
     } else {
-        // Create a child of the parent logger
-        componentLogger = parentLogger.Named("component")
+        logger = logger.Named("component")
     }
     
     return &Component{
-        logger: componentLogger,
+        logger: logger,
     }
 }
 ```
-
-### 2. Inconsistent Logger Names
-
-**Problem**: Log messages have inconsistent component names or missing context.
-
-**Solution**: Establish and follow a naming convention for loggers:
-
-```go
-// Main app logger
-appLogger := logger.Named("app")
-
-// Component loggers - use consistent naming patterns
-serverLogger := appLogger.Named("server")
-apiLogger := serverLogger.Named("api") // Results in "app.server.api"
-
-// Alternative - use direct dot notation for clarity
-databaseLogger := logger.Named("app.database")
-```
-
-### 3. Missing Component Hierarchy
-
-**Problem**: Logs don't show clear component relationships, making it difficult to trace request flows.
-
-**Solution**: Use a consistent hierarchical naming pattern and pass parent loggers to child components:
-
-```go
-// Setup:
-appLogger := logger.Named("app")
-serverLogger := appLogger.Named("server")
-
-// Usage in a handler method:
-func (s *Server) HandleRequest(req *Request) {
-    // Create a request-specific logger
-    reqLogger := s.logger.With(
-        "request_id", req.ID,
-        "method", req.Method,
-        "path", req.Path,
-    )
-    
-    // Pass this logger to any components handling this request
-    result, err := s.processor.Process(req, reqLogger.Named("processor"))
-    
-    // Now all logs from the processor will have the request context
-    // and will show "app.server.processor" as the component
-}
-```
-
-### 4. Duplicate Log Messages
-
-**Problem**: The same event is being logged multiple times, often with different formats.
-
-**Solution**: Ensure each component only logs events it directly handles, and pass the logger to subcomponents:
-
-```go
-// Before - logging in multiple places
-func (s *Server) ProcessRequest(req *Request) {
-    s.logger.Info("Processing request", "id", req.ID)
-    
-    // Processor also logs the same thing
-    result := s.processor.Process(req)
-    
-    s.logger.Info("Request processed", "id", req.ID)
-    return result
-}
-
-// After - pass context-aware logger to subcomponents
-func (s *Server) ProcessRequest(req *Request) {
-    reqLogger := s.logger.With("request_id", req.ID)
-    reqLogger.Info("Processing request")
-    
-    // Pass the logger with request context
-    result := s.processor.ProcessWithLogger(req, reqLogger.Named("processor"))
-    
-    reqLogger.Info("Request processed")
-    return result
-}
-```
-
-### 5. Logging Structure Doesn't Match Component Structure
-
-**Problem**: The logger naming hierarchy doesn't match the actual component hierarchy in the code.
-
-**Solution**: Make your logger naming reflect your application's architectural structure:
-
-```go
-// Application structure:
-// - App
-//   - API Server
-//     - Auth Service
-//     - User Service
-//   - Background Processor
-
-// Logger hierarchy should match:
-appLogger := logger.Named("app")
-apiLogger := appLogger.Named("api")
-authLogger := apiLogger.Named("auth")
-userLogger := apiLogger.Named("user")
-procLogger := appLogger.Named("processor")
-```
-
-### 6. Logger Fallback Anti-patterns
-
-**Problem**: Components checking for nil loggers and falling back to different loggers.
-
-**Solution**: Standardize logger initialization in constructors and initialization methods:
-
-```go
-// Anti-pattern
-func (c *Component) LogError(err error) {
-    if c.logger != nil {
-        c.logger.Error("Error occurred", "error", err)
-    } else if globalLogger != nil {
-        globalLogger.Error("Component error", "error", err)
-    } else {
-        log.Printf("Error: %v", err)
-    }
-}
-
-// Better approach
-func NewComponent(cfg Config, parentLogger *logger.Logger) *Component {
-    // Standard logger initialization pattern
-    var componentLogger *logger.Logger
-    if parentLogger != nil {
-        componentLogger = parentLogger.Named("component")
-    } else {
-        componentLogger = logger.Named("component")
-    }
-    
-    return &Component{
-        config: cfg,
-        logger: componentLogger,
-    }
-}
-
-// Then simply use the component's logger directly
-func (c *Component) LogError(err error) {
-    c.logger.Error("Error occurred", "error", err)
-}
-```
-
-By consistently following these patterns, your application will have cleaner, more maintainable logging that correctly reflects your application structure.
 
 ## Cross-Platform Considerations
 
@@ -986,7 +696,7 @@ func setupSignalHandler() {
                 // ...
             } else {
                 // Handle graceful shutdown
-                logger.Sync() // Flush logs before exit
+                log.Sync() // Flush logs before exit
                 os.Exit(0)
             }
         }

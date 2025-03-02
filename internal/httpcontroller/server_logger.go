@@ -60,18 +60,6 @@ func (s *Server) initLogger() {
 		fmt.Println("Logger initialized in DEVELOPMENT mode (debug level enabled)")
 	}
 
-	// Only initialize logger if not already set
-	// This allows NewWithLogger to set a proper parent logger
-	if s.Logger == nil {
-		// Use the global logger with a component name instead of creating a new one
-		// This ensures consistent logging behavior across the application
-		s.Logger = logger.GetGlobal().Named("http")
-
-		if s.Logger == nil {
-			log.Fatal("Failed to get global logger")
-		}
-	}
-
 	// Create a writer adapter for Echo's logger
 	// Echo expects an io.Writer, but our logger doesn't implement that interface directly
 	echoLogWriter := &echoLogAdapter{logger: s.Logger}

@@ -48,9 +48,6 @@ func NewWikiMediaProvider(parentLogger *logger.Logger) (*wikiMediaProvider, erro
 	var componentLogger *logger.Logger
 	if parentLogger != nil {
 		componentLogger = parentLogger.Named("imageprovider.wikipedia")
-	} else {
-		// Fallback to global logger (will be removed after migration)
-		componentLogger = logger.GetGlobal().Named("imageprovider.wikipedia")
 	}
 
 	// Rate limit: 10 requests per second with burst of 10

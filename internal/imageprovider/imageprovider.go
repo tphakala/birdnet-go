@@ -215,9 +215,6 @@ func InitCache(e ImageProvider, t *telemetry.Metrics, store datastore.Interface,
 	var componentLogger *logger.Logger
 	if parentLogger != nil {
 		componentLogger = parentLogger.Named("imageprovider.cache")
-	} else {
-		// Fallback to global logger (will be removed after migration)
-		componentLogger = logger.GetGlobal().Named("imageprovider.cache")
 	}
 
 	quit := make(chan struct{})

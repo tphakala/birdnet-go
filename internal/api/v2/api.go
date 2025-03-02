@@ -131,9 +131,6 @@ func InitializeAPI(
 	if loggerInstance != nil {
 		// Use the provided logger and create a component-specific logger
 		apiLogger = loggerInstance.Named("api.v2")
-	} else {
-		// Use the global logger if no specific logger was provided
-		apiLogger = logger.Named("api.v2")
 	}
 
 	// Create new API controller with our structured logger

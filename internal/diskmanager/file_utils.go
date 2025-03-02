@@ -46,9 +46,6 @@ func NewDiskManager(parentLogger *logger.Logger, db Interface) *DiskManager {
 	var componentLogger *logger.Logger
 	if parentLogger != nil {
 		componentLogger = parentLogger.Named("diskmanager")
-	} else {
-		// This fallback will be removed once global logger is gone
-		componentLogger = logger.GetGlobal().Named("diskmanager")
 	}
 
 	return &DiskManager{

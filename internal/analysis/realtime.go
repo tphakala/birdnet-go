@@ -43,7 +43,9 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		DisableCaller: true,
 	}
 
-	if err := logger.InitGlobal(config); err != nil {
+	// Create a new logger instance, this will be passed to all components
+	logger, err := logger.NewLogger(config)
+	if err != nil {
 		return fmt.Errorf("error initializing logger: %w", err)
 	}
 

@@ -98,9 +98,6 @@ func NewWithLogger(settings *conf.Settings, dataStore datastore.Interface, birdI
 	var serverLogger *logger.Logger
 	if parentLogger != nil {
 		serverLogger = parentLogger.Named("server")
-	} else {
-		// Fall back to global logger with proper naming if no parent logger provided
-		serverLogger = logger.Named("server")
 	}
 
 	s := &Server{
