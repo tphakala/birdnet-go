@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // PrintCommand creates the print subcommand
@@ -15,7 +16,10 @@ func PrintCommand(settings *conf.Settings) *cobra.Command {
 		Use:   "print",
 		Short: "Print BirdNET range filter results",
 		Run: func(cmd *cobra.Command, args []string) {
-			bn, err := birdnet.NewBirdNET(settings)
+			// Initialize a logger for the range filter
+			rangeLogger := logger.Named("rangefilter")
+
+			bn, err := birdnet.NewBirdNET(settings, rangeLogger)
 			if err != nil {
 				fmt.Printf("Error initializing BirdNET: %v\n", err)
 				return

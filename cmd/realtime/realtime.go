@@ -11,14 +11,16 @@ import (
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 )
 
-// RealtimeCommand creates a new command for real-time audio analysis.
+// Command creates a new command for real-time audio analysis.
 func Command(settings *conf.Settings) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "realtime",
 		Short: "Analyze audio in realtime mode",
 		Long:  "Start analyzing incoming audio data in real-time looking for bird calls.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Create a channel for notifications
 			notificationChan := make(chan handlers.Notification, 10)
+			// Call RealtimeAnalysis which now handles its own logger initialization
 			return analysis.RealtimeAnalysis(settings, notificationChan)
 		},
 	}

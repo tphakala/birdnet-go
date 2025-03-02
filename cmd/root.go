@@ -16,7 +16,6 @@ import (
 	"github.com/tphakala/birdnet-go/cmd/realtime"
 	"github.com/tphakala/birdnet-go/cmd/support"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // RootCommand creates and returns the root command
@@ -73,25 +72,7 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 // initialize is called before any subcommands are run, but after the context is ready
 // This function is responsible for setting up configurations, ensuring the environment is ready, etc.
 func initialize() error {
-	// Initialize the global logger
-	config := logger.Config{
-		Level:         viper.GetString("log.level"),
-		Development:   viper.GetBool("debug"),
-		FilePath:      viper.GetString("log.path"),
-		JSON:          viper.GetBool("log.json"),
-		DisableColor:  viper.GetBool("log.disable_color"),
-		DisableCaller: true,
-	}
-
-	if err := logger.InitGlobal(config); err != nil {
-		return fmt.Errorf("error initializing logger: %w", err)
-	}
-
-	// Create a named root logger for the application
-	// This can be used later for passing to components
-	appLogger := logger.Named("birdnet")
-	appLogger.Info("BirdNET-Go starting", "version", viper.GetString("version"))
-
+	// Additional initialization if needed can go here
 	return nil
 }
 

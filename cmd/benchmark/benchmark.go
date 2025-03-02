@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 func Command(settings *conf.Settings) *cobra.Command {
@@ -84,8 +85,11 @@ type benchmarkResults struct {
 }
 
 func runInferenceBenchmark(settings *conf.Settings, results *benchmarkResults) error {
+	// Initialize a logger for the benchmark
+	benchmarkLogger := logger.Named("benchmark")
+
 	// Initialize BirdNET
-	bn, err := birdnet.NewBirdNET(settings)
+	bn, err := birdnet.NewBirdNET(settings, benchmarkLogger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize BirdNET: %w", err)
 	}

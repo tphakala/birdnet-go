@@ -279,47 +279,50 @@ go test github.com/tphakala/birdnet-go/internal/logger -v
 
 To maintain a unified logging approach across your application, follow these best practices:
 
-### 1. Initialize Global Logger Early
+### 1. Initialize the Logger at the Component Level
 
-Initialize the global logger at the application's entry point:
+Instead of initializing the global logger at the application's entry point, initialize it in the component that needs it first. This helps avoid circular dependencies between packages:
 
 ```go
-func main() {
-    // Configure and initialize the global logger early
+// In a component package (e.g., realtime.go)
+func SomeFunction(settings *conf.Settings) error {
+    // Initialize the global logger if not already initialized
     config := logger.Config{
-        Level:        "info",
-        JSON:         false,
-        Development:  false,
-        FilePath:     "app.log", // Empty for console only
-        DisableColor: false,
+        Level:         viper.GetString("log.level"),
+        Development:   settings.Debug,
+        FilePath:      viper.GetString("log.path"),
+        JSON:          viper.GetBool("log.json"),
+        DisableColor:  viper.GetBool("log.disable_color"),
+        DisableCaller: true,
     }
 
     if err := logger.InitGlobal(config); err != nil {
-        log.Fatalf("Failed to initialize logger: %v", err)
+        return fmt.Errorf("error initializing logger: %w", err)
     }
     
-    // Make sure to flush buffers on exit
-    defer logger.Sync()
+    // Create a root application logger that will be the parent for all component loggers
+    appLogger := logger.Named("app")
+    appLogger.Info("Application starting", "version", viper.GetString("version"))
     
-    // Create a named root logger for the application
-    appLogger := logger.Named("myapp")
+    // Create a component-specific logger as a child of the app logger
+    componentLogger := appLogger.Named("component")
     
-    // Pass this logger to major components
-    server := NewServer(appLogger.Named("server"))
+    // Use the logger...
+    componentLogger.Info("Component initialized")
     
-    // Rest of your application...
+    // Rest of your function...
 }
 ```
 
-Here's a real-world example from our application's root command initialization:
+Here's a real-world example from our application's real-time analysis module:
 
 ```go
-// From cmd/root.go
-func initialize() error {
+// From internal/analysis/realtime.go
+func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
     // Initialize the global logger
     config := logger.Config{
         Level:         viper.GetString("log.level"),
-        Development:   viper.GetBool("debug"),
+        Development:   settings.Debug,
         FilePath:      viper.GetString("log.path"),
         JSON:          viper.GetBool("log.json"),
         DisableColor:  viper.GetBool("log.disable_color"),
@@ -330,15 +333,23 @@ func initialize() error {
         return fmt.Errorf("error initializing logger: %w", err)
     }
 
-    // Create a named root logger for the application
+    // Create an app-level logger first
     appLogger := logger.Named("birdnet")
-    appLogger.Info("Application starting", "version", viper.GetString("version"))
-
-    // The appLogger can now be passed to subcomponents
+    appLogger.Info("BirdNET-Go starting", "version", viper.GetString("version"))
     
-    return nil
+    // Create a component logger for the realtime analyzer
+    analyzerLogger := appLogger.Named("analyzer")
+    analyzerLogger.Info("Starting real-time analysis")
+    
+    // Rest of the function...
 }
 ```
+
+This approach ensures that:
+1. The logger is initialized before it's used
+2. Circular dependencies are avoided
+3. Each component gets a properly named logger
+4. The logger hierarchy reflects the application structure
 
 ### 2. Use Dependency Injection for Component Loggers
 
