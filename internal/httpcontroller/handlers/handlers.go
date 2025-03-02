@@ -138,7 +138,7 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		stdLogger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
 
-	return &Handlers{
+	handlers := &Handlers{
 		baseHandler: baseHandler{
 			errorHandler: defaultErrorHandler,
 			logger:       stdLogger,
@@ -147,7 +147,7 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		Settings:          settings,
 		DashboardSettings: dashboardSettings,
 		BirdImageCache:    birdImageCache,
-		SSE:               NewSSEHandler(),
+		SSE:               nil, // Initialize later with logger
 		SunCalc:           sunCalc,
 		AudioLevelChan:    audioLevelChan,
 		OAuth2Server:      oauth2Server,
@@ -158,11 +158,18 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		Server:            server,
 		// Logger will be set separately
 	}
+
+	return handlers
 }
 
 // SetLogger sets the custom logger for the handlers
 func (h *Handlers) SetLogger(logger *logger.Logger) {
 	h.Logger = logger
+
+	// Now that we have the logger, initialize the SSE handler with it
+	if h.SSE == nil {
+		h.SSE = NewSSEHandler(logger)
+	}
 }
 
 // defaultErrorHandler is the default implementation of error handling.

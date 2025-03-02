@@ -171,6 +171,12 @@ func (s *Server) initializeServer() {
 	s.Echo.HideBanner = true
 	s.initLogger()
 	s.configureMiddleware()
+
+	// Initialize handlers after the logger is initialized
+	if s.Handlers != nil && s.Logger != nil {
+		s.Handlers.SetLogger(s.Logger)
+	}
+
 	s.initRoutes()
 
 	// Initialize the JSON API v2
