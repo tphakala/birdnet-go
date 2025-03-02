@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/weather"
 	"gorm.io/gorm"
 )
@@ -172,14 +173,25 @@ func (h *Handlers) Detections(c echo.Context) error {
 // DetectionDetails retrieves a single detection from the database and renders it.
 // API: GET /api/v1/detections/details
 func (h *Handlers) DetectionDetails(c echo.Context) error {
+	// Get a component-specific logger
+	detailsLogger := h.getDetectionLogger("details")
+
 	noteID := c.QueryParam("id")
 	if noteID == "" {
+		if detailsLogger != nil {
+			detailsLogger.Warn("Empty note ID provided")
+		}
 		return h.NewHandlerError(fmt.Errorf("empty note ID"), "Note ID is required", http.StatusBadRequest)
 	}
 
 	// Retrieve the note from the database
 	note, err := h.DS.Get(noteID)
 	if err != nil {
+		if detailsLogger != nil {
+			detailsLogger.Error("Failed to retrieve note",
+				"note_id", noteID,
+				"error", err)
+		}
 		return h.NewHandlerError(err, "Failed to retrieve note", http.StatusInternalServerError)
 	}
 
@@ -189,7 +201,13 @@ func (h *Handlers) DetectionDetails(c echo.Context) error {
 	// Generate the spectrogram path for the note
 	spectrogramPath, err := h.getSpectrogramPath(note.ClipName, width)
 	if err != nil {
-		h.logError(fmt.Sprintf("Error generating spectrogram for %s", note.ClipName), err, nil)
+		if detailsLogger != nil {
+			detailsLogger.Error("Error generating spectrogram",
+				"clip_name", note.ClipName,
+				"error", err)
+		} else {
+			h.logError(fmt.Sprintf("Error generating spectrogram for %s", note.ClipName), err, nil)
+		}
 		spectrogramPath = "" // Set to empty string to avoid breaking the template
 	}
 
@@ -205,27 +223,99 @@ func (h *Handlers) DetectionDetails(c echo.Context) error {
 	// render the detectionDetails template with the data
 	err = c.Render(http.StatusOK, "detectionDetails", data)
 	if err != nil {
-		log.Printf("Failed to render detectionDetails template: %v", err)
+		if detailsLogger != nil {
+			detailsLogger.Error("Failed to render template",
+				"template", "detectionDetails",
+				"note_id", noteID,
+				"error", err)
+		} else {
+			log.Printf("Failed to render detectionDetails template: %v", err)
+		}
 		return h.NewHandlerError(err, "Failed to render template", http.StatusInternalServerError)
 	}
+
+	if detailsLogger != nil && h.debug {
+		detailsLogger.Debug("Successfully rendered detection details",
+			"note_id", noteID,
+			"common_name", note.CommonName)
+	}
 	return nil
+}
+
+// getDetectionLogger returns a component-specific logger for detection operations
+func (h *Handlers) getDetectionLogger(subComponent string) *logger.Logger {
+	if h.Logger == nil {
+		return nil
+	}
+
+	loggerName := "detections"
+	if subComponent != "" {
+		loggerName += "." + subComponent
+	}
+
+	return h.Logger.Named(loggerName)
+}
+
+// Debug is a helper method for logging debug messages
+// Deprecated: Use structured logging methods instead
+func (h *Handlers) Debug(format string, v ...interface{}) {
+	if h.debug {
+		if h.Logger != nil {
+			// When using structured logging, convert the format string to a message
+			// and add any arguments as context fields
+			if len(v) == 0 {
+				h.Logger.Debug(format)
+			} else {
+				// For backward compatibility, format the message
+				formattedMsg := fmt.Sprintf(format, v...)
+				h.Logger.Debug(formattedMsg)
+			}
+		} else {
+			// Fall back to standard logging
+			if len(v) == 0 {
+				log.Print(format)
+			} else {
+				log.Printf(format, v...)
+			}
+		}
+	}
 }
 
 // RecentDetections handles requests for the latest detections.
 // API: GET /api/v1/detections/recent
 func (h *Handlers) RecentDetections(c echo.Context) error {
-	h.Debug("RecentDetections: Starting handler")
+	// Get a component-specific logger
+	recentLogger := h.getDetectionLogger("recent")
+
+	if recentLogger != nil && h.debug {
+		recentLogger.Debug("Starting handler")
+	} else {
+		h.Debug("RecentDetections: Starting handler")
+	}
 
 	numDetections := parseNumDetections(c.QueryParam("numDetections"), 10)
-	h.Debug("RecentDetections: Fetching %d detections", numDetections)
+
+	if recentLogger != nil && h.debug {
+		recentLogger.Debug("Fetching detections", "count", numDetections)
+	} else {
+		h.Debug("RecentDetections: Fetching %d detections", numDetections)
+	}
 
 	notes, err := h.DS.GetLastDetections(numDetections)
 	if err != nil {
-		h.Debug("RecentDetections: Error fetching detections: %v", err)
+		if recentLogger != nil {
+			recentLogger.Error("Failed to fetch detections", "error", err)
+		} else {
+			h.Debug("RecentDetections: Error fetching detections: %v", err)
+		}
 		return h.NewHandlerError(err, "Failed to fetch recent detections", http.StatusInternalServerError)
 	}
 
-	h.Debug("RecentDetections: Found %d detections", len(notes))
+	if recentLogger != nil && h.debug {
+		recentLogger.Debug("Found detections", "count", len(notes))
+	} else {
+		h.Debug("RecentDetections: Found %d detections", len(notes))
+	}
 
 	data := struct {
 		Notes             []datastore.Note
@@ -241,14 +331,29 @@ func (h *Handlers) RecentDetections(c echo.Context) error {
 		},
 	}
 
-	h.Debug("RecentDetections: Rendering template")
+	if recentLogger != nil && h.debug {
+		recentLogger.Debug("Rendering template")
+	} else {
+		h.Debug("RecentDetections: Rendering template")
+	}
+
 	err = c.Render(http.StatusOK, "recentDetections", data)
 	if err != nil {
-		h.Debug("RecentDetections: Error rendering template: %v", err)
+		if recentLogger != nil {
+			recentLogger.Error("Failed to render template",
+				"template", "recentDetections",
+				"error", err)
+		} else {
+			h.Debug("RecentDetections: Error rendering template: %v", err)
+		}
 		return h.NewHandlerError(err, "Failed to render template", http.StatusInternalServerError)
 	}
 
-	h.Debug("RecentDetections: Successfully completed")
+	if recentLogger != nil && h.debug {
+		recentLogger.Debug("Successfully completed")
+	} else {
+		h.Debug("RecentDetections: Successfully completed")
+	}
 	return nil
 }
 
@@ -322,9 +427,15 @@ func (h *Handlers) addWeatherAndTimeOfDay(notes []datastore.Note) ([]NoteWithWea
 // DeleteDetection handles the deletion of a detection and its associated files
 // API: DELETE /api/v1/detections/delete
 func (h *Handlers) DeleteDetection(c echo.Context) error {
+	// Get a component-specific logger
+	deleteLogger := h.getDetectionLogger("delete")
+
 	id := c.QueryParam("id")
 
 	if id == "" {
+		if deleteLogger != nil {
+			deleteLogger.Warn("Missing detection ID")
+		}
 		h.SSE.SendNotification(Notification{
 			Message: "Missing detection ID",
 			Type:    "error",
@@ -335,7 +446,13 @@ func (h *Handlers) DeleteDetection(c echo.Context) error {
 	// Get the clip path before deletion
 	clipPath, err := h.DS.GetNoteClipPath(id)
 	if err != nil {
-		h.Debug("Failed to get clip path: %v", err)
+		if deleteLogger != nil {
+			deleteLogger.Error("Failed to get clip path",
+				"detection_id", id,
+				"error", err)
+		} else {
+			h.Debug("Failed to get clip path: %v", err)
+		}
 		h.SSE.SendNotification(Notification{
 			Message: fmt.Sprintf("Failed to get clip path: %v", err),
 			Type:    "error",
@@ -345,7 +462,13 @@ func (h *Handlers) DeleteDetection(c echo.Context) error {
 
 	// Delete the note from the database
 	if err := h.DS.Delete(id); err != nil {
-		h.Debug("Failed to delete note %s: %v", id, err)
+		if deleteLogger != nil {
+			deleteLogger.Error("Failed to delete note",
+				"detection_id", id,
+				"error", err)
+		} else {
+			h.Debug("Failed to delete note %s: %v", id, err)
+		}
 		h.SSE.SendNotification(Notification{
 			Message: fmt.Sprintf("Failed to delete note: %v", err),
 			Type:    "error",
@@ -358,18 +481,34 @@ func (h *Handlers) DeleteDetection(c echo.Context) error {
 		// Delete audio file
 		audioPath := fmt.Sprintf("%s/%s", h.Settings.Realtime.Audio.Export.Path, clipPath)
 		if err := os.Remove(audioPath); err != nil && !os.IsNotExist(err) {
-			h.Debug("Failed to delete audio file %s: %v", audioPath, err)
+			if deleteLogger != nil {
+				deleteLogger.Warn("Failed to delete audio file",
+					"path", audioPath,
+					"error", err)
+			} else {
+				h.Debug("Failed to delete audio file %s: %v", audioPath, err)
+			}
 		}
 
 		// Delete spectrogram file
 		spectrogramPath := fmt.Sprintf("%s/%s.png", h.Settings.Realtime.Audio.Export.Path, strings.TrimSuffix(clipPath, ".wav"))
 		if err := os.Remove(spectrogramPath); err != nil && !os.IsNotExist(err) {
-			h.Debug("Failed to delete spectrogram file %s: %v", spectrogramPath, err)
+			if deleteLogger != nil {
+				deleteLogger.Warn("Failed to delete spectrogram file",
+					"path", spectrogramPath,
+					"error", err)
+			} else {
+				h.Debug("Failed to delete spectrogram file %s: %v", spectrogramPath, err)
+			}
 		}
 	}
 
 	// Log the successful deletion
-	h.Debug("Successfully deleted detection %s", id)
+	if deleteLogger != nil {
+		deleteLogger.Info("Successfully deleted detection", "detection_id", id)
+	} else {
+		h.Debug("Successfully deleted detection %s", id)
+	}
 
 	// Send success notification
 	h.SSE.SendNotification(Notification{
