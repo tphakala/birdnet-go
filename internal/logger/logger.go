@@ -120,8 +120,7 @@ func NewLogger(config Config, rotationConfig ...RotationConfig) (*Logger, error)
 
 	// Add caller information unless disabled
 	if !config.DisableCaller {
-		opts = append(opts, zap.AddCaller())
-		opts = append(opts, zap.AddCallerSkip(1))
+		opts = append(opts, zap.AddCaller(), zap.AddCallerSkip(1))
 	}
 
 	if config.Development {

@@ -50,26 +50,6 @@ func setupTestFs() afero.Fs {
 	return afero.NewMemMapFs()
 }
 
-// captureOutput redirects standard output to a buffer and returns a function to restore it
-func captureOutput(t *testing.T) (*bytes.Buffer, func()) {
-	var buf bytes.Buffer
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-
-	os.Stdout = w
-
-	go func() {
-		_, err := io.Copy(&buf, r)
-		assert.NoError(t, err)
-	}()
-
-	return &buf, func() {
-		w.Close()
-		os.Stdout = oldStdout
-	}
-}
-
 // TestLogLevels tests that different log levels are properly handled
 func TestLogLevels(t *testing.T) {
 	// Define test cases for each level
