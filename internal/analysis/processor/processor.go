@@ -28,6 +28,7 @@ type Processor struct {
 	Ds                  datastore.Interface
 	Bn                  *birdnet.BirdNET
 	BwClient            *birdweather.BwClient
+	bwClientMutex       sync.RWMutex // Mutex to protect BwClient access
 	MqttClient          mqtt.Client
 	mqttMutex           sync.RWMutex // Mutex to protect MQTT client access
 	BirdImageCache      *imageprovider.BirdImageCache
@@ -104,9 +105,11 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	// Initialize BirdWeather client if enabled in settings
 	if settings.Realtime.Birdweather.Enabled {
 		var err error
-		p.BwClient, err = birdweather.New(settings)
+		bwClient, err := birdweather.New(settings)
 		if err != nil {
 			log.Printf("failed to create Birdweather client: %s", err)
+		} else {
+			p.SetBwClient(bwClient) // Use setter for thread safety
 		}
 	}
 
@@ -495,13 +498,16 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	}
 
 	// Add BirdWeatherAction if enabled and client is initialized
-	if p.Settings.Realtime.Birdweather.Enabled && p.BwClient != nil {
-		actions = append(actions, &BirdWeatherAction{
-			Settings:     p.Settings,
-			EventTracker: p.EventTracker,
-			BwClient:     p.BwClient,
-			Note:         detection.Note,
-			pcmData:      detection.pcmData3s})
+	if p.Settings.Realtime.Birdweather.Enabled {
+		bwClient := p.GetBwClient() // Use getter for thread safety
+		if bwClient != nil {
+			actions = append(actions, &BirdWeatherAction{
+				Settings:     p.Settings,
+				EventTracker: p.EventTracker,
+				BwClient:     bwClient,
+				Note:         detection.Note,
+				pcmData:      detection.pcmData3s})
+		}
 	}
 
 	// Add MQTT action if enabled and client is available
@@ -530,4 +536,29 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	}
 
 	return actions
+}
+
+// GetBwClient safely returns the current BirdWeather client
+func (p *Processor) GetBwClient() *birdweather.BwClient {
+	p.bwClientMutex.RLock()
+	defer p.bwClientMutex.RUnlock()
+	return p.BwClient
+}
+
+// SetBwClient safely sets a new BirdWeather client
+func (p *Processor) SetBwClient(client *birdweather.BwClient) {
+	p.bwClientMutex.Lock()
+	defer p.bwClientMutex.Unlock()
+	p.BwClient = client
+}
+
+// DisconnectBwClient safely disconnects and removes the BirdWeather client
+func (p *Processor) DisconnectBwClient() {
+	p.bwClientMutex.Lock()
+	defer p.bwClientMutex.Unlock()
+	// Call the Close method if the client exists
+	if p.BwClient != nil {
+		p.BwClient.Close()
+		p.BwClient = nil
+	}
 }
