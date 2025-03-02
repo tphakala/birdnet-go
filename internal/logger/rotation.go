@@ -64,7 +64,10 @@ func NewRotatingLogger(
 	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
 
 	var encoder zapcore.Encoder
-	if config.JSON {
+	// For file output, respect ForceJSONFile setting
+	if config.ForceJSONFile {
+		encoder = zapcore.NewJSONEncoder(encoderConfig)
+	} else if config.JSON {
 		encoder = zapcore.NewJSONEncoder(encoderConfig)
 	} else {
 		encoder = zapcore.NewConsoleEncoder(encoderConfig)

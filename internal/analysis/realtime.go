@@ -37,8 +37,9 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	config := logger.Config{
 		Level:         viper.GetString("log.level"),
 		Development:   settings.Debug,
-		FilePath:      viper.GetString("log.path"),
-		JSON:          viper.GetBool("log.json"),
+		FilePath:      settings.Main.Log.Path,
+		JSON:          false, // Use human-readable format for console
+		ForceJSONFile: true,  // Force JSON format for file output
 		DisableColor:  viper.GetBool("log.disable_color"),
 		DisableCaller: true,
 	}

@@ -89,6 +89,18 @@ func (l *Logger) Fatal(msg string, fields ...interface{}) {
 
 // NewLogger creates a new logger with the given configuration.
 // This is a unified initialization method for all logger types.
+//
+// When a file path is provided, logs are sent to both the console and the file.
+// Console logs will use the format specified by Config.JSON, while file logs
+// will be forced to JSON format if Config.ForceJSONFile is true.
+//
+// This allows for human-readable logs in the console while maintaining
+// structured JSON logs in files for easier parsing by log analysis tools.
+//
+// Example for dual-format logging (human-readable console + JSON file):
+//
+//	config := logger.DualLogConfig("/path/to/logfile.log")
+//	log, err := logger.NewLogger(config)
 func NewLogger(config Config, rotationConfig ...RotationConfig) (*Logger, error) {
 	// Log development mode status
 	if config.Development {
@@ -105,9 +117,9 @@ func NewLogger(config Config, rotationConfig ...RotationConfig) (*Logger, error)
 
 	// Determine logger type based on configuration
 	switch {
-	case config.FilePath != "" && config.Development:
-		// Case 1: Development mode with file path - use tee logger (console AND file)
-		// Always prioritize development mode with tee logger when file path is provided
+	case config.FilePath != "":
+		// Case 1: File path is provided - use tee logger (console AND file)
+		// Always output to both console and file when a file path is provided
 		// Default rotation config if not provided
 		rc := DefaultRotationConfig()
 		if len(rotationConfig) > 0 {
@@ -119,8 +131,8 @@ func NewLogger(config Config, rotationConfig ...RotationConfig) (*Logger, error)
 		fileEncoderConfig := GetEncoderConfig(config, false)   // false for file
 
 		// Create encoders
-		consoleEncoder := CreateEncoder(config, consoleEncoderConfig)
-		fileEncoder := CreateEncoder(config, fileEncoderConfig)
+		consoleEncoder := CreateEncoder(config, consoleEncoderConfig, true) // true for console
+		fileEncoder := CreateEncoder(config, fileEncoderConfig, false)      // false for file
 
 		// Console output
 		consoleOutput := zapcore.AddSync(os.Stdout)
@@ -148,30 +160,13 @@ func NewLogger(config Config, rotationConfig ...RotationConfig) (*Logger, error)
 		core := zapcore.NewTee(consoleCore, fileCore)
 		zapLogger = zap.New(core, opts...)
 
-	case config.FilePath != "" && len(rotationConfig) > 0:
-		// Case 2: File output with rotation configuration (non-development mode)
-		// Get encoder config for file
-		encoderConfig := GetEncoderConfig(config, false) // false for file
-
-		// Create encoder
-		encoder := CreateEncoder(config, encoderConfig)
-
-		// Create the core
-		core, coreErr := CreateRotatingFileCore(config.FilePath, encoder, level, rotationConfig[0])
-		if coreErr != nil {
-			return nil, coreErr
-		}
-
-		// Create logger
-		zapLogger = zap.New(core, opts...)
-
 	default:
-		// Case 3: Simple logger (console only)
+		// Case 2: Simple logger (console only)
 		// Get encoder config for console
 		encoderConfig := GetEncoderConfig(config, true) // true for console
 
 		// Create encoder
-		encoder := CreateEncoder(config, encoderConfig)
+		encoder := CreateEncoder(config, encoderConfig, true) // true for console
 
 		// Create output
 		output := zapcore.AddSync(os.Stdout)

@@ -14,6 +14,8 @@ type Config struct {
 	Level string `json:"level"`
 	// JSON enables structured JSON logging; when false, logs are in human-readable format
 	JSON bool `json:"json"`
+	// ForceJSONFile forces JSON format for file output, regardless of the JSON setting
+	ForceJSONFile bool `json:"force_json_file"`
 	// Development puts the logger in development mode, which changes the behavior of DPanicLevel
 	Development bool `json:"development"`
 	// FilePath is the path to the log file; if empty, logs go to stdout
@@ -29,6 +31,7 @@ func DefaultConfig() Config {
 	return Config{
 		Level:         "",
 		JSON:          false,
+		ForceJSONFile: false,
 		Development:   true,
 		FilePath:      "",
 		DisableColor:  false,
@@ -41,6 +44,7 @@ func ProductionConfig() Config {
 	return Config{
 		Level:         "info",
 		JSON:          true,
+		ForceJSONFile: true,
 		Development:   false,
 		FilePath:      "",
 		DisableColor:  true,
@@ -142,7 +146,13 @@ func GetEncoderConfig(config Config, isConsole bool) zapcore.EncoderConfig {
 }
 
 // CreateEncoder creates the appropriate encoder based on configuration
-func CreateEncoder(config Config, encoderConfig zapcore.EncoderConfig) zapcore.Encoder {
+func CreateEncoder(config Config, encoderConfig zapcore.EncoderConfig, isConsole bool) zapcore.Encoder {
+	// For file output, respect ForceJSONFile setting
+	if !isConsole && config.ForceJSONFile {
+		return zapcore.NewJSONEncoder(encoderConfig)
+	}
+
+	// Otherwise use the JSON setting
 	if config.JSON {
 		return zapcore.NewJSONEncoder(encoderConfig)
 	}
@@ -160,4 +170,28 @@ func getZapLevel(levelStr string, defaultLevel zapcore.Level) zapcore.Level {
 		return defaultLevel
 	}
 	return level
+}
+
+// DualLogConfig returns a configuration for human-readable console logs and structured JSON file logs.
+// This is a helper function to easily set up a dual-format logging configuration where:
+// - Console output is human-readable for better developer experience
+// - File output is JSON formatted for better machine parsing and log analysis
+//
+// The returned config will have:
+// - Level set to "info"
+// - JSON set to false (human-readable console logs)
+// - ForceJSONFile set to true (structured JSON file logs)
+// - Development mode disabled
+// - Colors enabled for console output
+// - Caller information disabled
+func DualLogConfig(filePath string) Config {
+	return Config{
+		Level:         "info",
+		JSON:          false, // Human-readable for console
+		ForceJSONFile: true,  // Force JSON for file
+		Development:   false,
+		FilePath:      filePath,
+		DisableColor:  false,
+		DisableCaller: true,
+	}
 }

@@ -184,6 +184,7 @@ if err != nil {
 
 - **Level**: Sets the minimum log level ("debug", "info", "warn", "error", "dpanic", "panic", "fatal")
 - **JSON**: When true, outputs structured JSON logs; when false, outputs human-readable logs
+- **ForceJSONFile**: When true, forces JSON format for file output regardless of the JSON setting
 - **Development**: When true, uses development mode with debug level as default and more verbose stack traces
 - **FilePath**: Path to the log file; if empty, logs go to stdout
 - **DisableColor**: Disables colored output for console logging
@@ -390,12 +391,13 @@ Here's a real-world example from the application's real-time analysis module:
 ```go
 // From internal/analysis/realtime.go
 func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
-    // Initialize a new logger instance
+    // Initialize a new logger instance with dual-format logging
     config := logger.Config{
         Level:         viper.GetString("log.level"),
         Development:   settings.Debug,
         FilePath:      viper.GetString("log.path"),
-        JSON:          viper.GetBool("log.json"),
+        JSON:          false,                   // Use human-readable format for console
+        ForceJSONFile: true,                    // Force JSON format for file output
         DisableColor:  viper.GetBool("log.disable_color"),
         DisableCaller: true,
     }
@@ -410,14 +412,13 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
     coreLogger := logger.Named("core")
     coreLogger.Info("Starting real-time analysis")
     
-    // Rest of the function...
+    // ... rest of the function ...
 }
 ```
 
-This approach ensures that:
-1. Each component gets a properly configured logger instance
-2. The logger hierarchy reflects the application structure
-3. Dependencies between components are explicit
+With this configuration:
+1. Console output is human-readable for easier debugging during development
+2. File output is structured JSON for better integration with log analysis tools like Grafana Loki, ELK stack, etc.
 
 ### 2. Use Dependency Injection for Component Loggers
 
@@ -716,4 +717,82 @@ func setupSignalHandler() {
 - Advanced log rotation strategies
 - Multiple output destinations
 - Log filtering capabilities
-- Log aggregation support 
+- Log aggregation support
+
+### Dual-Format Logging
+
+You can configure the logger to output human-readable logs to the console while simultaneously writing structured JSON logs to a file:
+
+```go
+// Use the helper function for dual-format logging
+config := logger.DualLogConfig("/path/to/app.log")
+log, err := logger.NewLogger(config)
+if err != nil {
+    // handle error
+}
+
+// Or configure manually
+config := logger.Config{
+    Level:         "info",
+    JSON:          false,      // Human-readable for console
+    ForceJSONFile: true,       // Force JSON for file
+    Development:   false,
+    FilePath:      "/path/to/app.log",
+    DisableColor:  false,
+    DisableCaller: true,
+}
+log, err := logger.NewLogger(config)
+if err != nil {
+    // handle error
+}
+
+// Now you have:
+// 1. Human-readable logs in the console:
+//    2025-03-02T21:32:52  INFO  core   System details   {"os": "linux", "platform": "debian"}
+//
+// 2. Structured JSON logs in the file:
+//    {"timestamp":"2025-03-02T21:15:07Z","level":"INFO","logger":"core.server.http.request","message":"Processed HTTP request","http":{"status":200,"method":"GET","uri":"/api/v1/top-birds?date=2025-03-02","remote_ip":"192.168.4.3","latency_ms":17.738517,"request_id":"88a8ddbe","resp_size":37461}}
+```
+
+This approach gives you the best of both worlds:
+- Developer-friendly, readable logs in the console
+- Machine-parsable, structured logs in files for log analysis tools
+- No duplication of log infrastructure 
+
+#### Real-World Example from BirdNET-Go
+
+Here's how dual-format logging is used in the real-time analysis module:
+
+```go
+// From internal/analysis/realtime.go
+func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
+    // Initialize a new logger instance with dual-format logging
+    config := logger.Config{
+        Level:         viper.GetString("log.level"),
+        Development:   settings.Debug,
+        FilePath:      viper.GetString("log.path"),
+        JSON:          false,                   // Use human-readable format for console
+        ForceJSONFile: true,                    // Force JSON format for file output
+        DisableColor:  viper.GetBool("log.disable_color"),
+        DisableCaller: true,
+    }
+
+    // Create a new logger instance, this will be passed to all components
+    logger, err := logger.NewLogger(config)
+    if err != nil {
+        return fmt.Errorf("error initializing logger: %w", err)
+    }
+
+    // Create a component logger for the realtime analyzer
+    coreLogger := logger.Named("core")
+    coreLogger.Info("Starting real-time analysis")
+    
+    // ... rest of the function ...
+}
+```
+
+With this configuration:
+1. Console output is human-readable for easier debugging during development
+2. File output is structured JSON for better integration with log analysis tools like Grafana Loki, ELK stack, etc.
+
+// ... rest of content ... 

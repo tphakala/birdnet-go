@@ -18,7 +18,7 @@ func CreateTestCore(config Config, writer io.Writer) (zapcore.Core, error) {
 	encoderConfig := GetEncoderConfig(config, true) // Use console settings for tests
 
 	// Create the encoder
-	encoder := CreateEncoder(config, encoderConfig)
+	encoder := CreateEncoder(config, encoderConfig, true) // true for console
 
 	// Set up output
 	output := zapcore.AddSync(writer)
