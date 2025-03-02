@@ -11,32 +11,14 @@ import (
 // CreateTestCore creates a zapcore.Core that writes to the given io.Writer
 // This is useful for testing to intercept logger output
 func CreateTestCore(config Config, writer io.Writer) (zapcore.Core, error) {
-	// Determine log level
-	level := zapcore.InfoLevel
-	if config.Development {
-		level = zapcore.DebugLevel
-	}
+	// Determine log level using helper function
+	level := GetLogLevel(config)
 
-	level = getZapLevel(config.Level, level)
+	// Get encoder config
+	encoderConfig := GetEncoderConfig(config, true) // Use console settings for tests
 
-	// Create encoder config
-	encoderConfig := createEncoderConfig()
-
-	// For human-readable logs, use colored level only if explicitly enabled
-	// In tests, we default to no colors for better readability of test output
-	if !config.JSON && !config.DisableColor {
-		encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	} else {
-		encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
-	}
-
-	// Create the encoder based on the encoding
-	var encoder zapcore.Encoder
-	if config.JSON {
-		encoder = zapcore.NewJSONEncoder(encoderConfig)
-	} else {
-		encoder = zapcore.NewConsoleEncoder(encoderConfig)
-	}
+	// Create the encoder
+	encoder := CreateEncoder(config, encoderConfig)
 
 	// Set up output
 	output := zapcore.AddSync(writer)
@@ -47,15 +29,8 @@ func CreateTestCore(config Config, writer io.Writer) (zapcore.Core, error) {
 // NewLoggerWithCore creates a new Logger with a custom core
 // This is useful for testing to inject custom behavior
 func NewLoggerWithCore(core zapcore.Core, config Config) *Logger {
-	// Create options
-	opts := []zap.Option{
-		zap.AddCaller(),
-		zap.AddCallerSkip(1),
-	}
-
-	if config.Development {
-		opts = append(opts, zap.Development())
-	}
+	// Get options from config
+	opts := GetZapOptions(config)
 
 	// Create the logger
 	zapLogger := zap.New(core, opts...)

@@ -34,7 +34,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -46,29 +45,6 @@ type Logger struct {
 	zap    *zap.Logger
 	sugar  *zap.SugaredLogger
 	config Config
-}
-
-// createEncoderConfig creates a standard encoder configuration
-func createEncoderConfig() zapcore.EncoderConfig {
-	return zapcore.EncoderConfig{
-		TimeKey:        "time",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		CallerKey:      "caller",
-		FunctionKey:    zapcore.OmitKey,
-		MessageKey:     "msg",
-		StacktraceKey:  "stacktrace",
-		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.CapitalLevelEncoder,
-		EncodeTime:     simpleDateTimeEncoder,
-		EncodeDuration: zapcore.StringDurationEncoder,
-		EncodeCaller:   zapcore.ShortCallerEncoder,
-	}
-}
-
-// simpleDateTimeEncoder encodes time as yyyy-MM-ddTHH:mm:ss without milliseconds or timezone
-func simpleDateTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-	enc.AppendString(t.Format("2006-01-02T15:04:05"))
 }
 
 // Debug logs a message at the debug level
@@ -104,26 +80,13 @@ func NewLogger(config Config, rotationConfig ...RotationConfig) (*Logger, error)
 		log.Println("🚨 Development mode enabled")
 	}
 
-	// Determine the log level
-	level := zapcore.InfoLevel
-	if config.Development {
-		level = zapcore.DebugLevel
-	}
-	level = getZapLevel(config.Level, level)
+	// Determine the log level using the helper function
+	level := GetLogLevel(config)
 
 	var zapLogger *zap.Logger
 
-	// Create options
-	opts := []zap.Option{}
-
-	// Add caller information unless disabled
-	if !config.DisableCaller {
-		opts = append(opts, zap.AddCaller(), zap.AddCallerSkip(1))
-	}
-
-	if config.Development {
-		opts = append(opts, zap.Development())
-	}
+	// Get options from config
+	opts := GetZapOptions(config)
 
 	// Determine logger type based on configuration
 	switch {
@@ -136,25 +99,13 @@ func NewLogger(config Config, rotationConfig ...RotationConfig) (*Logger, error)
 			rc = rotationConfig[0]
 		}
 
-		// Create console encoder config
-		consoleEncoderConfig := createEncoderConfig()
-		if !config.JSON && !config.DisableColor {
-			consoleEncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-		}
-
-		// Create file encoder config
-		fileEncoderConfig := createEncoderConfig()
-		fileEncoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
+		// Get encoder configs for console and file
+		consoleEncoderConfig := GetEncoderConfig(config, true) // true for console
+		fileEncoderConfig := GetEncoderConfig(config, false)   // false for file
 
 		// Create encoders
-		var consoleEncoder, fileEncoder zapcore.Encoder
-		if config.JSON {
-			consoleEncoder = zapcore.NewJSONEncoder(consoleEncoderConfig)
-			fileEncoder = zapcore.NewJSONEncoder(fileEncoderConfig)
-		} else {
-			consoleEncoder = zapcore.NewConsoleEncoder(consoleEncoderConfig)
-			fileEncoder = zapcore.NewConsoleEncoder(fileEncoderConfig)
-		}
+		consoleEncoder := CreateEncoder(config, consoleEncoderConfig)
+		fileEncoder := CreateEncoder(config, fileEncoderConfig)
 
 		// Console output
 		consoleOutput := zapcore.AddSync(os.Stdout)
@@ -184,17 +135,11 @@ func NewLogger(config Config, rotationConfig ...RotationConfig) (*Logger, error)
 
 	case config.FilePath != "" && len(rotationConfig) > 0:
 		// Case 2: File output with rotation configuration (non-development mode)
-		// Create encoder config
-		encoderConfig := createEncoderConfig()
-		encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder // No colors for file output
+		// Get encoder config for file
+		encoderConfig := GetEncoderConfig(config, false) // false for file
 
 		// Create encoder
-		var encoder zapcore.Encoder
-		if config.JSON {
-			encoder = zapcore.NewJSONEncoder(encoderConfig)
-		} else {
-			encoder = zapcore.NewConsoleEncoder(encoderConfig)
-		}
+		encoder := CreateEncoder(config, encoderConfig)
 
 		// Create the core
 		core, coreErr := CreateRotatingFileCore(config.FilePath, encoder, level, rotationConfig[0])
@@ -207,23 +152,11 @@ func NewLogger(config Config, rotationConfig ...RotationConfig) (*Logger, error)
 
 	default:
 		// Case 3: Simple logger (console only)
-		// Create encoder config
-		encoderConfig := createEncoderConfig()
-
-		// For human-readable logs, use colored level if not disabled
-		if !config.JSON && !config.DisableColor {
-			encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-		} else {
-			encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
-		}
+		// Get encoder config for console
+		encoderConfig := GetEncoderConfig(config, true) // true for console
 
 		// Create encoder
-		var encoder zapcore.Encoder
-		if config.JSON {
-			encoder = zapcore.NewJSONEncoder(encoderConfig)
-		} else {
-			encoder = zapcore.NewConsoleEncoder(encoderConfig)
-		}
+		encoder := CreateEncoder(config, encoderConfig)
 
 		// Create output
 		output := zapcore.AddSync(os.Stdout)

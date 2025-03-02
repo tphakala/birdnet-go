@@ -2,6 +2,9 @@
 package logger
 
 import (
+	"time"
+
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -29,7 +32,7 @@ func DefaultConfig() Config {
 		Development:   true,
 		FilePath:      "",
 		DisableColor:  false,
-		DisableCaller: false,
+		DisableCaller: true,
 	}
 }
 
@@ -41,7 +44,7 @@ func ProductionConfig() Config {
 		Development:   false,
 		FilePath:      "",
 		DisableColor:  true,
-		DisableCaller: false,
+		DisableCaller: true,
 	}
 }
 
@@ -65,6 +68,85 @@ func DefaultRotationConfig() RotationConfig {
 		MaxAge:     30, // 30 days
 		Compress:   true,
 	}
+}
+
+// createEncoderConfig creates a standard encoder configuration
+func createEncoderConfig() zapcore.EncoderConfig {
+	return zapcore.EncoderConfig{
+		TimeKey:        "time",
+		LevelKey:       "level",
+		NameKey:        "logger",
+		CallerKey:      "caller", // This will be overridden in GetEncoderConfig if DisableCaller is true
+		FunctionKey:    zapcore.OmitKey,
+		MessageKey:     "msg",
+		StacktraceKey:  "stacktrace",
+		LineEnding:     zapcore.DefaultLineEnding,
+		EncodeLevel:    zapcore.CapitalLevelEncoder,
+		EncodeTime:     simpleDateTimeEncoder,
+		EncodeDuration: zapcore.StringDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
+	}
+}
+
+// simpleDateTimeEncoder encodes time as yyyy-MM-ddTHH:mm:ss without milliseconds or timezone
+func simpleDateTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+	enc.AppendString(t.Format("2006-01-02T15:04:05"))
+}
+
+// GetZapOptions returns the zap options based on the given configuration
+func GetZapOptions(config Config) []zap.Option {
+	opts := []zap.Option{}
+
+	// Add caller information unless disabled
+	if !config.DisableCaller {
+		opts = append(opts, zap.AddCaller(), zap.AddCallerSkip(1))
+	}
+
+	if config.Development {
+		opts = append(opts, zap.Development())
+	}
+
+	return opts
+}
+
+// GetLogLevel determines the appropriate log level based on configuration
+func GetLogLevel(config Config) zapcore.Level {
+	// Set default level based on mode
+	level := zapcore.InfoLevel
+	if config.Development {
+		level = zapcore.DebugLevel
+	}
+
+	// Override with explicit level if provided
+	return getZapLevel(config.Level, level)
+}
+
+// GetEncoderConfig returns the appropriate encoder configuration
+// isConsole indicates if this is for console output (vs file output)
+func GetEncoderConfig(config Config, isConsole bool) zapcore.EncoderConfig {
+	encoderConfig := createEncoderConfig()
+
+	// If caller is disabled, remove CallerKey from the encoder config
+	if config.DisableCaller {
+		encoderConfig.CallerKey = ""
+	}
+
+	// Apply color to console output if enabled
+	if isConsole && !config.JSON && !config.DisableColor {
+		encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	} else {
+		encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
+	}
+
+	return encoderConfig
+}
+
+// CreateEncoder creates the appropriate encoder based on configuration
+func CreateEncoder(config Config, encoderConfig zapcore.EncoderConfig) zapcore.Encoder {
+	if config.JSON {
+		return zapcore.NewJSONEncoder(encoderConfig)
+	}
+	return zapcore.NewConsoleEncoder(encoderConfig)
 }
 
 // getZapLevel converts a level string to zapcore.Level

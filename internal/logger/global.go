@@ -18,7 +18,17 @@ var (
 // It can only be called once; subsequent calls will be ignored
 func InitGlobal(config Config) error {
 	defaultLoggerInit.Do(func() {
-		defaultLogger, errDefaultLogger = NewLogger(config)
+		// Make a copy of the configuration to avoid modifying the original
+		configCopy := config
+
+		// Force disable caller information for the global logger
+		configCopy.DisableCaller = true
+
+		// Log what we're doing
+		fmt.Printf("DEBUG: InitGlobal forcing DisableCaller=true (original value: %v)\n", config.DisableCaller)
+
+		// Use the modified config
+		defaultLogger, errDefaultLogger = NewLogger(configCopy)
 	})
 	return errDefaultLogger
 }
@@ -29,6 +39,13 @@ func GetGlobal() *Logger {
 	defaultLoggerInit.Do(func() {
 		// Default configuration logs to stdout with colored output in development mode
 		config := DefaultConfig()
+
+		// Force disable caller information for the global logger
+		config.DisableCaller = true
+
+		// Log the configuration that's being used
+		fmt.Printf("DEBUG: Setting up global logger with DisableCaller=%v\n", config.DisableCaller)
+
 		defaultLogger, errDefaultLogger = NewLogger(config)
 		if errDefaultLogger != nil {
 			fmt.Fprintf(os.Stderr, "Failed to initialize default logger: %v\n", errDefaultLogger)
