@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"strings"
 	"sync"
 
 	"github.com/labstack/echo/v4"
@@ -208,17 +209,52 @@ func (h *Handlers) HandleError(err error, c echo.Context) error {
 		}
 	}
 
+	// Get request-specific details for logging
+	requestID := c.Request().Header.Get("X-Request-ID")
+	if requestID == "" {
+		requestID = c.Response().Header().Get("X-Request-ID")
+	}
+	clientIP := c.RealIP()
+	path := c.Request().URL.Path
+	method := c.Request().Method
+
 	// Log the error using our custom logger if available
 	if h.Logger != nil {
-		stackTrace := string(debug.Stack())
-		h.Logger.Error("HTTP Error",
+		// Create an error-specific logger with component hierarchy
+		errorLogger := h.Logger.Named("http.error")
+
+		// Get a shortened stack trace (limit to 5 frames for readability)
+		stackTrace := limitStackTrace(string(debug.Stack()), 5)
+
+		// Include all relevant fields for debugging
+		fields := []interface{}{
 			"code", he.Code,
 			"message", he.Message,
 			"error", he.Err,
-			"path", c.Request().URL.Path,
-			"method", c.Request().Method,
-			"stacktrace", stackTrace,
-		)
+			"path", path,
+			"method", method,
+			"client_ip", clientIP,
+		}
+
+		// Only include request ID if it exists
+		if requestID != "" {
+			fields = append(fields, "request_id", requestID)
+		}
+
+		// Only include stack trace for server errors
+		if he.Code >= 500 {
+			fields = append(fields, "stacktrace", stackTrace)
+		}
+
+		// Log at appropriate level based on status code
+		switch {
+		case he.Code >= 500:
+			errorLogger.Error("Server error occurred", fields...)
+		case he.Code >= 400:
+			errorLogger.Warn("Client error occurred", fields...)
+		default:
+			errorLogger.Info("Request error", fields...)
+		}
 	} else {
 		// Fallback to the base handler logger
 		h.baseHandler.logError(he)
@@ -261,6 +297,22 @@ func (h *Handlers) HandleError(err error, c echo.Context) error {
 
 	// Render the template
 	return c.Render(he.Code, template, errorData)
+}
+
+// limitStackTrace reduces the stack trace to a given number of frames for readability
+func limitStackTrace(stackTrace string, maxFrames int) string {
+	lines := strings.Split(stackTrace, "\n")
+	if len(lines) <= maxFrames*2 {
+		return stackTrace
+	}
+
+	// Take the first line (which has the error) plus maxFrames*2 lines (each frame has 2 lines in Go stack traces)
+	truncatedLines := make([]string, 0, maxFrames*2+2)                   // Pre-allocate capacity
+	truncatedLines = append(truncatedLines, lines[0])                    // Add first line (error message)
+	truncatedLines = append(truncatedLines, lines[1:(maxFrames*2)+1]...) // Add stack frames
+	truncatedLines = append(truncatedLines, fmt.Sprintf("... %d more frames omitted ...", (len(lines)-(maxFrames*2+1))/2))
+
+	return strings.Join(truncatedLines, "\n")
 }
 
 // getErrorTemplate returns the appropriate error template name based on the error code

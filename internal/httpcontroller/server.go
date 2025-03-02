@@ -227,3 +227,73 @@ func (s *Server) handleServerError(errChan chan error) {
 		// Additional error handling logic here
 	}
 }
+
+// getHttpLogger returns a component-specific logger for HTTP operations
+// It creates a hierarchical structure (e.g., http.api.v1)
+func (s *Server) getHttpLogger(component string) *logger.Logger {
+	if s.Logger == nil {
+		return nil
+	}
+	return s.Logger.Named("http." + component)
+}
+
+// getApiLogger returns a component-specific logger for API operations
+// It creates a hierarchical structure (e.g., api.v1.detection)
+func (s *Server) getApiLogger(version, component string) *logger.Logger {
+	if s.Logger == nil {
+		return nil
+	}
+
+	path := "api"
+	if version != "" {
+		path += "." + version
+	}
+
+	if component != "" {
+		path += "." + component
+	}
+
+	return s.Logger.Named(path)
+}
+
+// createRequestContextLogger creates a request-specific logger with all relevant request details
+// This is different from getRequestLogger in middleware.go which creates a logger from a component logger
+func (s *Server) createRequestContextLogger(c echo.Context) *logger.Logger {
+	if s.Logger == nil {
+		return nil
+	}
+
+	// Generate request ID if not present
+	requestID := c.Request().Header.Get("X-Request-ID")
+	if requestID == "" {
+		requestID = c.Response().Header().Get("X-Request-ID")
+	}
+
+	// Determine logger component path based on request path
+	path := c.Path()
+	var loggerComponent string
+
+	switch {
+	case strings.HasPrefix(path, "/api/v1"):
+		loggerComponent = "api.v1"
+	case strings.HasPrefix(path, "/api/v2"):
+		loggerComponent = "api.v2"
+	case strings.HasPrefix(path, "/dashboard"):
+		loggerComponent = "http.dashboard"
+	case strings.HasPrefix(path, "/settings"):
+		loggerComponent = "http.settings"
+	default:
+		loggerComponent = "http.request"
+	}
+
+	// Create the logger with the right component path
+	requestLogger := s.Logger.Named(loggerComponent)
+
+	// Add request-specific context
+	return requestLogger.With(
+		"request_id", requestID,
+		"client_ip", s.RealIP(c),
+		"method", c.Request().Method,
+		"path", path,
+	)
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -99,27 +100,100 @@ func (s *Server) initLogger() {
 	echoLogWriter := &echoLogAdapter{logger: s.Logger}
 	s.Echo.Logger.SetOutput(echoLogWriter)
 
-	// Configure Echo's logging middleware with our logger
+	// Configure Echo's logging middleware with our structured logger
+	s.setupRequestLogger()
+}
+
+// setupRequestLogger configures the HTTP request logging middleware
+func (s *Server) setupRequestLogger() {
+	// Create a component-specific logger for HTTP requests
+	httpLogger := s.Logger.Named("http.request")
+
+	// Configure request logger middleware
 	s.Echo.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
-		LogURI:      true,
-		LogStatus:   true,
-		LogRemoteIP: true,
-		LogMethod:   true,
-		LogError:    true,
-		HandleError: true,
+		LogURI:          true,
+		LogStatus:       true,
+		LogLatency:      true,
+		LogRemoteIP:     true,
+		LogMethod:       true,
+		LogError:        true,
+		LogResponseSize: true,
+		LogUserAgent:    true,
+		LogReferer:      true,
+		HandleError:     true,
 		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
-			// Use our custom logger
-			errorStr := ""
-			if v.Error != nil {
-				errorStr = v.Error.Error()
+			// Get a request-specific ID to track related log entries
+			requestID := c.Request().Header.Get("X-Request-ID")
+			if requestID == "" {
+				requestID = c.Response().Header().Get("X-Request-ID")
 			}
-			s.Logger.Info(fmt.Sprintf("%s %v %s %d", v.RemoteIP, v.Method, v.URI, v.Status),
+
+			// Extract path parameters if any
+			pathParams := make(map[string]string)
+			for _, name := range c.ParamNames() {
+				pathParams[name] = c.Param(name)
+			}
+
+			// Determine which log level to use based on status code
+			var logMethod func(string, ...interface{})
+			statusCode := v.Status
+
+			switch {
+			case statusCode >= 500:
+				logMethod = httpLogger.Error
+			case statusCode >= 400:
+				logMethod = httpLogger.Warn
+			case s.isDevMode() && statusCode >= 300:
+				// Log redirects as debug in dev mode only
+				logMethod = httpLogger.Debug
+			default:
+				logMethod = httpLogger.Info
+			}
+
+			// Calculate request latency in milliseconds
+			latencyMs := float64(v.Latency) / float64(time.Millisecond)
+
+			// Format a concise message showing the essential request info
+			message := fmt.Sprintf("%s %s %d", v.Method, v.URI, statusCode)
+
+			// Fields to include in all log messages
+			fields := []interface{}{
 				"remote_ip", v.RemoteIP,
 				"method", v.Method,
 				"uri", v.URI,
-				"status", v.Status,
-				"error", errorStr,
-			)
+				"status", statusCode,
+				"latency_ms", latencyMs,
+			}
+
+			// Add optional fields only if they have values
+			if requestID != "" {
+				fields = append(fields, "request_id", requestID)
+			}
+
+			if v.ResponseSize > 0 {
+				fields = append(fields, "resp_size", v.ResponseSize)
+			}
+
+			if v.Error != nil {
+				fields = append(fields, "error", v.Error.Error())
+			}
+
+			if len(pathParams) > 0 {
+				fields = append(fields, "path_params", pathParams)
+			}
+
+			// Only log UserAgent and Referer for non-success responses or in debug mode
+			if (statusCode >= 400 || s.isDevMode()) && v.UserAgent != "" {
+				fields = append(fields, "user_agent", v.UserAgent)
+			}
+
+			if (statusCode >= 400 || s.isDevMode()) && v.Referer != "" {
+				fields = append(fields, "referer", v.Referer)
+			}
+
+			// Log with the appropriate level
+			logMethod(message, fields...)
+
 			return nil
 		},
 	}))
