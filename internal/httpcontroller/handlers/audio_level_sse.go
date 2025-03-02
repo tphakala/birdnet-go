@@ -257,160 +257,235 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 	// Get a connection-specific logger
 	connLogger := h.getAudioConnectionLogger(connectionID, clientIP)
 
-	// Check for existing connection
-	if _, exists := activeSSEConnections.LoadOrStore(clientIP, time.Now()); exists {
-		if connLogger != nil {
-			connLogger.Warn("Rejected duplicate connection")
-		} else {
-			h.LogWarn("AudioLevelSSE: Rejected duplicate connection", "client_ip", clientIP)
-		}
-		return c.NoContent(http.StatusTooManyRequests)
+	// Check for duplicate connections
+	if err := h.checkDuplicateConnection(clientIP, connLogger); err != nil {
+		return err
 	}
 
-	// Log connection established
-	if connLogger != nil {
-		connLogger.Info("New connection established")
-	} else {
-		h.LogInfo("AudioLevelSSE: New connection", "client_ip", clientIP)
-	}
-
-	// Cleanup connection on exit
-	defer func() {
-		activeSSEConnections.Delete(clientIP)
-		if connLogger != nil {
-			connLogger.Info("Connection closed")
-		} else {
-			h.LogDebug("AudioLevelSSE: Cleaned up connection", "client_ip", clientIP)
-		}
-	}()
-
-	// Start connection timeout timer
-	timeout := time.NewTimer(connectionTimeout)
-	defer timeout.Stop()
+	// Setup connection and defer cleanup
+	h.logConnectionEstablished(clientIP, connLogger)
+	defer h.cleanupConnection(clientIP, connLogger)
 
 	// Set up SSE headers
 	initializeSSEHeaders(c)
 
-	// Create tickers for heartbeat and activity check
-	heartbeat := time.NewTicker(10 * time.Second)
-	defer heartbeat.Stop()
-	activityCheck := time.NewTicker(1 * time.Second)
-	defer activityCheck.Stop()
-
-	// Initialize data structures
-	const inactivityThreshold = 15 * time.Second
-	levels, lastUpdateTime, lastNonZeroTime := h.initializeLevelsData(h.Server.IsAccessAllowed(c))
-	lastLogTime := time.Now()
-	lastSentTime := time.Now()
-	startTime := time.Now()
+	// Initialize connection state
+	connState := h.initializeConnectionState(c, connLogger)
 
 	// Send initial empty update to establish connection
-	if err := sendLevelsUpdate(c, levels); err != nil {
-		if connLogger != nil {
-			connLogger.Error("Error sending initial update", "error", err)
-		} else {
-			h.LogError("AudioLevelSSE: Error sending initial update", err)
-		}
+	if err := sendLevelsUpdate(c, connState.levels); err != nil {
+		h.logError("Error sending initial update", err, connLogger)
 		return err
 	}
 
-	// Connection metrics
-	messageCount := 0
-	totalSources := len(levels)
+	// Run the main event loop
+	return h.runEventLoop(c, connState, clientIP, connLogger)
+}
+
+// ConnectionState holds the state data for an SSE connection
+type ConnectionState struct {
+	levels          map[string]myaudio.AudioLevelData
+	lastUpdateTime  map[string]time.Time
+	lastNonZeroTime map[string]time.Time
+	lastLogTime     time.Time
+	lastSentTime    time.Time
+	startTime       time.Time
+	messageCount    int
+	totalSources    int
+}
+
+// checkDuplicateConnection checks if there's already a connection from this IP
+func (h *Handlers) checkDuplicateConnection(clientIP string, connLogger *logger.Logger) error {
+	if _, exists := activeSSEConnections.LoadOrStore(clientIP, time.Now()); exists {
+		if connLogger != nil {
+			connLogger.Warn("Rejected duplicate connection")
+		} else {
+			h.LogWarn("Rejected duplicate connection", "client_ip", clientIP)
+		}
+		return echo.NewHTTPError(http.StatusTooManyRequests)
+	}
+	return nil
+}
+
+// logConnectionEstablished logs when a new connection is established
+func (h *Handlers) logConnectionEstablished(clientIP string, connLogger *logger.Logger) {
+	if connLogger != nil {
+		connLogger.Info("New connection established")
+	} else {
+		h.LogInfo("New connection", "client_ip", clientIP)
+	}
+}
+
+// cleanupConnection removes the connection from tracking and logs it
+func (h *Handlers) cleanupConnection(clientIP string, connLogger *logger.Logger) {
+	activeSSEConnections.Delete(clientIP)
+	if connLogger != nil {
+		connLogger.Info("Connection closed")
+	} else {
+		h.LogDebug("Cleaned up connection", "client_ip", clientIP)
+	}
+}
+
+// initializeConnectionState creates and initializes the connection state
+func (h *Handlers) initializeConnectionState(c echo.Context, connLogger *logger.Logger) *ConnectionState {
+	levels, lastUpdateTime, lastNonZeroTime := h.initializeLevelsData(h.Server.IsAccessAllowed(c))
+	return &ConnectionState{
+		levels:          levels,
+		lastUpdateTime:  lastUpdateTime,
+		lastNonZeroTime: lastNonZeroTime,
+		lastLogTime:     time.Now(),
+		lastSentTime:    time.Now(),
+		startTime:       time.Now(),
+		messageCount:    0,
+		totalSources:    len(levels),
+	}
+}
+
+// logError logs an error with the appropriate logger
+func (h *Handlers) logError(message string, err error, connLogger *logger.Logger) {
+	if connLogger != nil {
+		connLogger.Error(message, "error", err)
+	} else {
+		h.LogError(message, err)
+	}
+}
+
+// runEventLoop handles the main event processing loop for the SSE connection
+func (h *Handlers) runEventLoop(c echo.Context, state *ConnectionState, clientIP string, connLogger *logger.Logger) error {
+	// Create tickers and timers
+	timeout := time.NewTimer(connectionTimeout)
+	defer timeout.Stop()
+
+	heartbeat := time.NewTicker(10 * time.Second)
+	defer heartbeat.Stop()
+
+	activityCheck := time.NewTicker(1 * time.Second)
+	defer activityCheck.Stop()
+
+	// Define the inactivity threshold
+	const inactivityThreshold = 15 * time.Second
 
 	for {
 		select {
 		case <-timeout.C:
-			if connLogger != nil {
-				connLogger.Info("Connection timeout",
-					"duration_ms", time.Since(startTime).Milliseconds(),
-					"messages_sent", messageCount)
-			} else {
-				h.LogDebug("AudioLevelSSE: Connection timeout", "client_ip", clientIP)
-			}
-			return nil
+			return h.handleTimeout(state, clientIP, connLogger)
 
 		case <-c.Request().Context().Done():
-			if connLogger != nil {
-				connLogger.Info("Client disconnected",
-					"duration_ms", time.Since(startTime).Milliseconds(),
-					"messages_sent", messageCount)
-			} else {
-				h.LogDebug("AudioLevelSSE: Client disconnected", "client_ip", clientIP)
-			}
-			return nil
+			return h.handleClientDisconnect(state, clientIP, connLogger)
 
 		case audioData := <-h.AudioLevelChan:
-			// Only log details occasionally to avoid flooding logs
-			if time.Since(lastLogTime) > 5*time.Second {
-				if connLogger != nil {
-					connLogger.Debug("Processing audio data",
-						"source", audioData.Source,
-						"level", audioData.Level,
-						"name", audioData.Name)
-				} else {
-					h.LogDebug("AudioLevelSSE: Received audio data",
-						"client_ip", clientIP,
-						"source", audioData.Source,
-						"level", audioData.Level,
-						"name", audioData.Name)
-				}
-				lastLogTime = time.Now()
-			}
-
-			h.updateAudioLevels(audioData, levels, lastUpdateTime, lastNonZeroTime,
-				h.Server.IsAccessAllowed(c), inactivityThreshold, connLogger)
-
-			// Only send updates if enough time has passed (rate limiting)
-			if time.Since(lastSentTime) >= 50*time.Millisecond {
-				if err := sendLevelsUpdate(c, levels); err != nil {
-					if connLogger != nil {
-						connLogger.Error("Error sending update", "error", err)
-					} else {
-						h.LogError("AudioLevelSSE: Error sending update", err)
-					}
-					return err
-				}
-				messageCount++
-				lastSentTime = time.Now()
-			}
-
-		case <-activityCheck.C:
-			if updated := checkSourceActivity(levels, lastUpdateTime, lastNonZeroTime, inactivityThreshold, connLogger); updated {
-				if err := sendLevelsUpdate(c, levels); err != nil {
-					if connLogger != nil {
-						connLogger.Error("Error sending update", "error", err)
-					} else {
-						h.LogError("AudioLevelSSE: Error sending update", err)
-					}
-					return err
-				}
-				messageCount++
-			}
-
-		case <-heartbeat.C:
-			// Send a comment as heartbeat
-			if _, err := fmt.Fprintf(c.Response(), ": heartbeat %d\n\n", time.Now().Unix()); err != nil {
-				if connLogger != nil {
-					connLogger.Error("Heartbeat error", "error", err)
-				} else {
-					h.LogError("AudioLevelSSE: Heartbeat error", err)
-				}
+			if err := h.handleAudioData(c, state, audioData, inactivityThreshold, clientIP, connLogger); err != nil {
 				return err
 			}
 
-			// Log connection stats on heartbeat occasionally
-			if connLogger != nil && time.Since(startTime) > 30*time.Second {
-				connLogger.Debug("Connection stats",
-					"duration_s", int(time.Since(startTime).Seconds()),
-					"messages_sent", messageCount,
-					"sources", totalSources,
-					"msg_per_min", float64(messageCount)/(time.Since(startTime).Minutes()))
+		case <-activityCheck.C:
+			if err := h.handleActivityCheck(c, state, inactivityThreshold, connLogger); err != nil {
+				return err
 			}
 
-			c.Response().Flush()
+		case <-heartbeat.C:
+			if err := h.handleHeartbeat(c, state, connLogger); err != nil {
+				return err
+			}
 		}
 	}
+}
+
+// handleTimeout handles connection timeout
+func (h *Handlers) handleTimeout(state *ConnectionState, clientIP string, connLogger *logger.Logger) error {
+	if connLogger != nil {
+		connLogger.Info("Connection timeout",
+			"duration_ms", time.Since(state.startTime).Milliseconds(),
+			"messages_sent", state.messageCount)
+	} else {
+		h.LogDebug("Connection timeout", "client_ip", clientIP)
+	}
+	return nil
+}
+
+// handleClientDisconnect handles client disconnection
+func (h *Handlers) handleClientDisconnect(state *ConnectionState, clientIP string, connLogger *logger.Logger) error {
+	if connLogger != nil {
+		connLogger.Info("Client disconnected",
+			"duration_ms", time.Since(state.startTime).Milliseconds(),
+			"messages_sent", state.messageCount)
+	} else {
+		h.LogDebug("Client disconnected", "client_ip", clientIP)
+	}
+	return nil
+}
+
+// handleAudioData processes incoming audio level data
+func (h *Handlers) handleAudioData(c echo.Context, state *ConnectionState, audioData myaudio.AudioLevelData,
+	inactivityThreshold time.Duration, clientIP string, connLogger *logger.Logger) error {
+
+	// Only log details occasionally to avoid flooding logs
+	if time.Since(state.lastLogTime) > 5*time.Second {
+		if connLogger != nil {
+			connLogger.Debug("Processing audio data",
+				"source", audioData.Source,
+				"level", audioData.Level,
+				"name", audioData.Name)
+		} else {
+			h.LogDebug("Received audio data",
+				"client_ip", clientIP,
+				"source", audioData.Source,
+				"level", audioData.Level,
+				"name", audioData.Name)
+		}
+		state.lastLogTime = time.Now()
+	}
+
+	h.updateAudioLevels(audioData, state.levels, state.lastUpdateTime, state.lastNonZeroTime,
+		h.Server.IsAccessAllowed(c), inactivityThreshold, connLogger)
+
+	// Only send updates if enough time has passed (rate limiting)
+	if time.Since(state.lastSentTime) >= 50*time.Millisecond {
+		if err := sendLevelsUpdate(c, state.levels); err != nil {
+			h.logError("Error sending update", err, connLogger)
+			return err
+		}
+		state.messageCount++
+		state.lastSentTime = time.Now()
+	}
+
+	return nil
+}
+
+// handleActivityCheck checks source activity and sends updates if needed
+func (h *Handlers) handleActivityCheck(c echo.Context, state *ConnectionState,
+	inactivityThreshold time.Duration, connLogger *logger.Logger) error {
+
+	if updated := checkSourceActivity(state.levels, state.lastUpdateTime, state.lastNonZeroTime, inactivityThreshold, connLogger); updated {
+		if err := sendLevelsUpdate(c, state.levels); err != nil {
+			h.logError("Error sending update", err, connLogger)
+			return err
+		}
+		state.messageCount++
+	}
+
+	return nil
+}
+
+// handleHeartbeat sends a heartbeat and logs connection stats
+func (h *Handlers) handleHeartbeat(c echo.Context, state *ConnectionState, connLogger *logger.Logger) error {
+	// Send a comment as heartbeat
+	if _, err := fmt.Fprintf(c.Response(), ": heartbeat %d\n\n", time.Now().Unix()); err != nil {
+		h.logError("Heartbeat error", err, connLogger)
+		return err
+	}
+
+	// Log connection stats on heartbeat occasionally
+	if connLogger != nil && time.Since(state.startTime) > 30*time.Second {
+		connLogger.Debug("Connection stats",
+			"duration_s", int(time.Since(state.startTime).Seconds()),
+			"messages_sent", state.messageCount,
+			"sources", state.totalSources,
+			"msg_per_min", float64(state.messageCount)/(time.Since(state.startTime).Minutes()))
+	}
+
+	c.Response().Flush()
+	return nil
 }
 
 // sendLevelsUpdate sends the current levels data to the client

@@ -189,7 +189,7 @@ func (h *Handlers) DetectionDetails(c echo.Context) error {
 	// Generate the spectrogram path for the note
 	spectrogramPath, err := h.getSpectrogramPath(note.ClipName, width)
 	if err != nil {
-		h.logError(&HandlerError{Err: err, Message: fmt.Sprintf("Error generating spectrogram for %s", note.ClipName), Code: http.StatusInternalServerError})
+		h.logError(fmt.Sprintf("Error generating spectrogram for %s", note.ClipName), err, nil)
 		spectrogramPath = "" // Set to empty string to avoid breaking the template
 	}
 
