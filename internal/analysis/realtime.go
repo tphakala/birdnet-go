@@ -149,8 +149,6 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Start buffer monitors for each audio source only if we have active sources
 	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
 		bufferManager.UpdateMonitors(sources)
-	} else {
-		log.Println("⚠️  Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
 	}
 
 	// start audio capture
@@ -272,7 +270,7 @@ func closeDataStore(store datastore.Interface) {
 // ClipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
 func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 	// Get a named logger for this function
-	log := logger.GetGlobal().Named("clipcleanup")
+	log := logger.GetGlobal().Named("cleanup")
 
 	// Create a ticker that triggers every five minutes to perform cleanup
 	ticker := time.NewTicker(5 * time.Minute)
