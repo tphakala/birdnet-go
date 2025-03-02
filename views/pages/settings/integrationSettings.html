@@ -75,7 +75,19 @@
                 "max" "1"
                 "tooltip" "Minimum confidence threshold for uploading predictions to BirdWeather."
                 }}
-
+            
+            <!-- Multi-Stage Operation Component for BirdWeather Connection Test -->
+            {{template "multiStageOperation" dict
+                "operationName" "BirdWeather Connection Test"
+                "apiEndpoint" "/api/v1/birdweather/test"
+                "stageOrder" "['Starting Test', 'API Connectivity', 'Authentication', 'Soundscape Upload', 'Detection Post']"
+                "buttonText" "Test BirdWeather Connection"
+                "buttonLoadingText" "Testing..."
+                "buttonDisabledCondition" "!birdweather.enabled || !birdweather.id || isRunning"
+                "buttonTooltipMap" "!birdweather.enabled ? 'BirdWeather must be enabled to test' : !birdweather.id ? 'BirdWeather token must be specified' : isRunning ? 'Test in progress...' : 'Test BirdWeather connection'"
+                "payload" "{enabled: birdweather.enabled, id: birdweather.id, threshold: birdweather.threshold, locationAccuracy: birdweather.locationAccuracy, debug: birdweather.debug}"
+                "completionMessage" "Please remember to save settings to apply the changes permanently."
+            }}
         </div>
     </div>
 </div>

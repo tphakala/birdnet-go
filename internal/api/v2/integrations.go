@@ -80,25 +80,32 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 
 	// Check if we have an active MQTT connection through the control channel
 	if c.controlChan != nil {
-		// Ask the control monitor for MQTT status
-		statusReq := make(chan any)
-		// Create a message with a specific structure expected by the control monitor
-		message := "mqtt_status"
-		c.controlChan <- message
+		c.Debug("Requesting MQTT status check")
 
-		// Wait for response with timeout
-		select {
-		case resp := <-statusReq:
-			if mqttStatus, ok := resp.(map[string]interface{}); ok {
-				if connected, ok := mqttStatus["connected"].(bool); ok {
-					status.Connected = connected
+		// Create a temporary MQTT client to check connection status
+		metrics, err := telemetry.NewMetrics()
+		if err == nil {
+			tempClient, err := mqtt.NewClient(c.Settings, metrics)
+			if err == nil {
+				// Use a short timeout to check connection
+				testCtx, cancel := context.WithTimeout(ctx.Request().Context(), 3*time.Second)
+				defer cancel()
+
+				// Try to connect and set status based on result
+				err = tempClient.Connect(testCtx)
+				status.Connected = err == nil && tempClient.IsConnected()
+
+				if err != nil {
+					status.LastError = fmt.Sprintf("error:connection:mqtt_broker:%s", err.Error()) // Standardized error code format
 				}
-				if lastErr, ok := mqttStatus["error"].(string); ok && lastErr != "" {
-					status.LastError = fmt.Sprintf("error:connection:mqtt_broker:%s", lastErr)
-				}
+
+				// Disconnect the temporary client
+				tempClient.Disconnect()
+			} else {
+				status.LastError = fmt.Sprintf("error:client:mqtt_client_creation:%s", err.Error()) // Standardized error code format
 			}
-		case <-time.After(2 * time.Second):
-			status.LastError = "error:timeout:status_request:request_timed_out"
+		} else {
+			status.LastError = fmt.Sprintf("error:metrics:initialization:%s", err.Error()) // Standardized error code format
 		}
 	} else if mqttConfig.Enabled {
 		// If control channel is not available but MQTT is enabled,
