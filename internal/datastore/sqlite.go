@@ -159,22 +159,6 @@ func (store *SQLiteStore) Open() error {
 		}
 	}
 
-	// Create a backup of the database if it exists and is larger than 1 MB
-	if _, err := os.Stat(dbPath); err == nil {
-		fi, err := os.Stat(dbPath)
-		if err == nil && fi.Size() > 1024*1024 {
-			if err := createBackup(dbPath); err != nil {
-				if sqliteLogger != nil {
-					sqliteLogger.Warn("Failed to create database backup",
-						"path", dbPath,
-						"error", err)
-				} else {
-					log.Printf("Warning: Failed to create database backup: %v", err)
-				}
-			}
-		}
-	}
-
 	// Create a new GORM logger
 	newLogger := createGormLogger(store.Logger)
 
