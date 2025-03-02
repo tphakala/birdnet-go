@@ -208,11 +208,17 @@ func (c *BirdImageCache) Close() error {
 }
 
 // initCache initializes a new BirdImageCache with the given ImageProvider.
-func InitCache(e ImageProvider, t *telemetry.Metrics, store datastore.Interface) *BirdImageCache {
+func InitCache(e ImageProvider, t *telemetry.Metrics, store datastore.Interface, parentLogger *logger.Logger) *BirdImageCache {
 	settings := conf.Setting()
 
-	// Use the global logger with a component name
-	componentLogger := logger.GetGlobal().Named("imageprovider.cache")
+	// Use the parent logger or fall back to global logger
+	var componentLogger *logger.Logger
+	if parentLogger != nil {
+		componentLogger = parentLogger.Named("imageprovider.cache")
+	} else {
+		// Fallback to global logger (will be removed after migration)
+		componentLogger = logger.GetGlobal().Named("imageprovider.cache")
+	}
 
 	quit := make(chan struct{})
 	cache := &BirdImageCache{
@@ -224,15 +230,13 @@ func InitCache(e ImageProvider, t *telemetry.Metrics, store datastore.Interface)
 		quit:     quit,
 	}
 
-	// Load cached images into memory only if store is available
-	if store != nil {
-		if err := cache.loadCachedImages(); err != nil && cache.debug && cache.logger != nil {
-			cache.logger.Debug("Error loading cached images", "error", err)
-		}
-	}
+	// Start a goroutine to periodically refresh the cache
+	go cache.startCacheRefresh(quit)
 
-	// Start cache refresh routine
-	cache.startCacheRefresh(quit)
+	// Attempt to initialize by loading from the database
+	if err := cache.loadCachedImages(); err != nil && cache.debug {
+		componentLogger.Error("Failed to load images from database", "error", err)
+	}
 
 	return cache
 }
@@ -528,37 +532,13 @@ func (c *BirdImageCache) updateMetrics() {
 }
 
 // CreateDefaultCache creates a new BirdImageCache with the default WikiMedia image provider.
-func CreateDefaultCache(metrics *telemetry.Metrics, store datastore.Interface) (*BirdImageCache, error) {
+func CreateDefaultCache(metrics *telemetry.Metrics, store datastore.Interface, parentLogger *logger.Logger) (*BirdImageCache, error) {
 	// Create the default WikiMedia provider
-	provider, err := NewWikiMediaProvider()
+	provider, err := NewWikiMediaProvider(parentLogger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create WikiMedia provider: %w", err)
 	}
 
-	settings := conf.Setting()
-
-	// Use the global logger with a component name
-	componentLogger := logger.GetGlobal().Named("imageprovider.cache")
-
-	quit := make(chan struct{})
-	cache := &BirdImageCache{
-		provider: provider,
-		metrics:  metrics.ImageProvider,
-		debug:    settings.Realtime.Dashboard.Thumbnails.Debug,
-		store:    store,
-		logger:   componentLogger,
-		quit:     quit,
-	}
-
-	// Load cached images into memory only if store is available
-	if store != nil {
-		if err := cache.loadCachedImages(); err != nil && cache.debug && cache.logger != nil {
-			cache.logger.Debug("Error loading cached images", "error", err)
-		}
-	}
-
-	// Start cache refresh routine
-	cache.startCacheRefresh(quit)
-
-	return cache, nil
+	// Use InitCache which now handles logger dependency injection
+	return InitCache(provider, metrics, store, parentLogger), nil
 }

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	_ "embed" // Embedding data directly into the binary.
 	"fmt"
+	"log"
 	"os"
 	"runtime"
 	"strings"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/cpuspec"
-	"github.com/tphakala/birdnet-go/internal/logger"
 	tflite "github.com/tphakala/go-tflite"
 	"github.com/tphakala/go-tflite/delegates/xnnpack"
 )
@@ -45,23 +45,13 @@ type BirdNET struct {
 	AnalysisInterpreter *tflite.Interpreter
 	RangeInterpreter    *tflite.Interpreter
 	Settings            *conf.Settings
-	logger              *logger.Logger
 	mu                  sync.Mutex
 }
 
 // NewBirdNET initializes a new BirdNET instance with given settings.
-func NewBirdNET(settings *conf.Settings, parentLogger *logger.Logger) (*BirdNET, error) {
-	var bnLogger *logger.Logger
-	if parentLogger != nil {
-		bnLogger = parentLogger.Named("birdnet")
-	} else {
-		// Fall back to global logger if no parent logger is provided
-		bnLogger = logger.Named("birdnet")
-	}
-
+func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	bn := &BirdNET{
 		Settings: settings,
-		logger:   bnLogger,
 	}
 
 	if err := bn.initializeModel(); err != nil {
@@ -109,8 +99,10 @@ func (bn *BirdNET) initializeModel() error {
 	if bn.Settings.BirdNET.UseXNNPACK {
 		delegate := xnnpack.New(xnnpack.DelegateOptions{NumThreads: int32(max(1, threads-1))})
 		if delegate == nil {
-			bn.logger.Warn("Failed to create XNNPACK delegate, falling back to default CPU",
-				"recommendation", "Download updated tensorflow lite C API library from: https://github.com/tphakala/tflite_c/releases/tag/v2.17.1")
+			fmt.Println("⚠️ Failed to create XNNPACK delegate, falling back to default CPU")
+			fmt.Println("Please download updated tensorflow lite C API library from:")
+			fmt.Println("https://github.com/tphakala/tflite_c/releases/tag/v2.17.1")
+			fmt.Println("and install it to enable use of XNNPACK delegate")
 			options.SetNumThread(threads)
 		} else {
 			options.AddDelegate(delegate)
@@ -121,7 +113,7 @@ func (bn *BirdNET) initializeModel() error {
 	}
 
 	options.SetErrorReporter(func(msg string, user_data interface{}) {
-		bn.logger.Error(msg)
+		fmt.Println(msg)
 	}, nil)
 
 	// Create and allocate the TensorFlow Lite interpreter.
@@ -153,14 +145,14 @@ func (bn *BirdNET) initializeModel() error {
 		initMessage = fmt.Sprintf("%s model initialized, using configured %v threads of available %v CPUs",
 			modelVersion, threads, runtime.NumCPU())
 	}
-	bn.logger.Info(initMessage)
+	fmt.Println(initMessage)
 	return nil
 }
 
 // getMetaModelData returns the appropriate meta model data based on the settings.
 func (bn *BirdNET) getMetaModelData() []byte {
 	if bn.Settings.BirdNET.RangeFilter.Model == "legacy" {
-		bn.logger.Warn("Using legacy range filter model")
+		fmt.Printf("⚠️ Using legacy range filter model")
 		return metaModelDataV1
 	}
 	return metaModelDataV2
@@ -179,7 +171,7 @@ func (bn *BirdNET) initializeMetaModel() error {
 	options := tflite.NewInterpreterOptions()
 	options.SetNumThread(1)
 	options.SetErrorReporter(func(msg string, user_data interface{}) {
-		bn.logger.Error(msg)
+		fmt.Println(msg)
 	}, nil)
 
 	// Create and allocate the TensorFlow Lite interpreter for the meta model.
@@ -240,7 +232,7 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 
 	// if locale is not set use english as default
 	if bn.Settings.BirdNET.Locale == "" {
-		bn.logger.Info("BirdNET locale not set, using English as default")
+		fmt.Println("BirdNET locale not set, using English as default")
 		bn.Settings.BirdNET.Locale = "en"
 	}
 
@@ -359,26 +351,20 @@ func (bn *BirdNET) validateModelAndLabels() error {
 
 	// Compare with the number of labels
 	if len(bn.Settings.BirdNET.Labels) != modelOutputSize {
-		bn.logger.Error("Label count mismatch",
-			"expected", modelOutputSize,
-			"actual", len(bn.Settings.BirdNET.Labels),
-			"status", "❌")
-		return fmt.Errorf("label count mismatch: model expects %d classes but label file has %d labels",
+		return fmt.Errorf("\033[31m❌ label count mismatch: model expects %d classes but label file has %d labels\033[0m",
 			modelOutputSize, len(bn.Settings.BirdNET.Labels))
 	}
 
-	bn.logger.Info("Model validation successful",
-		"labels", modelOutputSize,
-		"status", "✅")
+	bn.Debug("\033[32m✅ Model validation successful: %d labels match model output size\033[0m", modelOutputSize)
 	return nil
 }
 
 // ReloadModel safely reloads the BirdNET model and labels while handling ongoing analysis
 func (bn *BirdNET) ReloadModel() error {
-	bn.Debug("Acquiring mutex for model reload", "status", "🔒")
+	bn.Debug("\033[33m🔒 Acquiring mutex for model reload\033[0m")
 	bn.mu.Lock()
 	defer bn.mu.Unlock()
-	bn.Debug("Acquired mutex for model reload", "status", "✅")
+	bn.Debug("\033[32m✅ Acquired mutex for model reload\033[0m")
 
 	// Store old interpreters to clean up after successful reload
 	oldAnalysisInterpreter := bn.AnalysisInterpreter
@@ -386,10 +372,9 @@ func (bn *BirdNET) ReloadModel() error {
 
 	// Initialize new model
 	if err := bn.initializeModel(); err != nil {
-		bn.logger.Error("Failed to reload model", "error", err, "status", "❌")
-		return fmt.Errorf("failed to reload model: %w", err)
+		return fmt.Errorf("\033[31m❌ failed to reload model: %w\033[0m", err)
 	}
-	bn.Debug("Model initialized successfully", "status", "✅")
+	bn.Debug("\033[32m✅ Model initialized successfully\033[0m")
 
 	// Initialize new meta model
 	if err := bn.initializeMetaModel(); err != nil {
@@ -400,10 +385,9 @@ func (bn *BirdNET) ReloadModel() error {
 		// Restore the old interpreters
 		bn.AnalysisInterpreter = oldAnalysisInterpreter
 		bn.RangeInterpreter = oldRangeInterpreter
-		bn.logger.Error("Failed to reload meta model", "error", err, "status", "❌")
-		return fmt.Errorf("failed to reload meta model: %w", err)
+		return fmt.Errorf("\033[31m❌ failed to reload meta model: %w\033[0m", err)
 	}
-	bn.Debug("Meta model initialized successfully", "status", "✅")
+	bn.Debug("\033[32m✅ Meta model initialized successfully\033[0m")
 
 	// Reload labels
 	if err := bn.loadLabels(); err != nil {
@@ -417,10 +401,9 @@ func (bn *BirdNET) ReloadModel() error {
 		// Restore the old interpreters
 		bn.AnalysisInterpreter = oldAnalysisInterpreter
 		bn.RangeInterpreter = oldRangeInterpreter
-		bn.logger.Error("Failed to reload labels", "error", err, "status", "❌")
-		return fmt.Errorf("failed to reload labels: %w", err)
+		return fmt.Errorf("\033[31m❌ failed to reload labels: %w\033[0m", err)
 	}
-	bn.Debug("Labels loaded successfully", "status", "✅")
+	bn.Debug("\033[32m✅ Labels loaded successfully\033[0m")
 
 	// Validate that the model and labels match
 	if err := bn.validateModelAndLabels(); err != nil {
@@ -434,8 +417,7 @@ func (bn *BirdNET) ReloadModel() error {
 		// Restore the old interpreters
 		bn.AnalysisInterpreter = oldAnalysisInterpreter
 		bn.RangeInterpreter = oldRangeInterpreter
-		bn.logger.Error("Model validation failed", "error", err, "status", "❌")
-		return fmt.Errorf("model validation failed: %w", err)
+		return fmt.Errorf("\033[31m❌ model validation failed: %w\033[0m", err)
 	}
 
 	// Clean up old interpreters after successful reload
@@ -446,23 +428,17 @@ func (bn *BirdNET) ReloadModel() error {
 		oldRangeInterpreter.Delete()
 	}
 
-	bn.logger.Info("Model reload completed successfully", "status", "✅")
+	bn.Debug("\033[32m✅ Model reload completed successfully\033[0m")
 	return nil
 }
 
-// Debug logs debug messages if debug mode is enabled
-func (bn *BirdNET) Debug(message string, fields ...interface{}) {
+// Debug prints debug messages if debug mode is enabled
+func (bn *BirdNET) Debug(format string, v ...interface{}) {
 	if bn.Settings.BirdNET.Debug {
-		bn.logger.Debug(message, fields...)
-	}
-}
-
-// SetLogger allows setting a custom logger for the BirdNET instance
-func (bn *BirdNET) SetLogger(l *logger.Logger) {
-	if l != nil {
-		bn.logger = l.Named("birdnet")
-	} else {
-		// Fall back to global logger if nil is provided
-		bn.logger = logger.Named("birdnet")
+		if len(v) == 0 {
+			log.Print("[birdnet] " + format)
+		} else {
+			log.Printf("[birdnet] "+format, v...)
+		}
 	}
 }

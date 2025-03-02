@@ -35,17 +35,23 @@ type wikiMediaAuthor struct {
 	licenseURL  string
 }
 
-// NewWikiMediaProvider creates a new Wikipedia media provider.
-// It initializes a new mwclient for interacting with the Wikipedia API.
-func NewWikiMediaProvider() (*wikiMediaProvider, error) {
+// NewWikiMediaProvider creates a new WikiMedia image provider
+func NewWikiMediaProvider(parentLogger *logger.Logger) (*wikiMediaProvider, error) {
 	settings := conf.Setting()
-	client, err := mwclient.New("https://wikipedia.org/w/api.php", "BirdNET-Go")
+
+	client, err := mwclient.New("https://commons.wikimedia.org/w/api.php", "BirdNET-Go/1.0")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create mwclient: %w", err)
+		return nil, err
 	}
 
-	// Use the global logger with a component name
-	componentLogger := logger.GetGlobal().Named("imageprovider.wikipedia")
+	// Use the parent logger or fall back to global logger
+	var componentLogger *logger.Logger
+	if parentLogger != nil {
+		componentLogger = parentLogger.Named("imageprovider.wikipedia")
+	} else {
+		// Fallback to global logger (will be removed after migration)
+		componentLogger = logger.GetGlobal().Named("imageprovider.wikipedia")
+	}
 
 	// Rate limit: 10 requests per second with burst of 10
 	return &wikiMediaProvider{

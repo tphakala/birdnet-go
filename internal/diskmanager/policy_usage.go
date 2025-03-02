@@ -17,17 +17,21 @@ type Policy struct {
 }
 
 // UsageBasedCleanup cleans up old audio files based on the configuration and monitors for quit signals
+// Deprecated: Use DiskManager.UsageBasedCleanup instead
 func UsageBasedCleanup(quitChan chan struct{}, db Interface) error {
-	// Initialize logger if it hasn't been initialized
-	if diskLogger == nil {
-		InitLogger()
-	}
-
 	settings := conf.Setting()
 
 	debug := settings.Realtime.Audio.Export.Retention.Debug
 	baseDir := settings.Realtime.Audio.Export.Path
 	minClipsPerSpecies := settings.Realtime.Audio.Export.Retention.MinClips
+
+	// Check if usage cleanup is enabled based on policy setting
+	if settings.Realtime.Audio.Export.Retention.Policy != "usage" {
+		if debug {
+			diskLogger.Debug("Usage cleanup disabled in settings")
+		}
+		return nil
+	}
 
 	// Convert 80% string etc. to 80.0 float64
 	threshold, err := conf.ParsePercentage(settings.Realtime.Audio.Export.Retention.MaxUsage)
@@ -82,11 +86,6 @@ func UsageBasedCleanup(quitChan chan struct{}, db Interface) error {
 }
 
 func performCleanup(files []FileInfo, baseDir string, threshold float64, minClipsPerSpecies int, speciesMonthCount map[string]map[string]int, debug bool, quitChan chan struct{}) error {
-	// Initialize logger if it hasn't been initialized
-	if diskLogger == nil {
-		InitLogger()
-	}
-
 	// Delete files until disk usage is below the threshold or 100 files have been deleted
 	deletedFiles := 0
 	maxDeletions := 1000
@@ -178,11 +177,6 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 }
 
 func sortFiles(files []FileInfo, debug bool) map[string]map[string]int {
-	// Initialize logger if it hasn't been initialized
-	if diskLogger == nil {
-		InitLogger()
-	}
-
 	if debug {
 		diskLogger.Debug("Sorting files by cleanup priority")
 	}
@@ -229,4 +223,72 @@ func sortFiles(files []FileInfo, debug bool) map[string]map[string]int {
 	}
 
 	return speciesMonthCount
+}
+
+// UsageBasedCleanup cleans up old audio files based on the configuration and monitors for quit signals
+func (dm *DiskManager) UsageBasedCleanup(quitChan chan struct{}) error {
+	settings := conf.Setting()
+
+	debug := settings.Realtime.Audio.Export.Retention.Debug
+	baseDir := settings.Realtime.Audio.Export.Path
+	minClipsPerSpecies := settings.Realtime.Audio.Export.Retention.MinClips
+
+	// Check if usage cleanup is enabled based on policy setting
+	if settings.Realtime.Audio.Export.Retention.Policy != "usage" {
+		if debug {
+			dm.Logger.Debug("Usage cleanup disabled in settings")
+		}
+		return nil
+	}
+
+	// Convert 80% string etc. to 80.0 float64
+	threshold, err := conf.ParsePercentage(settings.Realtime.Audio.Export.Retention.MaxUsage)
+	if err != nil {
+		return err
+	}
+
+	if debug {
+		dm.Logger.Debug("Starting cleanup process",
+			"base_dir", baseDir,
+			"threshold", threshold)
+	}
+
+	// Check handle disk usage
+	diskUsage, err := GetDiskUsage(baseDir)
+	if err != nil {
+		return err
+	}
+
+	if diskUsage > threshold {
+		if debug {
+			dm.Logger.Debug("Disk usage above threshold",
+				"usage", diskUsage,
+				"threshold", threshold)
+		}
+
+		// Get the list of audio files, limited to allowed file types defined in file_utils.go
+		files, err := GetAudioFiles(baseDir, allowedFileTypes, dm.DB, debug)
+		if err != nil {
+			return err
+		}
+
+		// Sort files by the cleanup priority and get the initial count of files per species per subdirectory
+		speciesMonthCount := sortFiles(files, debug)
+
+		// Debug: write sorted files to a file
+		if debug {
+			if err := WriteSortedFilesToFile(files, "file_cleanup_order.txt"); err != nil {
+				return err
+			}
+		}
+
+		// Perform the cleanup
+		return performCleanup(files, baseDir, threshold, minClipsPerSpecies, speciesMonthCount, debug, quitChan)
+	} else if debug {
+		dm.Logger.Debug("Disk usage below threshold, no cleanup needed",
+			"usage", diskUsage,
+			"threshold", threshold)
+	}
+
+	return nil
 }

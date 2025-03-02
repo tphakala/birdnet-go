@@ -131,14 +131,14 @@ func (s *Server) setupRequestLogger() {
 			latencyMs := float64(v.Latency) / float64(time.Millisecond)
 
 			// Format a concise message showing the essential request info
-			message := fmt.Sprintf("%s %s %d", v.Method, v.URI, statusCode)
+			message := fmt.Sprintf("%d %s %s", statusCode, v.Method, v.URI)
 
 			// Fields to include in all log messages
 			fields := []interface{}{
-				"remote_ip", v.RemoteIP,
+				"status", statusCode,
 				"method", v.Method,
 				"uri", v.URI,
-				"status", statusCode,
+				"remote_ip", v.RemoteIP,
 				"latency_ms", latencyMs,
 			}
 

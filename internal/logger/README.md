@@ -275,6 +275,64 @@ go test github.com/tphakala/birdnet-go/internal/logger -v
    config := logger.ProductionConfig()
    ```
 
+## Sensitive Data Handling
+
+The logger package includes built-in protection against accidental logging of sensitive information such as passwords, tokens, cookies, and API keys.
+
+### How It Works
+
+All logging methods (Debug, Info, Warn, Error, Fatal) automatically:
+
+1. Scan log messages for common patterns of sensitive data and redact them
+2. Examine field keys for sensitive keywords (like "password", "token", etc.) and redact their values
+3. Replace sensitive information with "[REDACTED]" to maintain log readability
+
+### Example
+
+```go
+// Original code
+logger.Info("User authenticated", 
+    "username", "john.doe",
+    "token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "session_id", "abcdef123456")
+
+// What gets logged
+// {"level":"info","ts":1632512345.6789,"msg":"User authenticated","username":"john.doe","token":"[REDACTED]","session_id":"[REDACTED]"}
+```
+
+### Recognized Sensitive Data
+
+The logger automatically recognizes and redacts:
+
+- Authentication tokens (Bearer tokens, JWTs)
+- API keys
+- Passwords
+- Cookie values
+- CSRF tokens
+- Session IDs
+- Any field with names containing words like "secret", "key", "auth", etc.
+
+### Custom Handling
+
+If you need to customize sensitive data handling for specific use cases, you can use the exposed functions directly:
+
+```go
+// Redact sensitive data from a string
+safeMessage := logger.RedactSensitiveData(potentiallyUnsafeMessage)
+
+// Redact sensitive values from key-value pairs
+safeFields := logger.RedactSensitiveFields(fields)
+```
+
+### Security Considerations
+
+While the automatic redaction provides a good baseline of protection, it's still recommended to:
+
+1. Be mindful about what you log, especially in production environments
+2. Never design your code to intentionally log sensitive data
+3. Consider using dedicated security tools for comprehensive security analysis
+4. Regularly audit your logs to ensure sensitive data is not being inadvertently exposed
+
 ## Application-wide Logging Best Practices
 
 To maintain a unified logging approach across your application, follow these best practices:

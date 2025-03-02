@@ -2,7 +2,6 @@
 package diskmanager
 
 import (
-	"encoding/csv"
 	"errors"
 	"fmt"
 	"os"
@@ -36,55 +35,31 @@ type Interface interface {
 // diskLogger is a named logger for disk operations
 var diskLogger *logger.Logger
 
-// InitLogger initializes the diskmanager logger
-func InitLogger() {
-	diskLogger = logger.GetGlobal().Named("diskmanager")
+// DiskManager holds the components needed for disk management operations
+type DiskManager struct {
+	Logger *logger.Logger
+	DB     Interface
 }
 
-// LoadPolicy loads the cleanup policies from a CSV file
-func LoadPolicy(policyFile string) (*Policy, error) {
-	// Initialize logger if it hasn't been initialized
-	if diskLogger == nil {
-		InitLogger()
+// NewDiskManager creates a new DiskManager with the given logger
+func NewDiskManager(parentLogger *logger.Logger, db Interface) *DiskManager {
+	var componentLogger *logger.Logger
+	if parentLogger != nil {
+		componentLogger = parentLogger.Named("diskmanager")
+	} else {
+		// This fallback will be removed once global logger is gone
+		componentLogger = logger.GetGlobal().Named("diskmanager")
 	}
 
-	file, err := os.Open(policyFile)
-	if err != nil {
-		return nil, err
+	return &DiskManager{
+		Logger: componentLogger,
+		DB:     db,
 	}
-	defer file.Close()
-
-	reader := csv.NewReader(file)
-	records, err := reader.ReadAll()
-	if err != nil {
-		return nil, err
-	}
-
-	policy := &Policy{
-		AlwaysCleanupFirst: make(map[string]bool),
-		NeverCleanup:       make(map[string]bool),
-	}
-
-	for _, record := range records {
-		if len(record) != 2 {
-			return nil, errors.New("invalid policy record")
-		}
-		if record[1] == "always" {
-			policy.AlwaysCleanupFirst[record[0]] = true
-		} else if record[1] == "never" {
-			policy.NeverCleanup[record[0]] = true
-		}
-	}
-
-	return policy, nil
 }
 
 // GetAudioFiles returns a list of audio files in the directory and its subdirectories
 func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug bool) ([]FileInfo, error) {
 	// Initialize logger if it hasn't been initialized
-	if diskLogger == nil {
-		InitLogger()
-	}
 
 	var files []FileInfo
 
@@ -180,11 +155,6 @@ func contains(slice []string, item string) bool {
 
 // WriteSortedFilesToFile writes the sorted list of files to a text file for investigation
 func WriteSortedFilesToFile(files []FileInfo, filePath string) error {
-	// Initialize logger if it hasn't been initialized
-	if diskLogger == nil {
-		InitLogger()
-	}
-
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)

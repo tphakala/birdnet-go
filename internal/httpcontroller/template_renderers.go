@@ -2,6 +2,7 @@ package httpcontroller
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -135,7 +136,7 @@ func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 		if renderLogger != nil {
 			renderLogger.Error("Invalid render data type", "data_type", fmt.Sprintf("%T", data))
 		}
-		return "", fmt.Errorf(errMsg)
+		return "", errors.New(errMsg)
 	}
 
 	// Extract the context from the data
@@ -157,7 +158,7 @@ func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 		if renderLogger != nil {
 			renderLogger.Error("No route found", "path", path)
 		}
-		return "", fmt.Errorf(errMsg)
+		return "", errors.New(errMsg)
 	}
 
 	// Create a buffer to store the rendered template

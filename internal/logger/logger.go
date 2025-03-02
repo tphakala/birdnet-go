@@ -49,27 +49,42 @@ type Logger struct {
 
 // Debug logs a message at the debug level
 func (l *Logger) Debug(msg string, fields ...interface{}) {
-	l.sugar.Debugw(msg, fields...)
+	// Redact sensitive information from the message and fields
+	safeMsg := RedactSensitiveData(msg)
+	safeFields := RedactSensitiveFields(fields)
+	l.sugar.Debugw(safeMsg, safeFields...)
 }
 
 // Info logs a message at the info level
 func (l *Logger) Info(msg string, fields ...interface{}) {
-	l.sugar.Infow(msg, fields...)
+	// Redact sensitive information from the message and fields
+	safeMsg := RedactSensitiveData(msg)
+	safeFields := RedactSensitiveFields(fields)
+	l.sugar.Infow(safeMsg, safeFields...)
 }
 
 // Warn logs a message at the warn level
 func (l *Logger) Warn(msg string, fields ...interface{}) {
-	l.sugar.Warnw(msg, fields...)
+	// Redact sensitive information from the message and fields
+	safeMsg := RedactSensitiveData(msg)
+	safeFields := RedactSensitiveFields(fields)
+	l.sugar.Warnw(safeMsg, safeFields...)
 }
 
 // Error logs a message at the error level
 func (l *Logger) Error(msg string, fields ...interface{}) {
-	l.sugar.Errorw(msg, fields...)
+	// Redact sensitive information from the message and fields
+	safeMsg := RedactSensitiveData(msg)
+	safeFields := RedactSensitiveFields(fields)
+	l.sugar.Errorw(safeMsg, safeFields...)
 }
 
 // Fatal logs a message at the fatal level and then calls os.Exit(1)
 func (l *Logger) Fatal(msg string, fields ...interface{}) {
-	l.sugar.Fatalw(msg, fields...)
+	// Redact sensitive information from the message and fields
+	safeMsg := RedactSensitiveData(msg)
+	safeFields := RedactSensitiveFields(fields)
+	l.sugar.Fatalw(safeMsg, safeFields...)
 }
 
 // NewLogger creates a new logger with the given configuration.

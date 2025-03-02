@@ -252,20 +252,21 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
 func startClipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}, dataStore datastore.Interface, settings *conf.Settings, logger *logger.Logger) {
-	// Initialize diskmanager logger - this should be updated to use dependency injection
-	diskmanager.InitLogger()
+	// Create a diskmanager instance with proper logger inheritance
+	diskManagerLogger := logger.Named("diskmanager")
+	dm := diskmanager.NewDiskManager(diskManagerLogger, dataStore)
 
 	logger.Info("Starting clip cleanup monitor")
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		clipCleanupMonitor(quitChan, dataStore, settings, logger)
+		clipCleanupMonitor(quitChan, dataStore, settings, logger, dm)
 	}()
 }
 
 // ClipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
-func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface, settings *conf.Settings, logger *logger.Logger) {
+func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface, settings *conf.Settings, logger *logger.Logger, dm *diskmanager.DiskManager) {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop() // Ensure the ticker is stopped to prevent leaks
 
@@ -282,7 +283,7 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface, s
 			// age based cleanup method
 			if settings.Realtime.Audio.Export.Retention.Policy == "age" {
 				logger.Debug("Running age-based cleanup")
-				if err := diskmanager.AgeBasedCleanup(quitChan, dataStore); err != nil {
+				if err := dm.AgeBasedCleanup(quitChan); err != nil {
 					logger.Error("Error during age-based cleanup", "error", err)
 				}
 			}
@@ -290,7 +291,7 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface, s
 			// priority based cleanup method
 			if settings.Realtime.Audio.Export.Retention.Policy == "usage" {
 				logger.Debug("Running usage-based cleanup")
-				if err := diskmanager.UsageBasedCleanup(quitChan, dataStore); err != nil {
+				if err := dm.UsageBasedCleanup(quitChan); err != nil {
 					logger.Error("Error during usage-based cleanup", "error", err)
 				}
 			}
@@ -370,7 +371,7 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics, logg
 	logger.Info("Initializing bird image cache")
 
 	// Create the cache first
-	birdImageCache, err := imageprovider.CreateDefaultCache(metrics, ds)
+	birdImageCache, err := imageprovider.CreateDefaultCache(metrics, ds, logger)
 	if err != nil {
 		logger.Error("Failed to create image cache", "error", err)
 		return nil

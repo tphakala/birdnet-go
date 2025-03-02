@@ -89,18 +89,23 @@ func (s *Server) CSRFMiddleware() echo.MiddlewareFunc {
 			reqLogger := s.getRequestLogger(csrfLogger, c)
 
 			if reqLogger != nil {
+				// Logger's Error method now automatically redacts sensitive data
 				reqLogger.Error("CSRF token validation failed",
 					"token_header", c.Request().Header.Get("X-CSRF-Token"),
 					"token_form", c.FormValue("_csrf"),
 					"cookies", c.Request().Header.Get("Cookie"),
 					"error", err)
 			} else if s.isDevMode() {
+				// In dev mode, still log but ensure we're not exposing sensitive data
+				method := c.Request().Method
+				path := c.Request().URL.Path
+
+				// Don't log sensitive data directly
 				s.Debug("🚨 CSRF ERROR: Rejected request")
-				s.Debug("🔍 Request Method: %s, Path: %s", c.Request().Method, c.Request().URL.Path)
-				s.Debug("📌 CSRF Token in Header: %s", c.Request().Header.Get("X-CSRF-Token"))
-				s.Debug("📌 CSRF Token in Form: %s", c.FormValue("_csrf"))
-				s.Debug("📝 All Cookies: %s", c.Request().Header.Get("Cookie"))
+				s.Debug("🔍 Request Method: %s, Path: %s", method, path)
 				s.Debug("💡 Error Details: %v", err)
+
+				// Note: Tokens and cookies are not logged directly anymore
 			}
 
 			return echo.NewHTTPError(http.StatusForbidden, "Invalid CSRF token")
