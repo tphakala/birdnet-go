@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"github.com/tphakala/birdnet-go/internal/weather"
@@ -67,6 +68,10 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 	// Initialize database access.
 	dataStore := datastore.New(settings)
+
+	// Set the logger for the datastore using the global logger
+	dbLogger := logger.GetGlobal().Named("db")
+	dataStore.SetLogger(dbLogger)
 
 	// Open a connection to the database and handle possible errors.
 	if err := dataStore.Open(); err != nil {
@@ -201,6 +206,9 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
 func startClipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}, dataStore datastore.Interface) {
+	// Initialize diskmanager logger
+	diskmanager.InitLogger()
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -263,11 +271,14 @@ func closeDataStore(store datastore.Interface) {
 
 // ClipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
 func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
+	// Get a named logger for this function
+	log := logger.GetGlobal().Named("clipcleanup")
+
 	// Create a ticker that triggers every five minutes to perform cleanup
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop() // Ensure the ticker is stopped to prevent leaks
 
-	log.Println("Clip retention policy:", conf.Setting().Realtime.Audio.Export.Retention.Policy)
+	log.Info("Starting clip cleanup monitor", "policy", conf.Setting().Realtime.Audio.Export.Retention.Policy)
 
 	for {
 		select {
@@ -279,14 +290,14 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 			// age based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "age" {
 				if err := diskmanager.AgeBasedCleanup(quitChan, dataStore); err != nil {
-					log.Println("Error cleaning up clips: ", err)
+					log.Error("Error cleaning up clips", "error", err)
 				}
 			}
 
 			// priority based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "usage" {
 				if err := diskmanager.UsageBasedCleanup(quitChan, dataStore); err != nil {
-					log.Println("Error cleaning up clips: ", err)
+					log.Error("Error cleaning up clips", "error", err)
 				}
 			}
 		}

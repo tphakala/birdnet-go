@@ -4,7 +4,6 @@ package datastore
 import (
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -172,8 +171,13 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 						"attempt", attempt+1,
 						"max_attempts", maxRetries,
 						"delay_ms", delay.Milliseconds())
-				} else {
-					log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				} else if ds.Logger != nil {
+					// Use the datastore logger if transaction-specific logger is not available
+					ds.Logger.Warn("Database locked, retrying transaction",
+						"tx_id", txID,
+						"attempt", attempt+1,
+						"max_attempts", maxRetries,
+						"delay_ms", delay.Milliseconds())
 				}
 				time.Sleep(delay)
 				lastErr = err
@@ -188,8 +192,11 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 				txLogger.Info("Database transaction successful after retries",
 					"tx_id", txID,
 					"attempts", attempt+1)
-			} else {
-				log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
+			} else if ds.Logger != nil {
+				// Use the datastore logger if transaction-specific logger is not available
+				ds.Logger.Info("Database transaction successful after retries",
+					"tx_id", txID,
+					"attempts", attempt+1)
 			}
 		}
 
@@ -429,7 +436,12 @@ func (ds *DataStore) GetLastDetections(numDetections int) ([]Note, error) {
 	}
 
 	elapsed := time.Since(now)
-	log.Printf("Retrieved %d detections in %v", numDetections, elapsed)
+	// Use structured logger instead of standard log
+	if ds.Logger != nil {
+		ds.Logger.Info("Retrieved detections",
+			"count", numDetections,
+			"duration_ms", elapsed.Milliseconds())
+	}
 
 	return notes, nil
 }
@@ -835,8 +847,14 @@ func (ds *DataStore) LockNote(noteID string) error {
 						"attempt", attempt+1,
 						"max_attempts", maxRetries,
 						"delay_ms", delay.Milliseconds())
-				} else {
-					log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				} else if ds.Logger != nil {
+					// Use the datastore logger if lock-specific logger is not available
+					ds.Logger.Warn("Database locked, retrying lock operation",
+						"tx_id", txID,
+						"note_id", noteID,
+						"attempt", attempt+1,
+						"max_attempts", maxRetries,
+						"delay_ms", delay.Milliseconds())
 				}
 				time.Sleep(delay)
 				lastErr = result.Error
@@ -852,8 +870,12 @@ func (ds *DataStore) LockNote(noteID string) error {
 					"tx_id", txID,
 					"note_id", noteID,
 					"attempts", attempt+1)
-			} else {
-				log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
+			} else if ds.Logger != nil {
+				// Use the datastore logger if lock-specific logger is not available
+				ds.Logger.Info("Lock operation successful after retries",
+					"tx_id", txID,
+					"note_id", noteID,
+					"attempts", attempt+1)
 			}
 		}
 		return nil
@@ -909,8 +931,14 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 						"attempt", attempt+1,
 						"max_attempts", maxRetries,
 						"delay_ms", delay.Milliseconds())
-				} else {
-					log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				} else if ds.Logger != nil {
+					// Use the datastore logger if unlock-specific logger is not available
+					ds.Logger.Warn("Database locked, retrying unlock operation",
+						"tx_id", txID,
+						"note_id", noteID,
+						"attempt", attempt+1,
+						"max_attempts", maxRetries,
+						"delay_ms", delay.Milliseconds())
 				}
 				time.Sleep(delay)
 				lastErr = result.Error
@@ -926,8 +954,12 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 					"tx_id", txID,
 					"note_id", noteID,
 					"attempts", attempt+1)
-			} else {
-				log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
+			} else if ds.Logger != nil {
+				// Use the datastore logger if unlock-specific logger is not available
+				ds.Logger.Info("Unlock operation successful after retries",
+					"tx_id", txID,
+					"note_id", noteID,
+					"attempts", attempt+1)
 			}
 		}
 		return nil

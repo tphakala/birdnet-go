@@ -2,7 +2,6 @@
 package diskmanager
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +12,11 @@ import (
 
 // AgeBasedCleanup removes clips from the filesystem based on their age and the number of clips per species.
 func AgeBasedCleanup(quit <-chan struct{}, db Interface) error {
+	// Initialize logger if it hasn't been initialized
+	if diskLogger == nil {
+		InitLogger()
+	}
+
 	settings := conf.Setting()
 
 	debug := settings.Realtime.Audio.Export.Retention.Debug
@@ -22,12 +26,14 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) error {
 
 	retentionPeriodInHours, err := conf.ParseRetentionPeriod(retentionPeriod)
 	if err != nil {
-		log.Printf("Invalid retention period: %s\n", err)
+		diskLogger.Error("Invalid retention period", "error", err)
 		return err
 	}
 
 	if debug {
-		log.Printf("Starting age-based cleanup process. Base directory: %s, Retention period: %s", baseDir, retentionPeriod)
+		diskLogger.Debug("Starting age-based cleanup",
+			"base_dir", baseDir,
+			"retention_period", retentionPeriod)
 	}
 
 	// Get the list of audio files, limited to allowed file types defined in file_utils.go
@@ -54,13 +60,13 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) error {
 	for _, file := range files {
 		select {
 		case <-quit:
-			log.Printf("Cleanup interrupted by quit signal\n")
+			diskLogger.Info("Cleanup interrupted by quit signal")
 			return nil
 		default:
 			// Skip locked files from deletion
 			if file.Locked {
 				if debug {
-					log.Printf("Skipping locked file: %s", file.Path)
+					diskLogger.Debug("Skipping locked file", "path", file.Path)
 				}
 				continue
 			}
@@ -70,18 +76,22 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) error {
 
 				if speciesMonthCount[file.Species][subDir] <= minClipsPerSpecies {
 					if debug {
-						log.Printf("Species clip count for %s in %s is at the minimum threshold (%d). Skipping file deletion.", file.Species, subDir, minClipsPerSpecies)
+						diskLogger.Debug("Species clip count at minimum threshold, skipping deletion",
+							"species", file.Species,
+							"directory", subDir,
+							"count", speciesMonthCount[file.Species][subDir],
+							"min_threshold", minClipsPerSpecies)
 					}
 					continue
 				}
 
 				if debug {
-					log.Printf("File %s is older than retention period, deleting.", file.Path)
+					diskLogger.Debug("File older than retention period, deleting", "path", file.Path)
 				}
 
 				err = os.Remove(file.Path)
 				if err != nil {
-					log.Printf("Failed to remove %s: %s\n", file.Path, err)
+					diskLogger.Error("Failed to remove file", "path", file.Path, "error", err)
 					return err
 				}
 
@@ -89,7 +99,7 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) error {
 				deletedFiles++
 
 				if debug {
-					log.Printf("File %s deleted", file.Path)
+					diskLogger.Debug("File deleted", "path", file.Path)
 				}
 
 				// Yield to other goroutines
@@ -98,7 +108,7 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) error {
 				// Check if we have reached the maximum number of deletions
 				if deletedFiles >= maxDeletions {
 					if debug {
-						log.Printf("Reached maximum number of deletions (%d). Ending cleanup.", maxDeletions)
+						diskLogger.Debug("Reached maximum number of deletions", "max", maxDeletions)
 					}
 					return nil
 				}
@@ -107,7 +117,7 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) error {
 	}
 
 	if debug {
-		log.Printf("Age retention policy applied, total files deleted: %d", deletedFiles)
+		diskLogger.Info("Age retention policy applied", "files_deleted", deletedFiles)
 	}
 
 	return nil

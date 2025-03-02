@@ -667,128 +667,22 @@ func (h *Handlers) processReview(noteID uint, verified string, lockDetection boo
 		return fmt.Errorf("invalid verification status")
 	}
 
+	return h.executeWithRetry(func() error {
+		return h.updateNoteReviewAndLock(noteID, verified, lockDetection, reviewLogger)
+	}, maxRetries, baseDelay, reviewLogger, noteID)
+}
+
+// executeWithRetry executes the provided function with retry logic for database locks
+func (h *Handlers) executeWithRetry(operation func() error, maxRetries int, baseDelay time.Duration,
+	logger *logger.Logger, noteID uint) error {
+
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		err := h.DS.Transaction(func(tx *gorm.DB) error {
-			// Get note and existing review in a transaction
-			note, err := h.DS.Get(strconv.FormatUint(uint64(noteID), 10))
-			if err != nil {
-				if reviewLogger != nil {
-					reviewLogger.Error("Failed to retrieve note",
-						"note_id", noteID,
-						"error", err)
-				}
-				return fmt.Errorf("failed to retrieve note: %w", err)
-			}
-
-			if reviewLogger != nil && h.debug {
-				reviewLogger.Debug("Retrieved note",
-					"note_id", noteID,
-					"is_locked", note.Lock != nil)
-			}
-
-			// Check if note is locked and trying to mark as false positive
-			if note.Lock != nil && verified == "false_positive" {
-				if reviewLogger != nil {
-					reviewLogger.Warn("Attempt to mark locked note as false positive",
-						"note_id", noteID,
-						"common_name", note.CommonName)
-				}
-				return fmt.Errorf("cannot mark locked detection as false positive - unlock it first")
-			}
-
-			// Only process review status if it's provided
-			if verified != "" {
-				// Handle species exclusion
-				if err := h.handleSpeciesExclusion(&note, verified, ""); err != nil {
-					if reviewLogger != nil {
-						reviewLogger.Error("Failed to handle species exclusion",
-							"common_name", note.CommonName,
-							"error", err)
-					}
-					return err
-				}
-
-				// Create or update the review using upsert
-				review := &datastore.NoteReview{
-					NoteID:    noteID,
-					Verified:  verified,
-					CreatedAt: time.Now(),
-					UpdatedAt: time.Now(),
-				}
-
-				// Use upsert operation for the review
-				if err := tx.Where("note_id = ?", noteID).
-					Assign(*review).
-					FirstOrCreate(review).Error; err != nil {
-					if reviewLogger != nil {
-						reviewLogger.Error("Failed to save review",
-							"note_id", noteID,
-							"error", err)
-					}
-					return fmt.Errorf("failed to save review: %w", err)
-				}
-
-				if reviewLogger != nil && h.debug {
-					reviewLogger.Debug("Review saved successfully", "note_id", noteID)
-				}
-			}
-
-			// Handle lock state changes
-			if verified == "correct" || verified == "" { // Also handle lock changes when no review status is provided
-				if reviewLogger != nil && h.debug {
-					reviewLogger.Debug("Handling lock state",
-						"note_id", noteID,
-						"lock_detection", lockDetection)
-				}
-
-				if lockDetection {
-					// Lock the detection
-					lock := &datastore.NoteLock{
-						NoteID:   noteID,
-						LockedAt: time.Now(),
-					}
-
-					// Use upsert operation within the same transaction
-					if err := tx.Where("note_id = ?", noteID).
-						Assign(*lock).
-						FirstOrCreate(lock).Error; err != nil {
-						if reviewLogger != nil {
-							reviewLogger.Error("Failed to lock note",
-								"note_id", noteID,
-								"error", err)
-						}
-						return fmt.Errorf("failed to lock note: %w", err)
-					}
-
-					if reviewLogger != nil && h.debug {
-						reviewLogger.Debug("Note locked successfully", "note_id", noteID)
-					}
-				} else {
-					// Remove lock if exists
-					if err := tx.Where("note_id = ?", noteID).Delete(&datastore.NoteLock{}).Error; err != nil {
-						if reviewLogger != nil {
-							reviewLogger.Error("Failed to unlock note",
-								"note_id", noteID,
-								"error", err)
-						}
-						return fmt.Errorf("failed to unlock note: %w", err)
-					}
-
-					if reviewLogger != nil && h.debug {
-						reviewLogger.Debug("Note unlocked successfully", "note_id", noteID)
-					}
-				}
-			}
-
-			return nil
-		})
-
-		if err != nil {
+		if err := operation(); err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
 				delay := baseDelay * time.Duration(attempt+1)
-				if reviewLogger != nil {
-					reviewLogger.Warn("Database locked, retrying",
+				if logger != nil {
+					logger.Warn("Database locked, retrying",
 						"note_id", noteID,
 						"attempt", attempt+1,
 						"max_retries", maxRetries,
@@ -801,20 +695,171 @@ func (h *Handlers) processReview(noteID uint, verified string, lockDetection boo
 			return err
 		}
 
-		// If we get here, the transaction was successful
-		if reviewLogger != nil && h.debug {
-			reviewLogger.Debug("Transaction completed successfully", "note_id", noteID)
+		// If we get here, the operation was successful
+		if logger != nil && h.debug {
+			logger.Debug("Transaction completed successfully", "note_id", noteID)
 		}
 		return nil
 	}
 
-	if reviewLogger != nil {
-		reviewLogger.Error("All attempts failed",
+	if logger != nil {
+		logger.Error("All attempts failed",
 			"note_id", noteID,
 			"max_retries", maxRetries,
 			"last_error", lastErr)
 	}
 	return lastErr
+}
+
+// updateNoteReviewAndLock handles the database transaction for updating note review and lock status
+func (h *Handlers) updateNoteReviewAndLock(noteID uint, verified string, lockDetection bool,
+	reviewLogger *logger.Logger) error {
+
+	return h.DS.Transaction(func(tx *gorm.DB) error {
+		// Get note in a transaction
+		note, err := h.DS.Get(strconv.FormatUint(uint64(noteID), 10))
+		if err != nil {
+			if reviewLogger != nil {
+				reviewLogger.Error("Failed to retrieve note",
+					"note_id", noteID,
+					"error", err)
+			}
+			return fmt.Errorf("failed to retrieve note: %w", err)
+		}
+
+		if reviewLogger != nil && h.debug {
+			reviewLogger.Debug("Retrieved note",
+				"note_id", noteID,
+				"is_locked", note.Lock != nil)
+		}
+
+		// Process verification status if provided
+		if verified != "" {
+			if err := h.processVerificationStatus(tx, &note, noteID, verified, reviewLogger); err != nil {
+				return err
+			}
+		}
+
+		// Process lock state if applicable
+		if verified == "correct" || verified == "" {
+			if err := h.processLockState(tx, noteID, lockDetection, reviewLogger); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
+// processVerificationStatus handles the verification status update
+func (h *Handlers) processVerificationStatus(tx *gorm.DB, note *datastore.Note, noteID uint,
+	verified string, reviewLogger *logger.Logger) error {
+
+	// Check if note is locked and trying to mark as false positive
+	if note.Lock != nil && verified == "false_positive" {
+		if reviewLogger != nil {
+			reviewLogger.Warn("Attempt to mark locked note as false positive",
+				"note_id", noteID,
+				"common_name", note.CommonName)
+		}
+		return fmt.Errorf("cannot mark locked detection as false positive - unlock it first")
+	}
+
+	// Handle species exclusion
+	if err := h.handleSpeciesExclusion(note, verified, ""); err != nil {
+		if reviewLogger != nil {
+			reviewLogger.Error("Failed to handle species exclusion",
+				"common_name", note.CommonName,
+				"error", err)
+		}
+		return err
+	}
+
+	// Create or update the review
+	review := &datastore.NoteReview{
+		NoteID:    noteID,
+		Verified:  verified,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	// Use upsert operation for the review
+	if err := tx.Where("note_id = ?", noteID).
+		Assign(*review).
+		FirstOrCreate(review).Error; err != nil {
+		if reviewLogger != nil {
+			reviewLogger.Error("Failed to save review",
+				"note_id", noteID,
+				"error", err)
+		}
+		return fmt.Errorf("failed to save review: %w", err)
+	}
+
+	if reviewLogger != nil && h.debug {
+		reviewLogger.Debug("Review saved successfully", "note_id", noteID)
+	}
+
+	return nil
+}
+
+// processLockState handles the lock state update
+func (h *Handlers) processLockState(tx *gorm.DB, noteID uint, lockDetection bool,
+	reviewLogger *logger.Logger) error {
+
+	if reviewLogger != nil && h.debug {
+		reviewLogger.Debug("Handling lock state",
+			"note_id", noteID,
+			"lock_detection", lockDetection)
+	}
+
+	if lockDetection {
+		return h.createLock(tx, noteID, reviewLogger)
+	}
+	return h.removeLock(tx, noteID, reviewLogger)
+}
+
+// createLock adds a lock to a note
+func (h *Handlers) createLock(tx *gorm.DB, noteID uint, reviewLogger *logger.Logger) error {
+	// Lock the detection
+	lock := &datastore.NoteLock{
+		NoteID:   noteID,
+		LockedAt: time.Now(),
+	}
+
+	// Use upsert operation
+	if err := tx.Where("note_id = ?", noteID).
+		Assign(*lock).
+		FirstOrCreate(lock).Error; err != nil {
+		if reviewLogger != nil {
+			reviewLogger.Error("Failed to lock note",
+				"note_id", noteID,
+				"error", err)
+		}
+		return fmt.Errorf("failed to lock note: %w", err)
+	}
+
+	if reviewLogger != nil && h.debug {
+		reviewLogger.Debug("Note locked successfully", "note_id", noteID)
+	}
+	return nil
+}
+
+// removeLock removes a lock from a note
+func (h *Handlers) removeLock(tx *gorm.DB, noteID uint, reviewLogger *logger.Logger) error {
+	// Remove lock if exists
+	if err := tx.Where("note_id = ?", noteID).Delete(&datastore.NoteLock{}).Error; err != nil {
+		if reviewLogger != nil {
+			reviewLogger.Error("Failed to unlock note",
+				"note_id", noteID,
+				"error", err)
+		}
+		return fmt.Errorf("failed to unlock note: %w", err)
+	}
+
+	if reviewLogger != nil && h.debug {
+		reviewLogger.Debug("Note unlocked successfully", "note_id", noteID)
+	}
+	return nil
 }
 
 // ReviewDetection handles the review status update and related operations
