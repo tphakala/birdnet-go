@@ -3,16 +3,107 @@ package birdweather
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log"
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 )
+
+// Rate limiting constants
+const (
+	// Minimum time between test submissions (1 minute)
+	minTestInterval = 1 * time.Minute
+)
+
+// DNS Fallback resolvers
+var fallbackDNSResolvers = []string{
+	"1.1.1.1:53", // Cloudflare
+	"8.8.8.8:53", // Google
+	"9.9.9.9:53", // Quad9
+}
+
+// resultContext is used to pass result IDs through context
+type resultContext struct {
+	ID string
+}
+
+// Define a custom type for the context key to avoid collisions
+type contextKey int
+
+// Define the key constant
+const resultIDKey contextKey = iota
+
+// Global rate limiter state
+var (
+	lastTestTime  time.Time
+	rateLimiterMu sync.Mutex
+)
+
+// checkRateLimit returns error if tests are being run too frequently
+func checkRateLimit() error {
+	rateLimiterMu.Lock()
+	defer rateLimiterMu.Unlock()
+
+	// If this is the first test or enough time has passed, allow it
+	if lastTestTime.IsZero() || time.Since(lastTestTime) >= minTestInterval {
+		// Update the last test time and allow this test
+		lastTestTime = time.Now()
+		return nil
+	}
+
+	// Calculate time until next allowed test
+	nextAllowedTime := lastTestTime.Add(minTestInterval)
+	waitTime := time.Until(nextAllowedTime).Round(time.Second)
+
+	return fmt.Errorf("rate limit exceeded: please wait %s before testing again", waitTime)
+}
+
+// resolveDNSWithFallback attempts to resolve a hostname using fallback DNS servers if the OS resolver fails
+func resolveDNSWithFallback(hostname string) ([]net.IP, error) {
+	// First try the standard resolver
+	ips, err := net.LookupIP(hostname)
+	if err == nil && len(ips) > 0 {
+		return ips, nil
+	}
+
+	// If standard resolver fails, log the error
+	log.Printf("Standard DNS resolution for %s failed: %v", hostname, err)
+	log.Printf("Attempting to resolve %s using fallback DNS servers...", hostname)
+
+	// Try each fallback resolver
+	for _, resolver := range fallbackDNSResolvers {
+		r := &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+				d := net.Dialer{Timeout: 5 * time.Second}
+				return d.DialContext(ctx, "udp", resolver)
+			},
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		fallbackIPs, err := r.LookupIPAddr(ctx, hostname)
+		cancel()
+
+		if err == nil && len(fallbackIPs) > 0 {
+			// Convert IPAddr to IP
+			result := make([]net.IP, len(fallbackIPs))
+			for i, addr := range fallbackIPs {
+				result[i] = addr.IP
+			}
+			log.Printf("Successfully resolved %s using fallback DNS %s: %v", hostname, resolver, result)
+			return result, nil
+		}
+	}
+
+	return nil, fmt.Errorf("failed to resolve %s with all DNS resolvers", hostname)
+}
 
 // TestConfig encapsulates test configuration for artificial delays and failures
 type TestConfig struct {
@@ -70,6 +161,7 @@ type TestResult struct {
 	IsProgress bool   `json:"isProgress,omitempty"`
 	State      string `json:"state,omitempty"`     // Current state: running, completed, failed, timeout
 	Timestamp  string `json:"timestamp,omitempty"` // ISO8601 timestamp of the result
+	ResultID   string `json:"resultId,omitempty"`  // Optional ID for test results like soundscapeID
 }
 
 // TestStage represents a stage in the BirdWeather test process
@@ -127,6 +219,9 @@ func runTest(ctx context.Context, stage TestStage, test birdweatherTest) TestRes
 	// Create buffered channel for test result
 	resultChan := make(chan error, 1)
 
+	// Create a context with a value to pass back the result ID
+	ctx = context.WithValue(ctx, resultIDKey, &resultContext{})
+
 	// Run the test in a goroutine
 	go func() {
 		resultChan <- test(ctx)
@@ -152,10 +247,28 @@ func runTest(ctx context.Context, stage TestStage, test birdweatherTest) TestRes
 		}
 	}
 
+	// Get any result ID from the context
+	var resultID string
+	if rc, ok := ctx.Value(resultIDKey).(*resultContext); ok && rc != nil {
+		resultID = rc.ID
+	}
+
+	// Create appropriate success message based on the stage
+	var message string
+	switch stage {
+	case SoundscapeUpload:
+		message = fmt.Sprintf("Successfully uploaded test soundscape (0.5 second silent audio) to BirdWeather. This recording should appear on your BirdWeather station at %s.", time.Now().Format("Jan 2, 2006 at 15:04:05"))
+	case DetectionPost:
+		message = fmt.Sprintf("Successfully posted test detection to BirdWeather: Whooper Swan (Cygnus cygnus) with unlikely confidence.")
+	default:
+		message = fmt.Sprintf("Successfully completed %s", stage)
+	}
+
 	return TestResult{
-		Success: true,
-		Stage:   stage.String(),
-		Message: fmt.Sprintf("Successfully completed %s", stage),
+		Success:  true,
+		Stage:    stage.String(),
+		Message:  message,
+		ResultID: resultID,
 	}
 }
 
@@ -165,31 +278,138 @@ func (b *BwClient) testAPIConnectivity(ctx context.Context) TestResult {
 	defer apiCancel()
 
 	return runTest(apiCtx, APIConnectivity, func(ctx context.Context) error {
-		// Simple check if we can reach the BirdWeather API endpoint
-		req, err := http.NewRequestWithContext(ctx, "HEAD", "https://app.birdweather.com/api/v1/health", http.NoBody)
-		if err != nil {
-			return err
-		}
-		req.Header.Set("User-Agent", "BirdNET-Go")
+		// Define the API endpoint URL
+		apiEndpoint := "https://app.birdweather.com/api/v1"
 
-		// Create a temporary HTTP client with a shorter timeout for this test
-		client := &http.Client{Timeout: apiTimeout}
-		resp, err := client.Do(req)
+		// Parse URL to extract the hostname
+		parsedURL, err := url.Parse(apiEndpoint)
 		if err != nil {
-			var netErr net.Error
-			if errors.As(err, &netErr) && netErr.Timeout() {
-				return fmt.Errorf("API connectivity test timed out: %w", err)
+			return fmt.Errorf("invalid API endpoint URL: %w", err)
+		}
+		hostname := parsedURL.Hostname()
+
+		// First attempt: Use standard HTTP client
+		log.Printf("Testing connectivity to BirdWeather API at %s", apiEndpoint)
+		err = tryAPIConnection(ctx, apiEndpoint)
+
+		// If first attempt fails with DNS error, try fallback DNS resolution
+		if err != nil {
+			if isDNSError(err) {
+				log.Printf("DNS resolution failed: %v, attempting fallback...", err)
+
+				// Attempt DNS resolution with fallback resolvers
+				ips, resolveErr := resolveDNSWithFallback(hostname)
+				if resolveErr != nil {
+					return fmt.Errorf("all DNS resolution attempts failed: %w", resolveErr)
+				}
+
+				// Try to connect using the resolved IP directly
+				for _, ip := range ips {
+					// Create a modified URL with IP instead of hostname
+					// Need to keep the original hostname in HTTP Host header
+					ipEndpoint := replaceHostWithIP(apiEndpoint, ip.String())
+
+					log.Printf("Attempting connection with fallback DNS resolved IP: %s", ipEndpoint)
+					err = tryAPIConnection(ctx, ipEndpoint, hostname)
+					if err == nil {
+						log.Printf("✅ Successfully connected to BirdWeather API via fallback DNS resolution")
+						return nil
+					}
+				}
+
+				return fmt.Errorf("connection failed using both standard and fallback DNS: %w", err)
 			}
-			return fmt.Errorf("failed to connect to BirdWeather API: %w", err)
-		}
-		defer resp.Body.Close()
 
-		if resp.StatusCode >= 400 {
-			return fmt.Errorf("API returned error status: %d", resp.StatusCode)
+			// Not a DNS error, return the original error
+			return err
 		}
 
 		return nil
 	})
+}
+
+// Helper function to check if an error is DNS-related
+func isDNSError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+	return strings.Contains(errStr, "no such host") ||
+		strings.Contains(errStr, "lookup ") ||
+		strings.Contains(errStr, "dial tcp") ||
+		strings.Contains(errStr, "DNS") ||
+		strings.Contains(errStr, "dns") ||
+		strings.Contains(errStr, "cannot resolve")
+}
+
+// Helper function to replace hostname with IP in URL
+func replaceHostWithIP(urlStr, ip string) string {
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return urlStr // return original if parsing fails
+	}
+
+	// Keep track of original port if specified
+	port := parsedURL.Port()
+	if port != "" {
+		parsedURL.Host = ip + ":" + port
+	} else {
+		parsedURL.Host = ip
+	}
+
+	return parsedURL.String()
+}
+
+// tryAPIConnection attempts to connect to the API endpoint
+func tryAPIConnection(ctx context.Context, apiEndpoint string, hostHeader ...string) error {
+	req, err := http.NewRequestWithContext(ctx, "HEAD", apiEndpoint, http.NoBody)
+	if err != nil {
+		return err
+	}
+
+	// Set User-Agent
+	req.Header.Set("User-Agent", "BirdNET-Go")
+
+	// If host header is provided (for IP direct connections), set it
+	if len(hostHeader) > 0 && hostHeader[0] != "" {
+		req.Host = hostHeader[0]
+	}
+
+	// Create a temporary HTTP client with a shorter timeout for this test
+	client := &http.Client{
+		Timeout: apiTimeout,
+		// Add special transport to handle potential certificate issues with direct IP
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: false, // Keep secure by default
+			},
+		},
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			return fmt.Errorf("API connectivity test timed out while connecting to %s: %w", apiEndpoint, err)
+		}
+		return fmt.Errorf("failed to connect to BirdWeather API at %s: %w", apiEndpoint, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		// Special handling for 404 Not Found errors
+		if resp.StatusCode == 404 {
+			log.Printf("BirdWeather API endpoint not found: %s returned 404", apiEndpoint)
+			return fmt.Errorf("API endpoint not found (404): %s", apiEndpoint)
+		}
+		log.Printf("BirdWeather API returned error status: %d for URL %s", resp.StatusCode, apiEndpoint)
+		return fmt.Errorf("API at %s returned error status: %d", apiEndpoint, resp.StatusCode)
+	}
+
+	// Successfully connected to the API
+	log.Printf("✅ Successfully connected to BirdWeather API at %s (status: %d)", apiEndpoint, resp.StatusCode)
+	return nil
 }
 
 // testAuthentication tests authentication with the BirdWeather API
@@ -200,26 +420,145 @@ func (b *BwClient) testAuthentication(ctx context.Context) TestResult {
 	return runTest(authCtx, Authentication, func(ctx context.Context) error {
 		// Check if the station ID is valid by attempting to retrieve station details
 		stationURL := fmt.Sprintf("https://app.birdweather.com/api/v1/stations/%s", b.BirdweatherID)
-		req, err := http.NewRequestWithContext(ctx, "GET", stationURL, http.NoBody)
+
+		// Try primary authentication method
+		err := tryAuthentication(ctx, b, stationURL)
 		if err != nil {
+			// If it's a DNS or network error, try with alternative methods
+			if isDNSError(err) || isNetworkError(err) {
+				log.Printf("Primary authentication failed with network error: %v", err)
+
+				// Try to resolve the hostname with fallback DNS
+				parsedURL, parseErr := url.Parse(stationURL)
+				if parseErr != nil {
+					return fmt.Errorf("invalid station URL: %w", parseErr)
+				}
+
+				hostname := parsedURL.Hostname()
+				ips, resolveErr := resolveDNSWithFallback(hostname)
+				if resolveErr != nil {
+					return fmt.Errorf("all DNS resolution attempts failed during authentication: %w", resolveErr)
+				}
+
+				// Try each resolved IP
+				for _, ip := range ips {
+					ipEndpoint := replaceHostWithIP(stationURL, ip.String())
+					log.Printf("Attempting authentication with fallback DNS: %s", ipEndpoint)
+
+					// Use the original hostname for Host header
+					authErr := tryAuthenticationWithHostOverride(ctx, b, ipEndpoint, hostname)
+					if authErr == nil {
+						log.Printf("✅ Successfully authenticated with BirdWeather via fallback DNS")
+						return nil
+					}
+				}
+
+				// All fallback attempts failed
+				return fmt.Errorf("authentication failed using both standard and fallback methods: %w", err)
+			}
+
+			// Not a network error, return original error
 			return err
-		}
-		req.Header.Set("User-Agent", "BirdNET-Go")
-
-		resp, err := b.HTTPClient.Do(req)
-		if err != nil {
-			return fmt.Errorf("failed to authenticate with BirdWeather: %w", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == 401 || resp.StatusCode == 403 {
-			return fmt.Errorf("authentication failed: invalid station ID")
-		} else if resp.StatusCode >= 400 {
-			return fmt.Errorf("authentication failed: server returned status code %d", resp.StatusCode)
 		}
 
 		return nil
 	})
+}
+
+// tryAuthentication attempts to authenticate with the station URL
+func tryAuthentication(ctx context.Context, b *BwClient, stationURL string) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", stationURL, http.NoBody)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "BirdNET-Go")
+
+	resp, err := b.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to authenticate with BirdWeather at %s: %w", stationURL, err)
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case 401, 403:
+		log.Printf("❌ BirdWeather authentication failed: invalid station ID (tried URL: %s)", stationURL)
+		return fmt.Errorf("authentication failed: invalid station ID (tried URL: %s)", stationURL)
+	case 404:
+		log.Printf("❌ BirdWeather station not found: %s returned 404", stationURL)
+		return fmt.Errorf("station not found (404): %s", stationURL)
+	default:
+		if resp.StatusCode >= 400 {
+			log.Printf("❌ BirdWeather authentication failed: server returned status code %d for URL %s", resp.StatusCode, stationURL)
+			return fmt.Errorf("authentication failed: server returned status code %d for URL %s", resp.StatusCode, stationURL)
+		}
+	}
+
+	// Successfully authenticated - don't log the actual token
+	log.Printf("✅ Successfully authenticated with BirdWeather (status: %d)", resp.StatusCode)
+	return nil
+}
+
+// tryAuthenticationWithHostOverride attempts to authenticate with a provided host override
+func tryAuthenticationWithHostOverride(ctx context.Context, b *BwClient, stationURL, hostOverride string) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", stationURL, http.NoBody)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "BirdNET-Go")
+
+	// Set host header for direct IP connection
+	if hostOverride != "" {
+		req.Host = hostOverride
+	}
+
+	// Create a client with custom transport to handle direct IP connection
+	client := &http.Client{
+		Timeout: authTimeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: false, // Keep secure
+			},
+		},
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to authenticate with BirdWeather at %s (host: %s): %w", stationURL, hostOverride, err)
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case 401, 403:
+		log.Printf("❌ BirdWeather authentication failed: invalid station ID (tried URL: %s)", stationURL)
+		return fmt.Errorf("authentication failed: invalid station ID (tried URL: %s)", stationURL)
+	case 404:
+		log.Printf("❌ BirdWeather station not found: %s returned 404", stationURL)
+		return fmt.Errorf("station not found (404): %s", stationURL)
+	default:
+		if resp.StatusCode >= 400 {
+			log.Printf("❌ BirdWeather authentication failed: server returned status code %d for URL %s", resp.StatusCode, stationURL)
+			return fmt.Errorf("authentication failed: server returned status code %d for URL %s", resp.StatusCode, stationURL)
+		}
+	}
+
+	// Successfully authenticated
+	log.Printf("✅ Successfully authenticated with BirdWeather (status: %d)", resp.StatusCode)
+	return nil
+}
+
+// Helper function to check if error is network-related
+func isNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+	return strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "i/o timeout") ||
+		strings.Contains(errStr, "network") ||
+		strings.Contains(errStr, "unreachable") ||
+		strings.Contains(errStr, "reset by peer") ||
+		strings.Contains(errStr, "connection closed")
 }
 
 // testSoundscapeUpload tests uploading a small soundscape to BirdWeather
@@ -237,9 +576,18 @@ func (b *BwClient) testSoundscapeUpload(ctx context.Context) TestResult {
 		timestamp := time.Now().Format("2006-01-02T15:04:05.000-0700")
 
 		// Attempt to upload the test soundscape
-		_, err := b.UploadSoundscape(timestamp, testPCMData)
+		soundscapeID, err := b.UploadSoundscape(timestamp, testPCMData)
 		if err != nil {
+			log.Printf("❌ BirdWeather soundscape upload failed: %s", err)
 			return fmt.Errorf("failed to upload soundscape: %w", err)
+		}
+
+		// Successfully uploaded soundscape
+		log.Printf("✅ Successfully uploaded test soundscape to BirdWeather with ID: %s", soundscapeID)
+
+		// Store the soundscapeID in the context
+		if rc, ok := ctx.Value(resultIDKey).(*resultContext); ok && rc != nil {
+			rc.ID = soundscapeID
 		}
 
 		return nil
@@ -255,16 +603,21 @@ func (b *BwClient) testDetectionPost(ctx context.Context, soundscapeID string) T
 		// Generate current timestamp in the required format
 		timestamp := time.Now().Format("2006-01-02T15:04:05.000-0700")
 
-		// Use a common test species - Whooper Swan
+		// Use a test detection with 0% confidence to avoid contaminating real data
 		commonName := "Whooper Swan"
 		scientificName := "Cygnus cygnus"
-		confidence := 0.95
+		confidence := 0.3 // 30% confidence to indicate this is not a real detection
 
 		// Post the test detection
 		err := b.PostDetection(soundscapeID, timestamp, commonName, scientificName, confidence)
 		if err != nil {
+			log.Printf("❌ BirdWeather detection post failed: %s", err)
 			return fmt.Errorf("failed to post detection: %w", err)
 		}
+
+		// Successfully posted detection
+		log.Printf("✅ Successfully posted test detection to BirdWeather: %s (%s) with confidence %.2f",
+			commonName, scientificName, confidence)
 
 		return nil
 	})
@@ -335,13 +688,47 @@ func (b *BwClient) TestConnection(ctx context.Context, resultChan chan<- TestRes
 		return
 	}
 
+	// Start with the explicit "Starting Test" stage
+	sendResult(TestResult{
+		Success:    true,
+		Stage:      "Starting Test",
+		Message:    "Initializing BirdWeather Connection Test...",
+		State:      "running",
+		IsProgress: true,
+	})
+
+	// Check rate limiting
+	if err := checkRateLimit(); err != nil {
+		sendResult(TestResult{
+			Success: false,
+			Stage:   "Starting Test",
+			Message: "Rate limit check failed",
+			Error:   err.Error(),
+			State:   "failed",
+		})
+		return
+	}
+
 	// Helper function to run a test stage
 	runStage := func(stage TestStage, test func() TestResult) bool {
-		// Send progress message
+		// First, mark the "Starting Test" stage as completed if we're on the first real test
+		if stage == APIConnectivity {
+			sendResult(TestResult{
+				Success:    true,
+				Stage:      "Starting Test",
+				Message:    "Initialization complete, starting tests",
+				State:      "completed",
+				IsProgress: false,
+			})
+		}
+
+		// Send progress message for current stage
 		sendResult(TestResult{
-			Success: true,
-			Stage:   stage.String(),
-			Message: fmt.Sprintf("Running %s test...", stage.String()),
+			Success:    true,
+			Stage:      stage.String(),
+			Message:    fmt.Sprintf("Running %s test...", stage.String()),
+			State:      "running",
+			IsProgress: true,
 		})
 
 		// Execute the test
@@ -369,13 +756,8 @@ func (b *BwClient) TestConnection(ctx context.Context, resultChan chan<- TestRes
 	uploadResult := runStage(SoundscapeUpload, func() TestResult {
 		result := b.testSoundscapeUpload(ctx)
 		if result.Success {
-			// Extract soundscape ID from success message
-			if strings.Contains(result.Message, "ID:") {
-				parts := strings.Split(result.Message, "ID:")
-				if len(parts) > 1 {
-					soundscapeID = strings.TrimSpace(parts[1])
-				}
-			}
+			// Get the soundscape ID directly from the result
+			soundscapeID = result.ResultID
 		}
 		return result
 	})
@@ -447,7 +829,7 @@ func (b *BwClient) UploadTestSoundscape(ctx context.Context) TestResult {
 		return TestResult{
 			Success: true,
 			Stage:   SoundscapeUpload.String(),
-			Message: fmt.Sprintf("Successfully uploaded test soundscape with ID: %s", result.id),
+			Message: fmt.Sprintf("Successfully uploaded test soundscape (0.5 second silent audio). <span class=\"text-info\">This recording should appear on your BirdWeather station at %s with ID: %s</span>", time.Now().Format("Jan 2, 2006 at 15:04:05"), result.id),
 		}
 	}
 }
@@ -468,10 +850,10 @@ func (b *BwClient) PostTestDetection(ctx context.Context, soundscapeID string) T
 	// Generate current timestamp in the required format
 	timestamp := time.Now().Format("2006-01-02T15:04:05.000-0700")
 
-	// Use a common test species - Whooper Swan
+	// Use a test detection with 0% confidence to avoid contaminating real data
 	commonName := "Whooper Swan"
 	scientificName := "Cygnus cygnus"
-	confidence := 0.95
+	confidence := 0.3 // 30% confidence to indicate this is not a real detection
 
 	// Create a channel for the post result
 	resultChan := make(chan error, 1)
@@ -502,7 +884,7 @@ func (b *BwClient) PostTestDetection(ctx context.Context, soundscapeID string) T
 		return TestResult{
 			Success: true,
 			Stage:   DetectionPost.String(),
-			Message: "Successfully posted test detection",
+			Message: "Successfully posted test detection: Whooper Swan (Cygnus cygnus) with unlikely confidence.",
 		}
 	}
 }
