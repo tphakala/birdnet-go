@@ -224,6 +224,7 @@ func (s *Server) RealIP(c echo.Context) string {
 // initializeServer configures and initializes the server.
 func (s *Server) initializeServer() {
 	s.Echo.HideBanner = true
+	s.Echo.HidePort = true
 	s.initLogger()
 	s.configureMiddleware()
 

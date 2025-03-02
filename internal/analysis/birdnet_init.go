@@ -16,8 +16,8 @@ func initializeBirdNET(settings *conf.Settings) error {
 	if bn == nil {
 		var err error
 		// Get the analyzer logger from the global logger
-		analyzerLogger := logger.Named("birdnet-go").Named("analyzer")
-		bn, err = birdnet.NewBirdNET(settings, analyzerLogger)
+		coreLogger := logger.Named("core")
+		bn, err = birdnet.NewBirdNET(settings, coreLogger)
 		if err != nil {
 			return fmt.Errorf("failed to initialize BirdNET: %w", err)
 		}

@@ -47,16 +47,13 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		return fmt.Errorf("error initializing logger: %w", err)
 	}
 
-	// Create an app-level logger first
-	appLogger := logger.Named("birdnet-go")
-
 	// Create a component logger for the realtime analyzer
-	analyzerLogger := appLogger.Named("analyzer")
-	analyzerLogger.Info("Starting real-time analysis")
+	coreLogger := logger.Named("core")
+	coreLogger.Info("Starting real-time analysis")
 
 	// Initialize BirdNET interpreter
 	if err := initializeBirdNET(settings); err != nil {
-		analyzerLogger.Error("Failed to initialize BirdNET", "error", err)
+		coreLogger.Error("Failed to initialize BirdNET", "error", err)
 		return err
 	}
 
@@ -67,7 +64,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Get system details with golps
 	info, err := host.Info()
 	if err != nil {
-		analyzerLogger.Error("Failed to retrieve host info", "error", err)
+		coreLogger.Error("Failed to retrieve host info", "error", err)
 	}
 
 	var hwModel string
@@ -81,14 +78,14 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	}
 
 	// Log system details
-	analyzerLogger.Info("System details",
+	coreLogger.Info("System details",
 		"os", info.OS,
 		"platform", info.Platform,
 		"version", info.PlatformVersion,
 		"hardware", hwModel)
 
 	// Log analyzer configuration
-	analyzerLogger.Info("Analyzer configuration",
+	coreLogger.Info("Analyzer configuration",
 		"threshold", settings.BirdNET.Threshold,
 		"overlap", settings.BirdNET.Overlap,
 		"sensitivity", settings.BirdNET.Sensitivity,
@@ -98,17 +95,17 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	dataStore := datastore.New(settings)
 
 	// Set the logger for the datastore using a hierarchical name
-	dbLogger := analyzerLogger.Named("db")
+	dbLogger := coreLogger.Named("db")
 	dataStore.SetLogger(dbLogger)
 
 	// Open a connection to the database and handle possible errors.
 	if err := dataStore.Open(); err != nil {
-		analyzerLogger.Error("Failed to open database", "error", err)
+		coreLogger.Error("Failed to open database", "error", err)
 		return err // Return error to stop execution if database connection fails.
 	} else {
-		analyzerLogger.Info("Database connection established")
+		coreLogger.Info("Database connection established")
 		// Ensure the database connection is closed when the function returns.
-		defer closeDataStore(dataStore, analyzerLogger)
+		defer closeDataStore(dataStore, coreLogger)
 	}
 
 	// Initialize the control channel for restart control.
@@ -137,11 +134,11 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		if err := initializeBuffers(sources); err != nil {
 			// If buffer initialization fails, log the error but continue
 			// Some sources might still work
-			analyzerLogger.Warn("Error initializing buffers", "error", err)
-			analyzerLogger.Warn("Some audio sources might not be available")
+			coreLogger.Warn("Error initializing buffers", "error", err)
+			coreLogger.Warn("Some audio sources might not be available")
 		}
 	} else {
-		analyzerLogger.Warn("Starting without active audio sources. Configure audio devices or RTSP streams through the web interface.")
+		coreLogger.Warn("Starting without active audio sources. Configure audio devices or RTSP streams through the web interface.")
 	}
 
 	// init detection queue
@@ -150,28 +147,28 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Initialize Prometheus metrics manager
 	metrics, err := telemetry.NewMetrics()
 	if err != nil {
-		analyzerLogger.Error("Failed to initialize metrics", "error", err)
+		coreLogger.Error("Failed to initialize metrics", "error", err)
 		return fmt.Errorf("error initializing metrics: %w", err)
 	}
 
 	var birdImageCache *imageprovider.BirdImageCache
 	if settings.Realtime.Dashboard.Thumbnails.Summary || settings.Realtime.Dashboard.Thumbnails.Recent {
 		// Initialize the bird image cache
-		birdImageCache = initBirdImageCache(dataStore, metrics, analyzerLogger.Named("imageCache"))
+		birdImageCache = initBirdImageCache(dataStore, metrics, coreLogger.Named("imageCache"))
 	} else {
 		birdImageCache = nil
 	}
 
 	// Initialize processor with a logger
 	// Create a child logger for the processor
-	analyzerLogger.Named("processor")
+	coreLogger.Named("processor")
 	proc := processor.New(settings, dataStore, bn, metrics, birdImageCache)
 	// Set logger for processor if it has a SetLogger method
 	// This would require adding SetLogger method to processor if not exists
 	// proc.SetLogger(analyzerLogger.Named("processor"))
 
 	// Initialize and start the HTTP server with proper logger inheritance
-	httpServer := httpcontroller.NewWithLogger(settings, dataStore, birdImageCache, audioLevelChan, controlChan, proc, analyzerLogger)
+	httpServer := httpcontroller.NewWithLogger(settings, dataStore, birdImageCache, audioLevelChan, controlChan, proc, coreLogger)
 	httpServer.Start()
 
 	// Initialize the wait group to wait for all goroutines to finish
@@ -179,7 +176,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 	// Initialize the buffer manager with a logger
 	// Create a child logger for the buffer manager
-	analyzerLogger.Named("buffer")
+	coreLogger.Named("buffer")
 	bufferManager := NewBufferManager(bn, quitChan, &wg)
 	// Set logger for buffer manager if it has a SetLogger method
 	// bufferManager.SetLogger(analyzerLogger.Named("buffer"))
@@ -190,37 +187,37 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	}
 
 	// start audio capture with a logger
-	audioLogger := analyzerLogger.Named("audio")
+	audioLogger := coreLogger.Named("audio")
 	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, audioLogger)
 
 	// start cleanup of clips with a logger
-	cleanupLogger := analyzerLogger.Named("cleanup")
+	cleanupLogger := coreLogger.Named("cleanup")
 	if settings.Realtime.Audio.Export.Retention.Policy != "none" {
 		startClipCleanupMonitor(&wg, quitChan, dataStore, settings, cleanupLogger)
 	}
 
 	// start weather polling with a logger
-	weatherLogger := analyzerLogger.Named("weather")
+	weatherLogger := coreLogger.Named("weather")
 	if settings.Realtime.Weather.Provider != "none" {
 		startWeatherPolling(&wg, settings, dataStore, quitChan, weatherLogger)
 	}
 
 	// start telemetry endpoint with a logger
-	telemetryLogger := analyzerLogger.Named("telemetry")
+	telemetryLogger := coreLogger.Named("telemetry")
 	startTelemetryEndpoint(&wg, settings, metrics, quitChan, telemetryLogger)
 
 	// start control monitor for hot reloads with a logger
-	controlLogger := analyzerLogger.Named("control")
+	controlLogger := coreLogger.Named("control")
 	startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, controlLogger)
 
 	// start quit signal monitor with a logger
-	monitorCtrlC(quitChan, analyzerLogger)
+	monitorCtrlC(quitChan, coreLogger)
 
 	// loop to monitor quit and restart channels
 	for {
 		select {
 		case <-quitChan:
-			analyzerLogger.Info("Shutting down realtime analyzer")
+			coreLogger.Info("Shutting down realtime analyzer")
 			// Close controlChan to signal that no restart attempts should be made.
 			close(controlChan)
 			// Stop all analysis buffer monitors
@@ -229,13 +226,13 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 			wg.Wait()
 			// Delete the BirdNET interpreter.
 			bn.Delete()
-			analyzerLogger.Info("Realtime analyzer shutdown complete")
+			coreLogger.Info("Realtime analyzer shutdown complete")
 			// Return nil to indicate that the program exited successfully.
 			return nil
 
 		case <-restartChan:
 			// Handle the restart signal.
-			analyzerLogger.Info("Restarting audio capture")
+			coreLogger.Info("Restarting audio capture")
 			startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, audioLogger)
 		}
 	}
