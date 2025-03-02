@@ -9,6 +9,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
@@ -71,6 +72,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureMQTT()
 	case "reconfigure_rtsp_sources":
 		cm.handleReconfigureRTSP()
+	case "reconfigure_birdweather":
+		cm.handleReconfigureBirdWeather()
 	default:
 		log.Printf("Received unknown control signal: %v", signal)
 	}
@@ -174,6 +177,40 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 
 	log.Printf("\033[32m✅ RTSP sources reconfigured successfully\033[0m")
 	cm.notifySuccess("Audio capture reconfigured successfully")
+}
+
+// handleReconfigureBirdWeather reconfigures the BirdWeather integration
+func (cm *ControlMonitor) handleReconfigureBirdWeather() {
+	log.Printf("\033[32m🔄 Reconfiguring BirdWeather integration...\033[0m")
+	settings := conf.Setting()
+
+	if cm.proc == nil {
+		log.Printf("\033[31m❌ Error: Processor not available\033[0m")
+		cm.notifyError("Failed to reconfigure BirdWeather", fmt.Errorf("processor not available"))
+		return
+	}
+
+	// First, safely disconnect any existing client
+	cm.proc.DisconnectBwClient()
+
+	// Create new BirdWeather client with updated settings
+	if settings.Realtime.Birdweather.Enabled {
+		bwClient, err := birdweather.New(settings)
+		if err != nil {
+			log.Printf("\033[31m❌ Error creating BirdWeather client: %v\033[0m", err)
+			cm.notifyError("Failed to create BirdWeather client", err)
+			return
+		}
+
+		// Update the processor's BirdWeather client using the thread-safe setter
+		cm.proc.SetBwClient(bwClient)
+		log.Printf("\033[32m✅ BirdWeather integration configured successfully\033[0m")
+		cm.notifySuccess("BirdWeather integration configured successfully")
+	} else {
+		// If BirdWeather is disabled, client is already set to nil by DisconnectBwClient
+		log.Printf("\033[32m✅ BirdWeather integration disabled\033[0m")
+		cm.notifySuccess("BirdWeather integration disabled")
+	}
 }
 
 // notifySuccess sends a success notification

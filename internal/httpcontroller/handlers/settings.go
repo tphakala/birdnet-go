@@ -95,6 +95,15 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		h.controlChan <- "reconfigure_mqtt"
 	}
 
+	// Check if BirdWeather settings have changed
+	if birdWeatherSettingsChanged(&oldSettings, settings) {
+		h.SSE.SendNotification(Notification{
+			Message: "Reconfiguring BirdWeather integration...",
+			Type:    "info",
+		})
+		h.controlChan <- "reconfigure_birdweather"
+	}
+
 	// Check if RTSP settings were included in the form and have changed
 	if hasRTSPSettings(formParams) && rtspSettingsChanged(&oldSettings, settings) {
 		h.SSE.SendNotification(Notification{
@@ -699,4 +708,26 @@ func mqttSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		oldSettings.Realtime.MQTT.Topic != currentSettings.Realtime.MQTT.Topic ||
 		oldSettings.Realtime.MQTT.Username != currentSettings.Realtime.MQTT.Username ||
 		oldSettings.Realtime.MQTT.Password != currentSettings.Realtime.MQTT.Password
+}
+
+// birdWeatherSettingsChanged checks if BirdWeather integration settings have changed
+func birdWeatherSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Check for changes in BirdWeather enabled state
+	if oldSettings.Realtime.Birdweather.Enabled != currentSettings.Realtime.Birdweather.Enabled {
+		return true
+	}
+
+	// Check for changes in BirdWeather credentials and configuration
+	if oldSettings.Realtime.Birdweather.ID != currentSettings.Realtime.Birdweather.ID ||
+		oldSettings.Realtime.Birdweather.Threshold != currentSettings.Realtime.Birdweather.Threshold ||
+		oldSettings.Realtime.Birdweather.LocationAccuracy != currentSettings.Realtime.Birdweather.LocationAccuracy {
+		return true
+	}
+
+	// Check for debug mode changes
+	if oldSettings.Realtime.Birdweather.Debug != currentSettings.Realtime.Birdweather.Debug {
+		return true
+	}
+
+	return false
 }
