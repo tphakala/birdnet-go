@@ -144,7 +144,7 @@ Source: Apache-2.0
 
 ### github.com/klauspost/cpuid/v2
 
-License: https://github.com/klauspost/cpuid/blob/v2.2.9/LICENSE
+License: https://github.com/klauspost/cpuid/blob/v2.2.10/LICENSE
 Source: MIT
 
 ### github.com/labstack/echo/v4
@@ -329,7 +329,7 @@ Source: Apache-2.0
 
 ### golang.org/x/crypto/acme
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.34.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.35.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
@@ -339,7 +339,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
 
-License: https://cs.opensource.google/go/x/oauth2/+/v0.26.0:LICENSE
+License: https://cs.opensource.google/go/x/oauth2/+/v0.27.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sync/semaphore
