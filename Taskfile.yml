@@ -113,7 +113,7 @@ tasks:
 
   generate-tailwindcss:
     cmds:
-      - npm -D install daisyui
+      - npm -D install daisyui@4.12.24
       - npx --yes tailwindcss@3.4.17 -i {{.TAILWIND_INPUT}} -o {{.TAILWIND_OUTPUT}} --minify
 
   labels-zip:
