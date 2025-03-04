@@ -10,8 +10,8 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
     if command -v tailwindcss >/dev/null 2>&1; then
       tailwindcss -i tailwind.input.css -o assets/tailwind.css
     elif command -v npx >/dev/null 2>&1; then
-      npm install -D daisyui
-      npx --yes tailwindcss@latest -i tailwind.input.css -o assets/tailwind.css
+      npm install -D daisyui@4.12.24
+      npx --yes tailwindcss@3.4.17 -i tailwind.input.css -o assets/tailwind.css
     else
       echo "Error: Neither 'tailwindcss' binary nor 'npx' found. Please install Tailwind CSS."
       exit 1
