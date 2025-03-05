@@ -84,6 +84,7 @@
           })()"
     >
       <input type="hidden" name="id" value="{{.ID}}">
+      <input type="hidden" name="_csrf" class="csrf-token">
       
       <div class="form-control">
         <label class="label cursor-pointer justify-start gap-4">
@@ -151,4 +152,15 @@
     <button>close</button>
   </form>
 </dialog>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Find all CSRF token inputs and set their value from the meta tag
+    document.querySelectorAll('.csrf-token').forEach(input => {
+      const token = document.querySelector('meta[name="csrf-token"]')?.content;
+      if (token) {
+        input.value = token;
+      }
+    });
+  });
+</script>
 {{end}} 
