@@ -100,7 +100,7 @@
              ? `Are you sure you want to show future detections of {{.CommonName | js}}?`
              : `Are you sure you want to ignore future detections of {{.CommonName | js}}? This will only affect new detections - existing detections will remain in the database.`;
            document.getElementById('confirmButton{{.ID}}').onclick = () => {
-             htmx.ajax('POST', '/detections/ignore?common_name=' + encodeURIComponent('{{.CommonName | js}}'), {
+             htmx.ajax('POST', '/api/v1/detections/ignore?common_name=' + encodeURIComponent('{{.CommonName | js}}'), {
                target: 'body',
                swap: 'none',
                handler: (success) => {
