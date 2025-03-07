@@ -187,14 +187,14 @@
     <template x-if="!isLocked">
       <li>
         <a href="#" 
-          class="text-sm text-error"
+          class="text-sm"
           @click="
             open = false;
             const modal = document.getElementById('confirmModal{{.ID}}');
             document.getElementById('confirmTitle{{.ID}}').textContent = 'Delete Detection of {{.CommonName | js}}';
             document.getElementById('confirmMessage{{.ID}}').textContent = 'Are you sure you want to delete detection of {{.CommonName | js}}? This action cannot be undone.';
             document.getElementById('confirmButton{{.ID}}').onclick = () => {
-              htmx.ajax('DELETE', '/detections/delete?id={{.ID}}', {
+              htmx.ajax('DELETE', '/api/v1/detections/delete?id={{.ID}}', {
               handler: (success) => {
                 if (success) {
                   const list = htmx.find('[hx-trigger*=refreshListEvent]');
