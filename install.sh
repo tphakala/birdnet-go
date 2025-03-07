@@ -1389,6 +1389,7 @@ done
 # Install missing packages in a single command
 if [ -n "${TO_INSTALL}" ]; then
     print_message "🔧 Installing missing packages: ${TO_INSTALL}" "$YELLOW"
+    sudo apt clean
     sudo apt update -q
     if sudo apt install -q -y "${TO_INSTALL}"; then
         print_message "✅ All packages installed successfully" "$GREEN"
