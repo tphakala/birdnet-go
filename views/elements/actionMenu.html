@@ -141,7 +141,7 @@
             ? 'Are you sure you want to unlock this detection of {{.CommonName | js}}? This will allow it to be deleted during regular cleanup.'
             : 'Are you sure you want to lock this detection of {{.CommonName | js}}? This will prevent it from being deleted during regular cleanup.';
           document.getElementById('confirmButton{{.ID}}').onclick = () => {
-            htmx.ajax('POST', '/detections/lock?id={{.ID}}', {
+            htmx.ajax('POST', '/api/v1/detections/lock?id={{.ID}}', {
               target: 'body',
               swap: 'none',
               handler: (success) => {
