@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
@@ -52,7 +53,7 @@ func (h *Handlers) initializeLevelsData(isAuthenticated bool) (levels map[string
 	for i, url := range h.Settings.Realtime.RTSP.URLs {
 		var displayName string
 		if isAuthenticated {
-			displayName = cleanRTSPUrl(url)
+			displayName = conf.SanitizeRTSPUrl(url)
 		} else {
 			displayName = fmt.Sprintf("camera-%d", i+1)
 		}
@@ -98,7 +99,7 @@ func (h *Handlers) updateAudioLevels(audioData myaudio.AudioLevelData, levels ma
 		}
 	} else {
 		if isAuthenticated {
-			audioData.Name = cleanRTSPUrl(audioData.Source)
+			audioData.Name = conf.SanitizeRTSPUrl(audioData.Source)
 		} else {
 			for i, url := range h.Settings.Realtime.RTSP.URLs {
 				if url == audioData.Source {
@@ -267,37 +268,4 @@ func sendLevelsUpdate(c echo.Context, levels map[string]myaudio.AudioLevelData) 
 
 	c.Response().Flush()
 	return nil
-}
-
-// cleanRTSPUrl removes sensitive information from RTSP URL and returns a display-friendly version
-func cleanRTSPUrl(url string) string {
-	// Find the @ symbol that separates credentials from host
-	atIndex := -1
-	for i := len("rtsp://"); i < len(url); i++ {
-		if url[i] == '@' {
-			atIndex = i
-			break
-		}
-	}
-
-	if atIndex > -1 {
-		// Keep only rtsp:// and everything after @
-		url = "rtsp://" + url[atIndex+1:]
-	}
-
-	// Find the first slash after the host:port
-	slashIndex := -1
-	for i := len("rtsp://"); i < len(url); i++ {
-		if url[i] == '/' {
-			slashIndex = i
-			break
-		}
-	}
-
-	if slashIndex > -1 {
-		// Keep only up to the first slash
-		url = url[:slashIndex]
-	}
-
-	return url
 }
