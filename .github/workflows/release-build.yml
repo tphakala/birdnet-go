@@ -88,32 +88,33 @@ jobs:
           
           # Create tarball
           cd artifacts
-          tar czf ../birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz *
+          tar czf ../birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref_name }}.tar.gz *
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+          path: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref_name }}.tar.gz
 
-      # Optional: Create a GitHub release for tagged builds
-      - name: Create Release
+      - name: Get latest release tag
         if: github.event_name == 'workflow_dispatch'
+        id: latest_release
         run: |
-          DATE=$(date +'%Y%m%d')
-          echo "RELEASE_DATE=$DATE" >> $GITHUB_ENV
-        
-      - name: Create GitHub Release
-        if: github.event_name == 'workflow_dispatch'
-        uses: softprops/action-gh-release@v1
+          # Get the latest release tag
+          LATEST_TAG=$(git describe --tags --abbrev=0)
+          echo "LATEST_TAG=${LATEST_TAG}" >> ${GITHUB_ENV}
+          echo "latest_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
+      
+      - name: Add Artifacts to GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
-          tag_name: v${{ github.ref_name }}
-          name: "Release ${{ github.ref_name }}"
-          prerelease: false
+          files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref_name }}.tar.gz
+          # For release events, use the triggering release
+          # For workflow_dispatch, use the latest release tag
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && env.LATEST_TAG || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+          
   docker:
     if: ${{ !contains(github.ref, 'nightly') && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
