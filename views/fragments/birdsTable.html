@@ -1,6 +1,5 @@
 {{define "birdsTable"}}
 <table class="table table-zebra h-full">
-
   <!-- Table header -->
   <thead class="sticky-header text-xs">
     <!-- Species header -->
@@ -13,13 +12,29 @@
     {{end}}
     <!-- Total detections header -->
     <th scope="col" class="py-0 px-4 w-100 h-11 hidden md:table-cell">Detections</th>
+    
+    <!-- Hourly view headers (1-hour intervals) -->
     {{range $hourIndex := seq 0 23}}
-        {{range $class, $length := dict "hourly-count" 1 "bi-hourly-count" 2 "six-hourly-count" 6}}
-            {{template "hourHeader" (getHourlyHeaderData $hourIndex $class $length $.SelectedDate $.Sunrise $.Sunset)}}
-        {{end}}
+      {{template "hourHeader" (getHourlyHeaderData $hourIndex "hourly-count" 1 $.SelectedDate $.Sunrise $.Sunset)}}
     {{end}}
+    
+    <!-- Bi-hourly view headers (2-hour intervals) -->
+    {{range $hourIndex := seq 0 23}}
+      {{if eq (mod $hourIndex 2) 0}}
+        {{template "hourHeader" (getHourlyHeaderData $hourIndex "bi-hourly-count bi-hourly" 2 $.SelectedDate $.Sunrise $.Sunset)}}
+      {{end}}
+    {{end}}
+    
+    <!-- Six-hourly view headers (6-hour intervals) -->
+    {{range $hourIndex := seq 0 23}}
+      {{if eq (mod $hourIndex 6) 0}}
+        {{template "hourHeader" (getHourlyHeaderData $hourIndex "six-hourly-count six-hourly" 6 $.SelectedDate $.Sunrise $.Sunset)}}
+      {{end}}
+    {{end}}
+    
     <th scope="col" class="py-0 px-0"></th>
   </thead>
+  
   <!-- Table body -->
   <tbody>
     {{range $index, $element := .NotesWithIndex}}
@@ -60,17 +75,45 @@
         </div>
       </td>
 
-      <!-- Hourly counts -->
+      <!-- Hourly counts (1-hour intervals) -->
       {{range $hourIndex := seq 0 23}}
         {{with getHourlyCounts $element $hourIndex}}
-          {{range $class, $length := dict "hourly-count" 1 "bi-hourly-count" 2 "six-hourly-count" 6}}
+          {{template "countDisplay" dict
+            "Class" "hourly-count"
+            "HourIndex" $hourIndex
+            "Duration" 1
+            "Species" $element.Note.CommonName
+            "Date" $.SelectedDate
+            "Count" (sumHourlyCountsRange $element.HourlyCounts $hourIndex 1)}}
+        {{end}}
+      {{end}}
+      
+      <!-- Bi-hourly counts (2-hour intervals) -->
+      {{range $hourIndex := seq 0 23}}
+        {{if eq (mod $hourIndex 2) 0}}
+          {{with getHourlyCounts $element $hourIndex}}
             {{template "countDisplay" dict
-              "Class" $class
+              "Class" "bi-hourly-count bi-hourly"
               "HourIndex" $hourIndex
-              "Duration" $length
+              "Duration" 2
               "Species" $element.Note.CommonName
               "Date" $.SelectedDate
-              "Count" (sumHourlyCountsRange $element.HourlyCounts $hourIndex $length)}}
+              "Count" (sumHourlyCountsRange $element.HourlyCounts $hourIndex 2)}}
+          {{end}}
+        {{end}}
+      {{end}}
+      
+      <!-- Six-hourly counts (6-hour intervals) -->
+      {{range $hourIndex := seq 0 23}}
+        {{if eq (mod $hourIndex 6) 0}}
+          {{with getHourlyCounts $element $hourIndex}}
+            {{template "countDisplay" dict
+              "Class" "six-hourly-count six-hourly"
+              "HourIndex" $hourIndex
+              "Duration" 6
+              "Species" $element.Note.CommonName
+              "Date" $.SelectedDate
+              "Count" (sumHourlyCountsRange $element.HourlyCounts $hourIndex 6)}}
           {{end}}
         {{end}}
       {{end}}
@@ -83,17 +126,17 @@
 {{end}}
 
 {{define "hourHeader"}}
-<th scope="col" class="text-center pt-0.5 pb-0 px-0 hour-header {{.Class}} {{if eq (mod .HourIndex 2) 0}}bi-hourly{{end}} {{if eq (mod .HourIndex 3) 0}}six-hourly{{end}}">
-  <a href="#" hx-get="/api/v1/detections?date={{urlquery .Date}}&hour={{.HourIndex}}&duration={{.Length}}&queryType=hourly" hx-target="#mainContent" hx-trigger="click" hx-push-url="true" class="relative inline-block">
+<th scope="col" class="text-center pt-0.5 pb-0 px-0 hour-header {{.Class}}">
+  <a href="#" hx-get="/api/v1/detections?date={{urlquery .Date}}&hour={{.HourIndex}}&duration={{.Length}}&queryType=hourly" hx-target="#mainContent" hx-trigger="click" hx-push-url="true">
     {{printf "%02d" .HourIndex}}
     {{$endHour := add .HourIndex .Length}}
     {{if and (le .HourIndex .Sunrise) (gt $endHour .Sunrise)}}
-      <span class="absolute -top-4 left-1/2 transform -translate-x-1/2">
+      <span class="sunrise-icon">
         {{sunPositionIcon (timeOfDayToInt "dawn")}}
       </span>
     {{end}}
     {{if and (le .HourIndex .Sunset) (gt $endHour .Sunset)}}
-      <span class="absolute -top-4 left-1/2 transform -translate-x-1/2">
+      <span class="sunset-icon">
         {{sunPositionIcon (timeOfDayToInt "dusk")}}
       </span>
     {{end}}
@@ -102,9 +145,9 @@
 {{end}}
 
 {{define "countDisplay"}}
-<td class="hour-data {{.Class}} {{if eq (mod .HourIndex 2) 0}}bi-hourly{{end}} {{if eq (mod .HourIndex 3) 0}}six-hourly{{end}} heatmap-color-{{heatmapColor .Count}} text-center h-full py-0 px-0">
+<td class="hour-data {{.Class}} heatmap-color-{{heatmapColor .Count}} text-center h-full py-0 px-0">
   {{if gt .Count 0}}
-<a href="#" class="flex items-center justify-center h-full" hx-get="/api/v1/detections?species={{urlquery .Species}}&date={{urlquery .Date}}&hour={{.HourIndex}}&duration={{.Duration}}&queryType=species" hx-target="#mainContent" hx-trigger="click" hx-push-url="true">
+  <a href="#" hx-get="/api/v1/detections?species={{urlquery .Species}}&date={{urlquery .Date}}&hour={{.HourIndex}}&duration={{.Duration}}&queryType=species" hx-target="#mainContent" hx-trigger="click" hx-push-url="true">
     {{.Count}}
   </a>
   {{else}}-{{end}}

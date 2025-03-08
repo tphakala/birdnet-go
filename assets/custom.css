@@ -145,7 +145,7 @@ thead.sticky-header {
 .hour-header,
 .hour-data,
 .hourly-count {
-  display: table-cell;
+  display: none;
 }
 
 /* Hide some count cells by default */
@@ -184,28 +184,33 @@ thead.sticky-header {
 }
 
 /* Responsive table adjustments */
-@media (max-width: 767px) {
-  .hour-header:not(.bi-hourly),
-  .hour-data:not(:bi-hourly) {
-      display: none;
-  }
+/* Large screens (desktop): show hourly view */
+@media (min-width: 768px) {
+  .hour-header.hourly-count,
+  .hour-data.hourly-count,
   .hourly-count {
-      display: none;
-  }
-  .bi-hourly-count {
-      display: table-cell;
+    display: table-cell;
   }
 }
-@media (max-width: 479px) {
-  .hour-header:not(.six-hourly),
-  .hour-data:not(.six-hourly) {
-      display: none;
-  }
+/* Medium screens (tablets): show bi-hourly */
+@media (max-width: 767px) {
+  .hour-header.bi-hourly,
+  .hour-data.bi-hourly,
   .bi-hourly-count {
-      display: none;
+    display: table-cell;
   }
+}
+/* Small screens (mobile): show six-hourly */
+@media (max-width: 479px) {
+  .hour-header.bi-hourly,
+  .hour-data.bi-hourly,
+  .bi-hourly-count {
+    display: none;
+  }
+  .hour-header.six-hourly,
+  .hour-data.six-hourly,
   .six-hourly-count {
-      display: table-cell;
+    display: table-cell;
   }
 }
 
@@ -230,6 +235,20 @@ thead.sticky-header {
   min-height: 2rem;
   max-height: 2rem;
   vertical-align: middle;
+}
+
+/* Sunrise/sunset icon positioning */
+.hour-header a {
+  position: relative;
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+}
+.hour-header a span {
+  position: absolute;
+  top: -1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  line-height: 1;
 }
 
 /* ========================================================================
