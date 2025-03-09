@@ -156,7 +156,6 @@ func (h *Handlers) Detections(c echo.Context) error {
 		Security: map[string]interface{}{
 			"Enabled":       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
 			"AccessAllowed": h.Server.IsAccessAllowed(c),
-			"IsCloudflare":  h.CloudflareAccess.IsEnabled(c),
 		},
 	}
 
@@ -237,7 +236,6 @@ func (h *Handlers) RecentDetections(c echo.Context) error {
 		Security: map[string]interface{}{
 			"Enabled":       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
 			"AccessAllowed": h.Server.IsAccessAllowed(c),
-			"IsCloudflare":  h.CloudflareAccess.IsEnabled(c),
 		},
 	}
 

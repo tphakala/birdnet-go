@@ -133,10 +133,6 @@ security:
   allowsubnetbypass:
     enabled: false           # true to disable OAuth in subnet
     subnet: ""               # comma-separated list of CIDR ranges (e.g., "192.168.1.0/24,10.0.0.0/8")
-  allowcloudflarebypass: 
-    enabled: false           # true to disable bypass for Cloudflare Tunnel
-    teamdomain: ""           # Cloudflare Tunnel team domain
-    audience: ""             # Cloudflare Tunnel policy audience
   basicauth:
     enabled: false           # true to enable basic auth
     password: ""             # password hash for the settings interface
