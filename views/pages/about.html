@@ -38,8 +38,8 @@
             BirdNET Project
         </div>
         <div class="collapse-content prose max-w-none">          
-            <p>BirdNET-Go would not be possible without the groundbreaking work of the BirdNET project. AI model used in BirdNET-Go is work of BirdNET project and is licensed under the <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener noreferrer">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License</a>.</p>
-            
+            <p>BirdNET-Go would not be possible without the groundbreaking work of the BirdNET project. The artificial intelligence model powering BirdNET-Go's detection capabilities is the result of the BirdNET project's innovative research and development.</p>
+                        
             <p class="text-xl font-medium mt-6">Developed by</p>
             <p>The K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology:</p>
             <ul class="list-none pl-0 grid grid-cols-1 md:grid-cols-2 gap-2 mt-4">
@@ -189,11 +189,33 @@
                     </svg>
                     Current Version: <span class="font-mono">{{if .Settings.Version}}{{.Settings.Version}}{{else}}Development Build{{end}}</span>
                 </p>
+                <p class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+                    </svg>
+                    Build Date: <span class="font-mono">{{if .Settings.BuildDate}}{{.Settings.BuildDate}}{{else}}Unknown{{end}}</span>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- License Information -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="card-title">License Information</h2>
+            <div class="space-y-4">
+                <p>Both the BirdNET AI model and BirdNET-Go are licensed under the <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" class="link link-primary" target="_blank" rel="noopener noreferrer">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License</a>.</p>
+                <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd" />
+                    </svg>
+                    <span>This license allows others to remix, adapt, and build upon this work non-commercially, as long as appropriate credit is given and new creations are licensed under identical terms.</span>
+                </div>
                 <div class="flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
                         <path fill-rule="evenodd" d="M10 2c-1.716 0-3.408.106-5.07.31C3.806 2.45 3 3.414 3 4.517V17.25a.75.75 0 001.075.676L10 15.082l5.925 2.844A.75.75 0 0017 17.25V4.517c0-1.103-.806-2.068-1.93-2.207A41.403 41.403 0 0010 2z" clip-rule="evenodd" />
                     </svg>
-                    <a href="/assets/LICENSES.md" class="link link-primary" target="_blank" rel="noopener noreferrer">View Licenses</a>
+                    <a href="/assets/LICENSES.md" class="link link-primary" target="_blank" rel="noopener noreferrer">Dependency Licenses</a>
                 </div>
             </div>
         </div>
