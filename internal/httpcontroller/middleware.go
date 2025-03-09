@@ -143,11 +143,6 @@ func (s *Server) VaryHeaderMiddleware() echo.MiddlewareFunc {
 func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if isProtectedRoute(c.Path()) {
-			// Check for Cloudflare bypass
-			if s.CloudflareAccess.IsEnabled(c) {
-				return next(c)
-			}
-
 			// Check if authentication is required for this IP
 			if s.OAuth2Server.IsAuthenticationEnabled(s.RealIP(c)) {
 				if !s.IsAccessAllowed(c) {

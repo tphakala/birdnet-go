@@ -42,7 +42,6 @@ type Handlers struct {
     OAuth2Server      *security.OAuth2Server
     controlChan       chan string
     notificationChan  chan Notification
-    CloudflareAccess  *security.CloudflareAccess
     debug             bool
     Server            interface{ IsAccessAllowed(c echo.Context) bool }
 }

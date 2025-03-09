@@ -248,12 +248,6 @@ type AllowSubnetBypass struct {
 	Subnet  string // disable OAuth2 in subnet
 }
 
-type AllowCloudflareBypass struct {
-	Enabled    bool   // true to enable CF Access
-	TeamDomain string // Cloudflare team domain
-	Audience   string // Cloudflare policy audience
-}
-
 // SecurityConfig handles all security-related settings and validations
 // for the application, including authentication, TLS, and access control.
 type Security struct {
@@ -268,13 +262,12 @@ type Security struct {
 	// Let's Encrypt. Requires Host to be set and port 80/443 access.
 	AutoTLS bool
 
-	RedirectToHTTPS       bool                  // true to redirect to HTTPS
-	AllowSubnetBypass     AllowSubnetBypass     // subnet bypass configuration
-	AllowCloudflareBypass AllowCloudflareBypass // Cloudflare Access configuration
-	BasicAuth             BasicAuth             // password authentication configuration
-	GoogleAuth            SocialProvider        // Google OAuth2 configuration
-	GithubAuth            SocialProvider        // Github OAuth2 configuration
-	SessionSecret         string                // secret for session cookie
+	RedirectToHTTPS   bool              // true to redirect to HTTPS
+	AllowSubnetBypass AllowSubnetBypass // subnet bypass configuration
+	BasicAuth         BasicAuth         // password authentication configuration
+	GoogleAuth        SocialProvider    // Google OAuth2 configuration
+	GithubAuth        SocialProvider    // Github OAuth2 configuration
+	SessionSecret     string            // secret for session cookie
 }
 
 // Settings contains all configuration options for the BirdNET-Go application.

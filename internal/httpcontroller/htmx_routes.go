@@ -36,7 +36,6 @@ type PartialRouteConfig struct {
 type Security struct {
 	Enabled       bool
 	AccessAllowed bool
-	IsCloudflare  bool
 }
 
 type RenderData struct {
@@ -167,7 +166,6 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 	path := c.Path()
 	pageRoute, isPageRoute := s.pageRoutes[path]
 	partialRoute, isFragment := s.partialRoutes[path]
-	isCloudflare := s.CloudflareAccess.IsEnabled(c)
 
 	// Return an error if route is unknown
 	if !isPageRoute && !isFragment {
@@ -197,7 +195,6 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 		Security: &Security{
 			Enabled:       s.isAuthenticationEnabled(c),
 			AccessAllowed: s.IsAccessAllowed(c),
-			IsCloudflare:  isCloudflare,
 		},
 		CSRFToken: func() string {
 			tokenStr, ok := token.(string)
