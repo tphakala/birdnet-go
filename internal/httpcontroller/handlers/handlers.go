@@ -33,7 +33,6 @@ type Handlers struct {
 	OAuth2Server      *security.OAuth2Server
 	controlChan       chan string
 	notificationChan  chan Notification
-	CloudflareAccess  *security.CloudflareAccess
 	debug             bool
 	Server            interface{ IsAccessAllowed(c echo.Context) bool }
 }
@@ -98,7 +97,6 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		OAuth2Server:      oauth2Server,
 		controlChan:       controlChan,
 		notificationChan:  notificationChan,
-		CloudflareAccess:  security.NewCloudflareAccess(),
 		debug:             settings.Debug,
 		Server:            server,
 	}
@@ -211,7 +209,6 @@ func (h *Handlers) GetLabels() []string {
 type Security struct {
 	Enabled       bool
 	AccessAllowed bool
-	IsCloudflare  bool
 }
 
 // GetSecurity returns the current security state for the context
@@ -219,6 +216,5 @@ func (h *Handlers) GetSecurity(c echo.Context) *Security {
 	return &Security{
 		Enabled:       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
 		AccessAllowed: h.Server.IsAccessAllowed(c),
-		IsCloudflare:  h.CloudflareAccess.IsEnabled(c),
 	}
 }

@@ -141,10 +141,5 @@ func (s *Server) handleLogout(c echo.Context) error {
 	// Logout from gothic session
 	gothic.Logout(c.Response(), c.Request()) //nolint:errcheck // gothic logout errors can be ignored during cleanup
 
-	// Handle Cloudflare logout if enabled
-	if s.CloudflareAccess.IsEnabled(c) {
-		return s.CloudflareAccess.Logout(c)
-	}
-
 	return c.Redirect(http.StatusFound, "/")
 }
