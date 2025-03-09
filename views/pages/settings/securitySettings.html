@@ -265,9 +265,6 @@ $watch('security', () => {
             enabled: {{.Settings.Security.AllowSubnetBypass.Enabled}},
             subnet: '{{.Settings.Security.AllowSubnetBypass.Subnet}}'
         },
-        allowCloudflareBypass: {
-            enabled: {{.Settings.Security.AllowCloudflareBypass.Enabled}}
-        }
     },
     bypassAuthOpen: false,
     showTooltip: null,
@@ -294,13 +291,6 @@ $watch('security', () => {
     </div>
 
     <div class="collapse-content">
-        <!-- Allow Cloudflare Access to Bypass -->
-        {{template "checkbox" dict
-            "id" "cloudflareBypassEnabled"
-            "model" "security.allowCloudflareBypass.enabled"
-            "label" "Allow Cloudflare Access to Bypass Authentication"
-            "tooltip" "Allow users authenticated through Cloudflare Access to be automatically granted access without additional login."}}
-
         <!-- Allow a subnet to bypass the password authentication -->
         <div class="form-control relative">
     
