@@ -28,7 +28,6 @@ type Server struct {
 	DS                datastore.Interface
 	Settings          *conf.Settings
 	OAuth2Server      *security.OAuth2Server
-	CloudflareAccess  *security.CloudflareAccess
 	DashboardSettings *conf.Dashboard
 	Logger            *logger.Logger
 	BirdImageCache    *imageprovider.BirdImageCache
@@ -57,7 +56,6 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 		AudioLevelChan:    audioLevelChan,
 		DashboardSettings: &settings.Realtime.Dashboard,
 		OAuth2Server:      security.NewOAuth2Server(),
-		CloudflareAccess:  security.NewCloudflareAccess(),
 		controlChan:       controlChan,
 		notificationChan:  make(chan handlers.Notification, 10),
 		Processor:         proc,
@@ -122,22 +120,10 @@ func (s *Server) isAuthenticationEnabled(c echo.Context) bool {
 }
 
 func (s *Server) IsAccessAllowed(c echo.Context) bool {
-	// First check Cloudflare Access JWT
-	if s.CloudflareAccess.IsEnabled(c) {
-		return true
-	}
-
 	return s.OAuth2Server.IsUserAuthenticated(c)
 }
 
 func (s *Server) RealIP(c echo.Context) string {
-	// If Cloudflare Access is enabled, prioritize CF-Connecting-IP
-	if s.CloudflareAccess.IsEnabled(c) {
-		if cfIP := c.Request().Header.Get("CF-Connecting-IP"); cfIP != "" {
-			return strings.TrimSpace(cfIP)
-		}
-	}
-
 	// Get the X-Forwarded-For header
 	if xff := c.Request().Header.Get("X-Forwarded-For"); xff != "" {
 		// Split and get the first IP in the chain
