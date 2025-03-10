@@ -87,11 +87,6 @@ Source: MIT
 License: https://github.com/go-sql-driver/mysql/blob/v1.7.0/LICENSE
 Source: MPL-2.0
 
-### github.com/golang-jwt/jwt/v5
-
-License: https://github.com/golang-jwt/jwt/blob/v5.2.1/LICENSE
-Source: MIT
-
 ### github.com/google/uuid
 
 License: https://github.com/google/uuid/blob/v1.6.0/LICENSE
@@ -214,7 +209,7 @@ Source: MIT
 
 ### github.com/prometheus/client_golang/prometheus
 
-License: https://github.com/prometheus/client_golang/blob/v1.21.0/LICENSE
+License: https://github.com/prometheus/client_golang/blob/v1.21.1/LICENSE
 Source: Apache-2.0
 
 ### github.com/prometheus/client_model/go
@@ -329,7 +324,7 @@ Source: Apache-2.0
 
 ### golang.org/x/crypto/acme
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.35.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.36.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
@@ -344,22 +339,22 @@ Source: BSD-3-Clause
 
 ### golang.org/x/sync/semaphore
 
-License: https://cs.opensource.google/go/x/sync/+/v0.11.0:LICENSE
+License: https://cs.opensource.google/go/x/sync/+/v0.12.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sys/unix
 
-License: https://cs.opensource.google/go/x/sys/+/v0.30.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.31.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term
 
-License: https://cs.opensource.google/go/x/term/+/v0.29.0:LICENSE
+License: https://cs.opensource.google/go/x/term/+/v0.30.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.22.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.23.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
