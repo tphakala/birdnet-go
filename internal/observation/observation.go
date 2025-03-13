@@ -44,12 +44,7 @@ func New(settings *conf.Settings, beginTime, endTime time.Time, species string, 
 	if settings.Input.Path != "" {
 		audioSource = settings.Input.Path
 	} else {
-		// If source is RTSP, sanitize URL before applying it
-		if strings.HasPrefix(source, "rtsp://") {
-			audioSource = conf.SanitizeRTSPUrl(source)
-		} else {
-			audioSource = source
-		}
+		audioSource = source
 	}
 
 	// Round confidence to two decimal places
