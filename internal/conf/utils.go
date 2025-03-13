@@ -406,11 +406,16 @@ func IsSafePath(path string) bool {
 }
 
 // SanitizeRTSPUrl removes sensitive information from RTSP URL and returns a display-friendly version
-func SanitizeRTSPUrl(url string) string {
+func SanitizeRTSPUrl(source string) string {
+	// If not an RTSP URL, return as is
+	if !strings.HasPrefix(source, "rtsp://") {
+		return source
+	}
+
 	// Find the @ symbol that separates credentials from host
 	atIndex := -1
-	for i := len("rtsp://"); i < len(url); i++ {
-		if url[i] == '@' {
+	for i := len("rtsp://"); i < len(source); i++ {
+		if source[i] == '@' {
 			atIndex = i
 			break
 		}
@@ -418,13 +423,13 @@ func SanitizeRTSPUrl(url string) string {
 
 	if atIndex > -1 {
 		// Keep only rtsp:// and everything after @
-		url = "rtsp://" + url[atIndex+1:]
+		source = "rtsp://" + source[atIndex+1:]
 	}
 
 	// Find the first slash after the host:port
 	slashIndex := -1
-	for i := len("rtsp://"); i < len(url); i++ {
-		if url[i] == '/' {
+	for i := len("rtsp://"); i < len(source); i++ {
+		if source[i] == '/' {
 			slashIndex = i
 			break
 		}
@@ -432,8 +437,8 @@ func SanitizeRTSPUrl(url string) string {
 
 	if slashIndex > -1 {
 		// Keep only up to the first slash
-		url = url[:slashIndex]
+		source = source[:slashIndex]
 	}
 
-	return url
+	return source
 }
