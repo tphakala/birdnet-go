@@ -3,14 +3,12 @@ package httpcontroller
 import (
 	"crypto/sha256"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/tphakala/birdnet-go/internal/security"
 )
 
 // CSRFContextKey is the key used to store CSRF token in the context
@@ -34,9 +32,11 @@ func (s *Server) CSRFMiddleware() echo.MiddlewareFunc {
 		CookiePath:     "/",
 		CookieHTTPOnly: true,
 		CookieSameSite: http.SameSiteLaxMode,
-		CookieMaxAge:   1800, // 30 minutes token lifetime
-		TokenLength:    32,
-		ContextKey:     CSRFContextKey,
+		CookieSecure:   false, // Allow cookies over HTTP, if user is not
+		// using HTTPS they don't care about security anyway
+		CookieMaxAge: 1800, // 30 minutes token lifetime
+		TokenLength:  32,
+		ContextKey:   CSRFContextKey,
 		Skipper: func(c echo.Context) bool {
 			path := c.Path()
 			// Skip CSRF for static assets and auth endpoints only
@@ -59,14 +59,7 @@ func (s *Server) CSRFMiddleware() echo.MiddlewareFunc {
 		},
 	}
 
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		csrfMiddleware := middleware.CSRFWithConfig(config)
-		return func(c echo.Context) error {
-			clientIP := net.ParseIP(s.RealIP(c))
-			config.CookieSecure = !security.IsInLocalSubnet(clientIP)
-			return csrfMiddleware(next)(c)
-		}
-	}
+	return middleware.CSRFWithConfig(config)
 }
 
 // GzipMiddleware configures Gzip compression for the server
