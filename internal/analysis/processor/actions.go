@@ -266,6 +266,10 @@ func (a *MqttAction) Execute(data interface{}) error {
 		birdImage = imageprovider.BirdImage{}
 	}
 
+	// Create a copy of the Note with sanitized RTSP URL
+	noteCopy := a.Note
+	noteCopy.Source = conf.SanitizeRTSPUrl(noteCopy.Source)
+
 	// Wrap note with bird image
 	noteWithBirdImage := NoteWithBirdImage{Note: a.Note, BirdImage: birdImage}
 
