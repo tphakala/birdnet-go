@@ -329,7 +329,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.35.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.36.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -359,7 +359,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
 
-License: https://cs.opensource.google/go/x/time/+/v0.10.0:LICENSE
+License: https://cs.opensource.google/go/x/time/+/v0.11.0:LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/protobuf
