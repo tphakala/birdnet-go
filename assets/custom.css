@@ -184,6 +184,12 @@ thead.sticky-header {
 }
 
 /* Responsive table adjustments */
+/* 
+ * Note on CSS selectors: We use attribute selectors [class*="hidden"][class*="2xl:table-cell"]
+ * instead of direct class selectors (.hidden.2xl\:table-cell) for better cross-browser compatibility
+ * when dealing with class names that contain special characters like colons and numbers.
+ */
+
 /* Extra large screens (large desktops, ≥1400px): show hourly view and total detections */
 @media (min-width: 1400px) {
   .hour-header.hourly-count,
@@ -192,7 +198,8 @@ thead.sticky-header {
     display: table-cell;
   }
   /* Show total detections column on extra large screens only */
-  .hidden.\32xl\:table-cell {
+  /* Use attribute selector for better cross-browser compatibility */
+  [class*="hidden"][class*="2xl:table-cell"] {
     display: table-cell;
   }
 }
@@ -205,7 +212,8 @@ thead.sticky-header {
     display: table-cell;
   }
   /* Hide total detections on large screens */
-  .hidden.\32xl\:table-cell {
+  /* Use attribute selector for better cross-browser compatibility */
+  [class*="hidden"][class*="2xl:table-cell"] {
     display: none !important;
   }
 }
@@ -225,7 +233,8 @@ thead.sticky-header {
     font-size: 0.7rem;
   }
   /* Hide total detections on medium-large screens */
-  .hidden.\32xl\:table-cell {
+  /* Use attribute selector for better cross-browser compatibility */
+  [class*="hidden"][class*="2xl:table-cell"] {
     display: none !important;
   }
   /* Make species column more compact */
@@ -268,7 +277,8 @@ thead.sticky-header {
     display: none;
   }
   /* Hide total detections on medium screens */
-  .hidden.\32xl\:table-cell {
+  /* Use attribute selector for better cross-browser compatibility */
+  [class*="hidden"][class*="2xl:table-cell"] {
     display: none !important;
   }
   /* Reduce padding for bi-hourly cells on medium screens */
@@ -312,7 +322,8 @@ thead.sticky-header {
     display: table-cell;
   }
   /* Hide total detections on small screens */
-  .hidden.\32xl\:table-cell {
+  /* Use attribute selector for better cross-browser compatibility */
+  [class*="hidden"][class*="2xl:table-cell"] {
     display: none !important;
   }
   /* Reduce padding for bi-hourly cells on small screens */
