@@ -5960,10 +5960,6 @@ html:has(.drawer-toggle:checked) {
   text-transform: none;
 }
 
-.italic {
-  font-style: italic;
-}
-
 .text-base-content {
   --tw-text-opacity: 1;
   color: var(--fallback-bc,oklch(var(--bc)/var(--tw-text-opacity)));
@@ -6513,10 +6509,6 @@ html {
     display: block;
   }
 
-  .md\:table-cell {
-    display: table-cell;
-  }
-
   .md\:w-24 {
     width: 6rem;
   }
@@ -6605,6 +6597,12 @@ html {
   }
 }
 
+@media (min-width: 1536px) {
+  .\32xl\:table-cell {
+    display: table-cell;
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   .dark\:bg-base-300 {
     --tw-bg-opacity: 1;
@@ -6627,10 +6625,5 @@ html {
   .dark\:text-base-300 {
     --tw-text-opacity: 1;
     color: var(--fallback-b3,oklch(var(--b3)/var(--tw-text-opacity)));
-  }
-
-  .dark\:invert {
-    --tw-invert: invert(100%);
-    filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
   }
 }
