@@ -314,20 +314,11 @@ type UsageBasedCleanupForTests struct {
 func (c UsageBasedCleanupForTests) Cleanup(quitChan chan struct{}, db Interface) error {
 	h := c.helper
 
-	// Simulate the settings from conf.Setting()
-	if h.debug {
-		// In debug mode we'd log: "Starting cleanup process. Base directory: %s, Threshold: %.1f%%", h.baseDir, maxUsage
-	}
-
 	// Parse "80%" to 80.0
 	maxUsage, _ := conf.ParsePercentage(h.maxUsagePercent)
 
 	// Check if disk usage exceeds threshold
 	if h.diskUsage > maxUsage {
-		if h.debug {
-			// In debug we'd log: "Disk usage %.1f%% is above the %.1f%% threshold. Cleanup needed."
-		}
-
 		// Mark files as locked based on h.lockedFilePaths
 		for i := range h.audioFiles {
 			h.audioFiles[i].Locked = isLockedClip(h.audioFiles[i].Path, h.lockedFilePaths)
@@ -347,9 +338,6 @@ func (c UsageBasedCleanupForTests) Cleanup(quitChan chan struct{}, db Interface)
 
 				// Skip locked files
 				if file.Locked {
-					if h.debug {
-						// Debug: "Skipping locked file: %s"
-					}
 					continue
 				}
 
@@ -363,9 +351,6 @@ func (c UsageBasedCleanupForTests) Cleanup(quitChan chan struct{}, db Interface)
 
 				// Check if we need to preserve this file for minClipsPerSpecies
 				if speciesCount[file.Species][subDir] <= h.minClipsPerSpecies {
-					if h.debug {
-						// Debug: "Species clip count is below the minimum threshold. Skipping."
-					}
 					continue
 				}
 
@@ -379,8 +364,6 @@ func (c UsageBasedCleanupForTests) Cleanup(quitChan chan struct{}, db Interface)
 				speciesCount[file.Species][subDir]--
 			}
 		}
-	} else if h.debug {
-		// In debug we'd log: "Disk usage is below the threshold. No cleanup needed."
 	}
 
 	return nil

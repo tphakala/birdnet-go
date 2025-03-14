@@ -141,9 +141,7 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 	nameWithoutExt := strings.TrimSuffix(name, ext)
 
 	// Handle special case for thumbnail suffixes like _400px
-	if strings.HasSuffix(nameWithoutExt, "_400px") {
-		nameWithoutExt = strings.TrimSuffix(nameWithoutExt, "_400px")
-	}
+	nameWithoutExt = strings.TrimSuffix(nameWithoutExt, "_400px")
 
 	parts := strings.Split(nameWithoutExt, "_")
 	if len(parts) < 3 {
