@@ -11,7 +11,7 @@
     <th scope="col" class="py-0 px-2 w-0">Thumbnail</th>
     {{end}}
     <!-- Total detections header -->
-    <th scope="col" class="py-0 px-4 w-100 h-11 hidden md:table-cell">Detections</th>
+    <th scope="col" class="py-0 px-4 w-100 h-11 hidden 2xl:table-cell">Detections</th>
     
     <!-- Hourly view headers (1-hour intervals) -->
     {{range $hourIndex := seq 0 23}}
@@ -60,12 +60,13 @@
       {{end}}
 
       <!-- Total detections -->
-      <td class="py-1 px-3 hidden md:table-cell">
+      <td class="py-1 px-3 hidden 2xl:table-cell">
         <div class="w-full bg-base-300 dark:bg-base-300 rounded-full overflow-hidden relative">
           {{$width := calcWidth .TotalDetections}}
-          <div class="progress progress-primary bg-gray-400 dark:bg-gray-400" style="width: {{$width}}%;">
+          {{$roundedWidth := roundToNearest $width 5}}
+          <div class="progress progress-primary bg-gray-400 dark:bg-gray-400 progress-width-{{$roundedWidth}}">
             {{if and (ge $width 45) (le $width 59)}}
-            <!-- Do no let the count label overlap with the progress bar -->
+            <!-- Do not let the count label overlap with the progress bar -->
             <span class="text-2xs text-gray-100 dark:text-base-300 absolute right-1 top-1/2 transform -translate-y-1/2">{{.TotalDetections}}</span>
             {{end}}
           </div>

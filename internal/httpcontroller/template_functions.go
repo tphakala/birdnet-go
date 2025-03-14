@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"math"
 	"net/url"
 	"path/filepath"
 	"sort"
@@ -33,6 +34,7 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"even":                  even,
 		"ge":                    geFunc,
 		"calcWidth":             calcWidth,
+		"roundToNearest":        roundToNearest,
 		"heatmapColor":          heatmapColor,
 		"title":                 cases.Title(language.English).String,
 		"confidence":            confidence,
@@ -386,4 +388,9 @@ func geFunc(a, b interface{}) bool {
 		return false
 	}
 	return aFloat >= bFloat
+}
+
+// roundToNearest rounds a number to the nearest multiple of another number
+func roundToNearest(value, multiple int) int {
+	return int(math.Round(float64(value)/float64(multiple)) * float64(multiple))
 }

@@ -184,23 +184,146 @@ thead.sticky-header {
 }
 
 /* Responsive table adjustments */
-/* Large screens (desktop): show hourly view */
-@media (min-width: 768px) {
+/* Extra large screens (large desktops, ≥1400px): show hourly view and total detections */
+@media (min-width: 1400px) {
   .hour-header.hourly-count,
   .hour-data.hourly-count,
   .hourly-count {
     display: table-cell;
   }
+  /* Show total detections column on extra large screens only */
+  .hidden.\32xl\:table-cell {
+    display: table-cell;
+  }
 }
-/* Medium screens (tablets): show bi-hourly */
+
+/* Large screens (desktops, 1200px-1399px): show hourly view, hide total detections */
+@media (min-width: 1200px) and (max-width: 1399px) {
+  .hour-header.hourly-count,
+  .hour-data.hourly-count,
+  .hourly-count {
+    display: table-cell;
+  }
+  /* Hide total detections on large screens */
+  .hidden.\32xl\:table-cell {
+    display: none !important;
+  }
+}
+
+/* Medium-large screens (small desktops and large tablets, 1024px-1199px): show hourly view, hide total detections */
+@media (min-width: 1024px) and (max-width: 1199px) {
+  .hour-header.hourly-count,
+  .hour-data.hourly-count,
+  .hourly-count {
+    display: table-cell;
+  }
+  /* Reduce padding for hourly cells on medium-large screens */
+  .hour-header.hourly-count,
+  .hour-data.hourly-count {
+    padding-left: 0;
+    padding-right: 0;
+    font-size: 0.7rem;
+  }
+  /* Hide total detections on medium-large screens */
+  .hidden.\32xl\:table-cell {
+    display: none !important;
+  }
+  /* Make species column more compact */
+  th[scope="row"].py-1.px-2.sm\:px-4.font-medium {
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+    max-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  th[scope="row"].py-1.px-2.sm\:px-4.font-medium a {
+    max-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+  /* Make thumbnail column more compact */
+  th[scope="row"].py-1.px-2 .thumbnail-container {
+    max-width: 40px;
+  }
+  th[scope="row"].py-1.px-2 .thumbnail-container img {
+    max-width: 40px;
+    height: auto;
+  }
+}
+
+/* Medium screens (tablets, 768px-1023px): show bi-hourly, hide total detections */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .hour-header.bi-hourly,
+  .hour-data.bi-hourly,
+  .bi-hourly-count {
+    display: table-cell;
+  }
+  /* Hide hourly counts on medium screens */
+  .hour-header.hourly-count,
+  .hour-data.hourly-count,
+  .hourly-count {
+    display: none;
+  }
+  /* Hide total detections on medium screens */
+  .hidden.\32xl\:table-cell {
+    display: none !important;
+  }
+  /* Reduce padding for bi-hourly cells on medium screens */
+  .hour-header.bi-hourly,
+  .hour-data.bi-hourly {
+    padding-left: 0;
+    padding-right: 0;
+    font-size: 0.7rem;
+  }
+  /* Ensure species column is not too wide */
+  th[scope="row"].py-1.px-2.sm\:px-4.font-medium {
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+    max-width: 120px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  th[scope="row"].py-1.px-2.sm\:px-4.font-medium a {
+    max-width: 120px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+  /* Make thumbnail column more compact */
+  th[scope="row"].py-1.px-2 .thumbnail-container {
+    max-width: 35px;
+  }
+  th[scope="row"].py-1.px-2 .thumbnail-container img {
+    max-width: 35px;
+    height: auto;
+  }
+}
+
+/* Small screens (mobile, <768px): show bi-hourly */
 @media (max-width: 767px) {
   .hour-header.bi-hourly,
   .hour-data.bi-hourly,
   .bi-hourly-count {
     display: table-cell;
   }
+  /* Hide total detections on small screens */
+  .hidden.\32xl\:table-cell {
+    display: none !important;
+  }
+  /* Reduce padding for bi-hourly cells on small screens */
+  .hour-header.bi-hourly,
+  .hour-data.bi-hourly {
+    padding-left: 0;
+    padding-right: 0;
+  }
 }
-/* Small screens (mobile): show six-hourly */
+
+/* Extra small screens (small mobile, <480px): show six-hourly */
 @media (max-width: 479px) {
   .hour-header.bi-hourly,
   .hour-data.bi-hourly,
@@ -237,11 +360,19 @@ thead.sticky-header {
   vertical-align: middle;
 }
 
+/* Make hour cells more compact by default */
+.hour-header,
+.hour-data {
+  padding-left: 0.1rem;
+  padding-right: 0.1rem;
+}
+
 /* Sunrise/sunset icon positioning */
 .hour-header a {
   position: relative;
   display: inline-block;
-  padding: 0.25rem 0.5rem;
+  padding: 0.25rem 0.25rem;
+  min-width: 1.5rem;
 }
 .hour-header a span {
   position: absolute;
@@ -249,6 +380,39 @@ thead.sticky-header {
   left: 50%;
   transform: translateX(-50%);
   line-height: 1;
+}
+
+/* Responsive hour header adjustments */
+@media (min-width: 1200px) and (max-width: 1399px) {
+  .hour-header a {
+    padding: 0.2rem 0.2rem;
+    min-width: 1.4rem;
+    font-size: 0.75rem;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1199px) {
+  .hour-header a {
+    padding: 0.2rem 0.2rem;
+    min-width: 1.4rem;
+    font-size: 0.75rem;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .hour-header a {
+    padding: 0.15rem 0.15rem;
+    min-width: 1.3rem;
+    font-size: 0.7rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .hour-header a {
+    padding: 0.1rem 0.1rem;
+    min-width: 1.2rem;
+    font-size: 0.65rem;
+  }
 }
 
 /* ========================================================================
@@ -359,7 +523,7 @@ thead.sticky-header {
   inset: 0;
   border-radius: 50%;
   transform-origin: center;
-  transform: rotate(180deg); /* Shifts starting point from 12 to 6 o’clock */
+  transform: rotate(180deg); /* Shifts starting point from 12 to 6 o'clock */
   background: conic-gradient(currentColor var(--progress), transparent 0);
   transition: all 0.3s ease;
   z-index: 1;
@@ -681,6 +845,30 @@ thead.sticky-header {
 .select {
   border-radius: 0.3rem;
 }
+
+/* Progress width classes (0-100) */
+/* We'll generate a few key percentages that are commonly used */
+.progress-width-0 { width: 0%; }
+.progress-width-5 { width: 5%; }
+.progress-width-10 { width: 10%; }
+.progress-width-15 { width: 15%; }
+.progress-width-20 { width: 20%; }
+.progress-width-25 { width: 25%; }
+.progress-width-30 { width: 30%; }
+.progress-width-35 { width: 35%; }
+.progress-width-40 { width: 40%; }
+.progress-width-45 { width: 45%; }
+.progress-width-50 { width: 50%; }
+.progress-width-55 { width: 55%; }
+.progress-width-60 { width: 60%; }
+.progress-width-65 { width: 65%; }
+.progress-width-70 { width: 70%; }
+.progress-width-75 { width: 75%; }
+.progress-width-80 { width: 80%; }
+.progress-width-85 { width: 85%; }
+.progress-width-90 { width: 90%; }
+.progress-width-95 { width: 95%; }
+.progress-width-100 { width: 100%; }
 
 /* Small changed badge styling */
 .badge.badge-primary.badge-sm.changed-badge {
