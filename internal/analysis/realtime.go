@@ -279,14 +279,14 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 			// age based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "age" {
 				if err := diskmanager.AgeBasedCleanup(quitChan, dataStore); err != nil {
-					log.Println("Error cleaning up clips: ", err)
+					log.Printf("Error during age-based cleanup: %v", err)
 				}
 			}
 
 			// priority based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "usage" {
 				if err := diskmanager.UsageBasedCleanup(quitChan, dataStore); err != nil {
-					log.Println("Error cleaning up clips: ", err)
+					log.Printf("Error during usage-based cleanup: %v", err)
 				}
 			}
 		}

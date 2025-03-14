@@ -2,6 +2,7 @@
 package diskmanager
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -28,7 +29,7 @@ func UsageBasedCleanup(quitChan chan struct{}, db Interface) error {
 	// Convert 80% string etc. to 80.0 float64
 	threshold, err := conf.ParsePercentage(settings.Realtime.Audio.Export.Retention.MaxUsage)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to parse usage threshold: %w", err)
 	}
 
 	if debug {
@@ -38,7 +39,7 @@ func UsageBasedCleanup(quitChan chan struct{}, db Interface) error {
 	// Check handle disk usage
 	diskUsage, err := GetDiskUsage(baseDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get disk usage for %s: %w", baseDir, err)
 	}
 
 	if diskUsage > threshold {
@@ -49,21 +50,24 @@ func UsageBasedCleanup(quitChan chan struct{}, db Interface) error {
 		// Get the list of audio files, limited to allowed file types defined in file_utils.go
 		files, err := GetAudioFiles(baseDir, allowedFileTypes, db, debug)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get audio files for usage-based cleanup: %w", err)
 		}
 
-		// Sort files by the cleanup priority and get the initial count of files per species per subdirectory
+		if len(files) == 0 {
+			if debug {
+				log.Printf("No eligible audio files found for cleanup in %s", baseDir)
+			}
+			return nil
+		}
+
+		// Sort files by priority and get species count per directory
 		speciesMonthCount := sortFiles(files, debug)
 
-		// Debug: write sorted files to a file
-		if debug {
-			if err := WriteSortedFilesToFile(files, "file_cleanup_order.txt"); err != nil {
-				return err
-			}
-		}
-
 		// Perform the cleanup
-		return performCleanup(files, baseDir, threshold, minClipsPerSpecies, speciesMonthCount, debug, quitChan)
+		err = performCleanup(files, baseDir, threshold, minClipsPerSpecies, speciesMonthCount, debug, quitChan)
+		if err != nil {
+			return fmt.Errorf("error during usage-based cleanup: %w", err)
+		}
 	} else if debug {
 		log.Printf("Disk usage %.1f%% is below the %.1f%% threshold. No cleanup needed.", diskUsage, threshold)
 	}
@@ -76,6 +80,7 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 	deletedFiles := 0
 	maxDeletions := 1000
 	totalFreedSpace := int64(0)
+	errorCount := 0 // Counter for deletion errors
 
 	for _, file := range files {
 		select {
@@ -97,7 +102,7 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 
 			diskUsage, err := GetDiskUsage(baseDir)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to get disk usage during cleanup: %w", err)
 			}
 
 			// Check if disk usage is below threshold or max deletions reached
@@ -116,25 +121,30 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 				}
 				continue
 			}
+
+			// Delete the file
 			if debug {
 				log.Printf("Deleting file: %s", file.Path)
 			}
 
-			// Delete the file deemed for cleanup
 			err = os.Remove(file.Path)
 			if err != nil {
-				return err
+				errorCount++
+				log.Printf("Failed to remove %s: %s", file.Path, err)
+				// Continue with other files instead of stopping the entire cleanup
+				if errorCount > 10 {
+					return fmt.Errorf("too many errors (%d) during usage-based cleanup, last error: %w", errorCount, err)
+				}
+				continue
 			}
 
-			// Increment deleted files count and update species count
+			// Update counters
 			deletedFiles++
+			totalFreedSpace += file.Size
 			speciesMonthCount[file.Species][subDir]--
 
-			// Add file size to total freed space
-			totalFreedSpace += file.Size
-
 			if debug {
-				log.Printf("File deleted. %d clips left for species %s in %s", speciesMonthCount[file.Species][subDir], file.Species, subDir)
+				log.Printf("Deleted file: %s, freed %d bytes", file.Path, file.Size)
 			}
 
 			// Yield to other goroutines
@@ -143,7 +153,7 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 	}
 
 	if debug {
-		log.Printf("Usage retention policy applied, total files deleted: %d", deletedFiles)
+		log.Printf("Cleanup completed. Deleted %d files, freed %d bytes", deletedFiles, totalFreedSpace)
 	}
 
 	return nil
