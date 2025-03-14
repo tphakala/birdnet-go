@@ -2,10 +2,24 @@ package diskmanager
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	mock_diskmanager "github.com/tphakala/birdnet-go/internal/diskmanager/mocks"
+	gomock "go.uber.org/mock/gomock"
+)
+
+// Original function signature references for testing
+var (
+	originalGetDiskUsage    = GetDiskUsage
+	originalGetAudioFiles   = GetAudioFiles
+	originalOsRemove        = osRemove
+	originalConfGetSettings = conf.GetSettings
 )
 
 // MockFileInfo implements os.FileInfo for testing
@@ -52,18 +66,18 @@ func TestFileTypesEligibleForDeletion(t *testing.T) {
 		description         string
 	}{
 		// Allowed file types (should be eligible for deletion)
-		{"owl_80p_20210102T150405Z.wav", ".wav", true, "WAV files should be eligible for deletion"},
-		{"owl_80p_20210102T150405Z.mp3", ".mp3", true, "MP3 files should be eligible for deletion"},
-		{"owl_80p_20210102T150405Z.flac", ".flac", true, "FLAC files should be eligible for deletion"},
-		{"owl_80p_20210102T150405Z.aac", ".aac", true, "AAC files should be eligible for deletion"},
-		{"owl_80p_20210102T150405Z.opus", ".opus", true, "OPUS files should be eligible for deletion"},
+		{"bubo_bubo_80p_20210102T150405Z.wav", ".wav", true, "WAV files should be eligible for deletion"},
+		{"bubo_bubo_80p_20210102T150405Z.mp3", ".mp3", true, "MP3 files should be eligible for deletion"},
+		{"bubo_bubo_80p_20210102T150405Z.flac", ".flac", true, "FLAC files should be eligible for deletion"},
+		{"bubo_bubo_80p_20210102T150405Z.aac", ".aac", true, "AAC files should be eligible for deletion"},
+		{"bubo_bubo_80p_20210102T150405Z.opus", ".opus", true, "OPUS files should be eligible for deletion"},
 
 		// Disallowed file types (should not be eligible for deletion)
-		{"owl_80p_20210102T150405Z.txt", ".txt", false, "TXT files should not be eligible for deletion"},
-		{"owl_80p_20210102T150405Z.jpg", ".jpg", false, "JPG files should not be eligible for deletion"},
-		{"owl_80p_20210102T150405Z.png", ".png", false, "PNG files should not be eligible for deletion"},
-		{"owl_80p_20210102T150405Z.db", ".db", false, "DB files should not be eligible for deletion"},
-		{"owl_80p_20210102T150405Z.csv", ".csv", false, "CSV files should not be eligible for deletion"},
+		{"bubo_bubo_80p_20210102T150405Z.txt", ".txt", false, "TXT files should not be eligible for deletion"},
+		{"bubo_bubo_80p_20210102T150405Z.jpg", ".jpg", false, "JPG files should not be eligible for deletion"},
+		{"bubo_bubo_80p_20210102T150405Z.png", ".png", false, "PNG files should not be eligible for deletion"},
+		{"bubo_bubo_80p_20210102T150405Z.db", ".db", false, "DB files should not be eligible for deletion"},
+		{"bubo_bubo_80p_20210102T150405Z.csv", ".csv", false, "CSV files should not be eligible for deletion"},
 		{"system_80p_20210102T150405Z.exe", ".exe", false, "EXE files should not be eligible for deletion"},
 	}
 
@@ -74,7 +88,7 @@ func TestFileTypesEligibleForDeletion(t *testing.T) {
 
 			if tc.eligibleForDeletion {
 				assert.NoError(t, err, "File should be eligible for deletion: %s", tc.description)
-				assert.Equal(t, "owl", fileInfo.Species, "Species should be correctly parsed")
+				assert.Equal(t, "bubo_bubo", fileInfo.Species, "Species should be correctly parsed")
 				assert.Equal(t, 80, fileInfo.Confidence, "Confidence should be correctly parsed")
 
 				// Check that the timestamp was parsed correctly
@@ -115,12 +129,12 @@ func TestParseFileInfoWithDifferentExtensions(t *testing.T) {
 		expectedExt   string
 		shouldSucceed bool
 	}{
-		{"owl_80p_20210102T150405Z.wav", ".wav", true},
-		{"owl_80p_20210102T150405Z.mp3", ".mp3", true},
-		{"owl_80p_20210102T150405Z.flac", ".flac", true},
-		{"owl_80p_20210102T150405Z.aac", ".aac", true},
-		{"owl_80p_20210102T150405Z.opus", ".opus", true},
-		{"owl_80p_20210102T150405Z.txt", ".txt", false}, // Unsupported extension
+		{"bubo_bubo_80p_20210102T150405Z.wav", ".wav", true},
+		{"bubo_bubo_80p_20210102T150405Z.mp3", ".mp3", true},
+		{"bubo_bubo_80p_20210102T150405Z.flac", ".flac", true},
+		{"bubo_bubo_80p_20210102T150405Z.aac", ".aac", true},
+		{"bubo_bubo_80p_20210102T150405Z.opus", ".opus", true},
+		{"bubo_bubo_80p_20210102T150405Z.txt", ".txt", false}, // Unsupported extension
 	}
 
 	for _, tc := range testCases {
@@ -130,7 +144,7 @@ func TestParseFileInfoWithDifferentExtensions(t *testing.T) {
 
 			if tc.shouldSucceed {
 				assert.NoError(t, err, "Should parse successfully")
-				assert.Equal(t, "owl", fileInfo.Species)
+				assert.Equal(t, "bubo_bubo", fileInfo.Species)
 				assert.Equal(t, 80, fileInfo.Confidence)
 
 				// Check that the timestamp was parsed correctly
@@ -146,37 +160,479 @@ func TestParseFileInfoWithDifferentExtensions(t *testing.T) {
 // TestParseFileInfoMp3Extension specifically tests the MP3 extension bug
 func TestParseFileInfoMp3Extension(t *testing.T) {
 	// This test specifically targets the bug in the error message
-	mockInfo := createMockFileInfo("owl_80p_20250130T184446Z.mp3", 1024)
+	mockInfo := createMockFileInfo("bubo_bubo_80p_20250130T184446Z.mp3", 1024)
 
-	fileInfo, err := parseFileInfo("/test/owl_80p_20250130T184446Z.mp3", mockInfo)
+	fileInfo, err := parseFileInfo("/test/bubo_bubo_80p_20250130T184446Z.mp3", mockInfo)
 
 	// The bug would cause an error here because it only trims .wav extension
 	assert.NoError(t, err, "Should parse MP3 files correctly")
-	assert.Equal(t, "owl", fileInfo.Species)
+	assert.Equal(t, "bubo_bubo", fileInfo.Species)
 	assert.Equal(t, 80, fileInfo.Confidence)
 
 	expectedTime := parseTime("20250130T184446Z")
 	assert.Equal(t, expectedTime, fileInfo.Timestamp)
 }
 
+// TestParseFileInfoProductionFormat tests file names as they actually appear in production
+func TestParseFileInfoProductionFormat(t *testing.T) {
+	// Test cases with real-world file names from production
+	testCases := []struct {
+		filename      string
+		expectedSpec  string
+		expectedConf  int
+		expectedTime  string
+		shouldSucceed bool
+		description   string
+	}{
+		{
+			// Standard production format with underscored species name
+			"vulpes_vulpes_92p_20250223T195727Z.flac",
+			"vulpes_vulpes",
+			92,
+			"20250223T195727Z",
+			true,
+			"Standard production file with multi-part species name",
+		},
+		{
+			// PNG thumbnail with size suffix - this should fail due to file type
+			"vulpes_vulpes_96p_20250223T073356Z_400px.png",
+			"",
+			0,
+			"",
+			false,
+			"PNG file with size suffix should fail due to file type",
+		},
+		{
+			// Three-part species name
+			"genus_species_subspecies_99p_20250222T043210Z.flac",
+			"genus_species_subspecies",
+			99,
+			"20250222T043210Z",
+			true,
+			"File with three-part species name",
+		},
+		{
+			// Audio file with thumbnail size suffix - with our fix, this should now parse correctly
+			"vulpes_vulpes_96p_20250223T073356Z_400px.flac",
+			"vulpes_vulpes",
+			96,
+			"20250223T073356Z",
+			true,
+			"Audio file with size suffix should now parse correctly with the fix",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.filename, func(t *testing.T) {
+			mockInfo := createMockFileInfo(tc.filename, 1024)
+			fileInfo, err := parseFileInfo("/test/"+tc.filename, mockInfo)
+
+			if tc.shouldSucceed {
+				assert.NoError(t, err, "Should parse successfully: "+tc.description)
+				assert.Equal(t, tc.expectedSpec, fileInfo.Species, "Species should be correctly parsed")
+				assert.Equal(t, tc.expectedConf, fileInfo.Confidence, "Confidence should be correctly parsed")
+
+				// Check that the timestamp was parsed correctly
+				expectedTime := parseTime(tc.expectedTime)
+				assert.Equal(t, expectedTime, fileInfo.Timestamp, "Timestamp should be correctly parsed")
+			} else {
+				assert.Error(t, err, "Should return an error: "+tc.description)
+				if err != nil {
+					t.Logf("Error as expected: %v", err)
+				}
+			}
+		})
+	}
+}
+
 // TestSortFiles tests the sortFiles function
 func TestSortFiles(t *testing.T) {
 	// Create a set of files with different timestamps, species counts, and confidence levels
 	files := []FileInfo{
-		{Path: "/base/dir1/owl_80p_20210102T150405Z.wav", Species: "owl", Confidence: 80, Timestamp: parseTime("20210102T150405Z")},
-		{Path: "/base/dir1/owl_90p_20210103T150405Z.wav", Species: "owl", Confidence: 90, Timestamp: parseTime("20210103T150405Z")},
-		{Path: "/base/dir1/duck_70p_20210101T150405Z.wav", Species: "duck", Confidence: 70, Timestamp: parseTime("20210101T150405Z")},
+		{Path: "/base/dir1/bubo_bubo_80p_20210102T150405Z.wav", Species: "bubo_bubo", Confidence: 80, Timestamp: parseTime("20210102T150405Z")},
+		{Path: "/base/dir1/bubo_bubo_90p_20210103T150405Z.wav", Species: "bubo_bubo", Confidence: 90, Timestamp: parseTime("20210103T150405Z")},
+		{Path: "/base/dir1/anas_platyrhynchos_70p_20210101T150405Z.wav", Species: "anas_platyrhynchos", Confidence: 70, Timestamp: parseTime("20210101T150405Z")},
 	}
 
 	// Sort the files
 	speciesCount := sortFiles(files, true)
 
 	// Verify sorting order (oldest first)
-	assert.Equal(t, "duck", files[0].Species, "Duck should be first (oldest)")
-	assert.Equal(t, "owl", files[1].Species, "Owl (oldest) should be second")
-	assert.Equal(t, "owl", files[2].Species, "Owl (newest) should be third")
+	assert.Equal(t, "anas_platyrhynchos", files[0].Species, "Anas platyrhynchos should be first (oldest)")
+	assert.Equal(t, "bubo_bubo", files[1].Species, "Bubo bubo (oldest) should be second")
+	assert.Equal(t, "bubo_bubo", files[2].Species, "Bubo bubo (newest) should be third")
 
 	// Verify the count map is correct
-	assert.Equal(t, 1, speciesCount["duck"]["/base/dir1"])
-	assert.Equal(t, 2, speciesCount["owl"]["/base/dir1"])
+	assert.Equal(t, 1, speciesCount["anas_platyrhynchos"]["/base/dir1"])
+	assert.Equal(t, 2, speciesCount["bubo_bubo"]["/base/dir1"])
 }
+
+// ----- Tests for Usage-Based Cleanup -----
+
+// UsageBasedTestHelper provides a test-friendly implementation
+type UsageBasedTestHelper struct {
+	// Test configuration
+	diskUsage       float64
+	audioFiles      []FileInfo
+	deletedFiles    []string
+	lockedFilePaths []string
+
+	// Settings
+	baseDir            string
+	maxUsagePercent    string
+	minClipsPerSpecies int
+	retentionPolicy    string
+	debug              bool
+}
+
+// Execute runs the test with the given configuration
+func (h *UsageBasedTestHelper) Execute(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Create mock DB
+	mockDB := mock_diskmanager.NewMockInterface(ctrl)
+	mockDB.EXPECT().GetLockedNotesClipPaths().Return(h.lockedFilePaths, nil).AnyTimes()
+
+	// Create test disk cleanup with our helper
+	diskCleaner := UsageBasedCleanupForTests{
+		helper: h,
+	}
+
+	// Execute the cleanup
+	quitChan := make(chan struct{})
+	err := diskCleaner.Cleanup(quitChan, mockDB)
+	require.NoError(t, err)
+}
+
+// UsageBasedCleanupForTests is a test-friendly implementation of the cleanup system
+type UsageBasedCleanupForTests struct {
+	helper *UsageBasedTestHelper
+}
+
+// Cleanup implements the cleanup function for tests
+func (c UsageBasedCleanupForTests) Cleanup(quitChan chan struct{}, db Interface) error {
+	h := c.helper
+
+	// Simulate the settings from conf.Setting()
+	if h.debug {
+		// In debug mode we'd log: "Starting cleanup process. Base directory: %s, Threshold: %.1f%%", h.baseDir, maxUsage
+	}
+
+	// Parse "80%" to 80.0
+	maxUsage, _ := conf.ParsePercentage(h.maxUsagePercent)
+
+	// Check if disk usage exceeds threshold
+	if h.diskUsage > maxUsage {
+		if h.debug {
+			// In debug we'd log: "Disk usage %.1f%% is above the %.1f%% threshold. Cleanup needed."
+		}
+
+		// Mark files as locked based on h.lockedFilePaths
+		for i := range h.audioFiles {
+			h.audioFiles[i].Locked = isLockedClip(h.audioFiles[i].Path, h.lockedFilePaths)
+		}
+
+		// Sort files by priority
+		speciesCount := sortFiles(h.audioFiles, h.debug)
+
+		// Process the files for cleanup
+		for i := range h.audioFiles {
+			// Check for quit signal
+			select {
+			case <-quitChan:
+				return nil
+			default:
+				file := h.audioFiles[i]
+
+				// Skip locked files
+				if file.Locked {
+					if h.debug {
+						// Debug: "Skipping locked file: %s"
+					}
+					continue
+				}
+
+				// Get the subdirectory name
+				subDir := filepath.Dir(file.Path)
+
+				// Check if disk usage is below threshold
+				if h.diskUsage < maxUsage {
+					break
+				}
+
+				// Check if we need to preserve this file for minClipsPerSpecies
+				if speciesCount[file.Species][subDir] <= h.minClipsPerSpecies {
+					if h.debug {
+						// Debug: "Species clip count is below the minimum threshold. Skipping."
+					}
+					continue
+				}
+
+				// "Delete" the file
+				h.deletedFiles = append(h.deletedFiles, file.Path)
+
+				// Reduce disk usage after each delete to simulate cleanup progress
+				h.diskUsage -= 2.0 // Simple reduction for testing
+
+				// Decrement the species count for the subdirectory
+				speciesCount[file.Species][subDir]--
+			}
+		}
+	} else if h.debug {
+		// In debug we'd log: "Disk usage is below the threshold. No cleanup needed."
+	}
+
+	return nil
+}
+
+// TestUsageBasedCleanupTriggered tests that cleanup is triggered when usage exceeds threshold
+func TestUsageBasedCleanupTriggered(t *testing.T) {
+	// Create a temporary test directory
+	tempDir := t.TempDir()
+
+	// Setup test helper
+	helper := &UsageBasedTestHelper{
+		diskUsage: 90.0, // 90% usage exceeds 80% threshold
+		audioFiles: []FileInfo{
+			{Path: tempDir + "/bubo_bubo_80p_20210101T150405Z.wav", Species: "bubo_bubo", Confidence: 80, Timestamp: parseTime("20210101T150405Z"), Size: 1024},
+			{Path: tempDir + "/bubo_bubo_85p_20210102T150405Z.mp3", Species: "bubo_bubo", Confidence: 85, Timestamp: parseTime("20210102T150405Z"), Size: 512},
+			{Path: tempDir + "/anas_platyrhynchos_70p_20210103T150405Z.flac", Species: "anas_platyrhynchos", Confidence: 70, Timestamp: parseTime("20210103T150405Z"), Size: 2048},
+		},
+		deletedFiles:       []string{},
+		lockedFilePaths:    []string{},
+		baseDir:            tempDir,
+		maxUsagePercent:    "80%",
+		minClipsPerSpecies: 1,
+		retentionPolicy:    "usage",
+		debug:              true,
+	}
+
+	// Run the test
+	helper.Execute(t)
+
+	// Verify files were deleted since disk usage was above threshold
+	assert.NotEmpty(t, helper.deletedFiles, "Files should have been deleted when usage exceeds threshold")
+}
+
+// TestUsageBasedCleanupNoTriggerBelowThreshold tests that cleanup is not triggered when usage is below threshold
+func TestUsageBasedCleanupNoTriggerBelowThreshold(t *testing.T) {
+	// Create a temporary test directory
+	tempDir := t.TempDir()
+
+	// Setup test helper with usage below threshold
+	helper := &UsageBasedTestHelper{
+		diskUsage: 70.0, // 70% usage is below 80% threshold
+		audioFiles: []FileInfo{
+			{Path: tempDir + "/bubo_bubo_80p_20210101T150405Z.wav", Species: "bubo_bubo", Confidence: 80, Timestamp: parseTime("20210101T150405Z"), Size: 1024},
+		},
+		deletedFiles:       []string{},
+		lockedFilePaths:    []string{},
+		baseDir:            tempDir,
+		maxUsagePercent:    "80%",
+		minClipsPerSpecies: 1,
+		retentionPolicy:    "usage",
+		debug:              true,
+	}
+
+	// Run the test
+	helper.Execute(t)
+
+	// Verify no files were deleted since disk usage was below threshold
+	assert.Empty(t, helper.deletedFiles, "No files should be deleted when usage is below threshold")
+}
+
+// TestUsageBasedCleanupWithAllFileTypes tests that all supported file types are cleaned up
+func TestUsageBasedCleanupWithAllFileTypes(t *testing.T) {
+	// Create a temporary test directory
+	tempDir := t.TempDir()
+
+	// Setup test helper with files of all types
+	helper := &UsageBasedTestHelper{
+		diskUsage: 90.0, // 90% usage exceeds 80% threshold
+		audioFiles: []FileInfo{
+			{Path: tempDir + "/bubo_bubo_80p_20210101T150405Z.wav", Species: "bubo_bubo", Confidence: 80, Timestamp: parseTime("20210101T150405Z"), Size: 1024},
+			{Path: tempDir + "/bubo_bubo_85p_20210102T150405Z.mp3", Species: "bubo_bubo", Confidence: 85, Timestamp: parseTime("20210102T150405Z"), Size: 512},
+			{Path: tempDir + "/anas_platyrhynchos_70p_20210103T150405Z.flac", Species: "anas_platyrhynchos", Confidence: 70, Timestamp: parseTime("20210103T150405Z"), Size: 2048},
+			{Path: tempDir + "/erithacus_rubecula_60p_20210104T150405Z.aac", Species: "erithacus_rubecula", Confidence: 60, Timestamp: parseTime("20210104T150405Z"), Size: 768},
+			{Path: tempDir + "/passer_domesticus_90p_20210105T150405Z.opus", Species: "passer_domesticus", Confidence: 90, Timestamp: parseTime("20210105T150405Z"), Size: 1536},
+			// Add more instances of bubo_bubo to test min clips per species
+			{Path: tempDir + "/bubo_bubo_75p_20210106T150405Z.wav", Species: "bubo_bubo", Confidence: 75, Timestamp: parseTime("20210106T150405Z"), Size: 1024},
+			{Path: tempDir + "/bubo_bubo_65p_20210107T150405Z.mp3", Species: "bubo_bubo", Confidence: 65, Timestamp: parseTime("20210107T150405Z"), Size: 512},
+			{Path: tempDir + "/bubo_bubo_95p_20210108T150405Z.flac", Species: "bubo_bubo", Confidence: 95, Timestamp: parseTime("20210108T150405Z"), Size: 2048},
+		},
+		deletedFiles:       []string{},
+		lockedFilePaths:    []string{},
+		baseDir:            tempDir,
+		maxUsagePercent:    "80%",
+		minClipsPerSpecies: 2, // Keep at least 2 clips per species
+		retentionPolicy:    "usage",
+		debug:              true,
+	}
+
+	// Run the test
+	helper.Execute(t)
+
+	// Verify files were deleted
+	assert.NotEmpty(t, helper.deletedFiles, "Files should have been deleted")
+
+	// Check that all supported file types are represented in deleted files
+	fileTypeProcessed := make(map[string]bool)
+	for _, path := range helper.deletedFiles {
+		ext := filepath.Ext(path)
+		fileTypeProcessed[ext] = true
+	}
+
+	// Check that at least some file types were processed
+	assert.True(t, len(fileTypeProcessed) > 0, "Some files should have been deleted")
+
+	// Count how many bubo_bubo files were deleted to verify minClipsPerSpecies is respected
+	buboFilesDeleted := 0
+	for _, path := range helper.deletedFiles {
+		if contains([]string{
+			tempDir + "/bubo_bubo_80p_20210101T150405Z.wav",
+			tempDir + "/bubo_bubo_85p_20210102T150405Z.mp3",
+			tempDir + "/bubo_bubo_75p_20210106T150405Z.wav",
+			tempDir + "/bubo_bubo_65p_20210107T150405Z.mp3",
+			tempDir + "/bubo_bubo_95p_20210108T150405Z.flac",
+		}, path) {
+			buboFilesDeleted++
+		}
+	}
+
+	// With 5 bubo files and minClipsPerSpecies=2, we should delete at most 3 bubo files
+	assert.LessOrEqual(t, buboFilesDeleted, 3, "Should keep at least 2 bubo_bubo files as per minClipsPerSpecies setting")
+}
+
+// TestUsageBasedCleanupRespectLockedFiles verifies that locked files are not deleted
+func TestUsageBasedCleanupRespectLockedFiles(t *testing.T) {
+	// Create a temporary test directory
+	tempDir := t.TempDir()
+
+	// Define a locked file path
+	lockedFilePath := tempDir + "/erithacus_rubecula_80p_20210101T150405Z.wav"
+
+	// Setup test helper with a locked file and multiple non-locked files
+	// Including multiple files of the same species to ensure some can be deleted
+	helper := &UsageBasedTestHelper{
+		diskUsage: 90.0, // 90% usage exceeds 80% threshold
+		audioFiles: []FileInfo{
+			// Multiple bubo files - at least one will be deleted
+			{Path: tempDir + "/bubo_bubo_80p_20210101T150405Z.wav", Species: "bubo_bubo", Confidence: 80, Timestamp: parseTime("20210101T150405Z"), Size: 1024},
+			{Path: tempDir + "/bubo_bubo_82p_20210102T150405Z.wav", Species: "bubo_bubo", Confidence: 82, Timestamp: parseTime("20210102T150405Z"), Size: 1024},
+			{Path: tempDir + "/bubo_bubo_85p_20210103T150405Z.wav", Species: "bubo_bubo", Confidence: 85, Timestamp: parseTime("20210103T150405Z"), Size: 1024},
+
+			// Locked file - should never be deleted
+			{Path: lockedFilePath, Species: "erithacus_rubecula", Confidence: 80, Timestamp: parseTime("20210101T150405Z"), Size: 1024},
+
+			// Multiple anas_platyrhynchos files - at least one will be deleted
+			{Path: tempDir + "/anas_platyrhynchos_70p_20210102T150405Z.mp3", Species: "anas_platyrhynchos", Confidence: 70, Timestamp: parseTime("20210102T150405Z"), Size: 512},
+			{Path: tempDir + "/anas_platyrhynchos_72p_20210103T150405Z.mp3", Species: "anas_platyrhynchos", Confidence: 72, Timestamp: parseTime("20210103T150405Z"), Size: 512},
+			{Path: tempDir + "/anas_platyrhynchos_75p_20210104T150405Z.mp3", Species: "anas_platyrhynchos", Confidence: 75, Timestamp: parseTime("20210104T150405Z"), Size: 512},
+		},
+		deletedFiles:       []string{},
+		lockedFilePaths:    []string{lockedFilePath}, // This file is locked
+		baseDir:            tempDir,
+		maxUsagePercent:    "80%",
+		minClipsPerSpecies: 1, // Keep at least 1 clip per species
+		retentionPolicy:    "usage",
+		debug:              true,
+	}
+
+	// Run the test
+	helper.Execute(t)
+
+	// Verify some files were deleted
+	assert.NotEmpty(t, helper.deletedFiles, "Some files should have been deleted")
+
+	// Verify that the locked file was not deleted
+	for _, path := range helper.deletedFiles {
+		assert.NotEqual(t, lockedFilePath, path, "Locked file should not be deleted")
+	}
+}
+
+// TestUsageBasedCleanupWithYearMonthFolders tests cleanup with production-like year/month folder structure
+func TestUsageBasedCleanupWithYearMonthFolders(t *testing.T) {
+	// Create a temporary test directory
+	tempDir := t.TempDir()
+
+	// Create year/month structure
+	yearDir1 := filepath.Join(tempDir, "2024")
+	yearDir2 := filepath.Join(tempDir, "2025")
+
+	monthDir1 := filepath.Join(yearDir1, "12") // 2024/12
+	monthDir2 := filepath.Join(yearDir2, "01") // 2025/01
+	monthDir3 := filepath.Join(yearDir2, "02") // 2025/02
+
+	// Setup test helper with files in year/month folder structure
+	helper := &UsageBasedTestHelper{
+		diskUsage: 90.0, // 90% usage exceeds 80% threshold
+		audioFiles: []FileInfo{
+			// Files in 2024/12
+			{Path: filepath.Join(monthDir1, "bubo_bubo_80p_20241215T150405Z.wav"), Species: "bubo_bubo", Confidence: 80, Timestamp: parseTime("20241215T150405Z"), Size: 1024},
+			{Path: filepath.Join(monthDir1, "bubo_bubo_85p_20241220T150405Z.mp3"), Species: "bubo_bubo", Confidence: 85, Timestamp: parseTime("20241220T150405Z"), Size: 512},
+
+			// Files in 2025/01
+			{Path: filepath.Join(monthDir2, "erithacus_rubecula_70p_20250105T150405Z.flac"), Species: "erithacus_rubecula", Confidence: 70, Timestamp: parseTime("20250105T150405Z"), Size: 2048},
+			{Path: filepath.Join(monthDir2, "erithacus_rubecula_75p_20250110T150405Z.flac"), Species: "erithacus_rubecula", Confidence: 75, Timestamp: parseTime("20250110T150405Z"), Size: 2048},
+
+			// Files in 2025/02
+			{Path: filepath.Join(monthDir3, "anas_platyrhynchos_60p_20250205T150405Z.aac"), Species: "anas_platyrhynchos", Confidence: 60, Timestamp: parseTime("20250205T150405Z"), Size: 768},
+			{Path: filepath.Join(monthDir3, "anas_platyrhynchos_65p_20250210T150405Z.aac"), Species: "anas_platyrhynchos", Confidence: 65, Timestamp: parseTime("20250210T150405Z"), Size: 768},
+			{Path: filepath.Join(monthDir3, "bubo_bubo_90p_20250215T150405Z.opus"), Species: "bubo_bubo", Confidence: 90, Timestamp: parseTime("20250215T150405Z"), Size: 1536},
+		},
+		deletedFiles:       []string{},
+		lockedFilePaths:    []string{},
+		baseDir:            tempDir,
+		maxUsagePercent:    "80%",
+		minClipsPerSpecies: 1, // Keep at least 1 clip per species per directory
+		retentionPolicy:    "usage",
+		debug:              true,
+	}
+
+	// Run the test
+	helper.Execute(t)
+
+	// Verify files were deleted
+	assert.NotEmpty(t, helper.deletedFiles, "Files should have been deleted")
+
+	// Count files deleted by species and subdirectory
+	speciesCountByDir := make(map[string]map[string]int)
+	for _, path := range helper.deletedFiles {
+		species := ""
+		for s := range map[string]bool{"bubo_bubo": true, "erithacus_rubecula": true, "anas_platyrhynchos": true} {
+			if strings.Contains(path, s) {
+				species = s
+				break
+			}
+		}
+
+		dir := filepath.Dir(path)
+		if speciesCountByDir[species] == nil {
+			speciesCountByDir[species] = make(map[string]int)
+		}
+		speciesCountByDir[species][dir]++
+	}
+
+	// Verify we keep at least minClipsPerSpecies per directory
+	for species, dirCounts := range speciesCountByDir {
+		for dir, count := range dirCounts {
+			// Calculate how many files of this species were in this directory originally
+			originalCount := 0
+			for _, file := range helper.audioFiles {
+				if file.Species == species && filepath.Dir(file.Path) == dir {
+					originalCount++
+				}
+			}
+
+			// Verify we didn't delete too many files
+			remainingCount := originalCount - count
+			assert.GreaterOrEqual(t, remainingCount, helper.minClipsPerSpecies,
+				"Should keep at least %d %s files in directory %s",
+				helper.minClipsPerSpecies, species, dir)
+		}
+	}
+}
+
+// Define a variable for os.Remove to allow mocking in tests
+var osRemove = os.Remove

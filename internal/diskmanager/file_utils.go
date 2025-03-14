@@ -68,6 +68,7 @@ func LoadPolicy(policyFile string) (*Policy, error) {
 // GetAudioFiles returns a list of audio files in the directory and its subdirectories
 func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug bool) ([]FileInfo, error) {
 	var files []FileInfo
+	var parseErrors []string
 
 	// Get list of protected clips from database
 	lockedClips, err := getLockedClips(db)
@@ -88,7 +89,13 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 			if contains(allowedExts, ext) {
 				fileInfo, err := parseFileInfo(path, info)
 				if err != nil {
-					return err
+					// Log the error but continue processing other files
+					errMsg := fmt.Sprintf("Error parsing file %s: %v", path, err)
+					parseErrors = append(parseErrors, errMsg)
+					if debug {
+						log.Println(errMsg)
+					}
+					return nil // Continue with next file
 				}
 				// Check if the file is protected
 				fileInfo.Locked = isLockedClip(fileInfo.Path, lockedClips)
@@ -102,7 +109,22 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 		return nil
 	})
 
-	return files, err
+	if err != nil {
+		return nil, fmt.Errorf("error walking directory %s: %w", baseDir, err)
+	}
+
+	// If we encountered parse errors but still have some valid files, log a summary but continue
+	if len(parseErrors) > 0 {
+		if debug {
+			log.Printf("Encountered %d file parsing errors during cleanup", len(parseErrors))
+		}
+		// If we have no valid files at all, return an error
+		if len(files) == 0 {
+			return nil, fmt.Errorf("failed to parse any files: %s", parseErrors[0])
+		}
+	}
+
+	return files, nil
 }
 
 // parseFileInfo parses the file information from the file path and os.FileInfo
@@ -115,9 +137,17 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 		return FileInfo{}, fmt.Errorf("file type not eligible for cleanup operation: %s", ext)
 	}
 
-	parts := strings.Split(name, "_")
+	// Remove the extension for parsing
+	nameWithoutExt := strings.TrimSuffix(name, ext)
+
+	// Handle special case for thumbnail suffixes like _400px
+	if strings.HasSuffix(nameWithoutExt, "_400px") {
+		nameWithoutExt = strings.TrimSuffix(nameWithoutExt, "_400px")
+	}
+
+	parts := strings.Split(nameWithoutExt, "_")
 	if len(parts) < 3 {
-		return FileInfo{}, errors.New("invalid file name format")
+		return FileInfo{}, fmt.Errorf("invalid file name format: %s (has %d parts, expected at least 3)", name, len(parts))
 	}
 
 	// The species name might contain underscores, so we need to handle the last two parts separately
@@ -127,17 +157,12 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 
 	confidence, err := strconv.Atoi(strings.TrimSuffix(confidenceStr, "p"))
 	if err != nil {
-		return FileInfo{}, err
+		return FileInfo{}, fmt.Errorf("invalid confidence value in file %s: %w", name, err)
 	}
-
-	// Extract the extension from timestampStr
-	ext = filepath.Ext(timestampStr)
-	// Remove the extension to parse the timestamp correctly
-	timestampStr = strings.TrimSuffix(timestampStr, ext)
 
 	timestamp, err := time.Parse("20060102T150405Z", timestampStr)
 	if err != nil {
-		return FileInfo{}, err
+		return FileInfo{}, fmt.Errorf("invalid timestamp format in file %s: %w", name, err)
 	}
 
 	return FileInfo{

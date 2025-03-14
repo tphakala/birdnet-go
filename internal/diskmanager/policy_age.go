@@ -2,6 +2,7 @@
 package diskmanager
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -33,7 +34,14 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) error {
 	// Get the list of audio files, limited to allowed file types defined in file_utils.go
 	files, err := GetAudioFiles(baseDir, allowedFileTypes, db, debug)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get audio files for age-based cleanup: %w", err)
+	}
+
+	if len(files) == 0 {
+		if debug {
+			log.Printf("No eligible audio files found for cleanup in %s", baseDir)
+		}
+		return nil
 	}
 
 	// Create a map to keep track of the number of files per species per subdirectory
@@ -50,6 +58,7 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) error {
 
 	maxDeletions := 1000 // Maximum number of files to delete in one run
 	deletedFiles := 0    // Counter for the number of deleted files
+	errorCount := 0      // Counter for deletion errors
 
 	for _, file := range files {
 		select {
@@ -81,8 +90,13 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) error {
 
 				err = os.Remove(file.Path)
 				if err != nil {
+					errorCount++
 					log.Printf("Failed to remove %s: %s\n", file.Path, err)
-					return err
+					// Continue with other files instead of stopping the entire cleanup
+					if errorCount > 10 {
+						return fmt.Errorf("too many errors (%d) during age-based cleanup, last error: %w", errorCount, err)
+					}
+					continue
 				}
 
 				speciesMonthCount[file.Species][subDir]--

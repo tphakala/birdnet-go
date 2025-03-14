@@ -38,18 +38,18 @@ func TestAgeBasedCleanupFileTypeEligibility(t *testing.T) {
 		errorContains string
 	}{
 		// Audio files - should work without errors
-		{"owl_80p_20210102T150405Z.wav", false, ""},
-		{"owl_80p_20210102T150405Z.mp3", false, ""},
-		{"owl_80p_20210102T150405Z.flac", false, ""},
-		{"owl_80p_20210102T150405Z.aac", false, ""},
-		{"owl_80p_20210102T150405Z.opus", false, ""},
+		{"bubo_bubo_80p_20210102T150405Z.wav", false, ""},
+		{"bubo_bubo_80p_20210102T150405Z.mp3", false, ""},
+		{"bubo_bubo_80p_20210102T150405Z.flac", false, ""},
+		{"bubo_bubo_80p_20210102T150405Z.aac", false, ""},
+		{"bubo_bubo_80p_20210102T150405Z.opus", false, ""},
 
 		// Non-audio files - should return errors
-		{"owl_80p_20210102T150405Z.txt", true, "file type not eligible"},
-		{"owl_80p_20210102T150405Z.jpg", true, "file type not eligible"},
-		{"owl_80p_20210102T150405Z.png", true, "file type not eligible"},
-		{"owl_80p_20210102T150405Z.db", true, "file type not eligible"},
-		{"owl_80p_20210102T150405Z.csv", true, "file type not eligible"},
+		{"bubo_bubo_80p_20210102T150405Z.txt", true, "file type not eligible"},
+		{"bubo_bubo_80p_20210102T150405Z.jpg", true, "file type not eligible"},
+		{"bubo_bubo_80p_20210102T150405Z.png", true, "file type not eligible"},
+		{"bubo_bubo_80p_20210102T150405Z.db", true, "file type not eligible"},
+		{"bubo_bubo_80p_20210102T150405Z.csv", true, "file type not eligible"},
 		{"system_80p_20210102T150405Z.exe", true, "file type not eligible"},
 	}
 
@@ -110,7 +110,7 @@ func TestAgeBasedFilesAfterFilter(t *testing.T) {
 	}
 
 	for _, ext := range fileTypes {
-		filePath := filepath.Join(testDir, fmt.Sprintf("owl_80p_20210102T150405Z%s", ext))
+		filePath := filepath.Join(testDir, fmt.Sprintf("bubo_bubo_80p_20210102T150405Z%s", ext))
 		if err := os.WriteFile(filePath, []byte("test content"), 0o644); err != nil {
 			t.Fatalf("Failed to create test file: %v", err)
 		}
@@ -141,8 +141,8 @@ func TestAgeBasedCleanupBasicFunctionality(t *testing.T) {
 	// Create test files with different timestamps
 	// Recent files (within retention period)
 	recentFile1 := FileInfo{
-		Path:       "/test/owl_80p_20210102T150405Z.wav",
-		Species:    "owl",
+		Path:       "/test/bubo_bubo_80p_20210102T150405Z.wav",
+		Species:    "bubo_bubo",
 		Confidence: 80,
 		Timestamp:  time.Now().Add(-24 * time.Hour), // 1 day old
 		Size:       1024,
@@ -150,8 +150,8 @@ func TestAgeBasedCleanupBasicFunctionality(t *testing.T) {
 	}
 
 	recentFile2 := FileInfo{
-		Path:       "/test/duck_70p_20210102T150405Z.wav",
-		Species:    "duck",
+		Path:       "/test/anas_platyrhynchos_70p_20210102T150405Z.wav",
+		Species:    "anas_platyrhynchos",
 		Confidence: 70,
 		Timestamp:  time.Now().Add(-48 * time.Hour), // 2 days old
 		Size:       1024,
@@ -160,8 +160,8 @@ func TestAgeBasedCleanupBasicFunctionality(t *testing.T) {
 
 	// Old files (beyond retention period)
 	oldFile1 := FileInfo{
-		Path:       "/test/owl_90p_20200102T150405Z.wav",
-		Species:    "owl",
+		Path:       "/test/bubo_bubo_90p_20200102T150405Z.wav",
+		Species:    "bubo_bubo",
 		Confidence: 90,
 		Timestamp:  time.Now().Add(-720 * time.Hour), // 30 days old
 		Size:       1024,
@@ -169,8 +169,8 @@ func TestAgeBasedCleanupBasicFunctionality(t *testing.T) {
 	}
 
 	oldFile2 := FileInfo{
-		Path:       "/test/duck_60p_20200102T150405Z.wav",
-		Species:    "duck",
+		Path:       "/test/anas_platyrhynchos_60p_20200102T150405Z.wav",
+		Species:    "anas_platyrhynchos",
 		Confidence: 60,
 		Timestamp:  time.Now().Add(-1440 * time.Hour), // 60 days old
 		Size:       1024,
@@ -179,8 +179,8 @@ func TestAgeBasedCleanupBasicFunctionality(t *testing.T) {
 
 	// A locked file that should never be deleted
 	lockedFile := FileInfo{
-		Path:       "/test/owl_95p_20200102T150405Z.wav",
-		Species:    "owl",
+		Path:       "/test/bubo_bubo_95p_20200102T150405Z.wav",
+		Species:    "bubo_bubo",
 		Confidence: 95,
 		Timestamp:  time.Now().Add(-2160 * time.Hour), // 90 days old
 		Size:       1024,
