@@ -51,8 +51,9 @@
 					hx-get="/api/v1/detections/recent" 
 					hx-target="#recentDetections"
 					hx-trigger="load, change, refreshListEvent from:body"  
-					class="select select-sm focus-visible:outline-none">
-				<option value="5" selected>5</option>
+					class="select select-sm focus-visible:outline-none"
+					onchange="saveDetectionLimit(this.value)">
+				<option value="5">5</option>
 				<option value="10">10</option>
 				<option value="25">25</option>
 				<option value="50">50</option>
@@ -80,6 +81,27 @@
 		if (datePicker && date) {
 			datePicker.value = date;
 			htmx.trigger(datePicker, 'change');
+		}
+	});
+
+	// Function to save detection limit to localStorage
+	function saveDetectionLimit(limit) {
+		localStorage.setItem('recentDetectionLimit', limit);
+	}
+
+	// Initialize detection limit from localStorage
+	document.addEventListener('DOMContentLoaded', function() {
+		var numDetections = document.getElementById('numDetections');
+		var savedLimit = localStorage.getItem('recentDetectionLimit');
+		
+		if (savedLimit && numDetections) {
+			// Set the select value to the saved limit
+			numDetections.value = savedLimit;
+			
+			// If the value has changed from the default, trigger the htmx request
+			if (numDetections.value !== '5') {
+				htmx.trigger(numDetections, 'change');
+			}
 		}
 	});
 </script>
