@@ -86,7 +86,11 @@
 
 	// Function to save detection limit to localStorage
 	function saveDetectionLimit(limit) {
-		localStorage.setItem('recentDetectionLimit', limit);
+		try {
+			localStorage.setItem('recentDetectionLimit', limit);
+		} catch(e) {
+			console.error("Failed to save detection limit:", e);
+		}
 	}
 
 	// Initialize detection limit from localStorage
