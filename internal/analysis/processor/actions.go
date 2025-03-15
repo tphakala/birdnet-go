@@ -57,7 +57,8 @@ type BirdWeatherAction struct {
 	pcmData      []byte
 	BwClient     *birdweather.BwClient
 	EventTracker *EventTracker
-	mu           sync.Mutex // Protect concurrent access to Note and pcmData
+	RetryConfig  RetryConfig // Configuration for retry behavior
+	mu           sync.Mutex  // Protect concurrent access to Note and pcmData
 }
 
 type MqttAction struct {
@@ -66,7 +67,8 @@ type MqttAction struct {
 	BirdImageCache *imageprovider.BirdImageCache
 	MqttClient     mqtt.Client
 	EventTracker   *EventTracker
-	mu             sync.Mutex // Protect concurrent access to Note
+	RetryConfig    RetryConfig // Configuration for retry behavior
+	mu             sync.Mutex  // Protect concurrent access to Note
 }
 
 type UpdateRangeFilterAction struct {
@@ -224,10 +226,17 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 
 	// Try to publish with appropriate error handling
 	if err := a.BwClient.Publish(&note, pcmData); err != nil {
-		log.Printf("error uploading to BirdWeather: %s\n", err)
-		return err
-	} else if a.Settings.Debug {
-		log.Printf("Uploaded %s to Birdweather\n", a.Note.ClipName)
+		// Log the error with retry information if retries are enabled
+		if a.RetryConfig.Enabled {
+			log.Printf("Error uploading to BirdWeather (will retry): %s\n", err)
+		} else {
+			log.Printf("Error uploading to BirdWeather: %s\n", err)
+		}
+		return err // Return the error to trigger retry mechanism
+	}
+
+	if a.Settings.Debug {
+		log.Printf("Successfully uploaded %s to BirdWeather\n", a.Note.ClipName)
 	}
 	return nil
 }
@@ -251,6 +260,10 @@ func (a *MqttAction) Execute(data interface{}) error {
 
 	// First, check if the MQTT client is connected
 	if !a.MqttClient.IsConnected() {
+		if a.RetryConfig.Enabled {
+			// If retries are enabled, return an error to trigger retry
+			return fmt.Errorf("MQTT client is not connected")
+		}
 		log.Println("MQTT client is not connected, skipping publish")
 		return nil
 	}
@@ -276,7 +289,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 	// Create a JSON representation of the note
 	noteJson, err := json.Marshal(noteWithBirdImage)
 	if err != nil {
-		log.Printf("error marshalling note to JSON: %s\n", err)
+		log.Printf("Error marshalling note to JSON: %s\n", err)
 		return err
 	}
 
@@ -287,9 +300,19 @@ func (a *MqttAction) Execute(data interface{}) error {
 	// Publish the note to the MQTT broker
 	err = a.MqttClient.Publish(ctx, a.Settings.Realtime.MQTT.Topic, string(noteJson))
 	if err != nil {
+		// Log the error with retry information if retries are enabled
+		if a.RetryConfig.Enabled {
+			log.Printf("Error publishing to MQTT (will retry): %s\n", err)
+		} else {
+			log.Printf("Error publishing to MQTT: %s\n", err)
+		}
 		return fmt.Errorf("failed to publish to MQTT: %w", err)
 	}
 
+	if a.Settings.Debug {
+		log.Printf("Successfully published %s to MQTT topic %s\n",
+			a.Note.CommonName, a.Settings.Realtime.MQTT.Topic)
+	}
 	return nil
 }
 
