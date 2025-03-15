@@ -80,13 +80,23 @@ type DynamicThresholdSettings struct {
 	ValidHours int     // number of hours to consider for dynamic threshold
 }
 
-// BirdweatherSettings contains settings for Birdweather integration.
+// RetrySettings contains common settings for retry mechanisms
+type RetrySettings struct {
+	Enabled           bool    // true to enable retry mechanism
+	MaxRetries        int     // maximum number of retry attempts
+	InitialDelay      int     // initial delay before first retry in seconds
+	MaxDelay          int     // maximum delay between retries in seconds
+	BackoffMultiplier float64 // multiplier for exponential backoff
+}
+
+// BirdweatherSettings contains settings for BirdWeather API integration.
 type BirdweatherSettings struct {
-	Enabled          bool    // true to enable birdweather uploads
-	Debug            bool    // true to enable debug mode
-	ID               string  // birdweather ID
-	Threshold        float64 // threshold for prediction confidence for uploads
-	LocationAccuracy float64 // accuracy of location in meters
+	Enabled          bool          // true to enable birdweather uploads
+	Debug            bool          // true to enable debug mode
+	ID               string        // birdweather ID
+	Threshold        float64       // threshold for prediction confidence for uploads
+	LocationAccuracy float64       // accuracy of location in meters
+	RetrySettings    RetrySettings // settings for retry mechanism
 }
 
 // WeatherSettings contains all weather-related settings
@@ -130,11 +140,12 @@ type RTSPSettings struct {
 
 // MQTTSettings contains settings for MQTT integration.
 type MQTTSettings struct {
-	Enabled  bool   // true to enable MQTT
-	Broker   string // MQTT (tcp://host:port)
-	Topic    string // MQTT topic
-	Username string // MQTT username
-	Password string // MQTT password
+	Enabled       bool          // true to enable MQTT
+	Broker        string        // MQTT broker URL
+	Topic         string        // MQTT topic
+	Username      string        // MQTT username
+	Password      string        // MQTT password
+	RetrySettings RetrySettings // settings for retry mechanism
 }
 
 // TelemetrySettings contains settings for telemetry.

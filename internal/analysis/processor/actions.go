@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -57,7 +58,8 @@ type BirdWeatherAction struct {
 	pcmData      []byte
 	BwClient     *birdweather.BwClient
 	EventTracker *EventTracker
-	mu           sync.Mutex // Protect concurrent access to Note and pcmData
+	RetryConfig  jobqueue.RetryConfig // Configuration for retry behavior
+	mu           sync.Mutex           // Protect concurrent access to Note and pcmData
 }
 
 type MqttAction struct {
@@ -66,7 +68,8 @@ type MqttAction struct {
 	BirdImageCache *imageprovider.BirdImageCache
 	MqttClient     mqtt.Client
 	EventTracker   *EventTracker
-	mu             sync.Mutex // Protect concurrent access to Note
+	RetryConfig    jobqueue.RetryConfig // Configuration for retry behavior
+	mu             sync.Mutex           // Protect concurrent access to Note
 }
 
 type UpdateRangeFilterAction struct {
@@ -224,10 +227,21 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 
 	// Try to publish with appropriate error handling
 	if err := a.BwClient.Publish(&note, pcmData); err != nil {
-		log.Printf("error uploading to BirdWeather: %s\n", err)
-		return err
-	} else if a.Settings.Debug {
-		log.Printf("Uploaded %s to Birdweather\n", a.Note.ClipName)
+		// Log the error with retry information if retries are enabled
+		// Sanitize error before logging
+		sanitizedErr := sanitizeError(err)
+		if a.RetryConfig.Enabled {
+			log.Printf("Error uploading %s (%s) to BirdWeather (confidence: %.2f, clip: %s) (will retry): %v\n",
+				note.CommonName, note.ScientificName, note.Confidence, note.ClipName, sanitizedErr)
+		} else {
+			log.Printf("Error uploading %s (%s) to BirdWeather (confidence: %.2f, clip: %s): %v\n",
+				note.CommonName, note.ScientificName, note.Confidence, note.ClipName, sanitizedErr)
+		}
+		return fmt.Errorf("failed to upload %s to BirdWeather: %w", note.CommonName, err) // Return wrapped error with context
+	}
+
+	if a.Settings.Debug {
+		log.Printf("Successfully uploaded %s to BirdWeather\n", a.Note.ClipName)
 	}
 	return nil
 }
@@ -251,8 +265,23 @@ func (a *MqttAction) Execute(data interface{}) error {
 
 	// First, check if the MQTT client is connected
 	if !a.MqttClient.IsConnected() {
-		log.Println("MQTT client is not connected, skipping publish")
-		return nil
+		// Try an immediate reconnect before giving up
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		reconnectErr := a.MqttClient.Connect(ctx)
+		if reconnectErr != nil {
+			log.Printf("Failed to reconnect to MQTT broker: %v", reconnectErr)
+
+			if a.RetryConfig.Enabled {
+				// If retries are enabled, return an error to trigger retry
+				return fmt.Errorf("MQTT client is not connected and reconnect failed: %w", reconnectErr)
+			}
+			log.Println("MQTT client is not connected, skipping publish")
+			return nil
+		}
+
+		log.Println("Successfully reconnected to MQTT broker")
 	}
 
 	// Validate MQTT settings
@@ -276,7 +305,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 	// Create a JSON representation of the note
 	noteJson, err := json.Marshal(noteWithBirdImage)
 	if err != nil {
-		log.Printf("error marshalling note to JSON: %s\n", err)
+		log.Printf("Error marshalling note to JSON: %s\n", err)
 		return err
 	}
 
@@ -287,9 +316,23 @@ func (a *MqttAction) Execute(data interface{}) error {
 	// Publish the note to the MQTT broker
 	err = a.MqttClient.Publish(ctx, a.Settings.Realtime.MQTT.Topic, string(noteJson))
 	if err != nil {
-		return fmt.Errorf("failed to publish to MQTT: %w", err)
+		// Log the error with retry information if retries are enabled
+		// Sanitize error before logging
+		sanitizedErr := sanitizeError(err)
+		if a.RetryConfig.Enabled {
+			log.Printf("Error publishing %s (%s) to MQTT topic %s (confidence: %.2f, clip: %s) (will retry): %v\n",
+				a.Note.CommonName, a.Note.ScientificName, a.Settings.Realtime.MQTT.Topic, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
+		} else {
+			log.Printf("Error publishing %s (%s) to MQTT topic %s (confidence: %.2f, clip: %s): %v\n",
+				a.Note.CommonName, a.Note.ScientificName, a.Settings.Realtime.MQTT.Topic, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
+		}
+		return fmt.Errorf("failed to publish %s to MQTT topic %s: %w", a.Note.CommonName, a.Settings.Realtime.MQTT.Topic, err)
 	}
 
+	if a.Settings.Debug {
+		log.Printf("Successfully published %s to MQTT topic %s\n",
+			a.Note.CommonName, a.Settings.Realtime.MQTT.Topic)
+	}
 	return nil
 }
 
