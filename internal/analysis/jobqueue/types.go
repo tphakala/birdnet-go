@@ -68,3 +68,6 @@ func (s JobStatus) String() string {
 		return "Unknown"
 	}
 }
+
+// AllowJobDropping controls whether dropping jobs is allowed in tests
+var AllowJobDropping = true
