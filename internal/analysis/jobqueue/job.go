@@ -6,16 +6,17 @@ import (
 
 // Job represents a unit of work in the job queue
 type Job struct {
-	ID          string      // Unique ID for this job
-	Action      Action      // The action to execute
-	Data        interface{} // Data for the action
-	Attempts    int         // Number of attempts made so far
-	MaxAttempts int         // Maximum number of attempts allowed
-	CreatedAt   time.Time   // When the job was created
-	NextRetryAt time.Time   // When to next attempt the job
-	Status      JobStatus   // Current status of the job
-	LastError   error       // Last error encountered
-	Config      RetryConfig // Retry configuration for this job
+	ID                     string      // Unique ID for this job
+	Action                 Action      // The action to execute
+	Data                   interface{} // Data for the action
+	Attempts               int         // Number of attempts made so far
+	MaxAttempts            int         // Maximum number of attempts allowed
+	CreatedAt              time.Time   // When the job was created
+	NextRetryAt            time.Time   // When to next attempt the job
+	Status                 JobStatus   // Current status of the job
+	LastError              error       // Last error encountered
+	Config                 RetryConfig // Retry configuration for this job
+	TestExemptFromDropping bool        // Flag to indicate if this job should be exempt from dropping during queue overflow
 }
 
 // JobStats tracks statistics about job processing
@@ -53,16 +54,17 @@ type ActionStats struct {
 
 // TypedJob is a generic version of Job for type-safe operations
 type TypedJob[T any] struct {
-	ID          string         // Unique ID for this job
-	Action      TypedAction[T] // The action to execute
-	Data        T              // Data for the action (type-safe)
-	Attempts    int            // Number of attempts made so far
-	MaxAttempts int            // Maximum number of attempts allowed
-	CreatedAt   time.Time      // When the job was created
-	NextRetryAt time.Time      // When to next attempt the job
-	Status      JobStatus      // Current status of the job
-	LastError   error          // Last error encountered
-	Config      RetryConfig    // Retry configuration for this job
+	ID                     string         // Unique ID for this job
+	Action                 TypedAction[T] // The action to execute
+	Data                   T              // Data for the action (type-safe)
+	Attempts               int            // Number of attempts made so far
+	MaxAttempts            int            // Maximum number of attempts allowed
+	CreatedAt              time.Time      // When the job was created
+	NextRetryAt            time.Time      // When to next attempt the job
+	Status                 JobStatus      // Current status of the job
+	LastError              error          // Last error encountered
+	Config                 RetryConfig    // Retry configuration for this job
+	TestExemptFromDropping bool           // Flag to indicate if this job should be exempt from dropping during queue overflow
 }
 
 // TypedAction is a generic version of Action for type-safe operations

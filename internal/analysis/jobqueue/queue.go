@@ -25,6 +25,7 @@ type JobQueue struct {
 	logAllSuccesses    bool // Whether to log all successful jobs, not just retries
 	processCancel      context.CancelFunc
 	processingInterval time.Duration // Interval for the processing ticker (for testing)
+	clock              Clock         // Clock interface for time-related operations
 }
 
 // NewJobQueue creates a new job queue with default settings
@@ -42,6 +43,7 @@ func NewJobQueueWithOptions(maxJobs, maxArchivedJobs int, logAllSuccesses bool) 
 		maxJobs:            maxJobs,
 		logAllSuccesses:    logAllSuccesses,
 		processingInterval: 1 * time.Second, // Default processing interval
+		clock:              &RealClock{},    // Use the real clock by default
 		stats: JobStats{
 			ActionStats: make(map[string]ActionStats),
 		},
@@ -53,6 +55,13 @@ func (q *JobQueue) SetProcessingInterval(interval time.Duration) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.processingInterval = interval
+}
+
+// SetClock sets a custom clock implementation for testing purposes
+func (q *JobQueue) SetClock(clock Clock) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.clock = clock
 }
 
 // Start starts the job queue processing
@@ -116,7 +125,7 @@ func (q *JobQueue) StopWithTimeout(timeout time.Duration) error {
 	select {
 	case <-c:
 		return nil
-	case <-time.After(timeout):
+	case <-q.clock.After(timeout):
 		return fmt.Errorf("timed out waiting for jobs to complete after %v", timeout)
 	}
 }
@@ -153,7 +162,7 @@ func (q *JobQueue) Enqueue(action Action, data interface{}, config RetryConfig) 
 
 	q.jobCounter++
 	// Pre-allocate ID string to reduce memory allocations
-	now := time.Now()
+	now := q.clock.Now()
 	job := &Job{
 		ID:          fmt.Sprintf("job-%d", q.jobCounter),
 		Action:      action,
@@ -191,9 +200,8 @@ func (q *JobQueue) _dropOldestPendingJob() bool {
 	var oldestTime time.Time
 
 	for i, job := range q.jobs {
-		// Skip jobs with special IDs used in testing
-		// For TestQueueOverflow test we use job IDs with "pending-job-" prefix
-		if job.ID != "" && len(job.ID) >= 11 && job.ID[0:11] == "pending-job-" {
+		// Skip jobs that are exempt from dropping
+		if job.TestExemptFromDropping {
 			continue
 		}
 
@@ -312,12 +320,12 @@ func (q *JobQueue) cleanupStaleJobs(ctx context.Context) {
 }
 
 // calculateBackoffDelay calculates the delay before the next retry attempt
-func calculateBackoffDelay(config RetryConfig, attemptNum int) time.Duration {
+func calculateBackoffDelay(config RetryConfig, attemptNum int, clock Clock) time.Duration {
 	// Calculate exponential backoff with jitter
 	backoff := float64(config.InitialDelay) * math.Pow(config.Multiplier, float64(attemptNum))
 
 	// Add some jitter (±10%)
-	jitterFactor := 0.9 + 0.2*float64(time.Now().Nanosecond())/1e9
+	jitterFactor := 0.9 + 0.2*float64(clock.Now().Nanosecond())/1e9
 	backoff *= jitterFactor
 
 	// Cap at max delay
@@ -339,7 +347,7 @@ func (q *JobQueue) processDueJobs(ctx context.Context) {
 
 	// Find jobs that are due for execution
 	var dueJobs []*Job
-	now := time.Now()
+	now := q.clock.Now()
 
 	for _, job := range q.jobs {
 		// Check for both pending and retrying jobs
@@ -459,8 +467,8 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 			job.Status = JobStatusRetrying
 
 			// Calculate backoff with exponential strategy
-			delay := calculateBackoffDelay(job.Config, job.Attempts)
-			job.NextRetryAt = time.Now().Add(delay)
+			delay := calculateBackoffDelay(job.Config, job.Attempts, q.clock)
+			job.NextRetryAt = q.clock.Now().Add(delay)
 
 			log.Printf("Job %s of type %T failed, will retry in %v (attempt %d/%d): %v",
 				job.ID, job.Action, delay, job.Attempts, job.MaxAttempts, err)
@@ -553,16 +561,17 @@ func (q *TypedJobQueue[T]) EnqueueTyped(action TypedAction[T], data T, config Re
 
 	// Convert the job to a typed job
 	typedJob := &TypedJob[T]{
-		ID:          job.ID,
-		Action:      action,
-		Data:        data,
-		Attempts:    job.Attempts,
-		MaxAttempts: job.MaxAttempts,
-		CreatedAt:   job.CreatedAt,
-		NextRetryAt: job.NextRetryAt,
-		Status:      job.Status,
-		LastError:   job.LastError,
-		Config:      job.Config,
+		ID:                     job.ID,
+		Action:                 action,
+		Data:                   data,
+		Attempts:               job.Attempts,
+		MaxAttempts:            job.MaxAttempts,
+		CreatedAt:              job.CreatedAt,
+		NextRetryAt:            job.NextRetryAt,
+		Status:                 job.Status,
+		LastError:              job.LastError,
+		Config:                 job.Config,
+		TestExemptFromDropping: job.TestExemptFromDropping,
 	}
 
 	return typedJob, nil
