@@ -25,6 +25,9 @@ type Task struct {
 	Action    Action
 }
 
+// Variable used for testing to override retry configuration
+var testRetryConfigOverride func(action Action) (jobqueue.RetryConfig, bool)
+
 // startWorkerPool initializes the job queue for task processing.
 // This is kept for backward compatibility but now simply ensures the job queue is started.
 func (p *Processor) startWorkerPool(numWorkers int) {
@@ -42,6 +45,13 @@ func (p *Processor) startWorkerPool(numWorkers int) {
 
 // getJobQueueRetryConfig extracts the retry configuration from an action
 func getJobQueueRetryConfig(action Action) jobqueue.RetryConfig {
+	// Check if we have a test override (defined in workers_test.go)
+	if testRetryConfigOverride != nil {
+		if config, ok := testRetryConfigOverride(action); ok {
+			return config
+		}
+	}
+
 	switch a := action.(type) {
 	case *BirdWeatherAction:
 		return a.RetryConfig // Now directly returns jobqueue.RetryConfig
