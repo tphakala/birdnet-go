@@ -307,12 +307,17 @@ func TestAgeBasedCleanupReturnValues(t *testing.T) {
 		testDir,
 		[]string{recentFile, oldFile1, oldFile2},
 		deletedFiles,
+		90, // Initial disk utilization
+		0,  // minClipsPerSpecies
 	)
 
 	// Verify the return values
 	assert.NoError(t, result.Err, "AgeBasedCleanup should not return an error")
 	assert.Equal(t, 2, result.ClipsRemoved, "AgeBasedCleanup should remove 2 clips")
-	assert.Equal(t, 75, result.DiskUtilization, "AgeBasedCleanup should return 75% disk utilization")
+
+	// With initial disk utilization of 90% and 2 files deleted at 5% reduction each,
+	// we expect 90 - (2 * 5) = 80% utilization
+	assert.Equal(t, 80, result.DiskUtilization, "AgeBasedCleanup should return 80% disk utilization")
 
 	// Verify that the correct files were deleted
 	assert.True(t, deletedFiles[oldFile1], "Old file 1 should have been deleted")
@@ -327,12 +332,18 @@ func testAgeBasedCleanupWithRealFiles(
 	baseDir string,
 	testFiles []string,
 	deletedFiles map[string]bool,
+	initialDiskUtilization int,
+	minClipsPerSpecies int,
 ) AgeCleanupResult {
 	// This implementation simulates the real AgeBasedCleanup function
 	// but with controlled inputs and outputs
 
 	// Set a fixed retention period (7 days in hours)
 	retentionPeriodHours := 168
+
+	// Track current disk utilization
+	currentDiskUtilization := initialDiskUtilization
+	utilizationReductionPerFile := 5 // Reduction per file deleted
 
 	// Get the list of files
 	files := []FileInfo{}
@@ -377,7 +388,6 @@ func testAgeBasedCleanupWithRealFiles(
 
 	// Process files for deletion
 	deletedCount := 0
-	minClipsPerSpecies := 0 // Set to 0 to allow all old files to be deleted
 
 	for _, file := range files {
 		// Skip locked files
@@ -404,8 +414,14 @@ func testAgeBasedCleanupWithRealFiles(
 
 		// Update the species count
 		speciesCount[file.Species][subDir]--
+
+		// Reduce disk utilization for each deleted file
+		currentDiskUtilization -= utilizationReductionPerFile
+		if currentDiskUtilization < 0 {
+			currentDiskUtilization = 0
+		}
 	}
 
-	// Return the results
-	return AgeCleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: 75}
+	// Return the results with dynamic disk utilization
+	return AgeCleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: currentDiskUtilization}
 }
