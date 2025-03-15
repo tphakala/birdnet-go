@@ -135,3 +135,62 @@ func TestGetAudioFilesWithMixedFiles(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to parse any files", "Error should indicate no valid files were found")
 	assert.Len(t, files, 0, "Should return no files when all are invalid")
 }
+
+// TestGetDiskUsage tests that GetDiskUsage returns a valid disk usage percentage
+func TestGetDiskUsage(t *testing.T) {
+	// Create a temporary directory
+	tempDir := t.TempDir()
+
+	// Call GetDiskUsage
+	usage, err := GetDiskUsage(tempDir)
+
+	// Verify the return values
+	assert.NoError(t, err, "GetDiskUsage should not return an error")
+	assert.GreaterOrEqual(t, usage, 0.0, "Disk usage should be greater than or equal to 0%")
+	assert.LessOrEqual(t, usage, 100.0, "Disk usage should be less than or equal to 100%")
+}
+
+// TestCleanupReturnValues tests that cleanup functions return the expected values
+func TestCleanupReturnValues(t *testing.T) {
+	// Create a mock DB
+	mockDB := &MockDB{}
+
+	// Create a quit channel
+	quitChan := make(chan struct{})
+
+	// Test AgeBasedCleanup
+	t.Run("AgeBasedCleanup", func(t *testing.T) {
+		// Call AgeBasedCleanup
+		result := AgeBasedCleanup(quitChan, mockDB)
+
+		// Verify the return values
+		if result.Err != nil {
+			t.Logf("AgeBasedCleanup returned error: %v", result.Err)
+		}
+
+		// Verify that clipsRemoved is a valid count (zero or positive)
+		assert.GreaterOrEqual(t, result.ClipsRemoved, 0, "AgeBasedCleanup should return a valid clips removed count")
+
+		// Verify that diskUtilization is a valid percentage (0-100)
+		assert.GreaterOrEqual(t, result.DiskUtilization, 0, "Disk utilization should be greater than or equal to 0%")
+		assert.LessOrEqual(t, result.DiskUtilization, 100, "Disk utilization should be less than or equal to 100%")
+	})
+
+	// Test UsageBasedCleanup
+	t.Run("UsageBasedCleanup", func(t *testing.T) {
+		// Call UsageBasedCleanup
+		result := UsageBasedCleanup(quitChan, mockDB)
+
+		// Verify the return values
+		if result.Err != nil {
+			t.Logf("UsageBasedCleanup returned error: %v", result.Err)
+		}
+
+		// Verify that clipsRemoved is a valid count (zero or positive)
+		assert.GreaterOrEqual(t, result.ClipsRemoved, 0, "UsageBasedCleanup should return a valid clips removed count")
+
+		// Verify that diskUtilization is a valid percentage (0-100)
+		assert.GreaterOrEqual(t, result.DiskUtilization, 0, "Disk utilization should be greater than or equal to 0%")
+		assert.LessOrEqual(t, result.DiskUtilization, 100, "Disk utilization should be less than or equal to 100%")
+	})
+}
