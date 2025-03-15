@@ -31,6 +31,31 @@ type Action interface {
 	Execute(data interface{}) error
 }
 
+// Clock is an interface for time-related operations that can be mocked for testing
+type Clock interface {
+	Now() time.Time
+	Sleep(d time.Duration)
+	After(d time.Duration) <-chan time.Time
+}
+
+// RealClock is the default implementation of Clock that uses the actual system clock
+type RealClock struct{}
+
+// Now returns the current time
+func (c *RealClock) Now() time.Time {
+	return time.Now()
+}
+
+// Sleep pauses the current goroutine for the specified duration
+func (c *RealClock) Sleep(d time.Duration) {
+	time.Sleep(d)
+}
+
+// After returns a channel that will receive the current time after the specified duration
+func (c *RealClock) After(d time.Duration) <-chan time.Time {
+	return time.After(d)
+}
+
 // JobStatus represents the current status of a job in the queue
 type JobStatus int
 
