@@ -63,6 +63,35 @@ func getJobQueueRetryConfig(action Action) jobqueue.RetryConfig {
 	}
 }
 
+// sanitizeString applies sanitization rules to remove sensitive information from strings
+func sanitizeString(input string) string {
+	// Sanitize RTSP URLs with credentials
+	rtspRegex := regexp.MustCompile(`rtsp://[^:]+:[^@]+@`)
+	result := rtspRegex.ReplaceAllString(input, "rtsp://[redacted]@")
+
+	// Sanitize MQTT credentials
+	mqttRegex := regexp.MustCompile(`mqtt://[^:]+:[^@]+@`)
+	result = mqttRegex.ReplaceAllString(result, "mqtt://[redacted]@")
+
+	// Sanitize API keys
+	apiKeyRegex := regexp.MustCompile(`(api[_-]?key|apikey|token|secret)[=:]["']?[a-zA-Z0-9_\-\.]{5,}["']?`)
+	result = apiKeyRegex.ReplaceAllString(result, "$1=[REDACTED]")
+
+	// Sanitize passwords - expanded to include more variations
+	passwordRegex := regexp.MustCompile(`(password|passwd|pwd)[=:]["']?[^&"'\s]+["']?`)
+	result = passwordRegex.ReplaceAllString(result, "$1=[REDACTED]")
+
+	// Sanitize OAuth tokens
+	oauthRegex := regexp.MustCompile(`(Bearer|OAuth|oauth_token|access_token)[\s=:]["']?[^&"'\s]+["']?`)
+	result = oauthRegex.ReplaceAllString(result, "$1 [REDACTED]")
+
+	// Sanitize other potential sensitive information
+	otherSensitiveRegex := regexp.MustCompile(`(private|sensitive|credential|auth)[=:]["']?[^&"'\s]+["']?`)
+	result = otherSensitiveRegex.ReplaceAllString(result, "$1=[REDACTED]")
+
+	return result
+}
+
 // sanitizeError removes sensitive information from error messages
 func sanitizeError(err error) error {
 	if err == nil {
@@ -70,22 +99,7 @@ func sanitizeError(err error) error {
 	}
 
 	errMsg := err.Error()
-
-	// Sanitize RTSP URLs with credentials
-	rtspRegex := regexp.MustCompile(`rtsp://[^:]+:[^@]+@`)
-	errMsg = rtspRegex.ReplaceAllString(errMsg, "rtsp://[redacted]@")
-
-	// Sanitize MQTT credentials
-	mqttRegex := regexp.MustCompile(`mqtt://[^:]+:[^@]+@`)
-	errMsg = mqttRegex.ReplaceAllString(errMsg, "mqtt://[redacted]@")
-
-	// Sanitize API keys
-	apiKeyRegex := regexp.MustCompile(`(api[_-]?key|apikey|token|secret)[=:]["']?[a-zA-Z0-9_\-\.]{5,}["']?`)
-	errMsg = apiKeyRegex.ReplaceAllString(errMsg, "$1=[REDACTED]")
-
-	// Sanitize passwords
-	passwordRegex := regexp.MustCompile(`(password|passwd)[=:]["']?[^&"'\s]+["']?`)
-	errMsg = passwordRegex.ReplaceAllString(errMsg, "$1=[REDACTED]")
+	errMsg = sanitizeString(errMsg)
 
 	// Return a new error with the sanitized message
 	return fmt.Errorf("%s", errMsg)
@@ -93,23 +107,7 @@ func sanitizeError(err error) error {
 
 // sanitizeActionType removes sensitive information from action type strings
 func sanitizeActionType(actionType string) string {
-	// Sanitize RTSP URLs with credentials
-	rtspRegex := regexp.MustCompile(`rtsp://[^:]+:[^@]+@`)
-	actionType = rtspRegex.ReplaceAllString(actionType, "rtsp://[redacted]@")
-
-	// Sanitize MQTT credentials
-	mqttRegex := regexp.MustCompile(`mqtt://[^:]+:[^@]+@`)
-	actionType = mqttRegex.ReplaceAllString(actionType, "mqtt://[redacted]@")
-
-	// Sanitize API keys
-	apiKeyRegex := regexp.MustCompile(`(api[_-]?key|apikey|token|secret)[=:]["']?[a-zA-Z0-9_\-\.]{5,}["']?`)
-	actionType = apiKeyRegex.ReplaceAllString(actionType, "$1=[REDACTED]")
-
-	// Sanitize passwords
-	passwordRegex := regexp.MustCompile(`(password|passwd)[=:]["']?[^&"'\s]+["']?`)
-	actionType = passwordRegex.ReplaceAllString(actionType, "$1=[REDACTED]")
-
-	return actionType
+	return sanitizeString(actionType)
 }
 
 // EnqueueTask adds a task directly to the job queue for processing.
@@ -148,19 +146,21 @@ func (p *Processor) EnqueueTask(task *Task) error {
 				queueSize, sanitizedActionType)
 
 			// Suggest increasing queue size if this happens frequently
-			return fmt.Errorf("job queue is full (capacity: %d): %w", queueSize, err)
+			return fmt.Errorf("job queue is full (capacity: %d): %w", queueSize, sanitizeError(err))
 
 		case strings.Contains(err.Error(), "queue has been stopped"):
 			log.Printf("❌ Cannot enqueue task for action type %s: job queue has been stopped",
 				sanitizedActionType)
 			return fmt.Errorf("job queue has been stopped, cannot enqueue task for %s: %w",
-				sanitizedActionType, err)
+				sanitizedActionType, sanitizeError(err))
 
 		default:
 			// Sanitize error before logging
 			sanitizedErr := sanitizeError(err)
-			log.Printf("❌ Failed to enqueue task for action type %s: %v", sanitizedActionType, sanitizedErr)
-			return fmt.Errorf("failed to enqueue task for %s: %w", sanitizedActionType, err)
+			// Double-check that the error message is fully sanitized
+			sanitizedErrStr := sanitizeString(sanitizedErr.Error())
+			log.Printf("❌ Failed to enqueue task for action type %s: %v", sanitizedActionType, sanitizedErrStr)
+			return fmt.Errorf("failed to enqueue task for %s: %w", sanitizedActionType, sanitizeError(err))
 		}
 	}
 
