@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -57,8 +58,8 @@ type BirdWeatherAction struct {
 	pcmData      []byte
 	BwClient     *birdweather.BwClient
 	EventTracker *EventTracker
-	RetryConfig  RetryConfig // Configuration for retry behavior
-	mu           sync.Mutex  // Protect concurrent access to Note and pcmData
+	RetryConfig  jobqueue.RetryConfig // Configuration for retry behavior
+	mu           sync.Mutex           // Protect concurrent access to Note and pcmData
 }
 
 type MqttAction struct {
@@ -67,8 +68,8 @@ type MqttAction struct {
 	BirdImageCache *imageprovider.BirdImageCache
 	MqttClient     mqtt.Client
 	EventTracker   *EventTracker
-	RetryConfig    RetryConfig // Configuration for retry behavior
-	mu             sync.Mutex  // Protect concurrent access to Note
+	RetryConfig    jobqueue.RetryConfig // Configuration for retry behavior
+	mu             sync.Mutex           // Protect concurrent access to Note
 }
 
 type UpdateRangeFilterAction struct {
@@ -228,11 +229,13 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 	if err := a.BwClient.Publish(&note, pcmData); err != nil {
 		// Log the error with retry information if retries are enabled
 		if a.RetryConfig.Enabled {
-			log.Printf("Error uploading to BirdWeather (will retry): %s\n", err)
+			log.Printf("Error uploading %s (%s) to BirdWeather (confidence: %.2f, clip: %s) (will retry): %v\n",
+				note.CommonName, note.ScientificName, note.Confidence, note.ClipName, err)
 		} else {
-			log.Printf("Error uploading to BirdWeather: %s\n", err)
+			log.Printf("Error uploading %s (%s) to BirdWeather (confidence: %.2f, clip: %s): %v\n",
+				note.CommonName, note.ScientificName, note.Confidence, note.ClipName, err)
 		}
-		return err // Return the error to trigger retry mechanism
+		return fmt.Errorf("failed to upload %s to BirdWeather: %w", note.CommonName, err) // Return wrapped error with context
 	}
 
 	if a.Settings.Debug {
@@ -260,12 +263,23 @@ func (a *MqttAction) Execute(data interface{}) error {
 
 	// First, check if the MQTT client is connected
 	if !a.MqttClient.IsConnected() {
-		if a.RetryConfig.Enabled {
-			// If retries are enabled, return an error to trigger retry
-			return fmt.Errorf("MQTT client is not connected")
+		// Try an immediate reconnect before giving up
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		reconnectErr := a.MqttClient.Connect(ctx)
+		if reconnectErr != nil {
+			log.Printf("Failed to reconnect to MQTT broker: %v", reconnectErr)
+
+			if a.RetryConfig.Enabled {
+				// If retries are enabled, return an error to trigger retry
+				return fmt.Errorf("MQTT client is not connected and reconnect failed: %w", reconnectErr)
+			}
+			log.Println("MQTT client is not connected, skipping publish")
+			return nil
 		}
-		log.Println("MQTT client is not connected, skipping publish")
-		return nil
+
+		log.Println("Successfully reconnected to MQTT broker")
 	}
 
 	// Validate MQTT settings
@@ -302,11 +316,13 @@ func (a *MqttAction) Execute(data interface{}) error {
 	if err != nil {
 		// Log the error with retry information if retries are enabled
 		if a.RetryConfig.Enabled {
-			log.Printf("Error publishing to MQTT (will retry): %s\n", err)
+			log.Printf("Error publishing %s (%s) to MQTT topic %s (confidence: %.2f, clip: %s) (will retry): %v\n",
+				a.Note.CommonName, a.Note.ScientificName, a.Settings.Realtime.MQTT.Topic, a.Note.Confidence, a.Note.ClipName, err)
 		} else {
-			log.Printf("Error publishing to MQTT: %s\n", err)
+			log.Printf("Error publishing %s (%s) to MQTT topic %s (confidence: %.2f, clip: %s): %v\n",
+				a.Note.CommonName, a.Note.ScientificName, a.Settings.Realtime.MQTT.Topic, a.Note.Confidence, a.Note.ClipName, err)
 		}
-		return fmt.Errorf("failed to publish to MQTT: %w", err)
+		return fmt.Errorf("failed to publish %s to MQTT topic %s: %w", a.Note.CommonName, a.Settings.Realtime.MQTT.Topic, err)
 	}
 
 	if a.Settings.Debug {
