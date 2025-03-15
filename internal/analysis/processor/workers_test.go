@@ -1309,3 +1309,56 @@ func BenchmarkEnqueueTask(b *testing.B) {
 		}
 	}
 }
+
+// TestSanitizeActionType tests that the sanitizeActionType function correctly sanitizes sensitive information
+func TestSanitizeActionType(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple type",
+			input:    "*processor.MockAction",
+			expected: "*processor.MockAction",
+		},
+		{
+			name:     "RTSP URL with credentials",
+			input:    "*actions.RTSPAction{URL:rtsp://admin:password123@192.168.1.100:554/stream}",
+			expected: "*actions.RTSPAction{URL:rtsp://[redacted]@192.168.1.100:554/stream}",
+		},
+		{
+			name:     "MQTT URL with credentials",
+			input:    "*actions.MQTTAction{Broker:mqtt://user:secret@mqtt.example.com:1883}",
+			expected: "*actions.MQTTAction{Broker:mqtt://[redacted]@mqtt.example.com:1883}",
+		},
+		{
+			name:     "API key in type",
+			input:    "*actions.APIAction{Key:api_key=abc123xyz789}",
+			expected: "*actions.APIAction{Key:api_key=[REDACTED]}",
+		},
+		{
+			name:     "Password in type",
+			input:    "*actions.LoginAction{Username:user,password=supersecret123}",
+			expected: "*actions.LoginAction{Username:user,password=[REDACTED]",
+		},
+		{
+			name:     "Multiple sensitive data",
+			input:    "*actions.MultiAction{RTSP:rtsp://user:pass@example.com,API:api_key=12345,Auth:password=secret}",
+			expected: "*actions.MultiAction{RTSP:rtsp://[redacted]@example.com,API:api_key=[REDACTED],Auth:password=[REDACTED]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sanitized := sanitizeActionType(tt.input)
+			// Print the actual output for debugging
+			t.Logf("Input: %q", tt.input)
+			t.Logf("Actual: %q", sanitized)
+			t.Logf("Expected: %q", tt.expected)
+			if sanitized != tt.expected {
+				t.Errorf("sanitizeActionType() = %q, want %q", sanitized, tt.expected)
+			}
+		})
+	}
+}
