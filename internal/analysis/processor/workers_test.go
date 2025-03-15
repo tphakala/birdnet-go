@@ -260,8 +260,14 @@ func TestSanitizeError(t *testing.T) {
 				return
 			}
 
+			// Check that the sanitized error message matches the expected value
 			if sanitized.Error() != tt.expected {
 				t.Errorf("sanitizeError() = %q, want %q", sanitized.Error(), tt.expected)
+			}
+
+			// Check that the original error is preserved
+			if !errors.Is(sanitized, tt.err) {
+				t.Errorf("errors.Is(sanitized, original) = false, want true")
 			}
 		})
 	}
@@ -280,6 +286,16 @@ func TestSanitizeErrorWrapped(t *testing.T) {
 	expected := "operation failed: password=[REDACTED]"
 	if sanitized.Error() != expected {
 		t.Errorf("sanitizeError() = %q, want %q", sanitized.Error(), expected)
+	}
+
+	// Check that the original error is preserved
+	if !errors.Is(sanitized, wrappedErr) {
+		t.Errorf("errors.Is(sanitized, wrappedErr) = false, want true")
+	}
+
+	// Check that we can still access the base error
+	if !errors.Is(sanitized, baseErr) {
+		t.Errorf("errors.Is(sanitized, baseErr) = false, want true")
 	}
 }
 
@@ -1345,7 +1361,7 @@ func TestSanitizeActionType(t *testing.T) {
 		{
 			name:     "Multiple sensitive data",
 			input:    "*actions.MultiAction{RTSP:rtsp://user:pass@example.com,API:api_key=12345,Auth:password=secret}",
-			expected: "*actions.MultiAction{RTSP:rtsp://[redacted]@example.com,API:api_key=[REDACTED],Auth:password=[REDACTED]",
+			expected: "*actions.MultiAction{RTSP:rtsp://[redacted]@example.com,API:api_key=[REDACTED],Auth=[REDACTED]",
 		},
 	}
 

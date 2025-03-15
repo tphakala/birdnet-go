@@ -66,30 +66,46 @@ func getJobQueueRetryConfig(action Action) jobqueue.RetryConfig {
 // sanitizeString applies sanitization rules to remove sensitive information from strings
 func sanitizeString(input string) string {
 	// Sanitize RTSP URLs with credentials
-	rtspRegex := regexp.MustCompile(`rtsp://[^:]+:[^@]+@`)
+	rtspRegex := regexp.MustCompile(`(?i)rtsp://[^:]+:[^@]+@`)
 	result := rtspRegex.ReplaceAllString(input, "rtsp://[redacted]@")
 
 	// Sanitize MQTT credentials
-	mqttRegex := regexp.MustCompile(`mqtt://[^:]+:[^@]+@`)
+	mqttRegex := regexp.MustCompile(`(?i)mqtt://[^:]+:[^@]+@`)
 	result = mqttRegex.ReplaceAllString(result, "mqtt://[redacted]@")
 
-	// Sanitize API keys
-	apiKeyRegex := regexp.MustCompile(`(api[_-]?key|apikey|token|secret)[=:]["']?[a-zA-Z0-9_\-\.]{5,}["']?`)
+	// Sanitize API keys - made case-insensitive with (?i)
+	apiKeyRegex := regexp.MustCompile(`(?i)(api[_-]?key|apikey|token|secret)[=:]["']?[a-zA-Z0-9_\-\.]{5,}["']?`)
 	result = apiKeyRegex.ReplaceAllString(result, "$1=[REDACTED]")
 
-	// Sanitize passwords - expanded to include more variations
-	passwordRegex := regexp.MustCompile(`(password|passwd|pwd)[=:]["']?[^&"'\s]+["']?`)
+	// Sanitize passwords - expanded to include more variations and made case-insensitive
+	passwordRegex := regexp.MustCompile(`(?i)(password|passwd|pwd)[=:]["']?[^&"'\s]+["']?`)
 	result = passwordRegex.ReplaceAllString(result, "$1=[REDACTED]")
 
-	// Sanitize OAuth tokens
-	oauthRegex := regexp.MustCompile(`(Bearer|OAuth|oauth_token|access_token)[\s=:]["']?[^&"'\s]+["']?`)
+	// Sanitize OAuth tokens - made case-insensitive
+	oauthRegex := regexp.MustCompile(`(?i)(Bearer|OAuth|oauth_token|access_token)[\s=:]["']?[^&"'\s]+["']?`)
 	result = oauthRegex.ReplaceAllString(result, "$1 [REDACTED]")
 
-	// Sanitize other potential sensitive information
-	otherSensitiveRegex := regexp.MustCompile(`(private|sensitive|credential|auth)[=:]["']?[^&"'\s]+["']?`)
+	// Sanitize other potential sensitive information - made case-insensitive
+	otherSensitiveRegex := regexp.MustCompile(`(?i)(private|sensitive|credential|auth)[=:]["']?[^&"'\s]+["']?`)
 	result = otherSensitiveRegex.ReplaceAllString(result, "$1=[REDACTED]")
 
 	return result
+}
+
+// SanitizedError is a custom error type that wraps the original error while sanitizing its message
+type SanitizedError struct {
+	original     error
+	sanitizedMsg string
+}
+
+// Error returns the sanitized error message
+func (e *SanitizedError) Error() string {
+	return e.sanitizedMsg
+}
+
+// Unwrap returns the original error, allowing errors.Is() and errors.As() to work with the sanitized error
+func (e *SanitizedError) Unwrap() error {
+	return e.original
 }
 
 // sanitizeError removes sensitive information from error messages
@@ -98,11 +114,11 @@ func sanitizeError(err error) error {
 		return nil
 	}
 
-	errMsg := err.Error()
-	errMsg = sanitizeString(errMsg)
-
-	// Return a new error with the sanitized message
-	return fmt.Errorf("%s", errMsg)
+	// Return a new SanitizedError that wraps the original error
+	return &SanitizedError{
+		original:     err,
+		sanitizedMsg: sanitizeString(err.Error()),
+	}
 }
 
 // sanitizeActionType removes sensitive information from action type strings
@@ -131,8 +147,9 @@ func (p *Processor) EnqueueTask(task *Task) error {
 
 	// Log detailed information about the task being enqueued
 	if p.Settings.Debug {
-		log.Printf("Enqueuing task for action type %s with retry config: enabled=%v, maxRetries=%d",
-			sanitizedActionType, jqRetryConfig.Enabled, jqRetryConfig.MaxRetries)
+		// Log without including the action type to avoid potential sensitive information
+		log.Printf("Enqueuing task with retry config: enabled=%v, maxRetries=%d",
+			jqRetryConfig.Enabled, jqRetryConfig.MaxRetries)
 	}
 
 	// Enqueue the task directly to the job queue
@@ -142,15 +159,15 @@ func (p *Processor) EnqueueTask(task *Task) error {
 		switch {
 		case strings.Contains(err.Error(), "queue is full"):
 			queueSize := p.JobQueue.GetMaxJobs()
-			log.Printf("❌ Job queue is full (capacity: %d), dropping task for action type %s",
-				queueSize, sanitizedActionType)
+			// Log without including the action type to avoid potential sensitive information
+			log.Printf("❌ Job queue is full (capacity: %d), dropping task", queueSize)
 
 			// Suggest increasing queue size if this happens frequently
 			return fmt.Errorf("job queue is full (capacity: %d): %w", queueSize, sanitizeError(err))
 
 		case strings.Contains(err.Error(), "queue has been stopped"):
-			log.Printf("❌ Cannot enqueue task for action type %s: job queue has been stopped",
-				sanitizedActionType)
+			// Log without including the action type to avoid potential sensitive information
+			log.Printf("❌ Cannot enqueue task: job queue has been stopped")
 			return fmt.Errorf("job queue has been stopped, cannot enqueue task for %s: %w",
 				sanitizedActionType, sanitizeError(err))
 
@@ -159,7 +176,8 @@ func (p *Processor) EnqueueTask(task *Task) error {
 			sanitizedErr := sanitizeError(err)
 			// Double-check that the error message is fully sanitized
 			sanitizedErrStr := sanitizeString(sanitizedErr.Error())
-			log.Printf("❌ Failed to enqueue task for action type %s: %v", sanitizedActionType, sanitizedErrStr)
+			// Log without including the action type to avoid potential sensitive information
+			log.Printf("❌ Failed to enqueue task: %v", sanitizedErrStr)
 			return fmt.Errorf("failed to enqueue task for %s: %w", sanitizedActionType, sanitizeError(err))
 		}
 	}
@@ -170,8 +188,9 @@ func (p *Processor) EnqueueTask(task *Task) error {
 			speciesName = task.Detection.Note.CommonName
 		}
 
-		log.Printf("✅ Task enqueued as job %s for action type %s (species: %s)",
-			job.ID, sanitizedActionType, speciesName)
+		// Log without including the action type to avoid potential sensitive information
+		log.Printf("✅ Task enqueued as job %s (species: %s)",
+			job.ID, speciesName)
 	}
 
 	return nil
