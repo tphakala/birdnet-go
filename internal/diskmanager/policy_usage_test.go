@@ -3,7 +3,6 @@ package diskmanager
 import (
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -658,9 +657,9 @@ func TestUsageBasedCleanupReturnValues(t *testing.T) {
 	// Track which files were deleted
 	deletedFiles := make(map[string]bool)
 
-	// Initial disk usage and expected reduction per file
+	// Test configuration
 	initialDiskUsage := 90.0
-	diskUsageReductionPerFile := 5.0
+	diskUsageReductionPerFile := 5.0 // Each deleted file reduces disk usage by 5%
 
 	// Call our test-specific implementation that uses real files
 	result := testUsageBasedCleanupWithRealFiles(
@@ -669,8 +668,9 @@ func TestUsageBasedCleanupReturnValues(t *testing.T) {
 		tempDir,
 		filePaths,
 		deletedFiles,
-		initialDiskUsage, // Initial disk usage above threshold
-		false,            // Don't check locked files
+		initialDiskUsage,          // Initial disk usage above threshold
+		false,                     // Don't check locked files
+		diskUsageReductionPerFile, // Reduction per file deleted
 	)
 
 	// Calculate expected disk utilization after deleting 2 files
@@ -699,6 +699,7 @@ func testUsageBasedCleanupWithRealFiles(
 	deletedFiles map[string]bool,
 	initialDiskUsage float64,
 	checkLockedFiles bool,
+	diskUsageReductionPerFile float64,
 ) UsageCleanupResult {
 	// This implementation simulates the real UsageBasedCleanup function
 	// but with controlled inputs and outputs
@@ -708,9 +709,6 @@ func testUsageBasedCleanupWithRealFiles(
 
 	// Use the provided initial disk usage
 	currentDiskUsage := initialDiskUsage
-
-	// Define how much each file deletion reduces disk usage
-	diskUsageReductionPerFile := 5.0
 
 	// Get locked file paths if needed
 	var lockedPathsMap map[string]bool
@@ -746,20 +744,9 @@ func testUsageBasedCleanupWithRealFiles(
 		files = append(files, fileData)
 	}
 
-	// Sort files by timestamp (oldest first)
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].Timestamp.Before(files[j].Timestamp)
-	})
-
-	// Create a map to track species counts
-	speciesCount := make(map[string]map[string]int)
-	for _, file := range files {
-		subDir := filepath.Dir(file.Path)
-		if _, exists := speciesCount[file.Species]; !exists {
-			speciesCount[file.Species] = make(map[string]int)
-		}
-		speciesCount[file.Species][subDir]++
-	}
+	// Sort files by timestamp (oldest first) using the same sortFiles function
+	// used elsewhere in the codebase for consistency
+	speciesCount := sortFiles(files, false)
 
 	// Process files for deletion if disk usage is above threshold
 	deletedCount := 0
@@ -789,6 +776,7 @@ func testUsageBasedCleanupWithRealFiles(
 			speciesCount[file.Species][subDir]--
 
 			// Reduce disk usage after each delete (simulating cleanup progress)
+			// In a real system, this would be based on file size relative to total storage
 			currentDiskUsage -= diskUsageReductionPerFile
 
 			// Stop if we've reached the threshold
@@ -842,8 +830,9 @@ func TestUsageBasedCleanupBelowThreshold(t *testing.T) {
 	// Track which files were deleted
 	deletedFiles := make(map[string]bool)
 
-	// Initial disk usage below threshold
+	// Test configuration
 	initialDiskUsage := 70.0
+	diskUsageReductionPerFile := 5.0 // Each deleted file reduces disk usage by 5%
 
 	// Call our test-specific implementation with disk usage below threshold
 	result := testUsageBasedCleanupWithRealFiles(
@@ -852,8 +841,9 @@ func TestUsageBasedCleanupBelowThreshold(t *testing.T) {
 		tempDir,
 		filePaths,
 		deletedFiles,
-		initialDiskUsage, // Initial disk usage below threshold
-		false,            // Don't check locked files
+		initialDiskUsage,          // Initial disk usage below threshold
+		false,                     // Don't check locked files
+		diskUsageReductionPerFile, // Reduction per file deleted
 	)
 
 	// Verify the return values
@@ -911,9 +901,9 @@ func TestUsageBasedCleanupLockedFiles(t *testing.T) {
 	// Track which files were deleted
 	deletedFiles := make(map[string]bool)
 
-	// Initial disk usage and expected reduction per file
+	// Test configuration
 	initialDiskUsage := 90.0
-	diskUsageReductionPerFile := 5.0
+	diskUsageReductionPerFile := 5.0 // Each deleted file reduces disk usage by 5%
 
 	// Call our test-specific implementation with locked files
 	result := testUsageBasedCleanupWithRealFiles(
@@ -922,8 +912,9 @@ func TestUsageBasedCleanupLockedFiles(t *testing.T) {
 		tempDir,
 		filePaths,
 		deletedFiles,
-		initialDiskUsage, // Initial disk usage above threshold
-		true,             // Check locked files
+		initialDiskUsage,          // Initial disk usage above threshold
+		true,                      // Check locked files
+		diskUsageReductionPerFile, // Reduction per file deleted
 	)
 
 	// Calculate expected disk utilization after deleting 2 files
