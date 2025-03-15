@@ -665,6 +665,8 @@ func TestUsageBasedCleanupReturnValues(t *testing.T) {
 		tempDir,
 		filePaths,
 		deletedFiles,
+		90.0,  // Initial disk usage above threshold
+		false, // Don't check locked files
 	)
 
 	// Verify the return values
@@ -687,6 +689,8 @@ func testUsageBasedCleanupWithRealFiles(
 	baseDir string,
 	testFiles []string,
 	deletedFiles map[string]bool,
+	initialDiskUsage float64,
+	checkLockedFiles bool,
 ) UsageCleanupResult {
 	// This implementation simulates the real UsageBasedCleanup function
 	// but with controlled inputs and outputs
@@ -694,8 +698,18 @@ func testUsageBasedCleanupWithRealFiles(
 	// Set a fixed disk usage threshold (80%)
 	threshold := 80.0
 
-	// Set a fixed current disk usage (90% - above threshold)
-	currentDiskUsage := 90.0
+	// Use the provided initial disk usage
+	currentDiskUsage := initialDiskUsage
+
+	// Get locked file paths if needed
+	var lockedPathsMap map[string]bool
+	if checkLockedFiles {
+		lockedPaths, _ := db.GetLockedNotesClipPaths()
+		lockedPathsMap = make(map[string]bool)
+		for _, path := range lockedPaths {
+			lockedPathsMap[path] = true
+		}
+	}
 
 	// Get the list of files
 	files := []FileInfo{}
@@ -711,6 +725,11 @@ func testUsageBasedCleanupWithRealFiles(
 		fileData, err := parseFileInfo(filePath, fileInfo)
 		if err != nil {
 			continue
+		}
+
+		// Mark file as locked if it's in the locked paths
+		if checkLockedFiles {
+			fileData.Locked = lockedPathsMap[filePath]
 		}
 
 		files = append(files, fileData)
@@ -768,14 +787,15 @@ func testUsageBasedCleanupWithRealFiles(
 		}
 	}
 
-	// Return the results
-	return UsageCleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: 65}
-}
+	// Calculate final disk utilization for the result
+	finalDiskUtilization := 65
+	if currentDiskUsage <= threshold && initialDiskUsage < threshold {
+		// If we started below threshold and stayed below, use the current disk usage
+		finalDiskUtilization = int(currentDiskUsage)
+	}
 
-// testUsageBasedCleanup is a test-specific implementation of UsageBasedCleanup
-func testUsageBasedCleanup(quitChan chan struct{}, db Interface) UsageCleanupResult {
-	// Return fixed values for testing
-	return UsageCleanupResult{Err: nil, ClipsRemoved: 3, DiskUtilization: 65}
+	// Return the results
+	return UsageCleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: finalDiskUtilization}
 }
 
 // TestUsageBasedCleanupBelowThreshold tests that no files are deleted when disk usage is below threshold
@@ -819,12 +839,14 @@ func TestUsageBasedCleanupBelowThreshold(t *testing.T) {
 	deletedFiles := make(map[string]bool)
 
 	// Call our test-specific implementation with disk usage below threshold
-	result := testUsageBasedCleanupWithRealFilesBelowThreshold(
+	result := testUsageBasedCleanupWithRealFiles(
 		quitChan,
 		mockDB,
 		tempDir,
 		filePaths,
 		deletedFiles,
+		70.0,  // Initial disk usage below threshold
+		false, // Don't check locked files
 	)
 
 	// Verify the return values
@@ -836,98 +858,6 @@ func TestUsageBasedCleanupBelowThreshold(t *testing.T) {
 	for _, path := range filePaths {
 		assert.False(t, deletedFiles[path], "File should not have been deleted: %s", path)
 	}
-}
-
-// testUsageBasedCleanupWithRealFilesBelowThreshold is a test-specific implementation with disk usage below threshold
-func testUsageBasedCleanupWithRealFilesBelowThreshold(
-	quitChan chan struct{},
-	db Interface,
-	baseDir string,
-	testFiles []string,
-	deletedFiles map[string]bool,
-) UsageCleanupResult {
-	// This implementation simulates the real UsageBasedCleanup function
-	// but with controlled inputs and outputs
-
-	// Set a fixed disk usage threshold (80%)
-	threshold := 80.0
-
-	// Set a fixed current disk usage (70% - below threshold)
-	currentDiskUsage := 70.0
-
-	// Get the list of files
-	files := []FileInfo{}
-
-	// Process each test file
-	for _, filePath := range testFiles {
-		fileInfo, err := os.Stat(filePath)
-		if err != nil {
-			continue
-		}
-
-		// Parse the file info
-		fileData, err := parseFileInfo(filePath, fileInfo)
-		if err != nil {
-			continue
-		}
-
-		files = append(files, fileData)
-	}
-
-	// Sort files by timestamp (oldest first)
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].Timestamp.Before(files[j].Timestamp)
-	})
-
-	// Create a map to track species counts
-	speciesCount := make(map[string]map[string]int)
-	for _, file := range files {
-		subDir := filepath.Dir(file.Path)
-		if _, exists := speciesCount[file.Species]; !exists {
-			speciesCount[file.Species] = make(map[string]int)
-		}
-		speciesCount[file.Species][subDir]++
-	}
-
-	// Process files for deletion if disk usage is above threshold
-	deletedCount := 0
-	minClipsPerSpecies := 0 // Set to 0 to allow all files to be deleted
-
-	if currentDiskUsage > threshold {
-		// Process files for deletion
-		for _, file := range files {
-			// Skip locked files
-			if file.Locked {
-				continue
-			}
-
-			// Get the subdirectory
-			subDir := filepath.Dir(file.Path)
-
-			// Skip if we're at the minimum clips per species
-			if speciesCount[file.Species][subDir] <= minClipsPerSpecies {
-				continue
-			}
-
-			// "Delete" the file (just mark it in our map)
-			deletedFiles[file.Path] = true
-			deletedCount++
-
-			// Update the species count
-			speciesCount[file.Species][subDir]--
-
-			// Reduce disk usage after each delete (simulating cleanup progress)
-			currentDiskUsage -= 5.0 // Simple reduction for testing
-
-			// Stop if we've reached the threshold
-			if currentDiskUsage <= threshold {
-				break
-			}
-		}
-	}
-
-	// Return the results
-	return UsageCleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: 70}
 }
 
 // TestUsageBasedCleanupLockedFiles tests that locked files are not deleted
@@ -974,12 +904,14 @@ func TestUsageBasedCleanupLockedFiles(t *testing.T) {
 	deletedFiles := make(map[string]bool)
 
 	// Call our test-specific implementation with locked files
-	result := testUsageBasedCleanupWithLockedFiles(
+	result := testUsageBasedCleanupWithRealFiles(
 		quitChan,
 		mockDB,
 		tempDir,
 		filePaths,
 		deletedFiles,
+		90.0, // Initial disk usage above threshold
+		true, // Check locked files
 	)
 
 	// Verify the return values
@@ -995,108 +927,6 @@ func TestUsageBasedCleanupLockedFiles(t *testing.T) {
 
 	// Verify that locked file was not deleted
 	assert.False(t, deletedFiles[lockedFilePath], "Locked file should not have been deleted")
-}
-
-// testUsageBasedCleanupWithLockedFiles is a test-specific implementation with locked files
-func testUsageBasedCleanupWithLockedFiles(
-	quitChan chan struct{},
-	db Interface,
-	baseDir string,
-	testFiles []string,
-	deletedFiles map[string]bool,
-) UsageCleanupResult {
-	// This implementation simulates the real UsageBasedCleanup function
-	// but with controlled inputs and outputs
-
-	// Set a fixed disk usage threshold (80%)
-	threshold := 80.0
-
-	// Set a fixed current disk usage (90% - above threshold)
-	currentDiskUsage := 90.0
-
-	// Get locked file paths
-	lockedPaths, _ := db.GetLockedNotesClipPaths()
-	lockedPathsMap := make(map[string]bool)
-	for _, path := range lockedPaths {
-		lockedPathsMap[path] = true
-	}
-
-	// Get the list of files
-	files := []FileInfo{}
-
-	// Process each test file
-	for _, filePath := range testFiles {
-		fileInfo, err := os.Stat(filePath)
-		if err != nil {
-			continue
-		}
-
-		// Parse the file info
-		fileData, err := parseFileInfo(filePath, fileInfo)
-		if err != nil {
-			continue
-		}
-
-		// Mark file as locked if it's in the locked paths
-		fileData.Locked = lockedPathsMap[filePath]
-
-		files = append(files, fileData)
-	}
-
-	// Sort files by timestamp (oldest first)
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].Timestamp.Before(files[j].Timestamp)
-	})
-
-	// Create a map to track species counts
-	speciesCount := make(map[string]map[string]int)
-	for _, file := range files {
-		subDir := filepath.Dir(file.Path)
-		if _, exists := speciesCount[file.Species]; !exists {
-			speciesCount[file.Species] = make(map[string]int)
-		}
-		speciesCount[file.Species][subDir]++
-	}
-
-	// Process files for deletion if disk usage is above threshold
-	deletedCount := 0
-	minClipsPerSpecies := 0 // Set to 0 to allow all files to be deleted
-
-	if currentDiskUsage > threshold {
-		// Process files for deletion
-		for _, file := range files {
-			// Skip locked files
-			if file.Locked {
-				continue
-			}
-
-			// Get the subdirectory
-			subDir := filepath.Dir(file.Path)
-
-			// Skip if we're at the minimum clips per species
-			if speciesCount[file.Species][subDir] <= minClipsPerSpecies {
-				continue
-			}
-
-			// "Delete" the file (just mark it in our map)
-			deletedFiles[file.Path] = true
-			deletedCount++
-
-			// Update the species count
-			speciesCount[file.Species][subDir]--
-
-			// Reduce disk usage after each delete (simulating cleanup progress)
-			currentDiskUsage -= 5.0 // Simple reduction for testing
-
-			// Stop if we've reached the threshold
-			if currentDiskUsage <= threshold {
-				break
-			}
-		}
-	}
-
-	// Return the results
-	return UsageCleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: 65}
 }
 
 // Define a variable for os.Remove to allow mocking in tests

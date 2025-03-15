@@ -409,9 +409,3 @@ func testAgeBasedCleanupWithRealFiles(
 	// Return the results
 	return AgeCleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: 75}
 }
-
-// testAgeBasedCleanup is a test-specific implementation of AgeBasedCleanup
-func testAgeBasedCleanup(quit <-chan struct{}, db Interface) AgeCleanupResult {
-	// Return fixed values for testing
-	return AgeCleanupResult{Err: nil, ClipsRemoved: 2, DiskUtilization: 75}
-}
