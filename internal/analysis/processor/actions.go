@@ -228,12 +228,14 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 	// Try to publish with appropriate error handling
 	if err := a.BwClient.Publish(&note, pcmData); err != nil {
 		// Log the error with retry information if retries are enabled
+		// Sanitize error before logging
+		sanitizedErr := sanitizeError(err)
 		if a.RetryConfig.Enabled {
 			log.Printf("Error uploading %s (%s) to BirdWeather (confidence: %.2f, clip: %s) (will retry): %v\n",
-				note.CommonName, note.ScientificName, note.Confidence, note.ClipName, err)
+				note.CommonName, note.ScientificName, note.Confidence, note.ClipName, sanitizedErr)
 		} else {
 			log.Printf("Error uploading %s (%s) to BirdWeather (confidence: %.2f, clip: %s): %v\n",
-				note.CommonName, note.ScientificName, note.Confidence, note.ClipName, err)
+				note.CommonName, note.ScientificName, note.Confidence, note.ClipName, sanitizedErr)
 		}
 		return fmt.Errorf("failed to upload %s to BirdWeather: %w", note.CommonName, err) // Return wrapped error with context
 	}
@@ -315,12 +317,14 @@ func (a *MqttAction) Execute(data interface{}) error {
 	err = a.MqttClient.Publish(ctx, a.Settings.Realtime.MQTT.Topic, string(noteJson))
 	if err != nil {
 		// Log the error with retry information if retries are enabled
+		// Sanitize error before logging
+		sanitizedErr := sanitizeError(err)
 		if a.RetryConfig.Enabled {
 			log.Printf("Error publishing %s (%s) to MQTT topic %s (confidence: %.2f, clip: %s) (will retry): %v\n",
-				a.Note.CommonName, a.Note.ScientificName, a.Settings.Realtime.MQTT.Topic, a.Note.Confidence, a.Note.ClipName, err)
+				a.Note.CommonName, a.Note.ScientificName, a.Settings.Realtime.MQTT.Topic, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
 		} else {
 			log.Printf("Error publishing %s (%s) to MQTT topic %s (confidence: %.2f, clip: %s): %v\n",
-				a.Note.CommonName, a.Note.ScientificName, a.Settings.Realtime.MQTT.Topic, a.Note.Confidence, a.Note.ClipName, err)
+				a.Note.CommonName, a.Note.ScientificName, a.Settings.Realtime.MQTT.Topic, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
 		}
 		return fmt.Errorf("failed to publish %s to MQTT topic %s: %w", a.Note.CommonName, a.Settings.Realtime.MQTT.Topic, err)
 	}

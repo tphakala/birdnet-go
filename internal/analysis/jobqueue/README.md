@@ -16,6 +16,19 @@ The `jobqueue` package provides a job queue implementation with the following ke
 - **Context Support**: Cancel jobs via context cancellation
 - **Timeout Handling**: Automatically timeout hanging jobs
 
+## Integration with Processor
+
+The `jobqueue` package is integrated directly with the `processor` package through the `Processor.EnqueueTask` method. Each processor instance maintains its own job queue, eliminating the need for global state or initialization functions.
+
+Tasks are enqueued directly to the processor's job queue using:
+
+```go
+// Enqueue a task to the processor's job queue
+err := processor.EnqueueTask(task)
+```
+
+The `ActionAdapter` in the processor package adapts the processor-specific `Action` interface to the jobqueue's `Action` interface, allowing processor actions to be executed by the job queue.
+
 ## Architecture
 
 The job queue is designed around these core components:

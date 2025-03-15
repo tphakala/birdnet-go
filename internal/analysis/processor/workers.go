@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
@@ -52,14 +53,38 @@ func getJobQueueRetryConfig(action Action) jobqueue.RetryConfig {
 	}
 }
 
-// EnqueueTask adds a task directly to the job queue for processing.
-func EnqueueTask(task *Task) error {
-	if task == nil {
-		return fmt.Errorf("cannot enqueue nil task")
+// sanitizeError removes sensitive information from error messages
+func sanitizeError(err error) error {
+	if err == nil {
+		return nil
 	}
 
-	if p == nil {
-		return fmt.Errorf("processor not initialized, call InitProcessor first")
+	errMsg := err.Error()
+
+	// Sanitize RTSP URLs with credentials
+	rtspRegex := regexp.MustCompile(`rtsp://[^:]+:[^@]+@`)
+	errMsg = rtspRegex.ReplaceAllString(errMsg, "rtsp://[redacted]@")
+
+	// Sanitize MQTT credentials
+	mqttRegex := regexp.MustCompile(`mqtt://[^:]+:[^@]+@`)
+	errMsg = mqttRegex.ReplaceAllString(errMsg, "mqtt://[redacted]@")
+
+	// Sanitize API keys
+	apiKeyRegex := regexp.MustCompile(`(api[_-]?key|apikey|token|secret)[=:]["']?[a-zA-Z0-9_\-\.]{5,}["']?`)
+	errMsg = apiKeyRegex.ReplaceAllString(errMsg, "$1=[REDACTED]")
+
+	// Sanitize passwords
+	passwordRegex := regexp.MustCompile(`(password|passwd)[=:]["']?[^&"'\s]+["']?`)
+	errMsg = passwordRegex.ReplaceAllString(errMsg, "$1=[REDACTED]")
+
+	// Return a new error with the sanitized message
+	return fmt.Errorf("%s", errMsg)
+}
+
+// EnqueueTask adds a task directly to the job queue for processing.
+func (p *Processor) EnqueueTask(task *Task) error {
+	if task == nil {
+		return fmt.Errorf("cannot enqueue nil task")
 	}
 
 	// Get action type for logging
@@ -99,7 +124,9 @@ func EnqueueTask(task *Task) error {
 				actionType, err)
 
 		default:
-			log.Printf("❌ Failed to enqueue task for action type %s: %v", actionType, err)
+			// Sanitize error before logging
+			sanitizedErr := sanitizeError(err)
+			log.Printf("❌ Failed to enqueue task for action type %s: %v", actionType, sanitizedErr)
 			return fmt.Errorf("failed to enqueue task for %s: %w", actionType, err)
 		}
 	}
