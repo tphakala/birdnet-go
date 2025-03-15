@@ -12,9 +12,16 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
+// AgeCleanupResult contains the results of an age-based cleanup operation
+type AgeCleanupResult struct {
+	Err             error // Any error that occurred during cleanup
+	ClipsRemoved    int   // Number of clips that were removed
+	DiskUtilization int   // Current disk utilization percentage after cleanup
+}
+
 // AgeBasedCleanup removes clips from the filesystem based on their age and the number of clips per species.
-// Returns error, number of clips removed, and current disk utilization percentage.
-func AgeBasedCleanup(quit <-chan struct{}, db Interface) (err error, clipsRemoved, diskUtilization int) {
+// Returns an AgeCleanupResult containing error, number of clips removed, and current disk utilization percentage.
+func AgeBasedCleanup(quit <-chan struct{}, db Interface) AgeCleanupResult {
 	settings := conf.Setting()
 
 	debug := settings.Realtime.Audio.Export.Retention.Debug
@@ -25,7 +32,7 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) (err error, clipsRemove
 	retentionPeriodInHours, err := conf.ParseRetentionPeriod(retentionPeriod)
 	if err != nil {
 		log.Printf("Invalid retention period: %s\n", err)
-		return err, 0, 0
+		return AgeCleanupResult{Err: err, ClipsRemoved: 0, DiskUtilization: 0}
 	}
 
 	if debug {
@@ -35,7 +42,7 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) (err error, clipsRemove
 	// Get the list of audio files, limited to allowed file types defined in file_utils.go
 	files, err := GetAudioFiles(baseDir, allowedFileTypes, db, debug)
 	if err != nil {
-		return fmt.Errorf("failed to get audio files for age-based cleanup: %w", err), 0, 0
+		return AgeCleanupResult{Err: fmt.Errorf("failed to get audio files for age-based cleanup: %w", err), ClipsRemoved: 0, DiskUtilization: 0}
 	}
 
 	if len(files) == 0 {
@@ -46,10 +53,10 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) (err error, clipsRemove
 		// Get current disk utilization even if no files were processed
 		diskUsage, err := GetDiskUsage(baseDir)
 		if err != nil {
-			return fmt.Errorf("failed to get disk usage: %w", err), 0, 0
+			return AgeCleanupResult{Err: fmt.Errorf("failed to get disk usage: %w", err), ClipsRemoved: 0, DiskUtilization: 0}
 		}
 
-		return nil, 0, int(diskUsage)
+		return AgeCleanupResult{Err: nil, ClipsRemoved: 0, DiskUtilization: int(diskUsage)}
 	}
 
 	// Create a map to keep track of the number of files per species per subdirectory
@@ -62,10 +69,10 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) (err error, clipsRemove
 	// Get current disk utilization after cleanup
 	diskUsage, diskErr := GetDiskUsage(baseDir)
 	if diskErr != nil {
-		return fmt.Errorf("cleanup completed but failed to get disk usage: %w", diskErr), deletedCount, 0
+		return AgeCleanupResult{Err: fmt.Errorf("cleanup completed but failed to get disk usage: %w", diskErr), ClipsRemoved: deletedCount, DiskUtilization: 0}
 	}
 
-	return err, deletedCount, int(diskUsage)
+	return AgeCleanupResult{Err: err, ClipsRemoved: deletedCount, DiskUtilization: int(diskUsage)}
 }
 
 // buildSpeciesCountMap creates a map to track the number of files per species per subdirectory
