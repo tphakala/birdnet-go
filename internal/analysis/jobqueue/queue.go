@@ -152,14 +152,15 @@ func (q *JobQueue) Enqueue(action Action, data interface{}, config RetryConfig) 
 	}
 
 	q.jobCounter++
+	// Pre-allocate ID string to reduce memory allocations
+	now := time.Now()
 	job := &Job{
 		ID:          fmt.Sprintf("job-%d", q.jobCounter),
 		Action:      action,
 		Data:        data,
-		Attempts:    0,
 		MaxAttempts: config.MaxRetries + 1,
-		CreatedAt:   time.Now(),
-		NextRetryAt: time.Now(), // Ready to run immediately
+		CreatedAt:   now,
+		NextRetryAt: now, // Ready to run immediately
 		Status:      JobStatusPending,
 		Config:      config,
 	}
@@ -237,6 +238,20 @@ func (q *JobQueue) processJobs(ctx context.Context) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	// Check context immediately and periodically
+	checkCtx := func() bool {
+		if ctx.Err() != nil {
+			log.Printf("Job queue processing stopped via context: %v", ctx.Err())
+			return true
+		}
+		return false
+	}
+
+	// Exit immediately if context is already canceled
+	if checkCtx() {
+		return
+	}
+
 	for {
 		select {
 		case <-q.stopCh:
@@ -246,9 +261,8 @@ func (q *JobQueue) processJobs(ctx context.Context) {
 			log.Printf("Job queue processing stopped via context: %v", ctx.Err())
 			return
 		case <-ticker.C:
-			// Check if context is still valid before processing
-			if ctx.Err() != nil {
-				log.Printf("Skipping job processing due to context cancellation: %v", ctx.Err())
+			// Check context again before processing
+			if checkCtx() {
 				return
 			}
 
@@ -562,6 +576,13 @@ type typedActionAdapter[T any] struct {
 
 // Execute implements the Action interface
 func (a *typedActionAdapter[T]) Execute(data interface{}) error {
+	// If data is provided, ensure it's the correct type and use it
+	if data != nil {
+		if typedData, ok := data.(T); ok {
+			return a.action.Execute(typedData)
+		}
+		return fmt.Errorf("invalid data type: expected %T, got %T", a.data, data)
+	}
 	return a.action.Execute(a.data)
 }
 
