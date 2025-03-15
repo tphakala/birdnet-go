@@ -1,10 +1,13 @@
-// workers.go contains the worker pool and the worker goroutines that process tasks.
+// workers.go contains task processing logic for the processor.
 package processor
 
 import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 )
 
 // TaskType defines types of tasks that can be handled by the worker.
@@ -21,83 +24,95 @@ type Task struct {
 	Action    Action
 }
 
-// workerQueue is a channel that holds tasks to be processed by worker goroutines.
-var workerQueue chan Task
-
-// startWorkerPool initializes a pool of worker goroutines to process tasks.
+// startWorkerPool initializes the job queue for task processing.
+// This is kept for backward compatibility but now simply ensures the job queue is started.
 func (p *Processor) startWorkerPool(numWorkers int) {
-	workerQueue = make(chan Task, 100) // Initialize the task queue with a buffer
+	// Create a cancellable context for the job queue
+	ctx, cancel := context.WithCancel(context.Background())
 
-	// Start the specified number of worker goroutines
-	for i := 0; i < numWorkers; i++ {
-		go p.actionWorker(context.Background())
-	}
+	// Store the cancel function in the processor for clean shutdown
+	p.workerCancel = cancel
+
+	// Ensure the job queue is started with our context
+	p.JobQueue.StartWithContext(ctx)
+
+	log.Printf("Job queue started with max capacity of %d jobs", p.JobQueue.GetMaxJobs())
 }
 
-// actionWorker is the goroutine that processes tasks from the workerQueue.
-func (p *Processor) actionWorker(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			log.Printf("Worker stopping due to context cancellation: %v", ctx.Err())
-			return
-		case task, ok := <-workerQueue:
-			if !ok {
-				// Channel closed, exit worker
-				return
-			}
-
-			if task.Type == TaskTypeAction {
-				// Check if the action has retry enabled
-				retryConfig := getRetryConfig(task.Action)
-
-				// Execute the action associated with the task
-				err := task.Action.Execute(task.Detection)
-				if err != nil {
-					// Check if we should retry this action
-					if retryConfig.Enabled {
-						actionType := fmt.Sprintf("%T", task.Action)
-						log.Printf("Action %s failed: %v, adding to retry queue", actionType, err)
-						// Add to the retry queue
-						_, enqueueErr := p.JobQueue.Enqueue(task.Action, task.Detection, retryConfig)
-						if enqueueErr != nil {
-							log.Printf("Failed to enqueue retry job: %v", enqueueErr)
-						}
-					} else {
-						log.Printf("Action %T failed (no retry): %v", task.Action, err)
-					}
-				}
-			}
-		}
-	}
-}
-
-// getRetryConfig extracts the retry configuration from an action if available
-func getRetryConfig(action Action) RetryConfig {
+// getJobQueueRetryConfig extracts the retry configuration from an action
+func getJobQueueRetryConfig(action Action) jobqueue.RetryConfig {
 	switch a := action.(type) {
 	case *BirdWeatherAction:
-		return a.RetryConfig
+		return a.RetryConfig // Now directly returns jobqueue.RetryConfig
 	case *MqttAction:
-		return a.RetryConfig
+		return a.RetryConfig // Now directly returns jobqueue.RetryConfig
 	default:
 		// Default no retry for actions that don't support it
-		return RetryConfig{Enabled: false}
+		return jobqueue.RetryConfig{Enabled: false}
 	}
 }
 
-// EnqueueTask adds a task to the worker queue for processing.
+// EnqueueTask adds a task directly to the job queue for processing.
 func EnqueueTask(task *Task) error {
 	if task == nil {
 		return fmt.Errorf("cannot enqueue nil task")
 	}
 
-	select {
-	case workerQueue <- *task:
-		// Task enqueued successfully
-		return nil
-	default:
-		err := fmt.Errorf("worker queue is full")
-		log.Printf("❌ %v", err)
-		return err
+	if p == nil {
+		return fmt.Errorf("processor not initialized, call InitProcessor first")
 	}
+
+	// Get action type for logging
+	actionType := fmt.Sprintf("%T", task.Action)
+
+	// Validate the task
+	if task.Action == nil {
+		return fmt.Errorf("cannot enqueue task with nil action")
+	}
+
+	// Get retry configuration for the action directly as jobqueue.RetryConfig
+	jqRetryConfig := getJobQueueRetryConfig(task.Action)
+
+	// Log detailed information about the task being enqueued
+	if p.Settings.Debug {
+		log.Printf("Enqueuing task for action type %s with retry config: enabled=%v, maxRetries=%d",
+			actionType, jqRetryConfig.Enabled, jqRetryConfig.MaxRetries)
+	}
+
+	// Enqueue the task directly to the job queue
+	job, err := p.JobQueue.Enqueue(&ActionAdapter{action: task.Action}, task.Detection, jqRetryConfig)
+	if err != nil {
+		// Handle specific error types with appropriate messages
+		switch {
+		case strings.Contains(err.Error(), "queue is full"):
+			queueSize := p.JobQueue.GetMaxJobs()
+			log.Printf("❌ Job queue is full (capacity: %d), dropping task for action type %s",
+				queueSize, actionType)
+
+			// Suggest increasing queue size if this happens frequently
+			return fmt.Errorf("job queue is full (capacity: %d): %w", queueSize, err)
+
+		case strings.Contains(err.Error(), "queue has been stopped"):
+			log.Printf("❌ Cannot enqueue task for action type %s: job queue has been stopped",
+				actionType)
+			return fmt.Errorf("job queue has been stopped, cannot enqueue task for %s: %w",
+				actionType, err)
+
+		default:
+			log.Printf("❌ Failed to enqueue task for action type %s: %v", actionType, err)
+			return fmt.Errorf("failed to enqueue task for %s: %w", actionType, err)
+		}
+	}
+
+	if p.Settings.Debug {
+		speciesName := "unknown"
+		if task.Detection.Note.CommonName != "" {
+			speciesName = task.Detection.Note.CommonName
+		}
+
+		log.Printf("✅ Task enqueued as job %s for action type %s (species: %s)",
+			job.ID, actionType, speciesName)
+	}
+
+	return nil
 }

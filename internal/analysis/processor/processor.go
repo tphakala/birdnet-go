@@ -2,6 +2,7 @@
 package processor
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math"
@@ -10,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/analysis/queue"
+	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -44,7 +45,8 @@ type Processor struct {
 	dogDetectionMutex   sync.Mutex
 	detectionMutex      sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
 	controlChan         chan string
-	JobQueue            *JobQueue // Queue for managing job retries
+	JobQueue            *jobqueue.JobQueue // Queue for managing job retries
+	workerCancel        context.CancelFunc // Function to cancel worker goroutines
 }
 
 // DynamicThreshold represents the dynamic threshold configuration for a species.
@@ -92,9 +94,12 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		DynamicThresholds:   make(map[string]*DynamicThreshold),
 		pendingDetections:   make(map[string]PendingDetection),
 		lastDogDetectionLog: make(map[string]time.Time),
-		controlChan:         make(chan string),
-		JobQueue:            NewJobQueue(), // Initialize the job queue
+		controlChan:         make(chan string, 10),  // Buffered channel to prevent blocking
+		JobQueue:            jobqueue.NewJobQueue(), // Initialize the job queue
 	}
+
+	// Initialize the global processor instance for the adapter
+	InitProcessor(p)
 
 	// Start the detection processor
 	p.startDetectionProcessor()
@@ -129,7 +134,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 func (p *Processor) startDetectionProcessor() {
 	go func() {
 		// ResultsQueue is fed by myaudio.ProcessData()
-		for item := range queue.ResultsQueue {
+		for item := range birdnet.ResultsQueue {
 			itemCopy := item
 			p.processDetections(&itemCopy)
 		}
@@ -138,7 +143,7 @@ func (p *Processor) startDetectionProcessor() {
 
 // processDetections examines each detection from the queue, updating held detections
 // with new or higher-confidence instances and setting an appropriate flush deadline.
-func (p *Processor) processDetections(item *queue.Results) {
+func (p *Processor) processDetections(item *birdnet.Results) {
 	// Delay before a detection is considered final and is flushed.
 	// TODO: make this configurable
 	const delay = 15 * time.Second
@@ -186,7 +191,7 @@ func (p *Processor) processDetections(item *queue.Results) {
 }
 
 // processResults processes the results from the BirdNET prediction and returns a list of detections.
-func (p *Processor) processResults(item *queue.Results) []Detections {
+func (p *Processor) processResults(item *birdnet.Results) []Detections {
 	var detections []Detections
 
 	// Collect processing time metric
@@ -264,7 +269,7 @@ func (p *Processor) processResults(item *queue.Results) []Detections {
 }
 
 // handleDogDetection handles the detection of dog barks and updates the last detection timestamp.
-func (p *Processor) handleDogDetection(item *queue.Results, speciesLowercase string, result datastore.Results) {
+func (p *Processor) handleDogDetection(item *birdnet.Results, speciesLowercase string, result datastore.Results) {
 	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, "dog") &&
 		result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
 		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, item.Source)
@@ -275,7 +280,7 @@ func (p *Processor) handleDogDetection(item *queue.Results, speciesLowercase str
 }
 
 // handleHumanDetection handles the detection of human vocalizations and updates the last detection timestamp.
-func (p *Processor) handleHumanDetection(item *queue.Results, speciesLowercase string, result datastore.Results) {
+func (p *Processor) handleHumanDetection(item *birdnet.Results, speciesLowercase string, result datastore.Results) {
 	// only check this if privacy filter is enabled
 	if p.Settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human ") &&
 		result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
@@ -377,7 +382,13 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, species str
 	for _, action := range actionList {
 		task := &Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
 		if err := EnqueueTask(task); err != nil {
-			log.Printf("Failed to enqueue task for %s: %v", species, err)
+			// Check error message instead of using errors.Is to avoid import cycle
+			if err.Error() == "worker queue is full" {
+				log.Printf("❌ Worker queue is full, dropping task for %s", species)
+			} else {
+				log.Printf("Failed to enqueue task for %s: %v", species, err)
+			}
+			continue
 		}
 	}
 
@@ -511,12 +522,12 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 		bwClient := p.GetBwClient() // Use getter for thread safety
 		if bwClient != nil {
 			// Create BirdWeather retry config from settings
-			bwRetryConfig := RetryConfig{
-				Enabled:      p.Settings.Realtime.Birdweather.RetryEnabled,
-				MaxRetries:   p.Settings.Realtime.Birdweather.MaxRetries,
-				InitialDelay: time.Duration(p.Settings.Realtime.Birdweather.InitialDelay) * time.Second,
-				MaxDelay:     time.Duration(p.Settings.Realtime.Birdweather.MaxDelay) * time.Second,
-				Multiplier:   p.Settings.Realtime.Birdweather.BackoffMultiplier,
+			bwRetryConfig := jobqueue.RetryConfig{
+				Enabled:      p.Settings.Realtime.Birdweather.RetrySettings.Enabled,
+				MaxRetries:   p.Settings.Realtime.Birdweather.RetrySettings.MaxRetries,
+				InitialDelay: time.Duration(p.Settings.Realtime.Birdweather.RetrySettings.InitialDelay) * time.Second,
+				MaxDelay:     time.Duration(p.Settings.Realtime.Birdweather.RetrySettings.MaxDelay) * time.Second,
+				Multiplier:   p.Settings.Realtime.Birdweather.RetrySettings.BackoffMultiplier,
 			}
 
 			actions = append(actions, &BirdWeatherAction{
@@ -535,12 +546,12 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 		mqttClient := p.GetMQTTClient()
 		if mqttClient != nil && mqttClient.IsConnected() {
 			// Create MQTT retry config from settings
-			mqttRetryConfig := RetryConfig{
-				Enabled:      p.Settings.Realtime.MQTT.RetryEnabled,
-				MaxRetries:   p.Settings.Realtime.MQTT.MaxRetries,
-				InitialDelay: time.Duration(p.Settings.Realtime.MQTT.InitialDelay) * time.Second,
-				MaxDelay:     time.Duration(p.Settings.Realtime.MQTT.MaxDelay) * time.Second,
-				Multiplier:   p.Settings.Realtime.MQTT.BackoffMultiplier,
+			mqttRetryConfig := jobqueue.RetryConfig{
+				Enabled:      p.Settings.Realtime.MQTT.RetrySettings.Enabled,
+				MaxRetries:   p.Settings.Realtime.MQTT.RetrySettings.MaxRetries,
+				InitialDelay: time.Duration(p.Settings.Realtime.MQTT.RetrySettings.InitialDelay) * time.Second,
+				MaxDelay:     time.Duration(p.Settings.Realtime.MQTT.RetrySettings.MaxDelay) * time.Second,
+				Multiplier:   p.Settings.Realtime.MQTT.RetrySettings.BackoffMultiplier,
 			}
 
 			actions = append(actions, &MqttAction{
@@ -594,6 +605,32 @@ func (p *Processor) DisconnectBwClient() {
 }
 
 // GetJobQueueStats returns statistics about the job queue
-func (p *Processor) GetJobQueueStats() JobStatsSnapshot {
+// This method is thread-safe as it delegates to JobQueue.GetStats() which handles locking internally
+func (p *Processor) GetJobQueueStats() jobqueue.JobStatsSnapshot {
 	return p.JobQueue.GetStats()
+}
+
+// Shutdown gracefully stops all processor components
+func (p *Processor) Shutdown() error {
+	// Cancel all worker goroutines
+	if p.workerCancel != nil {
+		p.workerCancel()
+	}
+
+	// Stop the job queue with a timeout
+	if err := p.JobQueue.StopWithTimeout(30 * time.Second); err != nil {
+		log.Printf("Warning: job queue shutdown timed out: %v", err)
+	}
+
+	// Disconnect BirdWeather client
+	p.DisconnectBwClient()
+
+	// Disconnect MQTT client if connected
+	mqttClient := p.GetMQTTClient()
+	if mqttClient != nil && mqttClient.IsConnected() {
+		mqttClient.Disconnect()
+	}
+
+	log.Println("Processor shutdown complete")
+	return nil
 }

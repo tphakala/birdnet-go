@@ -7,7 +7,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/analysis/queue"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -69,7 +68,7 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 	}
 
 	// Create a Results message to be sent through queue to processor
-	resultsMessage := queue.Results{
+	resultsMessage := birdnet.Results{
 		StartTime:   startTime,
 		ElapsedTime: elapsedTime,
 		PCMdata:     data,
@@ -82,7 +81,7 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 
 	// Send the results to the queue
 	select {
-	case queue.ResultsQueue <- copyToSend:
+	case birdnet.ResultsQueue <- copyToSend:
 		// Results enqueued successfully
 	default:
 		log.Println("❌ Results queue is full!")
