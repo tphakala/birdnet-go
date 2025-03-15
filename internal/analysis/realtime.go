@@ -11,15 +11,14 @@ import (
 	"time"
 
 	"github.com/shirou/gopsutil/v3/host"
-	"github.com/tphakala/birdnet-go/internal/imageprovider"
-
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
-	"github.com/tphakala/birdnet-go/internal/analysis/queue"
+	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"github.com/tphakala/birdnet-go/internal/weather"
@@ -111,8 +110,9 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		log.Println("⚠️  Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
 	}
 
-	// init detection queue
-	queue.Init(5, 5)
+	// Queue is now initialized at package level in birdnet package
+	// Optionally resize the queue if needed
+	birdnet.ResizeQueue(5)
 
 	// Initialize Prometheus metrics manager
 	metrics, err := telemetry.NewMetrics()
