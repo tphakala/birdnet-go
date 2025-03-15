@@ -276,17 +276,23 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 			return
 
 		case <-ticker.C:
+			log.Println("🧹 Running clip cleanup task")
+
 			// age based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "age" {
-				if err := diskmanager.AgeBasedCleanup(quitChan, dataStore); err != nil {
+				if err, clipsRemoved, diskUtilization := diskmanager.AgeBasedCleanup(quitChan, dataStore); err != nil {
 					log.Printf("Error during age-based cleanup: %v", err)
+				} else {
+					log.Printf("🧹 Age-based cleanup completed successfully, clips removed: %d, current disk utilization: %d%%", clipsRemoved, diskUtilization)
 				}
 			}
 
 			// priority based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "usage" {
-				if err := diskmanager.UsageBasedCleanup(quitChan, dataStore); err != nil {
+				if err, clipsRemoved, diskUtilization := diskmanager.UsageBasedCleanup(quitChan, dataStore); err != nil {
 					log.Printf("Error during usage-based cleanup: %v", err)
+				} else {
+					log.Printf("🧹 Usage-based cleanup completed successfully, clips removed: %d, current disk utilization: %d%%", clipsRemoved, diskUtilization)
 				}
 			}
 		}

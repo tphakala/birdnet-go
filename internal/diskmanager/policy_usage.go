@@ -19,7 +19,8 @@ type Policy struct {
 }
 
 // UsageBasedCleanup cleans up old audio files based on the configuration and monitors for quit signals
-func UsageBasedCleanup(quitChan chan struct{}, db Interface) error {
+// Returns error, number of clips removed, and current disk utilization percentage.
+func UsageBasedCleanup(quitChan chan struct{}, db Interface) (err error, clipsRemoved, diskUtilization int) {
 	settings := conf.Setting()
 
 	debug := settings.Realtime.Audio.Export.Retention.Debug
@@ -29,7 +30,7 @@ func UsageBasedCleanup(quitChan chan struct{}, db Interface) error {
 	// Convert 80% string etc. to 80.0 float64
 	threshold, err := conf.ParsePercentage(settings.Realtime.Audio.Export.Retention.MaxUsage)
 	if err != nil {
-		return fmt.Errorf("failed to parse usage threshold: %w", err)
+		return fmt.Errorf("failed to parse usage threshold: %w", err), 0, 0
 	}
 
 	if debug {
@@ -39,8 +40,10 @@ func UsageBasedCleanup(quitChan chan struct{}, db Interface) error {
 	// Check handle disk usage
 	diskUsage, err := GetDiskUsage(baseDir)
 	if err != nil {
-		return fmt.Errorf("failed to get disk usage for %s: %w", baseDir, err)
+		return fmt.Errorf("failed to get disk usage for %s: %w", baseDir, err), 0, 0
 	}
+
+	deletedFiles := 0
 
 	if diskUsage > threshold {
 		if debug {
@@ -50,32 +53,40 @@ func UsageBasedCleanup(quitChan chan struct{}, db Interface) error {
 		// Get the list of audio files, limited to allowed file types defined in file_utils.go
 		files, err := GetAudioFiles(baseDir, allowedFileTypes, db, debug)
 		if err != nil {
-			return fmt.Errorf("failed to get audio files for usage-based cleanup: %w", err)
+			return fmt.Errorf("failed to get audio files for usage-based cleanup: %w", err), 0, int(diskUsage)
 		}
 
 		if len(files) == 0 {
 			if debug {
 				log.Printf("No eligible audio files found for cleanup in %s", baseDir)
 			}
-			return nil
+			return nil, 0, int(diskUsage)
 		}
 
 		// Sort files by priority and get species count per directory
 		speciesMonthCount := sortFiles(files, debug)
 
 		// Perform the cleanup
-		err = performCleanup(files, baseDir, threshold, minClipsPerSpecies, speciesMonthCount, debug, quitChan)
+		deletedFiles, err = performCleanup(files, baseDir, threshold, minClipsPerSpecies, speciesMonthCount, debug, quitChan)
 		if err != nil {
-			return fmt.Errorf("error during usage-based cleanup: %w", err)
+			return fmt.Errorf("error during usage-based cleanup: %w", err), deletedFiles, int(diskUsage)
+		}
+
+		// Get updated disk usage after cleanup
+		diskUsage, err = GetDiskUsage(baseDir)
+		if err != nil {
+			return fmt.Errorf("cleanup completed but failed to get updated disk usage: %w", err), deletedFiles, 0
 		}
 	} else if debug {
 		log.Printf("Disk usage %.1f%% is below the %.1f%% threshold. No cleanup needed.", diskUsage, threshold)
 	}
 
-	return nil
+	return nil, deletedFiles, int(diskUsage)
 }
 
-func performCleanup(files []FileInfo, baseDir string, threshold float64, minClipsPerSpecies int, speciesMonthCount map[string]map[string]int, debug bool, quitChan chan struct{}) error {
+func performCleanup(files []FileInfo, baseDir string, threshold float64, minClipsPerSpecies int,
+	speciesMonthCount map[string]map[string]int, debug bool,
+	quitChan chan struct{}) (int, error) {
 	// Delete files until disk usage is below the threshold or 100 files have been deleted
 	deletedFiles := 0
 	maxDeletions := 1000
@@ -86,7 +97,7 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 		select {
 		case <-quitChan:
 			log.Println("Received quit signal, ending cleanup run.")
-			return nil
+			return deletedFiles, nil
 		default:
 			// Skip locked files
 			if file.Locked {
@@ -102,7 +113,7 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 
 			diskUsage, err := GetDiskUsage(baseDir)
 			if err != nil {
-				return fmt.Errorf("failed to get disk usage during cleanup: %w", err)
+				return deletedFiles, fmt.Errorf("failed to get disk usage during cleanup: %w", err)
 			}
 
 			// Check if disk usage is below threshold or max deletions reached
@@ -133,7 +144,7 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 				log.Printf("Failed to remove %s: %s", file.Path, err)
 				// Continue with other files instead of stopping the entire cleanup
 				if errorCount > 10 {
-					return fmt.Errorf("too many errors (%d) during usage-based cleanup, last error: %w", errorCount, err)
+					return deletedFiles, fmt.Errorf("too many errors (%d) during usage-based cleanup, last error: %w", errorCount, err)
 				}
 				continue
 			}
@@ -156,7 +167,7 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 		log.Printf("Cleanup completed. Deleted %d files, freed %d bytes", deletedFiles, totalFreedSpace)
 	}
 
-	return nil
+	return deletedFiles, nil
 }
 
 func sortFiles(files []FileInfo, debug bool) map[string]map[string]int {

@@ -13,7 +13,8 @@ import (
 )
 
 // AgeBasedCleanup removes clips from the filesystem based on their age and the number of clips per species.
-func AgeBasedCleanup(quit <-chan struct{}, db Interface) error {
+// Returns error, number of clips removed, and current disk utilization percentage.
+func AgeBasedCleanup(quit <-chan struct{}, db Interface) (err error, clipsRemoved, diskUtilization int) {
 	settings := conf.Setting()
 
 	debug := settings.Realtime.Audio.Export.Retention.Debug
@@ -24,7 +25,7 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) error {
 	retentionPeriodInHours, err := conf.ParseRetentionPeriod(retentionPeriod)
 	if err != nil {
 		log.Printf("Invalid retention period: %s\n", err)
-		return err
+		return err, 0, 0
 	}
 
 	if debug {
@@ -34,14 +35,21 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) error {
 	// Get the list of audio files, limited to allowed file types defined in file_utils.go
 	files, err := GetAudioFiles(baseDir, allowedFileTypes, db, debug)
 	if err != nil {
-		return fmt.Errorf("failed to get audio files for age-based cleanup: %w", err)
+		return fmt.Errorf("failed to get audio files for age-based cleanup: %w", err), 0, 0
 	}
 
 	if len(files) == 0 {
 		if debug {
 			log.Printf("No eligible audio files found for cleanup in %s", baseDir)
 		}
-		return nil
+
+		// Get current disk utilization even if no files were processed
+		diskUsage, err := GetDiskUsage(baseDir)
+		if err != nil {
+			return fmt.Errorf("failed to get disk usage: %w", err), 0, 0
+		}
+
+		return nil, 0, int(diskUsage)
 	}
 
 	// Create a map to keep track of the number of files per species per subdirectory
@@ -49,7 +57,15 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) error {
 
 	expirationTime := time.Now().Add(-time.Duration(retentionPeriodInHours) * time.Hour)
 
-	return processFiles(files, speciesMonthCount, expirationTime, minClipsPerSpecies, debug, quit)
+	deletedCount, err := processFiles(files, speciesMonthCount, expirationTime, minClipsPerSpecies, debug, quit)
+
+	// Get current disk utilization after cleanup
+	diskUsage, diskErr := GetDiskUsage(baseDir)
+	if diskErr != nil {
+		return fmt.Errorf("cleanup completed but failed to get disk usage: %w", diskErr), deletedCount, 0
+	}
+
+	return err, deletedCount, int(diskUsage)
 }
 
 // buildSpeciesCountMap creates a map to track the number of files per species per subdirectory
@@ -66,8 +82,9 @@ func buildSpeciesCountMap(files []FileInfo) map[string]map[string]int {
 }
 
 // processFiles handles the deletion of expired files while respecting constraints
+// Returns the number of deleted files and any error that occurred
 func processFiles(files []FileInfo, speciesMonthCount map[string]map[string]int,
-	expirationTime time.Time, minClipsPerSpecies int, debug bool, quit <-chan struct{}) error {
+	expirationTime time.Time, minClipsPerSpecies int, debug bool, quit <-chan struct{}) (int, error) {
 
 	maxDeletions := 1000 // Maximum number of files to delete in one run
 	deletedFiles := 0    // Counter for the number of deleted files
@@ -77,7 +94,7 @@ func processFiles(files []FileInfo, speciesMonthCount map[string]map[string]int,
 		select {
 		case <-quit:
 			log.Printf("Cleanup interrupted by quit signal\n")
-			return nil
+			return deletedFiles, nil
 		default:
 			file := &files[i]
 			if shouldSkipFile(file, debug) {
@@ -97,7 +114,7 @@ func processFiles(files []FileInfo, speciesMonthCount map[string]map[string]int,
 				errorCount++
 				log.Printf("Failed to remove %s: %s\n", file.Path, err)
 				if errorCount > 10 {
-					return fmt.Errorf("too many errors (%d) during age-based cleanup, last error: %w", errorCount, err)
+					return deletedFiles, fmt.Errorf("too many errors (%d) during age-based cleanup, last error: %w", errorCount, err)
 				}
 				continue
 			}
@@ -112,7 +129,7 @@ func processFiles(files []FileInfo, speciesMonthCount map[string]map[string]int,
 				if debug {
 					log.Printf("Reached maximum number of deletions (%d). Ending cleanup.", maxDeletions)
 				}
-				return nil
+				return deletedFiles, nil
 			}
 		}
 	}
@@ -121,7 +138,7 @@ func processFiles(files []FileInfo, speciesMonthCount map[string]map[string]int,
 		log.Printf("Age retention policy applied, total files deleted: %d", deletedFiles)
 	}
 
-	return nil
+	return deletedFiles, nil
 }
 
 // shouldSkipFile checks if a file should be skipped (e.g., if it's locked)
