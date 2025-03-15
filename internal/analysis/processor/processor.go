@@ -98,9 +98,6 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		JobQueue:            jobqueue.NewJobQueue(), // Initialize the job queue
 	}
 
-	// Initialize the global processor instance for the adapter
-	InitProcessor(p)
-
 	// Start the detection processor
 	p.startDetectionProcessor()
 
@@ -381,12 +378,13 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, species str
 	actionList := p.getActionsForItem(&item.Detection)
 	for _, action := range actionList {
 		task := &Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
-		if err := EnqueueTask(task); err != nil {
+		if err := p.EnqueueTask(task); err != nil {
 			// Check error message instead of using errors.Is to avoid import cycle
 			if err.Error() == "worker queue is full" {
 				log.Printf("❌ Worker queue is full, dropping task for %s", species)
 			} else {
-				log.Printf("Failed to enqueue task for %s: %v", species, err)
+				sanitizedErr := sanitizeError(err)
+				log.Printf("Failed to enqueue task for %s: %v", species, sanitizedErr)
 			}
 			continue
 		}
