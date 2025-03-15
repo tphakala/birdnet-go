@@ -437,11 +437,12 @@ func TestRetryBackoff(t *testing.T) {
 		queue.ProcessImmediately(ctx)
 
 		// Wait for appropriate time based on the retry delay
-		if i == 0 {
+		switch i {
+		case 0:
 			time.Sleep(30 * time.Millisecond) // A bit more than initialDelay
-		} else if i == 1 {
+		case 1:
 			time.Sleep(60 * time.Millisecond) // A bit more than initialDelay*multiplier
-		} else {
+		default:
 			time.Sleep(30 * time.Millisecond)
 		}
 	}
@@ -1358,11 +1359,12 @@ func TestRateLimiting(t *testing.T) {
 		config := RetryConfig{Enabled: false}
 
 		_, err := queue.Enqueue(action, data, config)
-		if err == nil {
+		switch {
+		case err == nil:
 			successCount.Add(1)
-		} else if errors.Is(err, ErrQueueFull) {
+		case errors.Is(err, ErrQueueFull):
 			rejectionCount.Add(1)
-		} else {
+		default:
 			t.Errorf("Unexpected error: %v", err)
 		}
 
