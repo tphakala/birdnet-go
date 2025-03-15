@@ -4,20 +4,23 @@
 package diskmanager
 
 import (
+	"fmt"
 	"syscall"
 )
 
-// GetDiskUsage returns the disk usage percentage for Unix-based systems (Linux and macOS)
-func GetDiskUsage(baseDir string) (float64, error) {
+// GetDiskUsage returns the disk usage percentage for the given path
+func GetDiskUsage(path string) (float64, error) {
 	var stat syscall.Statfs_t
-	err := syscall.Statfs(baseDir, &stat)
+	err := syscall.Statfs(path, &stat)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to get disk stats: %w", err)
 	}
 
-	total := stat.Blocks * uint64(stat.Bsize)
-	free := stat.Bavail * uint64(stat.Bsize)
-	used := total - free
+	// Calculate disk usage percentage
+	totalBlocks := stat.Blocks
+	freeBlocks := stat.Bfree
+	usedBlocks := totalBlocks - freeBlocks
+	usagePercentage := float64(usedBlocks) / float64(totalBlocks) * 100.0
 
-	return (float64(used) / float64(total)) * 100, nil
+	return usagePercentage, nil
 }
