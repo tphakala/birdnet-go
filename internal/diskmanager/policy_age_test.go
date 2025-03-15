@@ -300,6 +300,10 @@ func TestAgeBasedCleanupReturnValues(t *testing.T) {
 	// Track which files were deleted
 	deletedFiles := make(map[string]bool)
 
+	// Test configuration
+	initialDiskUtilization := 90
+	utilizationReductionPerFile := 5 // Each deleted file reduces utilization by 5%
+
 	// Create a test-specific implementation that uses the real files
 	result := testAgeBasedCleanupWithRealFiles(
 		quitChan,
@@ -307,8 +311,9 @@ func TestAgeBasedCleanupReturnValues(t *testing.T) {
 		testDir,
 		[]string{recentFile, oldFile1, oldFile2},
 		deletedFiles,
-		90, // Initial disk utilization
-		0,  // minClipsPerSpecies
+		initialDiskUtilization,      // Initial disk utilization
+		0,                           // minClipsPerSpecies
+		utilizationReductionPerFile, // Reduction per file deleted
 	)
 
 	// Verify the return values
@@ -317,7 +322,9 @@ func TestAgeBasedCleanupReturnValues(t *testing.T) {
 
 	// With initial disk utilization of 90% and 2 files deleted at 5% reduction each,
 	// we expect 90 - (2 * 5) = 80% utilization
-	assert.Equal(t, 80, result.DiskUtilization, "AgeBasedCleanup should return 80% disk utilization")
+	expectedDiskUtilization := initialDiskUtilization - (2 * utilizationReductionPerFile)
+	assert.Equal(t, expectedDiskUtilization, result.DiskUtilization,
+		"AgeBasedCleanup should return %d%% disk utilization", expectedDiskUtilization)
 
 	// Verify that the correct files were deleted
 	assert.True(t, deletedFiles[oldFile1], "Old file 1 should have been deleted")
@@ -334,6 +341,7 @@ func testAgeBasedCleanupWithRealFiles(
 	deletedFiles map[string]bool,
 	initialDiskUtilization int,
 	minClipsPerSpecies int,
+	utilizationReductionPerFile int,
 ) AgeCleanupResult {
 	// This implementation simulates the real AgeBasedCleanup function
 	// but with controlled inputs and outputs
@@ -343,7 +351,6 @@ func testAgeBasedCleanupWithRealFiles(
 
 	// Track current disk utilization
 	currentDiskUtilization := initialDiskUtilization
-	utilizationReductionPerFile := 5 // Reduction per file deleted
 
 	// Get the list of files
 	files := []FileInfo{}
@@ -416,6 +423,7 @@ func testAgeBasedCleanupWithRealFiles(
 		speciesCount[file.Species][subDir]--
 
 		// Reduce disk utilization for each deleted file
+		// In a real system, this would be based on file size relative to total storage
 		currentDiskUtilization -= utilizationReductionPerFile
 		if currentDiskUtilization < 0 {
 			currentDiskUtilization = 0
