@@ -658,6 +658,10 @@ func TestUsageBasedCleanupReturnValues(t *testing.T) {
 	// Track which files were deleted
 	deletedFiles := make(map[string]bool)
 
+	// Initial disk usage and expected reduction per file
+	initialDiskUsage := 90.0
+	diskUsageReductionPerFile := 5.0
+
 	// Call our test-specific implementation that uses real files
 	result := testUsageBasedCleanupWithRealFiles(
 		quitChan,
@@ -665,14 +669,18 @@ func TestUsageBasedCleanupReturnValues(t *testing.T) {
 		tempDir,
 		filePaths,
 		deletedFiles,
-		90.0,  // Initial disk usage above threshold
-		false, // Don't check locked files
+		initialDiskUsage, // Initial disk usage above threshold
+		false,            // Don't check locked files
 	)
+
+	// Calculate expected disk utilization after deleting 2 files
+	expectedDiskUtilization := int(initialDiskUsage - (2 * diskUsageReductionPerFile))
 
 	// Verify the return values
 	assert.NoError(t, result.Err, "UsageBasedCleanup should not return an error")
 	assert.Equal(t, 2, result.ClipsRemoved, "UsageBasedCleanup should remove 2 clips")
-	assert.Equal(t, 65, result.DiskUtilization, "UsageBasedCleanup should return 65% disk utilization")
+	assert.Equal(t, expectedDiskUtilization, result.DiskUtilization,
+		"UsageBasedCleanup should return %d%% disk utilization", expectedDiskUtilization)
 
 	// Verify that the first two files were deleted (since disk usage is above threshold)
 	assert.True(t, deletedFiles[filePaths[0]], "File should have been deleted: %s", filePaths[0])
@@ -700,6 +708,9 @@ func testUsageBasedCleanupWithRealFiles(
 
 	// Use the provided initial disk usage
 	currentDiskUsage := initialDiskUsage
+
+	// Define how much each file deletion reduces disk usage
+	diskUsageReductionPerFile := 5.0
 
 	// Get locked file paths if needed
 	var lockedPathsMap map[string]bool
@@ -778,7 +789,7 @@ func testUsageBasedCleanupWithRealFiles(
 			speciesCount[file.Species][subDir]--
 
 			// Reduce disk usage after each delete (simulating cleanup progress)
-			currentDiskUsage -= 5.0 // Simple reduction for testing
+			currentDiskUsage -= diskUsageReductionPerFile
 
 			// Stop if we've reached the threshold
 			if currentDiskUsage <= threshold {
@@ -787,15 +798,8 @@ func testUsageBasedCleanupWithRealFiles(
 		}
 	}
 
-	// Calculate final disk utilization for the result
-	finalDiskUtilization := 65
-	if currentDiskUsage <= threshold && initialDiskUsage < threshold {
-		// If we started below threshold and stayed below, use the current disk usage
-		finalDiskUtilization = int(currentDiskUsage)
-	}
-
-	// Return the results
-	return UsageCleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: finalDiskUtilization}
+	// Return the results with the actual current disk usage
+	return UsageCleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: int(currentDiskUsage)}
 }
 
 // TestUsageBasedCleanupBelowThreshold tests that no files are deleted when disk usage is below threshold
@@ -838,6 +842,9 @@ func TestUsageBasedCleanupBelowThreshold(t *testing.T) {
 	// Track which files were deleted
 	deletedFiles := make(map[string]bool)
 
+	// Initial disk usage below threshold
+	initialDiskUsage := 70.0
+
 	// Call our test-specific implementation with disk usage below threshold
 	result := testUsageBasedCleanupWithRealFiles(
 		quitChan,
@@ -845,14 +852,15 @@ func TestUsageBasedCleanupBelowThreshold(t *testing.T) {
 		tempDir,
 		filePaths,
 		deletedFiles,
-		70.0,  // Initial disk usage below threshold
-		false, // Don't check locked files
+		initialDiskUsage, // Initial disk usage below threshold
+		false,            // Don't check locked files
 	)
 
 	// Verify the return values
 	assert.NoError(t, result.Err, "UsageBasedCleanup should not return an error")
 	assert.Equal(t, 0, result.ClipsRemoved, "UsageBasedCleanup should not remove any clips")
-	assert.Equal(t, 70, result.DiskUtilization, "UsageBasedCleanup should return 70% disk utilization")
+	assert.Equal(t, int(initialDiskUsage), result.DiskUtilization,
+		"UsageBasedCleanup should return %d%% disk utilization", int(initialDiskUsage))
 
 	// Verify that no files were deleted (since disk usage is below threshold)
 	for _, path := range filePaths {
@@ -903,6 +911,10 @@ func TestUsageBasedCleanupLockedFiles(t *testing.T) {
 	// Track which files were deleted
 	deletedFiles := make(map[string]bool)
 
+	// Initial disk usage and expected reduction per file
+	initialDiskUsage := 90.0
+	diskUsageReductionPerFile := 5.0
+
 	// Call our test-specific implementation with locked files
 	result := testUsageBasedCleanupWithRealFiles(
 		quitChan,
@@ -910,14 +922,18 @@ func TestUsageBasedCleanupLockedFiles(t *testing.T) {
 		tempDir,
 		filePaths,
 		deletedFiles,
-		90.0, // Initial disk usage above threshold
-		true, // Check locked files
+		initialDiskUsage, // Initial disk usage above threshold
+		true,             // Check locked files
 	)
+
+	// Calculate expected disk utilization after deleting 2 files
+	expectedDiskUtilization := int(initialDiskUsage - (2 * diskUsageReductionPerFile))
 
 	// Verify the return values
 	assert.NoError(t, result.Err, "UsageBasedCleanup should not return an error")
 	assert.Equal(t, 2, result.ClipsRemoved, "UsageBasedCleanup should remove 2 clips")
-	assert.Equal(t, 65, result.DiskUtilization, "UsageBasedCleanup should return 65% disk utilization")
+	assert.Equal(t, expectedDiskUtilization, result.DiskUtilization,
+		"UsageBasedCleanup should return %d%% disk utilization", expectedDiskUtilization)
 
 	// Verify that non-locked files were deleted
 	assert.True(t, deletedFiles[filepath.Join(tempDir, "bubo_bubo_80p_20210101T150405Z.wav")],
