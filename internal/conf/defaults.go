@@ -100,6 +100,11 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.birdweather.id", "")
 	viper.SetDefault("realtime.birdweather.threshold", 0.8)
 	viper.SetDefault("realtime.birdweather.locationaccuracy", 500)
+	viper.SetDefault("realtime.birdweather.retryenabled", true)
+	viper.SetDefault("realtime.birdweather.maxretries", 10)
+	viper.SetDefault("realtime.birdweather.initialdelay", 30)
+	viper.SetDefault("realtime.birdweather.maxdelay", 1800)
+	viper.SetDefault("realtime.birdweather.backoffmultiplier", 2.0)
 
 	// OpenWeather configuration
 	/*
@@ -133,6 +138,11 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.mqtt.topic", "birdnet")
 	viper.SetDefault("realtime.mqtt.username", "birdnet")
 	viper.SetDefault("realtime.mqtt.password", "secret")
+	viper.SetDefault("realtime.mqtt.retryenabled", true)
+	viper.SetDefault("realtime.mqtt.maxretries", 5)
+	viper.SetDefault("realtime.mqtt.initialdelay", 30)
+	viper.SetDefault("realtime.mqtt.maxdelay", 1800)
+	viper.SetDefault("realtime.mqtt.backoffmultiplier", 2.0)
 
 	// Privacy filter configuration
 	viper.SetDefault("realtime.privacyfilter.enabled", true)

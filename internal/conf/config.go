@@ -82,11 +82,16 @@ type DynamicThresholdSettings struct {
 
 // BirdweatherSettings contains settings for Birdweather integration.
 type BirdweatherSettings struct {
-	Enabled          bool    // true to enable birdweather uploads
-	Debug            bool    // true to enable debug mode
-	ID               string  // birdweather ID
-	Threshold        float64 // threshold for prediction confidence for uploads
-	LocationAccuracy float64 // accuracy of location in meters
+	Enabled           bool    // true to enable birdweather uploads
+	Debug             bool    // true to enable debug mode
+	ID                string  // birdweather ID
+	Threshold         float64 // threshold for prediction confidence for uploads
+	LocationAccuracy  float64 // accuracy of location in meters
+	RetryEnabled      bool    // true to enable retry mechanism for failed uploads
+	MaxRetries        int     // maximum number of retry attempts
+	InitialDelay      int     // initial delay before first retry in seconds
+	MaxDelay          int     // maximum delay between retries in seconds
+	BackoffMultiplier float64 // multiplier for exponential backoff
 }
 
 // WeatherSettings contains all weather-related settings
@@ -128,13 +133,18 @@ type RTSPSettings struct {
 	URLs      []string // RTSP stream URL
 }
 
-// MQTTSettings contains settings for MQTT integration.
+// MQTTSettings struct for MQTT configuration
 type MQTTSettings struct {
-	Enabled  bool   // true to enable MQTT
-	Broker   string // MQTT (tcp://host:port)
-	Topic    string // MQTT topic
-	Username string // MQTT username
-	Password string // MQTT password
+	Enabled           bool    // true to enable MQTT
+	Broker            string  // MQTT (tcp://host:port)
+	Topic             string  // MQTT topic
+	Username          string  // MQTT username
+	Password          string  // MQTT password
+	RetryEnabled      bool    // true to enable retry mechanism for failed publishes
+	MaxRetries        int     // maximum number of retry attempts
+	InitialDelay      int     // initial delay before first retry in seconds
+	MaxDelay          int     // maximum delay between retries in seconds
+	BackoffMultiplier float64 // multiplier for exponential backoff
 }
 
 // TelemetrySettings contains settings for telemetry.

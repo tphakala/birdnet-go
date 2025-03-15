@@ -44,6 +44,7 @@ type Processor struct {
 	dogDetectionMutex   sync.Mutex
 	detectionMutex      sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
 	controlChan         chan string
+	JobQueue            *JobQueue // Queue for managing job retries
 }
 
 // DynamicThreshold represents the dynamic threshold configuration for a species.
@@ -91,6 +92,8 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		DynamicThresholds:   make(map[string]*DynamicThreshold),
 		pendingDetections:   make(map[string]PendingDetection),
 		lastDogDetectionLog: make(map[string]time.Time),
+		controlChan:         make(chan string),
+		JobQueue:            NewJobQueue(), // Initialize the job queue
 	}
 
 	// Start the detection processor
@@ -115,6 +118,9 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 
 	// Initialize MQTT client if enabled in settings
 	p.initializeMQTT(settings)
+
+	// Start the job queue
+	p.JobQueue.Start()
 
 	return p
 }
@@ -369,7 +375,10 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, species str
 	item.Detection.Note.BeginTime = item.FirstDetected
 	actionList := p.getActionsForItem(&item.Detection)
 	for _, action := range actionList {
-		workerQueue <- Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
+		task := &Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
+		if err := EnqueueTask(task); err != nil {
+			log.Printf("Failed to enqueue task for %s: %v", species, err)
+		}
 	}
 
 	// Update BirdNET metrics detection counter if enabled
@@ -501,12 +510,23 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	if p.Settings.Realtime.Birdweather.Enabled {
 		bwClient := p.GetBwClient() // Use getter for thread safety
 		if bwClient != nil {
+			// Create BirdWeather retry config from settings
+			bwRetryConfig := RetryConfig{
+				Enabled:      p.Settings.Realtime.Birdweather.RetryEnabled,
+				MaxRetries:   p.Settings.Realtime.Birdweather.MaxRetries,
+				InitialDelay: time.Duration(p.Settings.Realtime.Birdweather.InitialDelay) * time.Second,
+				MaxDelay:     time.Duration(p.Settings.Realtime.Birdweather.MaxDelay) * time.Second,
+				Multiplier:   p.Settings.Realtime.Birdweather.BackoffMultiplier,
+			}
+
 			actions = append(actions, &BirdWeatherAction{
 				Settings:     p.Settings,
 				EventTracker: p.EventTracker,
 				BwClient:     bwClient,
 				Note:         detection.Note,
-				pcmData:      detection.pcmData3s})
+				pcmData:      detection.pcmData3s,
+				RetryConfig:  bwRetryConfig,
+			})
 		}
 	}
 
@@ -514,12 +534,22 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	if p.Settings.Realtime.MQTT.Enabled {
 		mqttClient := p.GetMQTTClient()
 		if mqttClient != nil && mqttClient.IsConnected() {
+			// Create MQTT retry config from settings
+			mqttRetryConfig := RetryConfig{
+				Enabled:      p.Settings.Realtime.MQTT.RetryEnabled,
+				MaxRetries:   p.Settings.Realtime.MQTT.MaxRetries,
+				InitialDelay: time.Duration(p.Settings.Realtime.MQTT.InitialDelay) * time.Second,
+				MaxDelay:     time.Duration(p.Settings.Realtime.MQTT.MaxDelay) * time.Second,
+				Multiplier:   p.Settings.Realtime.MQTT.BackoffMultiplier,
+			}
+
 			actions = append(actions, &MqttAction{
 				Settings:       p.Settings,
 				MqttClient:     mqttClient,
 				EventTracker:   p.EventTracker,
 				Note:           detection.Note,
 				BirdImageCache: p.BirdImageCache,
+				RetryConfig:    mqttRetryConfig,
 			})
 		}
 	}
@@ -561,4 +591,9 @@ func (p *Processor) DisconnectBwClient() {
 		p.BwClient.Close()
 		p.BwClient = nil
 	}
+}
+
+// GetJobQueueStats returns statistics about the job queue
+func (p *Processor) GetJobQueueStats() JobStatsSnapshot {
+	return p.JobQueue.GetStats()
 }
