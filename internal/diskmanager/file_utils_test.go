@@ -161,36 +161,36 @@ func TestCleanupReturnValues(t *testing.T) {
 	// Test AgeBasedCleanup
 	t.Run("AgeBasedCleanup", func(t *testing.T) {
 		// Call AgeBasedCleanup
-		err, clipsRemoved, diskUtilization := AgeBasedCleanup(quitChan, mockDB)
+		result := AgeBasedCleanup(quitChan, mockDB)
 
 		// Verify the return values
-		if err != nil {
-			t.Logf("AgeBasedCleanup returned error: %v", err)
+		if result.Err != nil {
+			t.Logf("AgeBasedCleanup returned error: %v", result.Err)
 		}
 
 		// Verify that clipsRemoved is a valid count (zero or positive)
-		assert.GreaterOrEqual(t, clipsRemoved, 0, "AgeBasedCleanup should return a valid clips removed count")
+		assert.GreaterOrEqual(t, result.ClipsRemoved, 0, "AgeBasedCleanup should return a valid clips removed count")
 
 		// Verify that diskUtilization is a valid percentage (0-100)
-		assert.GreaterOrEqual(t, diskUtilization, 0, "Disk utilization should be greater than or equal to 0%")
-		assert.LessOrEqual(t, diskUtilization, 100, "Disk utilization should be less than or equal to 100%")
+		assert.GreaterOrEqual(t, result.DiskUtilization, 0, "Disk utilization should be greater than or equal to 0%")
+		assert.LessOrEqual(t, result.DiskUtilization, 100, "Disk utilization should be less than or equal to 100%")
 	})
 
 	// Test UsageBasedCleanup
 	t.Run("UsageBasedCleanup", func(t *testing.T) {
 		// Call UsageBasedCleanup
-		err, clipsRemoved, diskUtilization := UsageBasedCleanup(quitChan, mockDB)
+		result := UsageBasedCleanup(quitChan, mockDB)
 
 		// Verify the return values
-		if err != nil {
-			t.Logf("UsageBasedCleanup returned error: %v", err)
+		if result.Err != nil {
+			t.Logf("UsageBasedCleanup returned error: %v", result.Err)
 		}
 
 		// Verify that clipsRemoved is a valid count (zero or positive)
-		assert.GreaterOrEqual(t, clipsRemoved, 0, "UsageBasedCleanup should return a valid clips removed count")
+		assert.GreaterOrEqual(t, result.ClipsRemoved, 0, "UsageBasedCleanup should return a valid clips removed count")
 
 		// Verify that diskUtilization is a valid percentage (0-100)
-		assert.GreaterOrEqual(t, diskUtilization, 0, "Disk utilization should be greater than or equal to 0%")
-		assert.LessOrEqual(t, diskUtilization, 100, "Disk utilization should be less than or equal to 100%")
+		assert.GreaterOrEqual(t, result.DiskUtilization, 0, "Disk utilization should be greater than or equal to 0%")
+		assert.LessOrEqual(t, result.DiskUtilization, 100, "Disk utilization should be less than or equal to 100%")
 	})
 }

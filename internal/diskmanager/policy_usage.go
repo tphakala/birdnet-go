@@ -18,9 +18,16 @@ type Policy struct {
 	NeverCleanup       map[string]bool // Species to never cleanup
 }
 
+// UsageCleanupResult contains the results of a usage-based cleanup operation
+type UsageCleanupResult struct {
+	Err             error // Any error that occurred during cleanup
+	ClipsRemoved    int   // Number of clips that were removed
+	DiskUtilization int   // Current disk utilization percentage after cleanup
+}
+
 // UsageBasedCleanup cleans up old audio files based on the configuration and monitors for quit signals
-// Returns error, number of clips removed, and current disk utilization percentage.
-func UsageBasedCleanup(quitChan chan struct{}, db Interface) (err error, clipsRemoved, diskUtilization int) {
+// Returns a UsageCleanupResult containing error, number of clips removed, and current disk utilization percentage.
+func UsageBasedCleanup(quitChan chan struct{}, db Interface) UsageCleanupResult {
 	settings := conf.Setting()
 
 	debug := settings.Realtime.Audio.Export.Retention.Debug
@@ -30,58 +37,55 @@ func UsageBasedCleanup(quitChan chan struct{}, db Interface) (err error, clipsRe
 	// Convert 80% string etc. to 80.0 float64
 	threshold, err := conf.ParsePercentage(settings.Realtime.Audio.Export.Retention.MaxUsage)
 	if err != nil {
-		return fmt.Errorf("failed to parse usage threshold: %w", err), 0, 0
+		return UsageCleanupResult{Err: fmt.Errorf("failed to parse usage threshold: %w", err), ClipsRemoved: 0, DiskUtilization: 0}
 	}
 
 	if debug {
 		log.Printf("Starting cleanup process. Base directory: %s, Threshold: %.1f%%", baseDir, threshold)
 	}
 
-	// Check handle disk usage
+	// Get current disk usage
 	diskUsage, err := GetDiskUsage(baseDir)
 	if err != nil {
-		return fmt.Errorf("failed to get disk usage for %s: %w", baseDir, err), 0, 0
+		return UsageCleanupResult{Err: fmt.Errorf("failed to get disk usage for %s: %w", baseDir, err), ClipsRemoved: 0, DiskUtilization: int(diskUsage)}
 	}
 
-	deletedFiles := 0
-
+	// Only perform cleanup if disk usage exceeds threshold
+	var deletedFiles int
 	if diskUsage > threshold {
-		if debug {
-			log.Printf("Disk usage %.1f%% is above the %.1f%% threshold. Cleanup needed.", diskUsage, threshold)
-		}
-
-		// Get the list of audio files, limited to allowed file types defined in file_utils.go
+		// Get all audio files
 		files, err := GetAudioFiles(baseDir, allowedFileTypes, db, debug)
 		if err != nil {
-			return fmt.Errorf("failed to get audio files for usage-based cleanup: %w", err), 0, int(diskUsage)
+			return UsageCleanupResult{Err: fmt.Errorf("failed to get audio files for usage-based cleanup: %w", err), ClipsRemoved: 0, DiskUtilization: int(diskUsage)}
 		}
 
+		// Check if we have any files to process
 		if len(files) == 0 {
 			if debug {
 				log.Printf("No eligible audio files found for cleanup in %s", baseDir)
 			}
-			return nil, 0, int(diskUsage)
+			return UsageCleanupResult{Err: nil, ClipsRemoved: 0, DiskUtilization: int(diskUsage)}
 		}
 
-		// Sort files by priority and get species count per directory
+		// Sort files by timestamp (oldest first)
 		speciesMonthCount := sortFiles(files, debug)
 
 		// Perform the cleanup
 		deletedFiles, err = performCleanup(files, baseDir, threshold, minClipsPerSpecies, speciesMonthCount, debug, quitChan)
 		if err != nil {
-			return fmt.Errorf("error during usage-based cleanup: %w", err), deletedFiles, int(diskUsage)
+			return UsageCleanupResult{Err: fmt.Errorf("error during usage-based cleanup: %w", err), ClipsRemoved: deletedFiles, DiskUtilization: int(diskUsage)}
 		}
 
 		// Get updated disk usage after cleanup
 		diskUsage, err = GetDiskUsage(baseDir)
 		if err != nil {
-			return fmt.Errorf("cleanup completed but failed to get updated disk usage: %w", err), deletedFiles, 0
+			return UsageCleanupResult{Err: fmt.Errorf("cleanup completed but failed to get updated disk usage: %w", err), ClipsRemoved: deletedFiles, DiskUtilization: 0}
 		}
 	} else if debug {
 		log.Printf("Disk usage %.1f%% is below the %.1f%% threshold. No cleanup needed.", diskUsage, threshold)
 	}
 
-	return nil, deletedFiles, int(diskUsage)
+	return UsageCleanupResult{Err: nil, ClipsRemoved: deletedFiles, DiskUtilization: int(diskUsage)}
 }
 
 func performCleanup(files []FileInfo, baseDir string, threshold float64, minClipsPerSpecies int,
