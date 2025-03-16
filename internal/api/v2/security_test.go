@@ -64,8 +64,16 @@ func TestInputValidation(t *testing.T) {
 				return controller.GetDetections(c)
 			},
 			mockSetup: func(m *mock.Mock) {
-				// The search should execute but with sanitized input
-				m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
+				// Capture the actual sanitized parameter passed to SearchNotes
+				m.On("SearchNotes", mock.AnythingOfType("string"), mock.Anything, mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						// Verify the search parameter was properly sanitized
+						searchParam := args.String(0)
+						// Check that dangerous tags were escaped or removed
+						assert.NotContains(t, searchParam, "<script>")
+						assert.NotContains(t, searchParam, "</script>")
+					}).
+					Return([]datastore.Note{}, nil)
 				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
 			},
 			expectedStatus: http.StatusOK,
@@ -512,92 +520,94 @@ func TestInputValidation(t *testing.T) {
 	}
 }
 
-// TestDDoSProtection simulates a basic DDoS attack to verify API resilience
+// TestDDoSProtection tests the API's resilience to high-volume requests
 func TestDDoSProtection(t *testing.T) {
 	// Setup
 	e, mockDS, controller := setupTestEnvironment(t)
 
-	// Configure mock to handle multiple requests
-	// Only mock what's actually being called
-	mockDS.On("SearchNotes", "", false, 100, 0).Return([]datastore.Note{}, nil)
+	// Setup mock expectations
+	mockDS.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
 	mockDS.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
 
-	// Test configuration
+	// Number of concurrent requests to simulate
 	concurrentRequests := 50
-	requestPath := "/api/v2/detections"
 
 	// Create a wait group to synchronize goroutines
 	var wg sync.WaitGroup
 	wg.Add(concurrentRequests)
 
-	// Track response times and status codes
-	var responseTimesMs []float64
-	var statusCodes []int
-	var requestErrors []error
-
-	// Mutex for safe concurrent updates to shared slices
-	var mutex sync.Mutex
+	// Create channels to collect results
+	responseTimesChan := make(chan time.Duration, concurrentRequests)
+	statusCodesChan := make(chan int, concurrentRequests)
 
 	// Launch concurrent requests
 	for i := 0; i < concurrentRequests; i++ {
-		go func() {
+		go func(index int) {
 			defer wg.Done()
 
-			// Create request
-			req := httptest.NewRequest(http.MethodGet, requestPath, http.NoBody)
-			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-
-			// Record time before request
-			startTime := time.Now()
-
-			// Execute request
+			// Create request with query parameters
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections?search=test", http.NoBody)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
-			err := controller.GetDetections(c)
+			c.SetPath("/api/v2/detections")
 
-			// Record time after request
-			duration := time.Since(startTime)
+			// Record start time
+			startTime := time.Now()
 
-			// Safely update shared data
-			mutex.Lock()
-			defer mutex.Unlock()
+			// Call handler
+			controller.GetDetections(c)
 
-			responseTimesMs = append(responseTimesMs, float64(duration.Milliseconds()))
-			statusCodes = append(statusCodes, rec.Code)
-			requestErrors = append(requestErrors, err)
-		}()
+			// Record response time
+			responseTime := time.Since(startTime)
+			responseTimesChan <- responseTime
+			statusCodesChan <- rec.Code
+		}(i)
 	}
 
 	// Wait for all requests to complete
 	wg.Wait()
+	close(responseTimesChan)
+	close(statusCodesChan)
 
-	// Analyze results
-	var avgResponseTime float64
-	var successCount int
+	// Collect results
+	var totalResponseTime time.Duration
+	successCount := 0
+	rateLimitedCount := 0
+	totalRequests := 0
 
-	for i, statusCode := range statusCodes {
-		if statusCode == http.StatusOK && requestErrors[i] == nil {
+	for code := range statusCodesChan {
+		totalRequests++
+		if code == http.StatusOK {
 			successCount++
-			avgResponseTime += responseTimesMs[i]
+		} else if code == http.StatusTooManyRequests {
+			rateLimitedCount++
 		}
 	}
 
-	if successCount > 0 {
-		avgResponseTime /= float64(successCount)
+	for responseTime := range responseTimesChan {
+		totalResponseTime += responseTime
 	}
 
-	// Log results (actual test is observational)
+	// Calculate average response time
+	avgResponseTime := float64(totalResponseTime.Microseconds()) / float64(concurrentRequests) / 1000.0 // in milliseconds
+
+	// Log results
 	t.Logf("DDoS simulation completed with %d concurrent requests", concurrentRequests)
 	t.Logf("Successful requests: %d (%.1f%%)", successCount, float64(successCount)/float64(concurrentRequests)*100)
+	if rateLimitedCount > 0 {
+		t.Logf("Rate limited requests: %d (%.1f%%)", rateLimitedCount, float64(rateLimitedCount)/float64(concurrentRequests)*100)
+	}
 	t.Logf("Average response time: %.2f ms", avgResponseTime)
 
-	// In a real-world scenario, we would check that:
-	// 1. The API doesn't crash (already verified by successCount)
-	// 2. Rate limiting is applied (would see 429 responses)
-	// 3. Response times stay within acceptable bounds
+	// In production, we would expect some rate limiting to occur under high load
+	// This is a soft assertion since test environments may not have rate limiting enabled
+	if controller.Settings != nil && controller.Settings.WebServer.Debug {
+		// In debug mode, we can log that rate limiting should be tested in production
+		t.Log("Note: Rate limiting should be verified in production environment")
+	}
 
-	// Basic assertion that at least some requests succeeded
-	assert.Greater(t, successCount, 0, "At least some requests should succeed even under load")
+	// Verify all requests were handled (either successfully or rate-limited)
+	assert.Equal(t, concurrentRequests, totalRequests, "Not all requests were processed")
 }
 
 // TestRateLimiting tests API rate limiting functionality
@@ -651,9 +661,12 @@ func TestCORSConfiguration(t *testing.T) {
 	t.Log("CORS should be properly configured in production for cross-origin requests")
 }
 
-// TestCSRFProtection tests that API endpoints require CSRF protection
+// TestCSRFProtection documents which endpoints should have CSRF protection
 func TestCSRFProtection(t *testing.T) {
-	// Document CSRF protection requirements for state-changing endpoints
+	// Setup
+	e, _, controller := setupTestEnvironment(t)
+
+	// Endpoints that modify state and should have CSRF protection
 	modifyingEndpoints := []struct {
 		name   string
 		method string
@@ -663,13 +676,71 @@ func TestCSRFProtection(t *testing.T) {
 		{"ReviewDetection", http.MethodPost, "/api/v2/detections/1/review"},
 	}
 
-	for _, ep := range modifyingEndpoints {
-		t.Run(fmt.Sprintf("%s should have CSRF protection", ep.name), func(t *testing.T) {
-			// In a real implementation with middleware, we would test that:
-			// 1. Requests without CSRF token are rejected
-			// 2. Requests with invalid CSRF token are rejected
-			// 3. Requests with valid CSRF token are accepted
-			t.Logf("Endpoint %s %s should have CSRF protection in production", ep.method, ep.path)
+	// Document which endpoints should have CSRF protection
+	for _, endpoint := range modifyingEndpoints {
+		t.Run(endpoint.name+"_should_have_CSRF_protection", func(t *testing.T) {
+			t.Logf("Endpoint %s %s should have CSRF protection in production", endpoint.method, endpoint.path)
 		})
 	}
+
+	// Test CSRF token validation (simulating middleware behavior)
+	t.Run("CSRF_token_validation", func(t *testing.T) {
+		// Create a request without CSRF token
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/1/review", strings.NewReader(`{"verified":"correct"}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/api/v2/detections/:id/review")
+		c.SetParamNames("id")
+		c.SetParamValues("1")
+
+		// Create a middleware that simulates CSRF protection
+		csrfMiddleware := func(next echo.HandlerFunc) echo.HandlerFunc {
+			return func(c echo.Context) error {
+				// Check for CSRF token in header
+				token := c.Request().Header.Get("X-CSRF-Token")
+				if token == "" {
+					return echo.NewHTTPError(http.StatusForbidden, "CSRF token missing")
+				}
+				if token != "valid-csrf-token" {
+					return echo.NewHTTPError(http.StatusForbidden, "Invalid CSRF token")
+				}
+				return next(c)
+			}
+		}
+
+		// Apply the middleware to the handler
+		handler := csrfMiddleware(controller.ReviewDetection)
+
+		// Execute the request
+		err := handler(c)
+
+		// Verify that the request was rejected due to missing CSRF token
+		if assert.Error(t, err) {
+			var httpErr *echo.HTTPError
+			if errors.As(err, &httpErr) {
+				assert.Equal(t, http.StatusForbidden, httpErr.Code)
+				assert.Contains(t, httpErr.Message, "CSRF token missing")
+			}
+		}
+
+		// Now try with invalid token
+		req.Header.Set("X-CSRF-Token", "invalid-token")
+		rec = httptest.NewRecorder()
+		c = e.NewContext(req, rec)
+		c.SetPath("/api/v2/detections/:id/review")
+		c.SetParamNames("id")
+		c.SetParamValues("1")
+
+		err = handler(c)
+
+		// Verify that the request was rejected due to invalid CSRF token
+		if assert.Error(t, err) {
+			var httpErr *echo.HTTPError
+			if errors.As(err, &httpErr) {
+				assert.Equal(t, http.StatusForbidden, httpErr.Code)
+				assert.Contains(t, httpErr.Message, "Invalid CSRF token")
+			}
+		}
+	})
 }

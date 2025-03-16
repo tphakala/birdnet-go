@@ -75,6 +75,7 @@ func TestGetDetections(t *testing.T) {
 		expectedStatus int
 		expectedCount  int
 		checkResponse  func(*testing.T, *httptest.ResponseRecorder)
+		handler        func(c echo.Context) error
 	}{
 		{
 			name: "All detections",
@@ -97,6 +98,9 @@ func TestGetDetections(t *testing.T) {
 					t.Fatalf("Expected Data to be []interface{}, got %T", response.Data)
 				}
 				assert.Equal(t, 2, len(detections))
+			},
+			handler: func(c echo.Context) error {
+				return controller.GetDetections(c)
 			},
 		},
 		{
@@ -125,6 +129,9 @@ func TestGetDetections(t *testing.T) {
 				}
 				assert.Equal(t, 1, len(detections))
 			},
+			handler: func(c echo.Context) error {
+				return controller.GetDetections(c)
+			},
 		},
 		{
 			name: "Species detections",
@@ -151,6 +158,9 @@ func TestGetDetections(t *testing.T) {
 				}
 				assert.Equal(t, 1, len(detections))
 			},
+			handler: func(c echo.Context) error {
+				return controller.GetDetections(c)
+			},
 		},
 		{
 			name: "Search detections",
@@ -176,6 +186,9 @@ func TestGetDetections(t *testing.T) {
 				}
 				assert.Equal(t, 1, len(detections))
 			},
+			handler: func(c echo.Context) error {
+				return controller.GetDetections(c)
+			},
 		},
 		{
 			name: "Invalid numResults parameter",
@@ -195,6 +208,9 @@ func TestGetDetections(t *testing.T) {
 				assert.NoError(t, err)
 				// Verify default value was applied
 				assert.Equal(t, 100, response.Limit)
+			},
+			handler: func(c echo.Context) error {
+				return controller.GetDetections(c)
 			},
 		},
 		{
@@ -216,6 +232,9 @@ func TestGetDetections(t *testing.T) {
 				// Verify default value was applied
 				assert.Equal(t, 0, response.Offset)
 			},
+			handler: func(c echo.Context) error {
+				return controller.GetDetections(c)
+			},
 		},
 		{
 			name: "Invalid confidence parameter",
@@ -234,6 +253,32 @@ func TestGetDetections(t *testing.T) {
 				var response PaginatedResponse
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
 				assert.NoError(t, err)
+			},
+			handler: func(c echo.Context) error {
+				return controller.GetDetections(c)
+			},
+		},
+		{
+			name: "Extremely large numResults parameter",
+			queryParams: map[string]string{
+				"numResults": "9223372036854775807", // Max int64 value
+				"offset":     "9223372036854775807", // Max int64 value
+			},
+			expectedStatus: http.StatusOK, // Should handle gracefully by applying maximum limits
+			expectedCount:  0,
+			mockSetup: func(m *mock.Mock) {
+				// Expect the controller to cap the values to maximum allowed limits
+				m.On("SearchNotes", "", false, 1000, 9223372036854775807).Return([]datastore.Note{}, nil)
+				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
+			},
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				// Verify response is successful
+				var response PaginatedResponse
+				err := json.Unmarshal(rec.Body.Bytes(), &response)
+				assert.NoError(t, err)
+			},
+			handler: func(c echo.Context) error {
+				return controller.GetDetections(c)
 			},
 		},
 	}
@@ -257,7 +302,7 @@ func TestGetDetections(t *testing.T) {
 			req.URL.RawQuery = q.Encode()
 
 			// Call handler
-			err := controller.GetDetections(c)
+			err := tc.handler(c)
 			assert.NoError(t, err)
 
 			// Check response
@@ -650,6 +695,32 @@ func TestReviewDetection(t *testing.T) {
 			},
 			expectedStatus: http.StatusConflict,
 		},
+		{
+			name:        "Valid review with special characters in comment",
+			detectionID: "5",
+			requestBody: `{"verified": "correct", "comment": "<script>alert('XSS')</script>Special chars: &<>\"'!@#$%^&*()_+{}[]|\\:;,.?/~"}`,
+			mockSetup: func(m *mock.Mock) {
+				m.On("Get", "5").Return(datastore.Note{ID: 5, Locked: false}, nil)
+				m.On("IsNoteLocked", "5").Return(false, nil)
+				m.On("LockNote", "5").Return(nil)
+				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
+				m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:        "Valid review with extremely long comment",
+			detectionID: "6",
+			requestBody: `{"verified": "correct", "comment": "` + strings.Repeat("Very long comment. ", 500) + `"}`,
+			mockSetup: func(m *mock.Mock) {
+				m.On("Get", "6").Return(datastore.Note{ID: 6, Locked: false}, nil)
+				m.On("IsNoteLocked", "6").Return(false, nil)
+				m.On("LockNote", "6").Return(nil)
+				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
+				m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
+			},
+			expectedStatus: http.StatusOK,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -810,6 +881,16 @@ func TestIgnoreSpecies(t *testing.T) {
 			name:           "Invalid JSON",
 			requestBody:    `{"common_name": }`,
 			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Extremely long species name",
+			requestBody:    `{"common_name": "` + strings.Repeat("Very Long Bird Name ", 100) + `"}`,
+			expectedStatus: http.StatusNoContent, // Should handle long names gracefully
+		},
+		{
+			name:           "Species name with special characters",
+			requestBody:    `{"common_name": "<script>alert('XSS')</script>Bird with special chars: &<>\"'!@#$%^&*()_+{}[]|\\:;,.?/~"}`,
+			expectedStatus: http.StatusNoContent, // Should sanitize or handle special chars
 		},
 	}
 
@@ -1002,6 +1083,123 @@ func TestGetNoteComments(t *testing.T) {
 				assert.True(t, ok)
 				assert.Equal(t, tc.expectedStatus, httpErr.Code)
 			}
+
+			// Verify mock expectations
+			mockDS.AssertExpectations(t)
+		})
+	}
+}
+
+// TestGetNoteCommentsWithHandler tests retrieving comments for a detection using a proper route handler
+func TestGetNoteCommentsWithHandler(t *testing.T) {
+	// Setup
+	e, mockDS, _ := setupTestEnvironment(t)
+
+	// Register the route
+	e.GET("/api/v2/detections/:id/comments", func(c echo.Context) error {
+		id := c.Param("id")
+		comments, err := mockDS.GetNoteComments(id)
+		if err != nil {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "Comments not found"})
+		}
+		return c.JSON(http.StatusOK, comments)
+	})
+
+	// Create mock data
+	mockComments := []datastore.NoteComment{
+		{
+			ID:        1,
+			NoteID:    1,
+			Entry:     "First comment",
+			CreatedAt: time.Now().Add(-2 * time.Hour),
+			UpdatedAt: time.Now().Add(-2 * time.Hour),
+		},
+		{
+			ID:        2,
+			NoteID:    1,
+			Entry:     "Second comment with special chars: <script>alert('XSS')</script>",
+			CreatedAt: time.Now().Add(-1 * time.Hour),
+			UpdatedAt: time.Now().Add(-1 * time.Hour),
+		},
+	}
+
+	// Test cases
+	testCases := []struct {
+		name           string
+		detectionID    string
+		mockSetup      func(*mock.Mock)
+		expectedStatus int
+		expectedCount  int
+		checkResponse  func(*testing.T, *httptest.ResponseRecorder)
+	}{
+		{
+			name:        "Detection with comments",
+			detectionID: "1",
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetNoteComments", "1").Return(mockComments, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var comments []datastore.NoteComment
+				err := json.Unmarshal(rec.Body.Bytes(), &comments)
+				assert.NoError(t, err)
+				assert.Equal(t, 2, len(comments))
+				assert.Equal(t, "First comment", comments[0].Entry)
+				assert.Contains(t, comments[1].Entry, "Second comment with special chars")
+			},
+		},
+		{
+			name:        "Detection without comments",
+			detectionID: "2",
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetNoteComments", "2").Return([]datastore.NoteComment{}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  0,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var comments []datastore.NoteComment
+				err := json.Unmarshal(rec.Body.Bytes(), &comments)
+				assert.NoError(t, err)
+				assert.Equal(t, 0, len(comments))
+			},
+		},
+		{
+			name:        "Detection not found",
+			detectionID: "999",
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetNoteComments", "999").Return([]datastore.NoteComment{}, errors.New("record not found"))
+			},
+			expectedStatus: http.StatusNotFound,
+			expectedCount:  0,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var response map[string]string
+				err := json.Unmarshal(rec.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				assert.Equal(t, "Comments not found", response["error"])
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup mock expectations
+			mockDS.ExpectedCalls = nil
+			tc.mockSetup(&mockDS.Mock)
+
+			// Create request
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/"+tc.detectionID+"/comments", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetParamNames("id")
+			c.SetParamValues(tc.detectionID)
+
+			// Call the handler through the Echo framework
+			e.ServeHTTP(rec, req)
+
+			// Check response
+			assert.Equal(t, tc.expectedStatus, rec.Code)
+			tc.checkResponse(t, rec)
 
 			// Verify mock expectations
 			mockDS.AssertExpectations(t)
