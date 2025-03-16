@@ -64,7 +64,7 @@ func (m *MockSecurityManager) ValidateRefreshToken(token string) (bool, error) {
 }
 
 // GenerateNewTokenPair generates a new access token and refresh token pair
-func (m *MockSecurityManager) GenerateNewTokenPair(username string) (string, string, error) {
+func (m *MockSecurityManager) GenerateNewTokenPair(username string) (accessToken, refreshToken string, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	args := m.Called(username)
