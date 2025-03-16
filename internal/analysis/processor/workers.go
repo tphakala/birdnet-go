@@ -154,7 +154,7 @@ func (p *Processor) EnqueueTask(task *Task) error {
 		}
 
 		// Log the action description and species to provide more context
-		log.Printf("Enqueuing task '%s' for species '%s' with retry config: enabled=%v, maxRetries=%d",
+		log.Printf("📬 Enqueuing task '%s' for species '%s' with retry config: enabled=%v, maxRetries=%d",
 			sanitizedDesc, speciesName, jqRetryConfig.Enabled, jqRetryConfig.MaxRetries)
 	}
 
