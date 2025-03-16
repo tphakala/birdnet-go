@@ -429,14 +429,12 @@ func (q *JobQueue) processDueJobs(ctx context.Context) {
 	}
 }
 
-// Maximum length for stored error messages
-const maxErrorMessageLength = 500
-
 // sanitizeErrorMessage returns a sanitized version of the error message
 // for safe storage in statistics. This function:
 // 1. Handles nil errors
 // 2. Bounds the message length to prevent memory bloat
-// 3. Removes any control characters or potential code injection patterns
+// 3. Removes control characters and potentially unsafe characters
+// 4. Handles non-ASCII characters and escape sequences
 func sanitizeErrorMessage(err error) string {
 	if err == nil {
 		return ""
@@ -445,18 +443,40 @@ func sanitizeErrorMessage(err error) string {
 	errMsg := err.Error()
 
 	// Bound message length to prevent memory bloat
-	if len(errMsg) > maxErrorMessageLength {
-		truncatedMsg := errMsg[:maxErrorMessageLength]
+	if len(errMsg) > MaxMessageLength {
+		truncatedMsg := errMsg[:MaxMessageLength]
 		errMsg = truncatedMsg + "... [truncated]"
 	}
 
-	// Remove control characters and potentially unsafe characters
+	// Enhanced sanitization to handle control characters, escape sequences, and non-ASCII
 	errMsg = strings.Map(func(r rune) rune {
-		if r < 32 || r == 127 { // ASCII control characters
-			return -1 // Remove character
+		// Remove ASCII control characters
+		if r < 32 || r == 127 {
+			return -1
 		}
+
+		// Option: For stricter sanitization, uncomment to keep only ASCII printable characters
+		// if r > 127 {
+		//    return -1
+		// }
+
+		// Remove potentially problematic Unicode characters
+		if r >= 0xFFF0 && r <= 0xFFFF { // Unicode specials
+			return -1
+		}
+
 		return r
 	}, errMsg)
+
+	// Replace common escape sequences that might have survived
+	replacer := strings.NewReplacer(
+		"\\n", " ",
+		"\\r", " ",
+		"\\t", " ",
+		"\\\"", "\"",
+		"\\\\", "\\",
+	)
+	errMsg = replacer.Replace(errMsg)
 
 	return errMsg
 }
@@ -730,9 +750,14 @@ func (q *JobQueue) GetStats() JobStatsSnapshot {
 		RetryAttempts:  q.stats.RetryAttempts,
 
 		// Current queue state
-		PendingJobs:      len(q.jobs),
-		MaxQueueSize:     q.maxJobs,
-		QueueUtilization: float64(len(q.jobs)) / float64(q.maxJobs) * 100.0,
+		PendingJobs:  len(q.jobs),
+		MaxQueueSize: q.maxJobs,
+		QueueUtilization: func() float64 {
+			if q.maxJobs == 0 { // Avoid division by zero
+				return 0
+			}
+			return float64(len(q.jobs)) / float64(q.maxJobs) * 100.0
+		}(),
 
 		// Action-specific statistics
 		ActionStats: actionStatsCopy,
