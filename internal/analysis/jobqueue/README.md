@@ -11,10 +11,11 @@ The `jobqueue` package provides a job queue implementation with the following ke
 - **Job Prioritization**: Ability to drop oldest jobs when the queue is full
 - **Graceful Shutdown**: Wait for in-progress jobs to complete
 - **Panic Recovery**: Automatically recover from panics in job execution
-- **Comprehensive Statistics**: Track success, failure, and retry metrics
+- **Comprehensive Statistics**: Track success, failure, and retry metrics per action type
 - **Type-Safe API**: Generic implementation for type safety
 - **Context Support**: Cancel jobs via context cancellation
 - **Timeout Handling**: Automatically timeout hanging jobs
+- **Action Description Tracking**: Track statistics based on both action type and description
 
 ## Integration with Processor
 
@@ -37,9 +38,11 @@ The job queue is designed around these core components:
 
 - **JobQueue**: The main queue that manages jobs and their lifecycle
 - **Job**: Represents a unit of work with its metadata and status
-- **Action**: Interface that defines the executable work
+- **Action**: Interface that defines the executable work and its description
 - **RetryConfig**: Configuration for retry behavior
 - **JobStatus**: Enum representing the current status of a job
+- **JobStats**: Tracks statistics about job processing
+- **ActionStats**: Tracks statistics for a specific action type
 
 ### Job Lifecycle
 
@@ -68,6 +71,10 @@ func (a *MyAction) Execute(data interface{}) error {
     return nil
 }
 
+func (a *MyAction) GetDescription() string {
+    return "My custom action description"
+}
+
 // Enqueue a job
 action := &MyAction{}
 data := MyDataType{...}
@@ -93,6 +100,10 @@ func (a *MyTypedAction) Execute(data MyDataType) error {
     // Process the data
     // No type assertion needed
     return nil
+}
+
+func (a *MyTypedAction) GetDescription() string {
+    return "My typed action description"
 }
 
 // Enqueue a typed job
@@ -148,6 +159,7 @@ queue.Stop()
 2. **Statelessness**: Jobs should not rely on external state that might change between retries
 3. **Timeout Awareness**: Jobs should respect context cancellation and timeouts
 4. **Error Handling**: Return meaningful errors that help diagnose issues
+5. **Descriptive Actions**: Provide meaningful descriptions for actions to aid in monitoring and debugging
 
 ### Queue Configuration
 
@@ -161,6 +173,7 @@ queue.Stop()
 1. **Track Statistics**: Regularly monitor queue statistics to detect issues
 2. **Log Analysis**: Analyze logs for patterns of failures
 3. **Resource Usage**: Monitor memory and CPU usage during high load
+4. **API Exposure**: Use the JSON API to monitor queue statistics in real-time
 
 ## Implementation Details
 
@@ -214,6 +227,10 @@ func (a *MyCustomAction) Execute(data interface{}) error {
     // Custom implementation
     return nil
 }
+
+func (a *MyCustomAction) GetDescription() string {
+    return "Description of what this action does"
+}
 ```
 
 ### Statistics Tracking
@@ -230,16 +247,41 @@ fmt.Printf("Retry attempts: %d\n", stats.RetryAttempts)
 
 ### Action-Specific Statistics
 
-The queue tracks statistics per action type:
+The queue tracks statistics per action type and description:
 
 ```go
 stats := queue.GetStats()
+
+// Get stats by action type and description (new format)
+actionKey := fmt.Sprintf("%T:%s", myAction, myAction.GetDescription())
+actionStats := stats.ActionStats[actionKey]
+
+// Get stats by action type only (backward compatibility)
 actionType := fmt.Sprintf("%T", myAction)
 actionStats := stats.ActionStats[actionType]
+
 fmt.Printf("Attempted: %d\n", actionStats.Attempted)
 fmt.Printf("Successful: %d\n", actionStats.Successful)
 fmt.Printf("Failed: %d\n", actionStats.Failed)
 fmt.Printf("Retried: %d\n", actionStats.Retried)
+fmt.Printf("Average Duration: %v\n", actionStats.AverageDuration)
+```
+
+### JSON API Integration
+
+The job queue statistics can be exposed through the JSON API:
+
+```go
+// Get stats in JSON format
+jsonStats, err := stats.ToJSON()
+if err != nil {
+    log.Fatalf("Failed to convert stats to JSON: %v", err)
+}
+
+// The JSON structure includes:
+// - Queue statistics (total, successful, failed, etc.)
+// - Action-specific statistics (attempts, successes, failures, etc.)
+// - Performance metrics (durations, timestamps, etc.)
 ```
 
 ## Testing
@@ -266,6 +308,7 @@ When working with this codebase, keep in mind:
 4. **Type Assertions**: Be careful with type assertions in job execution
 5. **Memory Management**: Consider memory implications of large job loads
 6. **Panic Recovery**: The queue recovers from panics, but it's better to avoid them
+7. **Action Keys**: Action statistics are tracked using a combination of type name and description
 
 ## License
 
