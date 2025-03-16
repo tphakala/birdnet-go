@@ -469,7 +469,7 @@ func TestRetryExhaustion(t *testing.T) {
 	assert.Equal(t, 1, stats.TotalJobs, "Total jobs should be 1")
 	assert.Equal(t, 0, stats.SuccessfulJobs, "Successful jobs should be 0")
 	assert.Equal(t, 1, stats.FailedJobs, "Failed jobs should be 1")
-	assert.Equal(t, maxRetries+1, stats.RetryAttempts, "Retry attempts should match maxRetries + 1")
+	assert.Equal(t, maxRetries, stats.RetryAttempts, "Retry attempts should match maxRetries")
 
 	// Verify the job status is failed
 	var jobFailed bool
@@ -588,7 +588,7 @@ func TestRetryBackoff(t *testing.T) {
 	assert.Equal(t, 1, stats.TotalJobs, "Total jobs should be 1")
 	assert.Equal(t, 0, stats.SuccessfulJobs, "Successful jobs should be 0")
 	assert.Equal(t, 1, stats.FailedJobs, "Failed jobs should be 1")
-	assert.Equal(t, maxRetries+1, stats.RetryAttempts, "Retry attempts should match maxRetries + 1")
+	assert.Equal(t, maxRetries, stats.RetryAttempts, "Retry attempts should match maxRetries")
 
 	// Verify the job status is failed
 	var jobFailed bool

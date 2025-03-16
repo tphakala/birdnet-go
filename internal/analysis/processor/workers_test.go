@@ -905,6 +905,9 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 		t.Errorf("Expected action to be executed once, got %d executions", mockAction.ExecuteCount)
 	}
 
+	// Wait a bit for the job queue to update its statistics
+	time.Sleep(100 * time.Millisecond)
+
 	// Verify that the job queue statistics reflect the completed job
 	stats := realQueue.GetStats()
 	if stats.SuccessfulJobs != 1 {
