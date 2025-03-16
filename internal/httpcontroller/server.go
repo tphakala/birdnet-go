@@ -156,14 +156,16 @@ func (s *Server) initializeServer() {
 		s.SunCalc,
 		s.controlChan,
 		log.Default(),
+		s.Processor,
 	)
 
-	// Add the server to Echo context for API v2 authentication
+	// Add the server and processor to Echo context for API v2 authentication and job queue stats
 	s.Echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			// Add server as a context value for API v2 to access authentication methods
 			if strings.HasPrefix(c.Path(), "/api/v2/") {
 				c.Set("server", s)
+				c.Set("processor", s.Processor)
 			}
 			return next(c)
 		}

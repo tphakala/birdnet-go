@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/process"
+	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
@@ -156,6 +158,50 @@ func GetCachedCPUUsage() []float64 {
 	return result
 }
 
+// JobQueueStats represents the job queue statistics
+type JobQueueStats struct {
+	Queue     map[string]interface{} `json:"queue"`
+	Actions   map[string]interface{} `json:"actions"`
+	Timestamp string                 `json:"timestamp"`
+}
+
+// GetJobQueueStats returns statistics about the job queue
+func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
+	// Get the processor from the context
+	processorObj := ctx.Get("processor")
+	if processorObj == nil {
+		return c.HandleError(ctx, fmt.Errorf("processor not available"), "Processor not available", http.StatusInternalServerError)
+	}
+
+	// Get the processor with the correct type
+	p, ok := processorObj.(*processor.Processor)
+	if !ok {
+		return c.HandleError(ctx, fmt.Errorf("invalid processor type"), "Invalid processor type", http.StatusInternalServerError)
+	}
+
+	// Check if job queue is available
+	if p.JobQueue == nil {
+		return c.HandleError(ctx, fmt.Errorf("job queue not available"), "Job queue not available", http.StatusInternalServerError)
+	}
+
+	// Get job queue stats
+	stats := p.JobQueue.GetStats()
+
+	// Convert to JSON
+	jsonStats, err := stats.ToJSON()
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to convert job queue stats to JSON", http.StatusInternalServerError)
+	}
+
+	// Parse the JSON string back to a map for proper JSON response
+	var statsMap map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStats), &statsMap); err != nil {
+		return c.HandleError(ctx, err, "Failed to parse job queue stats JSON", http.StatusInternalServerError)
+	}
+
+	return ctx.JSON(http.StatusOK, statsMap)
+}
+
 // Initialize system routes
 func (c *Controller) initSystemRoutes() {
 	// Start CPU usage monitoring in background with context for controlled shutdown
@@ -173,6 +219,7 @@ func (c *Controller) initSystemRoutes() {
 	protectedGroup.GET("/info", c.GetSystemInfo)
 	protectedGroup.GET("/resources", c.GetResourceInfo)
 	protectedGroup.GET("/disks", c.GetDiskInfo)
+	protectedGroup.GET("/jobs", c.GetJobQueueStats)
 
 	// Audio device routes (all protected)
 	audioGroup := protectedGroup.Group("/audio")
