@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // JobQueue manages a queue of jobs that can be retried
@@ -180,11 +182,16 @@ func (q *JobQueue) Enqueue(action Action, data interface{}, config RetryConfig) 
 		}
 	}
 
+	// Increment job counter (kept for backward compatibility and metrics, not used for ID generation)
 	q.jobCounter++
+	// Generate a UUID v4 for the job ID, truncated to 12 characters
+	uuidStr := uuid.New().String()
+	shortUUID := uuidStr[:12] // Take first 12 characters of the UUID
+
 	// Pre-allocate ID string to reduce memory allocations
 	now := q.clock.Now()
 	job := &Job{
-		ID:          fmt.Sprintf("job-%d", q.jobCounter),
+		ID:          fmt.Sprintf("job-%s", shortUUID),
 		Action:      action,
 		Data:        data,
 		MaxAttempts: config.MaxRetries + 1,
@@ -598,10 +605,13 @@ func (q *JobQueue) GetStats() JobStatsSnapshot {
 	typeNameMap := make(map[string][]ActionStats)
 
 	// First, collect all stats by type name
-	for k, v := range q.stats.ActionStats {
+	for k := range q.stats.ActionStats {
 		// Extract the type name from the key (format is "TypeName:Description")
 		parts := strings.SplitN(k, ":", 2)
 		typeName := parts[0]
+
+		// Get a copy of the value to avoid modifying the original
+		v := q.stats.ActionStats[k]
 
 		// Make sure description is up-to-date by checking if we have a reference to the action
 		for _, job := range q.jobs {
@@ -622,50 +632,52 @@ func (q *JobQueue) GetStats() JobStatsSnapshot {
 
 	// Now add aggregated stats by type name for backward compatibility
 	for typeName, statsList := range typeNameMap {
-		if len(statsList) > 0 {
-			// Use the first entry as a base
-			aggregated := statsList[0]
-
-			// Aggregate stats from all actions of this type
-			for i := 1; i < len(statsList); i++ {
-				s := statsList[i]
-				aggregated.Attempted += s.Attempted
-				aggregated.Successful += s.Successful
-				aggregated.Failed += s.Failed
-				aggregated.Retried += s.Retried
-				aggregated.Dropped += s.Dropped
-				aggregated.TotalDuration += s.TotalDuration
-
-				// Update min/max durations
-				if s.MinDuration > 0 && (aggregated.MinDuration == 0 || s.MinDuration < aggregated.MinDuration) {
-					aggregated.MinDuration = s.MinDuration
-				}
-				if s.MaxDuration > aggregated.MaxDuration {
-					aggregated.MaxDuration = s.MaxDuration
-				}
-
-				// Use the most recent timestamps
-				if s.LastExecutionTime.After(aggregated.LastExecutionTime) {
-					aggregated.LastExecutionTime = s.LastExecutionTime
-				}
-				if s.LastSuccessfulTime.After(aggregated.LastSuccessfulTime) {
-					aggregated.LastSuccessfulTime = s.LastSuccessfulTime
-				}
-				if s.LastFailedTime.After(aggregated.LastFailedTime) {
-					aggregated.LastFailedTime = s.LastFailedTime
-					aggregated.LastErrorMessage = s.LastErrorMessage
-				}
-			}
-
-			// Calculate average duration
-			totalAttempts := aggregated.Successful + aggregated.Failed + aggregated.Retried
-			if totalAttempts > 0 {
-				aggregated.AverageDuration = time.Duration(int64(aggregated.TotalDuration) / int64(totalAttempts))
-			}
-
-			// Add the aggregated stats to the copy
-			actionStatsCopy[typeName] = aggregated
+		if len(statsList) == 0 {
+			continue
 		}
+
+		// Use the first entry as a base
+		aggregated := statsList[0]
+
+		// Aggregate stats from all actions of this type
+		for i := 1; i < len(statsList); i++ {
+			s := statsList[i]
+			aggregated.Attempted += s.Attempted
+			aggregated.Successful += s.Successful
+			aggregated.Failed += s.Failed
+			aggregated.Retried += s.Retried
+			aggregated.Dropped += s.Dropped
+			aggregated.TotalDuration += s.TotalDuration
+
+			// Update min/max durations
+			if s.MinDuration > 0 && (aggregated.MinDuration == 0 || s.MinDuration < aggregated.MinDuration) {
+				aggregated.MinDuration = s.MinDuration
+			}
+			if s.MaxDuration > aggregated.MaxDuration {
+				aggregated.MaxDuration = s.MaxDuration
+			}
+
+			// Use the most recent timestamps
+			if s.LastExecutionTime.After(aggregated.LastExecutionTime) {
+				aggregated.LastExecutionTime = s.LastExecutionTime
+			}
+			if s.LastSuccessfulTime.After(aggregated.LastSuccessfulTime) {
+				aggregated.LastSuccessfulTime = s.LastSuccessfulTime
+			}
+			if s.LastFailedTime.After(aggregated.LastFailedTime) {
+				aggregated.LastFailedTime = s.LastFailedTime
+				aggregated.LastErrorMessage = s.LastErrorMessage
+			}
+		}
+
+		// Calculate average duration
+		totalAttempts := aggregated.Successful + aggregated.Failed + aggregated.Retried
+		if totalAttempts > 0 {
+			aggregated.AverageDuration = time.Duration(int64(aggregated.TotalDuration) / int64(totalAttempts))
+		}
+
+		// Add the aggregated stats to the copy
+		actionStatsCopy[typeName] = aggregated
 	}
 
 	return JobStatsSnapshot{
