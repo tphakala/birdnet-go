@@ -166,6 +166,11 @@ func (m *MockAction) Execute(data interface{}) error {
 	return nil
 }
 
+// GetDescription implements the Action interface
+func (m *MockAction) GetDescription() string {
+	return "Mock Action for testing"
+}
+
 // Reset resets the mock action state
 func (m *MockAction) Reset() {
 	m.mu.Lock()
@@ -180,10 +185,20 @@ type MockBirdWeatherAction struct {
 	RetryConfig jobqueue.RetryConfig
 }
 
+// GetDescription returns a description for the MockBirdWeatherAction
+func (m *MockBirdWeatherAction) GetDescription() string {
+	return "Mock BirdWeather Action for testing"
+}
+
 // MockMqttAction is a mock implementation of MqttAction
 type MockMqttAction struct {
 	MockAction
 	RetryConfig jobqueue.RetryConfig
+}
+
+// GetDescription returns a description for the MockMqttAction
+func (m *MockMqttAction) GetDescription() string {
+	return "Mock MQTT Action for testing"
 }
 
 // MockSettings implements the necessary methods from conf.Settings for testing
@@ -890,6 +905,9 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 		t.Errorf("Expected action to be executed once, got %d executions", mockAction.ExecuteCount)
 	}
 
+	// Wait a bit for the job queue to update its statistics
+	time.Sleep(100 * time.Millisecond)
+
 	// Verify that the job queue statistics reflect the completed job
 	stats := realQueue.GetStats()
 	if stats.SuccessfulJobs != 1 {
@@ -1297,7 +1315,7 @@ func BenchmarkEnqueueTask(b *testing.B) {
 	}()
 
 	// Use a custom function for benchmarking
-	enqueueTaskBench := func(p *Processor, task *Task) error {
+	enqueueTaskBench := func(task *Task) error {
 		if task == nil {
 			return fmt.Errorf("cannot enqueue nil task")
 		}
@@ -1319,7 +1337,7 @@ func BenchmarkEnqueueTask(b *testing.B) {
 
 	// Run the benchmark
 	for i := 0; i < b.N; i++ {
-		err := enqueueTaskBench(processor, task)
+		err := enqueueTaskBench(task)
 		if err != nil {
 			b.Fatalf("EnqueueTask failed: %v", err)
 		}

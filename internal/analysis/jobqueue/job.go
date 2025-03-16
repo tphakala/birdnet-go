@@ -1,6 +1,7 @@
 package jobqueue
 
 import (
+	"encoding/json"
 	"time"
 )
 
@@ -33,6 +34,7 @@ type JobStats struct {
 
 // JobStatsSnapshot provides a point-in-time snapshot of job statistics
 type JobStatsSnapshot struct {
+	// Queue statistics
 	TotalJobs      int
 	SuccessfulJobs int
 	FailedJobs     int
@@ -40,16 +42,38 @@ type JobStatsSnapshot struct {
 	ArchivedJobs   int
 	DroppedJobs    int
 	RetryAttempts  int
-	ActionStats    map[string]ActionStats // Key is the type name of the action
+
+	// Current queue state
+	PendingJobs      int     // Current number of jobs in the queue
+	MaxQueueSize     int     // Maximum queue capacity
+	QueueUtilization float64 // Queue utilization percentage
+
+	// Action-specific statistics
+	ActionStats map[string]ActionStats // Key is the type name of the action
 }
 
 // ActionStats tracks statistics for a specific action type
 type ActionStats struct {
-	Attempted  int
-	Successful int
-	Failed     int
-	Retried    int
-	Dropped    int // Track number of jobs dropped due to queue full
+	// Type identifier information
+	TypeName    string // The fully qualified type name of the action
+	Description string // Human-readable description of this action type
+
+	// Core metrics
+	Attempted  int // Total attempts (including retries)
+	Successful int // Successfully completed jobs
+	Failed     int // Permanently failed jobs (after retry attempts)
+	Retried    int // Number of retry attempts
+	Dropped    int // Jobs dropped due to queue full
+
+	// Performance metrics
+	TotalDuration      time.Duration // Total execution time across all attempts
+	AverageDuration    time.Duration // Average execution time per attempt
+	MinDuration        time.Duration // Minimum execution time
+	MaxDuration        time.Duration // Maximum execution time
+	LastExecutionTime  time.Time     // When this action was last executed
+	LastSuccessfulTime time.Time     // When this action last succeeded
+	LastFailedTime     time.Time     // When this action last failed
+	LastErrorMessage   string        // Last error message (sanitized)
 }
 
 // TypedJob is a generic version of Job for type-safe operations
@@ -70,4 +94,115 @@ type TypedJob[T any] struct {
 // TypedAction is a generic version of Action for type-safe operations
 type TypedAction[T any] interface {
 	Execute(data T) error
+	GetDescription() string // Returns a human-readable description of the action
+}
+
+// ToJSON converts the JobStatsSnapshot to a JSON string with pretty formatting
+func (s *JobStatsSnapshot) ToJSON() (string, error) {
+	return s.toJSON(true)
+}
+
+// ToJSONCompact converts the JobStatsSnapshot to a compact JSON string
+// This is more efficient for production use where pretty formatting isn't needed
+func (s *JobStatsSnapshot) ToJSONCompact() (string, error) {
+	return s.toJSON(false)
+}
+
+// toJSON is the internal implementation that handles both pretty and compact JSON
+func (s *JobStatsSnapshot) toJSON(prettyPrint bool) (string, error) {
+	// Use a single timestamp for consistency across the entire snapshot
+	snapshotTime := time.Now()
+	formattedTime := snapshotTime.Format(time.RFC3339)
+
+	// Create a map to represent the JSON structure
+	statsMap := map[string]interface{}{
+		"queue": map[string]interface{}{
+			"total":         s.TotalJobs,
+			"successful":    s.SuccessfulJobs,
+			"failed":        s.FailedJobs,
+			"stale":         s.StaleJobs,
+			"archived":      s.ArchivedJobs,
+			"dropped":       s.DroppedJobs,
+			"retryAttempts": s.RetryAttempts,
+			"pending":       s.PendingJobs,
+			"maxSize":       s.MaxQueueSize,
+			"utilization":   s.QueueUtilization,
+		},
+		"actions":   make(map[string]interface{}),
+		"timestamp": formattedTime,
+	}
+	// Pre-allocate actions map with the right capacity
+	actionsMap := make(map[string]interface{}, len(s.ActionStats))
+	statsMap["actions"] = actionsMap
+
+	// Add action stats to the map
+	for typeName := range s.ActionStats {
+		// Get a reference to the stats to avoid copying the large struct
+		stats := s.ActionStats[typeName]
+
+		// Bound description length to prevent bloat in JSON output
+		description := stats.Description
+		if len(description) > MaxMessageLength {
+			description = description[:MaxMessageLength] + "... [truncated]"
+		}
+
+		// Create action stats map with metrics and performance data
+		actionStats := map[string]interface{}{
+			"typeName":    stats.TypeName,
+			"description": description,
+			"metrics": map[string]interface{}{
+				"attempted":  stats.Attempted,
+				"successful": stats.Successful,
+				"failed":     stats.Failed,
+				"retried":    stats.Retried,
+				"dropped":    stats.Dropped,
+			},
+			"performance": map[string]interface{}{
+				"totalDuration":   stats.TotalDuration.String(),
+				"averageDuration": stats.AverageDuration.String(),
+				"minDuration":     stats.MinDuration.String(),
+				"maxDuration":     stats.MaxDuration.String(),
+			},
+		}
+
+		// Add timestamps if available
+		timestamps := make(map[string]string)
+		if !stats.LastExecutionTime.IsZero() {
+			timestamps["lastExecution"] = stats.LastExecutionTime.Format(time.RFC3339)
+		}
+		if !stats.LastSuccessfulTime.IsZero() {
+			timestamps["lastSuccess"] = stats.LastSuccessfulTime.Format(time.RFC3339)
+		}
+		if !stats.LastFailedTime.IsZero() {
+			timestamps["lastFailure"] = stats.LastFailedTime.Format(time.RFC3339)
+		}
+
+		if len(timestamps) > 0 {
+			actionStats["timestamps"] = timestamps
+		}
+
+		// Add last error if available
+		if stats.LastErrorMessage != "" {
+			actionStats["lastError"] = stats.LastErrorMessage
+		}
+
+		// Add action stats to the actions map
+		actionsMap[typeName] = actionStats
+	}
+
+	// Convert to JSON based on format preference
+	var jsonBytes []byte
+	var err error
+
+	if prettyPrint {
+		jsonBytes, err = json.MarshalIndent(statsMap, "", "  ")
+	} else {
+		jsonBytes, err = json.Marshal(statsMap)
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	return string(jsonBytes), nil
 }

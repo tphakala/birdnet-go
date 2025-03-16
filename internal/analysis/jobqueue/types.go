@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+// Constants for message length limits
+const (
+	// MaxMessageLength is the maximum length for error messages and descriptions
+	// to prevent memory bloat in logs and JSON output
+	MaxMessageLength = 500
+)
+
 // Common errors that can be returned by job queue operations
 var (
 	ErrNilAction     = errors.New("cannot enqueue nil action")
@@ -29,6 +36,7 @@ type RetryConfig struct {
 // that can be executed by the job queue.
 type Action interface {
 	Execute(data interface{}) error
+	GetDescription() string // Returns a human-readable description of the action
 }
 
 // Clock is an interface for time-related operations that can be mocked for testing
