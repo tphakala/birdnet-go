@@ -4,6 +4,8 @@ package api
 
 import (
 	"encoding/json"
+	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,13 +15,15 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
 
 // TestGetSpeciesSummary tests the species summary endpoint
 func TestGetSpeciesSummary(t *testing.T) {
 	// Setup
-	e, mockDS, controller := setupTestEnvironment(t)
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Create mock data
 	firstSeen := time.Now().AddDate(0, -1, 0)
@@ -86,7 +90,7 @@ func TestGetSpeciesSummary(t *testing.T) {
 // TestGetHourlyAnalytics tests the hourly analytics endpoint
 func TestGetHourlyAnalytics(t *testing.T) {
 	// Setup
-	e, mockDS, controller := setupTestEnvironment(t)
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Create mock data
 	date := "2023-01-01"
@@ -153,7 +157,7 @@ func TestGetHourlyAnalytics(t *testing.T) {
 // TestGetDailyAnalytics tests the daily analytics endpoint
 func TestGetDailyAnalytics(t *testing.T) {
 	// Setup
-	e, mockDS, controller := setupTestEnvironment(t)
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Create mock data
 	startDate := "2023-01-01"
@@ -229,7 +233,7 @@ func TestGetDailyAnalytics(t *testing.T) {
 // This tests the aggregated data behavior, which represents detection trends across all species
 func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
 	// Setup
-	e, mockDS, controller := setupTestEnvironment(t)
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Create mock data
 	startDate := "2023-01-01"
@@ -290,7 +294,7 @@ func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
 // TestGetInvalidAnalyticsRequests tests analytics endpoints with invalid parameters
 func TestGetInvalidAnalyticsRequests(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
+	e, _, controller := setupAnalyticsTestEnvironment(t)
 
 	// Test cases
 	testCases := []struct {
@@ -365,4 +369,549 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGetDailySpeciesSummary_MultipleDetections tests that the GetDailySpeciesSummary function
+// correctly counts multiple detections of the same species
+func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
+	// Create a new echo instance
+	e := echo.New()
+
+	// Create a mock datastore
+	mockDS := &MockDataStoreV2{
+		GetTopBirdsDataFunc: func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
+			// Return multiple notes with the same species to simulate multiple detections
+			return []datastore.Note{
+				{
+					ID:             1,
+					SpeciesCode:    "AMCRO",
+					ScientificName: "Corvus brachyrhynchos",
+					CommonName:     "American Crow",
+					Confidence:     0.9,
+					Date:           "2025-03-07",
+					Time:           "08:15:00",
+				},
+				{
+					ID:             2,
+					SpeciesCode:    "AMCRO",
+					ScientificName: "Corvus brachyrhynchos",
+					CommonName:     "American Crow",
+					Confidence:     0.85,
+					Date:           "2025-03-07",
+					Time:           "09:30:00",
+				},
+				{
+					ID:             3,
+					SpeciesCode:    "AMCRO",
+					ScientificName: "Corvus brachyrhynchos",
+					CommonName:     "American Crow",
+					Confidence:     0.95,
+					Date:           "2025-03-07",
+					Time:           "14:45:00",
+				},
+				{
+					ID:             4,
+					SpeciesCode:    "RBWO",
+					ScientificName: "Melanerpes carolinus",
+					CommonName:     "Red-bellied Woodpecker",
+					Confidence:     0.8,
+					Date:           "2025-03-07",
+					Time:           "10:20:00",
+				},
+				{
+					ID:             5,
+					SpeciesCode:    "RBWO",
+					ScientificName: "Melanerpes carolinus",
+					CommonName:     "Red-bellied Woodpecker",
+					Confidence:     0.75,
+					Date:           "2025-03-07",
+					Time:           "16:05:00",
+				},
+			}, nil
+		},
+	}
+
+	// Create a mock image provider
+	mockImageProvider := &TestImageProvider{
+		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
+			return imageprovider.BirdImage{
+				ScientificName: scientificName,
+				URL:            "http://example.com/" + scientificName + ".jpg",
+			}, nil
+		},
+	}
+
+	// Create a bird image cache with our mock provider
+	imageCache := imageprovider.InitCache(mockImageProvider, NewTestMetrics(t), mockDS)
+
+	// Create a controller with our mocks
+	controller := &Controller{
+		DS:             mockDS,
+		BirdImageCache: imageCache,
+		logger:         log.New(io.Discard, "", 0), // Add logger
+	}
+
+	// Create a request with the date we want to test
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Call the handler
+	err := controller.GetDailySpeciesSummary(c)
+
+	// Verify no error occurred
+	assert.NoError(t, err)
+
+	// Verify the response status code
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Parse the response
+	var response []SpeciesDailySummary
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+
+	// Verify we got the expected number of species
+	assert.Equal(t, 2, len(response))
+
+	// Find the American Crow in the response
+	var amcro *SpeciesDailySummary
+	var rbwo *SpeciesDailySummary
+	for i := range response {
+		if response[i].ScientificName == "Corvus brachyrhynchos" {
+			amcro = &response[i]
+		}
+		if response[i].ScientificName == "Melanerpes carolinus" {
+			rbwo = &response[i]
+		}
+	}
+
+	// Verify the American Crow has the correct count (3)
+	assert.NotNil(t, amcro, "American Crow should be in the response")
+	assert.Equal(t, 3, amcro.Count, "American Crow should have 3 detections")
+
+	// Verify the correct hourly distribution for American Crow
+	expectedAmcroHourly := make([]int, 24)
+	expectedAmcroHourly[8] = 1  // 08:15:00
+	expectedAmcroHourly[9] = 1  // 09:30:00
+	expectedAmcroHourly[14] = 1 // 14:45:00
+	assert.Equal(t, expectedAmcroHourly, amcro.HourlyCounts)
+
+	// Verify the Red-bellied Woodpecker has the correct count (2)
+	assert.NotNil(t, rbwo, "Red-bellied Woodpecker should be in the response")
+	assert.Equal(t, 2, rbwo.Count, "Red-bellied Woodpecker should have 2 detections")
+
+	// Verify the correct hourly distribution for Red-bellied Woodpecker
+	expectedRbwoHourly := make([]int, 24)
+	expectedRbwoHourly[10] = 1 // 10:20:00
+	expectedRbwoHourly[16] = 1 // 16:05:00
+	assert.Equal(t, expectedRbwoHourly, rbwo.HourlyCounts)
+
+	// Close the image cache to clean up resources
+	imageCache.Close()
+}
+
+// TestGetDailySpeciesSummary_SingleDetection tests that the GetDailySpeciesSummary function
+// correctly handles the case where each species has only one detection
+func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
+	// Create a new echo instance
+	e := echo.New()
+
+	// Create a mock datastore
+	mockDS := &MockDataStoreV2{
+		GetTopBirdsDataFunc: func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
+			// Return one note per species to simulate single detections
+			return []datastore.Note{
+				{
+					ID:             1,
+					SpeciesCode:    "AMCRO",
+					ScientificName: "Corvus brachyrhynchos",
+					CommonName:     "American Crow",
+					Confidence:     0.9,
+					Date:           "2025-03-07",
+					Time:           "08:15:00",
+				},
+				{
+					ID:             2,
+					SpeciesCode:    "RBWO",
+					ScientificName: "Melanerpes carolinus",
+					CommonName:     "Red-bellied Woodpecker",
+					Confidence:     0.8,
+					Date:           "2025-03-07",
+					Time:           "10:20:00",
+				},
+			}, nil
+		},
+	}
+
+	// Create a mock image provider
+	mockImageProvider := &TestImageProvider{
+		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
+			return imageprovider.BirdImage{
+				ScientificName: scientificName,
+				URL:            "http://example.com/" + scientificName + ".jpg",
+			}, nil
+		},
+	}
+
+	// Create a bird image cache with our mock provider
+	imageCache := imageprovider.InitCache(mockImageProvider, NewTestMetrics(t), mockDS)
+
+	// Create a controller with our mocks
+	controller := &Controller{
+		DS:             mockDS,
+		BirdImageCache: imageCache,
+		logger:         log.New(io.Discard, "", 0), // Add logger
+	}
+
+	// Create a request with the date we want to test
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Call the handler
+	err := controller.GetDailySpeciesSummary(c)
+
+	// Verify no error occurred
+	assert.NoError(t, err)
+
+	// Verify the response status code
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Parse the response
+	var response []SpeciesDailySummary
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+
+	// Verify we got the expected number of species
+	assert.Equal(t, 2, len(response))
+
+	// Verify each species has a count of 1
+	for _, species := range response {
+		assert.Equal(t, 1, species.Count, "%s should have 1 detection", species.CommonName)
+	}
+
+	// Close the image cache to clean up resources
+	imageCache.Close()
+}
+
+// TestGetDailySpeciesSummary_EmptyResult tests that the GetDailySpeciesSummary function
+// correctly handles the case where no detections are found
+func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
+	// Create a new echo instance
+	e := echo.New()
+
+	// Create a mock datastore that returns no detections
+	mockDS := &MockDataStoreV2{
+		GetTopBirdsDataFunc: func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
+			return []datastore.Note{}, nil
+		},
+	}
+
+	// Create a controller with our mock
+	controller := &Controller{
+		DS:     mockDS,
+		logger: log.New(io.Discard, "", 0), // Add logger
+	}
+
+	// Create a request with the date we want to test
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Call the handler
+	err := controller.GetDailySpeciesSummary(c)
+
+	// Verify no error occurred
+	assert.NoError(t, err)
+
+	// Verify the response status code
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Parse the response
+	var response []SpeciesDailySummary
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+
+	// Verify we got an empty result
+	assert.Equal(t, 0, len(response))
+}
+
+// TestGetDailySpeciesSummary_TimeHandling tests that the GetDailySpeciesSummary function
+// correctly handles the first and latest detection times
+func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
+	// Create a new echo instance
+	e := echo.New()
+
+	// Create a mock datastore
+	mockDS := &MockDataStoreV2{
+		GetTopBirdsDataFunc: func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
+			// Return multiple notes with the same species to test time handling
+			return []datastore.Note{
+				{
+					ID:             1,
+					SpeciesCode:    "AMCRO",
+					ScientificName: "Corvus brachyrhynchos",
+					CommonName:     "American Crow",
+					Confidence:     0.9,
+					Date:           "2025-03-07",
+					Time:           "08:15:00",
+				},
+				{
+					ID:             2,
+					SpeciesCode:    "AMCRO",
+					ScientificName: "Corvus brachyrhynchos",
+					CommonName:     "American Crow",
+					Confidence:     0.85,
+					Date:           "2025-03-07",
+					Time:           "06:30:00", // Earlier time
+				},
+				{
+					ID:             3,
+					SpeciesCode:    "AMCRO",
+					ScientificName: "Corvus brachyrhynchos",
+					CommonName:     "American Crow",
+					Confidence:     0.95,
+					Date:           "2025-03-07",
+					Time:           "21:45:00", // Later time
+				},
+			}, nil
+		},
+	}
+
+	// Create a controller with our mock
+	controller := &Controller{
+		DS:     mockDS,
+		logger: log.New(io.Discard, "", 0), // Add logger
+	}
+
+	// Create a request with the date we want to test
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Call the handler
+	err := controller.GetDailySpeciesSummary(c)
+
+	// Verify no error occurred
+	assert.NoError(t, err)
+
+	// Verify the response status code
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Parse the response
+	var response []SpeciesDailySummary
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+
+	// Verify we got one species
+	assert.Equal(t, 1, len(response))
+
+	// Verify the first and latest times are correct
+	species := response[0]
+	assert.Equal(t, "06:30:00", species.First, "First detection should be 06:30:00")
+	assert.Equal(t, "21:45:00", species.Latest, "Latest detection should be 21:45:00")
+}
+
+// TestGetDailySpeciesSummary_ConfidenceFilter tests that the GetDailySpeciesSummary function
+// correctly filters by confidence level
+func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
+	// Create a new echo instance
+	e := echo.New()
+
+	// Track if our filter was properly applied
+	var appliedMinConfidence float64
+
+	// Create a mock datastore
+	mockDS := &MockDataStoreV2{
+		GetTopBirdsDataFunc: func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
+			// Save the applied confidence filter
+			appliedMinConfidence = minConfidenceNormalized
+
+			// Return notes with varying confidence levels
+			return []datastore.Note{
+				{
+					ID:             1,
+					SpeciesCode:    "AMCRO",
+					ScientificName: "Corvus brachyrhynchos",
+					CommonName:     "American Crow",
+					Confidence:     0.9, // High confidence
+					Date:           "2025-03-07",
+					Time:           "08:15:00",
+				},
+				{
+					ID:             2,
+					SpeciesCode:    "RBWO",
+					ScientificName: "Melanerpes carolinus",
+					CommonName:     "Red-bellied Woodpecker",
+					Confidence:     0.6, // Medium confidence
+					Date:           "2025-03-07",
+					Time:           "10:20:00",
+				},
+				{
+					ID:             3,
+					SpeciesCode:    "BCCH",
+					ScientificName: "Poecile atricapillus",
+					CommonName:     "Black-capped Chickadee",
+					Confidence:     0.3, // Low confidence
+					Date:           "2025-03-07",
+					Time:           "12:45:00",
+				},
+			}, nil
+		},
+	}
+
+	// Create a controller with our mock
+	controller := &Controller{
+		DS:     mockDS,
+		logger: log.New(io.Discard, "", 0), // Add logger
+	}
+
+	// Test with a confidence threshold of "70"
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07&min_confidence=70", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Call the handler
+	err := controller.GetDailySpeciesSummary(c)
+
+	// Verify no error occurred
+	assert.NoError(t, err)
+
+	// Verify the threshold was correctly normalized (70% -> 0.7)
+	assert.Equal(t, 0.7, appliedMinConfidence)
+
+	// Verify the response status code
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Parse the response
+	var response []SpeciesDailySummary
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+
+	// Verify the response only includes species with confidence >= 0.7
+	for _, species := range response {
+		assert.NotEqual(t, "Black-capped Chickadee", species.CommonName)
+		assert.NotEqual(t, "Red-bellied Woodpecker", species.CommonName)
+		assert.Equal(t, "American Crow", species.CommonName)
+	}
+}
+
+// TestGetDailySpeciesSummary_LimitParameter tests that the GetDailySpeciesSummary function
+// correctly applies the limit parameter
+func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
+	// Create a new echo instance
+	e := echo.New()
+
+	// Create a mock datastore
+	mockDS := &MockDataStoreV2{
+		GetTopBirdsDataFunc: func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
+			// Return multiple species to test limiting
+			return []datastore.Note{
+				{
+					ID:             1,
+					SpeciesCode:    "AMCRO",
+					ScientificName: "Corvus brachyrhynchos",
+					CommonName:     "American Crow",
+					Confidence:     0.95,
+					Date:           "2025-03-07",
+					Time:           "08:15:00",
+				},
+				{
+					ID:             2,
+					SpeciesCode:    "RBWO",
+					ScientificName: "Melanerpes carolinus",
+					CommonName:     "Red-bellied Woodpecker",
+					Confidence:     0.90,
+					Date:           "2025-03-07",
+					Time:           "10:20:00",
+				},
+				{
+					ID:             3,
+					SpeciesCode:    "BCCH",
+					ScientificName: "Poecile atricapillus",
+					CommonName:     "Black-capped Chickadee",
+					Confidence:     0.85,
+					Date:           "2025-03-07",
+					Time:           "12:45:00",
+				},
+				{
+					ID:             4,
+					SpeciesCode:    "NOCA",
+					ScientificName: "Cardinalis cardinalis",
+					CommonName:     "Northern Cardinal",
+					Confidence:     0.80,
+					Date:           "2025-03-07",
+					Time:           "14:30:00",
+				},
+			}, nil
+		},
+	}
+
+	// Create a controller with our mock
+	controller := &Controller{
+		DS:     mockDS,
+		logger: log.New(io.Discard, "", 0), // Add logger
+	}
+
+	// Create a request with a limit of 2
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07&limit=2", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.QueryParams().Set("limit", "2")
+
+	// Call the handler
+	err := controller.GetDailySpeciesSummary(c)
+
+	// Verify no error occurred
+	assert.NoError(t, err)
+
+	// Verify the response status code
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Parse the response
+	var response []SpeciesDailySummary
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	assert.NoError(t, err)
+
+	// Verify we got exactly 2 species (limited)
+	assert.Equal(t, 2, len(response))
+}
+
+// TestGetDailySpeciesSummary_DatabaseError tests that the GetDailySpeciesSummary function
+// correctly handles database errors
+func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
+	// Setup using the proper test environment
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	// Override the GetTopBirdsData function to return an error
+	mockDS.On("GetTopBirdsData", mock.Anything, mock.Anything).Return([]datastore.Note{}, errors.New("database connection error"))
+
+	// Create a request with the date we want to test
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Call the handler
+	err := controller.GetDailySpeciesSummary(c)
+
+	// The controller's HandleError method returns a JSON response, not an error
+	assert.NoError(t, err)
+
+	// Verify the response status code is 500 Internal Server Error
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+
+	// Parse the error response
+	var errorResponse map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
+	assert.NoError(t, err)
+
+	// Check that the error response contains the expected fields
+	assert.Contains(t, errorResponse, "error")
+	assert.Contains(t, errorResponse, "message")
+	assert.Contains(t, errorResponse, "code")
+
+	// Check the error message
+	assert.Contains(t, errorResponse["error"].(string), "database connection error")
+	assert.Equal(t, "Failed to get daily species data", errorResponse["message"])
+	assert.Equal(t, float64(http.StatusInternalServerError), errorResponse["code"])
 }
