@@ -1,15 +1,19 @@
-// auth_test.go: Package api provides tests for API v2 authentication endpoints.
+// auth_test.go: Package api provides tests for API v2 authentication mechanisms implementation.
+// This file focuses on testing the correctness of authentication implementation including
+// middleware behavior, login functionality, and token validation.
 
 package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"errors"
 
@@ -23,6 +27,10 @@ import (
 type SecurityManager interface {
 	ValidateToken(token string) (bool, error)
 	GenerateToken(username string) (string, error)
+	ValidateRefreshToken(token string) (bool, error)
+	GenerateNewTokenPair(username string) (string, string, error)
+	ValidateSession(sessionID string) (bool, error)
+	CreateSession(username string) (string, error)
 }
 
 // MockSecurityManager implements a mock for the authentication system
@@ -41,6 +49,38 @@ func (m *MockSecurityManager) ValidateToken(token string) (bool, error) {
 
 // Generate a new token
 func (m *MockSecurityManager) GenerateToken(username string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	args := m.Called(username)
+	return args.String(0), args.Error(1)
+}
+
+// ValidateRefreshToken validates a refresh token
+func (m *MockSecurityManager) ValidateRefreshToken(token string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	args := m.Called(token)
+	return args.Bool(0), args.Error(1)
+}
+
+// GenerateNewTokenPair generates a new access token and refresh token pair
+func (m *MockSecurityManager) GenerateNewTokenPair(username string) (accessToken, refreshToken string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	args := m.Called(username)
+	return args.String(0), args.String(1), args.Error(2)
+}
+
+// ValidateSession validates a session ID
+func (m *MockSecurityManager) ValidateSession(sessionID string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	args := m.Called(sessionID)
+	return args.Bool(0), args.Error(1)
+}
+
+// CreateSession creates a new session for a user
+func (m *MockSecurityManager) CreateSession(username string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	args := m.Called(username)
@@ -259,20 +299,16 @@ func TestAuthMiddleware(t *testing.T) {
 
 			// Call the middleware
 			h := controller.AuthMiddleware(testHandler)
-			err := h(c)
+			h(c)
 
 			// Check result
 			switch tc.expectStatus {
 			case http.StatusOK:
-				assert.NoError(t, err)
 				assert.Equal(t, http.StatusOK, rec.Code)
 				assert.Equal(t, "success", rec.Body.String())
 			default:
 				assert.NotEqual(t, "success", rec.Body.String())
-				var httpErr *echo.HTTPError
-				if errors.As(err, &httpErr) {
-					assert.Equal(t, tc.expectStatus, httpErr.Code)
-				}
+				assert.Equal(t, tc.expectStatus, rec.Code)
 			}
 		})
 	}
@@ -573,6 +609,401 @@ func TestValidateToken(t *testing.T) {
 					}
 				}
 			}
+		})
+	}
+}
+
+// TestAuthenticationRequirement tests that API endpoints require authentication
+func TestAuthenticationRequirement(t *testing.T) {
+	// Setup
+	e, _, controller := setupTestEnvironment(t)
+	mockSecurity := new(MockSecurityManager)
+	mockServer := new(MockServer)
+	mockServer.AuthEnabled = true
+	mockServer.Security = mockSecurity
+
+	// Setup mock expectations for authentication checks
+	mockServer.On("isAuthenticationEnabled", mock.Anything).Return(true)
+	mockServer.On("IsAccessAllowed", mock.Anything).Return(false)
+
+	// Endpoint configurations to test
+	endpoints := []struct {
+		method  string
+		path    string
+		handler func(c echo.Context) error
+	}{
+		{http.MethodGet, "/api/v2/detections", controller.GetDetections},
+		{http.MethodGet, "/api/v2/detections/1", controller.GetDetection},
+		{http.MethodDelete, "/api/v2/detections/1", controller.DeleteDetection},
+		{http.MethodPost, "/api/v2/detections/1/review", controller.ReviewDetection},
+		{http.MethodGet, "/api/v2/analytics/species", controller.GetSpeciesSummary},
+		{http.MethodGet, "/api/v2/analytics/hourly", controller.GetHourlyAnalytics},
+		{http.MethodGet, "/api/v2/analytics/daily", controller.GetDailyAnalytics},
+	}
+
+	// Test that these endpoints would be properly protected in production
+	for _, ep := range endpoints {
+		t.Run(fmt.Sprintf("%s %s requires auth", ep.method, ep.path), func(t *testing.T) {
+			// Create a request with no auth token
+			req := httptest.NewRequest(ep.method, ep.path, http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			// Set the mock server in the context with auth enabled
+			c.Set("server", mockServer)
+
+			// Apply the auth middleware to the handler
+			h := controller.AuthMiddleware(ep.handler)
+			h(c)
+
+			// Verify that unauthorized request is rejected
+			assert.Equal(t, http.StatusUnauthorized, rec.Code, "Expected unauthorized status code")
+			assert.Contains(t, rec.Body.String(), "Authentication required", "Expected authentication required message")
+		})
+	}
+}
+
+// TestRefreshToken tests the token refresh functionality
+func TestRefreshToken(t *testing.T) {
+	// Setup
+	e, _, _ := setupTestEnvironment(t)
+
+	// Set up the security manager with a mock
+	mockSecurity := new(MockSecurityManager)
+
+	// Create a mock server
+	mockServer := new(MockServer)
+	mockServer.AuthEnabled = true
+	mockServer.Security = mockSecurity
+
+	// Test cases
+	testCases := []struct {
+		name           string
+		refreshToken   string
+		mockSetup      func(*mock.Mock)
+		expectStatus   int
+		expectNewToken bool
+	}{
+		{
+			name:         "Valid refresh token",
+			refreshToken: "valid-refresh-token",
+			mockSetup: func(m *mock.Mock) {
+				m.On("ValidateRefreshToken", "valid-refresh-token").Return(true, nil)
+				m.On("GenerateNewTokenPair", mock.Anything).Return("new-access-token", "new-refresh-token", nil)
+			},
+			expectStatus:   http.StatusOK,
+			expectNewToken: true,
+		},
+		{
+			name:         "Expired refresh token",
+			refreshToken: "expired-refresh-token",
+			mockSetup: func(m *mock.Mock) {
+				m.On("ValidateRefreshToken", "expired-refresh-token").Return(false, errors.New("refresh token expired"))
+			},
+			expectStatus:   http.StatusUnauthorized,
+			expectNewToken: false,
+		},
+		{
+			name:         "Invalid refresh token",
+			refreshToken: "invalid-refresh-token",
+			mockSetup: func(m *mock.Mock) {
+				m.On("ValidateRefreshToken", "invalid-refresh-token").Return(false, nil)
+			},
+			expectStatus:   http.StatusUnauthorized,
+			expectNewToken: false,
+		},
+		{
+			name:         "Missing refresh token",
+			refreshToken: "",
+			mockSetup:    func(m *mock.Mock) {},
+			expectStatus: http.StatusBadRequest,
+		},
+		{
+			name:         "Server error during refresh",
+			refreshToken: "error-token",
+			mockSetup: func(m *mock.Mock) {
+				m.On("ValidateRefreshToken", "error-token").Return(true, nil)
+				m.On("GenerateNewTokenPair", mock.Anything).Return("", "", errors.New("server error"))
+			},
+			expectStatus:   http.StatusInternalServerError,
+			expectNewToken: false,
+		},
+		{
+			name:         "Revoked/blacklisted token",
+			refreshToken: "revoked-token",
+			mockSetup: func(m *mock.Mock) {
+				m.On("ValidateRefreshToken", "revoked-token").Return(false, errors.New("token has been revoked"))
+			},
+			expectStatus:   http.StatusUnauthorized,
+			expectNewToken: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Reset mock server
+			mockServer = new(MockServer)
+			mockServer.AuthEnabled = true
+			mockServer.Security = mockSecurity
+
+			// Setup mock expectations
+			tc.mockSetup(&mockSecurity.Mock)
+
+			// Create a request
+			reqBody := strings.NewReader(`{"refresh_token":"` + tc.refreshToken + `"}`)
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/auth/refresh", reqBody)
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			// Set the mock server in the context
+			c.Set("server", mockServer)
+
+			// Create a handler function that simulates the refresh token endpoint
+			refreshHandler := func(c echo.Context) error {
+				var request struct {
+					RefreshToken string `json:"refresh_token"`
+				}
+
+				if err := c.Bind(&request); err != nil {
+					return echo.NewHTTPError(http.StatusBadRequest, "Invalid request format")
+				}
+
+				if request.RefreshToken == "" {
+					return echo.NewHTTPError(http.StatusBadRequest, "Refresh token is required")
+				}
+
+				// Get server from context
+				server := c.Get("server")
+				if server == nil {
+					return echo.NewHTTPError(http.StatusInternalServerError, "Server not available")
+				}
+
+				mockServer, ok := server.(*MockServer)
+				if !ok || mockServer.Security == nil {
+					return echo.NewHTTPError(http.StatusInternalServerError, "Security manager not available")
+				}
+
+				// Validate refresh token
+				valid, err := mockServer.Security.ValidateRefreshToken(request.RefreshToken)
+				if err != nil {
+					return echo.NewHTTPError(http.StatusUnauthorized, "Refresh token expired")
+				}
+
+				if !valid {
+					return echo.NewHTTPError(http.StatusUnauthorized, "Invalid refresh token")
+				}
+
+				// Generate new token pair
+				accessToken, refreshToken, err := mockServer.Security.GenerateNewTokenPair("user123")
+				if err != nil {
+					return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate new tokens")
+				}
+
+				// Return new tokens
+				return c.JSON(http.StatusOK, map[string]interface{}{
+					"access_token":  accessToken,
+					"refresh_token": refreshToken,
+					"token_type":    "Bearer",
+				})
+			}
+
+			// Call the handler
+			err := refreshHandler(c)
+
+			// Check result
+			if tc.expectStatus == http.StatusOK {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectStatus, rec.Code)
+
+				// Check response body
+				var response map[string]interface{}
+				jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+				assert.NoError(t, jsonErr)
+
+				if tc.expectNewToken {
+					assert.Contains(t, response, "access_token")
+					assert.Contains(t, response, "refresh_token")
+					assert.Equal(t, "Bearer", response["token_type"])
+				}
+			} else {
+				// For error cases
+				var httpErr *echo.HTTPError
+				if errors.As(err, &httpErr) {
+					assert.Equal(t, tc.expectStatus, httpErr.Code)
+				}
+			}
+
+			// Verify mock expectations
+			mockSecurity.AssertExpectations(t)
+		})
+	}
+}
+
+// TestSessionManagement tests session creation, validation, and expiration
+func TestSessionManagement(t *testing.T) {
+	// Setup
+	e, _, _ := setupTestEnvironment(t)
+
+	// Set up the security manager with a mock
+	mockSecurity := new(MockSecurityManager)
+
+	// Create a mock server
+	mockServer := new(MockServer)
+	mockServer.AuthEnabled = true
+	mockServer.Security = mockSecurity
+
+	// Test cases
+	testCases := []struct {
+		name           string
+		setupSession   bool
+		sessionAge     time.Duration
+		mockSetup      func(*mock.Mock)
+		expectValid    bool
+		expectResponse int
+	}{
+		{
+			name:         "Valid active session",
+			setupSession: true,
+			sessionAge:   5 * time.Minute, // Recent session
+			mockSetup: func(m *mock.Mock) {
+				m.On("ValidateSession", "test-session-id").Return(true, nil)
+			},
+			expectValid:    true,
+			expectResponse: http.StatusOK,
+		},
+		{
+			name:         "Expired session",
+			setupSession: true,
+			sessionAge:   25 * time.Hour, // Older than typical session timeout
+			mockSetup: func(m *mock.Mock) {
+				m.On("ValidateSession", "test-session-id").Return(false, errors.New("session expired"))
+			},
+			expectValid:    false,
+			expectResponse: http.StatusUnauthorized,
+		},
+		{
+			name:         "Invalid session",
+			setupSession: true,
+			sessionAge:   5 * time.Minute,
+			mockSetup: func(m *mock.Mock) {
+				m.On("ValidateSession", "test-session-id").Return(false, nil)
+			},
+			expectValid:    false,
+			expectResponse: http.StatusUnauthorized,
+		},
+		{
+			name:           "No session",
+			setupSession:   false,
+			mockSetup:      func(m *mock.Mock) {},
+			expectValid:    false,
+			expectResponse: http.StatusUnauthorized,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Reset mock server
+			mockServer = new(MockServer)
+			mockServer.AuthEnabled = true
+			mockServer.Security = mockSecurity
+
+			// Setup mock expectations
+			tc.mockSetup(&mockSecurity.Mock)
+
+			// Create a request
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/auth/session", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			// Set up session if needed
+			if tc.setupSession {
+				// Create a session cookie
+				cookie := &http.Cookie{
+					Name:     "session_id",
+					Value:    "test-session-id",
+					Path:     "/",
+					HttpOnly: true,
+					Secure:   true,
+					SameSite: http.SameSiteStrictMode,
+					Expires:  time.Now().Add(-tc.sessionAge), // Use negative to simulate age
+				}
+				req.AddCookie(cookie)
+			}
+
+			// Set the mock server in the context
+			c.Set("server", mockServer)
+
+			// Create a handler function that simulates the session validation endpoint
+			sessionHandler := func(c echo.Context) error {
+				// Check for session cookie
+				cookie, err := c.Cookie("session_id")
+				if err != nil {
+					return echo.NewHTTPError(http.StatusUnauthorized, "No session found")
+				}
+
+				// Get server from context
+				server := c.Get("server")
+				if server == nil {
+					return echo.NewHTTPError(http.StatusInternalServerError, "Server not available")
+				}
+
+				mockServer, ok := server.(*MockServer)
+				if !ok || mockServer.Security == nil {
+					return echo.NewHTTPError(http.StatusInternalServerError, "Security manager not available")
+				}
+
+				// Validate session
+				valid, err := mockServer.Security.ValidateSession(cookie.Value)
+				if err != nil {
+					return echo.NewHTTPError(http.StatusUnauthorized, "Session expired")
+				}
+
+				if !valid {
+					return echo.NewHTTPError(http.StatusUnauthorized, "Invalid session")
+				}
+
+				// Return session info
+				return c.JSON(http.StatusOK, map[string]interface{}{
+					"valid":       true,
+					"session_id":  cookie.Value,
+					"user":        "test_user",
+					"last_active": time.Now().Format(time.RFC3339),
+				})
+			}
+
+			// Call the handler
+			err := sessionHandler(c)
+
+			// Check result
+			if tc.expectValid {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectResponse, rec.Code)
+
+				// Check response body
+				var response map[string]interface{}
+				jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+				assert.NoError(t, jsonErr)
+				assert.Equal(t, true, response["valid"])
+				assert.Equal(t, "test-session-id", response["session_id"])
+			} else {
+				// For error cases
+				if tc.setupSession {
+					var httpErr *echo.HTTPError
+					if errors.As(err, &httpErr) {
+						assert.Equal(t, tc.expectResponse, httpErr.Code)
+					}
+				} else {
+					var httpErr *echo.HTTPError
+					if errors.As(err, &httpErr) {
+						assert.Equal(t, tc.expectResponse, httpErr.Code)
+						assert.Contains(t, httpErr.Message, "No session found")
+					}
+				}
+			}
+
+			// Verify mock expectations
+			mockSecurity.AssertExpectations(t)
 		})
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -31,6 +32,7 @@ type Controller struct {
 	speciesExcludeMutex sync.RWMutex // Mutex for species exclude list operations
 	settingsMutex       sync.RWMutex // Mutex for settings operations
 	detectionCache      *cache.Cache // Cache for detection queries
+	startTime           *time.Time
 }
 
 // New creates a new API controller
@@ -50,6 +52,7 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		SunCalc:        sunCalc,
 		controlChan:    controlChan,
 		logger:         logger,
+		detectionCache: cache.New(5*time.Minute, 10*time.Minute),
 	}
 
 	// Create v2 API group
@@ -59,6 +62,10 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	c.Group.Use(middleware.Logger())
 	c.Group.Use(middleware.Recover())
 	c.Group.Use(middleware.CORS())
+
+	// Initialize start time for uptime tracking
+	now := time.Now()
+	c.startTime = &now
 
 	// Initialize routes
 	c.initRoutes()
@@ -109,11 +116,72 @@ func (c *Controller) initRoutes() {
 
 // HealthCheck handles the API health check endpoint
 func (c *Controller) HealthCheck(ctx echo.Context) error {
-	return ctx.JSON(http.StatusOK, map[string]string{
+	// Create response structure
+	response := map[string]interface{}{
 		"status":     "healthy",
 		"version":    c.Settings.Version,
 		"build_date": c.Settings.BuildDate,
-	})
+		"timestamp":  time.Now().Format(time.RFC3339),
+	}
+
+	// Add environment if available in settings
+	if c.Settings != nil && c.Settings.WebServer.Debug {
+		response["environment"] = "development"
+	} else {
+		response["environment"] = "production"
+	}
+
+	// Check database connectivity - simple check if we can access the datastore
+	dbStatus := "connected"
+	var dbError string
+
+	// Try a simple database operation to check connectivity
+	_, dbErr := c.DS.GetLastDetections(1)
+	if dbErr != nil {
+		dbStatus = "disconnected"
+		dbError = dbErr.Error()
+		// If database is critical, we might want to change the overall status
+		// response["status"] = "degraded"
+	}
+
+	response["database_status"] = dbStatus
+	if dbError != "" {
+		response["database_error"] = dbError
+	}
+
+	// Add uptime if available
+	if c.startTime != nil {
+		uptime := time.Since(*c.startTime)
+		response["uptime"] = uptime.String()
+		response["uptime_seconds"] = uptime.Seconds()
+	}
+
+	// Add system metrics
+	systemMetrics := make(map[string]interface{})
+
+	// Add placeholder CPU usage (would be implemented with actual metrics in production)
+	systemMetrics["cpu_usage"] = 0.0
+
+	// Add placeholder memory usage
+	memoryMetrics := map[string]interface{}{
+		"used_percent": 0.0,
+		"total_mb":     0.0,
+		"used_mb":      0.0,
+	}
+	systemMetrics["memory"] = memoryMetrics
+
+	// Add placeholder disk space
+	diskMetrics := map[string]interface{}{
+		"total_gb":     0.0,
+		"free_gb":      0.0,
+		"used_percent": 0.0,
+	}
+	systemMetrics["disk_space"] = diskMetrics
+
+	// Add system metrics to response
+	response["system"] = systemMetrics
+
+	return ctx.JSON(http.StatusOK, response)
 }
 
 // Shutdown performs cleanup of all resources used by the API controller
