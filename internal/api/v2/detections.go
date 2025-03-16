@@ -91,6 +91,11 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 		numResults = 1000
 	}
 
+	// Ensure offset is non-negative for security and to prevent unexpected behavior
+	if offset < 0 {
+		offset = 0
+	}
+
 	// Set default duration
 	if duration <= 0 {
 		duration = 1
