@@ -299,20 +299,16 @@ func TestAuthMiddleware(t *testing.T) {
 
 			// Call the middleware
 			h := controller.AuthMiddleware(testHandler)
-			err := h(c)
+			h(c)
 
 			// Check result
 			switch tc.expectStatus {
 			case http.StatusOK:
-				assert.NoError(t, err)
 				assert.Equal(t, http.StatusOK, rec.Code)
 				assert.Equal(t, "success", rec.Body.String())
 			default:
 				assert.NotEqual(t, "success", rec.Body.String())
-				var httpErr *echo.HTTPError
-				if errors.As(err, &httpErr) {
-					assert.Equal(t, tc.expectStatus, httpErr.Code)
-				}
+				assert.Equal(t, tc.expectStatus, rec.Code)
 			}
 		})
 	}
@@ -620,7 +616,15 @@ func TestValidateToken(t *testing.T) {
 // TestAuthenticationRequirement tests that API endpoints require authentication
 func TestAuthenticationRequirement(t *testing.T) {
 	// Setup
-	_, _, controller := setupTestEnvironment(t)
+	e, _, controller := setupTestEnvironment(t)
+	mockSecurity := new(MockSecurityManager)
+	mockServer := new(MockServer)
+	mockServer.AuthEnabled = true
+	mockServer.Security = mockSecurity
+
+	// Setup mock expectations for authentication checks
+	mockServer.On("isAuthenticationEnabled", mock.Anything).Return(true)
+	mockServer.On("IsAccessAllowed", mock.Anything).Return(false)
 
 	// Endpoint configurations to test
 	endpoints := []struct {
@@ -638,12 +642,23 @@ func TestAuthenticationRequirement(t *testing.T) {
 	}
 
 	// Test that these endpoints would be properly protected in production
-	// We're mocking auth here since the actual middleware may not be applied in tests
 	for _, ep := range endpoints {
 		t.Run(fmt.Sprintf("%s %s requires auth", ep.method, ep.path), func(t *testing.T) {
-			// In a real application, requests would fail due to auth middleware
-			// We're documenting that these endpoints should be protected
-			t.Logf("Endpoint %s %s should have authentication protection in production", ep.method, ep.path)
+			// Create a request with no auth token
+			req := httptest.NewRequest(ep.method, ep.path, nil)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			// Set the mock server in the context with auth enabled
+			c.Set("server", mockServer)
+
+			// Apply the auth middleware to the handler
+			h := controller.AuthMiddleware(ep.handler)
+			h(c)
+
+			// Verify that unauthorized request is rejected
+			assert.Equal(t, http.StatusUnauthorized, rec.Code, "Expected unauthorized status code")
+			assert.Contains(t, rec.Body.String(), "Authentication required", "Expected authentication required message")
 		})
 	}
 }
@@ -711,6 +726,15 @@ func TestRefreshToken(t *testing.T) {
 				m.On("GenerateNewTokenPair", mock.Anything).Return("", "", errors.New("server error"))
 			},
 			expectStatus:   http.StatusInternalServerError,
+			expectNewToken: false,
+		},
+		{
+			name:         "Revoked/blacklisted token",
+			refreshToken: "revoked-token",
+			mockSetup: func(m *mock.Mock) {
+				m.On("ValidateRefreshToken", "revoked-token").Return(false, errors.New("token has been revoked"))
+			},
+			expectStatus:   http.StatusUnauthorized,
 			expectNewToken: false,
 		},
 	}
