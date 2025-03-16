@@ -272,21 +272,51 @@ func (ds *DataStore) GetAllNotes() ([]Note, error) {
 
 // GetTopBirdsData retrieves the top bird sightings based on a selected date and minimum confidence threshold.
 func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]Note, error) {
-	var results []Note
+	// Define a temporary struct to hold the query results including the count
+	type SpeciesCount struct {
+		CommonName     string
+		ScientificName string
+		Count          int
+		Confidence     float64
+		Date           string
+		Time           string
+	}
+
+	var results []SpeciesCount
 
 	// Get the number of species to report from the dashboard settings
 	reportCount := conf.Setting().Realtime.Dashboard.SummaryLimit
 
 	// First, get the count and common names
 	query := ds.DB.Table("notes").
-		Select("common_name, MAX(scientific_name) as scientific_name, COUNT(*) as count").
+		Select("common_name, MAX(scientific_name) as scientific_name, COUNT(*) as count, MAX(confidence) as confidence, MAX(date) as date, MAX(time) as time").
 		Where("date = ? AND confidence >= ?", selectedDate, minConfidenceNormalized).
 		Group("common_name").
 		Order("count DESC").
 		Limit(reportCount)
 
-	err := query.Scan(&results).Error
-	return results, err
+	if err := query.Scan(&results).Error; err != nil {
+		return nil, err
+	}
+
+	// Now get all the actual notes for these species on this date
+	var notes []Note
+	if len(results) > 0 {
+		// Extract the common names to use in the IN clause
+		commonNames := make([]string, len(results))
+		for i, result := range results {
+			commonNames[i] = result.CommonName
+		}
+
+		// Query to get all notes for these species on this date
+		if err := ds.DB.Where("date = ? AND common_name IN ? AND confidence >= ?",
+			selectedDate, commonNames, minConfidenceNormalized).
+			Find(&notes).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	return notes, nil
 }
 
 type ClipForRemoval struct {

@@ -75,7 +75,7 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get daily species data", http.StatusInternalServerError)
 	}
 
-	// Process notes to get hourly counts
+	// Process notes to get hourly counts and other statistics
 	birdData := make(map[string]struct {
 		CommonName     string
 		ScientificName string
