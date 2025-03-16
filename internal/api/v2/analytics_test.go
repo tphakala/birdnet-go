@@ -4,6 +4,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -294,7 +295,7 @@ func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
 // TestGetInvalidAnalyticsRequests tests analytics endpoints with invalid parameters
 func TestGetInvalidAnalyticsRequests(t *testing.T) {
 	// Setup
-	e, _, controller := setupAnalyticsTestEnvironment(t)
+	e, mockDS, controller := setupTestEnvironment(t)
 
 	// Test cases
 	testCases := []struct {
@@ -303,6 +304,8 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 		handler     func(echo.Context) error
 		queryParams map[string]string
 		expectCode  int
+		expectError string
+		mockSetup   func(*mock.Mock) // Add mockSetup function to configure mocks for each test case
 	}{
 		{
 			name:     "Missing date for hourly analytics",
@@ -311,7 +314,9 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 			queryParams: map[string]string{
 				"species": "Turdus migratorius",
 			},
-			expectCode: http.StatusBadRequest,
+			expectCode:  http.StatusBadRequest,
+			expectError: "Missing required parameter: date",
+			mockSetup:   func(m *mock.Mock) {},
 		},
 		{
 			name:     "Missing species for hourly analytics",
@@ -320,7 +325,9 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 			queryParams: map[string]string{
 				"date": "2023-01-01",
 			},
-			expectCode: http.StatusBadRequest,
+			expectCode:  http.StatusBadRequest,
+			expectError: "Missing required parameter: species",
+			mockSetup:   func(m *mock.Mock) {},
 		},
 		{
 			name:     "Invalid date format for hourly analytics",
@@ -330,7 +337,9 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 				"date":    "01-01-2023", // Wrong format
 				"species": "Turdus migratorius",
 			},
-			expectCode: http.StatusBadRequest,
+			expectCode:  http.StatusBadRequest,
+			expectError: "Invalid date format. Use YYYY-MM-DD",
+			mockSetup:   func(m *mock.Mock) {},
 		},
 		{
 			name:     "Missing start_date for daily analytics",
@@ -340,33 +349,263 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 				"end_date": "2023-01-07",
 				"species":  "Turdus migratorius",
 			},
-			expectCode: http.StatusBadRequest,
+			expectCode:  http.StatusBadRequest,
+			expectError: "Missing required parameter: start_date",
+			mockSetup:   func(m *mock.Mock) {},
+		},
+		// Enhanced date format validation tests
+		{
+			name:     "Invalid month in start_date (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "2023-13-01", // Month 13 is invalid
+				"end_date":   "2023-12-31",
+			},
+			expectCode:  http.StatusBadRequest,
+			expectError: "Invalid start_date format. Use YYYY-MM-DD",
+			mockSetup:   func(m *mock.Mock) {},
+		},
+		{
+			name:     "Invalid day in start_date (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "2023-04-31", // April has 30 days
+				"end_date":   "2023-05-01",
+			},
+			expectCode:  http.StatusBadRequest,
+			expectError: "Invalid start_date format. Use YYYY-MM-DD",
+			mockSetup:   func(m *mock.Mock) {},
+		},
+		{
+			name:     "Invalid day in end_date (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "2023-02-01",
+				"end_date":   "2023-02-30", // February never has 30 days
+			},
+			expectCode:  http.StatusBadRequest,
+			expectError: "Invalid end_date format. Use YYYY-MM-DD",
+			mockSetup:   func(m *mock.Mock) {},
+		},
+		{
+			name:     "Invalid leap year date (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "2023-02-29", // 2023 is not a leap year
+				"end_date":   "2023-03-01",
+			},
+			expectCode:  http.StatusBadRequest,
+			expectError: "Invalid start_date format. Use YYYY-MM-DD",
+			mockSetup:   func(m *mock.Mock) {},
+		},
+		{
+			name:     "Valid leap year date (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "2024-02-29", // 2024 is a leap year
+				"end_date":   "2024-03-01",
+			},
+			expectCode: http.StatusOK, // This should be valid
+			mockSetup: func(m *mock.Mock) {
+				// Add mock for GetDailyAnalyticsData since this test case passes validation
+				m.On("GetDailyAnalyticsData", "2024-02-29", "2024-03-01", "").Return([]datastore.DailyAnalyticsData{}, nil)
+			},
+		},
+		{
+			name:     "Date with text injection (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "2023-01-01' OR '1'='1", // SQL injection attempt
+				"end_date":   "2023-01-07",
+			},
+			expectCode:  http.StatusBadRequest,
+			expectError: "Invalid start_date format. Use YYYY-MM-DD",
+			mockSetup:   func(m *mock.Mock) {},
+		},
+		{
+			name:     "Date with zero month (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "2023-00-01", // Month 0 is invalid
+				"end_date":   "2023-01-01",
+			},
+			expectCode:  http.StatusBadRequest,
+			expectError: "Invalid start_date format. Use YYYY-MM-DD",
+			mockSetup:   func(m *mock.Mock) {},
+		},
+		{
+			name:     "Date with zero day (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "2023-01-00", // Day 0 is invalid
+				"end_date":   "2023-01-01",
+			},
+			expectCode:  http.StatusBadRequest,
+			expectError: "Invalid start_date format. Use YYYY-MM-DD",
+			mockSetup:   func(m *mock.Mock) {},
+		},
+		{
+			name:     "Date with spaces (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "2023 01 01", // Spaces instead of hyphens
+				"end_date":   "2023-01-07",
+			},
+			expectCode:  http.StatusBadRequest,
+			expectError: "Invalid start_date format. Use YYYY-MM-DD",
+			mockSetup:   func(m *mock.Mock) {},
+		},
+		{
+			name:     "Date with slashes (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "2023/01/01", // Slashes instead of hyphens
+				"end_date":   "2023-01-07",
+			},
+			expectCode:  http.StatusBadRequest,
+			expectError: "Invalid start_date format. Use YYYY-MM-DD",
+			mockSetup:   func(m *mock.Mock) {},
+		},
+		{
+			name:     "Date with dots (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "2023.01.01", // Dots instead of hyphens
+				"end_date":   "2023-01-07",
+			},
+			expectCode:  http.StatusBadRequest,
+			expectError: "Invalid start_date format. Use YYYY-MM-DD",
+			mockSetup:   func(m *mock.Mock) {},
+		},
+		{
+			name:     "Date with reversed format (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "01-01-2023", // DD-MM-YYYY format
+				"end_date":   "07-01-2023",
+			},
+			expectCode:  http.StatusBadRequest,
+			expectError: "Invalid start_date format. Use YYYY-MM-DD",
+			mockSetup:   func(m *mock.Mock) {},
+		},
+		{
+			name:     "Date with short year (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "23-01-01", // YY-MM-DD format
+				"end_date":   "23-01-07",
+			},
+			expectCode:  http.StatusBadRequest,
+			expectError: "Invalid start_date format. Use YYYY-MM-DD",
+			mockSetup:   func(m *mock.Mock) {},
+		},
+		{
+			name:     "Date with ISO 8601 format with time (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "2023-01-01T00:00:00Z", // ISO 8601 with time
+				"end_date":   "2023-01-07",
+			},
+			expectCode:  http.StatusBadRequest,
+			expectError: "Invalid start_date format. Use YYYY-MM-DD",
+			mockSetup:   func(m *mock.Mock) {},
+		},
+		{
+			name:     "Date with negative year (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "-2023-01-01", // Negative year
+				"end_date":   "2023-01-07",
+			},
+			expectCode:  http.StatusBadRequest,
+			expectError: "Invalid start_date format. Use YYYY-MM-DD",
+			mockSetup:   func(m *mock.Mock) {},
+		},
+		{
+			name:     "Date with very large year (daily analytics)",
+			endpoint: "/api/v2/analytics/daily",
+			handler:  controller.GetDailyAnalytics,
+			queryParams: map[string]string{
+				"start_date": "99999-01-01", // Very large year
+				"end_date":   "99999-01-07",
+			},
+			expectCode: http.StatusBadRequest, // Go's time.Parse cannot handle years this large
+			// No mock setup needed as validation will fail
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a request
+			// Reset mock expectations
+			mockDS.ExpectedCalls = nil
+
+			// Setup mock expectations for this test case
+			if tc.mockSetup != nil {
+				tc.mockSetup(&mockDS.Mock)
+			}
+
+			// Create request with query parameters
 			req := httptest.NewRequest(http.MethodGet, tc.endpoint, http.NoBody)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 			c.SetPath(tc.endpoint)
 
-			// Set query parameters
-			for key, value := range tc.queryParams {
-				c.QueryParams().Set(key, value)
+			// Add query parameters
+			q := req.URL.Query()
+			for k, v := range tc.queryParams {
+				q.Add(k, v)
 			}
+			req.URL.RawQuery = q.Encode()
 
 			// Call handler
 			err := tc.handler(c)
 
-			// Check if error handling works as expected
-			var httpErr *echo.HTTPError
-			if errors.As(err, &httpErr) {
-				assert.Equal(t, tc.expectCode, httpErr.Code)
-			} else {
+			// Check response
+			if tc.expectCode == http.StatusOK {
+				assert.NoError(t, err)
 				assert.Equal(t, tc.expectCode, rec.Code)
+			} else {
+				// For error cases, check the error message
+				if err != nil {
+					// Direct error from handler
+					var httpErr *echo.HTTPError
+					if errors.As(err, &httpErr) {
+						assert.Equal(t, tc.expectCode, httpErr.Code)
+						if tc.expectError != "" {
+							assert.Contains(t, fmt.Sprintf("%v", httpErr.Message), tc.expectError)
+						}
+					}
+				} else {
+					// Error handled by controller and returned as JSON
+					assert.Equal(t, tc.expectCode, rec.Code)
+					if tc.expectError != "" {
+						var errorResp map[string]interface{}
+						err = json.Unmarshal(rec.Body.Bytes(), &errorResp)
+						assert.NoError(t, err)
+						if errorResp["error"] != nil {
+							assert.Contains(t, errorResp["error"].(string), tc.expectError)
+						}
+					}
+				}
 			}
+
+			// Verify mock expectations
+			mockDS.AssertExpectations(t)
 		})
 	}
 }
