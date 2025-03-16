@@ -645,7 +645,7 @@ func TestAuthenticationRequirement(t *testing.T) {
 	for _, ep := range endpoints {
 		t.Run(fmt.Sprintf("%s %s requires auth", ep.method, ep.path), func(t *testing.T) {
 			// Create a request with no auth token
-			req := httptest.NewRequest(ep.method, ep.path, nil)
+			req := httptest.NewRequest(ep.method, ep.path, http.NoBody)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 
