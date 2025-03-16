@@ -902,7 +902,8 @@ func TestGetNoteComments(t *testing.T) {
 			} else {
 				// For error cases
 				assert.Error(t, err)
-				httpErr, ok := err.(*echo.HTTPError)
+				var httpErr *echo.HTTPError
+				ok := errors.As(err, &httpErr)
 				assert.True(t, ok)
 				assert.Equal(t, tc.expectedStatus, httpErr.Code)
 			}
