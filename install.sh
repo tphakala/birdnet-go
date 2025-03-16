@@ -1375,28 +1375,28 @@ sudo apt -qq update
 print_message "\n🔧 Checking and installing required packages..." "$YELLOW"
 
 # Check which packages need to be installed
-REQUIRED_PACKAGES="alsa-utils curl bc jq apache2-utils netcat-openbsd"
-TO_INSTALL=""
+REQUIRED_PACKAGES=("alsa-utils" "curl" "bc" "jq" "apache2-utils" "netcat-openbsd")
+TO_INSTALL=()
 
-for pkg in $REQUIRED_PACKAGES; do
+for pkg in "${REQUIRED_PACKAGES[@]}"; do
     if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed"; then
-        TO_INSTALL="$TO_INSTALL $pkg"
+        TO_INSTALL+=("$pkg")
     else
         print_message "✅ $pkg found" "$GREEN"
     fi
 done
 
-# Install missing packages in a single command
-if [ -n "${TO_INSTALL}" ]; then
-    print_message "🔧 Installing missing packages: ${TO_INSTALL}" "$YELLOW"
+# Install missing packages
+if [ ${#TO_INSTALL[@]} -gt 0 ]; then
+    print_message "🔧 Installing missing packages: ${TO_INSTALL[*]}" "$YELLOW"
     sudo apt clean
     sudo apt update -q
-    if sudo apt install -q -y "${TO_INSTALL}"; then
+    if sudo apt install -q -y "${TO_INSTALL[@]}"; then
         print_message "✅ All packages installed successfully" "$GREEN"
     else
         print_message "⚠️ Package installation failed, retrying with new apt update and install..." "$YELLOW"
         # Retry with apt update first
-        if sudo apt update && sudo apt install -q -y "${TO_INSTALL}"; then
+        if sudo apt update && sudo apt install -q -y "${TO_INSTALL[@]}"; then
             print_message "✅ All packages installed successfully after update" "$GREEN"
         else
             print_message "❌ Failed to install some packages even after apt update" "$RED"
