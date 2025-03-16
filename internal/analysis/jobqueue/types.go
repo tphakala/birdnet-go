@@ -29,6 +29,7 @@ type RetryConfig struct {
 // that can be executed by the job queue.
 type Action interface {
 	Execute(data interface{}) error
+	GetDescription() string // Returns a human-readable description of the action
 }
 
 // Clock is an interface for time-related operations that can be mocked for testing

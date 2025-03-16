@@ -107,7 +107,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	// Encode PCM data to WAV format
 	wavBuffer, err := encodePCMtoWAV(pcmData)
 	if err != nil {
-		log.Printf("Failed to encode PCM to WAV: %v\n", err)
+		log.Printf("❌ Failed to encode PCM to WAV: %v\n", err)
 		return "", fmt.Errorf("failed to encode PCM to WAV: %w", err)
 	}
 
@@ -115,11 +115,11 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	var gzipWavData bytes.Buffer
 	gzipWriter := gzip.NewWriter(&gzipWavData)
 	if _, err := io.Copy(gzipWriter, wavBuffer); err != nil {
-		log.Printf("Failed to compress WAV data: %v\n", err)
+		log.Printf("❌ Failed to compress WAV data: %v\n", err)
 		return "", fmt.Errorf("failed to compress WAV data: %w", err)
 	}
 	if err := gzipWriter.Close(); err != nil {
-		log.Printf("Failed to finalize compression: %v\n", err)
+		log.Printf("❌ Failed to finalize compression: %v\n", err)
 		return "", fmt.Errorf("failed to finalize compression: %w", err)
 	}
 
@@ -127,7 +127,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	soundscapeURL := fmt.Sprintf("https://app.birdweather.com/api/v1/stations/%s/soundscapes?timestamp=%s", b.BirdweatherID, timestamp)
 	req, err := http.NewRequest("POST", soundscapeURL, &gzipWavData)
 	if err != nil {
-		log.Printf("Failed to create POST request: %v\n", err)
+		log.Printf("❌ Failed to create POST request: %v\n", err)
 		return "", fmt.Errorf("failed to create POST request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
@@ -137,7 +137,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	// Execute the request
 	resp, err := b.HTTPClient.Do(req)
 	if err != nil {
-		log.Printf("Request to upload soundscape failed: %v\n", err)
+		log.Printf("❌ Request to upload soundscape failed: %v\n", err)
 		return "", handleNetworkError(err)
 	}
 	if resp == nil {
@@ -148,22 +148,22 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	// Process the response
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("Failed to read response body: %v\n", err)
+		log.Printf("❌ Failed to read response body: %v\n", err)
 		return "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	if b.Settings.Realtime.Birdweather.Debug {
-		log.Println("Response Body:", string(responseBody))
+		log.Println("📜 Response Body:", string(responseBody))
 	}
 
 	var sdata SoundscapeResponse
 	if err := json.Unmarshal(responseBody, &sdata); err != nil {
-		log.Printf("Failed to decode JSON response: %v\n", err)
+		log.Printf("❌ Failed to decode JSON response: %v\n", err)
 		return "", fmt.Errorf("failed to decode JSON response: %w", err)
 	}
 
 	if !sdata.Success {
-		log.Println("Upload was not successful according to the response")
+		log.Println("❌ Upload was not successful according to the response")
 		return "", fmt.Errorf("upload failed, response reported failure")
 	}
 
@@ -180,7 +180,7 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 	detectionURL := fmt.Sprintf("https://app.birdweather.com/api/v1/stations/%s/detections", b.BirdweatherID)
 
 	if b.Settings.Realtime.Birdweather.Debug {
-		log.Println("Posting detection to Birdweather: ", detectionURL)
+		log.Println("📡 Posting detection to Birdweather: ", detectionURL)
 	}
 
 	// Fuzz location coordinates with user defined accuracy
@@ -189,7 +189,7 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 	// Convert timestamp to time.Time and calculate end time
 	parsedTime, err := time.Parse("2006-01-02T15:04:05.000-0700", timestamp)
 	if err != nil {
-		log.Printf("Failed to parse timestamp: %s, err: %v\n", timestamp, err)
+		log.Printf("❌ Failed to parse timestamp: %s, err: %v\n", timestamp, err)
 		return fmt.Errorf("failed to parse timestamp: %w", err)
 	}
 	endTime := parsedTime.Add(3 * time.Second).Format("2006-01-02T15:04:05.000-0700") // Add 3 seconds to timestamp for endTime
@@ -222,18 +222,18 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 	// Marshal JSON data
 	postDataBytes, err := json.Marshal(postData)
 	if err != nil {
-		log.Printf("Failed to marshal JSON data, err: %v\n", err)
+		log.Printf("❌ Failed to marshal JSON data, err: %v\n", err)
 		return fmt.Errorf("failed to marshal JSON data: %w", err)
 	}
 
 	if b.Settings.Realtime.Birdweather.Debug {
-		log.Println("JSON Payload:", string(postDataBytes))
+		log.Println("📜 JSON Payload:", string(postDataBytes))
 	}
 
 	// Execute POST request
 	resp, err := b.HTTPClient.Post(detectionURL, "application/json", bytes.NewBuffer(postDataBytes))
 	if err != nil {
-		log.Printf("Failed to post detection, err: %v\n", err)
+		log.Printf("❌ Failed to post detection, err: %v\n", err)
 		return handleNetworkError(err)
 	}
 	if resp == nil {
@@ -245,10 +245,10 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 	if resp.StatusCode != http.StatusCreated {
 		responseBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			log.Printf("Failed to read response body: %v\n", err)
+			log.Printf("❌ Failed to read response body: %v\n", err)
 			return fmt.Errorf("failed to read response body: %w", err)
 		}
-		log.Printf("Failed to post detection, status code: %d, response body: %s\n", resp.StatusCode, string(responseBody))
+		log.Printf("⚠️ Failed to post detection, status code: %d, response body: %s\n", resp.StatusCode, string(responseBody))
 		return fmt.Errorf("failed to post detection, status code: %d, response: %s", resp.StatusCode, string(responseBody))
 	}
 
@@ -272,7 +272,7 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) error {
 	// Parse the timestamp using the given format and the system's local timezone
 	parsedTime, err := time.ParseInLocation("2006-01-02T15:04:05", dateTimeString, loc)
 	if err != nil {
-		log.Printf("Error parsing date: %v\n", err)
+		log.Printf("❌ Error parsing date: %v\n", err)
 		return fmt.Errorf("error parsing date: %w", err)
 	}
 
@@ -282,19 +282,19 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) error {
 	// Upload the soundscape to Birdweather and retrieve the soundscape ID
 	soundscapeID, err := b.UploadSoundscape(timestamp, pcmData)
 	if err != nil {
-		log.Printf("Failed to upload soundscape to Birdweather: %v\n", err)
+		log.Printf("❌ Failed to upload soundscape to Birdweather: %v\n", err)
 		return fmt.Errorf("failed to upload soundscape to Birdweather: %w", err)
 	}
 
 	// Log the successful posting of the soundscape, if debugging is enabled
 	if b.Settings.Realtime.Birdweather.Debug {
-		log.Println("Soundscape successfully posted to Birdweather")
+		log.Println("✅ Soundscape successfully posted to Birdweather")
 	}
 
 	// Post the detection details to Birdweather using the retrieved soundscape ID
 	err = b.PostDetection(soundscapeID, timestamp, note.CommonName, note.ScientificName, note.Confidence)
 	if err != nil {
-		log.Printf("Failed to post detection to Birdweather: %v\n", err)
+		log.Printf("❌ Failed to post detection to Birdweather: %v\n", err)
 		return fmt.Errorf("failed to post detection to Birdweather: %w", err)
 	}
 
@@ -318,6 +318,6 @@ func (b *BwClient) Close() {
 	}
 
 	if b.Settings.Realtime.Birdweather.Debug {
-		log.Println("BirdWeather client closed")
+		log.Println("✅ BirdWeather client closed")
 	}
 }

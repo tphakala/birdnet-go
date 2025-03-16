@@ -132,24 +132,30 @@ func (p *Processor) EnqueueTask(task *Task) error {
 		return fmt.Errorf("cannot enqueue nil task")
 	}
 
-	// Get action type for logging
-	actionType := fmt.Sprintf("%T", task.Action)
-	// Sanitize action type for error messages
-	sanitizedActionType := sanitizeActionType(actionType)
-
 	// Validate the task
 	if task.Action == nil {
 		return fmt.Errorf("cannot enqueue task with nil action")
 	}
+
+	// Get action description for logging
+	actionDesc := task.Action.GetDescription()
+	// Sanitize description for error messages (in case it contains sensitive info)
+	sanitizedDesc := sanitizeString(actionDesc)
 
 	// Get retry configuration for the action directly as jobqueue.RetryConfig
 	jqRetryConfig := getJobQueueRetryConfig(task.Action)
 
 	// Log detailed information about the task being enqueued
 	if p.Settings.Debug {
-		// Log without including the action type to avoid potential sensitive information
-		log.Printf("Enqueuing task with retry config: enabled=%v, maxRetries=%d",
-			jqRetryConfig.Enabled, jqRetryConfig.MaxRetries)
+		// Get species name for more informative logging if available
+		speciesName := "unknown"
+		if task.Detection.Note.CommonName != "" {
+			speciesName = task.Detection.Note.CommonName
+		}
+
+		// Log the action description and species to provide more context
+		log.Printf("Enqueuing task '%s' for species '%s' with retry config: enabled=%v, maxRetries=%d",
+			sanitizedDesc, speciesName, jqRetryConfig.Enabled, jqRetryConfig.MaxRetries)
 	}
 
 	// Enqueue the task directly to the job queue
@@ -159,26 +165,27 @@ func (p *Processor) EnqueueTask(task *Task) error {
 		switch {
 		case strings.Contains(err.Error(), "queue is full"):
 			queueSize := p.JobQueue.GetMaxJobs()
-			// Log without including the action type to avoid potential sensitive information
-			log.Printf("❌ Job queue is full (capacity: %d), dropping task", queueSize)
+			// Log with action description for better context
+			log.Printf("❌ Job queue is full (capacity: %d), dropping task '%s'", queueSize, sanitizedDesc)
 
 			// Suggest increasing queue size if this happens frequently
-			return fmt.Errorf("job queue is full (capacity: %d): %w", queueSize, sanitizeError(err))
+			return fmt.Errorf("job queue is full (capacity: %d), dropping task '%s': %w",
+				queueSize, sanitizedDesc, sanitizeError(err))
 
 		case strings.Contains(err.Error(), "queue has been stopped"):
-			// Log without including the action type to avoid potential sensitive information
-			log.Printf("❌ Cannot enqueue task: job queue has been stopped")
-			return fmt.Errorf("job queue has been stopped, cannot enqueue task for %s: %w",
-				sanitizedActionType, sanitizeError(err))
+			// Log with action description for better context
+			log.Printf("❌ Cannot enqueue task '%s': job queue has been stopped", sanitizedDesc)
+			return fmt.Errorf("job queue has been stopped, cannot enqueue task '%s': %w",
+				sanitizedDesc, sanitizeError(err))
 
 		default:
 			// Sanitize error before logging
 			sanitizedErr := sanitizeError(err)
 			// Double-check that the error message is fully sanitized
 			sanitizedErrStr := sanitizeString(sanitizedErr.Error())
-			// Log without including the action type to avoid potential sensitive information
-			log.Printf("❌ Failed to enqueue task: %v", sanitizedErrStr)
-			return fmt.Errorf("failed to enqueue task for %s: %w", sanitizedActionType, sanitizeError(err))
+			// Log with action description for better context
+			log.Printf("❌ Failed to enqueue task '%s': %v", sanitizedDesc, sanitizedErrStr)
+			return fmt.Errorf("failed to enqueue task '%s': %w", sanitizedDesc, sanitizeError(err))
 		}
 	}
 
@@ -188,9 +195,9 @@ func (p *Processor) EnqueueTask(task *Task) error {
 			speciesName = task.Detection.Note.CommonName
 		}
 
-		// Log without including the action type to avoid potential sensitive information
-		log.Printf("✅ Task enqueued as job %s (species: %s)",
-			job.ID, speciesName)
+		// Log with action description for better context
+		log.Printf("✅ Task '%s' enqueued as job %s (species: %s)",
+			sanitizedDesc, job.ID, speciesName)
 	}
 
 	return nil

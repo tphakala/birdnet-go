@@ -166,6 +166,11 @@ func (m *MockAction) Execute(data interface{}) error {
 	return nil
 }
 
+// GetDescription implements the Action interface
+func (m *MockAction) GetDescription() string {
+	return "Mock Action for testing"
+}
+
 // Reset resets the mock action state
 func (m *MockAction) Reset() {
 	m.mu.Lock()
@@ -180,10 +185,20 @@ type MockBirdWeatherAction struct {
 	RetryConfig jobqueue.RetryConfig
 }
 
+// GetDescription returns a description for the MockBirdWeatherAction
+func (m *MockBirdWeatherAction) GetDescription() string {
+	return "Mock BirdWeather Action for testing"
+}
+
 // MockMqttAction is a mock implementation of MqttAction
 type MockMqttAction struct {
 	MockAction
 	RetryConfig jobqueue.RetryConfig
+}
+
+// GetDescription returns a description for the MockMqttAction
+func (m *MockMqttAction) GetDescription() string {
+	return "Mock MQTT Action for testing"
 }
 
 // MockSettings implements the necessary methods from conf.Settings for testing
