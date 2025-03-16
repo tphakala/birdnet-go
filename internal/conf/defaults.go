@@ -101,8 +101,8 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.birdweather.threshold", 0.7)
 	viper.SetDefault("realtime.birdweather.locationaccuracy", 0)
 	viper.SetDefault("realtime.birdweather.retrysettings.enabled", true)
-	viper.SetDefault("realtime.birdweather.retrysettings.maxretries", 5)
-	viper.SetDefault("realtime.birdweather.retrysettings.initialdelay", 30)
+	viper.SetDefault("realtime.birdweather.retrysettings.maxretries", 10)
+	viper.SetDefault("realtime.birdweather.retrysettings.initialdelay", 60)
 	viper.SetDefault("realtime.birdweather.retrysettings.maxdelay", 3600)
 	viper.SetDefault("realtime.birdweather.retrysettings.backoffmultiplier", 2.0)
 

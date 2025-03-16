@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/patrickmn/go-cache"
+	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -24,6 +25,7 @@ type Controller struct {
 	Settings            *conf.Settings
 	BirdImageCache      *imageprovider.BirdImageCache
 	SunCalc             *suncalc.SunCalc
+	Processor           *processor.Processor
 	logger              *log.Logger
 	controlChan         chan string
 	speciesExcludeMutex sync.RWMutex // Mutex for species exclude list operations
