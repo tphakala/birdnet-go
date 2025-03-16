@@ -19,6 +19,11 @@ type ExecuteCommandAction struct {
 	Params  map[string]interface{}
 }
 
+// GetDescription returns a description of the action
+func (a ExecuteCommandAction) GetDescription() string {
+	return fmt.Sprintf("Execute command: %s", a.Command)
+}
+
 func (a ExecuteCommandAction) Execute(data interface{}) error {
 	log.Printf("[analysis/processor/execute] Executing command: %s params: %v\n", a.Command, a.Params)
 

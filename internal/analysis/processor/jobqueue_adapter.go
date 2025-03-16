@@ -13,3 +13,8 @@ type ActionAdapter struct {
 func (a *ActionAdapter) Execute(data interface{}) error {
 	return a.action.Execute(data)
 }
+
+// GetDescription returns a human-readable description of the action
+func (a *ActionAdapter) GetDescription() string {
+	return a.action.GetDescription()
+}

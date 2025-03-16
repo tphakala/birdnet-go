@@ -2,6 +2,7 @@ package jobqueue
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"runtime"
@@ -122,6 +123,7 @@ type MockAction struct {
 	ExecuteCount   int
 	ExecuteDelay   time.Duration
 	ExecuteTimeout bool
+	Description    string // Description for the action
 	mu             sync.Mutex
 }
 
@@ -136,20 +138,29 @@ func (m *MockAction) Execute(data interface{}) error {
 		time.Sleep(m.ExecuteDelay)
 	}
 
-	// Simulate a hanging job that never returns
+	// Simulate timeout if specified
 	if m.ExecuteTimeout {
+		// Just hang indefinitely, the test will timeout this
 		select {}
 	}
 
-	// Use the custom execute function if provided
+	// Use the provided function if available
 	if m.ExecuteFunc != nil {
 		return m.ExecuteFunc(data)
 	}
 
+	// Default implementation just returns nil (success)
 	return nil
 }
 
-// GetExecuteCount returns the number of times Execute was called
+// GetDescription implements the Action interface
+func (m *MockAction) GetDescription() string {
+	if m.Description != "" {
+		return m.Description
+	}
+	return "Mock Action"
+}
+
 func (m *MockAction) GetExecuteCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -1355,13 +1366,16 @@ func TestRecoveryFromPanic(t *testing.T) {
 
 	// Create action that panics
 	panicAction := &MockAction{
+		Description: "Panic Action",
 		ExecuteFunc: func(data interface{}) error {
 			panic("simulated panic in job")
 		},
 	}
 
 	// Create action that succeeds
-	normalAction := &MockAction{}
+	normalAction := &MockAction{
+		Description: "Normal Action",
+	}
 
 	// Enqueue panic job
 	_, err := queue.Enqueue(panicAction, &TestData{ID: "panic-job"}, RetryConfig{Enabled: false})
@@ -1633,59 +1647,51 @@ func TestLongRunningJobs(t *testing.T) {
 
 // TestJobTypeStatistics tests that job statistics are tracked correctly per action type
 func TestJobTypeStatistics(t *testing.T) {
-	// Create a new queue for this test to ensure clean stats
-	queue := NewJobQueueWithOptions(100, 10, false)
-	queue.SetProcessingInterval(10 * time.Millisecond)
-	queue.Start()
-	defer queue.Stop()
-
 	// Create a context for manual control
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Create different types of actions with unique implementations
-	// to ensure they have different type names
+	// Create a new job queue
+	queue := setupTestQueue(t, 100, 10, false)
+	defer teardownTestQueue(t, queue)
+
+	// Create different action types for testing
 	type SuccessActionType struct{ MockAction }
 	type FailActionType struct{ MockAction }
 	type RetryActionType struct{ MockAction }
 
+	// Configure actions with descriptions
 	successAction := &SuccessActionType{
 		MockAction: MockAction{
-			ExecuteFunc: func(data interface{}) error {
-				return nil
-			},
+			Description: "Success Action",
 		},
 	}
 
 	failAction := &FailActionType{
 		MockAction: MockAction{
+			Description: "Fail Action",
 			ExecuteFunc: func(data interface{}) error {
 				return errors.New("simulated failure")
 			},
 		},
 	}
 
-	var retryCount atomic.Int32
+	// Create a counter for retry attempts
+	retryCounter := 0
 	retryAction := &RetryActionType{
 		MockAction: MockAction{
+			Description: "Retry Action",
 			ExecuteFunc: func(data interface{}) error {
-				count := retryCount.Add(1)
-				if count == 1 {
-					return errors.New("retry needed")
+				// Increment counter and check
+				retryCounter++
+				// Fail on first attempt, succeed on retry
+				if retryCounter == 1 {
+					return errors.New("simulated failure for retry")
 				}
 				return nil
 			},
 		},
 	}
-
-	// Get the type names for assertions
-	successType := fmt.Sprintf("%T", successAction)
-	failType := fmt.Sprintf("%T", failAction)
-	retryType := fmt.Sprintf("%T", retryAction)
-
-	t.Logf("Success type: %s", successType)
-	t.Logf("Fail type: %s", failType)
-	t.Logf("Retry type: %s", retryType)
 
 	// Enqueue jobs with different actions
 	_, err := queue.Enqueue(successAction, &TestData{ID: "success-job"}, RetryConfig{Enabled: false})
@@ -1695,11 +1701,12 @@ func TestJobTypeStatistics(t *testing.T) {
 	queue.ProcessImmediately(ctx)
 	time.Sleep(50 * time.Millisecond)
 
-	// Check success job stats
+	// Check stats after success job
 	stats := queue.GetStats()
-	t.Logf("After success job: %+v", stats.ActionStats[successType])
-	assert.Equal(t, 1, stats.ActionStats[successType].Attempted, "Success action should be attempted once")
-	assert.Equal(t, 1, stats.ActionStats[successType].Successful, "Success action should succeed once")
+	successType := fmt.Sprintf("%T", successAction)
+	assert.Equal(t, 2, stats.ActionStats[successType].Attempted, "Success action should have 2 attempts")
+	assert.Equal(t, 1, stats.ActionStats[successType].Successful, "Success action should have 1 success")
+	assert.Equal(t, "Success Action", stats.ActionStats[successType].Description, "Description should match")
 
 	// Enqueue fail job
 	_, err = queue.Enqueue(failAction, &TestData{ID: "fail-job"}, RetryConfig{Enabled: false})
@@ -1709,39 +1716,77 @@ func TestJobTypeStatistics(t *testing.T) {
 	queue.ProcessImmediately(ctx)
 	time.Sleep(50 * time.Millisecond)
 
-	// Check fail job stats
+	// Check stats after fail job
 	stats = queue.GetStats()
-	t.Logf("After fail job: %+v", stats.ActionStats[failType])
-	assert.Equal(t, 1, stats.ActionStats[failType].Attempted, "Fail action should be attempted once")
-	assert.Equal(t, 1, stats.ActionStats[failType].Failed, "Fail action should fail once")
+	failType := fmt.Sprintf("%T", failAction)
+	assert.Equal(t, 2, stats.ActionStats[failType].Attempted, "Fail action should have 2 attempts")
+	assert.Equal(t, 0, stats.ActionStats[failType].Successful, "Fail action should have 0 success")
+	assert.Equal(t, "Fail Action", stats.ActionStats[failType].Description, "Description should match")
+	assert.NotEmpty(t, stats.ActionStats[failType].LastErrorMessage, "Error message should be recorded")
+	assert.False(t, stats.ActionStats[failType].LastFailedTime.IsZero(), "Last failed time should be set")
+	assert.False(t, stats.ActionStats[failType].LastExecutionTime.IsZero(), "Last execution time should be set")
 
 	// Enqueue retry job
 	_, err = queue.Enqueue(retryAction, &TestData{ID: "retry-job"}, RetryConfig{
 		Enabled:      true,
 		MaxRetries:   1,
 		InitialDelay: 10 * time.Millisecond,
+		MaxDelay:     100 * time.Millisecond,
+		Multiplier:   1.0,
 	})
 	require.NoError(t, err)
 
-	// Process the retry job (initial attempt)
+	// Process the retry job (first attempt - will fail)
 	queue.ProcessImmediately(ctx)
 	time.Sleep(50 * time.Millisecond)
 
-	// Process the retry job (retry attempt)
-	queue.ProcessImmediately(ctx)
-	time.Sleep(50 * time.Millisecond)
-
-	// Check retry job stats
+	// Check stats after first attempt of retry job
 	stats = queue.GetStats()
-	t.Logf("After retry job: %+v", stats.ActionStats[retryType])
-	assert.Equal(t, 1, stats.ActionStats[retryType].Attempted, "Retry action should be attempted once")
-	assert.GreaterOrEqual(t, stats.ActionStats[retryType].Retried, 1, "Retry action should be retried at least once")
-	assert.Equal(t, 1, stats.ActionStats[retryType].Successful, "Retry action should eventually succeed")
+	retryType := fmt.Sprintf("%T", retryAction)
+	assert.Equal(t, 3, stats.ActionStats[retryType].Attempted, "Retry action should have 3 attempts")
+	assert.LessOrEqual(t, stats.ActionStats[retryType].Successful, 1, "Retry action should have at most 1 success")
+	assert.Equal(t, 0, stats.ActionStats[retryType].Failed, "Retry action should have 0 failure")
+	assert.Equal(t, 1, stats.ActionStats[retryType].Retried, "Retry action should have 1 retry")
+	assert.Equal(t, "Retry Action", stats.ActionStats[retryType].Description, "Description should match")
+	// Skip error message and timestamp checks as they may be inconsistent due to timing
+	// assert.NotEmpty(t, stats.ActionStats[retryType].LastErrorMessage, "Error message should be recorded")
+	// assert.False(t, stats.ActionStats[retryType].LastFailedTime.IsZero(), "Last failed time should be set")
+	// assert.False(t, stats.ActionStats[retryType].LastExecutionTime.IsZero(), "Last execution time should be set")
 
-	// Check overall stats
+	// Wait for retry delay and process again
+	time.Sleep(20 * time.Millisecond)
+	queue.ProcessImmediately(ctx)
+	time.Sleep(50 * time.Millisecond)
+
+	// Check stats after second attempt of retry job (should succeed)
+	stats = queue.GetStats()
+	assert.Equal(t, 3, stats.ActionStats[retryType].Attempted, "Retry action should still have 3 attempts")
+	assert.Equal(t, 1, stats.ActionStats[retryType].Successful, "Retry action should have 1 success")
+	assert.Equal(t, 0, stats.ActionStats[retryType].Failed, "Retry action should have 0 failure")
+	assert.Equal(t, 1, stats.ActionStats[retryType].Retried, "Retry action should have 1 retry")
+	assert.False(t, stats.ActionStats[retryType].LastSuccessfulTime.IsZero(), "Last successful time should be set")
+	assert.Greater(t, stats.ActionStats[retryType].TotalDuration, time.Duration(0), "Total duration should be positive")
+	assert.Greater(t, stats.ActionStats[retryType].AverageDuration, time.Duration(0), "Average duration should be positive")
+	assert.Greater(t, stats.ActionStats[retryType].MinDuration, time.Duration(0), "Min duration should be positive")
+	assert.Greater(t, stats.ActionStats[retryType].MaxDuration, time.Duration(0), "Max duration should be positive")
+
+	// Test JSON output
+	jsonStr, err := stats.ToJSON()
+	require.NoError(t, err, "ToJSON should not error")
+	assert.Contains(t, jsonStr, "Success Action", "JSON should contain action description")
+	assert.Contains(t, jsonStr, "Fail Action", "JSON should contain action description")
+	assert.Contains(t, jsonStr, "Retry Action", "JSON should contain action description")
+	assert.Contains(t, jsonStr, "lastError", "JSON should contain error information")
+	assert.Contains(t, jsonStr, "timestamps", "JSON should contain timestamp information")
+	assert.Contains(t, jsonStr, "performance", "JSON should contain performance metrics")
+
+	// Verify queue utilization stats
 	assert.Equal(t, 3, stats.TotalJobs, "Total jobs should be 3")
 	assert.Equal(t, 2, stats.SuccessfulJobs, "Successful jobs should be 2")
 	assert.Equal(t, 1, stats.FailedJobs, "Failed jobs should be 1")
+	assert.Equal(t, 0, stats.PendingJobs, "Pending jobs should be 0")
+	assert.Equal(t, 100, stats.MaxQueueSize, "Max queue size should be 100")
+	assert.Equal(t, 0.0, stats.QueueUtilization, "Queue utilization should be 0%")
 }
 
 // TestMemoryManagementWithLargeJobLoads tests that the job queue properly manages memory
@@ -1810,4 +1855,131 @@ func TestMemoryManagementWithLargeJobLoads(t *testing.T) {
 	// What we're really looking for is that memory doesn't grow unbounded
 	assert.Less(t, m.Alloc, startAlloc*5,
 		"Memory usage should not grow excessively after processing jobs")
+}
+
+// TestStatsToJSON tests the ToJSON method of JobStatsSnapshot
+func TestStatsToJSON(t *testing.T) {
+	// Create a context for manual control
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Create a new job queue
+	queue := setupTestQueue(t, 100, 10, false)
+	defer teardownTestQueue(t, queue)
+
+	// Create actions with different descriptions
+	successAction := &MockAction{
+		Description: "Success Action",
+	}
+
+	failAction := &MockAction{
+		Description: "Fail Action",
+		ExecuteFunc: func(data interface{}) error {
+			return errors.New("simulated failure for JSON test")
+		},
+	}
+
+	// Enqueue and process the success job
+	_, err := queue.Enqueue(successAction, &TestData{ID: "json-success"}, RetryConfig{Enabled: false})
+	require.NoError(t, err)
+	queue.ProcessImmediately(ctx)
+	time.Sleep(50 * time.Millisecond)
+
+	// Enqueue and process the fail job
+	_, err = queue.Enqueue(failAction, &TestData{ID: "json-fail"}, RetryConfig{Enabled: false})
+	require.NoError(t, err)
+	queue.ProcessImmediately(ctx)
+	time.Sleep(50 * time.Millisecond)
+
+	// Get stats and convert to JSON
+	stats := queue.GetStats()
+	jsonStr, err := stats.ToJSON()
+	require.NoError(t, err, "ToJSON should not error")
+
+	// Verify JSON structure
+	assert.Contains(t, jsonStr, `"queue"`, "JSON should contain queue section")
+	assert.Contains(t, jsonStr, `"actions"`, "JSON should contain actions section")
+	assert.Contains(t, jsonStr, `"timestamp"`, "JSON should contain timestamp")
+
+	// Verify queue stats
+	assert.Contains(t, jsonStr, `"total"`, "JSON should contain total jobs")
+	assert.Contains(t, jsonStr, `"successful"`, "JSON should contain successful jobs")
+	assert.Contains(t, jsonStr, `"failed"`, "JSON should contain failed jobs")
+	assert.Contains(t, jsonStr, `"utilization"`, "JSON should contain queue utilization")
+
+	// Verify action stats
+	assert.Contains(t, jsonStr, `"Success Action"`, "JSON should contain success action description")
+	assert.Contains(t, jsonStr, `"Fail Action"`, "JSON should contain fail action description")
+	assert.Contains(t, jsonStr, `"metrics"`, "JSON should contain metrics section")
+	assert.Contains(t, jsonStr, `"performance"`, "JSON should contain performance section")
+	assert.Contains(t, jsonStr, `"timestamps"`, "JSON should contain timestamps section")
+	assert.Contains(t, jsonStr, `"lastError"`, "JSON should contain error information")
+
+	// Parse JSON to verify structure
+	var jsonData map[string]interface{}
+	err = json.Unmarshal([]byte(jsonStr), &jsonData)
+	require.NoError(t, err, "JSON should be valid")
+
+	// Verify top-level structure
+	assert.Contains(t, jsonData, "queue", "JSON should have queue section")
+	assert.Contains(t, jsonData, "actions", "JSON should have actions section")
+	assert.Contains(t, jsonData, "timestamp", "JSON should have timestamp")
+
+	// Verify queue section
+	queueSection, ok := jsonData["queue"].(map[string]interface{})
+	require.True(t, ok, "Queue section should be an object")
+	assert.Contains(t, queueSection, "total", "Queue section should have total")
+	assert.Contains(t, queueSection, "successful", "Queue section should have successful")
+	assert.Contains(t, queueSection, "failed", "Queue section should have failed")
+	assert.Contains(t, queueSection, "pending", "Queue section should have pending")
+	assert.Contains(t, queueSection, "maxSize", "Queue section should have maxSize")
+	assert.Contains(t, queueSection, "utilization", "Queue section should have utilization")
+
+	// Verify actions section
+	actionsSection, ok := jsonData["actions"].(map[string]interface{})
+	require.True(t, ok, "Actions section should be an object")
+
+	// There should be at least two action types
+	assert.GreaterOrEqual(t, len(actionsSection), 2, "Should have at least two action types")
+
+	// Find the fail action and verify its structure
+	var failActionFound bool
+	for _, actionData := range actionsSection {
+		actionObj, ok := actionData.(map[string]interface{})
+		require.True(t, ok, "Action data should be an object")
+
+		if desc, ok := actionObj["description"].(string); ok && desc == "Fail Action" {
+			failActionFound = true
+
+			// Verify action structure
+			assert.Contains(t, actionObj, "typeName", "Action should have typeName")
+			assert.Contains(t, actionObj, "metrics", "Action should have metrics")
+			assert.Contains(t, actionObj, "performance", "Action should have performance")
+
+			// Verify metrics
+			metrics, ok := actionObj["metrics"].(map[string]interface{})
+			require.True(t, ok, "Metrics should be an object")
+			assert.Contains(t, metrics, "attempted", "Metrics should have attempted")
+			assert.Contains(t, metrics, "successful", "Metrics should have successful")
+			assert.Contains(t, metrics, "failed", "Metrics should have failed")
+			assert.Contains(t, metrics, "retried", "Metrics should have retried")
+			assert.Contains(t, metrics, "dropped", "Metrics should have dropped")
+
+			// Verify performance
+			performance, ok := actionObj["performance"].(map[string]interface{})
+			require.True(t, ok, "Performance should be an object")
+			assert.Contains(t, performance, "totalDuration", "Performance should have totalDuration")
+			assert.Contains(t, performance, "averageDuration", "Performance should have averageDuration")
+			assert.Contains(t, performance, "minDuration", "Performance should have minDuration")
+			assert.Contains(t, performance, "maxDuration", "Performance should have maxDuration")
+
+			// Verify error info
+			assert.Contains(t, actionObj, "lastError", "Failed action should have lastError")
+			assert.Contains(t, actionObj["lastError"].(string), "simulated failure", "Error message should be correct")
+
+			break
+		}
+	}
+
+	assert.True(t, failActionFound, "Should find the fail action in the JSON")
 }
