@@ -1,4 +1,4 @@
-// test_helpers.go: Package api provides shared test utilities for API v2 tests.
+// test_utils.go: Package api provides shared test utilities for API v2 tests.
 
 package api
 
@@ -237,7 +237,8 @@ func (m *MockDataStore) GetDetectionTrends(period string, limit int) ([]datastor
 }
 
 // TestImageProvider implements the imageprovider.Provider interface for testing
-// with a function field for easier test setup
+// with a function field for easier test setup.
+// Use this when you need a simple mock with customizable behavior via FetchFunc.
 type TestImageProvider struct {
 	FetchFunc func(scientificName string) (imageprovider.BirdImage, error)
 }
@@ -373,6 +374,8 @@ func (m *MockDataStoreV2) GetDetectionTrends(period string, limit int) ([]datast
 }
 
 // MockImageProvider is a mock implementation of imageprovider.ImageProvider interface
+// that uses testify/mock for expectations and verification.
+// Use this when you need to verify specific method calls and arguments.
 type MockImageProvider struct {
 	mock.Mock
 }
@@ -384,6 +387,19 @@ func (m *MockImageProvider) Fetch(scientificName string) (imageprovider.BirdImag
 }
 
 // Setup function to create a test environment
+//
+// This function creates a complete test environment for API tests with the following components:
+// 1. Echo instance - A new Echo web framework instance for handling HTTP requests
+// 2. MockDataStore - A mock implementation of the datastore interface for test data
+// 3. Settings - Default configuration settings for testing
+// 4. Logger - A test logger that outputs to stdout
+// 5. MockImageProvider - A mock image provider for bird images
+// 6. BirdImageCache - An initialized image cache with the mock provider
+// 7. SunCalc - A mock sun calculator for time-based calculations
+// 8. Control channel - A channel for control messages between components
+//
+// The function returns the Echo instance, MockDataStore, and Controller for use in tests.
+// Note: Callers are responsible for closing any resources (like channels) when tests complete.
 func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller) {
 	t.Helper()
 
