@@ -195,7 +195,7 @@ func (q *JobQueue) Enqueue(action Action, data interface{}, config RetryConfig) 
 	// Pre-allocate ID string to reduce memory allocations
 	now := q.clock.Now()
 	job := &Job{
-		ID:          fmt.Sprintf("job-%s", shortUUID),
+		ID:          shortUUID,
 		Action:      action,
 		Data:        data,
 		MaxAttempts: config.MaxRetries + 1,
@@ -274,7 +274,7 @@ func (q *JobQueue) _dropOldestPendingJob() bool {
 	stats.Dropped++
 	q.stats.ActionStats[actionKey] = stats
 
-	log.Printf("Dropped oldest pending job %s to make room for new job", oldestJob.ID)
+	log.Printf("🗑️ Dropped oldest pending job %s to make room for new job", oldestJob.ID)
 	return true
 }
 
@@ -291,7 +291,7 @@ func (q *JobQueue) processJobs(ctx context.Context) {
 	// Check context immediately and periodically
 	checkCtx := func() bool {
 		if ctx.Err() != nil {
-			log.Printf("Job queue processing stopped via context: %v", ctx.Err())
+			log.Printf("🛑 Job queue processing stopped via context: %v", ctx.Err())
 			return true
 		}
 		return false
@@ -305,10 +305,10 @@ func (q *JobQueue) processJobs(ctx context.Context) {
 	for {
 		select {
 		case <-q.stopCh:
-			log.Println("Job queue processing stopped via stop channel")
+			log.Println("🛑 Job queue processing stopped via stop channel")
 			return
 		case <-ctx.Done():
-			log.Printf("Job queue processing stopped via context: %v", ctx.Err())
+			log.Printf("🛑 Job queue processing stopped via context: %v", ctx.Err())
 			return
 		case <-ticker.C:
 			// Check context again before processing
@@ -498,7 +498,7 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 
 	// Log the attempt
 	if job.Attempts > 1 {
-		log.Printf("Retrying job %s: %s, attempt %d/%d",
+		log.Printf("🔄️ Retrying %s: %s, attempt %d/%d",
 			job.ID, actionDesc, job.Attempts, job.MaxAttempts)
 	}
 
@@ -581,7 +581,7 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 			stats.Failed++
 			q.stats.ActionStats[actionKey] = stats
 
-			log.Printf("Job %s: %s permanently failed after %d attempts: %v",
+			log.Printf("⚠️ Job %s: %s permanently failed after %d attempts: %v",
 				job.ID, actionDesc, job.Attempts, err)
 		} else {
 			// Schedule for retry
@@ -591,7 +591,7 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 			delay := calculateBackoffDelay(job.Config, job.Attempts, q.clock)
 			job.NextRetryAt = q.clock.Now().Add(delay)
 
-			log.Printf("Job %s: %s failed, will retry in %v (attempt %d/%d): %v",
+			log.Printf("⚠️ Job %s: %s failed, will retry in %v (attempt %d/%d): %v",
 				job.ID, actionDesc, delay, job.Attempts, job.MaxAttempts, err)
 		}
 	} else {
@@ -608,10 +608,10 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 		// Log success based on configuration
 		if job.Attempts > 1 || q.logAllSuccesses {
 			if job.Attempts > 1 {
-				log.Printf("Job %s: %s succeeded after %d attempts",
+				log.Printf("✅ Job %s: %s succeeded after %d attempts",
 					job.ID, actionDesc, job.Attempts)
 			} else {
-				log.Printf("Job %s: %s succeeded on first attempt",
+				log.Printf("✅ Job %s: %s succeeded on first attempt",
 					job.ID, actionDesc)
 			}
 		}
