@@ -131,10 +131,6 @@ func (s *JobStatsSnapshot) toJSON(prettyPrint bool) (string, error) {
 		"actions":   make(map[string]interface{}),
 		"timestamp": formattedTime,
 	}
-
-	// Maximum length for descriptions in JSON output
-	const maxDescriptionLength = 500
-
 	// Pre-allocate actions map with the right capacity
 	actionsMap := make(map[string]interface{}, len(s.ActionStats))
 	statsMap["actions"] = actionsMap
@@ -146,8 +142,8 @@ func (s *JobStatsSnapshot) toJSON(prettyPrint bool) (string, error) {
 
 		// Bound description length to prevent bloat in JSON output
 		description := stats.Description
-		if len(description) > maxDescriptionLength {
-			description = description[:maxDescriptionLength] + "... [truncated]"
+		if len(description) > MaxMessageLength {
+			description = description[:MaxMessageLength] + "... [truncated]"
 		}
 
 		// Create action stats map with metrics and performance data
