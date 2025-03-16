@@ -1315,7 +1315,7 @@ func BenchmarkEnqueueTask(b *testing.B) {
 	}()
 
 	// Use a custom function for benchmarking
-	enqueueTaskBench := func(p *Processor, task *Task) error {
+	enqueueTaskBench := func(task *Task) error {
 		if task == nil {
 			return fmt.Errorf("cannot enqueue nil task")
 		}
@@ -1337,7 +1337,7 @@ func BenchmarkEnqueueTask(b *testing.B) {
 
 	// Run the benchmark
 	for i := 0; i < b.N; i++ {
-		err := enqueueTaskBench(processor, task)
+		err := enqueueTaskBench(task)
 		if err != nil {
 			b.Fatalf("EnqueueTask failed: %v", err)
 		}

@@ -16,6 +16,15 @@ The `jobqueue` package provides a job queue implementation with the following ke
 - **Context Support**: Cancel jobs via context cancellation
 - **Timeout Handling**: Automatically timeout hanging jobs
 - **Action Description Tracking**: Track statistics based on both action type and description
+- **Unique Job IDs**: Uses UUID v4 (truncated to 12 characters) for job identifiers
+
+## Job IDs
+
+Jobs are assigned unique identifiers using the format `job-xxxxxxx` where:
+- The prefix "job-" identifies it as a job identifier
+- The "xxxxxxx" part is a truncated UUID v4 (first 12 characters)
+- This provides reliable uniqueness while keeping IDs reasonably short
+- Example: `job-1a2b3c4d5e6f`
 
 ## Integration with Processor
 
@@ -83,6 +92,9 @@ job, err := queue.Enqueue(action, data, config)
 if err != nil {
     log.Fatalf("Failed to enqueue job: %v", err)
 }
+
+// Access the UUID-based job ID
+fmt.Printf("Job ID: %s\n", job.ID)  // e.g., "job-1a2b3c4d5e6f"
 ```
 
 ### Type-Safe Usage
@@ -233,6 +245,24 @@ func (a *MyCustomAction) GetDescription() string {
 }
 ```
 
+### Job Identification
+
+Jobs are assigned unique IDs using UUIDs to ensure uniqueness even in high-throughput environments:
+
+```go
+// Enqueue a job and get its ID
+job, err := queue.Enqueue(action, data, config)
+if err != nil {
+    log.Fatalf("Failed to enqueue job: %v", err)
+}
+
+// The ID uses the format "job-xxxxxxx" where xxxxxxx is a 12-character UUID v4
+fmt.Printf("Job ID: %s\n", job.ID)  // e.g., "job-1a2b3c4d5e6f"
+
+// Jobs can be referenced by ID in logs, making debugging easier
+log.Printf("Processing job %s", job.ID)
+```
+
 ### Statistics Tracking
 
 The queue tracks comprehensive statistics:
@@ -309,6 +339,8 @@ When working with this codebase, keep in mind:
 5. **Memory Management**: Consider memory implications of large job loads
 6. **Panic Recovery**: The queue recovers from panics, but it's better to avoid them
 7. **Action Keys**: Action statistics are tracked using a combination of type name and description
+8. **Job Identification**: Jobs use UUID v4 (truncated to 12 characters) for uniqueness
+9. **Job Tracking**: Job IDs (format: job-xxxxxxx) are used in logs for easier debugging and tracing
 
 ## License
 

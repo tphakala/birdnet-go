@@ -98,7 +98,7 @@ type TypedAction[T any] interface {
 }
 
 // ToJSON converts the JobStatsSnapshot to a JSON string
-func (s JobStatsSnapshot) ToJSON() (string, error) {
+func (s *JobStatsSnapshot) ToJSON() (string, error) {
 	// Create a map to represent the JSON structure
 	statsMap := map[string]interface{}{
 		"queue": map[string]interface{}{
@@ -118,7 +118,8 @@ func (s JobStatsSnapshot) ToJSON() (string, error) {
 	}
 
 	// Add action stats to the map
-	for typeName, stats := range s.ActionStats {
+	for typeName := range s.ActionStats {
+		stats := s.ActionStats[typeName]
 		actionStats := map[string]interface{}{
 			"typeName":    stats.TypeName,
 			"description": stats.Description,
