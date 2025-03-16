@@ -188,9 +188,9 @@ func (q *JobQueue) Enqueue(action Action, data interface{}, config RetryConfig) 
 
 	// Increment job counter (kept for backward compatibility and metrics, not used for ID generation)
 	q.jobCounter++
-	// Generate a UUID v4 for the job ID, truncated to 12 characters
+	// Generate a UUID v4 for the job ID, truncated to 8 characters
 	uuidStr := uuid.New().String()
-	shortUUID := uuidStr[:12] // Take first 12 characters of the UUID
+	shortUUID := uuidStr[:8] // Take first 8 characters of the UUID
 
 	// Pre-allocate ID string to reduce memory allocations
 	now := q.clock.Now()
