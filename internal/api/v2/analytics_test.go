@@ -836,9 +836,9 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 				},
 				{
 					ID:             4,
-					SpeciesCode:    "NOCA",
-					ScientificName: "Cardinalis cardinalis",
-					CommonName:     "Northern Cardinal",
+					SpeciesCode:    "AMGO",
+					ScientificName: "Spinus tristis",
+					CommonName:     "American Goldfinch",
 					Confidence:     0.80,
 					Date:           "2025-03-07",
 					Time:           "14:30:00",
