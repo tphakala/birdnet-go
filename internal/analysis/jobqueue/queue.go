@@ -137,10 +137,14 @@ func (q *JobQueue) StopWithTimeout(timeout time.Duration) error {
 func getActionKey(action Action) string {
 	typeName := fmt.Sprintf("%T", action)
 	description := action.GetDescription()
+
+	// Escape any colons in the description to avoid ambiguity when splitting
+	escapedDescription := strings.ReplaceAll(description, ":", "\\:")
+
 	// Combine type name and description to create a unique key
 	// This ensures different actions with the same type but different descriptions
 	// get separate statistics entries
-	return fmt.Sprintf("%s:%s", typeName, description)
+	return fmt.Sprintf("%s:%s", typeName, escapedDescription)
 }
 
 // Enqueue adds a job to the queue
@@ -425,15 +429,36 @@ func (q *JobQueue) processDueJobs(ctx context.Context) {
 	}
 }
 
+// Maximum length for stored error messages
+const maxErrorMessageLength = 500
+
 // sanitizeErrorMessage returns a sanitized version of the error message
-// for safe storage in statistics. This is a simple implementation that
-// just returns the error message string. A more comprehensive sanitization
-// should be implemented if needed.
+// for safe storage in statistics. This function:
+// 1. Handles nil errors
+// 2. Bounds the message length to prevent memory bloat
+// 3. Removes any control characters or potential code injection patterns
 func sanitizeErrorMessage(err error) string {
 	if err == nil {
 		return ""
 	}
-	return err.Error()
+
+	errMsg := err.Error()
+
+	// Bound message length to prevent memory bloat
+	if len(errMsg) > maxErrorMessageLength {
+		truncatedMsg := errMsg[:maxErrorMessageLength]
+		errMsg = truncatedMsg + "... [truncated]"
+	}
+
+	// Remove control characters and potentially unsafe characters
+	errMsg = strings.Map(func(r rune) rune {
+		if r < 32 || r == 127 { // ASCII control characters
+			return -1 // Remove character
+		}
+		return r
+	}, errMsg)
+
+	return errMsg
 }
 
 // executeJob executes a job and handles retries if needed
@@ -607,8 +632,22 @@ func (q *JobQueue) GetStats() JobStatsSnapshot {
 	// First, collect all stats by type name
 	for k := range q.stats.ActionStats {
 		// Extract the type name from the key (format is "TypeName:Description")
-		parts := strings.SplitN(k, ":", 2)
-		typeName := parts[0]
+		// We need to look for unescaped colons to handle cases where description contains escaped colons
+		colonIndex := -1
+		for i := 0; i < len(k); i++ {
+			if k[i] == ':' && (i == 0 || k[i-1] != '\\') {
+				colonIndex = i
+				break
+			}
+		}
+
+		var typeName string
+		if colonIndex >= 0 {
+			typeName = k[:colonIndex]
+		} else {
+			// Fallback if no unescaped colon is found
+			typeName = k
+		}
 
 		// Get a copy of the value to avoid modifying the original
 		v := q.stats.ActionStats[k]

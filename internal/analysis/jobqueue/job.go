@@ -97,8 +97,23 @@ type TypedAction[T any] interface {
 	GetDescription() string // Returns a human-readable description of the action
 }
 
-// ToJSON converts the JobStatsSnapshot to a JSON string
+// ToJSON converts the JobStatsSnapshot to a JSON string with pretty formatting
 func (s *JobStatsSnapshot) ToJSON() (string, error) {
+	return s.toJSON(true)
+}
+
+// ToJSONCompact converts the JobStatsSnapshot to a compact JSON string
+// This is more efficient for production use where pretty formatting isn't needed
+func (s *JobStatsSnapshot) ToJSONCompact() (string, error) {
+	return s.toJSON(false)
+}
+
+// toJSON is the internal implementation that handles both pretty and compact JSON
+func (s *JobStatsSnapshot) toJSON(prettyPrint bool) (string, error) {
+	// Use a single timestamp for consistency across the entire snapshot
+	snapshotTime := time.Now()
+	formattedTime := snapshotTime.Format(time.RFC3339)
+
 	// Create a map to represent the JSON structure
 	statsMap := map[string]interface{}{
 		"queue": map[string]interface{}{
@@ -114,15 +129,31 @@ func (s *JobStatsSnapshot) ToJSON() (string, error) {
 			"utilization":   s.QueueUtilization,
 		},
 		"actions":   make(map[string]interface{}),
-		"timestamp": time.Now().Format(time.RFC3339),
+		"timestamp": formattedTime,
 	}
+
+	// Maximum length for descriptions in JSON output
+	const maxDescriptionLength = 500
+
+	// Pre-allocate actions map with the right capacity
+	actionsMap := make(map[string]interface{}, len(s.ActionStats))
+	statsMap["actions"] = actionsMap
 
 	// Add action stats to the map
 	for typeName := range s.ActionStats {
+		// Get a reference to the stats to avoid copying the large struct
 		stats := s.ActionStats[typeName]
+
+		// Bound description length to prevent bloat in JSON output
+		description := stats.Description
+		if len(description) > maxDescriptionLength {
+			description = description[:maxDescriptionLength] + "... [truncated]"
+		}
+
+		// Create action stats map with metrics and performance data
 		actionStats := map[string]interface{}{
 			"typeName":    stats.TypeName,
-			"description": stats.Description,
+			"description": description,
 			"metrics": map[string]interface{}{
 				"attempted":  stats.Attempted,
 				"successful": stats.Successful,
@@ -160,11 +191,19 @@ func (s *JobStatsSnapshot) ToJSON() (string, error) {
 		}
 
 		// Add action stats to the actions map
-		statsMap["actions"].(map[string]interface{})[typeName] = actionStats
+		actionsMap[typeName] = actionStats
 	}
 
-	// Convert to JSON
-	jsonBytes, err := json.MarshalIndent(statsMap, "", "  ")
+	// Convert to JSON based on format preference
+	var jsonBytes []byte
+	var err error
+
+	if prettyPrint {
+		jsonBytes, err = json.MarshalIndent(statsMap, "", "  ")
+	} else {
+		jsonBytes, err = json.Marshal(statsMap)
+	}
+
 	if err != nil {
 		return "", err
 	}
