@@ -67,18 +67,17 @@ func TestGetDetections(t *testing.T) {
 		},
 	}
 
-	// Test cases for different query types
+	// Test cases
 	testCases := []struct {
 		name           string
-		queryType      string
 		queryParams    map[string]string
 		mockSetup      func(*mock.Mock)
 		expectedStatus int
 		expectedCount  int
+		checkResponse  func(*testing.T, *httptest.ResponseRecorder)
 	}{
 		{
-			name:      "All detections",
-			queryType: "all",
+			name: "All detections",
 			queryParams: map[string]string{
 				"queryType":  "all",
 				"numResults": "10",
@@ -89,10 +88,19 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var response PaginatedResponse
+				err := json.Unmarshal(rec.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				detections, ok := response.Data.([]interface{})
+				if !ok {
+					t.Fatalf("Expected Data to be []interface{}, got %T", response.Data)
+				}
+				assert.Equal(t, 2, len(detections))
+			},
 		},
 		{
-			name:      "Hourly detections",
-			queryType: "hourly",
+			name: "Hourly detections",
 			queryParams: map[string]string{
 				"queryType":  "hourly",
 				"date":       "2025-03-07",
@@ -107,10 +115,19 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var response PaginatedResponse
+				err := json.Unmarshal(rec.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				detections, ok := response.Data.([]interface{})
+				if !ok {
+					t.Fatalf("Expected Data to be []interface{}, got %T", response.Data)
+				}
+				assert.Equal(t, 1, len(detections))
+			},
 		},
 		{
-			name:      "Species detections",
-			queryType: "species",
+			name: "Species detections",
 			queryParams: map[string]string{
 				"queryType":  "species",
 				"species":    "American Crow",
@@ -124,10 +141,19 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var response PaginatedResponse
+				err := json.Unmarshal(rec.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				detections, ok := response.Data.([]interface{})
+				if !ok {
+					t.Fatalf("Expected Data to be []interface{}, got %T", response.Data)
+				}
+				assert.Equal(t, 1, len(detections))
+			},
 		},
 		{
-			name:      "Search detections",
-			queryType: "search",
+			name: "Search detections",
 			queryParams: map[string]string{
 				"queryType":  "search",
 				"search":     "Crow",
@@ -140,6 +166,70 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var response PaginatedResponse
+				err := json.Unmarshal(rec.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				detections, ok := response.Data.([]interface{})
+				if !ok {
+					t.Fatalf("Expected Data to be []interface{}, got %T", response.Data)
+				}
+				assert.Equal(t, 1, len(detections))
+			},
+		},
+		{
+			name: "Invalid numResults parameter",
+			queryParams: map[string]string{
+				"numResults": "-5", // Negative value
+			},
+			mockSetup: func(m *mock.Mock) {
+				// No mock calls expected as validation should fail before DB access
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedCount:  0,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var errorResp map[string]interface{}
+				err := json.Unmarshal(rec.Body.Bytes(), &errorResp)
+				assert.NoError(t, err)
+				assert.Contains(t, errorResp, "error")
+				assert.Contains(t, errorResp["error"].(string), "numResults")
+			},
+		},
+		{
+			name: "Invalid offset parameter",
+			queryParams: map[string]string{
+				"offset": "abc", // Non-integer value
+			},
+			mockSetup: func(m *mock.Mock) {
+				// No mock calls expected as validation should fail before DB access
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedCount:  0,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var errorResp map[string]interface{}
+				err := json.Unmarshal(rec.Body.Bytes(), &errorResp)
+				assert.NoError(t, err)
+				assert.Contains(t, errorResp, "error")
+				assert.Contains(t, errorResp["error"].(string), "offset")
+			},
+		},
+		{
+			name: "Invalid confidence parameter",
+			queryParams: map[string]string{
+				"minConfidence": "200", // Value > 100
+			},
+			mockSetup: func(m *mock.Mock) {
+				// No mock calls expected as validation should fail before DB access
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedCount:  0,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var errorResp map[string]interface{}
+				err := json.Unmarshal(rec.Body.Bytes(), &errorResp)
+				assert.NoError(t, err)
+				assert.Contains(t, errorResp, "error")
+				assert.Contains(t, errorResp["error"].(string), "confidence")
+			},
 		},
 	}
 
@@ -916,9 +1006,6 @@ func TestGetNoteComments(t *testing.T) {
 
 // TestReviewDetectionConcurrency tests concurrent review attempts
 func TestReviewDetectionConcurrency(t *testing.T) {
-	// Setup
-	e, mockDS, controller := setupTestEnvironment(t)
-
 	// Create review request
 	reviewRequest := map[string]interface{}{
 		"correct": true,
@@ -931,9 +1018,8 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 
 	// Scenario 1: Note is already locked by another user
 	t.Run("NoteLocked", func(t *testing.T) {
-		// Reset mock
-		mockDS = new(MockDataStore)
-		controller.DS = mockDS
+		// Setup a fresh environment for this subtest
+		e, mockDS, controller := setupTestEnvironment(t)
 
 		// Mock Get to return a valid note
 		mockNote := datastore.Note{
@@ -977,9 +1063,8 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 
 	// Scenario 2: Database error during lock check
 	t.Run("LockCheckError", func(t *testing.T) {
-		// Reset mock
-		mockDS = new(MockDataStore)
-		controller.DS = mockDS
+		// Setup a fresh environment for this subtest
+		e, mockDS, controller := setupTestEnvironment(t)
 
 		// Create mock note
 		mockNote := datastore.Note{
@@ -1018,9 +1103,8 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 
 	// Scenario 3: Race condition when locking note
 	t.Run("RaceCondition", func(t *testing.T) {
-		// Reset mock
-		mockDS = new(MockDataStore)
-		controller.DS = mockDS
+		// Setup a fresh environment for this subtest
+		e, mockDS, controller := setupTestEnvironment(t)
 
 		// Create mock note
 		mockNote := datastore.Note{
