@@ -30,6 +30,7 @@ func (c *Controller) initMediaRoutes() {
 }
 
 // validateMediaPath ensures that a file path is within the allowed export directory and has a valid filename
+// It also creates the export path directory if it doesn't exist
 func (c *Controller) validateMediaPath(exportPath, filename string) (string, error) {
 	// Check if filename is empty
 	if filename == "" {
@@ -39,6 +40,13 @@ func (c *Controller) validateMediaPath(exportPath, filename string) (string, err
 	// Allow only filenames with safe characters
 	if !safeFilenamePattern.MatchString(filename) {
 		return "", fmt.Errorf("invalid filename characters")
+	}
+
+	// Create the export directory if it doesn't exist
+	if _, err := os.Stat(exportPath); os.IsNotExist(err) {
+		if err := os.MkdirAll(exportPath, 0o755); err != nil {
+			return "", fmt.Errorf("failed to create export directory: %w", err)
+		}
 	}
 
 	// Sanitize the filename to prevent path traversal
@@ -101,47 +109,51 @@ func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 	// Parse the Range header
 	ranges, err := parseRange(rangeHeader, fileInfo.Size())
 	if err != nil {
-		// If range is invalid, serve the full file
-		return ctx.File(fullPath)
+		// If range is invalid, return a 416 Range Not Satisfiable response
+		return ctx.NoContent(http.StatusRequestedRangeNotSatisfiable)
 	}
 
-	// We only support a single range for now
-	if len(ranges) != 1 {
-		// If multiple ranges, serve the full file for simplicity
-		return ctx.File(fullPath)
+	// If multiple ranges are requested, just use the first one
+	// This is more efficient than serving the full file
+	if len(ranges) > 0 {
+		// Use the first range in the request
+		rangeToServe := ranges[0]
+
+		// Get the content type based on file extension
+		contentType := getContentType(fullPath)
+
+		// Open the file
+		file, err := os.Open(fullPath)
+		if err != nil {
+			return c.HandleError(ctx, err, "Error opening audio file", http.StatusInternalServerError)
+		}
+		defer file.Close()
+
+		// Set up the response for partial content
+		start, length := rangeToServe.start, rangeToServe.length
+		ctx.Response().Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, start+length-1, fileInfo.Size()))
+		ctx.Response().Header().Set("Accept-Ranges", "bytes")
+		ctx.Response().Header().Set("Content-Type", contentType)
+		ctx.Response().Header().Set("Content-Length", fmt.Sprintf("%d", length))
+		ctx.Response().WriteHeader(http.StatusPartialContent)
+
+		// Seek to the start position
+		_, err = file.Seek(start, 0)
+		if err != nil {
+			return c.HandleError(ctx, err, "Error seeking audio file", http.StatusInternalServerError)
+		}
+
+		// Copy the requested range to the response
+		_, err = io.CopyN(ctx.Response(), file, length)
+		if err != nil {
+			return err
+		}
+
+		return nil
 	}
 
-	// Get the content type based on file extension
-	contentType := getContentType(fullPath)
-
-	// Open the file
-	file, err := os.Open(fullPath)
-	if err != nil {
-		return c.HandleError(ctx, err, "Error opening audio file", http.StatusInternalServerError)
-	}
-	defer file.Close()
-
-	// Set up the response for partial content
-	start, length := ranges[0].start, ranges[0].length
-	ctx.Response().Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, start+length-1, fileInfo.Size()))
-	ctx.Response().Header().Set("Accept-Ranges", "bytes")
-	ctx.Response().Header().Set("Content-Type", contentType)
-	ctx.Response().Header().Set("Content-Length", fmt.Sprintf("%d", length))
-	ctx.Response().WriteHeader(http.StatusPartialContent)
-
-	// Seek to the start position
-	_, err = file.Seek(start, 0)
-	if err != nil {
-		return c.HandleError(ctx, err, "Error seeking audio file", http.StatusInternalServerError)
-	}
-
-	// Copy the requested range to the response
-	_, err = io.CopyN(ctx.Response(), file, length)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	// If we somehow get here with no valid ranges, serve the full file
+	return ctx.File(fullPath)
 }
 
 // httpRange specifies the byte range to be sent to the client
