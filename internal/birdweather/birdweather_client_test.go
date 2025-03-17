@@ -453,7 +453,8 @@ func TestPublish(t *testing.T) {
 
 		// Check content type to determine if it's a soundscape upload or detection post
 		contentType := r.Header.Get("Content-Type")
-		if contentType == "application/octet-stream" {
+		switch contentType {
+		case "application/octet-stream":
 			// This is a soundscape upload
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -469,12 +470,12 @@ func TestPublish(t *testing.T) {
 					"duration": 3.0
 				}
 			}`)
-		} else if contentType == "application/json" {
+		case "application/json":
 			// This is a detection post
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			fmt.Fprint(w, `{"success": true}`)
-		} else {
+		default:
 			// Unexpected content type
 			t.Errorf("Unexpected Content-Type: %s", contentType)
 			w.WriteHeader(http.StatusBadRequest)
