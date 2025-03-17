@@ -290,12 +290,22 @@ func setupAnalyticsTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *C
 // This is a specialized version used primarily for analytics tests that only need
 // to mock specific methods like GetTopBirdsData
 type MockDataStoreV2 struct {
-	GetTopBirdsDataFunc func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error)
+	GetTopBirdsDataFunc      func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error)
+	GetHourlyOccurrencesFunc func(date, commonName string, minConfidenceNormalized float64) ([24]int, error)
 }
 
 // GetTopBirdsData implements the datastore.Interface GetTopBirdsData method
 func (m *MockDataStoreV2) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
 	return m.GetTopBirdsDataFunc(selectedDate, minConfidenceNormalized)
+}
+
+// GetHourlyOccurrences implements the datastore.Interface GetHourlyOccurrences method
+func (m *MockDataStoreV2) GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
+	if m.GetHourlyOccurrencesFunc != nil {
+		return m.GetHourlyOccurrencesFunc(date, commonName, minConfidenceNormalized)
+	}
+	// Default implementation returns empty array
+	return [24]int{}, nil
 }
 
 // Satisfy the remaining methods of the datastore.Interface (with empty implementations)
@@ -305,9 +315,6 @@ func (m *MockDataStoreV2) Delete(id string) error                               
 func (m *MockDataStoreV2) Get(id string) (datastore.Note, error)                        { return datastore.Note{}, nil }
 func (m *MockDataStoreV2) Close() error                                                 { return nil }
 func (m *MockDataStoreV2) GetAllNotes() ([]datastore.Note, error)                       { return nil, nil }
-func (m *MockDataStoreV2) GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
-	return [24]int{}, nil
-}
 func (m *MockDataStoreV2) SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit, offset int) ([]datastore.Note, error) {
 	return nil, nil
 }

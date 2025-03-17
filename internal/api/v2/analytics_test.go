@@ -668,6 +668,23 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 				},
 			}, nil
 		},
+		GetHourlyOccurrencesFunc: func(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
+			// Return appropriate hourly counts based on the species
+			var hourlyCounts [24]int
+
+			if commonName == "American Crow" {
+				// Set counts for hours 8, 9, and 14 for American Crow
+				hourlyCounts[8] = 1  // 08:15:00
+				hourlyCounts[9] = 1  // 09:30:00
+				hourlyCounts[14] = 1 // 14:45:00
+			} else if commonName == "Red-bellied Woodpecker" {
+				// Set counts for hours 10 and 16 for Red-bellied Woodpecker
+				hourlyCounts[10] = 1 // 10:20:00
+				hourlyCounts[16] = 1 // 16:05:00
+			}
+
+			return hourlyCounts, nil
+		},
 	}
 
 	// Create a mock image provider
@@ -780,6 +797,20 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 				},
 			}, nil
 		},
+		GetHourlyOccurrencesFunc: func(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
+			// Return appropriate hourly counts based on the species
+			var hourlyCounts [24]int
+
+			if commonName == "American Crow" {
+				// Set count for hour 8 for American Crow
+				hourlyCounts[8] = 1 // 08:15:00
+			} else if commonName == "Red-bellied Woodpecker" {
+				// Set count for hour 10 for Red-bellied Woodpecker
+				hourlyCounts[10] = 1 // 10:20:00
+			}
+
+			return hourlyCounts, nil
+		},
 	}
 
 	// Create a mock image provider
@@ -843,6 +874,10 @@ func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
 	mockDS := &MockDataStoreV2{
 		GetTopBirdsDataFunc: func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
 			return []datastore.Note{}, nil
+		},
+		GetHourlyOccurrencesFunc: func(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
+			// Return empty hourly counts since there are no detections
+			return [24]int{}, nil
 		},
 	}
 
@@ -914,6 +949,18 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 					Time:           "21:45:00", // Later time
 				},
 			}, nil
+		},
+		GetHourlyOccurrencesFunc: func(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
+			// Return hourly counts for American Crow
+			var hourlyCounts [24]int
+
+			if commonName == "American Crow" {
+				hourlyCounts[6] = 1  // 06:30:00
+				hourlyCounts[8] = 1  // 08:15:00
+				hourlyCounts[21] = 1 // 21:45:00
+			}
+
+			return hourlyCounts, nil
 		},
 	}
 
@@ -996,6 +1043,21 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 					Time:           "12:45:00",
 				},
 			}, nil
+		},
+		GetHourlyOccurrencesFunc: func(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
+			// Return hourly counts based on confidence filter
+			var hourlyCounts [24]int
+
+			// Only return counts for species that meet the confidence threshold
+			if commonName == "American Crow" && minConfidenceNormalized <= 0.9 {
+				hourlyCounts[8] = 1 // 08:15:00
+			} else if commonName == "Red-bellied Woodpecker" && minConfidenceNormalized <= 0.6 {
+				hourlyCounts[10] = 1 // 10:20:00
+			} else if commonName == "Black-capped Chickadee" && minConfidenceNormalized <= 0.3 {
+				hourlyCounts[12] = 1 // 12:45:00
+			}
+
+			return hourlyCounts, nil
 		},
 	}
 
@@ -1083,6 +1145,22 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 					Time:           "14:30:00",
 				},
 			}, nil
+		},
+		GetHourlyOccurrencesFunc: func(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
+			// Return hourly counts for each species
+			var hourlyCounts [24]int
+
+			if commonName == "American Crow" {
+				hourlyCounts[8] = 1 // 08:15:00
+			} else if commonName == "Red-bellied Woodpecker" {
+				hourlyCounts[10] = 1 // 10:20:00
+			} else if commonName == "Black-capped Chickadee" {
+				hourlyCounts[12] = 1 // 12:45:00
+			} else if commonName == "American Goldfinch" {
+				hourlyCounts[14] = 1 // 14:30:00
+			}
+
+			return hourlyCounts, nil
 		},
 	}
 
