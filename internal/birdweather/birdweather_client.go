@@ -4,6 +4,7 @@ package birdweather
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -42,6 +43,15 @@ type BwClient struct {
 	Latitude      float64
 	Longitude     float64
 	HTTPClient    *http.Client
+}
+
+// BirdweatherClientInterface defines what methods a BirdweatherClient must have
+type Interface interface {
+	Publish(note *datastore.Note, pcmData []byte) error
+	UploadSoundscape(timestamp string, pcmData []byte) (soundscapeID string, err error)
+	PostDetection(soundscapeID, timestamp, commonName, scientificName string, confidence float64) error
+	TestConnection(ctx context.Context, resultChan chan<- TestResult)
+	Close()
 }
 
 // New creates and initializes a new BwClient with the given settings.
