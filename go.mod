@@ -2,6 +2,8 @@ module github.com/tphakala/birdnet-go
 
 go 1.24.1
 
+toolchain go1.24.1
+
 require (
 	cgt.name/pkg/go-mwclient v1.3.0
 	github.com/antonholmquist/jason v1.0.0
@@ -10,7 +12,7 @@ require (
 	github.com/gen2brain/malgo v0.11.23
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0
-	github.com/go-echarts/go-echarts/v2 v2.5.1
+	github.com/go-echarts/go-echarts/v2 v2.5.2
 	github.com/google/uuid v1.6.0
 	github.com/k3a/html2text v1.2.1
 	github.com/klauspost/cpuid/v2 v2.2.10
