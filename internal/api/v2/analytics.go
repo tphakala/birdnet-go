@@ -94,47 +94,38 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 			continue
 		}
 
-		// Get hour from time string
-		hourInt := 0
-		if len(note.Time) >= 2 {
-			hourInt, _ = strconv.Atoi(note.Time[:2])
+		// Get hourly counts for this species
+		hourlyCounts, err := c.DS.GetHourlyOccurrences(selectedDate, note.CommonName, minConfidence)
+		if err != nil {
+			c.Debug("Error getting hourly counts: %v", err)
+			continue
 		}
 
-		// Create or update bird data
+		// Calculate total count from hourly counts
+		totalCount := 0
+		for _, count := range hourlyCounts {
+			totalCount += count
+		}
+
+		// Create bird data entry
 		birdKey := note.ScientificName
-		data, exists := birdData[birdKey]
-		if !exists {
-			data = struct {
-				CommonName     string
-				ScientificName string
-				Count          int
-				HourlyCounts   [24]int
-				HighConfidence bool
-				First          string
-				Latest         string
-			}{
-				CommonName:     note.CommonName,
-				ScientificName: note.ScientificName,
-				First:          note.Time,
-				Latest:         note.Time,
-				HighConfidence: note.Confidence >= 0.8, // Define high confidence
-			}
+		birdData[birdKey] = struct {
+			CommonName     string
+			ScientificName string
+			Count          int
+			HourlyCounts   [24]int
+			HighConfidence bool
+			First          string
+			Latest         string
+		}{
+			CommonName:     note.CommonName,
+			ScientificName: note.ScientificName,
+			Count:          totalCount,
+			HourlyCounts:   hourlyCounts,
+			HighConfidence: note.Confidence >= 0.8, // Define high confidence
+			First:          note.Time,
+			Latest:         note.Time,
 		}
-
-		// Update counters
-		data.Count++
-		data.HourlyCounts[hourInt]++
-
-		// Update time tracking
-		if note.Time < data.First {
-			data.First = note.Time
-		}
-		if note.Time > data.Latest {
-			data.Latest = note.Time
-		}
-
-		// Save updated data
-		birdData[birdKey] = data
 	}
 
 	// Convert map to slice for response

@@ -289,9 +289,9 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 
 	// First, get the count and common names
 	query := ds.DB.Table("notes").
-		Select("common_name, MAX(scientific_name) as scientific_name, COUNT(*) as count, MAX(confidence) as confidence, MAX(date) as date, MAX(time) as time").
+		Select("common_name, scientific_name, COUNT(*) as count, MAX(confidence) as confidence, date, MAX(time) as time").
 		Where("date = ? AND confidence >= ?", selectedDate, minConfidenceNormalized).
-		Group("common_name").
+		Group("common_name, scientific_name, date").
 		Order("count DESC").
 		Limit(reportCount)
 
@@ -299,21 +299,23 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 		return nil, err
 	}
 
-	// Now get all the actual notes for these species on this date
+	// Create a single note for each species with the count information
 	var notes []Note
-	if len(results) > 0 {
-		// Extract the common names to use in the IN clause
-		commonNames := make([]string, len(results))
-		for i, result := range results {
-			commonNames[i] = result.CommonName
+	for _, result := range results {
+		// Create a representative note for this species
+		note := Note{
+			CommonName:     result.CommonName,
+			ScientificName: result.ScientificName,
+			Confidence:     result.Confidence,
+			Date:           result.Date,
+			Time:           result.Time,
 		}
 
-		// Query to get all notes for these species on this date
-		if err := ds.DB.Where("date = ? AND common_name IN ? AND confidence >= ?",
-			selectedDate, commonNames, minConfidenceNormalized).
-			Find(&notes).Error; err != nil {
-			return nil, err
-		}
+		// Add this note to our results
+		notes = append(notes, note)
+
+		// For the web UI, we only need one note per species
+		// The hourly counts will be retrieved separately via GetHourlyOccurrences
 	}
 
 	return notes, nil
