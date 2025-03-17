@@ -107,24 +107,46 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 			totalCount += count
 		}
 
-		// Create bird data entry
+		// Create or update bird data entry
 		birdKey := note.ScientificName
-		birdData[birdKey] = struct {
-			CommonName     string
-			ScientificName string
-			Count          int
-			HourlyCounts   [24]int
-			HighConfidence bool
-			First          string
-			Latest         string
-		}{
-			CommonName:     note.CommonName,
-			ScientificName: note.ScientificName,
-			Count:          totalCount,
-			HourlyCounts:   hourlyCounts,
-			HighConfidence: note.Confidence >= 0.8, // Define high confidence
-			First:          note.Time,
-			Latest:         note.Time,
+		data, exists := birdData[birdKey]
+
+		if !exists {
+			// Create new entry if it doesn't exist
+			birdData[birdKey] = struct {
+				CommonName     string
+				ScientificName string
+				Count          int
+				HourlyCounts   [24]int
+				HighConfidence bool
+				First          string
+				Latest         string
+			}{
+				CommonName:     note.CommonName,
+				ScientificName: note.ScientificName,
+				Count:          totalCount,
+				HourlyCounts:   hourlyCounts,
+				HighConfidence: note.Confidence >= 0.8, // Define high confidence
+				First:          note.Time,
+				Latest:         note.Time,
+			}
+		} else {
+			// Update existing entry
+			// Update first/latest times if needed
+			if note.Time < data.First {
+				data.First = note.Time
+			}
+			if note.Time > data.Latest {
+				data.Latest = note.Time
+			}
+
+			// Update other fields
+			data.Count = totalCount
+			data.HourlyCounts = hourlyCounts
+			data.HighConfidence = data.HighConfidence || note.Confidence >= 0.8
+
+			// Save updated data back to map
+			birdData[birdKey] = data
 		}
 	}
 

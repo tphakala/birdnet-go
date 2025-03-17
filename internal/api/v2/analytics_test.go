@@ -924,6 +924,15 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 			// Return multiple notes with the same species to test time handling
 			return []datastore.Note{
 				{
+					ID:             2,
+					SpeciesCode:    "AMCRO",
+					ScientificName: "Corvus brachyrhynchos",
+					CommonName:     "American Crow",
+					Confidence:     0.85,
+					Date:           "2025-03-07",
+					Time:           "06:30:00", // Earlier time - put this first
+				},
+				{
 					ID:             1,
 					SpeciesCode:    "AMCRO",
 					ScientificName: "Corvus brachyrhynchos",
@@ -931,15 +940,6 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 					Confidence:     0.9,
 					Date:           "2025-03-07",
 					Time:           "08:15:00",
-				},
-				{
-					ID:             2,
-					SpeciesCode:    "AMCRO",
-					ScientificName: "Corvus brachyrhynchos",
-					CommonName:     "American Crow",
-					Confidence:     0.85,
-					Date:           "2025-03-07",
-					Time:           "06:30:00", // Earlier time
 				},
 				{
 					ID:             3,
