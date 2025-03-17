@@ -790,13 +790,11 @@ func TestControlEndpointsAuthScenarios_Advanced(t *testing.T) {
 				case <-time.After(100 * time.Millisecond):
 					assert.Fail(t, "Control signal was not sent")
 				}
-			} else {
+			} else if tc.expectedResult == false {
 				// For invalid auth, we just verify we would get a 401
 				// This is a simulation since we're not actually running the middleware
-				if tc.expectedResult == false {
-					// This is just a placeholder to show the test passed
-					assert.False(t, tc.expectedResult, "Auth should fail for %s", tc.name)
-				}
+				// This is just a placeholder to show the test passed
+				assert.False(t, tc.expectedResult, "Auth should fail for %s", tc.name)
 			}
 		})
 	}
