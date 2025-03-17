@@ -80,8 +80,18 @@ func (c *Controller) RestartAnalysis(ctx echo.Context) error {
 
 	c.Debug("API requested analysis restart")
 
-	// Send restart signal
-	c.controlChan <- SignalRestartAnalysis
+	// Get request context
+	reqCtx := ctx.Request().Context()
+
+	// Send restart signal with context timeout awareness
+	select {
+	case c.controlChan <- SignalRestartAnalysis:
+		// Signal sent successfully
+	case <-reqCtx.Done():
+		// Request context is done (timeout or cancelled)
+		return c.HandleError(ctx, reqCtx.Err(),
+			"Request timeout while sending control signal", http.StatusRequestTimeout)
+	}
 
 	return ctx.JSON(http.StatusOK, ControlResult{
 		Success:   true,
@@ -101,8 +111,18 @@ func (c *Controller) ReloadModel(ctx echo.Context) error {
 
 	c.Debug("API requested model reload")
 
-	// Send reload signal
-	c.controlChan <- SignalReloadModel
+	// Get request context
+	reqCtx := ctx.Request().Context()
+
+	// Send reload signal with context timeout awareness
+	select {
+	case c.controlChan <- SignalReloadModel:
+		// Signal sent successfully
+	case <-reqCtx.Done():
+		// Request context is done (timeout or cancelled)
+		return c.HandleError(ctx, reqCtx.Err(),
+			"Request timeout while sending control signal", http.StatusRequestTimeout)
+	}
 
 	return ctx.JSON(http.StatusOK, ControlResult{
 		Success:   true,
@@ -122,8 +142,18 @@ func (c *Controller) RebuildFilter(ctx echo.Context) error {
 
 	c.Debug("API requested species filter rebuild")
 
-	// Send rebuild filter signal
-	c.controlChan <- SignalRebuildFilter
+	// Get request context
+	reqCtx := ctx.Request().Context()
+
+	// Send rebuild filter signal with context timeout awareness
+	select {
+	case c.controlChan <- SignalRebuildFilter:
+		// Signal sent successfully
+	case <-reqCtx.Done():
+		// Request context is done (timeout or cancelled)
+		return c.HandleError(ctx, reqCtx.Err(),
+			"Request timeout while sending control signal", http.StatusRequestTimeout)
+	}
 
 	return ctx.JSON(http.StatusOK, ControlResult{
 		Success:   true,
