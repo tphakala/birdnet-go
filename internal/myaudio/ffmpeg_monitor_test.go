@@ -856,6 +856,14 @@ func TestFFmpegProcessKilledDetection(t *testing.T) {
 }
 
 func TestFFmpegProcessRestartMechanism(t *testing.T) {
+	// Create channels to track counts
+	type testStats struct {
+		startCount   int
+		restartCount int
+		exitCount    int
+	}
+	statsChan := make(chan testStats, 1)
+
 	// Create a test-specific version of manageFfmpegLifecycle
 	testManageFfmpegLifecycle := func(config FFmpegConfig, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
 		// Create a context with cancellation for local use
@@ -863,11 +871,11 @@ func TestFFmpegProcessRestartMechanism(t *testing.T) {
 		defer cancel()
 
 		processExitChan := make(chan error, 1)
-		startCount := 0
+		stats := testStats{}
 
 		// Simulate a couple of process lifecycles
 		for i := 0; i < 3; i++ {
-			startCount++
+			stats.startCount++
 			// Simulate process running and then exiting
 			go func() {
 				time.Sleep(50 * time.Millisecond)
@@ -881,11 +889,13 @@ func TestFFmpegProcessRestartMechanism(t *testing.T) {
 
 			case err := <-processExitChan:
 				// Process exited
+				stats.exitCount++
 				t.Logf("Test iteration %d: Process exited with: %v", i, err)
 				// Cleanup would happen here
 
 			case <-restartChan:
 				// Restart signal received
+				stats.restartCount++
 				t.Logf("Test iteration %d: Explicit restart triggered", i)
 				// Cleanup would happen here
 			}
@@ -895,6 +905,8 @@ func TestFFmpegProcessRestartMechanism(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 
+		// Send test statistics back to the main test
+		statsChan <- stats
 		return nil
 	}
 
@@ -908,20 +920,38 @@ func TestFFmpegProcessRestartMechanism(t *testing.T) {
 		Transport: "tcp",
 	}
 
+	// Create a done channel to signal test completion
+	testDone := make(chan struct{})
+
 	// Run the test function in a goroutine
 	go func() {
 		testManageFfmpegLifecycle(config, restartChan, audioLevelChan)
+		close(testDone)
 	}()
 
 	// Send an explicit restart signal
 	time.Sleep(75 * time.Millisecond) // Wait for first iteration to start
 	restartChan <- struct{}{}
 
-	// Allow time for test to complete
-	time.Sleep(200 * time.Millisecond)
+	// Allow time for test to complete and collect stats
+	var stats testStats
+	select {
+	case <-testDone:
+		// Ensure we can get the stats
+		select {
+		case stats = <-statsChan:
+			// Got statistics
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("Could not retrieve test statistics")
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Test did not complete within expected timeframe")
+	}
 
-	// No explicit assertions since we're testing behavior
-	// Success is completing without deadlock or panic
+	// Verify the expected behavior occurred
+	assert.Equal(t, 3, stats.startCount, "Should have started FFmpeg process 3 times")
+	assert.Equal(t, 1, stats.restartCount, "Should have received 1 explicit restart signal")
+	assert.Equal(t, 2, stats.exitCount, "Should have handled 2 process exit events")
 }
 
 func TestWatchdogDetection(t *testing.T) {
@@ -1784,4 +1814,64 @@ func TestContextCancellation(t *testing.T) {
 
 	// This test demonstrates how long-running operations in the FFmpegMonitor
 	// should respect context cancellation to allow for proper shutdown
+}
+
+// TestEdgeCaseURLCleanup tests that the cleanup process handles unusual URL values correctly
+func TestEdgeCaseURLCleanup(t *testing.T) {
+	// Create test context
+	tc := NewTestContext(t)
+	defer tc.Cleanup()
+
+	// Configure the monitor to accept only one valid URL
+	validURL := "rtsp://valid.example.com/stream"
+	tc.WithConfiguredURLs([]string{validURL})
+
+	// Define edge case URLs to test
+	edgeCaseURLs := []string{
+		"",                                // Empty string
+		" ",                               // Just whitespace
+		"://no-scheme.com",                // Missing scheme
+		"rtsp://",                         // Missing host
+		"rtsp://malformed:port",           // Invalid port
+		"rtsp://[invalid-ip]/stream",      // Invalid IP format
+		"http://wrong-scheme.com/stream",  // Wrong scheme (not RTSP)
+		validURL + " with trailing space", // Valid URL with trailing data
+	}
+
+	// Create a mock process for each edge case URL
+	mockProcesses := make([]*MockFFmpegProcess, len(edgeCaseURLs))
+
+	// Add each process to the repository with an edge case URL
+	for i, url := range edgeCaseURLs {
+		mockProcesses[i] = NewMockFFmpegProcess(1000 + i)
+		tc.Repo.AddProcess(url, mockProcesses[i])
+	}
+
+	// Setup ForEach to actually invoke the callback with our test URLs
+	tc.Repo.On("ForEach", mock.AnythingOfType("func(interface {}, interface {}) bool")).Run(func(args mock.Arguments) {
+		callback := args.Get(0).(func(key, value any) bool)
+		// Process each URL/process pair
+		for i, url := range edgeCaseURLs {
+			if !callback(url, mockProcesses[i]) {
+				break
+			}
+		}
+		// Also include the valid URL if we want to test it's not cleaned up
+		callback(validURL, NewMockFFmpegProcess(9999))
+	}).Return()
+
+	// Configure process manager to return empty list
+	tc.ProcMgr.On("FindProcesses").Return([]ProcessInfo{}, nil)
+
+	// Run the check processes function
+	err := tc.Monitor.checkProcesses()
+	assert.NoError(t, err, "checkProcesses should handle edge case URLs without error")
+
+	// Verify that each edge case process was cleaned up
+	for i, url := range edgeCaseURLs {
+		assert.True(t, mockProcesses[i].cleanupCalled,
+			"Process with edge case URL '%s' should be cleaned up", url)
+		assert.Contains(t, mockProcesses[i].cleanupURLs, url,
+			"Cleanup should be called with the correct URL: %s", url)
+	}
 }
