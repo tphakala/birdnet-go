@@ -1308,8 +1308,19 @@ func TestResourceCleanupDuringProcessing(t *testing.T) {
 	assert.Nil(t, tc.Monitor.monitorTicker, "Ticker should be nil after Stop")
 }
 
-// Add this helper function to create a test with a controlled monitor
-func setupMonitorTest(t *testing.T) (*FFmpegMonitor, *MockConfigProvider, *MockProcessManager, *MockProcessRepository, *MockClock, func()) {
+// MonitorTestContext encapsulates test dependencies for simplified test setup
+type MonitorTestContext struct {
+	Monitor   *FFmpegMonitor
+	Config    *MockConfigProvider
+	ProcMgr   *MockProcessManager
+	Repo      *MockProcessRepository
+	Clock     *MockClock
+	Ticker    *MockTicker
+	CleanupFn func()
+}
+
+// CreateMonitorTestContext creates a simplified test context for monitor tests
+func CreateMonitorTestContext(t *testing.T) *MonitorTestContext {
 	// Create mock dependencies
 	mockConfig := new(MockConfigProvider)
 	mockProcMgr := new(MockProcessManager)
@@ -1343,24 +1354,39 @@ func setupMonitorTest(t *testing.T) (*FFmpegMonitor, *MockConfigProvider, *MockP
 		}
 	}
 
-	return monitor, mockConfig, mockProcMgr, mockRepo, mockClock, cleanup
+	return &MonitorTestContext{
+		Monitor:   monitor,
+		Config:    mockConfig,
+		ProcMgr:   mockProcMgr,
+		Repo:      mockRepo,
+		Clock:     mockClock,
+		Ticker:    mockTicker,
+		CleanupFn: cleanup,
+	}
+}
+
+// Cleanup performs test cleanup
+func (ctx *MonitorTestContext) Cleanup() {
+	if ctx.CleanupFn != nil {
+		ctx.CleanupFn()
+	}
 }
 
 func TestGoroutineTerminationOnStop(t *testing.T) {
-	// Setup with our helper
-	monitor, _, _, _, mockClock, cleanup := setupMonitorTest(t)
-	defer cleanup()
+	// Setup with our new helper
+	ctx := CreateMonitorTestContext(t)
+	defer ctx.Cleanup()
 
 	// Mock specific behavior needed for this test
 	// Use the existing implementation of RealTicker from the main code
 	realTicker := &RealTicker{ticker: time.NewTicker(10 * time.Millisecond)}
-	mockClock.On("NewTicker", 10*time.Millisecond).Return(realTicker)
+	ctx.Clock.On("NewTicker", 10*time.Millisecond).Return(realTicker)
 
 	// Count active goroutines before starting monitor
 	goroutinesBefore := runtime.NumGoroutine()
 
 	// Start the monitor
-	monitor.Start()
+	ctx.Monitor.Start()
 
 	// Allow a brief moment for goroutines to start
 	time.Sleep(20 * time.Millisecond)
@@ -1372,7 +1398,7 @@ func TestGoroutineTerminationOnStop(t *testing.T) {
 	assert.Greater(t, goroutinesAfterStart, goroutinesBefore, "Starting the monitor should create at least one goroutine")
 
 	// Stop the monitor
-	monitor.Stop()
+	ctx.Monitor.Stop()
 
 	// Allow a bit more time for goroutines to clean up
 	time.Sleep(20 * time.Millisecond)
@@ -1387,15 +1413,15 @@ func TestGoroutineTerminationOnStop(t *testing.T) {
 }
 
 func TestChannelClosureOnStop(t *testing.T) {
-	// Setup with our helper
-	monitor, _, _, _, _, cleanup := setupMonitorTest(t)
-	defer cleanup()
+	// Setup with our new helper
+	ctx := CreateMonitorTestContext(t)
+	defer ctx.Cleanup()
 
 	// Start the monitor
-	monitor.Start()
+	ctx.Monitor.Start()
 
 	// Stop the monitor
-	monitor.Stop()
+	ctx.Monitor.Stop()
 
 	// Try to send on the done channel (this should panic if the channel is closed)
 	// We wrap this in a function to recover from the panic
@@ -1408,7 +1434,7 @@ func TestChannelClosureOnStop(t *testing.T) {
 		}()
 
 		// This should panic if the channel is closed
-		monitor.done <- struct{}{}
+		ctx.Monitor.done <- struct{}{}
 	}()
 
 	// Verify that the done channel was closed
