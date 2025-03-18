@@ -170,7 +170,7 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 
 	// Initialize FFmpeg monitor if not already running
 	if ffmpegMonitor == nil {
-		ffmpegMonitor = NewFFmpegMonitor()
+		ffmpegMonitor = NewDefaultFFmpegMonitor()
 		ffmpegMonitor.Start()
 	}
 

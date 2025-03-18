@@ -17,7 +17,8 @@ import (
 
 // ffmpegProcesses keeps track of running FFmpeg processes for each URL
 // This is used to ensure that only one FFmpeg process is running per RTSP source
-var ffmpegProcesses sync.Map
+// Moved to ffmpeg_monitor.go to avoid duplicate declaration
+// var ffmpegProcesses = &sync.Map{}
 
 // FFmpegConfig holds the configuration for the FFmpeg command
 type FFmpegConfig struct {
