@@ -390,41 +390,58 @@ func (m *FFmpegMonitor) cleanupOrphanedProcesses() error {
 		return fmt.Errorf("error finding FFmpeg processes: %w", err)
 	}
 
-	// No processes found
-	if len(processes) == 0 {
-		return nil
+	// Build a map of PIDs found in the system
+	systemPIDs := make(map[int]bool)
+	for _, proc := range processes {
+		systemPIDs[proc.PID] = true
 	}
 
-	// Get list of known process IDs
+	// Get list of known process IDs and build a map of PID to URL
 	knownPIDs := make(map[int]bool)
+	pidToURL := make(map[int]string)
+	pidToProcess := make(map[int]any) // Store the actual process object
+
 	m.processRepo.ForEach(func(key, value any) bool {
-		// Check if the value is a process with cmd and cmd.Process
-		// Handle different types safely using type assertions
+		url := key.(string)
 
-		// Try FFmpegProcess first
+		// Track which PID belongs to which URL and store process
 		if process, ok := value.(*FFmpegProcess); ok && process.cmd != nil && process.cmd.Process != nil {
-			knownPIDs[process.cmd.Process.Pid] = true
-			return true
-		}
-
-		// For test mocks or any other implementation that has a cmd field
-		// Use reflection to safely access the cmd field, if present
-		if reflect.TypeOf(value).Kind() == reflect.Ptr {
+			pid := process.cmd.Process.Pid
+			knownPIDs[pid] = true
+			pidToURL[pid] = url
+			pidToProcess[pid] = value // Store the process
+		} else if reflect.TypeOf(value).Kind() == reflect.Ptr {
+			// Handle mock processes for testing
 			val := reflect.ValueOf(value).Elem()
-
-			// Check if there's a 'cmd' field
 			cmdField := val.FieldByName("cmd")
 			if cmdField.IsValid() && !cmdField.IsNil() {
-				// Get the cmd's Process's Pid
 				pidField := cmdField.Elem().FieldByName("pid")
 				if pidField.IsValid() {
-					knownPIDs[int(pidField.Int())] = true
+					pid := int(pidField.Int())
+					knownPIDs[pid] = true
+					pidToURL[pid] = url
+					pidToProcess[pid] = value // Store the process
 				}
 			}
 		}
 
 		return true
 	})
+
+	// Check for processes that have been killed externally
+	for pid, url := range pidToURL {
+		if systemPIDs[pid] && !m.processManager.IsProcessRunning(pid) {
+			// Process exists in the system but is not running (zombie or killed)
+			log.Printf("🧹 Found externally killed FFmpeg process for URL %s, cleaning up", url)
+
+			// Important: Use the stored process reference directly
+			if process, ok := pidToProcess[pid]; ok {
+				if cleaner, ok := process.(ProcessCleaner); ok {
+					cleaner.Cleanup(url)
+				}
+			}
+		}
+	}
 
 	// Clean up any processes not in our known list
 	for _, proc := range processes {

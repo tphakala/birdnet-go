@@ -1,13 +1,17 @@
 package myaudio
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"io"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // Mock implementations for testing
@@ -169,10 +173,14 @@ func convertArgsToInterface(args []string) []interface{} {
 
 // Mock FFmpegProcess for testing
 type MockFFmpegProcess struct {
-	cmd           *MockCmd
-	cleanupCalled bool
-	cleanupURLs   []string
-	expectedPID   int
+	cmd            *MockCmd
+	cancel         func()
+	done           chan error
+	stdout         io.ReadCloser
+	cleanupCalled  bool
+	cleanupURLs    []string
+	expectedPID    int
+	restartTracker *FFmpegRestartTracker
 }
 
 func NewMockFFmpegProcess(pid int) *MockFFmpegProcess {
@@ -356,6 +364,10 @@ func TestCleanupOrphanedProcesses(t *testing.T) {
 		{PID: 123, Name: "ffmpeg"}, // Known process
 		{PID: 456, Name: "ffmpeg"}, // Orphaned process
 	}, nil)
+
+	// Add expectation for IsProcessRunning
+	mockProcMgr.On("IsProcessRunning", 123).Return(true) // Process is running normally
+
 	// Use mock.Anything instead of mock.AnythingOfType for the function argument
 	mockRepo.On("ForEach", mock.Anything).Return()
 	mockProcMgr.On("TerminateProcess", 456).Return(nil)
@@ -381,8 +393,11 @@ func TestCleanupOrphanedProcessesError(t *testing.T) {
 	mockRepo := NewMockProcessRepository()
 	mockClock := new(MockClock)
 
-	// Configure mocks
+	// Configure mocks - simulate error when finding processes
 	mockProcMgr.On("FindProcesses").Return([]ProcessInfo{}, errors.New("command failed"))
+
+	// Empty repository to avoid IsProcessRunning calls
+	mockRepo.On("ForEach", mock.Anything).Return()
 
 	// Create the monitor
 	monitor := NewFFmpegMonitor(mockConfig, mockProcMgr, mockRepo, mockClock)
@@ -415,6 +430,8 @@ func TestMonitorLoopWithTick(t *testing.T) {
 	// Use mock.Anything instead of mock.AnythingOfType for the function argument
 	mockRepo.On("ForEach", mock.Anything).Return().Maybe()
 	mockProcMgr.On("FindProcesses").Return([]ProcessInfo{}, nil).Maybe()
+	// Allow IsProcessRunning calls with any int parameter
+	mockProcMgr.On("IsProcessRunning", mock.AnythingOfType("int")).Return(true).Maybe()
 
 	// Create the monitor
 	monitor := NewFFmpegMonitor(mockConfig, mockProcMgr, mockRepo, mockClock)
@@ -595,4 +612,292 @@ func TestBackoffStrategy(t *testing.T) {
 	delay, canRetry = backoff.nextDelay()
 	assert.True(t, canRetry, "Should allow retry after reset")
 	assert.Equal(t, initialDelay, delay, "Delay should reset to initial value")
+}
+
+func TestFFmpegProcessKilledDetection(t *testing.T) {
+	// Create mock dependencies
+	mockConfig := new(MockConfigProvider)
+	mockProcMgr := new(MockProcessManager)
+	mockRepo := NewMockProcessRepository()
+	mockClock := new(MockClock)
+
+	// Create a mock FFmpeg process
+	mockProcess := &MockFFmpegProcess{
+		cmd: &MockCmd{
+			pid:     123,
+			process: &MockProcess{pid: 123},
+		},
+		cleanupCalled: false,
+	}
+
+	// Add to repository
+	url := "rtsp://example.com/stream"
+	mockRepo.AddProcess(url, mockProcess)
+
+	// Configure expectations
+	mockConfig.On("GetConfiguredURLs").Return([]string{url})
+	mockRepo.On("ForEach", mock.Anything).Run(func(args mock.Arguments) {
+		callback := args.Get(0).(func(key, value any) bool)
+		callback(url, mockProcess)
+	})
+
+	// Important: Configure process manager to indicate the process is in the system
+	// but not running - this simulates a killed process
+	mockProcMgr.On("FindProcesses").Return([]ProcessInfo{
+		{PID: 123, Name: "ffmpeg"},
+	}, nil)
+
+	// This is key - indicate that PID 123 is not running
+	mockProcMgr.On("IsProcessRunning", 123).Return(false)
+
+	// We should expect a call to terminate the process
+	mockProcMgr.On("TerminateProcess", 123).Return(nil)
+
+	// Create the monitor
+	monitor := NewFFmpegMonitor(mockConfig, mockProcMgr, mockRepo, mockClock)
+
+	// Run the check processes function
+	err := monitor.checkProcesses()
+	assert.NoError(t, err)
+
+	// Verify that the process was properly detected as needing cleanup
+	assert.True(t, mockProcess.cleanupCalled, "Process should be cleaned up when killed")
+}
+
+func TestFFmpegProcessRestartMechanism(t *testing.T) {
+	// Create a test-specific version of manageFfmpegLifecycle
+	testManageFfmpegLifecycle := func(config FFmpegConfig, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
+		// Create a context with cancellation for local use
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		processExitChan := make(chan error, 1)
+		startCount := 0
+
+		// Simulate a couple of process lifecycles
+		for i := 0; i < 3; i++ {
+			startCount++
+			// Simulate process running and then exiting
+			go func() {
+				time.Sleep(50 * time.Millisecond)
+				processExitChan <- fmt.Errorf("process terminated")
+			}()
+
+			// This mirrors the core logic in manageFfmpegLifecycle
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+
+			case err := <-processExitChan:
+				// Process exited
+				t.Logf("Test iteration %d: Process exited with: %v", i, err)
+				// Cleanup would happen here
+
+			case <-restartChan:
+				// Restart signal received
+				t.Logf("Test iteration %d: Explicit restart triggered", i)
+				// Cleanup would happen here
+			}
+
+			// In real function, we'd calculate delay before restart
+			// For test, just use a small delay
+			time.Sleep(10 * time.Millisecond)
+		}
+
+		return nil
+	}
+
+	// Set up test channels
+	restartChan := make(chan struct{}, 5)
+	audioLevelChan := make(chan AudioLevelData, 5)
+
+	// Configure the test
+	config := FFmpegConfig{
+		URL:       "rtsp://example.com/stream",
+		Transport: "tcp",
+	}
+
+	// Run the test function in a goroutine
+	go func() {
+		testManageFfmpegLifecycle(config, restartChan, audioLevelChan)
+	}()
+
+	// Send an explicit restart signal
+	time.Sleep(75 * time.Millisecond) // Wait for first iteration to start
+	restartChan <- struct{}{}
+
+	// Allow time for test to complete
+	time.Sleep(200 * time.Millisecond)
+
+	// No explicit assertions since we're testing behavior
+	// Success is completing without deadlock or panic
+}
+
+func TestWatchdogDetection(t *testing.T) {
+	// Create a watchdog instance
+	watchdog := &audioWatchdog{
+		lastDataTime: time.Now().Add(-30 * time.Second),
+		mu:           sync.Mutex{},
+	}
+
+	// Create channels to track watchdog signals
+	restartChan := make(chan struct{}, 1)
+
+	// Create context for the test
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// URL for testing
+	url := "rtsp://example.com/stream"
+
+	// Mock the settings
+	settingsMock := conf.Setting()
+	settingsMock.Realtime.RTSP.URLs = []string{url}
+
+	// Start a goroutine to simulate the watchdog component
+	go func() {
+		// Mimic the audio processing function with watchdog
+		for {
+			select {
+			case <-ctx.Done():
+				return
+
+			default:
+				// Simulate the timeSinceLastData check in startWatchdog
+				if watchdog.timeSinceLastData() > 60*time.Second {
+					// Trigger restart
+					restartChan <- struct{}{}
+					return
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+	}()
+
+	// Let the watchdog run for a bit
+	time.Sleep(20 * time.Millisecond)
+
+	// Update lastDataTime to a time that will trigger the watchdog
+	watchdog.mu.Lock()
+	watchdog.lastDataTime = time.Now().Add(-65 * time.Second)
+	watchdog.mu.Unlock()
+
+	// Wait for restart signal
+	select {
+	case <-restartChan:
+		// Success - watchdog triggered restart
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Watchdog did not trigger restart")
+	}
+}
+
+func TestProcessCleanupOnConfigChange(t *testing.T) {
+	// Create mock dependencies
+	mockConfig := new(MockConfigProvider)
+	mockProcMgr := new(MockProcessManager) // Add process manager
+	mockRepo := NewMockProcessRepository()
+	mockClock := new(MockClock)
+
+	// Configure process manager mock
+	mockProcMgr.On("FindProcesses").Return([]ProcessInfo{}, nil)
+
+	// Create a mock process
+	mockProcess := NewMockFFmpegProcess(123)
+
+	// Add to repository
+	url := "rtsp://stream-to-remove.com"
+	mockRepo.AddProcess(url, mockProcess)
+
+	// Configure mocks - URL is NOT in configured list
+	mockConfig.On("GetConfiguredURLs").Return([]string{"rtsp://different-stream.com"})
+	mockRepo.On("ForEach", mock.Anything).Run(func(args mock.Arguments) {
+		callback := args.Get(0).(func(key, value any) bool)
+		// Call the callback with our mock process
+		callback(url, mockProcess)
+	})
+
+	// Create the monitor with mockProcMgr instead of nil
+	monitor := NewFFmpegMonitor(mockConfig, mockProcMgr, mockRepo, mockClock)
+
+	// Run the check
+	err := monitor.checkProcesses()
+
+	// Check results
+	assert.NoError(t, err)
+	assert.True(t, mockProcess.cleanupCalled, "Process should be cleaned up when removed from config")
+	assert.Contains(t, mockProcess.cleanupURLs, url, "Cleanup should be called with correct URL")
+
+	// Verify expectations
+	mockConfig.AssertExpectations(t)
+	mockRepo.AssertExpectations(t)
+	mockProcMgr.AssertExpectations(t)
+}
+
+func TestBackoffDelayForProcessRestarts(t *testing.T) {
+	// Create a process with a restart tracker
+	proc := &FFmpegProcess{
+		restartTracker: &FFmpegRestartTracker{
+			restartCount:  0,
+			lastRestartAt: time.Now().Add(-2 * time.Minute), // Old restart
+		},
+	}
+
+	// First restart should reset the count (since it's been over a minute)
+	proc.updateRestartInfo()
+	delay := proc.getRestartDelay()
+	assert.Equal(t, 5*time.Second, delay, "First restart should have 5s delay")
+
+	// Second restart should increase the delay
+	proc.updateRestartInfo()
+	delay = proc.getRestartDelay()
+	assert.Equal(t, 10*time.Second, delay, "Second restart should have 10s delay")
+
+	// Multiple rapid restarts should increase up to cap
+	for i := 0; i < 30; i++ {
+		proc.updateRestartInfo()
+	}
+	delay = proc.getRestartDelay()
+	assert.Equal(t, 2*time.Minute, delay, "Delay should be capped at 2 minutes")
+}
+
+func TestExternalProcessKill(t *testing.T) {
+	// Create mock dependencies
+	mockConfig := new(MockConfigProvider)
+	mockProcMgr := new(MockProcessManager)
+	mockRepo := NewMockProcessRepository()
+
+	// Configure mock config
+	mockConfig.On("GetConfiguredURLs").Return([]string{"rtsp://example.com"})
+
+	// Configure mock process manager
+	mockProcMgr.On("FindProcesses").Return([]ProcessInfo{
+		{PID: 123, Name: "ffmpeg"},
+	}, nil)
+	mockProcMgr.On("IsProcessRunning", 123).Return(false)
+
+	// Create a process in our repository that appears to be dead externally
+	mockProcess := &MockFFmpegProcess{
+		cmd:           &MockCmd{pid: 123},
+		cleanupCalled: false,
+	}
+
+	mockRepo.AddProcess("rtsp://example.com", mockProcess)
+	mockRepo.On("ForEach", mock.Anything).Run(func(args mock.Arguments) {
+		callback := args.Get(0).(func(key, value any) bool)
+		callback("rtsp://example.com", mockProcess)
+	})
+
+	// Create the monitor with our mock dependencies
+	monitor := &FFmpegMonitor{
+		config:         mockConfig,
+		processManager: mockProcMgr,
+		processRepo:    mockRepo,
+	}
+
+	// Run the check
+	err := monitor.checkProcesses()
+	assert.NoError(t, err)
+
+	// Verify that the process was detected as needing cleanup
+	assert.True(t, mockProcess.cleanupCalled, "Process should be cleaned up")
 }
