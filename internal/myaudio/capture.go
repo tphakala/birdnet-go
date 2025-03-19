@@ -100,14 +100,6 @@ type AudioDeviceInfo struct {
 	ID    string
 }
 
-// AudioLevelData holds audio level data
-type AudioLevelData struct {
-	Level    int    `json:"level"`    // 0-100
-	Clipping bool   `json:"clipping"` // true if clipping is detected
-	Source   string `json:"source"`   // Source identifier (e.g., "malgo" for device, or RTSP URL)
-	Name     string `json:"name"`     // Human-readable name of the source
-}
-
 // activeStreams keeps track of currently active RTSP streams
 var activeStreams sync.Map
 
@@ -267,6 +259,7 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 
 		// New stream, start it
 		activeStreams.Store(url, true)
+		wg.Add(1)
 		go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, audioLevelChan)
 	}
 }
@@ -323,6 +316,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 			}
 
 			activeStreams.Store(url, true)
+			wg.Add(1)
 			go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, audioLevelChan)
 		}
 	}
@@ -663,6 +657,9 @@ func processAudioFrame(
 		}
 	}
 
+	// Process audio level data
+	ProcessAudioLevel(pSamples, "malgo", source.Name, audioLevelChan)
+
 	return finalBufferPtr, fromPool, nil // Return pointer, pool status, and nil error
 }
 
@@ -769,6 +766,9 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 		// If ConvertToS16 consistently needs a larger buffer than scratchBuffer provides,
 		// it will keep allocating, which is less optimal but safe.
 		// A more advanced optimization could resize scratchBuffer based on ConvertToS16 feedback.
+
+		// Process audio level data
+		ProcessAudioLevel(pSamples, "malgo", source.Name, audioLevelChan)
 	}
 
 	// onStopDevice logic is now in handleDeviceStop, guarded by atomic flag
@@ -816,7 +816,13 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 	// print audio device we are attached to
 	color.New(color.FgHiGreen).Printf("Listening on source: %s (%s)\n", source.Name, source.ID)
 
-	// Loop until quit or restart signal
+	// Set up cleanup ticker to periodically clean up audio level trackers
+	cleanupTicker := time.NewTicker(10 * time.Minute)
+	defer cleanupTicker.Stop()
+
+	// Now, instead of directly waiting on QuitChannel,
+	// check if it's closed in a non-blocking select.
+	// This loop will keep running until QuitChannel is closed.
 	for {
 		select {
 		case <-quitChan:
@@ -828,6 +834,9 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 				fmt.Println("🔄 Restarting audio capture.")
 			}
 			return
+		case <-cleanupTicker.C:
+			// Clean up audio level trackers
+			CleanupAudioLevelTrackers()
 		default:
 			time.Sleep(100 * time.Millisecond)
 		}
