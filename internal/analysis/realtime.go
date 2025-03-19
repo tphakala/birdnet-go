@@ -25,7 +25,7 @@ import (
 )
 
 // audioLevelChan is a channel to send audio level updates
-var audioLevelChan = make(chan myaudio.AudioLevelData, 100)
+var audioLevelChan = make(chan myaudio.AudioLevelData, 20)
 
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
