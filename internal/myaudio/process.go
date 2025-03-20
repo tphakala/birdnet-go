@@ -90,15 +90,6 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 	return nil
 }
 
-func logProcessingTime(startTime time.Time) time.Duration {
-	var elapsedTime = time.Since(startTime)
-	/*if ctx.Settings.Realtime.ProcessingTime || ctx.Settings.Debug {
-		fmt.Printf("\r\033[Kprocessing time %v ms", elapsedTime.Milliseconds())
-		return elapsedTime
-	}*/
-	return elapsedTime
-}
-
 // ConvertToFloat32 converts a byte slice representing sample to a 2D slice of float32 samples.
 // The function supports 16, 24, and 32 bit depths.
 func ConvertToFloat32(sample []byte, bitDepth int) ([][]float32, error) {
