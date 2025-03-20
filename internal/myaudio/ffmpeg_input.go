@@ -42,6 +42,9 @@ type audioWatchdog struct {
 	mu           sync.Mutex
 }
 
+// silenceTimeout is the amount of time to wait before triggering a restart if no data is received
+const silenceTimeout = 60
+
 // FFmpegRestartTracker keeps track of restart information for each RTSP source
 type FFmpegRestartTracker struct {
 	restartCount  int
@@ -209,16 +212,14 @@ func (p *FFmpegProcess) Cleanup(url string) {
 		// Wait for process with timeout
 		if GlobalCleanupManager.WaitWithTimeout(done, 10*time.Second, fmt.Sprintf("FFmpeg process for %s", url)) {
 			log.Printf("⏹️ FFmpeg process for RTSP source %s stopped normally", url)
-		} else {
+		} else if !killed.Swap(true) {
 			// Timeout occurred, forcefully kill the process if not already killed
-			if !killed.Swap(true) {
-				if err := killProcessGroup(p.cmd); err != nil {
-					// Only attempt direct process kill if killProcessGroup fails
-					if err := p.cmd.Process.Kill(); err != nil {
-						// Only log if both kill attempts fail and process still exists
-						if !strings.Contains(err.Error(), "process already finished") {
-							log.Printf("⚠️ Failed to kill FFmpeg process for %s: %v", url, err)
-						}
+			if err := killProcessGroup(p.cmd); err != nil {
+				// Only attempt direct process kill if killProcessGroup fails
+				if err := p.cmd.Process.Kill(); err != nil {
+					// Only log if both kill attempts fail and process still exists
+					if !strings.Contains(err.Error(), "process already finished") {
+						log.Printf("⚠️ Failed to kill FFmpeg process for %s: %v", url, err)
 					}
 				}
 			}
@@ -263,9 +264,9 @@ func (p *FFmpegProcess) startWatchdog(ctx context.Context, url string, watchdog 
 				}
 
 				// Check if we've gone too long without data
-				timeout := watchdog.timeSinceLastData() > 60*time.Second
+				timeout := watchdog.timeSinceLastData() > time.Duration(silenceTimeout)*time.Second
 				if timeout {
-					log.Printf("⚠️ No data received from RTSP source %s for 60 seconds, triggering restart", url)
+					log.Printf("⚠️ No data received from RTSP source %s for %d seconds, triggering restart", url, silenceTimeout)
 					return
 				}
 			}
@@ -464,19 +465,67 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 	}, nil
 }
 
+// isStreamConfigured checks if the URL is still in the configured RTSP URLs
+func isStreamConfigured(url string) bool {
+	settings := conf.Setting()
+	for _, configuredURL := range settings.Realtime.RTSP.URLs {
+		if configuredURL == url {
+			return true
+		}
+	}
+	return false
+}
+
+// handleFFmpegStartFailure handles the case when FFmpeg fails to start
+func handleFFmpegStartFailure(ctx context.Context, backoff *backoffStrategy, url string, err error) (bool, error) {
+	delay, retry := backoff.nextDelay()
+	if !retry {
+		return false, fmt.Errorf("failed to start FFmpeg after maximum attempts: %w", err)
+	}
+
+	log.Printf("⚠️ Failed to start FFmpeg for RTSP source %s: %v. Retrying in %v...", url, err, delay)
+
+	// Wait for either the context to be cancelled or the delay to pass
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case <-time.After(delay):
+		return true, nil
+	}
+}
+
+// handleProcessCleanup performs cleanup operations for a process
+func handleProcessCleanup(processCancel context.CancelFunc,
+	restartForwarderDone chan struct{}, processDone chan error, url string) {
+
+	// Cancel the process context
+	processCancel()
+
+	// Wait for restart forwarder to finish
+	GlobalCleanupManager.WaitWithTimeout(restartForwarderDone, 2*time.Second,
+		fmt.Sprintf("restart forwarder for %s", url))
+
+	// Wait for process to clean up with a timeout
+	err, _ := GlobalCleanupManager.WaitForErrorWithTimeout(processDone, 5*time.Second,
+		fmt.Sprintf("process cleanup for %s", url))
+	if err != nil && !errors.Is(err, context.Canceled) {
+		log.Printf("⚠️ Process for %s reported error during cleanup: %v", url, err)
+	}
+}
+
+// cleanupProcess safely cleans up an FFmpeg process
+func cleanupProcess(url string) {
+	if process, exists := ffmpegProcesses.Load(url); exists {
+		if p, ok := process.(*FFmpegProcess); ok && p != nil {
+			p.Cleanup(url)
+		}
+	}
+	ffmpegProcesses.Delete(url)
+}
+
 func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
 	// Create a new backoff strategy with 5 attempts, 5 seconds initial delay, and 2 minutes maximum delay
 	backoff := newBackoffStrategy(5, 5*time.Second, 2*time.Minute)
-
-	// Create a cleanup function for consistent process handling
-	cleanupProcess := func(url string) {
-		if process, exists := ffmpegProcesses.Load(url); exists {
-			if p, ok := process.(*FFmpegProcess); ok && p != nil {
-				p.Cleanup(url)
-			}
-		}
-		ffmpegProcesses.Delete(url)
-	}
 
 	for {
 		// Check if context is done before proceeding
@@ -488,19 +537,9 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 			// Continue with normal operation
 		}
 
-		// Check if the stream is still configured before starting/restarting
-		settings := conf.Setting()
-		streamConfigured := false
-		for _, url := range settings.Realtime.RTSP.URLs {
-			if url == config.URL {
-				streamConfigured = true
-				break
-			}
-		}
-
-		if !streamConfigured {
+		// Check if the stream is still configured
+		if !isStreamConfigured(config.URL) {
 			log.Printf("ℹ️ Stream %s is no longer configured, stopping lifecycle manager", config.URL)
-			// Clean up and exit
 			cleanupProcess(config.URL)
 			return nil
 		}
@@ -508,28 +547,12 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 		// Start a new FFmpeg process
 		process, err := startFFmpeg(ctx, config)
 		if err != nil {
-			// Clean up our nil placeholder from the ffmpegProcesses map
 			cleanupProcess(config.URL)
-
-			// Get the next delay duration and check if we should retry
-			delay, retry := backoff.nextDelay()
-			if !retry {
-				// If we've exceeded our retry attempts, return an error
-				return fmt.Errorf("failed to start FFmpeg after maximum attempts: %w", err)
+			continueRetry, retryErr := handleFFmpegStartFailure(ctx, backoff, config.URL, err)
+			if !continueRetry {
+				return retryErr
 			}
-
-			// Log the failure and the next retry attempt
-			log.Printf("⚠️ Failed to start FFmpeg for RTSP source %s: %v. Retrying in %v...", config.URL, err, delay)
-
-			// Wait for either the context to be cancelled or the delay to pass
-			select {
-			case <-ctx.Done():
-				// If the context is cancelled, return its error
-				return ctx.Err()
-			case <-time.After(delay):
-				// If the delay has passed, continue to the next iteration
-				continue
-			}
+			continue
 		}
 
 		// Reset backoff on successful start
@@ -572,43 +595,18 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 		select {
 		case <-ctx.Done():
 			// Context cancelled, stop the FFmpeg process
-			processCancel() // Cancel the process context
-
-			// Wait for restart forwarder to finish
-			GlobalCleanupManager.WaitWithTimeout(restartForwarderDone, 2*time.Second,
-				fmt.Sprintf("restart forwarder for %s", config.URL))
-
-			// Wait for process to clean up with a timeout
-			err, _ := GlobalCleanupManager.WaitForErrorWithTimeout(processDone, 5*time.Second,
-				fmt.Sprintf("process cleanup for %s", config.URL))
-			if err != nil && !errors.Is(err, context.Canceled) {
-				log.Printf("⚠️ Process for %s reported error during shutdown: %v", config.URL, err)
-			}
-
+			handleProcessCleanup(processCancel, restartForwarderDone, processDone, config.URL)
 			cleanupProcess(config.URL)
 			return ctx.Err()
 
 		case err := <-processDone:
 			// FFmpeg process or audio processing ended
 			processCancel() // Cancel the process context even though it's already done
-
-			// Wait for restart forwarder to finish
 			GlobalCleanupManager.WaitWithTimeout(restartForwarderDone, 2*time.Second,
 				fmt.Sprintf("restart forwarder for %s", config.URL))
-
 			cleanupProcess(config.URL)
 
-			// Check if the stream is still configured before handling the error
-			settings := conf.Setting()
-			streamConfigured := false
-			for _, url := range settings.Realtime.RTSP.URLs {
-				if url == config.URL {
-					streamConfigured = true
-					break
-				}
-			}
-
-			if !streamConfigured {
+			if !isStreamConfigured(config.URL) {
 				log.Printf("ℹ️ Stream %s is no longer configured after process finished", config.URL)
 				return nil
 			}
@@ -621,35 +619,14 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 		case <-localRestartChan:
 			// Restart signal received
 			log.Printf("🔄 Restart signal received, restarting FFmpeg for RTSP source %s.", config.URL)
-			processCancel() // Cancel the process context
-
-			// Wait for restart forwarder to finish
-			GlobalCleanupManager.WaitWithTimeout(restartForwarderDone, 2*time.Second,
-				fmt.Sprintf("restart forwarder for %s", config.URL))
-
-			// Wait for process to clean up with a timeout
-			err, _ := GlobalCleanupManager.WaitForErrorWithTimeout(processDone, 5*time.Second,
-				fmt.Sprintf("process cleanup for %s", config.URL))
-			if err != nil && !errors.Is(err, context.Canceled) {
-				log.Printf("⚠️ Process for %s reported error during restart: %v", config.URL, err)
-			}
-
+			handleProcessCleanup(processCancel, restartForwarderDone, processDone, config.URL)
 			cleanupProcess(config.URL)
 			backoff.reset()
 			needsRestart = true
 		}
 
 		// Check configuration again before waiting for restart
-		settings = conf.Setting()
-		streamConfigured = false
-		for _, url := range settings.Realtime.RTSP.URLs {
-			if url == config.URL {
-				streamConfigured = true
-				break
-			}
-		}
-
-		if !streamConfigured {
+		if !isStreamConfigured(config.URL) {
 			log.Printf("🛑 Stream %s is no longer configured, stopping lifecycle manager", config.URL)
 			return nil
 		}
