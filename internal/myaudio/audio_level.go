@@ -186,7 +186,16 @@ func ShouldCalculateAudioLevel(ch chan AudioLevelData, sourceID string) bool {
 	return true
 }
 
+// CleanupAudioLevelTrackers cleans up stale audio level tracking data
+// This should be called periodically to prevent memory leaks
+func CleanupAudioLevelTrackers() {
+	// Cleanup both throttle map and consumption trackers
+	CleanupAudioLevelThrottleMap()
+	GlobalCleanupManager.CleanupTrackers()
+}
+
 // CleanupAudioLevelThrottleMap removes stale entries from the throttle map
+// It should be called periodically to prevent memory leaks
 func CleanupAudioLevelThrottleMap() {
 	audioLevelThrottleMu.Lock()
 	defer audioLevelThrottleMu.Unlock()
@@ -224,29 +233,6 @@ func NotifyAudioLevelConsumed(url string) {
 	// Use a consistent channel ID format
 	channelID := "audio_level:" + url
 	GlobalCleanupManager.TrackConsumption(channelID)
-}
-
-// CleanupAudioLevelTrackers cleans up stale audio level tracking data
-// This should be called periodically to prevent memory leaks
-func CleanupAudioLevelTrackers() {
-	// Cleanup both throttle map and consumption trackers
-	cleanupThrottleMap()
-	GlobalCleanupManager.CleanupTrackers()
-}
-
-// cleanupThrottleMap removes stale entries from the throttle map
-// It should be called periodically to prevent memory leaks
-func cleanupThrottleMap() {
-	audioLevelThrottleMu.Lock()
-	defer audioLevelThrottleMu.Unlock()
-
-	// Remove entries that haven't been updated in the last 5 minutes
-	cutoff := time.Now().Add(-5 * time.Minute)
-	for id, state := range audioLevelThrottleMap {
-		if state.lastSent.Before(cutoff) {
-			delete(audioLevelThrottleMap, id)
-		}
-	}
 }
 
 // ProcessAudioLevel handles the entire audio level processing logic:
