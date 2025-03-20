@@ -117,11 +117,6 @@ func InitCaptureBuffers(durationSeconds, sampleRate, bytesPerSample int, sources
 	return nil
 }
 
-// RemoveAudioBuffers removes the audio buffer for a given source
-func RemoveCaptureBuffers(source string) error {
-	return RemoveCaptureBuffer(source)
-}
-
 // WriteToCaptureBuffer adds PCM audio data to the buffer for a given source.
 func WriteToCaptureBuffer(source string, data []byte) error {
 	cbMutex.RLock()
