@@ -223,18 +223,6 @@ func SendAudioLevel(audioLevelChan chan AudioLevelData, data AudioLevelData) boo
 	}
 }
 
-// NotifyAudioLevelConsumed notifies the system that audio level data
-// for a specific URL has been consumed
-// This should be called by HTTP controllers when they send data to SSE clients
-func NotifyAudioLevelConsumed(url string) {
-	if url == "" {
-		return
-	}
-	// Use a consistent channel ID format
-	channelID := "audio_level:" + url
-	GlobalCleanupManager.TrackConsumption(channelID)
-}
-
 // ProcessAudioLevel handles the entire audio level processing logic:
 // 1. Checks if audio level should be calculated
 // 2. Calculates the audio level if needed

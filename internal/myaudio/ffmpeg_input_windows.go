@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os/exec"
 	"syscall"
 	"time"
@@ -21,7 +22,7 @@ func setupProcessGroup(cmd *exec.Cmd) {
 	}
 }
 
-// killProcessGroup kills a process and its children on Windows
+// In ffmpeg_input_windows.go
 func killProcessGroup(cmd *exec.Cmd) error {
 	if cmd == nil || cmd.Process == nil {
 		return errors.New("invalid command or process is nil")
@@ -32,17 +33,19 @@ func killProcessGroup(cmd *exec.Cmd) error {
 		return errors.New("invalid process ID")
 	}
 
-	// First try graceful termination with taskkill
-	killCmd := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprint(pid))
-
-	// Set a 10-second timeout for the kill command
+	// Create context with timeout
 	killCtx, killCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer killCancel()
-	killCmd = exec.CommandContext(killCtx, "taskkill", "/F", "/T", "/PID", fmt.Sprint(pid))
+	defer killCancel() // Ensure this is called to prevent resource leaks
 
-	if err := killCmd.Run(); err != nil {
-		// If taskkill fails, try direct process termination
-		return cmd.Process.Kill()
+	// Create the kill command
+	killCmd := exec.CommandContext(killCtx, "taskkill", "/F", "/T", "/PID", fmt.Sprint(pid))
+
+	// Capture both stdout and stderr for better error reporting
+	output, err := killCmd.CombinedOutput()
+	if err != nil {
+		log.Printf("⚠️ taskkill failed for PID %d: %v, output: %s", pid, err, string(output))
+		return cmd.Process.Kill() // Fall back to direct kill
 	}
+
 	return nil
 }
