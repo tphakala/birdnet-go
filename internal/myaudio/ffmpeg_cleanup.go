@@ -41,35 +41,6 @@ func NewConsumptionTracker() *ConsumptionTracker {
 	}
 }
 
-// RecordConsumption records that data was consumed from a channel
-func (ct *ConsumptionTracker) RecordConsumption(channelID string) {
-	ct.mu.Lock()
-	defer ct.mu.Unlock()
-
-	ct.lastConsumedMap[channelID] = time.Now()
-	ct.hasConsumersMap[channelID] = true
-}
-
-// HasActiveConsumers checks if a channel has had recent consumption
-func (ct *ConsumptionTracker) HasActiveConsumers(channelID string) bool {
-	ct.mu.Lock()
-	defer ct.mu.Unlock()
-
-	lastConsumed, exists := ct.lastConsumedMap[channelID]
-	if !exists {
-		return false
-	}
-
-	// If consumption was recent, consider it active
-	if time.Since(lastConsumed) <= ct.consumptionWindow {
-		return true
-	}
-
-	// Mark as inactive if no recent consumption
-	ct.hasConsumersMap[channelID] = false
-	return false
-}
-
 // CleanupStaleEntries removes entries that haven't been accessed recently
 func (ct *ConsumptionTracker) CleanupStaleEntries() {
 	ct.mu.Lock()
@@ -82,16 +53,6 @@ func (ct *ConsumptionTracker) CleanupStaleEntries() {
 			delete(ct.hasConsumersMap, id)
 		}
 	}
-}
-
-// TrackConsumption allows the cleanup manager to track channel consumption
-func (cm *CleanupManager) TrackConsumption(channelID string) {
-	cm.consumptionTracker.RecordConsumption(channelID)
-}
-
-// HasActiveConsumers checks if there are active consumers for a channel
-func (cm *CleanupManager) HasActiveConsumers(channelID string) bool {
-	return cm.consumptionTracker.HasActiveConsumers(channelID)
 }
 
 // CleanupTrackers cleans up stale consumption tracker entries
@@ -111,18 +72,6 @@ func (cm *CleanupManager) CloseReader(r io.ReadCloser, description string) {
 	}
 }
 
-// CloseWriter safely closes a writer
-func (cm *CleanupManager) CloseWriter(w io.WriteCloser, description string) {
-	if w == nil {
-		return
-	}
-
-	err := w.Close()
-	if err != nil && !strings.Contains(err.Error(), "file already closed") {
-		log.Printf("⚠️ Error closing %s: %v", description, err)
-	}
-}
-
 // WaitWithTimeout waits for a channel with a timeout and returns whether it completed normally
 func (cm *CleanupManager) WaitWithTimeout(ch <-chan struct{}, timeout time.Duration, description string) bool {
 	if ch == nil {
@@ -135,21 +84,6 @@ func (cm *CleanupManager) WaitWithTimeout(ch <-chan struct{}, timeout time.Durat
 	case <-time.After(timeout):
 		log.Printf("⚠️ Timeout waiting for %s", description)
 		return false
-	}
-}
-
-// WaitForErrorWithTimeout waits for an error channel with a timeout
-func (cm *CleanupManager) WaitForErrorWithTimeout(ch <-chan error, timeout time.Duration, description string) (error, bool) {
-	if ch == nil {
-		return nil, true
-	}
-
-	select {
-	case err := <-ch:
-		return err, true
-	case <-time.After(timeout):
-		log.Printf("⚠️ Timeout waiting for %s", description)
-		return fmt.Errorf("timeout waiting for %s", description), false
 	}
 }
 
@@ -183,20 +117,6 @@ func (cm *CleanupManager) SendNonBlocking(ch chan<- struct{}, description string
 		return true
 	default:
 		log.Printf("⚠️ Channel %s is full, dropping message", description)
-		return false
-	}
-}
-
-// SendWithTimeout sends a value to a channel with a timeout
-func (cm *CleanupManager) SendWithTimeout(ctx context.Context, ch chan<- struct{}, timeout time.Duration, description string) bool {
-	sendCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	select {
-	case ch <- struct{}{}:
-		return true
-	case <-sendCtx.Done():
-		log.Printf("⚠️ Timeout sending to channel %s", description)
 		return false
 	}
 }

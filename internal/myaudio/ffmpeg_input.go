@@ -10,16 +10,17 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// ffmpegProcesses keeps track of running FFmpeg processes for each URL
-// This is used to ensure that only one FFmpeg process is running per RTSP source
-// Moved to ffmpeg_monitor.go to avoid duplicate declaration
-// var ffmpegProcesses = &sync.Map{}
+const (
+	DefaultSilenceTimeout     = 60 * time.Second
+	DefaultProcessKillTimeout = 5 * time.Second
+	DefaultReadTimeout        = 30 * time.Second
+	DefaultRestartMaxDelay    = 2 * time.Minute
+)
 
 // FFmpegConfig holds the configuration for the FFmpeg command
 type FFmpegConfig struct {
@@ -41,9 +42,6 @@ type audioWatchdog struct {
 	lastDataTime time.Time
 	mu           sync.Mutex
 }
-
-// silenceTimeout is the amount of time to wait before triggering a restart if no data is received
-const silenceTimeout = 60
 
 // FFmpegRestartTracker keeps track of restart information for each RTSP source
 type FFmpegRestartTracker struct {
@@ -161,26 +159,18 @@ func (p *FFmpegProcess) getRestartDelay() time.Duration {
 	p.restartTracker.mu.Lock()         // Lock before accessing shared data
 	defer p.restartTracker.mu.Unlock() // Ensure unlock happens
 
-	delay := time.Duration(p.restartTracker.restartCount) * 5 * time.Second
-	if delay > 2*time.Minute {
-		delay = 2 * time.Minute // Cap the maximum delay at 2 minutes
+	delay := time.Duration(p.restartTracker.restartCount) * DefaultRestartMaxDelay
+	if delay > DefaultRestartMaxDelay {
+		delay = DefaultRestartMaxDelay
 	}
 	return delay
 }
 
-// Cleanup cleans up the FFmpeg process and removes it from the map
 func (p *FFmpegProcess) Cleanup(url string) {
 	if p == nil {
 		ffmpegProcesses.Delete(url)
 		return
 	}
-
-	// Create a cleanup completed channel to prevent races during cleanup
-	cleanupDone := make(chan struct{})
-	defer close(cleanupDone)
-
-	// Track whether we've done a process kill to avoid double-kill
-	var killed atomic.Bool
 
 	// First close stdout to prevent blocking reads
 	if p.stdout != nil {
@@ -188,39 +178,46 @@ func (p *FFmpegProcess) Cleanup(url string) {
 		p.stdout = nil
 	}
 
-	// Only attempt to cancel the context and kill the process if we have a valid command
-	if p.cmd != nil && p.cmd.Process != nil {
-		// Cancel the context to signal process termination
-		if p.cancel != nil {
-			p.cancel()
-			p.cancel = nil
-		}
+	// Cancel the context first to signal termination to all goroutines
+	if p.cancel != nil {
+		p.cancel()
+		p.cancel = nil
+	}
 
-		// Use a timeout to wait for the process to finish
-		done := make(chan struct{})
+	// Only attempt to kill if we have a valid process
+	if p.cmd != nil && p.cmd.Process != nil {
+		// Create a timeout context for the kill operation
+		killCtx, killCancel := context.WithTimeout(context.Background(), DefaultProcessKillTimeout)
+		defer killCancel()
+
+		// Create a channel to signal when process has exited
+		processExited := make(chan struct{})
+
+		// Wait for the process to exit naturally
 		go func() {
-			defer close(done)
+			defer close(processExited)
 			select {
 			case <-p.done:
-				// Process finished normally
-			case <-cleanupDone:
-				// Cleanup is being canceled, exit goroutine
-				return
+				// Process exited normally
+			case <-killCtx.Done():
+				// Timeout reached, will force kill below
 			}
 		}()
 
-		// Wait for process with timeout
-		if GlobalCleanupManager.WaitWithTimeout(done, 10*time.Second, fmt.Sprintf("FFmpeg process for %s", url)) {
+		// Wait with timeout
+		select {
+		case <-processExited:
 			log.Printf("⏹️ FFmpeg process for RTSP source %s stopped normally", url)
-		} else if !killed.Swap(true) {
-			// Timeout occurred, forcefully kill the process if not already killed
-			if err := killProcessGroup(p.cmd); err != nil {
-				// Only attempt direct process kill if killProcessGroup fails
-				if err := p.cmd.Process.Kill(); err != nil {
-					// Only log if both kill attempts fail and process still exists
-					if !strings.Contains(err.Error(), "process already finished") {
-						log.Printf("⚠️ Failed to kill FFmpeg process for %s: %v", url, err)
-					}
+		case <-killCtx.Done():
+			// Force kill the process group
+			log.Printf("⚠️ Timeout waiting for FFmpeg process for %s, forcing kill", url)
+			killErr := killProcessGroup(p.cmd)
+			if killErr != nil && !strings.Contains(killErr.Error(), "process already finished") {
+				log.Printf("❌ Failed to kill process group for %s: %v", url, killErr)
+				// Fall back to direct process kill
+				if err := p.cmd.Process.Kill(); err != nil &&
+					!strings.Contains(err.Error(), "process already finished") {
+					log.Printf("❌ Failed to kill FFmpeg process for %s: %v", url, err)
 				}
 			}
 		}
@@ -230,14 +227,14 @@ func (p *FFmpegProcess) Cleanup(url string) {
 	ffmpegProcesses.Delete(url)
 }
 
-// startWatchdog starts a goroutine that monitors the audio stream for inactivity
+// In ffmpeg_input.go
 func (p *FFmpegProcess) startWatchdog(ctx context.Context, url string, watchdog *audioWatchdog) <-chan struct{} {
 	watchdogCtx, watchdogCancel := context.WithCancel(ctx)
 	watchdogDone := make(chan struct{})
 
 	go func() {
 		defer close(watchdogDone)
-		defer watchdogCancel() // Ensure context is canceled when goroutine exits
+		defer watchdogCancel()
 
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -247,26 +244,18 @@ func (p *FFmpegProcess) startWatchdog(ctx context.Context, url string, watchdog 
 			case <-watchdogCtx.Done():
 				return
 			case <-ticker.C:
-				// Check if the stream is still configured
-				settings := conf.Setting()
-				streamConfigured := false
-				for _, configuredURL := range settings.Realtime.RTSP.URLs {
-					if configuredURL == url {
-						streamConfigured = true
-						break
-					}
-				}
+				// Take a snapshot of the configuration for this tick
+				isConfigured := isStreamConfigured(url)
+				timeSinceData := watchdog.timeSinceLastData()
 
-				// Exit if stream is no longer configured
-				if !streamConfigured {
+				if !isConfigured {
 					log.Printf("ℹ️ Stream %s is no longer configured, stopping watchdog", url)
 					return
 				}
 
-				// Check if we've gone too long without data
-				timeout := watchdog.timeSinceLastData() > time.Duration(silenceTimeout)*time.Second
-				if timeout {
-					log.Printf("⚠️ No data received from RTSP source %s for %d seconds, triggering restart", url, silenceTimeout)
+				if timeSinceData > DefaultSilenceTimeout {
+					log.Printf("⚠️ No data received from %s for %v, triggering restart",
+						url, DefaultSilenceTimeout)
 					return
 				}
 			}
@@ -275,114 +264,113 @@ func (p *FFmpegProcess) startWatchdog(ctx context.Context, url string, watchdog 
 	return watchdogDone
 }
 
-// processAudio reads audio data from FFmpeg's stdout and writes it to buffers
-func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
-	// Create a buffer to store audio data
+func (p *FFmpegProcess) processAudio(ctx context.Context, url string,
+	restartChan chan struct{},
+	audioLevelChan chan AudioLevelData) error {
 	buf := make([]byte, 32768)
 	watchdog := &audioWatchdog{lastDataTime: time.Now()}
 
-	// Create a context that can be canceled when the function returns
 	audioCtx, audioCancel := context.WithCancel(ctx)
-	defer audioCancel() // Ensure context gets canceled
+	defer audioCancel()
 
-	// Start watchdog goroutine
 	watchdogDone := p.startWatchdog(audioCtx, url, watchdog)
+	defer func() {
+		// Always ensure watchdog is properly stopped
+		audioCancel()
+		GlobalCleanupManager.WaitWithTimeout(watchdogDone, 5*time.Second,
+			fmt.Sprintf("watchdog for %s", url))
+	}()
 
-	// Continuously process audio data
 	for {
+		// First check if we should exit
 		select {
 		case <-ctx.Done():
-			log.Printf("Stopping audio processing for RTSP source: %s", url)
-			// Wait for watchdog to finish with a timeout
-			GlobalCleanupManager.WaitWithTimeout(watchdogDone, 5*time.Second,
-				fmt.Sprintf("watchdog for RTSP source %s", url))
-			return nil // Return nil on normal shutdown
+			return nil
 		case <-watchdogDone:
-			// Check if the stream is still configured before triggering restart
-			settings := conf.Setting()
-			streamConfigured := false
-			for _, configuredURL := range settings.Realtime.RTSP.URLs {
-				if configuredURL == url {
-					streamConfigured = true
-					break
-				}
+			if isStreamConfigured(url) {
+				GlobalCleanupManager.SendNonBlocking(restartChan,
+					fmt.Sprintf("restart channel for %s", url))
+				return fmt.Errorf("watchdog detected no data for %s", url)
 			}
+			return nil
+		default:
+			// Continue processing
+		}
 
-			if streamConfigured {
-				// Trigger restart by sending signal to restartChan with non-blocking send
-				if GlobalCleanupManager.SendNonBlocking(restartChan, fmt.Sprintf("restart channel for %s", url)) {
-					log.Printf("🔄 Watchdog triggered restart for RTSP source %s", url)
-				}
-				return fmt.Errorf("watchdog detected no data for RTSP source %s", url)
-			} else {
-				log.Printf("ℹ️ Stream %s is no longer configured, stopping audio processing", url)
+		// Read with timeout
+		n, err := readWithTimeout(ctx, p.stdout, buf, url)
+
+		if err != nil {
+			if isGracefulExit(err) {
 				return nil
 			}
-		default:
-			// Use a timeout on the read to avoid blocking indefinitely
-			readCtx, readCancel := context.WithTimeout(ctx, 30*time.Second)
-			var n int
-			var err error
 
-			// Execute the read with a timeout
-			readErr := GlobalCleanupManager.ExecuteWithTimeout(readCtx, 30*time.Second,
-				func() error {
-					var readErr error
-					n, readErr = p.stdout.Read(buf)
-					return readErr
-				},
-				fmt.Sprintf("read from FFmpeg stdout for %s", url))
-
-			readCancel() // Always cancel the context to prevent leaks
-
-			if readErr != nil {
-				// Wait for watchdog to finish with a timeout
-				GlobalCleanupManager.WaitWithTimeout(watchdogDone, 5*time.Second,
-					fmt.Sprintf("watchdog for RTSP source %s", url))
-
-				// Check if this is a normal shutdown
-				if errors.Is(readErr, io.EOF) || strings.Contains(readErr.Error(), "file already closed") {
-					return nil
-				}
-
-				// Check if this is a timeout
-				if strings.Contains(readErr.Error(), "timeout") || errors.Is(readErr, context.DeadlineExceeded) {
-					log.Printf("⚠️ Read timeout for RTSP source %s, triggering restart", url)
-					return fmt.Errorf("read timeout for RTSP source %s", url)
-				}
-
-				// Only return error for unexpected failures
-				return fmt.Errorf("error reading from ffmpeg: %w", readErr)
+			if isTimeoutError(err) {
+				log.Printf("⚠️ Read timeout for %s, triggering restart", url)
+				return fmt.Errorf("read timeout for %s", url)
 			}
 
-			// Ensure we don't process more data than we've read
-			if n > 0 {
-				watchdog.update() // Update the watchdog timestamp
+			return fmt.Errorf("error reading from ffmpeg: %w", err)
+		}
 
-				// Write the audio data to the analysis buffer
-				err = WriteToAnalysisBuffer(url, buf[:n])
-				if err != nil {
-					log.Printf("❌ Error writing to analysis buffer for RTSP source %s: %v", url, err)
-					time.Sleep(1 * time.Second)
-					continue
-				}
+		if n > 0 {
+			watchdog.update()
 
-				// Write the audio data to the capture buffer
-				err = WriteToCaptureBuffer(url, buf[:n])
-				if err != nil {
-					log.Printf("❌ Error writing to capture buffer for RTSP source %s: %v", url, err)
-					time.Sleep(1 * time.Second)
-					continue
-				}
-
-				// Broadcast audio data to WebSocket clients
-				broadcastAudioData(url, buf[:n])
-
-				// Process audio level data
-				ProcessAudioLevel(buf[:n], url, "", audioLevelChan)
+			// Process audio data with better error handling
+			if err := processAudioData(url, buf[:n], audioLevelChan); err != nil {
+				log.Printf("❌ Error processing audio for %s: %v", url, err)
+				// Continue instead of failing the whole process on data processing errors
+				time.Sleep(1 * time.Second) // Add backoff
 			}
 		}
 	}
+}
+
+// Helper function to read with timeout
+func readWithTimeout(ctx context.Context, reader io.Reader, buf []byte, url string) (int, error) {
+	readCtx, readCancel := context.WithTimeout(ctx, DefaultReadTimeout)
+	defer readCancel()
+
+	var n int
+	err := GlobalCleanupManager.ExecuteWithTimeout(readCtx, DefaultReadTimeout,
+		func() error {
+			var readErr error
+			n, readErr = reader.Read(buf)
+			return readErr
+		}, fmt.Sprintf("read from FFmpeg for %s", url))
+
+	return n, err
+}
+
+// Helper function to check if this is a graceful exit
+func isGracefulExit(err error) bool {
+	return errors.Is(err, io.EOF) ||
+		errors.Is(err, context.Canceled) ||
+		strings.Contains(err.Error(), "file already closed")
+}
+
+// Helper function to check if this is a timeout error
+func isTimeoutError(err error) bool {
+	return strings.Contains(err.Error(), "timeout") ||
+		errors.Is(err, context.DeadlineExceeded)
+}
+
+// Helper function to process audio data
+func processAudioData(url string, data []byte, audioLevelChan chan AudioLevelData) error {
+	// Write to analysis buffer
+	if err := WriteToAnalysisBuffer(url, data); err != nil {
+		return fmt.Errorf("analysis buffer error: %w", err)
+	}
+
+	// Write to capture buffer
+	if err := WriteToCaptureBuffer(url, data); err != nil {
+		return fmt.Errorf("capture buffer error: %w", err)
+	}
+
+	// Process audio level data
+	ProcessAudioLevel(data, url, "", audioLevelChan)
+
+	return nil
 }
 
 // startFFmpeg starts an FFmpeg process with the given configuration
@@ -466,204 +454,6 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 		stdout:         stdout,
 		restartTracker: restartTracker,
 	}, nil
-}
-
-// isStreamConfigured checks if the URL is still in the configured RTSP URLs
-func isStreamConfigured(url string) bool {
-	settings := conf.Setting()
-	for _, configuredURL := range settings.Realtime.RTSP.URLs {
-		if configuredURL == url {
-			return true
-		}
-	}
-	return false
-}
-
-// handleFFmpegStartFailure handles the case when FFmpeg fails to start
-func handleFFmpegStartFailure(ctx context.Context, backoff *backoffStrategy, url string, err error) (bool, error) {
-	delay, retry := backoff.nextDelay()
-	if !retry {
-		return false, fmt.Errorf("failed to start FFmpeg after maximum attempts: %w", err)
-	}
-
-	log.Printf("⚠️ Failed to start FFmpeg for RTSP source %s: %v. Retrying in %v...", url, err, delay)
-
-	// Wait for either the context to be cancelled or the delay to pass
-	select {
-	case <-ctx.Done():
-		return false, ctx.Err()
-	case <-time.After(delay):
-		return true, nil
-	}
-}
-
-// handleProcessCleanup performs cleanup operations for a process
-func handleProcessCleanup(processCancel context.CancelFunc,
-	restartForwarderDone chan struct{}, processDone chan error, url string) {
-
-	// Cancel the process context
-	processCancel()
-
-	// Wait for restart forwarder to finish
-	GlobalCleanupManager.WaitWithTimeout(restartForwarderDone, 2*time.Second,
-		fmt.Sprintf("restart forwarder for %s", url))
-
-	// Wait for process to clean up with a timeout
-	err, _ := GlobalCleanupManager.WaitForErrorWithTimeout(processDone, 5*time.Second,
-		fmt.Sprintf("process cleanup for %s", url))
-	if err != nil && !errors.Is(err, context.Canceled) {
-		log.Printf("⚠️ Process for %s reported error during cleanup: %v", url, err)
-	}
-}
-
-// cleanupProcess safely cleans up an FFmpeg process
-func cleanupProcess(url string) {
-	if process, exists := ffmpegProcesses.Load(url); exists {
-		if p, ok := process.(*FFmpegProcess); ok && p != nil {
-			p.Cleanup(url)
-		}
-	}
-	ffmpegProcesses.Delete(url)
-}
-
-func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
-	// Create a new backoff strategy with 5 attempts, 5 seconds initial delay, and 2 minutes maximum delay
-	backoff := newBackoffStrategy(5, 5*time.Second, 2*time.Minute)
-
-	for {
-		// Check if context is done before proceeding
-		select {
-		case <-ctx.Done():
-			cleanupProcess(config.URL)
-			return ctx.Err()
-		default:
-			// Continue with normal operation
-		}
-
-		// Check if the stream is still configured
-		if !isStreamConfigured(config.URL) {
-			log.Printf("ℹ️ Stream %s is no longer configured, stopping lifecycle manager", config.URL)
-			cleanupProcess(config.URL)
-			return nil
-		}
-
-		// Start a new FFmpeg process
-		process, err := startFFmpeg(ctx, config)
-		if err != nil {
-			cleanupProcess(config.URL)
-			continueRetry, retryErr := handleFFmpegStartFailure(ctx, backoff, config.URL, err)
-			if !continueRetry {
-				return retryErr
-			}
-			continue
-		}
-
-		// Reset backoff on successful start
-		backoff.reset()
-
-		// Store the process in the map
-		ffmpegProcesses.Store(config.URL, process)
-
-		// Start processing audio and wait for it to finish or for a restart signal
-		processDone := make(chan error, 1)
-		processCtx, processCancel := context.WithCancel(ctx)
-
-		go func() {
-			defer close(processDone)
-			processDone <- process.processAudio(processCtx, config.URL, restartChan, audioLevelChan)
-		}()
-
-		var needsRestart bool
-
-		// Create a channel for restart signals specific to this lifecycle iteration
-		localRestartChan := make(chan struct{}, 1)
-
-		// Start a goroutine to forward restart signals to our local channel
-		restartForwarderDone := make(chan struct{})
-		go func() {
-			defer close(restartForwarderDone)
-			for {
-				select {
-				case <-processCtx.Done():
-					return
-				case <-restartChan:
-					// Forward restart signal to local channel
-					GlobalCleanupManager.SendNonBlocking(localRestartChan,
-						fmt.Sprintf("local restart channel for %s", config.URL))
-				}
-			}
-		}()
-
-		// Wait for process to finish or for a signal
-		select {
-		case <-ctx.Done():
-			// Context cancelled, stop the FFmpeg process
-			handleProcessCleanup(processCancel, restartForwarderDone, processDone, config.URL)
-			cleanupProcess(config.URL)
-			return ctx.Err()
-
-		case err := <-processDone:
-			// FFmpeg process or audio processing ended
-			processCancel() // Cancel the process context even though it's already done
-			GlobalCleanupManager.WaitWithTimeout(restartForwarderDone, 2*time.Second,
-				fmt.Sprintf("restart forwarder for %s", config.URL))
-			cleanupProcess(config.URL)
-
-			if !isStreamConfigured(config.URL) {
-				log.Printf("ℹ️ Stream %s is no longer configured after process finished", config.URL)
-				return nil
-			}
-
-			if err != nil && !errors.Is(err, context.Canceled) {
-				log.Printf("⚠️ FFmpeg process for RTSP source %s ended unexpectedly: %v", config.URL, err)
-				needsRestart = true
-			}
-
-		case <-localRestartChan:
-			// Restart signal received
-			log.Printf("🔄 Restart signal received, restarting FFmpeg for RTSP source %s.", config.URL)
-			handleProcessCleanup(processCancel, restartForwarderDone, processDone, config.URL)
-			cleanupProcess(config.URL)
-			backoff.reset()
-			needsRestart = true
-		}
-
-		// Check configuration again before waiting for restart
-		if !isStreamConfigured(config.URL) {
-			log.Printf("🛑 Stream %s is no longer configured, stopping lifecycle manager", config.URL)
-			return nil
-		}
-
-		if needsRestart {
-			// Update restart information and wait before attempting to restart
-			if process != nil {
-				process.updateRestartInfo()
-				delay := process.getRestartDelay()
-
-				// Wait for restart with cancellation and restart signal handling
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-time.After(delay):
-					// Continue to next iteration after delay
-				case <-restartChan:
-					log.Printf("🔄 Restart signal received during restart delay, restarting FFmpeg for RTSP source %s immediately.", config.URL)
-				}
-			}
-		}
-	}
-}
-
-// getExitCode returns the exit code of the FFmpeg process
-func getExitCode(err error) int {
-	if err == nil {
-		return 0
-	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		return exitErr.ExitCode()
-	}
-	return -1
 }
 
 // audioWatchdog is a struct that keeps track of the last time data was received from the RTSP source
