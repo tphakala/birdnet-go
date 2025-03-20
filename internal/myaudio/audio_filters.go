@@ -74,16 +74,6 @@ func UpdateFilterChain(settings *conf.Settings) error {
 	return nil
 }
 
-// ResetFilters resets the state of all filters in the current filter chain
-func ResetFilters() {
-	filterMutex.Lock()
-	defer filterMutex.Unlock()
-
-	if filterChain != nil {
-		filterChain.Reset()
-	}
-}
-
 // createFilter creates a single filter based on the configuration
 func createFilter(config conf.EqualizerFilter, sampleRate float64) (*equalizer.Filter, error) {
 	// If passes is 0 or less, return nil without an error (filter is off)

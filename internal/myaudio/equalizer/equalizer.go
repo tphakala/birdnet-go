@@ -42,16 +42,6 @@ var (
 	p = Pi
 )
 
-// SetPi sets the pi value. After calling this function, call the constructor function such as NewLowPass().
-func SetPi(value float64) {
-	p = value
-}
-
-// UnsetPi sets the pi value to default value.
-func UnsetPi() {
-	p = Pi
-}
-
 // Filter holds the digital filter parameters.
 type Filter struct {
 	name FilterName
@@ -82,11 +72,6 @@ func (f *Filter) IsZero() bool {
 	return f.name == Undefined
 }
 
-// FilterName returns filter name.
-func (f *Filter) Name() FilterName {
-	return f.name
-}
-
 // NewFilter creates a new Filter with the specified number of passes
 func NewFilter(name FilterName, a0, a1, a2, b0, b1, b2 float64, passes int) *Filter {
 	f := &Filter{
@@ -112,24 +97,6 @@ func NewFilter(name FilterName, a0, a1, a2, b0, b1, b2 float64, passes int) *Fil
 	f.a2a0 = a2 / a0
 
 	return f
-}
-
-// Apply applies the current filter and returns the value.
-func (f *Filter) Apply(input float64) float64 {
-	result := input
-
-	for i := 0; i < f.passes; i++ {
-		output := f.b0a0*result + f.b1a0*f.in1[i] + f.b2a0*f.in2[i] -
-			f.a1a0*f.out1[i] - f.a2a0*f.out2[i]
-
-		f.in2[i] = f.in1[i]
-		f.in1[i] = result
-		f.out2[i] = f.out1[i]
-		f.out1[i] = output
-
-		result = output
-	}
-	return result
 }
 
 // ApplyBatch applies the filter to a batch of samples
@@ -415,49 +382,11 @@ func (fc *FilterChain) AddFilter(f *Filter) error {
 	return nil
 }
 
-// RemoveFilter removes a filter from the chain by its index.
-func (fc *FilterChain) RemoveFilter(index int) error {
-	fc.mu.Lock()
-	defer fc.mu.Unlock()
-
-	if index < 0 || index >= len(fc.filters) {
-		return fmt.Errorf("invalid filter index: %d", index)
-	}
-
-	fc.filters = append(fc.filters[:index], fc.filters[index+1:]...)
-	return nil
-}
-
-// GetFilter returns the filter at the specified index.
-func (fc *FilterChain) GetFilter(index int) (*Filter, error) { // Return pointer to Filter
-	fc.mu.RLock()
-	defer fc.mu.RUnlock()
-
-	if index < 0 || index >= len(fc.filters) {
-		return nil, fmt.Errorf("invalid filter index: %d", index)
-	}
-
-	return fc.filters[index], nil
-}
-
 // Length returns the number of filters in the chain.
 func (fc *FilterChain) Length() int {
 	fc.mu.RLock()
 	defer fc.mu.RUnlock()
 	return len(fc.filters)
-}
-
-// Apply applies all filters in the chain to the input signal.
-func (fc *FilterChain) Apply(input float64) float64 {
-	fc.mu.RLock()
-	defer fc.mu.RUnlock()
-
-	result := input
-	for _, filter := range fc.filters {
-		result = filter.Apply(result)
-	}
-
-	return result
 }
 
 // ApplyBatch applies all filters in the chain to a batch of input signals.
@@ -471,25 +400,5 @@ func (fc *FilterChain) ApplyBatch(input []float64) {
 		} else {
 			log.Println("Warning: Encountered a nil filter in the audio EQ filter chain")
 		}
-	}
-}
-
-// Reset resets the state of all filters in the chain.
-func (fc *FilterChain) Reset() {
-	fc.mu.Lock()
-	defer fc.mu.Unlock()
-
-	for _, filter := range fc.filters {
-		filter.Reset()
-	}
-}
-
-// Reset resets the state of the filter
-func (f *Filter) Reset() {
-	for i := 0; i < f.passes; i++ {
-		f.in1[i] = 0
-		f.in2[i] = 0
-		f.out1[i] = 0
-		f.out2[i] = 0
 	}
 }

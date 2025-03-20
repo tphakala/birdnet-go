@@ -96,67 +96,6 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 	return devices, nil
 }
 
-// SetAudioDevice sets the audio device based on the provided device name.
-func SetAudioDevice(deviceName string) (string, error) {
-	// Initialize the audio context
-	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to initialize context: %w", err)
-	}
-
-	// Ensure the context is uninitialized when the function returns
-	defer func() {
-		if err := ctx.Uninit(); err != nil {
-			log.Printf("❌ failed to uninitialize context: %v", err)
-		}
-	}()
-
-	// Get a list of capture devices
-	infos, err := ctx.Devices(malgo.Capture)
-	if err != nil {
-		return "", fmt.Errorf("failed to get devices: %w", err)
-	}
-
-	// Find the index of the device that matches the provided device name
-	var index int
-	for i := range infos {
-		// Decode the device ID from hex to ASCII
-		decodedID, err := hexToASCII(infos[i].ID.String())
-		if err != nil {
-			log.Printf("❌ Error decoding ID for device %d: %v\n", i, err)
-			continue
-		}
-
-		// Check if the current device matches the specified settings
-		if matchesDeviceSettings(decodedID, &infos[i], deviceName) {
-			index = i
-			break
-		}
-	}
-
-	// Check if a valid device was found
-	if index < 0 || index >= len(infos) {
-		return "", fmt.Errorf("invalid device index")
-	}
-
-	// Configure the device
-	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
-	deviceConfig.Capture.Format = malgo.FormatS16    // 16-bit
-	deviceConfig.Capture.Channels = conf.NumChannels // 1
-	deviceConfig.Capture.DeviceID = infos[index].ID.Pointer()
-	deviceConfig.SampleRate = conf.SampleRate // 48000
-	deviceConfig.Alsa.NoMMap = 1
-
-	// Initialize the device
-	_, err = malgo.InitDevice(ctx.Context, deviceConfig, malgo.DeviceCallbacks{})
-	if err != nil {
-		return "", fmt.Errorf("failed to initialize device: %w", err)
-	}
-
-	// Return the name of the selected device
-	return infos[index].Name(), nil
-}
-
 // ReconfigureRTSPStreams handles dynamic reconfiguration of RTSP streams
 func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
 	// If there are no RTSP URLs configured and FFmpeg monitor is running, stop it

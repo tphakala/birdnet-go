@@ -145,25 +145,6 @@ func InitAnalysisBuffers(capacity int, sources []string) error {
 	return nil
 }
 
-// CleanupAnalysisBuffers removes and cleans up all analysis buffers.
-func CleanupAnalysisBuffers() {
-	abMutex.Lock()
-	defer abMutex.Unlock()
-
-	// Clean up each buffer
-	for source, ab := range analysisBuffers {
-		ab.Reset()
-		delete(analysisBuffers, source)
-		delete(prevData, source)
-		delete(warningCounter, source)
-	}
-
-	// Reset the maps
-	analysisBuffers = make(map[string]*ringbuffer.RingBuffer)
-	prevData = make(map[string][]byte)
-	warningCounter = make(map[string]int)
-}
-
 // WriteToAnalysisBuffer writes audio data into the ring buffer for a given stream.
 func WriteToAnalysisBuffer(stream string, data []byte) error {
 	abMutex.RLock()

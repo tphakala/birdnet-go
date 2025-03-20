@@ -542,18 +542,6 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 	}
 }
 
-// getExitCode returns the exit code of the FFmpeg process
-func getExitCode(err error) int {
-	if err == nil {
-		return 0
-	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		return exitErr.ExitCode()
-	}
-	return -1
-}
-
 // CaptureAudioRTSP is the main function for capturing audio from an RTSP stream
 func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
 	// Return with error if FFmpeg path is not set
