@@ -1,0 +1,146 @@
+---
+description: 
+globs: *_test.go,**/*_test.go
+alwaysApply: false
+---
+# Go Test Best Practices
+
+## Go Version
+- Use Go 1.24+ features in tests
+- Reference: @https://tip.golang.org/doc/go1.24
+- Key testing improvements:
+  - t.Cleanup() for test cleanup
+  - t.TempDir() for managing temp dirs
+  - t.Setenv() for scoped environment variables
+  - b.Loop() for benchmarks (Go 1.24)
+  - go test -fuzz for fuzzing
+  - go vet now detects test misuses (Go 1.24)
+
+## Test Function Conventions
+- All test functions must follow correct naming and signature:
+  - Unit tests: `func TestXxx(t *testing.T)`
+  - Benchmarks: `func BenchmarkXxx(b *testing.B)`
+  - Fuzz tests: `func FuzzXxx(f *testing.F)`
+- Avoid misnamed or malformed test functions – go vet will catch these in Go 1.24+
+- Keep test functions short, focused, and readable
+
+## Table-Driven Tests
+- Use table-driven style for variations of the same logic
+- Use subtests (`t.Run(name, func(t *testing.T))`) for each case
+- Always call `t.Parallel()` within subtests if test cases are independent
+- Prefer descriptive names in subtests for easier debugging
+
+## Test Utilities and Cleanups
+- Use `t.Cleanup()` to register cleanup logic in tests
+- Use `t.TempDir()` instead of manual temp file management
+- Use `t.Setenv(key, value)` for setting env vars in test scope
+- Avoid manual cleanup with `defer os.Remove(...)` unless absolutely needed
+
+## Benchmarking
+- Use `b.ReportAllocs()` to track memory allocations in benchmarks
+- Use `b.ResetTimer()` before measuring just-in-time workloads
+- Prefer `b.Loop()` over `for i := 0; i < b.N; i++` (Go 1.24+)
+- Keep benchmark logic minimal and representative
+
+## Fuzzing (Go 1.18+)
+- Use `FuzzXxx(f *testing.F)` to test parsers and data consumers
+- Add seed inputs via `f.Add(...)` to initialize coverage
+- Fuzz tests should validate invariants and panic conditions
+- Always check and minimize corpus growth
+
+## Assertions and Error Checks
+- Avoid panics in tests – use `t.Fatal`, `t.Error`, `t.Fatalf`, `t.Errorf`
+- Use table-driven want vs got comparisons
+- Clearly format failure messages: `t.Errorf("expected %v, got %v", want, got)`
+- Consider using helper functions to reduce repetitive checks
+
+## Parallel Testing
+- Use `t.Parallel()` for top-level test functions where safe
+- Always use inside subtests when possible
+- Avoid global state mutation in parallel tests
+- Protect shared state with sync primitives if required
+
+## Logging and Debugging
+- Use `t.Log` / `t.Logf` for test-local logs
+- Avoid `fmt.Println()` in tests – not tied to test output
+- Prefer structured test logs when debugging complex cases
+
+## Temp Files & Directories
+- Use `t.TempDir()` for temp paths
+- Prefer `filepath.Join(t.TempDir(), "file.txt")` over hardcoded temp paths
+- Avoid manually cleaning up temp files – use Go's built-in cleanup
+
+## Environment Handling
+- Use `t.Setenv()` for environment variable setup in tests
+- Avoid modifying `os.Setenv` directly unless cleaned up properly
+- Test behavior under different env configs using subtests
+
+## Test Organization
+- Keep tests near the code they test (same package, _test.go file)
+- Group related tests together using sections or subtests
+- Use helper functions ending in _test.go to avoid export issues
+- Avoid logic in test files that is not directly test-related
+
+## Linting & Vetting
+- Run go vet on all test files – especially with Go 1.24+ analyzers
+- Enable linters:
+  - testpackage: avoid logic in test files
+  - gocognit: test complexity
+  - errcheck: all errors must be checked
+  - staticcheck: catch subtle test issues
+- Use go test -race for all concurrent test suites
+
+## Observability in Tests
+- Log context IDs or test metadata using t.Log for traceability
+- Capture test-specific logs and metrics via mocks or test sinks
+- Prefer context-aware testing when mocking services
+
+## Using Testify
+
+### Testify/Assert
+- Import with `import "github.com/stretchr/testify/assert"`
+- Use for readable test assertions: `assert.Equal(t, expected, actual, "optional message")`
+- Key assertion functions:
+  - `assert.Equal(t, expected, actual)` - Check for equality
+  - `assert.NotEqual(t, notExpected, actual)` - Check for inequality
+  - `assert.True(t, value)` / `assert.False(t, value)` - Check boolean values
+  - `assert.Nil(t, value)` / `assert.NotNil(t, value)` - Check for nil
+  - `assert.NoError(t, err)` / `assert.Error(t, err)` - Check error values
+  - `assert.Contains(t, collection, element)` - Check containment
+  - `assert.Subset(t, superSet, subSet)` - Check subset relationships
+- Use `require` instead of `assert` when test should abort on failure:
+  - `require.NoError(t, err)` - Test will abort if error is not nil
+  - Import with `import "github.com/stretchr/testify/require"`
+- Prefer assertion error messages that provide context:
+  - `assert.Equal(t, expected, actual, "should match after transformation")` 
+
+### Testify/Mock
+- Import with `import "github.com/stretchr/testify/mock"`
+- Create mock structs that embed `mock.Mock`
+- Define expectations before running the function under test:
+  - `mockObj.On("MethodName", arg1, arg2).Return(returnVal1, returnVal2)`
+- Verify expectations after test with `mockObj.AssertExpectations(t)`
+- For specific call counts: `mockObj.On("MethodName", mock.Anything).Return(true).Times(3)`
+- Match any argument with `mock.Anything` or `mock.AnythingOfType("string")`
+- Use custom matchers with `mock.MatchedBy(func(arg Type) bool { ... })`
+- Capture arguments with `mock.On(...).Run(func(args mock.Arguments) { ... })`
+- Structure test with clear setup, execution, and assertion phases
+
+### Testify Best Practices
+- Combine with table-driven tests for maximum readability
+- Avoid excessive mocking - mock only external dependencies
+- Use testify consistently across test suite for uniformity
+- For complex mock setup, use helper functions to improve readability
+- Consider using testify/suite for tests that share setup/teardown
+- Use `assert.Subset()` and `assert.ElementsMatch()` for collection comparison
+- For API testing, use testify with httptest package
+
+## Modern Patterns to Prefer
+- ✅ Use `t.Parallel()` and `t.Run()` for better concurrency
+- ✅ Use `t.Cleanup()` over manual defer cleanup
+- ✅ Use `t.Setenv()` over os.Setenv
+- ✅ Use `b.Loop()` over manual for i := 0; i < b.N; i++
+- ✅ Use fuzzing for complex input functions
+- ✅ Always check errors explicitly, even in tests
+- ✅ Use testify/assert for clear test assertions
+- ✅ Use testify/mock for clean dependency mocking
