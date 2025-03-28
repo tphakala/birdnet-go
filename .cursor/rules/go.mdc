@@ -1,0 +1,252 @@
+---
+description: Golang basic rules
+globs: *.go,**/*.go
+alwaysApply: false
+---
+# Golang Best Practices
+
+## Go Version
+- Code can use Go 1.24 features and improvements
+- Reference: 
+- Key enhancements to leverage:
+  - Release notes: @https://tip.golang.org/doc/go1.24
+  - Generic type aliases (`type JSONMap[T any] = map[string]T`)
+  - New `AddCleanup` and weak references for resource management
+  - Improved JSON handling with `omitzero` tag
+  - New cryptography packages from x/crypto
+  - Testing improvements with `b.Loop()` and test analyzers
+  - `os.Root` for filesystem sandboxing
+  - Tool dependency management with `go get -tool`
+  - Optimized map implementation for faster lookups
+
+## Language Features
+- Use built-in functions `min`, `max`, and `clear` (Go 1.21+)
+  - `min(x, y)` and `max(x, y)` to get smaller/larger of two values
+  - `clear(m)` to empty maps or slices in one call
+- Take advantage of improved generic type inference (Go 1.21+)
+  - Let compiler infer type arguments when possible
+  - Write clear function signatures to help type inference
+- Benefit from fixed loop variable capture (Go 1.22+)
+  - Each iteration now has its own copy of variables
+  - No need for manual variable capture in loops with goroutines
+- Use enhanced range loops:
+  - Range over integers directly: `for i := range 10 { ... }` (Go 1.22+)
+  - Range over iterator functions (Go 1.23+)
+- Use generic type aliases for API clarity (Go 1.24)
+
+## Standard Library Enhancements
+- Use the `slices` package (Go 1.21+) for operations:
+  - `slices.Index`, `slices.Contains`, `slices.Clone`, `slices.Compare`
+  - `slices.Concat` (Go 1.22+) to concatenate multiple slices
+- Use the `maps` package (Go 1.21+) for map operations:
+  - `maps.Keys(m)` to get a slice of map keys
+  - `maps.Clone(m)` to copy a map
+- Leverage the `cmp` package (Go 1.21+) for comparisons
+- Adopt `log/slog` for structured logging (Go 1.21+)
+- Use `math/rand/v2` for random data generation (Go 1.22+)
+- Utilize enhanced HTTP routing with new `ServeMux` patterns (Go 1.22+)
+- Use `database/sql.Null[T]` for nullable fields (Go 1.22+)
+- Use JSON struct tags effectively, including `omitzero` (Go 1.24)
+- Prefer standard library crypto packages including new ones (Go 1.24)
+
+## Project Structure
+- Set appropriate Go version in go.mod to enable new compiler checks
+- Use `go mod tidy -diff` (Go 1.23+) to preview dependency changes
+- `main.go` is reserved exclusively for application entry point
+- All internal packages must reside under `internal/` directory
+- Public packages should be placed in `pkg/` directory
+- Group related functionality into coherent packages
+- Use `cmd/` directory for multiple entry points
+- Place test files next to the code they test with `_test.go` suffix
+- Manage tool dependencies with `go get -tool` (Go 1.24)
+
+## Code Organization
+- Package names should be concise and meaningful
+- One package per directory
+- Avoid circular dependencies between packages
+- Use meaningful directory names that match package names
+- Keep interfaces close to where they are used
+- Follow standard Go project layout conventions
+
+## Context and Resource Management
+- Always pass context.Context as the first parameter for operations that may be cancelled
+- Implement proper context cancellation for all network operations
+- Use context timeouts for external service calls
+- Chain contexts appropriately without losing parent cancellation
+- Always cancel derived contexts with `defer cancel()`
+- Ensure goroutines are properly terminated when context is cancelled
+- Monitor goroutine leaks using runtime statistics
+- Limit concurrency with contexts or semaphores
+- Use `os.Root` (Go 1.24) to sandbox filesystem access
+- Consider `runtime.AddCleanup` (Go 1.24) for finalizers if needed
+- Explore `runtime/weak` package (Go 1.24) for weak references in caches
+
+## Code Style
+- Functions should be focused and concise (typically under 50 lines)
+- Keep cognitive complexity low (aim for under 50)
+- Use switch statements instead of long if-else chains
+- Combine related parameter types into structs when function has more than 3 parameters
+- Combine parameter types when multiple parameters have the same type (`func(a, b string)` instead of `func(a string, b string)`)
+- Use consistent naming conventions:
+  - Use MixedCaps or mixedCaps rather than underscores
+  - Use short, clear variable names
+  - Acronyms should be consistently cased (HTTP, URL, ID)
+- Document exported functions, types, and packages
+- Name return values in function signatures for better documentation
+- Avoid duplicate imports of the same package
+- Group similar declarations together
+- Order struct fields to minimize padding
+
+## Error Handling
+- Always check error returns, including from defer statements
+- Use errors.Is() and errors.As() for error comparison instead of == or != operators
+- Use error wrapping with fmt.Errorf("... %w", err) to preserve error types
+- Create custom error types or sentinel errors for important error cases
+- Propagate context.Canceled and context.DeadlineExceeded properly
+- Return errors, don't panic (especially in libraries)
+- Return early for error conditions
+- Implement proper error logging and tracing
+- Check errors from all I/O operations, especially in defer statements
+- Consider errors.Join (Go 1.20+) to combine multiple errors into one
+
+## Resource Management and Leak Prevention
+- Implement proper resource cleanup in defer statements
+- Always check errors returned from cleanup operations in defer statements
+- Use sync.WaitGroup to wait for goroutines to complete
+- Close channels when no longer needed
+- Implement proper connection pooling with maximum limits
+- Use resource pooling for frequently created/destroyed objects
+- Monitor goroutine count and resource usage
+- Implement circuit breakers for external service calls
+- Use leaktest in tests to detect goroutine leaks
+- Implement proper cleanup for temporary resources
+- Monitor system resources (file descriptors, memory, etc.)
+- Use `runtime.AddCleanup` (Go 1.24) instead of SetFinalizer for cleaner finalizers
+- Explore weak references (Go 1.24) for caches that shouldn't prevent GC
+
+## Performance and Safety
+- Use pointers for large structs or when mutation is needed
+- Implement proper mutex locks for shared resources
+- Pre-allocate slices when size is known
+- Use sync.Pool for frequently allocated objects
+- Avoid unnecessary string concatenation; use strings.Builder
+- Use buffered I/O operations
+- Implement proper connection pooling
+- Use sync.Map for concurrent map access
+- Avoid multiplication of time durations (use time.Duration directly)
+- Pass large structs by pointer to avoid copying
+- Combine multiple append operations into a single call when possible
+- Leverage modern Go features:
+  - Range over function types for cleaner iteration (Go 1.23+)
+  - Profile Guided Optimization for performance-critical code
+  - Improved timer implementation (Go 1.23+)
+  - New atomic operations
+  - Optimized map implementation (Go 1.24)
+- Use generics where appropriate, with improved type inference (Go 1.21+)
+- Benefit from GC tuning improvements (Go 1.21+) for reduced tail latency
+
+## Defensive Programming
+- Validate all input parameters
+- Check slice bounds before accessing elements
+- Verify map keys exist before access
+- Handle nil pointer cases explicitly
+- Don't check for nil before using len() on slices or maps (len() is defined as zero for nil slices/maps)
+- Never pass nil contexts; use context.TODO() or context.Background() if unsure
+- Use consistent, typed string keys for context values (avoid raw string type)
+- Use context.Context for cancellation and timeouts
+- Implement proper timeouts for network operations
+- Use proper input sanitization
+- Implement rate limiting where appropriate
+
+## Testing
+- Write table-driven tests for all packages
+- Use subtests (t.Run) for logically grouped cases
+- Name test functions correctly (TestXxx, BenchmarkXxx, etc.)
+- Use t.Cleanup() for test cleanup instead of custom solutions
+- Use t.TempDir() for temporary test directories
+- Use t.Setenv() to set environment variables for tests
+- Use t.Parallel() when tests can run concurrently
+- Implement benchmark tests with b.Loop() (Go 1.24) instead of manual loops
+- Use the Go fuzzing engine with FuzzXxx functions
+- Profile and optimize iteratively using Go's built-in tools
+- Regularly run go vet with test analyzers (Go 1.24) to catch test mistakes
+
+## Cross-Platform Compatibility
+- Use filepath.Join instead of string concatenation for paths
+- Use os.PathSeparator when necessary
+- Handle file permissions appropriately
+- Use build tags for platform-specific code
+- Test on both Linux and Darwin regularly
+- Use proper line endings
+- Handle filesystem case sensitivity differences
+- Use os.Root (Go 1.24) for sandboxed filesystem access
+
+## Documentation
+- Document all exported types, functions, and packages
+- Include examples in documentation
+- Provide usage examples in README
+- Document any platform-specific considerations
+- Include license information
+- Document build and test procedures
+
+## Dependencies
+- Minimize external dependencies
+- Use go.mod for dependency management
+- Pin dependency versions
+- Update go version in go.mod to latest supported version
+- Run go mod tidy regularly (or go mod tidy -diff in Go 1.23+)
+- Manage tool dependencies with go get -tool (Go 1.24)
+- Regularly update dependencies
+- Audit dependencies for security issues
+- Document required external services
+
+## Monitoring and Observability
+- Implement proper logging with log/slog (Go 1.21+)
+- Use structured logging formats
+- Include trace IDs in logs
+- Implement metrics collection
+- Add health check endpoints
+- Include proper debugging information
+- Implement proper panic recovery
+
+## Security
+- Use proper input validation
+- Implement secure password handling
+- Use proper encryption for sensitive data
+- Implement rate limiting
+- Use proper authentication and authorization
+- Handle sensitive data appropriately
+- Implement secure session management
+- Use latest crypto packages from standard library (Go 1.24)
+- Consider FIPS 140-3 compliance mechanisms (Go 1.24)
+
+## Build and Deployment
+- Use proper build tags
+- Implement proper versioning
+- Implement proper signal handling
+- Use proper environment variable handling
+- Implement graceful shutdown
+- Handle configuration properly
+- Use new octal literal style (0o644 instead of 0644)
+- Set up CI/CD pipelines with linter checks and tests
+- Consider Profile-Guided Optimization (PGO) for performance-critical applications
+
+## Tools
+- Use go vet with stdversionanalyzer to check version compatibility
+- Use go vet test analyzer (Go 1.24) to catch test mistakes
+- Run golangci-lint regularly with appropriate linters:
+  - durationcheck: For detecting incorrect operations with time.Duration
+  - errcheck: To ensure error returns are checked
+  - errorlint: To enforce errors.Is/errors.As usage
+  - gocognit: To keep cognitive complexity manageable
+  - gocritic: To detect various code improvement opportunities
+  - gosimple: To simplify code
+  - ineffassign: To detect ineffectual assignments
+  - staticcheck: For wide range of code improvements
+  - unconvert: To eliminate unnecessary type conversions
+- Configure linter settings via .golangci.yml file
+- Consider enabling Go telemetry (opt-in) to help improve Go
+- Use go env -changed to identify non-default environment settings
+- Leverage go mod tidy -diff to preview dependency changes
+- Use godebug directive in go.mod for debugging settings
+- Run tests with the race detector for non-trivial concurrent code
