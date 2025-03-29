@@ -307,6 +307,7 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 
 	startTime := time.Now()
 	var chunkCount int64 = 1
+	var eofReached int32 = 0 // Atomic flag to indicate EOF was reached
 
 	// Set number of workers to 1
 	numWorkers := 1
@@ -320,6 +321,7 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 	resultChan := make(chan []datastore.Note, 4)
 	errorChan := make(chan error, 1)
 	doneChan := make(chan struct{})
+	eofChan := make(chan struct{}, 1) // Channel to notify when EOF is reached
 
 	var allNotes []datastore.Note
 
@@ -348,7 +350,11 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 		}
 		defer shutdown()
 
-		for i := 1; i <= totalChunks; i++ {
+		// Create a collector loop that will run until we've processed all chunks
+		// or an error occurs, or EOF is reached and all sent chunks are processed
+		expectedChunks := totalChunks
+
+		for i := 1; i <= expectedChunks; i++ {
 			select {
 			case <-ctx.Done():
 				processingErrorMutex.Lock()
@@ -361,7 +367,18 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 				}
 				allNotes = append(allNotes, notes...)
 				atomic.AddInt64(&chunkCount, 1)
-				if atomic.LoadInt64(&chunkCount) > int64(totalChunks) {
+
+				// If EOF was reached and we've processed all chunks we've sent, we're done
+				if atomic.LoadInt32(&eofReached) == 1 &&
+					atomic.LoadInt64(&chunkCount) > int64(i) {
+					if settings.Debug {
+						fmt.Printf("DEBUG: EOF reached and all chunks processed (actual chunks: %d, expected: %d)\n",
+							i, expectedChunks)
+					}
+					return
+				}
+
+				if atomic.LoadInt64(&chunkCount) > int64(expectedChunks) {
 					return
 				}
 			case err := <-errorChan:
@@ -372,7 +389,27 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 				processingError = err
 				processingErrorMutex.Unlock()
 				return
+			case <-eofChan:
+				// EOF reached - if we've already processed all chunks, we can return
+				if settings.Debug {
+					fmt.Printf("DEBUG: Received EOF signal, waiting for remaining chunks to process\n")
+				}
+				// Just mark EOF as reached - we still need to process any chunks in flight
+				atomic.StoreInt32(&eofReached, 1)
+
+				// If we've already processed all chunks, we can return
+				if atomic.LoadInt64(&chunkCount) > int64(i) {
+					return
+				}
 			case <-time.After(5 * time.Second):
+				// If EOF was reached but we're still waiting for chunks, something is wrong
+				if atomic.LoadInt32(&eofReached) == 1 {
+					if settings.Debug {
+						fmt.Printf("DEBUG: Timeout waiting after EOF, processed %d chunks\n", i-1)
+					}
+					return
+				}
+
 				if settings.Debug {
 					fmt.Printf("DEBUG: Timeout waiting for chunk %d results\n", i)
 				}
@@ -392,30 +429,60 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 	filePosition := time.Time{}
 
 	// Read and send audio chunks with timing information
-	err := myaudio.ReadAudioFileBuffered(settings, func(chunkData []float32) error {
-		chunk := audioChunk{
-			Data:         chunkData,
-			FilePosition: filePosition,
+	err := myaudio.ReadAudioFileBuffered(settings, func(chunkData []float32, isEOF bool) error {
+		// If this is just an EOF signal with no data, notify and return
+		if isEOF && (chunkData == nil || len(chunkData) == 0) {
+			select {
+			case eofChan <- struct{}{}:
+				if settings.Debug {
+					fmt.Println("DEBUG: Sent EOF signal without data")
+				}
+			default:
+				// Channel full, that's okay
+			}
+			return nil
 		}
 
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case chunkChan <- chunk:
-			// Update predStart for next chunk
-			filePosition = filePosition.Add(time.Duration((3.0 - bn.Settings.BirdNET.Overlap) * float64(time.Second)))
-			return nil
-		case <-doneChan:
-			processingErrorMutex.Lock()
-			err := processingError
-			processingErrorMutex.Unlock()
-			if err != nil {
-				return err
+		// Process the chunk data if we have any
+		if chunkData != nil && len(chunkData) > 0 {
+			chunk := audioChunk{
+				Data:         chunkData,
+				FilePosition: filePosition,
 			}
-			return ctx.Err() // Return context error if no processing error
-		case <-time.After(5 * time.Second):
-			return fmt.Errorf("timeout sending chunk to processing")
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case chunkChan <- chunk:
+				// Update predStart for next chunk
+				filePosition = filePosition.Add(time.Duration((3.0 - bn.Settings.BirdNET.Overlap) * float64(time.Second)))
+
+				// If this is the last chunk, also send EOF signal
+				if isEOF {
+					select {
+					case eofChan <- struct{}{}:
+						if settings.Debug {
+							fmt.Println("DEBUG: Sent EOF signal with data")
+						}
+					default:
+						// Channel full, that's okay
+					}
+				}
+				return nil
+			case <-doneChan:
+				processingErrorMutex.Lock()
+				err := processingError
+				processingErrorMutex.Unlock()
+				if err != nil {
+					return err
+				}
+				return ctx.Err() // Return context error if no processing error
+			case <-time.After(5 * time.Second):
+				return fmt.Errorf("timeout sending chunk to processing")
+			}
 		}
+
+		return nil
 	})
 
 	if settings.Debug {
@@ -455,9 +522,13 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 	if settings.Debug {
 		fmt.Println("DEBUG: Analysis completed successfully")
 	}
+
+	// Calculate actual processed chunks
+	actualChunks := int(atomic.LoadInt64(&chunkCount)) - 1
+
 	// Update final statistics
 	totalTime := time.Since(startTime)
-	avgChunksPerSec := float64(totalChunks) / totalTime.Seconds()
+	avgChunksPerSec := float64(actualChunks) / totalTime.Seconds()
 
 	// Get terminal width for final status line
 	width, _, err := term.GetSize(int(os.Stdout.Fd()))
@@ -469,8 +540,8 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 	fmt.Print(formatProgressLine(
 		filename,
 		duration,
-		totalChunks,
-		totalChunks,
+		actualChunks,
+		actualChunks, // Use actual chunks processed instead of calculated total
 		avgChunksPerSec,
 		fmt.Sprintf("in %s", birdnet.FormatDuration(totalTime)),
 		width,
