@@ -177,7 +177,7 @@ func readWAVDirectBytes(file *os.File, decoder *wav.Decoder, settings *conf.Sett
 	chunkSamples := int(chunkDuration.Seconds() * float64(decoder.SampleRate))
 
 	// Start by seeking to the data chunk
-	if err := seekToDataChunk(file, decoder); err != nil {
+	if err := seekToDataChunk(file); err != nil {
 		return fmt.Errorf("error seeking to data chunk: %w", err)
 	}
 
@@ -201,7 +201,7 @@ func readWAVDirectBytes(file *os.File, decoder *wav.Decoder, settings *conf.Sett
 		// Read a block of raw PCM data
 		bytesRead, err := file.Read(buffer)
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return fmt.Errorf("error reading WAV data: %w", err)
@@ -259,7 +259,7 @@ func readWAVDirectBytes(file *os.File, decoder *wav.Decoder, settings *conf.Sett
 }
 
 // seekToDataChunk seeks the file to the beginning of the PCM data chunk
-func seekToDataChunk(file *os.File, decoder *wav.Decoder) error {
+func seekToDataChunk(file *os.File) error {
 	// Reset to beginning of file
 	if _, err := file.Seek(0, 0); err != nil {
 		return err
@@ -299,7 +299,7 @@ func seekToDataChunk(file *os.File, decoder *wav.Decoder) error {
 }
 
 // convertPCMToFloat32 converts raw PCM bytes to float32 samples
-func convertPCMToFloat32(data []byte, bytesPerSample int, numChannels int, divisor float32) ([]float32, error) {
+func convertPCMToFloat32(data []byte, bytesPerSample, numChannels int, divisor float32) ([]float32, error) {
 	if len(data)%(bytesPerSample*numChannels) != 0 {
 		return nil, fmt.Errorf("invalid PCM data length: %d bytes is not divisible by %d bytes per frame",
 			len(data), bytesPerSample*numChannels)
