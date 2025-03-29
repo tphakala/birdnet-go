@@ -20,6 +20,41 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observation"
 )
 
+// processingChannels holds all channels needed for audio processing
+type processingChannels struct {
+	chunkChan  chan audioChunk
+	resultChan chan []datastore.Note
+	errorChan  chan error
+	doneChan   chan struct{}
+	eofChan    chan struct{}
+}
+
+// Define audioChunk type at package level since it's used by multiple functions
+type audioChunk struct {
+	Data         []float32
+	FilePosition time.Time
+}
+
+// Define an error holder type to avoid pointer-to-pointer issues
+type errorHolder struct {
+	mu  sync.Mutex
+	err error
+}
+
+// setError safely sets the error
+func (h *errorHolder) setError(err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.err = err
+}
+
+// getError safely gets the error
+func (h *errorHolder) getError() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.err
+}
+
 // FileAnalysis conducts an analysis of an audio file and outputs the results.
 // It reads an audio file, analyzes it for bird sounds, and prints the results based on the provided configuration.
 func FileAnalysis(settings *conf.Settings, ctx context.Context) error {
@@ -285,12 +320,7 @@ func startWorkers(ctx context.Context, numWorkers int, chunkChan chan audioChunk
 	}
 }
 
-// Define audioChunk type at package level since it's used by multiple functions
-type audioChunk struct {
-	Data         []float32
-	FilePosition time.Time
-}
-
+// processAudioFile conducts an analysis of an audio file and outputs the results.
 func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx context.Context) ([]datastore.Note, error) {
 	// Calculate total chunks
 	totalChunks := myaudio.GetTotalChunks(
@@ -307,6 +337,7 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 
 	startTime := time.Now()
 	var chunkCount int64 = 1
+	var eofReached int32 = 0 // Atomic flag to indicate EOF was reached
 
 	// Set number of workers to 1
 	numWorkers := 1
@@ -315,11 +346,8 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 		fmt.Printf("DEBUG: Starting analysis with %d total chunks and %d workers\n", totalChunks, numWorkers)
 	}
 
-	// Create buffered channels for processing
-	chunkChan := make(chan audioChunk, 4)
-	resultChan := make(chan []datastore.Note, 4)
-	errorChan := make(chan error, 1)
-	doneChan := make(chan struct{})
+	// Setup processing channels
+	processingChannels := setupProcessingChannels()
 
 	var allNotes []datastore.Note
 
@@ -327,72 +355,221 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 	var doneChanClosed sync.Once
 	shutdown := func() {
 		doneChanClosed.Do(func() {
-			close(doneChan)
+			close(processingChannels.doneChan)
 		})
 	}
 	defer shutdown()
 
 	// Start worker goroutines
-	startWorkers(ctx, numWorkers, chunkChan, resultChan, errorChan, settings)
+	startWorkers(ctx, numWorkers, processingChannels.chunkChan, processingChannels.resultChan, processingChannels.errorChan, settings)
 
 	// Start progress monitoring goroutine
-	go monitorProgress(ctx, doneChan, filename, duration, totalChunks, &chunkCount, startTime)
+	go monitorProgress(ctx, processingChannels.doneChan, filename, duration, totalChunks, &chunkCount, startTime)
 
 	// Start result collector goroutine
-	var processingError error
-	var processingErrorMutex sync.Mutex
+	errHolder := &errorHolder{}
 
-	go func() {
-		if settings.Debug {
-			fmt.Println("DEBUG: Result collector started")
-		}
-		defer shutdown()
+	// Start the collector that manages analysis results and errors
+	go collectResults(
+		ctx,
+		settings,
+		totalChunks,
+		&chunkCount,
+		&eofReached,
+		processingChannels,
+		&allNotes,
+		errHolder,
+		shutdown,
+	)
 
-		for i := 1; i <= totalChunks; i++ {
-			select {
-			case <-ctx.Done():
-				processingErrorMutex.Lock()
-				processingError = ctx.Err()
-				processingErrorMutex.Unlock()
-				return
-			case notes := <-resultChan:
+	// Process audio data from file
+	err := processAudioData(
+		settings,
+		ctx,
+		processingChannels,
+		errHolder,
+	)
+
+	if settings.Debug {
+		fmt.Println("DEBUG: Finished reading audio file")
+	}
+	close(processingChannels.chunkChan)
+
+	if settings.Debug {
+		fmt.Println("DEBUG: Waiting for processing to complete")
+	}
+	<-processingChannels.doneChan // Wait for processing to complete
+
+	// Handle errors
+	if err := handleProcessingErrors(err, errHolder.getError(), settings); err != nil {
+		return allNotes, err
+	}
+
+	// Display results
+	displayProcessingResults(settings, filename, duration, chunkCount, startTime)
+
+	return allNotes, nil
+}
+
+// setupProcessingChannels creates and returns all channels needed for processing
+func setupProcessingChannels() processingChannels {
+	return processingChannels{
+		chunkChan:  make(chan audioChunk, 4),
+		resultChan: make(chan []datastore.Note, 4),
+		errorChan:  make(chan error, 1),
+		doneChan:   make(chan struct{}),
+		eofChan:    make(chan struct{}, 1),
+	}
+}
+
+// collectResults collects and processes analysis results
+func collectResults(
+	ctx context.Context,
+	settings *conf.Settings,
+	expectedChunks int,
+	chunkCount *int64,
+	eofReached *int32,
+	channels processingChannels,
+	allNotes *[]datastore.Note,
+	errHolder *errorHolder,
+	shutdown func(),
+) {
+	if settings.Debug {
+		fmt.Println("DEBUG: Result collector started")
+	}
+	defer shutdown()
+
+	for i := 1; i <= expectedChunks; i++ {
+		select {
+		case <-ctx.Done():
+			errHolder.setError(ctx.Err())
+			return
+		case notes := <-channels.resultChan:
+			if settings.Debug {
+				fmt.Printf("DEBUG: Received results for chunk #%d\n", atomic.LoadInt64(chunkCount))
+			}
+			*allNotes = append(*allNotes, notes...)
+			atomic.AddInt64(chunkCount, 1)
+
+			// If EOF was reached and we've processed all chunks we've sent, we're done
+			if atomic.LoadInt32(eofReached) == 1 &&
+				atomic.LoadInt64(chunkCount) > int64(i) {
 				if settings.Debug {
-					fmt.Printf("DEBUG: Received results for chunk #%d\n", atomic.LoadInt64(&chunkCount))
+					fmt.Printf("DEBUG: EOF reached and all chunks processed (actual chunks: %d, expected: %d)\n",
+						i, expectedChunks)
 				}
-				allNotes = append(allNotes, notes...)
-				atomic.AddInt64(&chunkCount, 1)
-				if atomic.LoadInt64(&chunkCount) > int64(totalChunks) {
-					return
-				}
-			case err := <-errorChan:
-				if settings.Debug {
-					fmt.Printf("DEBUG: Collector received error: %v\n", err)
-				}
-				processingErrorMutex.Lock()
-				processingError = err
-				processingErrorMutex.Unlock()
-				return
-			case <-time.After(5 * time.Second):
-				if settings.Debug {
-					fmt.Printf("DEBUG: Timeout waiting for chunk %d results\n", i)
-				}
-				processingErrorMutex.Lock()
-				currentCount := atomic.LoadInt64(&chunkCount)
-				processingError = fmt.Errorf("timeout waiting for analysis results (processed %d/%d chunks)", currentCount, totalChunks)
-				processingErrorMutex.Unlock()
 				return
 			}
-		}
-		if settings.Debug {
-			fmt.Println("DEBUG: Collector finished normally")
-		}
-	}()
 
+			if atomic.LoadInt64(chunkCount) > int64(expectedChunks) {
+				return
+			}
+		case err := <-channels.errorChan:
+			if settings.Debug {
+				fmt.Printf("DEBUG: Collector received error: %v\n", err)
+			}
+			errHolder.setError(err)
+			return
+		case <-channels.eofChan:
+			handleEOFSignal(settings, eofReached, chunkCount, i)
+		case <-time.After(5 * time.Second):
+			handleTimeout(settings, eofReached, chunkCount, i, expectedChunks, errHolder)
+			return
+		}
+	}
+	if settings.Debug {
+		fmt.Println("DEBUG: Collector finished normally")
+	}
+}
+
+// handleEOFSignal processes EOF notification
+func handleEOFSignal(settings *conf.Settings, eofReached *int32, chunkCount *int64, currentChunk int) bool {
+	if settings.Debug {
+		fmt.Printf("DEBUG: Received EOF signal, waiting for remaining chunks to process\n")
+	}
+	// Mark EOF as reached - we still need to process any chunks in flight
+	atomic.StoreInt32(eofReached, 1)
+
+	// If we've already processed all chunks, we can return
+	if atomic.LoadInt64(chunkCount) > int64(currentChunk) {
+		return true
+	}
+	return false
+}
+
+// handleTimeout handles timeouts during processing
+func handleTimeout(
+	settings *conf.Settings,
+	eofReached *int32,
+	chunkCount *int64,
+	currentChunk int,
+	totalChunks int,
+	errHolder *errorHolder,
+) {
+	// If EOF was reached but we're still waiting for chunks, something is wrong
+	if atomic.LoadInt32(eofReached) == 1 {
+		if settings.Debug {
+			fmt.Printf("DEBUG: Timeout waiting after EOF, processed %d chunks\n", currentChunk-1)
+		}
+		return
+	}
+
+	if settings.Debug {
+		fmt.Printf("DEBUG: Timeout waiting for chunk %d results\n", currentChunk)
+	}
+	currentCount := atomic.LoadInt64(chunkCount)
+	errHolder.setError(fmt.Errorf("timeout waiting for analysis results (processed %d/%d chunks)", currentCount, totalChunks))
+}
+
+// processAudioData reads and processes audio file data
+func processAudioData(
+	settings *conf.Settings,
+	ctx context.Context,
+	channels processingChannels,
+	errHolder *errorHolder,
+) error {
 	// Initialize filePosition before the loop
 	filePosition := time.Time{}
 
 	// Read and send audio chunks with timing information
-	err := myaudio.ReadAudioFileBuffered(settings, func(chunkData []float32) error {
+	return myaudio.ReadAudioFileBuffered(settings, func(chunkData []float32, isEOF bool) error {
+		return handleAudioChunk(
+			ctx,
+			chunkData,
+			isEOF,
+			filePosition,
+			settings,
+			channels,
+			errHolder,
+		)
+	})
+}
+
+// handleAudioChunk processes a single audio chunk
+func handleAudioChunk(
+	ctx context.Context,
+	chunkData []float32,
+	isEOF bool,
+	filePosition time.Time,
+	settings *conf.Settings,
+	channels processingChannels,
+	errHolder *errorHolder,
+) error {
+	// If this is just an EOF signal with no data, notify and return
+	if isEOF && len(chunkData) == 0 {
+		select {
+		case channels.eofChan <- struct{}{}:
+			if settings.Debug {
+				fmt.Println("DEBUG: Sent EOF signal without data")
+			}
+		default:
+			// Channel full, that's okay
+		}
+		return nil
+	}
+
+	// Process the chunk data if we have any
+	if len(chunkData) > 0 {
 		chunk := audioChunk{
 			Data:         chunkData,
 			FilePosition: filePosition,
@@ -401,14 +578,21 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case chunkChan <- chunk:
-			// Update predStart for next chunk
-			filePosition = filePosition.Add(time.Duration((3.0 - bn.Settings.BirdNET.Overlap) * float64(time.Second)))
+		case channels.chunkChan <- chunk:
+			// If this is the last chunk, also send EOF signal
+			if isEOF {
+				select {
+				case channels.eofChan <- struct{}{}:
+					if settings.Debug {
+						fmt.Println("DEBUG: Sent EOF signal with data")
+					}
+				default:
+					// Channel full, that's okay
+				}
+			}
 			return nil
-		case <-doneChan:
-			processingErrorMutex.Lock()
-			err := processingError
-			processingErrorMutex.Unlock()
+		case <-channels.doneChan:
+			err := errHolder.getError()
 			if err != nil {
 				return err
 			}
@@ -416,48 +600,48 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 		case <-time.After(5 * time.Second):
 			return fmt.Errorf("timeout sending chunk to processing")
 		}
-	})
-
-	if settings.Debug {
-		fmt.Println("DEBUG: Finished reading audio file")
 	}
-	close(chunkChan)
 
-	if settings.Debug {
-		fmt.Println("DEBUG: Waiting for processing to complete")
-	}
-	<-doneChan // Wait for processing to complete
+	return nil
+}
 
-	// Handle errors and return results
+// handleProcessingErrors processes errors from audio analysis
+func handleProcessingErrors(err, processingError error, settings *conf.Settings) error {
 	if err != nil {
 		if settings.Debug {
 			fmt.Printf("DEBUG: File processing error: %v\n", err)
 		}
 		if errors.Is(err, context.Canceled) {
-			return allNotes, ErrAnalysisCanceled
+			return ErrAnalysisCanceled
 		}
-		return nil, fmt.Errorf("error processing audio: %w", err)
+		return fmt.Errorf("error processing audio: %w", err)
 	}
 
-	processingErrorMutex.Lock()
-	err = processingError
-	processingErrorMutex.Unlock()
-	if err != nil {
+	if processingError != nil {
 		if settings.Debug {
-			fmt.Printf("DEBUG: Processing error encountered: %v\n", err)
+			fmt.Printf("DEBUG: Processing error encountered: %v\n", processingError)
 		}
-		if errors.Is(err, context.Canceled) {
-			return allNotes, ErrAnalysisCanceled
+		if errors.Is(processingError, context.Canceled) {
+			return ErrAnalysisCanceled
 		}
-		return allNotes, err
+		return processingError
 	}
 
+	return nil
+}
+
+// displayProcessingResults shows final processing statistics
+func displayProcessingResults(settings *conf.Settings, filename string, duration time.Duration, chunkCount int64, startTime time.Time) {
 	if settings.Debug {
 		fmt.Println("DEBUG: Analysis completed successfully")
 	}
+
+	// Calculate actual processed chunks
+	actualChunks := int(atomic.LoadInt64(&chunkCount)) - 1
+
 	// Update final statistics
 	totalTime := time.Since(startTime)
-	avgChunksPerSec := float64(totalChunks) / totalTime.Seconds()
+	avgChunksPerSec := float64(actualChunks) / totalTime.Seconds()
 
 	// Get terminal width for final status line
 	width, _, err := term.GetSize(int(os.Stdout.Fd()))
@@ -469,15 +653,13 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 	fmt.Print(formatProgressLine(
 		filename,
 		duration,
-		totalChunks,
-		totalChunks,
+		actualChunks,
+		actualChunks, // Use actual chunks processed instead of calculated total
 		avgChunksPerSec,
 		fmt.Sprintf("in %s", birdnet.FormatDuration(totalTime)),
 		width,
 	))
 	fmt.Println() // Add newline after completion
-
-	return allNotes, nil
 }
 
 // writeResults writes the notes to the output file based on the configuration.

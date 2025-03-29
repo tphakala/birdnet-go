@@ -99,20 +99,25 @@ func readFLACBuffered(file *os.File, settings *conf.Settings, callback AudioChun
 
 		// Process complete 3-second chunks
 		for len(currentChunk) >= secondsSamples {
-			if err := callback(currentChunk[:secondsSamples]); err != nil {
+			if err := callback(currentChunk[:secondsSamples], false); err != nil {
 				return err
 			}
 			currentChunk = currentChunk[step:]
 		}
 	}
 
-	// Handle the last chunk
+	// Handle the last chunk and signal EOF
 	if len(currentChunk) >= minLenSamples || len(currentChunk) > 0 {
 		if len(currentChunk) < secondsSamples {
 			padding := make([]float32, secondsSamples-len(currentChunk))
 			currentChunk = append(currentChunk, padding...)
 		}
-		if err := callback(currentChunk); err != nil {
+		if err := callback(currentChunk, true); err != nil {
+			return err
+		}
+	} else {
+		// Signal EOF even if there's no final chunk to process
+		if err := callback(nil, true); err != nil {
 			return err
 		}
 	}
