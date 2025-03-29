@@ -11,7 +11,8 @@ import (
 )
 
 // AudioChunkCallback is a function type that processes audio chunks
-type AudioChunkCallback func([]float32) error
+// The second parameter (isEOF) indicates when EOF has been reached in the audio file
+type AudioChunkCallback func([]float32, bool) error
 
 // GetAudioInfo returns basic information about the audio file
 type AudioInfo struct {
