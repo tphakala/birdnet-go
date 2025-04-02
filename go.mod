@@ -1,7 +1,6 @@
 module github.com/tphakala/birdnet-go
 
 go 1.24.1
-
 require (
 	cgt.name/pkg/go-mwclient v1.3.0
 	github.com/antonholmquist/jason v1.0.0
@@ -29,7 +28,7 @@ require (
 	github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e
 	go.uber.org/mock v0.5.0
 	golang.org/x/crypto v0.36.0
-	golang.org/x/net v0.37.0
+	golang.org/x/net v0.38.0
 	golang.org/x/term v0.30.0
 	golang.org/x/text v0.23.0
 	gopkg.in/yaml.v3 v3.0.1
