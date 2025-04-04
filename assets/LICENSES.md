@@ -84,7 +84,7 @@ Source: Apache-2.0
 
 ### github.com/go-echarts/go-echarts/v2
 
-License: https://github.com/go-echarts/go-echarts/blob/v2.5.1/LICENSE
+License: https://github.com/go-echarts/go-echarts/blob/v2.5.2/LICENSE
 Source: MIT
 
 ### github.com/go-sql-driver/mysql
