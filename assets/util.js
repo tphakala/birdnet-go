@@ -45,9 +45,15 @@ function initializeDatePicker() {
 
 	const today = getIsoDateString(new Date());
 	const newValue = hashDate || today;
-	
-	// Only trigger change if the value is actually different
-	if (picker.value !== newValue) {
+
+	if (hashDate === '') {
+		// Allow the dashboard root path to always load "today" without
+		// triggering a page change
+		picker.value = today
+		picker.classList.remove('invisible');
+	}
+	else if (picker.value !== newValue) {
+		// Only trigger change if the value is actually different
 		picker.value = newValue;
 		picker.classList.remove('invisible');
 		htmx.trigger(picker, 'change');
