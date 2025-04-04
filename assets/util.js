@@ -51,6 +51,7 @@ function initializeDatePicker() {
 		// triggering a page change
 		picker.value = today
 		picker.classList.remove('invisible');
+		htmx.trigger(picker, 'load');
 	}
 	else if (picker.value !== newValue) {
 		// Only trigger change if the value is actually different
