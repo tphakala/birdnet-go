@@ -17,7 +17,7 @@
 					</g>
 				</svg>
 			</button>
-			<input type="date" hx-get="/api/v1/top-birds" hx-target="#topBirdsChart" hx-trigger="change"
+			<input type="date" hx-get="/api/v1/top-birds" hx-target="#topBirdsChart" hx-trigger="change, load"
 				hx-include="*[name]" hx-params="date"
 				class="input input-sm sm:w-36 focus-visible:outline-none self-center whitespace-nowrap" id="datePicker"
 				name="date" onchange="updateDate(this.value)">
