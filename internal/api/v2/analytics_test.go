@@ -34,6 +34,7 @@ func TestGetSpeciesSummary(t *testing.T) {
 		{
 			ScientificName: "Turdus migratorius",
 			CommonName:     "American Robin",
+			SpeciesCode:    "amerob",
 			Count:          42,
 			FirstSeen:      firstSeen,
 			LastSeen:       lastSeen,
@@ -43,6 +44,7 @@ func TestGetSpeciesSummary(t *testing.T) {
 		{
 			ScientificName: "Cyanocitta cristata",
 			CommonName:     "Blue Jay",
+			SpeciesCode:    "blujay",
 			Count:          27,
 			FirstSeen:      time.Now().AddDate(0, -2, 0),
 			LastSeen:       time.Now(),
@@ -78,9 +80,11 @@ func TestGetSpeciesSummary(t *testing.T) {
 		assert.Len(t, response, 2)
 		assert.Equal(t, "Turdus migratorius", response[0]["scientific_name"])
 		assert.Equal(t, "American Robin", response[0]["common_name"])
+		assert.Equal(t, "amerob", response[0]["species_code"])
 		assert.Equal(t, float64(42), response[0]["count"])
 		assert.Equal(t, "Cyanocitta cristata", response[1]["scientific_name"])
 		assert.Equal(t, "Blue Jay", response[1]["common_name"])
+		assert.Equal(t, "blujay", response[1]["species_code"])
 		assert.Equal(t, float64(27), response[1]["count"])
 	}
 

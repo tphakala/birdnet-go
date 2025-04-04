@@ -276,6 +276,7 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 	type SpeciesCount struct {
 		CommonName     string
 		ScientificName string
+		SpeciesCode    string
 		Count          int
 		Confidence     float64
 		Date           string
@@ -289,9 +290,9 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 
 	// First, get the count and common names
 	query := ds.DB.Table("notes").
-		Select("common_name, scientific_name, COUNT(*) as count, MAX(confidence) as confidence, date, MAX(time) as time").
+		Select("common_name, scientific_name, species_code, COUNT(*) as count, MAX(confidence) as confidence, date, MAX(time) as time").
 		Where("date = ? AND confidence >= ?", selectedDate, minConfidenceNormalized).
-		Group("common_name, scientific_name, date").
+		Group("common_name, scientific_name, species_code, date").
 		Order("count DESC").
 		Limit(reportCount)
 
@@ -306,6 +307,7 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 		note := Note{
 			CommonName:     result.CommonName,
 			ScientificName: result.ScientificName,
+			SpeciesCode:    result.SpeciesCode,
 			Confidence:     result.Confidence,
 			Date:           result.Date,
 			Time:           result.Time,
