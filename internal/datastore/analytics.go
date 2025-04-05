@@ -10,6 +10,7 @@ import (
 type SpeciesSummaryData struct {
 	ScientificName string
 	CommonName     string
+	SpeciesCode    string
 	Count          int
 	FirstSeen      time.Time
 	LastSeen       time.Time
@@ -39,6 +40,7 @@ func (ds *DataStore) GetSpeciesSummaryData() ([]SpeciesSummaryData, error) {
 		SELECT 
 			scientific_name,
 			MAX(common_name) as common_name,
+			species_code,
 			COUNT(*) as count,
 			MIN(date || ' ' || time) as first_seen,
 			MAX(date || ' ' || time) as last_seen,
@@ -62,6 +64,7 @@ func (ds *DataStore) GetSpeciesSummaryData() ([]SpeciesSummaryData, error) {
 		if err := rows.Scan(
 			&summary.ScientificName,
 			&summary.CommonName,
+			&summary.SpeciesCode,
 			&summary.Count,
 			&firstSeenStr,
 			&lastSeenStr,
