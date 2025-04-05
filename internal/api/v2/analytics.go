@@ -14,6 +14,7 @@ import (
 type SpeciesDailySummary struct {
 	ScientificName string `json:"scientific_name"`
 	CommonName     string `json:"common_name"`
+	SpeciesCode    string `json:"species_code,omitempty"`
 	Count          int    `json:"count"`
 	HourlyCounts   []int  `json:"hourly_counts"`
 	HighConfidence bool   `json:"high_confidence"`
@@ -26,6 +27,7 @@ type SpeciesDailySummary struct {
 type SpeciesSummary struct {
 	ScientificName string  `json:"scientific_name"`
 	CommonName     string  `json:"common_name"`
+	SpeciesCode    string  `json:"species_code,omitempty"`
 	Count          int     `json:"count"`
 	FirstSeen      string  `json:"first_seen,omitempty"`
 	LastSeen       string  `json:"last_seen,omitempty"`
@@ -79,6 +81,7 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 	birdData := make(map[string]struct {
 		CommonName     string
 		ScientificName string
+		SpeciesCode    string
 		Count          int
 		HourlyCounts   [24]int
 		HighConfidence bool
@@ -116,6 +119,7 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 			birdData[birdKey] = struct {
 				CommonName     string
 				ScientificName string
+				SpeciesCode    string
 				Count          int
 				HourlyCounts   [24]int
 				HighConfidence bool
@@ -124,6 +128,7 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 			}{
 				CommonName:     note.CommonName,
 				ScientificName: note.ScientificName,
+				SpeciesCode:    note.SpeciesCode,
 				Count:          totalCount,
 				HourlyCounts:   hourlyCounts,
 				HighConfidence: note.Confidence >= 0.8, // Define high confidence
@@ -176,6 +181,7 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 		result = append(result, SpeciesDailySummary{
 			ScientificName: data.ScientificName,
 			CommonName:     data.CommonName,
+			SpeciesCode:    data.SpeciesCode,
 			Count:          data.Count,
 			HourlyCounts:   hourlyCounts,
 			HighConfidence: data.HighConfidence,
@@ -240,6 +246,7 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 		summary := SpeciesSummary{
 			ScientificName: data.ScientificName,
 			CommonName:     data.CommonName,
+			SpeciesCode:    data.SpeciesCode,
 			Count:          data.Count,
 			FirstSeen:      firstSeen,
 			LastSeen:       lastSeen,
