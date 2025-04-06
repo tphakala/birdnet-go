@@ -128,6 +128,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 		// Parse the timestamp
 		parsedTime, parseErr := time.Parse("2006-01-02T15:04:05.000-0700", timestamp)
 		if parseErr != nil {
+			log.Printf("🔍 Attempting to save debug WAV file with timestamp: %s", timestamp)
 			log.Printf("⚠️ Warning: couldn't parse timestamp for debug WAV file: %v", parseErr)
 		} else {
 			// Create a debug directory for WAV files
@@ -325,8 +326,8 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) error {
 			parsedTime.Format("20060102_150405")))
 
 		// Create directory if it doesn't exist
-		if err := os.MkdirAll(debugDir, 0o755); err != nil {
-			log.Printf("⚠️ Warning: couldn't create debug directory: %v", err)
+		if err := createDebugDirectory(debugDir); err != nil {
+			log.Printf("⚠️ Warning: %v", err)
 		} else {
 			// Save raw PCM data
 			if err := os.WriteFile(debugFilename, pcmData, 0o644); err != nil {
@@ -405,4 +406,12 @@ func (b *BwClient) Close() {
 	if b.Settings.Realtime.Birdweather.Debug {
 		log.Println("✅ BirdWeather client closed")
 	}
+}
+
+// createDebugDirectory creates a directory for debug files and returns any error encountered
+func createDebugDirectory(path string) error {
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return fmt.Errorf("couldn't create debug directory: %w", err)
+	}
+	return nil
 }

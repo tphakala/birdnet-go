@@ -12,6 +12,9 @@ import (
 	"time"
 )
 
+// WAVHeaderSize is the standard size of a WAV file header in bytes
+const WAVHeaderSize = 44
+
 // encodePCMtoWAV creates WAV data from PCM and returns it in a bytes.Buffer.
 func encodePCMtoWAV(pcmData []byte) (*bytes.Buffer, error) {
 	// Add check for empty pcmData
@@ -61,6 +64,11 @@ func encodePCMtoWAV(pcmData []byte) (*bytes.Buffer, error) {
 // saveBufferToWAV writes a bytes.Buffer containing WAV data to a file, along with
 // timestamp information for debugging purposes.
 func saveBufferToWAV(buffer *bytes.Buffer, filename string, startTime, endTime time.Time) error {
+	// Validate input parameters
+	if buffer == nil {
+		return fmt.Errorf("buffer is nil")
+	}
+
 	// Get the buffer size before any operations that might consume it
 	bufferSize := buffer.Len()
 
@@ -89,6 +97,9 @@ func saveBufferToWAV(buffer *bytes.Buffer, filename string, startTime, endTime t
 	}
 	actualFileSize := fileInfo.Size()
 
+	// Calculate the actual PCM data size (total size minus 44 bytes for the WAV header)
+	pcmDataSize := actualFileSize - WAVHeaderSize
+
 	// Create a metadata file with the same name but .txt extension
 	metaFilename := filename[:len(filename)-len(filepath.Ext(filename))] + ".txt"
 	metaFile, err := os.Create(metaFilename)
@@ -97,9 +108,6 @@ func saveBufferToWAV(buffer *bytes.Buffer, filename string, startTime, endTime t
 		return nil // Continue even if metadata file creation fails
 	}
 	defer metaFile.Close()
-
-	// Calculate the actual PCM data size (total size minus 44 bytes for the WAV header)
-	pcmDataSize := actualFileSize - 44 // 44 bytes is the WAV header size
 
 	// Write timestamp information to the metadata file
 	metaInfo := fmt.Sprintf("File: %s\n", filepath.Base(filename))
@@ -121,18 +129,3 @@ func saveBufferToWAV(buffer *bytes.Buffer, filename string, startTime, endTime t
 
 	return nil
 }
-
-// saveBufferToDisk writes a bytes.Buffer to a file, this is only used for debugging.
-/*func saveBufferToDisk(buffer *bytes.Buffer, filename string) error {
-	file, err := os.Create(filename)
-	if err != nil {
-		return fmt.Errorf("error creating file: %w", err)
-	}
-	defer file.Close()
-
-	_, err = io.Copy(file, buffer)
-	if err != nil {
-		return fmt.Errorf("error writing buffer to file: %w", err)
-	}
-	return nil
-}*/
