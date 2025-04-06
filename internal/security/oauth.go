@@ -77,9 +77,15 @@ func NewOAuth2Server() *OAuth2Server {
 		server.tokensFile = filepath.Join(configPaths[0], "tokens.json")
 		server.persistTokens = true
 
-		// Load any existing tokens
-		if err := server.loadTokens(); err != nil {
-			log.Printf("Warning: Failed to load persisted tokens: %v", err)
+		// Ensure the directory exists
+		if err := os.MkdirAll(filepath.Dir(server.tokensFile), 0o755); err != nil {
+			log.Printf("Warning: Failed to create directory for token persistence: %v", err)
+			server.persistTokens = false
+		} else {
+			// Load any existing tokens
+			if err := server.loadTokens(); err != nil {
+				log.Printf("Warning: Failed to load persisted tokens: %v", err)
+			}
 		}
 	}
 
@@ -254,8 +260,18 @@ func (s *OAuth2Server) ExchangeAuthCode(code string) (string, error) {
 
 	// Save tokens after creating a new one
 	go func() {
-		if err := s.saveTokens(); err != nil {
-			s.Debug("Error saving tokens after generating new access token: %v", err)
+		const maxRetries = 3
+		var err error
+		for i := 0; i < maxRetries; i++ {
+			err = s.saveTokens()
+			if err == nil {
+				return
+			}
+			s.Debug("Error saving tokens (attempt %d/%d): %v", i+1, maxRetries, err)
+			time.Sleep(time.Duration(i+1) * 100 * time.Millisecond) // Exponential backoff
+		}
+		if err != nil {
+			log.Printf("Failed to save tokens after %d attempts: %v", maxRetries, err)
 		}
 	}()
 
@@ -384,8 +400,17 @@ func (s *OAuth2Server) saveTokens() error {
 		return fmt.Errorf("failed to marshal tokens: %w", err)
 	}
 
-	if err := os.WriteFile(s.tokensFile, data, 0o600); err != nil {
+	// Write to a temporary file first
+	tempFile := s.tokensFile + ".tmp"
+	if err := os.WriteFile(tempFile, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write tokens file: %w", err)
+	}
+
+	// Atomically rename to ensure consistency
+	if err := os.Rename(tempFile, s.tokensFile); err != nil {
+		// Try to clean up the temp file
+		os.Remove(tempFile)
+		return fmt.Errorf("failed to finalize tokens file: %w", err)
 	}
 
 	s.Debug("Saved %d valid tokens to %s", len(validTokens), s.tokensFile)
