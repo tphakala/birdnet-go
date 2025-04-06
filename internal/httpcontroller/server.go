@@ -57,7 +57,7 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 		AudioLevelChan:     audioLevelChan,
 		DashboardSettings:  &settings.Realtime.Dashboard,
 		OAuth2Server:       security.NewOAuth2Server(),
-		AudioStreamManager: handlers.NewAudioStreamManager(),
+		AudioStreamManager: handlers.NewAudioStreamManager(settings.WebServer.Debug, settings.Security.Host),
 		controlChan:        controlChan,
 		notificationChan:   make(chan handlers.Notification, 10),
 		Processor:          proc,
