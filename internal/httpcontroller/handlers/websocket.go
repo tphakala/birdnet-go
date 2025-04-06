@@ -43,6 +43,14 @@ type AudioStreamManager struct {
 	// Configuration
 	bufferSize    int  // Bytes to accumulate before sending
 	forceInterval bool // Whether to force sending on interval
+	// Connection quality tracking
+	flushIntervals     map[string]time.Duration // Flush interval per source
+	connectionLatency  map[string]time.Duration // Connection latency per source
+	flushIntervalMutex sync.RWMutex
+	// Flush interval bounds
+	minFlushInterval time.Duration
+	maxFlushInterval time.Duration
+	adaptiveFlush    bool // Whether to use adaptive flush intervals
 }
 
 // NewAudioStreamManager creates a new audio stream manager
@@ -56,10 +64,15 @@ func NewAudioStreamManager() *AudioStreamManager {
 				return true // Allow all connections (security is handled by Echo middleware)
 			},
 		},
-		debug:         true, // Enable debug for troubleshooting
-		audioBuffers:  make(map[string]*bytes.Buffer),
-		bufferSize:    12288, // Reduced from 32768 to 12288 (smaller chunks to prevent client buffer overflow)
-		forceInterval: true,  // Force sending buffers periodically even if not full
+		debug:             true, // Enable debug for troubleshooting
+		audioBuffers:      make(map[string]*bytes.Buffer),
+		bufferSize:        12288, // Reduced from 32768 to 12288 (smaller chunks to prevent client buffer overflow)
+		forceInterval:     true,  // Force sending buffers periodically even if not full
+		flushIntervals:    make(map[string]time.Duration),
+		connectionLatency: make(map[string]time.Duration),
+		minFlushInterval:  10 * time.Millisecond, // Minimum flush interval
+		maxFlushInterval:  50 * time.Millisecond, // Maximum flush interval
+		adaptiveFlush:     true,                  // Enable adaptive flush intervals
 	}
 }
 
@@ -175,17 +188,97 @@ func (asm *AudioStreamManager) HandleWebSocket(c echo.Context) error {
 
 // startPeriodicFlush ensures audio buffers are flushed periodically to avoid latency
 func (asm *AudioStreamManager) startPeriodicFlush(sourceID string) {
-	ticker := time.NewTicker(20 * time.Millisecond) // Reduced from 30ms to 20ms for smoother delivery
+	// Set initial flush interval
+	asm.flushIntervalMutex.Lock()
+	if _, exists := asm.flushIntervals[sourceID]; !exists {
+		asm.flushIntervals[sourceID] = 20 * time.Millisecond // Default starting interval
+	}
+	flushInterval := asm.flushIntervals[sourceID]
+	asm.flushIntervalMutex.Unlock()
+
+	ticker := time.NewTicker(flushInterval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		// Stop if no clients are connected
-		if !asm.HasActiveClients(sourceID) {
-			break
-		}
+	adjustmentTicker := time.NewTicker(1 * time.Second) // Adjust interval every second
+	defer adjustmentTicker.Stop()
 
-		asm.flushBufferIfNeeded(sourceID, true)
+	for {
+		select {
+		case <-ticker.C:
+			// Stop if no clients are connected
+			if !asm.HasActiveClients(sourceID) {
+				return
+			}
+
+			asm.flushBufferIfNeeded(sourceID, true)
+
+		case <-adjustmentTicker.C:
+			// Skip adjustment if adaptive flush is disabled
+			if !asm.adaptiveFlush {
+				continue
+			}
+
+			// Stop if no clients are connected
+			if !asm.HasActiveClients(sourceID) {
+				return
+			}
+
+			// Adjust flush interval based on connection quality
+			asm.adjustFlushInterval(sourceID)
+
+			// Update the ticker with the new interval
+			asm.flushIntervalMutex.RLock()
+			newInterval := asm.flushIntervals[sourceID]
+			asm.flushIntervalMutex.RUnlock()
+
+			if newInterval != flushInterval {
+				ticker.Stop()
+				ticker = time.NewTicker(newInterval)
+				flushInterval = newInterval
+
+				if asm.debug {
+					log.Printf("🔄 Adjusted flush interval for source %s: %v", sourceID, newInterval)
+				}
+			}
+		}
 	}
+}
+
+// adjustFlushInterval modifies the flush interval based on connection quality
+func (asm *AudioStreamManager) adjustFlushInterval(sourceID string) {
+	asm.flushIntervalMutex.Lock()
+	defer asm.flushIntervalMutex.Unlock()
+
+	// Get current latency and flush interval
+	latency, hasLatency := asm.connectionLatency[sourceID]
+	currentInterval := asm.flushIntervals[sourceID]
+	if !hasLatency {
+		// No latency data yet, use default
+		return
+	}
+
+	// Use switch instead of if-else chain for better readability
+	var newInterval time.Duration
+	switch {
+	case latency < 50*time.Millisecond:
+		// Good connection, decrease interval by 2ms (more frequent flushes)
+		newInterval = currentInterval - 2*time.Millisecond
+		if newInterval < asm.minFlushInterval {
+			newInterval = asm.minFlushInterval
+		}
+	case latency > 100*time.Millisecond:
+		// Poor connection, increase interval by 5ms (less frequent flushes)
+		newInterval = currentInterval + 5*time.Millisecond
+		if newInterval > asm.maxFlushInterval {
+			newInterval = asm.maxFlushInterval
+		}
+	default:
+		// Acceptable connection, keep current interval
+		return
+	}
+
+	// Update the interval
+	asm.flushIntervals[sourceID] = newInterval
 }
 
 // flushBufferIfNeeded sends accumulated audio data to clients
@@ -332,50 +425,125 @@ func (asm *AudioStreamManager) handleClient(ws *websocket.Conn, sourceID string)
 		ws.Close()
 	}()
 
-	// Set larger ping/pong timeout
-	if err := ws.SetReadDeadline(time.Time{}); err != nil {
-		log.Printf("❌ Failed to set read deadline: %v", err)
+	// Set up connection
+	if err := asm.setupClientConnection(ws, sourceID); err != nil {
 		return
 	}
 
+	// Handle messages
+	asm.handleClientMessages(ws, sourceID)
+}
+
+// setupClientConnection initializes the WebSocket connection for a client
+func (asm *AudioStreamManager) setupClientConnection(ws *websocket.Conn, sourceID string) error {
+	// Set larger ping/pong timeout
+	if err := ws.SetReadDeadline(time.Time{}); err != nil {
+		log.Printf("❌ Failed to set read deadline: %v", err)
+		return err
+	}
+
+	// Configure pong handler for latency tracking
+	lastPingTime := time.Now()
 	ws.SetPongHandler(func(string) error {
 		if err := ws.SetReadDeadline(time.Time{}); err != nil {
 			log.Printf("❌ Failed to reset read deadline on pong: %v", err)
 			return err
 		}
+
+		// Calculate round-trip time and update connection latency
+		if asm.adaptiveFlush {
+			latency := time.Since(lastPingTime)
+			asm.flushIntervalMutex.Lock()
+			asm.connectionLatency[sourceID] = latency
+			asm.flushIntervalMutex.Unlock()
+
+			if asm.debug && time.Now().Second()%10 == 0 { // Log once every 10 seconds
+				log.Printf("📊 WebSocket ping latency for source %s: %v", sourceID, latency)
+			}
+		}
+
 		return nil
 	})
 
 	// Send an initial ping to check connection
 	if err := ws.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 		log.Printf("❌ Failed to send initial ping: %v", err)
-		return
+		return err
 	}
 
-	// Handle incoming messages (including pings and control messages)
+	return nil
+}
+
+// handleClientMessages processes incoming WebSocket messages
+func (asm *AudioStreamManager) handleClientMessages(ws *websocket.Conn, sourceID string) {
+	// Start periodic pings for latency measurement
+	pingTicker := time.NewTicker(5 * time.Second)
+	defer pingTicker.Stop()
+
+	// Message handling loop
 	for {
-		msgType, msg, err := ws.ReadMessage()
-		if err != nil {
-			// Client disconnected or error occurred
-			if asm.debug {
-				log.Printf("📥 WebSocket read error: %v", err)
+		select {
+		case <-pingTicker.C:
+			// Send ping for latency measurement
+			if err := ws.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(time.Second)); err != nil {
+				if asm.debug {
+					log.Printf("❌ Failed to send ping: %v", err)
+				}
+				return
 			}
-			break
-		}
 
-		// Handle ping messages
-		if msgType == websocket.PingMessage {
-			if err := ws.WriteMessage(websocket.PongMessage, nil); err != nil {
-				break
+		default:
+			// Process a single message
+			if !asm.processNextMessage(ws, sourceID) {
+				return // Connection closed or error
 			}
-			continue
-		}
-
-		// Process other messages
-		if asm.debug && msgType == websocket.TextMessage {
-			log.Printf("📥 Received WebSocket message from client: %s", string(msg))
 		}
 	}
+}
+
+// processNextMessage handles a single WebSocket message
+// Returns false if the connection should be closed
+func (asm *AudioStreamManager) processNextMessage(ws *websocket.Conn, sourceID string) bool {
+	// Set deadline for reading the next message
+	if err := ws.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		if asm.debug {
+			log.Printf("❌ Failed to set read deadline: %v", err)
+		}
+		return false
+	}
+
+	// Read message
+	msgType, msg, err := ws.ReadMessage()
+	if err != nil {
+		// Client disconnected or error occurred
+		if asm.debug {
+			log.Printf("📥 WebSocket read error: %v", err)
+		}
+		return false
+	}
+
+	// Clear deadline after successful read
+	if err := ws.SetReadDeadline(time.Time{}); err != nil {
+		if asm.debug {
+			log.Printf("❌ Failed to clear read deadline: %v", err)
+		}
+		return false
+	}
+
+	// Handle ping messages
+	if msgType == websocket.PingMessage {
+		if err := ws.WriteMessage(websocket.PongMessage, nil); err != nil {
+			return false
+		}
+		return true
+	}
+
+	// Process text messages
+	if asm.debug && msgType == websocket.TextMessage {
+		log.Printf("📥 Received WebSocket message from client: %s", string(msg))
+	}
+
+	return true
 }
 
 // BroadcastAudio accumulates audio data and sends in larger chunks for a specific source
