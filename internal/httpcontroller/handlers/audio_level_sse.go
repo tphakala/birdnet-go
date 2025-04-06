@@ -181,11 +181,21 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 	activityCheck := time.NewTicker(1 * time.Second)
 	defer activityCheck.Stop()
 
+	// Cache the authentication status at connection time to avoid constant checking
+	isAuthenticated := h.Server.IsAccessAllowed(c)
+	if h.debug {
+		log.Printf("AudioLevelSSE: User authentication status: %v", isAuthenticated)
+	}
+
 	// Initialize data structures
 	const inactivityThreshold = 15 * time.Second
-	levels, lastUpdateTime, lastNonZeroTime := h.initializeLevelsData(h.Server.IsAccessAllowed(c))
+	levels, lastUpdateTime, lastNonZeroTime := h.initializeLevelsData(isAuthenticated)
 	lastLogTime := time.Now()
 	lastSentTime := time.Now()
+
+	// Authentication refresh ticker (check once per minute)
+	authRefresh := time.NewTicker(1 * time.Minute)
+	defer authRefresh.Stop()
 
 	// Send initial empty update to establish connection
 	if err := sendLevelsUpdate(c, levels); err != nil {
@@ -207,6 +217,18 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 			}
 			return nil
 
+		case <-authRefresh.C:
+			// Only refresh authentication status periodically to avoid log spam
+			newAuthStatus := h.Server.IsAccessAllowed(c)
+			if newAuthStatus != isAuthenticated {
+				if h.debug {
+					log.Printf("AudioLevelSSE: User authentication status changed: %v -> %v", isAuthenticated, newAuthStatus)
+				}
+				isAuthenticated = newAuthStatus
+				// Re-initialize data with new authentication status if it changed
+				levels, lastUpdateTime, lastNonZeroTime = h.initializeLevelsData(isAuthenticated)
+			}
+
 		case audioData := <-h.AudioLevelChan:
 			if h.debug {
 				if time.Since(lastLogTime) > 5*time.Second {
@@ -215,7 +237,7 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 				}
 			}
 
-			h.updateAudioLevels(audioData, levels, lastUpdateTime, lastNonZeroTime, h.Server.IsAccessAllowed(c), inactivityThreshold)
+			h.updateAudioLevels(audioData, levels, lastUpdateTime, lastNonZeroTime, isAuthenticated, inactivityThreshold)
 
 			// Only send updates if enough time has passed (rate limiting)
 			if time.Since(lastSentTime) >= 50*time.Millisecond {
