@@ -1125,7 +1125,6 @@ Requires=docker.service
 Restart=always
 ExecStart=/usr/bin/docker run --rm \\
     -p 8080:8080 \\
-    --device /dev/snd \\
     --env TZ="${TZ}" \\
     ${AUDIO_ENV} \\
     -v ${CONFIG_DIR}:/config \\
