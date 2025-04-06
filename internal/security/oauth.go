@@ -50,6 +50,9 @@ type OAuth2Server struct {
 	persistTokens bool
 }
 
+// For testing purposes
+var testConfigPath string
+
 func NewOAuth2Server() *OAuth2Server {
 	settings := conf.GetSettings()
 	debug := settings.Security.Debug
@@ -83,41 +86,50 @@ func NewOAuth2Server() *OAuth2Server {
 // InitializeGoth initializes social authentication providers.
 func InitializeGoth(settings *conf.Settings) {
 	// Get path for storing sessions
-	configPaths, err := conf.GetDefaultConfigPaths()
-	if err != nil {
-		log.Printf("Warning: Failed to get config paths for session store: %v", err)
-		// Fallback to in-memory store if config paths can't be retrieved
-		gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
+	var sessionPath string
+
+	if testConfigPath != "" {
+		// Use test path if set
+		sessionPath = filepath.Join(testConfigPath, "sessions")
 	} else {
-		// Use FilesystemStore for persistent sessions
-		sessionPath := filepath.Join(configPaths[0], "sessions")
-		// Ensure directory exists
-		if err := os.MkdirAll(sessionPath, 0o755); err != nil {
-			log.Printf("Warning: Failed to create session directory: %v", err)
+		// Get path for storing sessions
+		configPaths, err := conf.GetDefaultConfigPaths()
+		if err != nil {
+			log.Printf("Warning: Failed to get config paths for session store: %v", err)
+			// Fallback to in-memory store if config paths can't be retrieved
 			gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
-		} else {
-			// Create persistent session store
-			gothic.Store = sessions.NewFilesystemStore(
-				sessionPath,
-				[]byte(settings.Security.SessionSecret),
-				[]byte(settings.Security.SessionSecret+"encryption"),
-			)
-
-			// Configure session store options
-			store := gothic.Store.(*sessions.FilesystemStore)
-			store.Options = &sessions.Options{
-				Path:     "/",
-				MaxAge:   86400 * 7, // 7 days
-				HttpOnly: true,
-				Secure:   settings.Security.RedirectToHTTPS,
-				SameSite: http.SameSiteLaxMode,
-			}
-
-			// Set reasonable values for session cookie storage
-			store.MaxLength(1024 * 1024) // 1MB max size
+			goto initProviders
 		}
+		sessionPath = filepath.Join(configPaths[0], "sessions")
 	}
 
+	// Ensure directory exists
+	if err := os.MkdirAll(sessionPath, 0o755); err != nil {
+		log.Printf("Warning: Failed to create session directory: %v", err)
+		gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
+	} else {
+		// Create persistent session store
+		gothic.Store = sessions.NewFilesystemStore(
+			sessionPath,
+			[]byte(settings.Security.SessionSecret),
+			[]byte(settings.Security.SessionSecret+"encryption"),
+		)
+
+		// Configure session store options
+		store := gothic.Store.(*sessions.FilesystemStore)
+		store.Options = &sessions.Options{
+			Path:     "/",
+			MaxAge:   86400 * 7, // 7 days
+			HttpOnly: true,
+			Secure:   settings.Security.RedirectToHTTPS,
+			SameSite: http.SameSiteLaxMode,
+		}
+
+		// Set reasonable values for session cookie storage
+		store.MaxLength(1024 * 1024) // 1MB max size
+	}
+
+initProviders:
 	// Initialize Gothic providers
 	googleProvider :=
 		gothGoogle.New(settings.Security.GoogleAuth.ClientID,
@@ -135,6 +147,12 @@ func InitializeGoth(settings *conf.Settings) {
 			"user:email",
 		),
 	)
+}
+
+// SetTestConfigPath sets a test path for testing session persistence
+// It should be called before InitializeGoth and reset after the test
+func SetTestConfigPath(path string) {
+	testConfigPath = path
 }
 
 func (s *OAuth2Server) UpdateProviders() {
