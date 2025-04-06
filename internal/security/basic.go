@@ -1,9 +1,12 @@
 package security
 
 import (
+	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo/v4"
@@ -59,15 +62,42 @@ func getIPv4Subnet(ip net.IP) net.IP {
 }
 
 // configureLocalNetworkCookieStore configures the cookie store for local network access
-func configureLocalNetworkCookieStore() {
-	store := gothic.Store.(*sessions.CookieStore)
-	store.Options = &sessions.Options{
-		Path: "/",
-		// Allow cookies to be sent over HTTP, this is for development purposes only
-		// and is allowed only for local LAN access
-		Secure:   false,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+func (s *OAuth2Server) configureLocalNetworkCookieStore() {
+	// Configure session options based on store type
+	switch store := gothic.Store.(type) {
+	case *sessions.CookieStore:
+		store.Options = &sessions.Options{
+			Path: "/",
+			// Allow cookies to be sent over HTTP, this is for development purposes only
+			// and is allowed only for local LAN access
+			Secure:   false,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		}
+	case *sessions.FilesystemStore:
+		store.Options = &sessions.Options{
+			Path:     "/",
+			MaxAge:   86400 * 7, // 7 days
+			Secure:   false,     // Allow cookies to be sent over HTTP for local LAN access
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		}
+	default:
+		log.Printf("Warning: Unknown session store type %T, using default cookie store options", store)
+		// Create a default cookie store as fallback - only for reference, not actually used
+		// Use the configured session secret instead of a hardcoded value
+		sessionSecret := s.Settings.Security.SessionSecret
+		if sessionSecret == "" {
+			// If no session secret is configured, use a pseudo-random value
+			// This is still not ideal but better than a hardcoded string
+			sessionSecret = fmt.Sprintf("birdnet-go-%d", time.Now().UnixNano())
+			log.Printf("Warning: No session secret configured, using temporary value")
+		}
+
+		// Note: This store is not actually used, it's only created as a reference
+		// for what options would be applied to a proper store. The warning above
+		// alerts operators about the unknown store type.
+		_ = sessions.NewCookieStore([]byte(sessionSecret))
 	}
 }
 
@@ -104,7 +134,7 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	// Check if client is in local subnet and configure cookie store accordingly
 	if clientIP := net.ParseIP(c.RealIP()); IsInLocalSubnet(clientIP) {
 		// For clients in the local subnet, allow non-HTTPS cookies
-		configureLocalNetworkCookieStore()
+		s.configureLocalNetworkCookieStore()
 	}
 
 	grantType := c.FormValue("grant_type")
