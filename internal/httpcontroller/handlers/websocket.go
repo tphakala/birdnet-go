@@ -186,34 +186,28 @@ func (asm *AudioStreamManager) HandleWebSocket(c echo.Context) error {
 
 	// Check authorization before attempting to upgrade
 	if authEnabled && !isAuthenticated {
-		if asm.debug {
-			log.Printf("⛔ Unauthorized WebSocket attempt from %s for source %s", c.RealIP(), sourceID)
-		}
+		// Always log unauthorized attempts regardless of debug mode
+		log.Printf("⛔ Unauthorized WebSocket attempt from %s for source %s", c.RealIP(), sourceID)
 		return echo.NewHTTPError(http.StatusUnauthorized, "Authentication required for audio streaming")
 	}
 
 	// Upgrade the connection to WebSocket
 	ws, err := asm.upgrader.Upgrade(c.Response(), c.Request(), nil)
 	if err != nil {
-		if asm.debug {
-			log.Printf("❌ WebSocket upgrade failed from %s for source %s: %v", c.RealIP(), sourceID, err)
-		}
+		// Always log upgrade failures regardless of debug mode
+		log.Printf("❌ WebSocket upgrade failed from %s for source %s: %v", c.RealIP(), sourceID, err)
 		return err
 	}
 
 	// Set write deadline to ensure timely delivery
 	if err := ws.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		if asm.debug {
-			log.Printf("❌ Failed to set write deadline: %v", err)
-		}
+		log.Printf("❌ Failed to set write deadline: %v", err)
 		ws.Close()
 		return err
 	}
 
-	// Log connection info
-	if asm.debug {
-		log.Printf("🔌 New WebSocket connection for source: %s from %s", sourceID, c.RealIP())
-	}
+	// Always log new connections regardless of debug mode
+	log.Printf("🔌 New WebSocket connection for source: %s from %s", sourceID, c.RealIP())
 
 	// Register the client
 	asm.clientsMutex.Lock()
@@ -235,9 +229,8 @@ func (asm *AudioStreamManager) HandleWebSocket(c echo.Context) error {
 
 	// Register the callback for this source if this is the first client
 	if firstClient {
-		if asm.debug {
-			log.Printf("🔄 Registering audio broadcast callback for source: %s", sourceID)
-		}
+		// Always log callback registration regardless of debug mode
+		log.Printf("🔄 Registering audio broadcast callback for source: %s", sourceID)
 		myaudio.RegisterBroadcastCallback(sourceID, func(callbackSourceID string, data []byte) {
 			asm.BroadcastAudio(callbackSourceID, data)
 		})
@@ -572,16 +565,15 @@ func (asm *AudioStreamManager) handleClientMessages(ws *websocket.Conn, sourceID
 func (asm *AudioStreamManager) processNextMessage(ws *websocket.Conn, sourceID string) bool {
 	// Set deadline for reading the next message
 	if err := ws.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
-		if asm.debug {
-			log.Printf("❌ Failed to set read deadline: %v", err)
-		}
+		log.Printf("❌ Failed to set read deadline: %v", err)
 		return false
 	}
 
 	// Read message
 	msgType, msg, err := ws.ReadMessage()
 	if err != nil {
-		// Client disconnected or error occurred
+		// Client disconnected or error occurred - only log if in debug mode
+		// since this is often just a normal client disconnect
 		if asm.debug {
 			log.Printf("📥 WebSocket read error: %v", err)
 		}
@@ -590,9 +582,7 @@ func (asm *AudioStreamManager) processNextMessage(ws *websocket.Conn, sourceID s
 
 	// Clear deadline after successful read
 	if err := ws.SetReadDeadline(time.Time{}); err != nil {
-		if asm.debug {
-			log.Printf("❌ Failed to clear read deadline: %v", err)
-		}
+		log.Printf("❌ Failed to clear read deadline: %v", err)
 		return false
 	}
 
@@ -680,9 +670,8 @@ func (asm *AudioStreamManager) cleanupClientConnection(ws *websocket.Conn, sourc
 
 	// If this was the last client, unregister the callback and clean up buffer
 	if lastClient {
-		if asm.debug {
-			log.Printf("🔄 Unregistering audio broadcast callback for source: %s (no more clients)", sourceID)
-		}
+		// Always log callback unregistration regardless of debug mode
+		log.Printf("🔄 Unregistering audio broadcast callback for source: %s (no more clients)", sourceID)
 		myaudio.UnregisterBroadcastCallback(sourceID)
 
 		// Clean up the buffer
@@ -698,10 +687,9 @@ func (asm *AudioStreamManager) cleanupClientConnection(ws *websocket.Conn, sourc
 		asm.flushIntervalMutex.Unlock()
 	}
 
-	if asm.debug {
-		log.Printf("🔌 WebSocket client %s disconnected from source %s, remaining clients: %d",
-			ws.RemoteAddr().String(), sourceID, clientCount)
-	}
+	// Always log disconnections regardless of debug mode
+	log.Printf("🔌 WebSocket client %s disconnected from source %s, remaining clients: %d",
+		ws.RemoteAddr().String(), sourceID, clientCount)
 
 	// Try to send a clean close message only if not already closed
 	closeMsg := websocket.FormatCloseMessage(CloseNormalClosure, "Connection closed normally")
@@ -709,9 +697,7 @@ func (asm *AudioStreamManager) cleanupClientConnection(ws *websocket.Conn, sourc
 	if err != nil {
 		// Only log as an error if it's not due to the connection already being closed
 		if !strings.Contains(err.Error(), "websocket: close sent") {
-			if asm.debug {
-				log.Printf("❌ Failed to send close message: %v", err)
-			}
+			log.Printf("❌ Failed to send close message: %v", err)
 		} else if asm.debug {
 			// Log at debug level that we tried to close an already closed connection
 			log.Printf("🔌 Connection already closed: %s", ws.RemoteAddr().String())
