@@ -15,6 +15,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -119,6 +121,34 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	if err != nil {
 		log.Printf("❌ Failed to encode PCM to WAV: %v\n", err)
 		return "", fmt.Errorf("failed to encode PCM to WAV: %w", err)
+	}
+
+	// If debug is enabled, save the WAV file locally with timestamp information
+	if b.Settings.Realtime.Birdweather.Debug {
+		// Parse the timestamp
+		parsedTime, parseErr := time.Parse("2006-01-02T15:04:05.000-0700", timestamp)
+		if parseErr != nil {
+			log.Printf("🔍 Attempting to save debug WAV file with timestamp: %s", timestamp)
+			log.Printf("⚠️ Warning: couldn't parse timestamp for debug WAV file: %v", parseErr)
+		} else {
+			// Create a debug directory for WAV files
+			debugDir := filepath.Join("debug", "birdweather", "wav")
+
+			// Generate a unique filename based on the timestamp
+			debugFilename := filepath.Join(debugDir, fmt.Sprintf("bw_debug_%s.wav",
+				parsedTime.Format("20060102_150405")))
+
+			// Calculate the end time (3 seconds after start)
+			endTime := parsedTime.Add(3 * time.Second)
+
+			// Save the WAV buffer with timestamp information
+			wavCopy := bytes.NewBuffer(wavBuffer.Bytes())
+			if saveErr := saveBufferToWAV(wavCopy, debugFilename, parsedTime, endTime); saveErr != nil {
+				log.Printf("⚠️ Warning: couldn't save debug WAV file: %v", saveErr)
+			} else {
+				log.Printf("✅ Saved debug WAV file to %s", debugFilename)
+			}
+		}
 	}
 
 	// Compress the WAV data
@@ -289,6 +319,52 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) error {
 	// Format the parsed time to the required timestamp format with timezone information
 	timestamp := parsedTime.Format("2006-01-02T15:04:05.000-0700")
 
+	// If debug is enabled, save the raw PCM data to help diagnose issues
+	if b.Settings.Realtime.Birdweather.Debug {
+		debugDir := filepath.Join("debug", "birdweather", "pcm")
+		debugFilename := filepath.Join(debugDir, fmt.Sprintf("bw_pcm_debug_%s.raw",
+			parsedTime.Format("20060102_150405")))
+
+		// Create directory if it doesn't exist
+		if err := createDebugDirectory(debugDir); err != nil {
+			log.Printf("⚠️ Warning: %v", err)
+		} else {
+			// Save raw PCM data
+			if err := os.WriteFile(debugFilename, pcmData, 0o644); err != nil {
+				log.Printf("⚠️ Warning: couldn't save debug PCM file: %v", err)
+			} else {
+				log.Printf("✅ Saved debug PCM file to %s", debugFilename)
+
+				// Write metadata
+				metaFilename := debugFilename + ".txt"
+				metaInfo := "PCM Raw Data\n"
+				metaInfo += fmt.Sprintf("File: %s\n", filepath.Base(debugFilename))
+				metaInfo += fmt.Sprintf("Timestamp: %s\n", timestamp)
+				metaInfo += fmt.Sprintf("Bird: %s (%s)\n", note.CommonName, note.ScientificName)
+				metaInfo += fmt.Sprintf("Confidence: %.2f\n", note.Confidence)
+
+				// Calculate proper audio duration - for 16-bit mono PCM at 48kHz:
+				// Duration in seconds = bytes / (sample rate * bytes per sample * channels)
+				pcmSize := len(pcmData)
+				bytesPerSample := 2 // 16-bit = 2 bytes
+				channels := 1       // Mono
+				sampleRate := 48000 // 48kHz
+				durationSec := float64(pcmSize) / float64(sampleRate*bytesPerSample*channels)
+
+				metaInfo += fmt.Sprintf("Size: %d bytes\n", pcmSize)
+				metaInfo += fmt.Sprintf("Expected Duration: %.3f seconds\n", durationSec)
+				metaInfo += fmt.Sprintf("Sample Rate: %d Hz\n", sampleRate)
+				metaInfo += fmt.Sprintf("Bits Per Sample: %d\n", bytesPerSample*8)
+				metaInfo += fmt.Sprintf("Channels: %d\n", channels)
+
+				// Save metadata
+				if err := os.WriteFile(metaFilename, []byte(metaInfo), 0o644); err != nil {
+					log.Printf("⚠️ Warning: couldn't save PCM metadata file: %v", err)
+				}
+			}
+		}
+	}
+
 	// Upload the soundscape to Birdweather and retrieve the soundscape ID
 	soundscapeID, err := b.UploadSoundscape(timestamp, pcmData)
 	if err != nil {
@@ -330,4 +406,12 @@ func (b *BwClient) Close() {
 	if b.Settings.Realtime.Birdweather.Debug {
 		log.Println("✅ BirdWeather client closed")
 	}
+}
+
+// createDebugDirectory creates a directory for debug files and returns any error encountered
+func createDebugDirectory(path string) error {
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return fmt.Errorf("couldn't create debug directory: %w", err)
+	}
+	return nil
 }
