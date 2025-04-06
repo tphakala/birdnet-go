@@ -60,14 +60,27 @@ func getIPv4Subnet(ip net.IP) net.IP {
 
 // configureLocalNetworkCookieStore configures the cookie store for local network access
 func configureLocalNetworkCookieStore() {
-	store := gothic.Store.(*sessions.CookieStore)
-	store.Options = &sessions.Options{
-		Path: "/",
-		// Allow cookies to be sent over HTTP, this is for development purposes only
-		// and is allowed only for local LAN access
-		Secure:   false,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+	// Configure session options based on store type
+	switch store := gothic.Store.(type) {
+	case *sessions.CookieStore:
+		store.Options = &sessions.Options{
+			Path: "/",
+			// Allow cookies to be sent over HTTP, this is for development purposes only
+			// and is allowed only for local LAN access
+			Secure:   false,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		}
+	case *sessions.FilesystemStore:
+		store.Options = &sessions.Options{
+			Path:     "/",
+			MaxAge:   86400 * 7, // 7 days
+			Secure:   false,     // Allow cookies to be sent over HTTP for local LAN access
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		}
+	default:
+		// Unknown store type, no changes made
 	}
 }
 
