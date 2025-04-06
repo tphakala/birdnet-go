@@ -50,6 +50,9 @@ type OAuth2Server struct {
 	// Token persistence
 	tokensFile    string
 	persistTokens bool
+
+	// Throttling
+	throttledMessages map[string]time.Time
 }
 
 // For testing purposes
@@ -468,6 +471,32 @@ func (s *OAuth2Server) StartAuthCleanup(interval time.Duration) {
 func (s *OAuth2Server) Debug(format string, v ...interface{}) {
 	if s.debug {
 		prefix := "[security/oauth] "
+		// Avoid excessive repetitive log entries about authentication status
+		if strings.Contains(format, "User was authenticated") ||
+			strings.Contains(format, "User authenticated") {
+			// Skip repetitive auth success messages if recent
+			s.mutex.RLock()
+			now := time.Now()
+			// Create throttle key based on message format (all user auth messages treated as same)
+			throttleKey := "auth_status"
+			lastTime, exists := s.throttledMessages[throttleKey]
+			tooFrequent := exists && now.Sub(lastTime) < 3*time.Second
+			s.mutex.RUnlock()
+
+			if tooFrequent {
+				// Skip this message as it's too frequent
+				return
+			}
+
+			// Update the throttle time
+			s.mutex.Lock()
+			if s.throttledMessages == nil {
+				s.throttledMessages = make(map[string]time.Time)
+			}
+			s.throttledMessages[throttleKey] = now
+			s.mutex.Unlock()
+		}
+
 		if len(v) == 0 {
 			log.Print(prefix + format)
 		} else {
