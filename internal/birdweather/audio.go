@@ -5,6 +5,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
+	"log"
+	"os"
+	"path/filepath"
+	"time"
 )
 
 // encodePCMtoWAV creates WAV data from PCM and returns it in a bytes.Buffer.
@@ -51,6 +56,70 @@ func encodePCMtoWAV(pcmData []byte) (*bytes.Buffer, error) {
 	}
 
 	return buffer, nil
+}
+
+// saveBufferToWAV writes a bytes.Buffer containing WAV data to a file, along with
+// timestamp information for debugging purposes.
+func saveBufferToWAV(buffer *bytes.Buffer, filename string, startTime, endTime time.Time) error {
+	// Get the buffer size before any operations that might consume it
+	bufferSize := buffer.Len()
+
+	// Create directory if it doesn't exist
+	dirPath := filepath.Dir(filename)
+	if err := os.MkdirAll(dirPath, 0o755); err != nil {
+		return fmt.Errorf("error creating directory: %w", err)
+	}
+
+	// Save the WAV file
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("error creating file: %w", err)
+	}
+	defer file.Close()
+
+	// Write the buffer to the file
+	if _, err := io.Copy(file, buffer); err != nil {
+		return fmt.Errorf("error writing buffer to file: %w", err)
+	}
+
+	// Get the actual file size from the filesystem
+	fileInfo, err := os.Stat(filename)
+	if err != nil {
+		log.Printf("Warning: couldn't get file size: %v", err)
+	}
+	actualFileSize := fileInfo.Size()
+
+	// Create a metadata file with the same name but .txt extension
+	metaFilename := filename[:len(filename)-len(filepath.Ext(filename))] + ".txt"
+	metaFile, err := os.Create(metaFilename)
+	if err != nil {
+		log.Printf("Warning: could not create metadata file: %v", err)
+		return nil // Continue even if metadata file creation fails
+	}
+	defer metaFile.Close()
+
+	// Calculate the actual PCM data size (total size minus 44 bytes for the WAV header)
+	pcmDataSize := actualFileSize - 44 // 44 bytes is the WAV header size
+
+	// Write timestamp information to the metadata file
+	metaInfo := fmt.Sprintf("File: %s\n", filepath.Base(filename))
+	metaInfo += fmt.Sprintf("Start Time: %s\n", startTime.Format(time.RFC3339))
+	metaInfo += fmt.Sprintf("End Time: %s\n", endTime.Format(time.RFC3339))
+	metaInfo += fmt.Sprintf("Duration: %s\n", endTime.Sub(startTime))
+	metaInfo += fmt.Sprintf("Total File Size: %d bytes\n", actualFileSize)
+	metaInfo += fmt.Sprintf("Buffer Size: %d bytes\n", bufferSize)
+	metaInfo += fmt.Sprintf("PCM Data Size: %d bytes\n", pcmDataSize)
+	metaInfo += fmt.Sprintf("Expected Audio Duration: %.3f seconds\n",
+		float64(pcmDataSize)/(48000.0*2.0))
+	metaInfo += "Sample Rate: 48000 Hz\n"
+	metaInfo += "Bits Per Sample: 16\n"
+	metaInfo += "Channels: 1\n"
+
+	if _, err := metaFile.WriteString(metaInfo); err != nil {
+		log.Printf("Warning: could not write to metadata file: %v", err)
+	}
+
+	return nil
 }
 
 // saveBufferToDisk writes a bytes.Buffer to a file, this is only used for debugging.
