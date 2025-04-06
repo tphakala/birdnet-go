@@ -4927,6 +4927,10 @@ html:has(.drawer-toggle:checked) {
   top: 0.5rem;
 }
 
+.isolate {
+  isolation: isolate;
+}
+
 .z-10 {
   z-index: 10;
 }

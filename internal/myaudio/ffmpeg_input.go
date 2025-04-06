@@ -306,6 +306,9 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 					continue
 				}
 
+				// Broadcast audio data to WebSocket clients
+				broadcastAudioData(url, buf[:n])
+
 				// Calculate audio level with source information
 				audioLevelData := calculateAudioLevel(buf[:n], url, "")
 
