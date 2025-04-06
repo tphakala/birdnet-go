@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -69,12 +70,17 @@ func NewOAuth2Server() *OAuth2Server {
 
 	// Set up token persistence
 	configPaths, err := conf.GetDefaultConfigPaths()
-	if err == nil {
+	if err != nil {
+		log.Printf("Warning: Failed to get config paths for token persistence: %v", err)
+		log.Printf("Token persistence will be disabled - sessions will not survive restarts")
+	} else {
 		server.tokensFile = filepath.Join(configPaths[0], "tokens.json")
 		server.persistTokens = true
 
 		// Load any existing tokens
-		server.loadTokens()
+		if err := server.loadTokens(); err != nil {
+			log.Printf("Warning: Failed to load persisted tokens: %v", err)
+		}
 	}
 
 	// Clean up expired tokens every hour
@@ -247,7 +253,11 @@ func (s *OAuth2Server) ExchangeAuthCode(code string) (string, error) {
 	}
 
 	// Save tokens after creating a new one
-	go s.saveTokens()
+	go func() {
+		if err := s.saveTokens(); err != nil {
+			s.Debug("Error saving tokens after generating new access token: %v", err)
+		}
+	}()
 
 	return accessToken, nil
 }
@@ -309,25 +319,25 @@ func (s *OAuth2Server) IsRequestFromAllowedSubnet(ip string) bool {
 }
 
 // loadTokens loads persisted access tokens from disk
-func (s *OAuth2Server) loadTokens() {
+func (s *OAuth2Server) loadTokens() error {
 	if !s.persistTokens {
-		return
+		return nil
 	}
 
 	s.Debug("Loading tokens from %s", s.tokensFile)
 
 	data, err := os.ReadFile(s.tokensFile)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			s.Debug("Error loading tokens: %v", err)
+		if os.IsNotExist(err) {
+			s.Debug("No token file found, starting with empty token store")
+			return nil
 		}
-		return
+		return fmt.Errorf("failed to read token file: %w", err)
 	}
 
 	var tokens map[string]AccessToken
 	if err := json.Unmarshal(data, &tokens); err != nil {
-		s.Debug("Error unmarshaling tokens: %v", err)
-		return
+		return fmt.Errorf("failed to parse token file: %w", err)
 	}
 
 	s.mutex.Lock()
@@ -335,19 +345,26 @@ func (s *OAuth2Server) loadTokens() {
 
 	// Only load valid tokens
 	now := time.Now()
+	validCount := 0
+	expiredCount := 0
+
 	for token, accessToken := range tokens {
 		if now.Before(accessToken.ExpiresAt) {
 			s.accessTokens[token] = accessToken
+			validCount++
+		} else {
+			expiredCount++
 		}
 	}
 
-	s.Debug("Loaded %d valid tokens", len(s.accessTokens))
+	s.Debug("Loaded %d valid tokens, skipped %d expired tokens", validCount, expiredCount)
+	return nil
 }
 
 // saveTokens persists access tokens to disk
-func (s *OAuth2Server) saveTokens() {
+func (s *OAuth2Server) saveTokens() error {
 	if !s.persistTokens {
-		return
+		return nil
 	}
 
 	s.mutex.RLock()
@@ -364,13 +381,15 @@ func (s *OAuth2Server) saveTokens() {
 
 	data, err := json.MarshalIndent(validTokens, "", "  ")
 	if err != nil {
-		s.Debug("Error marshaling tokens: %v", err)
-		return
+		return fmt.Errorf("failed to marshal tokens: %w", err)
 	}
 
 	if err := os.WriteFile(s.tokensFile, data, 0o600); err != nil {
-		s.Debug("Error saving tokens: %v", err)
+		return fmt.Errorf("failed to write tokens file: %w", err)
 	}
+
+	s.Debug("Saved %d valid tokens to %s", len(validTokens), s.tokensFile)
+	return nil
 }
 
 // StartAuthCleanup starts a goroutine to periodically clean up expired tokens
@@ -400,7 +419,9 @@ func (s *OAuth2Server) StartAuthCleanup(interval time.Duration) {
 			s.mutex.Unlock()
 
 			// Save valid tokens after cleanup
-			s.saveTokens()
+			if err := s.saveTokens(); err != nil {
+				s.Debug("Error saving tokens during cleanup: %v", err)
+			}
 		}
 	}()
 }
