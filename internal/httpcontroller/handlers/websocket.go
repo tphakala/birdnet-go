@@ -54,6 +54,9 @@ type AudioStreamManager struct {
 	maxFlushInterval   time.Duration
 	adaptiveFlush      bool // Whether to use adaptive flush intervals
 	stabilityThreshold int  // Number of consistent readings required before adjustment
+	// Connection mutex map to prevent concurrent writes to the same connection
+	connectionMutexes      map[*websocket.Conn]*sync.Mutex
+	connectionMutexesMutex sync.RWMutex
 }
 
 // NewAudioStreamManager creates a new audio stream manager
@@ -63,11 +66,23 @@ func NewAudioStreamManager(webServerDebug bool, securityHost string) *AudioStrea
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,  // Increased from 1024
 			WriteBufferSize: 16384, // Increased from 1024
+			// Set a longer handshake timeout for Cloudflare Tunnel
+			HandshakeTimeout: 30 * time.Second,
 			CheckOrigin: func(r *http.Request) bool {
+				// For Cloudflare Tunnel, we need to be more permissive with origin checks
 				origin := r.Header.Get("Origin")
 				// Log all connection attempts with origin information
 				if webServerDebug {
-					log.Printf("🌐 WebSocket origin check: %s connecting from %s", origin, r.RemoteAddr)
+					log.Printf("🌐 WebSocket origin check: %s connecting from %s, CF-Connecting-IP: %s",
+						origin, r.RemoteAddr, r.Header.Get("CF-Connecting-IP"))
+				}
+
+				// Always allow connections with Cloudflare headers
+				if r.Header.Get("CF-Connecting-IP") != "" {
+					if webServerDebug {
+						log.Printf("🌐 WebSocket allowing Cloudflare proxied connection")
+					}
+					return true
 				}
 
 				// Allow same-site requests
@@ -86,6 +101,8 @@ func NewAudioStreamManager(webServerDebug bool, securityHost string) *AudioStrea
 				// This is only safe if Echo middleware is handling security
 				return true
 			},
+			// Add custom response headers for Cloudflare Tunnel WebSocket
+			EnableCompression: true,
 		},
 		debug:              webServerDebug, // Use the debug setting from web server config
 		audioBuffers:       make(map[string]*bytes.Buffer),
@@ -93,11 +110,12 @@ func NewAudioStreamManager(webServerDebug bool, securityHost string) *AudioStrea
 		forceInterval:      true,  // Force sending buffers periodically even if not full
 		flushIntervals:     make(map[string]time.Duration),
 		connectionLatency:  make(map[string]time.Duration),
-		latencyHistory:     make(map[string][]time.Duration), // Track recent latency readings
-		minFlushInterval:   10 * time.Millisecond,            // Minimum flush interval
-		maxFlushInterval:   50 * time.Millisecond,            // Maximum flush interval
-		adaptiveFlush:      true,                             // Enable adaptive flush intervals
-		stabilityThreshold: 3,                                // Require 3 consistent readings before adjustment
+		latencyHistory:     make(map[string][]time.Duration),      // Track recent latency readings
+		minFlushInterval:   10 * time.Millisecond,                 // Minimum flush interval
+		maxFlushInterval:   50 * time.Millisecond,                 // Maximum flush interval
+		adaptiveFlush:      true,                                  // Enable adaptive flush intervals
+		stabilityThreshold: 3,                                     // Require 3 consistent readings before adjustment
+		connectionMutexes:  make(map[*websocket.Conn]*sync.Mutex), // Initialize the connection mutex map
 	}
 }
 
@@ -129,8 +147,18 @@ func (asm *AudioStreamManager) HandleWebSocket(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Source ID is required")
 	}
 
+	// Handle Cloudflare specific headers
+	clientIPString := c.RealIP()
+	cfIP := c.Request().Header.Get("CF-Connecting-IP")
+	if cfIP != "" {
+		clientIPString = cfIP
+		if asm.debug {
+			log.Printf("🌐 Using Cloudflare-provided IP: %s", clientIPString)
+		}
+	}
+
 	// Check if the source exists and has a valid capture buffer
-	if !asm.isAudioSourceValid(sourceID, c.RealIP()) {
+	if !asm.isAudioSourceValid(sourceID, clientIPString) {
 		return echo.NewHTTPError(http.StatusNotFound, "Audio source not found")
 	}
 
@@ -139,15 +167,14 @@ func (asm *AudioStreamManager) HandleWebSocket(c echo.Context) error {
 	var authEnabled bool = false
 
 	// Check if request is from local network using the security package
-	clientIP := net.ParseIP(c.RealIP())
+	clientIP := net.ParseIP(clientIPString)
 	isLocalNetwork := isLocalNetworkConnection(clientIP, asm.debug)
 
 	// Try to get server from context for authentication check
 	server := c.Get("server")
 	if server == nil {
-		if asm.debug {
-			log.Printf("⚠️ Server context not available for WebSocket authentication from %s", c.RealIP())
-		}
+		// Always log this error since it's critical for authentication
+		log.Printf("⚠️ Server context not available for WebSocket authentication from %s for source %s", c.RealIP(), sourceID)
 
 		// If server context is missing but client is from local network, allow the connection
 		if isLocalNetwork {
@@ -161,19 +188,32 @@ func (asm *AudioStreamManager) HandleWebSocket(c echo.Context) error {
 			isAuthenticated = false
 		}
 	} else {
-		// Server context is available, perform normal authentication check
+		// Server context is available, try multiple ways to perform authentication check
+		authEnabled = true
+
+		// Try to use the interface directly
 		if s, ok := server.(interface {
 			IsAccessAllowed(c echo.Context) bool
 			isAuthenticationEnabled(c echo.Context) bool
 		}); ok {
 			authEnabled = s.isAuthenticationEnabled(c)
 			isAuthenticated = !authEnabled || s.IsAccessAllowed(c)
-			if asm.debug {
-				log.Printf("🔐 WebSocket auth check: enabled=%v, authenticated=%v, IP=%s", authEnabled, isAuthenticated, c.RealIP())
+		} else {
+			// Try to use the specific Server type if available
+			switch s := server.(type) {
+			case interface{ IsAccessAllowed(c echo.Context) bool }:
+				isAuthenticated = s.IsAccessAllowed(c)
+				log.Printf("🔐 WebSocket auth: allowed connection for %s", c.RealIP())
+			default:
+				// Unable to use the interface
+				log.Printf("⚠️ WebSocket auth check: unable to use server interface from %s for source %s - server type: %T",
+					c.RealIP(), sourceID, server)
 			}
-		} else if asm.debug {
-			log.Printf("⚠️ WebSocket auth check: unable to assert server interface from %s", c.RealIP())
 		}
+
+		// Always log authentication status for debugging
+		log.Printf("🔐 WebSocket auth check: enabled=%v, authenticated=%v, IP=%s, source=%s",
+			authEnabled, isAuthenticated, c.RealIP(), sourceID)
 	}
 
 	// Always allow local network connections
@@ -420,6 +460,30 @@ func (asm *AudioStreamManager) flushBufferIfNeeded(sourceID string, force bool) 
 	}
 }
 
+// getConnectionMutex returns a mutex for the specified connection
+func (asm *AudioStreamManager) getConnectionMutex(conn *websocket.Conn) *sync.Mutex {
+	asm.connectionMutexesMutex.RLock()
+	mutex, exists := asm.connectionMutexes[conn]
+	asm.connectionMutexesMutex.RUnlock()
+
+	if !exists {
+		// Create a new mutex if one doesn't exist
+		mutex = &sync.Mutex{}
+		asm.connectionMutexesMutex.Lock()
+		asm.connectionMutexes[conn] = mutex
+		asm.connectionMutexesMutex.Unlock()
+	}
+
+	return mutex
+}
+
+// removeConnectionMutex removes the mutex for a closed connection
+func (asm *AudioStreamManager) removeConnectionMutex(conn *websocket.Conn) {
+	asm.connectionMutexesMutex.Lock()
+	delete(asm.connectionMutexes, conn)
+	asm.connectionMutexesMutex.Unlock()
+}
+
 // sendToClients sends data to all clients for a source
 func (asm *AudioStreamManager) sendToClients(sourceID string, data []byte) {
 	// Skip if no data or too small
@@ -443,35 +507,45 @@ func (asm *AudioStreamManager) sendToClients(sourceID string, data []byte) {
 
 	// Send the audio data to each client
 	for _, client := range clientsCopy {
-		if err := client.SetWriteDeadline(time.Now().Add(1 * time.Second)); err != nil {
-			if asm.debug {
-				log.Printf("❌ Error setting write deadline for client %s: %v", client.RemoteAddr().String(), err)
-			}
-			// Remove the client if we can't set deadline
-			asm.clientsMutex.Lock()
-			sourceClients, exists := asm.clients[sourceID]
-			if exists {
-				delete(sourceClients, client)
-			}
-			asm.clientsMutex.Unlock()
-			client.Close()
-			continue
-		}
+		// Process each client in a separate function to correctly scope the defer
+		func(client *websocket.Conn) {
+			// Get the connection mutex for this client
+			connMutex := asm.getConnectionMutex(client)
 
-		err := client.WriteMessage(websocket.BinaryMessage, data)
-		if err != nil {
-			if asm.debug {
-				log.Printf("❌ Error sending audio data to client %s: %v", client.RemoteAddr().String(), err)
+			// Lock the mutex to prevent concurrent writes to this connection
+			connMutex.Lock()
+			defer connMutex.Unlock()
+
+			if err := client.SetWriteDeadline(time.Now().Add(1 * time.Second)); err != nil {
+				if asm.debug {
+					log.Printf("❌ Error setting write deadline for client %s: %v", client.RemoteAddr().String(), err)
+				}
+				// Remove the client if we can't set deadline
+				asm.clientsMutex.Lock()
+				sourceClients, exists := asm.clients[sourceID]
+				if exists {
+					delete(sourceClients, client)
+				}
+				asm.clientsMutex.Unlock()
+				client.Close()
+				return
 			}
-			// Remove the client if we can't send to it
-			asm.clientsMutex.Lock()
-			sourceClients, exists := asm.clients[sourceID]
-			if exists {
-				delete(sourceClients, client)
+
+			err := client.WriteMessage(websocket.BinaryMessage, data)
+			if err != nil {
+				if asm.debug {
+					log.Printf("❌ Error sending audio data to client %s: %v", client.RemoteAddr().String(), err)
+				}
+				// Remove the client if we can't send to it
+				asm.clientsMutex.Lock()
+				sourceClients, exists := asm.clients[sourceID]
+				if exists {
+					delete(sourceClients, client)
+				}
+				asm.clientsMutex.Unlock()
+				client.Close()
 			}
-			asm.clientsMutex.Unlock()
-			client.Close()
-		}
+		}(client)
 	}
 }
 
@@ -535,27 +609,46 @@ func (asm *AudioStreamManager) setupClientConnection(ws *websocket.Conn, sourceI
 
 // handleClientMessages processes incoming WebSocket messages
 func (asm *AudioStreamManager) handleClientMessages(ws *websocket.Conn, sourceID string) {
-	// Start periodic pings for latency measurement
-	pingTicker := time.NewTicker(5 * time.Second)
+	// Start periodic pings for latency measurement and keeping connection alive through Cloudflare
+	// Cloudflare Tunnel has a 100-second timeout, so we ping more frequently to keep the connection alive
+	pingTicker := time.NewTicker(25 * time.Second)
 	defer pingTicker.Stop()
+
+	// Add a keepalive ping that's more frequent for Cloudflare Tunnel
+	keepAliveTicker := time.NewTicker(5 * time.Second)
+	defer keepAliveTicker.Stop()
 
 	// Message handling loop
 	for {
 		select {
 		case <-pingTicker.C:
 			// Send ping for latency measurement
-			if err := ws.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(time.Second)); err != nil {
+			err := ws.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(5*time.Second))
+			if err != nil {
 				if asm.debug {
-					log.Printf("❌ Failed to send ping: %v", err)
+					log.Printf("❌ Failed to send measurement ping: %v", err)
+				}
+				return
+			}
+
+		case <-keepAliveTicker.C:
+			// Send a small text message as keepalive (helps with Cloudflare Tunnel)
+			err := ws.WriteMessage(websocket.TextMessage, []byte("keepalive"))
+			if err != nil {
+				if asm.debug {
+					log.Printf("❌ Failed to send keepalive: %v", err)
 				}
 				return
 			}
 
 		default:
-			// Process a single message
+			// Process a single message with timeout handling for Cloudflare Tunnel
 			if !asm.processNextMessage(ws, sourceID) {
 				return // Connection closed or error
 			}
+
+			// Small sleep to avoid CPU spinning
+			time.Sleep(time.Millisecond * 10)
 		}
 	}
 }
@@ -563,8 +656,8 @@ func (asm *AudioStreamManager) handleClientMessages(ws *websocket.Conn, sourceID
 // processNextMessage handles a single WebSocket message
 // Returns false if the connection should be closed
 func (asm *AudioStreamManager) processNextMessage(ws *websocket.Conn, sourceID string) bool {
-	// Set deadline for reading the next message
-	if err := ws.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+	// Set deadline for reading the next message - longer timeout for Cloudflare Tunnel
+	if err := ws.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
 		log.Printf("❌ Failed to set read deadline: %v", err)
 		return false
 	}
@@ -572,10 +665,30 @@ func (asm *AudioStreamManager) processNextMessage(ws *websocket.Conn, sourceID s
 	// Read message
 	msgType, msg, err := ws.ReadMessage()
 	if err != nil {
-		// Client disconnected or error occurred - only log if in debug mode
-		// since this is often just a normal client disconnect
-		if asm.debug {
-			log.Printf("📥 WebSocket read error: %v", err)
+		// Use a switch to categorize the error type instead of if-else chain
+		switch {
+		case websocket.IsCloseError(err,
+			websocket.CloseNormalClosure,
+			websocket.CloseGoingAway,
+			websocket.CloseNoStatusReceived):
+			// Normal closure - don't treat as error
+			if asm.debug {
+				log.Printf("📤 WebSocket closed normally: %v", err)
+			}
+		case websocket.IsUnexpectedCloseError(err):
+			// Unexpected close
+			log.Printf("📥 WebSocket closed unexpectedly: %v", err)
+		case strings.Contains(err.Error(), "i/o timeout"):
+			// Timeout is expected with Cloudflare Tunnel, just log at debug level
+			if asm.debug {
+				log.Printf("📥 WebSocket read timeout (expected with Cloudflare): %v", err)
+			}
+			return true // Continue connection despite timeout
+		default:
+			// Other errors - only log in debug mode
+			if asm.debug {
+				log.Printf("📥 WebSocket read error: %v", err)
+			}
 		}
 		return false
 	}
@@ -595,8 +708,13 @@ func (asm *AudioStreamManager) processNextMessage(ws *websocket.Conn, sourceID s
 	}
 
 	// Process text messages
-	if asm.debug && msgType == websocket.TextMessage {
-		log.Printf("📥 Received WebSocket message from client: %s", string(msg))
+	if msgType == websocket.TextMessage {
+		// Special handling for keepalive messages
+		if string(msg) == "keepalive" && asm.debug {
+			log.Printf("📥 Received keepalive from client")
+		} else if asm.debug {
+			log.Printf("📥 Received WebSocket message from client: %s", string(msg))
+		}
 	}
 
 	return true
@@ -649,7 +767,7 @@ func (asm *AudioStreamManager) HasActiveClients(sourceID string) bool {
 	return exists && len(clients) > 0
 }
 
-// Disconnect client performs the client disconnection cleanup
+// cleanupClientConnection performs the client disconnection cleanup
 func (asm *AudioStreamManager) cleanupClientConnection(ws *websocket.Conn, sourceID string) {
 	// Remove client on disconnect
 	asm.clientsMutex.Lock()
@@ -667,6 +785,9 @@ func (asm *AudioStreamManager) cleanupClientConnection(ws *websocket.Conn, sourc
 		clientCount = len(clients)
 	}
 	asm.clientsMutex.Unlock()
+
+	// Remove the connection mutex
+	asm.removeConnectionMutex(ws)
 
 	// If this was the last client, unregister the callback and clean up buffer
 	if lastClient {
@@ -700,7 +821,7 @@ func (asm *AudioStreamManager) cleanupClientConnection(ws *websocket.Conn, sourc
 			log.Printf("❌ Failed to send close message: %v", err)
 		} else if asm.debug {
 			// Log at debug level that we tried to close an already closed connection
-			log.Printf("🔌 Connection already closed: %s", ws.RemoteAddr().String())
+			log.Printf("📥 Connection already closed: %s", ws.RemoteAddr().String())
 		}
 	}
 
