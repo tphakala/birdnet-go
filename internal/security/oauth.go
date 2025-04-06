@@ -3,9 +3,14 @@ package security
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net"
+	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -40,7 +45,14 @@ type OAuth2Server struct {
 
 	GithubConfig *oauth2.Config
 	GoogleConfig *oauth2.Config
+
+	// Token persistence
+	tokensFile    string
+	persistTokens bool
 }
+
+// For testing purposes
+var testConfigPath string
 
 func NewOAuth2Server() *OAuth2Server {
 	settings := conf.GetSettings()
@@ -56,6 +68,27 @@ func NewOAuth2Server() *OAuth2Server {
 	// Initialize Gothic with the provided configuration
 	InitializeGoth(settings)
 
+	// Set up token persistence
+	configPaths, err := conf.GetDefaultConfigPaths()
+	if err != nil {
+		log.Printf("Warning: Failed to get config paths for token persistence: %v", err)
+		log.Printf("Token persistence will be disabled - sessions will not survive restarts")
+	} else {
+		server.tokensFile = filepath.Join(configPaths[0], "tokens.json")
+		server.persistTokens = true
+
+		// Ensure the directory exists
+		if err := os.MkdirAll(filepath.Dir(server.tokensFile), 0o755); err != nil {
+			log.Printf("Warning: Failed to create directory for token persistence: %v", err)
+			server.persistTokens = false
+		} else {
+			// Load any existing tokens
+			if err := server.loadTokens(); err != nil {
+				log.Printf("Warning: Failed to load persisted tokens: %v", err)
+			}
+		}
+	}
+
 	// Clean up expired tokens every hour
 	server.StartAuthCleanup(time.Hour)
 
@@ -64,9 +97,51 @@ func NewOAuth2Server() *OAuth2Server {
 
 // InitializeGoth initializes social authentication providers.
 func InitializeGoth(settings *conf.Settings) {
-	// Set up the session store first
-	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
+	// Get path for storing sessions
+	var sessionPath string
 
+	if testConfigPath != "" {
+		// Use test path if set
+		sessionPath = filepath.Join(testConfigPath, "sessions")
+	} else {
+		// Get path for storing sessions
+		configPaths, err := conf.GetDefaultConfigPaths()
+		if err != nil {
+			log.Printf("Warning: Failed to get config paths for session store: %v", err)
+			// Fallback to in-memory store if config paths can't be retrieved
+			gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
+			goto initProviders
+		}
+		sessionPath = filepath.Join(configPaths[0], "sessions")
+	}
+
+	// Ensure directory exists
+	if err := os.MkdirAll(sessionPath, 0o755); err != nil {
+		log.Printf("Warning: Failed to create session directory: %v", err)
+		gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
+	} else {
+		// Create persistent session store
+		gothic.Store = sessions.NewFilesystemStore(
+			sessionPath,
+			[]byte(settings.Security.SessionSecret),
+			[]byte(settings.Security.SessionSecret+"encryption"),
+		)
+
+		// Configure session store options
+		store := gothic.Store.(*sessions.FilesystemStore)
+		store.Options = &sessions.Options{
+			Path:     "/",
+			MaxAge:   86400 * 7, // 7 days
+			HttpOnly: true,
+			Secure:   settings.Security.RedirectToHTTPS,
+			SameSite: http.SameSiteLaxMode,
+		}
+
+		// Set reasonable values for session cookie storage
+		store.MaxLength(1024 * 1024) // 1MB max size
+	}
+
+initProviders:
 	// Initialize Gothic providers
 	googleProvider :=
 		gothGoogle.New(settings.Security.GoogleAuth.ClientID,
@@ -84,6 +159,12 @@ func InitializeGoth(settings *conf.Settings) {
 			"user:email",
 		),
 	)
+}
+
+// SetTestConfigPath sets a test path for testing session persistence
+// It should be called before InitializeGoth and reset after the test
+func SetTestConfigPath(path string) {
+	testConfigPath = path
 }
 
 func (s *OAuth2Server) UpdateProviders() {
@@ -176,6 +257,24 @@ func (s *OAuth2Server) ExchangeAuthCode(code string) (string, error) {
 		Token:     accessToken,
 		ExpiresAt: time.Now().Add(s.Settings.Security.BasicAuth.AccessTokenExp),
 	}
+
+	// Save tokens after creating a new one
+	go func() {
+		const maxRetries = 3
+		var err error
+		for i := 0; i < maxRetries; i++ {
+			err = s.saveTokens()
+			if err == nil {
+				return
+			}
+			s.Debug("Error saving tokens (attempt %d/%d): %v", i+1, maxRetries, err)
+			time.Sleep(time.Duration(i+1) * 100 * time.Millisecond) // Exponential backoff
+		}
+		if err != nil {
+			log.Printf("Failed to save tokens after %d attempts: %v", maxRetries, err)
+		}
+	}()
+
 	return accessToken, nil
 }
 
@@ -235,6 +334,90 @@ func (s *OAuth2Server) IsRequestFromAllowedSubnet(ip string) bool {
 	return false
 }
 
+// loadTokens loads persisted access tokens from disk
+func (s *OAuth2Server) loadTokens() error {
+	if !s.persistTokens {
+		return nil
+	}
+
+	s.Debug("Loading tokens from %s", s.tokensFile)
+
+	data, err := os.ReadFile(s.tokensFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			s.Debug("No token file found, starting with empty token store")
+			return nil
+		}
+		return fmt.Errorf("failed to read token file: %w", err)
+	}
+
+	var tokens map[string]AccessToken
+	if err := json.Unmarshal(data, &tokens); err != nil {
+		return fmt.Errorf("failed to parse token file: %w", err)
+	}
+
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	// Only load valid tokens
+	now := time.Now()
+	validCount := 0
+	expiredCount := 0
+
+	for token, accessToken := range tokens {
+		if now.Before(accessToken.ExpiresAt) {
+			s.accessTokens[token] = accessToken
+			validCount++
+		} else {
+			expiredCount++
+		}
+	}
+
+	s.Debug("Loaded %d valid tokens, skipped %d expired tokens", validCount, expiredCount)
+	return nil
+}
+
+// saveTokens persists access tokens to disk
+func (s *OAuth2Server) saveTokens() error {
+	if !s.persistTokens {
+		return nil
+	}
+
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	// Only save valid tokens
+	validTokens := make(map[string]AccessToken)
+	now := time.Now()
+	for token, accessToken := range s.accessTokens {
+		if now.Before(accessToken.ExpiresAt) {
+			validTokens[token] = accessToken
+		}
+	}
+
+	data, err := json.MarshalIndent(validTokens, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal tokens: %w", err)
+	}
+
+	// Write to a temporary file first
+	tempFile := s.tokensFile + ".tmp"
+	if err := os.WriteFile(tempFile, data, 0o600); err != nil {
+		return fmt.Errorf("failed to write tokens file: %w", err)
+	}
+
+	// Atomically rename to ensure consistency
+	if err := os.Rename(tempFile, s.tokensFile); err != nil {
+		// Try to clean up the temp file
+		os.Remove(tempFile)
+		return fmt.Errorf("failed to finalize tokens file: %w", err)
+	}
+
+	s.Debug("Saved %d valid tokens to %s", len(validTokens), s.tokensFile)
+	return nil
+}
+
+// StartAuthCleanup starts a goroutine to periodically clean up expired tokens
 func (s *OAuth2Server) StartAuthCleanup(interval time.Duration) {
 	go func() {
 		ticker := time.NewTicker(interval)
@@ -259,11 +442,16 @@ func (s *OAuth2Server) StartAuthCleanup(interval time.Duration) {
 			}
 
 			s.mutex.Unlock()
-			s.Debug("Token & code cleanup completed")
+
+			// Save valid tokens after cleanup
+			if err := s.saveTokens(); err != nil {
+				s.Debug("Error saving tokens during cleanup: %v", err)
+			}
 		}
 	}()
 }
 
+// Debug logs debug messages if debug mode is enabled
 func (s *OAuth2Server) Debug(format string, v ...interface{}) {
 	if s.debug {
 		prefix := "[security/oauth] "
