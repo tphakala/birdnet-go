@@ -18,6 +18,52 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
+// AudioDataCallback is a function that can be registered to receive audio data
+type AudioDataCallback func(sourceID string, data []byte)
+
+// Global callback registry for broadcasting audio data
+var (
+	broadcastCallbacks     map[string]AudioDataCallback // Map of sourceID -> callback
+	broadcastCallbackMutex sync.RWMutex
+)
+
+func init() {
+	broadcastCallbacks = make(map[string]AudioDataCallback)
+}
+
+// RegisterBroadcastCallback adds a callback function to receive audio data for a specific source
+func RegisterBroadcastCallback(sourceID string, callback AudioDataCallback) {
+	broadcastCallbackMutex.Lock()
+	defer broadcastCallbackMutex.Unlock()
+	broadcastCallbacks[sourceID] = callback
+	log.Printf("🎧 Registered audio callback for source: %s, total callbacks: %d",
+		sourceID, len(broadcastCallbacks))
+}
+
+// UnregisterBroadcastCallback removes a callback function for a specific source
+func UnregisterBroadcastCallback(sourceID string) {
+	broadcastCallbackMutex.Lock()
+	defer broadcastCallbackMutex.Unlock()
+	delete(broadcastCallbacks, sourceID)
+	log.Printf("🎧 Unregistered audio callback for source: %s, remaining callbacks: %d",
+		sourceID, len(broadcastCallbacks))
+}
+
+// broadcastAudioData sends audio data to all registered callbacks
+func broadcastAudioData(sourceID string, data []byte) {
+	broadcastCallbackMutex.RLock()
+	callback, exists := broadcastCallbacks[sourceID]
+	broadcastCallbackMutex.RUnlock()
+
+	// If no callback registered for this source, skip all processing
+	if !exists {
+		return
+	}
+
+	// Call the callback for this source
+	callback(sourceID, data)
+}
+
 // captureSource holds information about an audio capture source.
 type captureSource struct {
 	Name    string
@@ -538,6 +584,9 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 		if err != nil {
 			log.Printf("❌ Error writing to capture buffer: %v", err)
 		}
+
+		// Broadcast audio data to WebSocket clients
+		broadcastAudioData("malgo", pSamples)
 
 		// Calculate audio level
 		audioLevelData := calculateAudioLevel(pSamples, "malgo", source.Name)
