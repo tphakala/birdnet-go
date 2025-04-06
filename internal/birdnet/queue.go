@@ -38,7 +38,7 @@ func (r Results) Copy() Results { //nolint:gocritic // This is a copy function, 
 	// Deep copy PCMdata
 	if r.PCMdata != nil {
 		newCopy.PCMdata = make([]byte, len(r.PCMdata))
-		newCopy.PCMdata = append(newCopy.PCMdata, r.PCMdata...)
+		copy(newCopy.PCMdata, r.PCMdata)
 	}
 
 	// Deep copy Results slice
