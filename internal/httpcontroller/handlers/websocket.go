@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -61,6 +62,9 @@ func NewAudioStreamManager() *AudioStreamManager {
 			ReadBufferSize:  4096,  // Increased from 1024
 			WriteBufferSize: 16384, // Increased from 1024
 			CheckOrigin: func(r *http.Request) bool {
+				origin := r.Header.Get("Origin")
+				// Log all connection attempts with origin information
+				log.Printf("🌐 WebSocket origin check: %s connecting from %s", origin, r.RemoteAddr)
 				return true // Allow all connections (security is handled by Echo middleware)
 			},
 		},
@@ -78,42 +82,76 @@ func NewAudioStreamManager() *AudioStreamManager {
 
 // HandleWebSocket upgrades an HTTP connection to WebSocket and handles the connection
 func (asm *AudioStreamManager) HandleWebSocket(c echo.Context) error {
+	// Log detailed request information
+	log.Printf("📝 WebSocket request: URL=%s, Method=%s, RemoteAddr=%s, Headers=%v",
+		c.Request().URL.String(), c.Request().Method, c.RealIP(), c.Request().Header)
+
 	sourceID := c.Param("sourceID")
 	if sourceID == "" {
+		log.Printf("⚠️ WebSocket connection attempt without source ID from %s", c.RealIP())
 		return echo.NewHTTPError(http.StatusBadRequest, "Source ID is required")
 	}
 
 	// Check if the source exists and has a valid capture buffer
 	exists := myaudio.HasCaptureBuffer(sourceID)
 	if !exists {
+		log.Printf("⚠️ WebSocket connection attempt for non-existent source %s from %s", sourceID, c.RealIP())
 		return echo.NewHTTPError(http.StatusNotFound, "Audio source not found")
 	}
 
-	// Perform authentication checks before upgrading
-	server := c.Get("server")
-	if server == nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Server context not available")
-	}
-
-	// Check if user is authenticated
-	var isAuthenticated bool
-	var authEnabled bool
-	if s, ok := server.(interface {
-		IsAccessAllowed(c echo.Context) bool
-		isAuthenticationEnabled(c echo.Context) bool
-	}); ok {
-		authEnabled = s.isAuthenticationEnabled(c)
-		isAuthenticated = !authEnabled || s.IsAccessAllowed(c)
-	}
+	// Initialize authentication variables
+	var isAuthenticated bool = false
+	var authEnabled bool = false
 
 	// Check if request is from local network using the security package
 	clientIP := net.ParseIP(c.RealIP())
 	isLocalNetwork := security.IsInLocalSubnet(clientIP)
+	log.Printf("🔐 WebSocket local network check: IP=%s, isLocal=%v", c.RealIP(), isLocalNetwork)
+
+	// Try to get server from context for authentication check
+	server := c.Get("server")
+	if server == nil {
+		log.Printf("⚠️ Server context not available for WebSocket authentication from %s", c.RealIP())
+
+		// If server context is missing but client is from local network, allow the connection
+		if isLocalNetwork {
+			log.Printf("🔐 WebSocket connection allowed from local network without server context: %s", c.RealIP())
+			isAuthenticated = true
+		} else {
+			// For non-local connections, fall back to a safe default: require authentication
+			authEnabled = true
+			isAuthenticated = false
+		}
+	} else {
+		// Server context is available, perform normal authentication check
+		if s, ok := server.(interface {
+			IsAccessAllowed(c echo.Context) bool
+			isAuthenticationEnabled(c echo.Context) bool
+		}); ok {
+			authEnabled = s.isAuthenticationEnabled(c)
+			isAuthenticated = !authEnabled || s.IsAccessAllowed(c)
+			log.Printf("🔐 WebSocket auth check: enabled=%v, authenticated=%v, IP=%s", authEnabled, isAuthenticated, c.RealIP())
+		} else {
+			log.Printf("⚠️ WebSocket auth check: unable to assert server interface from %s", c.RealIP())
+		}
+	}
+
+	// Always allow local network connections
+	if isLocalNetwork {
+		log.Printf("🔐 WebSocket connection allowed from local network: %s", c.RealIP())
+		isAuthenticated = true
+	}
+
+	// Check authorization before attempting to upgrade
+	if authEnabled && !isAuthenticated {
+		log.Printf("⛔ Unauthorized WebSocket attempt from %s for source %s", c.RealIP(), sourceID)
+		return echo.NewHTTPError(http.StatusUnauthorized, "Authentication required for audio streaming")
+	}
 
 	// Upgrade the connection to WebSocket
 	ws, err := asm.upgrader.Upgrade(c.Response(), c.Request(), nil)
 	if err != nil {
-		log.Printf("❌ WebSocket upgrade failed: %v", err)
+		log.Printf("❌ WebSocket upgrade failed from %s for source %s: %v", c.RealIP(), sourceID, err)
 		return err
 	}
 
@@ -122,20 +160,6 @@ func (asm *AudioStreamManager) HandleWebSocket(c echo.Context) error {
 		log.Printf("❌ Failed to set write deadline: %v", err)
 		ws.Close()
 		return err
-	}
-
-	// Now check authentication and local network - close with proper code if unauthorized
-	if authEnabled && !isAuthenticated && !isLocalNetwork {
-		// Send a proper close message with policy violation code
-		closeMsg := websocket.FormatCloseMessage(ClosePolicyViolation, "Authentication required for audio streaming")
-		if err := ws.WriteControl(websocket.CloseMessage, closeMsg, time.Now().Add(time.Second)); err != nil {
-			log.Printf("❌ Failed to send close message: %v", err)
-		}
-		ws.Close()
-
-		// Log the unauthorized attempt
-		log.Printf("⛔ Unauthorized WebSocket connection attempt for source %s from %s", sourceID, c.RealIP())
-		return nil
 	}
 
 	// Log connection info
@@ -415,13 +439,22 @@ func (asm *AudioStreamManager) handleClient(ws *websocket.Conn, sourceID string)
 				ws.RemoteAddr().String(), sourceID, clientCount)
 		}
 
-		// Close with proper normal closure code
+		// Try to send a clean close message only if not already closed
 		closeMsg := websocket.FormatCloseMessage(CloseNormalClosure, "Connection closed normally")
-		if err := ws.WriteControl(websocket.CloseMessage, closeMsg, time.Now().Add(time.Second)); err != nil {
-			if asm.debug {
-				log.Printf("❌ Failed to send close message: %v", err)
+		err := ws.WriteControl(websocket.CloseMessage, closeMsg, time.Now().Add(time.Second))
+		if err != nil {
+			// Only log as an error if it's not due to the connection already being closed
+			if !strings.Contains(err.Error(), "websocket: close sent") {
+				if asm.debug {
+					log.Printf("❌ Failed to send close message: %v", err)
+				}
+			} else if asm.debug {
+				// Log at debug level that we tried to close an already closed connection
+				log.Printf("🔌 Connection already closed: %s", ws.RemoteAddr().String())
 			}
 		}
+
+		// Always ensure the connection is closed
 		ws.Close()
 	}()
 
