@@ -205,3 +205,21 @@ It properly handles different network interface naming conventions and subnet ca
 - The package cleans up expired tokens to prevent memory leaks and unauthorized access
 - Always verify that redirect URIs match the configured hosts to prevent open redirectors
 - Session files are stored with strict permissions (0600) to prevent unauthorized access 
+
+## Testing
+
+The security package includes tests for session persistence:
+
+- `TestTokenPersistence`: Tests saving and loading of access tokens to/from disk
+- `TestFilesystemStore`: Tests correct initialization of persistent session storage
+- `TestLocalNetworkCookieStore`: Tests configuration of cookie stores for local network access
+
+For testing purposes, a helper function is available:
+
+```go
+// Set a custom path for session files during tests
+security.SetTestConfigPath("/path/for/testing")
+
+// Make sure to reset it after the test
+defer security.SetTestConfigPath("")
+``` 
