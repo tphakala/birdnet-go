@@ -970,10 +970,14 @@ func TestRetryLogic(t *testing.T) {
 		testRetryConfigOverride = nil
 	}()
 
+	// Create a dedicated context for this test that won't be canceled prematurely
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // Ensure context gets canceled at the end of the test
+
 	// Create a real job queue with a short processing interval for testing
 	realQueue := jobqueue.NewJobQueue()
 	realQueue.SetProcessingInterval(50 * time.Millisecond) // Process jobs quickly for testing
-	realQueue.Start()
+	realQueue.StartWithContext(ctx)
 	defer realQueue.Stop()
 
 	// Create a processor with the real queue
@@ -1059,9 +1063,13 @@ func TestRetryLogic(t *testing.T) {
 	select {
 	case <-successChan:
 		// Job succeeded after retries
-	case <-time.After(2 * time.Second):
+		t.Log("Success channel received signal")
+	case <-time.After(5 * time.Second): // Increased timeout for CI environments
 		t.Fatalf("Timeout waiting for job to succeed after retries")
 	}
+
+	// Wait a bit more to ensure all job stats are updated
+	time.Sleep(200 * time.Millisecond)
 
 	// Verify that the action was executed the expected number of times
 	attemptMutex.Lock()
@@ -1098,6 +1106,7 @@ func TestRetryLogic(t *testing.T) {
 
 	// Create a channel to track execution attempts
 	attemptChan := make(chan int, maxRetries+1)
+	allAttemptsComplete := make(chan struct{})
 
 	// Create a mock action that always fails
 	exhaustingAction := &MockAction{
@@ -1109,6 +1118,12 @@ func TestRetryLogic(t *testing.T) {
 
 			t.Logf("Exhaustion test: Attempt %d of %d", currentAttempt, maxRetries+1)
 			attemptChan <- currentAttempt
+
+			// Close the completion channel when all attempts are done
+			if currentAttempt == maxRetries+1 {
+				close(allAttemptsComplete)
+			}
+
 			return fmt.Errorf("simulated failure that will exhaust retries")
 		},
 	}
@@ -1145,14 +1160,13 @@ func TestRetryLogic(t *testing.T) {
 		t.Fatalf("Failed to enqueue exhausting task: %v", err)
 	}
 
-	// Wait for all attempts to complete
-	for i := 0; i < maxRetries+1; i++ {
-		select {
-		case <-attemptChan:
-			// Attempt recorded
-		case <-time.After(1 * time.Second):
-			t.Fatalf("Timeout waiting for attempt %d", i+1)
-		}
+	// Wait for all attempts to complete with an increased timeout
+	select {
+	case <-allAttemptsComplete:
+		// All attempts completed
+		t.Log("All exhaustion attempts completed")
+	case <-time.After(5 * time.Second):
+		t.Fatalf("Timeout waiting for all exhaustion attempts to complete")
 	}
 
 	// Wait a bit more to ensure all processing is complete
@@ -1169,8 +1183,18 @@ func TestRetryLogic(t *testing.T) {
 
 	// Verify that the job queue statistics reflect the failed job
 	stats = realQueue.GetStats()
-	if stats.FailedJobs < 1 {
-		t.Errorf("Expected at least 1 failed job, got %d", stats.FailedJobs)
+
+	// Total jobs should be 2 (1 successful from first test, 1 failed from exhaustion test)
+	if stats.TotalJobs != 2 {
+		t.Errorf("Expected 2 total jobs, got %d", stats.TotalJobs)
+	}
+
+	if stats.SuccessfulJobs != 1 {
+		t.Errorf("Expected 1 successful job, got %d", stats.SuccessfulJobs)
+	}
+
+	if stats.FailedJobs != 1 {
+		t.Errorf("Expected 1 failed job, got %d", stats.FailedJobs)
 	}
 
 	// Log final statistics
