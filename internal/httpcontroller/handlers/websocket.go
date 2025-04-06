@@ -3,15 +3,32 @@ package handlers
 import (
 	"bytes"
 	"log"
+	"net"
 	"net/http"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/security"
+)
+
+// Websocket close codes
+const (
+	CloseNormalClosure       = 1000
+	CloseGoingAway           = 1001
+	CloseProtocolError       = 1002
+	CloseUnsupportedData     = 1003
+	CloseNoStatusReceived    = 1005
+	CloseAbnormalClosure     = 1006
+	CloseInvalidFramePayload = 1007
+	ClosePolicyViolation     = 1008
+	CloseMessageTooBig       = 1009
+	CloseMandatoryExtension  = 1010
+	CloseInternalServerErr   = 1011
+	CloseServiceRestart      = 1012
+	CloseTryAgainLater       = 1013
 )
 
 // AudioStreamManager manages WebSocket connections for audio streaming
@@ -48,7 +65,18 @@ func NewAudioStreamManager() *AudioStreamManager {
 
 // HandleWebSocket upgrades an HTTP connection to WebSocket and handles the connection
 func (asm *AudioStreamManager) HandleWebSocket(c echo.Context) error {
-	// Check if user is authenticated or connecting from local network
+	sourceID := c.Param("sourceID")
+	if sourceID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "Source ID is required")
+	}
+
+	// Check if the source exists and has a valid capture buffer
+	exists := myaudio.HasCaptureBuffer(sourceID)
+	if !exists {
+		return echo.NewHTTPError(http.StatusNotFound, "Audio source not found")
+	}
+
+	// Perform authentication checks before upgrading
 	server := c.Get("server")
 	if server == nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Server context not available")
@@ -56,33 +84,18 @@ func (asm *AudioStreamManager) HandleWebSocket(c echo.Context) error {
 
 	// Check if user is authenticated
 	var isAuthenticated bool
+	var authEnabled bool
 	if s, ok := server.(interface {
 		IsAccessAllowed(c echo.Context) bool
 		isAuthenticationEnabled(c echo.Context) bool
 	}); ok {
-		// Allow access if authentication is disabled globally or user is authenticated
-		isAuthenticated = !s.isAuthenticationEnabled(c) || s.IsAccessAllowed(c)
+		authEnabled = s.isAuthenticationEnabled(c)
+		isAuthenticated = !authEnabled || s.IsAccessAllowed(c)
 	}
 
-	// Check if request is from local network
-	clientIP := c.RealIP()
-	isLocalNetwork := isLocalIPAddress(clientIP)
-
-	// Deny access if not authenticated and not from local network
-	if !isAuthenticated && !isLocalNetwork {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Authentication required for audio streaming")
-	}
-
-	sourceID := c.Param("sourceID")
-	if sourceID == "" {
-		return echo.NewHTTPError(400, "Source ID is required")
-	}
-
-	// Check if the source exists and has a valid capture buffer
-	exists := myaudio.HasCaptureBuffer(sourceID)
-	if !exists {
-		return echo.NewHTTPError(404, "Audio source not found")
-	}
+	// Check if request is from local network using the security package
+	clientIP := net.ParseIP(c.RealIP())
+	isLocalNetwork := security.IsInLocalSubnet(clientIP)
 
 	// Upgrade the connection to WebSocket
 	ws, err := asm.upgrader.Upgrade(c.Response(), c.Request(), nil)
@@ -96,6 +109,20 @@ func (asm *AudioStreamManager) HandleWebSocket(c echo.Context) error {
 		log.Printf("❌ Failed to set write deadline: %v", err)
 		ws.Close()
 		return err
+	}
+
+	// Now check authentication and local network - close with proper code if unauthorized
+	if authEnabled && !isAuthenticated && !isLocalNetwork {
+		// Send a proper close message with policy violation code
+		closeMsg := websocket.FormatCloseMessage(ClosePolicyViolation, "Authentication required for audio streaming")
+		if err := ws.WriteControl(websocket.CloseMessage, closeMsg, time.Now().Add(time.Second)); err != nil {
+			log.Printf("❌ Failed to send close message: %v", err)
+		}
+		ws.Close()
+
+		// Log the unauthorized attempt
+		log.Printf("⛔ Unauthorized WebSocket connection attempt for source %s from %s", sourceID, c.RealIP())
+		return nil
 	}
 
 	// Log connection info
@@ -295,6 +322,13 @@ func (asm *AudioStreamManager) handleClient(ws *websocket.Conn, sourceID string)
 				ws.RemoteAddr().String(), sourceID, clientCount)
 		}
 
+		// Close with proper normal closure code
+		closeMsg := websocket.FormatCloseMessage(CloseNormalClosure, "Connection closed normally")
+		if err := ws.WriteControl(websocket.CloseMessage, closeMsg, time.Now().Add(time.Second)); err != nil {
+			if asm.debug {
+				log.Printf("❌ Failed to send close message: %v", err)
+			}
+		}
 		ws.Close()
 	}()
 
@@ -389,42 +423,4 @@ func (asm *AudioStreamManager) HasActiveClients(sourceID string) bool {
 
 	clients, exists := asm.clients[sourceID]
 	return exists && len(clients) > 0
-}
-
-// isLocalIPAddress checks if the given IP address is from a local network
-func isLocalIPAddress(ip string) bool {
-	// Check for localhost
-	if ip == "127.0.0.1" || ip == "::1" || ip == "localhost" {
-		return true
-	}
-
-	// Check for private network ranges
-	// 10.0.0.0/8
-	if strings.HasPrefix(ip, "10.") {
-		return true
-	}
-
-	// 172.16.0.0/12
-	if strings.HasPrefix(ip, "172.") {
-		parts := strings.Split(ip, ".")
-		if len(parts) >= 2 {
-			if second, err := strconv.Atoi(parts[1]); err == nil {
-				if second >= 16 && second <= 31 {
-					return true
-				}
-			}
-		}
-	}
-
-	// 192.168.0.0/16
-	if strings.HasPrefix(ip, "192.168.") {
-		return true
-	}
-
-	// fc00::/7 (Unique Local Addresses)
-	if strings.HasPrefix(strings.ToLower(ip), "fc") || strings.HasPrefix(strings.ToLower(ip), "fd") {
-		return true
-	}
-
-	return false
 }
