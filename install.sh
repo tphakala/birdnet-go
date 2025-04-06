@@ -467,8 +467,8 @@ validate_audio_device() {
         fi
     fi
 
-    # Test audio device access
-    if ! arecord -c 1 -f S16_LE -r 48000 -d 1 -D "$device" /dev/null 2>/dev/null; then
+    # Test audio device access - using LC_ALL=C to force English output
+    if ! LC_ALL=C arecord -c 1 -f S16_LE -r 48000 -d 1 -D "$device" /dev/null 2>/dev/null; then
         print_message "❌ Failed to access audio device" "$RED"
         print_message "This could be due to:" "$YELLOW"
         print_message "  • Device is busy" "$YELLOW"
@@ -491,9 +491,9 @@ configure_sound_card() {
         declare -a devices
         local default_selection=0
         
-        # Capture arecord output to a variable first
+        # Capture arecord output to a variable first, forcing English locale 
         local arecord_output
-        arecord_output=$(arecord -l 2>/dev/null)
+        arecord_output=$(LC_ALL=C arecord -l 2>/dev/null)
         
         if [ -z "$arecord_output" ]; then
             print_message "❌ No audio capture devices found!" "$RED"
@@ -563,7 +563,7 @@ configure_sound_card() {
                     fi
                     ((index++))
                 fi
-            done <<< "$(arecord -l)"
+            done <<< "$(LC_ALL=C arecord -l)"
             
             ALSA_CARD="$friendly_name"
             print_message "✅ Selected capture device: " "$GREEN" "nonewline"
