@@ -110,90 +110,10 @@ func (h *Handlers) TestBirdWeather(c echo.Context) error {
 	// Stream results to client
 	enc := json.NewEncoder(c.Response())
 	for result := range resultChan {
-		// Modify the result enhancement to handle progress messages
-		if !result.Success {
-			// Log the error with the full details for debugging
-			if result.Error != "" {
-				log.Printf("BirdWeather test error in stage %s: %s", result.Stage, result.Error)
+		// Process the result
+		h.processBirdWeatherTestResult(&result)
 
-				// Check for rate limit error with expiry timestamp
-				if result.Stage == "Starting Test" && strings.Contains(result.Error, "rate limit exceeded") {
-					// Try to parse expiry timestamp
-					parts := strings.Split(result.Error, "|")
-					if len(parts) > 1 {
-						// Extract expiry timestamp
-						expiryStr := strings.TrimSpace(parts[1])
-						expiry, err := strconv.ParseInt(expiryStr, 10, 64)
-						if err == nil {
-							result.RateLimitExpiry = expiry
-							// Update error to remove timestamp part
-							result.Error = parts[0]
-							// Update the message to be more user-friendly
-							result.Message = "Rate limit exceeded: Tests can only be run once per minute."
-						}
-					}
-				}
-			}
-
-			// Generate a user-friendly troubleshooting hint
-			hint := generateBirdWeatherTroubleshootingHint(&result)
-
-			// Format the error message for the UI
-			// For 404 errors, make sure to show the URL that was attempted
-			if strings.Contains(result.Error, "404") || strings.Contains(result.Error, "not found") {
-				// Extract URL from error message if present
-				url := extractURLFromError(result.Error)
-				errorMsg := result.Error
-				if url != "" {
-					// Make it clear what URL was attempted
-					errorMsg = fmt.Sprintf("URL not found (404): %s", url)
-				}
-
-				result.Message = fmt.Sprintf("%s %s %s",
-					result.Message,
-					errorMsg,
-					hint)
-			} else if strings.Contains(result.Error, "Failed to connect to BirdWeather API") && strings.Contains(result.Error, "Could not resolve") {
-				// Handle detailed DNS resolution error specially
-				parts := strings.Split(result.Error, " - ")
-				if len(parts) > 1 {
-					detailedMessage := parts[1]
-					result.Message = fmt.Sprintf("%s: %s %s",
-						result.Message,
-						detailedMessage,
-						hint)
-				} else {
-					result.Message = fmt.Sprintf("%s %s %s",
-						result.Message,
-						result.Error,
-						hint)
-				}
-			} else if hint != "" {
-				result.Message = fmt.Sprintf("%s %s %s",
-					result.Message,
-					result.Error,
-					hint)
-			}
-			result.Error = "" // Clear the error field as we've incorporated it into the message
-		} else {
-			// Explicitly mark progress messages
-			result.IsProgress = strings.Contains(strings.ToLower(result.Message), "running") ||
-				strings.Contains(strings.ToLower(result.Message), "testing") ||
-				strings.Contains(strings.ToLower(result.Message), "establishing")
-
-			// Add a formatted note for the successful completion stages to make them stand out
-			if !result.IsProgress && (result.Stage == stageSoundscapeUpload || result.Stage == stageDetectionPost) {
-				// Add an extra formatting to highlight the verification instructions
-				if strings.Contains(result.Message, "This recording should appear") ||
-					strings.Contains(result.Message, "should be visible on your BirdWeather dashboard") {
-					// HTML is already properly formatted in the message from the testing module
-					// Just add a verification tip that stands out
-					result.Message = fmt.Sprintf("%s Visit your BirdWeather station page to verify this test submission was received.",
-						result.Message)
-				}
-			}
-		}
-
+		// Send the processed result
 		if err := enc.Encode(result); err != nil {
 			// If we can't write to the response, client probably disconnected
 			return nil
@@ -205,6 +125,94 @@ func (h *Handlers) TestBirdWeather(c echo.Context) error {
 	bwClient.Close()
 
 	return nil
+}
+
+// processBirdWeatherTestResult processes a BirdWeather test result and adds useful information
+func (h *Handlers) processBirdWeatherTestResult(result *birdweather.TestResult) {
+	// Modify the result enhancement to handle progress messages
+	if !result.Success {
+		// Log the error with the full details for debugging
+		if result.Error != "" {
+			log.Printf("BirdWeather test error in stage %s: %s", result.Stage, result.Error)
+
+			// Check for rate limit error with expiry timestamp
+			if result.Stage == "Starting Test" && strings.Contains(result.Error, "rate limit exceeded") {
+				// Try to parse expiry timestamp
+				parts := strings.Split(result.Error, "|")
+				if len(parts) > 1 {
+					// Extract expiry timestamp
+					expiryStr := strings.TrimSpace(parts[1])
+					expiry, err := strconv.ParseInt(expiryStr, 10, 64)
+					if err == nil {
+						result.RateLimitExpiry = expiry
+						// Update error to remove timestamp part
+						result.Error = parts[0]
+						// Update the message to be more user-friendly
+						result.Message = "Rate limit exceeded: Tests can only be run once per minute."
+					}
+				}
+			}
+		}
+
+		// Generate a user-friendly troubleshooting hint
+		hint := generateBirdWeatherTroubleshootingHint(result)
+
+		// Format the error message for the UI
+		// For 404 errors, make sure to show the URL that was attempted
+		switch {
+		case strings.Contains(result.Error, "404") || strings.Contains(result.Error, "not found"):
+			// Extract URL from error message if present
+			url := extractURLFromError(result.Error)
+			errorMsg := result.Error
+			if url != "" {
+				// Make it clear what URL was attempted
+				errorMsg = fmt.Sprintf("URL not found (404): %s", url)
+			}
+
+			result.Message = fmt.Sprintf("%s %s %s",
+				result.Message,
+				errorMsg,
+				hint)
+		case strings.Contains(result.Error, "Failed to connect to BirdWeather API") && strings.Contains(result.Error, "Could not resolve"):
+			// Handle detailed DNS resolution error specially
+			parts := strings.Split(result.Error, " - ")
+			if len(parts) > 1 {
+				detailedMessage := parts[1]
+				result.Message = fmt.Sprintf("%s: %s %s",
+					result.Message,
+					detailedMessage,
+					hint)
+			} else {
+				result.Message = fmt.Sprintf("%s %s %s",
+					result.Message,
+					result.Error,
+					hint)
+			}
+		case hint != "":
+			result.Message = fmt.Sprintf("%s %s %s",
+				result.Message,
+				result.Error,
+				hint)
+		}
+		result.Error = "" // Clear the error field as we've incorporated it into the message
+	} else {
+		// Explicitly mark progress messages
+		result.IsProgress = strings.Contains(strings.ToLower(result.Message), "running") ||
+			strings.Contains(strings.ToLower(result.Message), "testing") ||
+			strings.Contains(strings.ToLower(result.Message), "establishing")
+
+		// Add a formatted note for the successful completion stages to make them stand out
+		if !result.IsProgress && (result.Stage == stageSoundscapeUpload || result.Stage == stageDetectionPost) {
+			// Add an extra formatting to highlight the verification instructions
+			if strings.Contains(result.Message, "This recording should appear") ||
+				strings.Contains(result.Message, "should be visible on your BirdWeather dashboard") {
+				// HTML is already properly formatted in the message from the testing module
+				// Just add a verification tip that stands out
+				result.Message = fmt.Sprintf("%s Visit your BirdWeather station page to verify this test submission was received.",
+					result.Message)
+			}
+		}
+	}
 }
 
 // generateBirdWeatherTroubleshootingHint provides context-specific troubleshooting suggestions
