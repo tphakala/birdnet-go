@@ -2,6 +2,7 @@ package security
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -109,7 +110,7 @@ func InitializeGoth(settings *conf.Settings) {
 		if err != nil {
 			log.Printf("Warning: Failed to get config paths for session store: %v", err)
 			// Fallback to in-memory store if config paths can't be retrieved
-			gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
+			gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
 			goto initProviders
 		}
 		sessionPath = filepath.Join(configPaths[0], "sessions")
@@ -118,13 +119,16 @@ func InitializeGoth(settings *conf.Settings) {
 	// Ensure directory exists
 	if err := os.MkdirAll(sessionPath, 0o755); err != nil {
 		log.Printf("Warning: Failed to create session directory: %v", err)
-		gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
+		gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
 	} else {
-		// Create persistent session store
+		// Create persistent session store with properly sized keys
+		authKey := createSessionKey(settings.Security.SessionSecret)
+		encKey := createSessionKey(settings.Security.SessionSecret + "encryption")
+
 		gothic.Store = sessions.NewFilesystemStore(
 			sessionPath,
-			[]byte(settings.Security.SessionSecret),
-			[]byte(settings.Security.SessionSecret+"encryption"),
+			authKey,
+			encKey,
 		)
 
 		// Configure session store options
@@ -159,6 +163,15 @@ initProviders:
 			"user:email",
 		),
 	)
+}
+
+// createSessionKey creates a key of the proper length for AES encryption from a seed string
+// AES requires keys of exactly 16, 24, or 32 bytes
+func createSessionKey(seed string) []byte {
+	// Create a SHA-256 hash of the seed (32 bytes, perfect for AES-256)
+	hasher := sha256.New()
+	hasher.Write([]byte(seed))
+	return hasher.Sum(nil)
 }
 
 // SetTestConfigPath sets a test path for testing session persistence
