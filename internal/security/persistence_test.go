@@ -1,7 +1,9 @@
 package security
 
 import (
+	"bytes"
 	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
 	"testing"
@@ -47,7 +49,10 @@ func TestTokenPersistence(t *testing.T) {
 	}
 
 	// Save tokens
-	server.saveTokens()
+	err = server.saveTokens()
+	if err != nil {
+		t.Fatalf("Failed to save tokens: %v", err)
+	}
 
 	// Create a new server instance to load tokens
 	newServer := &OAuth2Server{
@@ -59,7 +64,10 @@ func TestTokenPersistence(t *testing.T) {
 	}
 
 	// Load tokens
-	newServer.loadTokens()
+	err = newServer.loadTokens()
+	if err != nil {
+		t.Fatalf("Failed to load tokens: %v", err)
+	}
 
 	// Verify only valid tokens were loaded
 	assert.True(t, newServer.ValidateAccessToken("valid_token"), "Valid token should be loaded and validated")
@@ -163,10 +171,22 @@ func TestConfigureLocalNetworkWithUnknownStore(t *testing.T) {
 		sessions.Store
 	}
 
+	// Save original log output to restore it later
+	originalOutput := log.Writer()
+	defer log.SetOutput(originalOutput)
+
+	// Capture logs to verify warning message
+	var logBuffer bytes.Buffer
+	log.SetOutput(&logBuffer)
+
+	// Set the mock store
 	gothic.Store = &mockStore{}
 
-	// This should not panic
+	// This should not panic and should log a warning
 	configureLocalNetworkCookieStore()
 
-	// No assertions needed - we're just testing it doesn't crash
+	// Verify that appropriate warning was logged
+	logOutput := logBuffer.String()
+	assert.Contains(t, logOutput, "Warning: Unknown session store type")
+	assert.Contains(t, logOutput, "mockStore")
 }

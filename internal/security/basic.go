@@ -1,6 +1,7 @@
 package security
 
 import (
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -80,7 +81,17 @@ func configureLocalNetworkCookieStore() {
 			SameSite: http.SameSiteLaxMode,
 		}
 	default:
-		// Unknown store type, no changes made
+		log.Printf("Warning: Unknown session store type %T, using default cookie store options", store)
+		// Create a default cookie store as fallback
+		defaultStore := sessions.NewCookieStore([]byte("birdnet-go-fallback"))
+		defaultStore.Options = &sessions.Options{
+			Path:     "/",
+			Secure:   false,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		}
+		// Only log the warning, don't replace the current store
+		// as that could cause unexpected behavior
 	}
 }
 
