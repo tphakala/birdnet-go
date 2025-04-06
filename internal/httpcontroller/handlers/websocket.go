@@ -189,8 +189,7 @@ func (asm *AudioStreamManager) HandleWebSocket(c echo.Context) error {
 		}
 	} else {
 		// Server context is available, try multiple ways to perform authentication check
-		authenticated := false
-		authEnabled := true
+		authEnabled = true
 
 		// Try to use the interface directly
 		if s, ok := server.(interface {
@@ -199,17 +198,12 @@ func (asm *AudioStreamManager) HandleWebSocket(c echo.Context) error {
 		}); ok {
 			authEnabled = s.isAuthenticationEnabled(c)
 			isAuthenticated = !authEnabled || s.IsAccessAllowed(c)
-			authenticated = true
-		}
-
-		// If the interface assertion failed, try with reflection or specific type assertion
-		if !authenticated {
+		} else {
 			// Try to use the specific Server type if available
 			switch s := server.(type) {
 			case interface{ IsAccessAllowed(c echo.Context) bool }:
 				isAuthenticated = s.IsAccessAllowed(c)
-				authenticated = true
-				log.Printf("🔐 WebSocket auth: using IsAccessAllowed method only for %s", c.RealIP())
+				log.Printf("🔐 WebSocket auth: allowed connection for %s", c.RealIP())
 			default:
 				// Unable to use the interface
 				log.Printf("⚠️ WebSocket auth check: unable to use server interface from %s for source %s - server type: %T",
