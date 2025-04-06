@@ -5002,6 +5002,10 @@ html:has(.drawer-toggle:checked) {
   margin-left: 0.5rem;
 }
 
+.ml-4 {
+  margin-left: 1rem;
+}
+
 .ml-7 {
   margin-left: 1.75rem;
 }
@@ -5016,6 +5020,10 @@ html:has(.drawer-toggle:checked) {
 
 .mr-5 {
   margin-right: 1.25rem;
+}
+
+.mt-0\.5 {
+  margin-top: 0.125rem;
 }
 
 .mt-1 {
@@ -5377,6 +5385,10 @@ html:has(.drawer-toggle:checked) {
   resize: both;
 }
 
+.list-disc {
+  list-style-type: disc;
+}
+
 .list-none {
   list-style-type: none;
 }
@@ -5610,6 +5622,11 @@ html:has(.drawer-toggle:checked) {
   border-color: var(--fallback-su,oklch(var(--su)/var(--tw-border-opacity)));
 }
 
+.border-warning {
+  --tw-border-opacity: 1;
+  border-color: var(--fallback-wa,oklch(var(--wa)/var(--tw-border-opacity)));
+}
+
 .bg-base-100 {
   --tw-bg-opacity: 1;
   background-color: var(--fallback-b1,oklch(var(--b1)/var(--tw-bg-opacity)));
@@ -5691,6 +5708,10 @@ html:has(.drawer-toggle:checked) {
 .bg-red-500 {
   --tw-bg-opacity: 1;
   background-color: rgb(239 68 68 / var(--tw-bg-opacity));
+}
+
+.bg-warning\/20 {
+  background-color: var(--fallback-wa,oklch(var(--wa)/0.2));
 }
 
 .bg-white\/50 {
@@ -6035,6 +6056,11 @@ html:has(.drawer-toggle:checked) {
 .text-success {
   --tw-text-opacity: 1;
   color: var(--fallback-su,oklch(var(--su)/var(--tw-text-opacity)));
+}
+
+.text-warning {
+  --tw-text-opacity: 1;
+  color: var(--fallback-wa,oklch(var(--wa)/var(--tw-text-opacity)));
 }
 
 .text-white {
