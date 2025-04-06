@@ -13,6 +13,7 @@ BirdWeather is a service that allows sharing of bird detections and environmenta
 - **Location Privacy**: Randomize location coordinates to protect precise location data
 - **Error Handling**: Comprehensive network and API error handling
 - **Connection Testing**: Diagnostic tools to test connectivity with the BirdWeather service
+- **Debug Capabilities**: Comprehensive debugging tools for audio data capture and analysis
 
 ## Components
 
@@ -60,6 +61,8 @@ For privacy protection, the package can randomize location data:
 ```go
 func (b *BwClient) RandomizeLocation(radiusMeters float64) (latitude, longitude float64)
 ```
+
+> **Note**: Currently, BirdWeather ignores user-submitted coordinates for BirdNET-Pi/Go implementations. The service always uses coordinates assigned to the station's token/ID. The location randomization feature is implemented but unused at this time.
 
 ### Connection Testing
 
@@ -173,6 +176,63 @@ Client connections are properly managed to prevent resource leaks:
 - Proper cleanup of resources in the `Close()` method
 - Idle connection cleanup
 
+## Debug Capabilities
+
+The package includes robust debugging features to help diagnose audio-related issues:
+
+### Audio Data Debugging
+
+When debug mode is enabled (`Settings.Realtime.Birdweather.Debug = true`), the following debug artifacts are saved:
+
+- **Raw PCM Data**: Saves the original PCM audio data before any processing
+  - Stored in `debug/birdweather/pcm/` directory
+  - Filename format: `bw_pcm_debug_*.raw`
+  - Includes detailed metadata in accompanying `.txt` file:
+    - Timestamp information
+    - Bird species details
+    - Confidence score
+    - Audio specifications (sample rate, bit depth, etc.)
+    - Expected duration
+
+- **WAV Audio Files**: Saves the processed WAV audio files
+  - Stored in `debug/birdweather/wav/` directory
+  - Filename format: `bw_debug_*.wav`
+  - Includes metadata in accompanying `.txt` file:
+    - Timestamp information
+    - File sizes (total file, buffer, PCM data)
+    - Audio duration and specifications
+
+### Enabling Debug Mode
+
+Enable debugging in your configuration:
+
+```go
+settings := &conf.Settings{
+    Realtime: conf.Realtime{
+        Birdweather: conf.Birdweather{
+            ID:               "your-station-id",
+            LocationAccuracy: 1000,
+            Debug:            true,  // Enable debug mode
+        },
+        // ...
+    },
+    // ...
+}
+```
+
+### Debug Directory Structure
+
+```
+debug/
+├── birdweather/
+│   ├── pcm/                      # Raw PCM audio data
+│   │   ├── bw_pcm_debug_*.raw    # Raw PCM files
+│   │   └── bw_pcm_debug_*.txt    # Metadata files
+│   └── wav/                      # Processed WAV files
+│       ├── bw_debug_*.wav        # WAV audio files
+│       └── bw_debug_*.txt        # Metadata files
+```
+
 ## Testing
 
 Comprehensive tests are provided for all key functionality:
@@ -187,6 +247,7 @@ Comprehensive tests are provided for all key functionality:
 - Audio data is expected to be 16-bit PCM at 48kHz sample rate
 - Location accuracy is limited to 4 decimal places
 - Network connectivity is required for all API operations
+- **Location coordinates** are currently ignored by BirdWeather's API. Despite the location randomization feature, BirdWeather always uses the coordinates assigned to your station ID/token rather than the coordinates submitted with detections.
 
 ## Dependencies
 
