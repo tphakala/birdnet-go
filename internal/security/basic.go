@@ -128,12 +128,14 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	// Verify client credentials from Authorization header
 	clientID, clientSecret, ok := c.Request().BasicAuth()
 	if !ok || clientID != s.Settings.Security.BasicAuth.ClientID || clientSecret != s.Settings.Security.BasicAuth.ClientSecret {
+		s.Debug("Invalid client credentials: %s", clientID)
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid client id or secret"})
 	}
 
 	// Check if client is in local subnet and configure cookie store accordingly
 	if clientIP := net.ParseIP(c.RealIP()); IsInLocalSubnet(clientIP) {
 		// For clients in the local subnet, allow non-HTTPS cookies
+		s.Debug("Client in local subnet, configuring cookie store accordingly")
 		s.configureLocalNetworkCookieStore()
 	}
 
@@ -141,38 +143,51 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	code := c.FormValue("code")
 	redirectURI := c.FormValue("redirect_uri")
 
+	s.Debug("Token request: grant_type=%s, code=%s, redirect_uri=%s", grantType, code, redirectURI)
+
 	// Check for required fields
 	if grantType == "" || code == "" || redirectURI == "" {
+		s.Debug("Missing required fields in token request")
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Missing required fields"})
 	}
 
 	// Verify grant type
 	if grantType != "authorization_code" {
+		s.Debug("Unsupported grant type: %s", grantType)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unsupported grant type"})
 	}
 
 	// Verify redirect URI
 	if !strings.Contains(redirectURI, s.Settings.Security.Host) {
+		s.Debug("Invalid redirect URI host: %s, expected %s", redirectURI, s.Settings.Security.Host)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid host for redirect URI"})
 	}
 
 	// Exchange the authorization code for an access token
 	accessToken, err := s.ExchangeAuthCode(code)
 	if err != nil {
+		s.Debug("Failed to exchange auth code: %v", err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid authorization code"})
 	}
 
 	// Store the access token in Gothic session
 	if err := gothic.StoreInSession("access_token", accessToken, c.Request(), c.Response()); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to store access token in session")
+		s.Debug("Failed to store access token in session: %v", err)
+		// Continue anyway since we'll return the token to the client
 	}
 
+	// Ensure content type is set explicitly
+	c.Response().Header().Set("Content-Type", "application/json")
+
 	// Return the access token in the response body
-	return c.JSON(http.StatusOK, map[string]string{
+	resp := map[string]string{
 		"access_token": accessToken,
 		"token_type":   "Bearer",
 		"expires_in":   s.Settings.Security.BasicAuth.AccessTokenExp.String(),
-	})
+	}
+
+	s.Debug("Successfully exchanged token, returning response")
+	return c.JSON(http.StatusOK, resp)
 }
 
 // HandleBasicAuthCallback handles the basic authorization callback flow
