@@ -906,7 +906,7 @@ Restart=always
 ExecStart=/usr/bin/docker run --rm \\
     -p 8080:8080 \\
     --env TZ="${TZ}" \\
-    ${AUDIO_ENV} \\
+    --device=/dev/snd \\
     -v ${CONFIG_DIR}:/config \\
     -v ${DATA_DIR}:/data \\
     ${BIRDNET_GO_IMAGE}
