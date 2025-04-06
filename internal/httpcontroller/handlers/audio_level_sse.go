@@ -149,11 +149,8 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 	clientIP := c.RealIP()
 
 	// Check for existing connection
-	if _, exists := activeSSEConnections.LoadOrStore(clientIP, time.Now()); exists {
-		if h.debug {
-			log.Printf("AudioLevelSSE: Rejected duplicate connection from %s", clientIP)
-		}
-		return c.NoContent(http.StatusTooManyRequests)
+	if err := h.checkDuplicateConnection(clientIP); err != nil {
+		return err
 	}
 
 	// Cleanup connection on exit
@@ -164,16 +161,42 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 		}
 	}()
 
-	// Start connection timeout timer
-	timeout := time.NewTimer(connectionTimeout)
-	defer timeout.Stop()
+	// Set up connection
+	if err := h.setupSSEConnection(c, clientIP); err != nil {
+		return err
+	}
 
+	// Run the SSE event loop
+	return h.runSSEEventLoop(c, clientIP)
+}
+
+// checkDuplicateConnection checks if there's already a connection from the same IP
+func (h *Handlers) checkDuplicateConnection(clientIP string) error {
+	if _, exists := activeSSEConnections.LoadOrStore(clientIP, time.Now()); exists {
+		if h.debug {
+			log.Printf("AudioLevelSSE: Rejected duplicate connection from %s", clientIP)
+		}
+		return echo.NewHTTPError(http.StatusTooManyRequests)
+	}
+	return nil
+}
+
+// setupSSEConnection initializes the SSE connection
+func (h *Handlers) setupSSEConnection(c echo.Context, clientIP string) error {
 	if h.debug {
 		log.Printf("AudioLevelSSE: New connection from %s", clientIP)
 	}
 
 	// Set up SSE headers
 	initializeSSEHeaders(c)
+	return nil
+}
+
+// runSSEEventLoop handles the main event loop for SSE
+func (h *Handlers) runSSEEventLoop(c echo.Context, clientIP string) error {
+	// Start connection timeout timer
+	timeout := time.NewTimer(connectionTimeout)
+	defer timeout.Stop()
 
 	// Create tickers for heartbeat and activity check
 	heartbeat := time.NewTicker(10 * time.Second)
@@ -218,55 +241,121 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 			return nil
 
 		case <-authRefresh.C:
-			// Only refresh authentication status periodically to avoid log spam
-			newAuthStatus := h.Server.IsAccessAllowed(c)
-			if newAuthStatus != isAuthenticated {
-				if h.debug {
-					log.Printf("AudioLevelSSE: User authentication status changed: %v -> %v", isAuthenticated, newAuthStatus)
-				}
-				isAuthenticated = newAuthStatus
-				// Re-initialize data with new authentication status if it changed
-				levels, lastUpdateTime, lastNonZeroTime = h.initializeLevelsData(isAuthenticated)
+			// Maps are already reference types, so we can modify them directly
+			newIsAuthenticated, newLevels, newLastUpdate, newLastNonZero :=
+				h.handleAuthRefresh(c, isAuthenticated, levels, lastUpdateTime, lastNonZeroTime)
+
+			// Update local variables with returned values
+			if newIsAuthenticated != isAuthenticated {
+				isAuthenticated = newIsAuthenticated
+				levels = newLevels
+				lastUpdateTime = newLastUpdate
+				lastNonZeroTime = newLastNonZero
 			}
 
 		case audioData := <-h.AudioLevelChan:
-			if h.debug {
-				if time.Since(lastLogTime) > 5*time.Second {
-					log.Printf("AudioLevelSSE: Received audio data from source %s: %+v", audioData.Source, audioData)
-					lastLogTime = time.Now()
-				}
-			}
+			updatedLastLogTime, updatedLastSentTime, err := h.handleAudioUpdate(c, audioData, lastLogTime, lastSentTime,
+				levels, lastUpdateTime, lastNonZeroTime, isAuthenticated, inactivityThreshold)
 
-			h.updateAudioLevels(audioData, levels, lastUpdateTime, lastNonZeroTime, isAuthenticated, inactivityThreshold)
+			lastLogTime = updatedLastLogTime
+			lastSentTime = updatedLastSentTime
 
-			// Only send updates if enough time has passed (rate limiting)
-			if time.Since(lastSentTime) >= 50*time.Millisecond {
-				if err := sendLevelsUpdate(c, levels); err != nil {
-					log.Printf("AudioLevelSSE: Error sending update: %v", err)
-					return err
-				}
-				lastSentTime = time.Now()
+			if err != nil {
+				return err
 			}
 
 		case <-activityCheck.C:
-			if updated := checkSourceActivity(levels, lastUpdateTime, lastNonZeroTime, inactivityThreshold); updated {
-				if err := sendLevelsUpdate(c, levels); err != nil {
-					log.Printf("AudioLevelSSE: Error sending update: %v", err)
-					return err
-				}
+			if err := h.handleActivityCheck(c, levels, lastUpdateTime, lastNonZeroTime, inactivityThreshold); err != nil {
+				return err
 			}
 
 		case <-heartbeat.C:
-			// Send a comment as heartbeat
-			if _, err := fmt.Fprintf(c.Response(), ": heartbeat %d\n\n", time.Now().Unix()); err != nil {
-				if h.debug {
-					log.Printf("AudioLevelSSE: Heartbeat error: %v", err)
-				}
+			if err := h.sendHeartbeat(c); err != nil {
 				return err
 			}
-			c.Response().Flush()
 		}
 	}
+}
+
+// handleAuthRefresh handles the authentication refresh event
+func (h *Handlers) handleAuthRefresh(c echo.Context, isAuthenticated bool,
+	levels map[string]myaudio.AudioLevelData,
+	lastUpdateTime, lastNonZeroTime map[string]time.Time) (newAuthStatus bool, newLevels map[string]myaudio.AudioLevelData,
+	newLastUpdate map[string]time.Time, newLastNonZero map[string]time.Time) {
+
+	// Only refresh authentication status periodically to avoid log spam
+	newAuthStatus = h.Server.IsAccessAllowed(c)
+	if newAuthStatus != isAuthenticated {
+		if h.debug {
+			log.Printf("AudioLevelSSE: User authentication status changed: %v -> %v", isAuthenticated, newAuthStatus)
+		}
+		// Re-initialize data with new authentication status if it changed
+		newLevels, newLastUpdate, newLastNonZero = h.initializeLevelsData(newAuthStatus)
+		return
+	}
+
+	newLevels = levels
+	newLastUpdate = lastUpdateTime
+	newLastNonZero = lastNonZeroTime
+	return
+}
+
+// handleAudioUpdate processes new audio level data
+func (h *Handlers) handleAudioUpdate(c echo.Context, audioData myaudio.AudioLevelData,
+	lastLogTime, lastSentTime time.Time,
+	levels map[string]myaudio.AudioLevelData, lastUpdateTime, lastNonZeroTime map[string]time.Time,
+	isAuthenticated bool, inactivityThreshold time.Duration) (updatedLastLogTime, updatedLastSentTime time.Time, err error) {
+
+	updatedLastLogTime = lastLogTime
+
+	if h.debug {
+		if time.Since(lastLogTime) > 5*time.Second {
+			log.Printf("AudioLevelSSE: Received audio data from source %s: %+v", audioData.Source, audioData)
+			updatedLastLogTime = time.Now()
+		}
+	}
+
+	h.updateAudioLevels(audioData, levels, lastUpdateTime, lastNonZeroTime, isAuthenticated, inactivityThreshold)
+
+	updatedLastSentTime = lastSentTime
+	// Only send updates if enough time has passed (rate limiting)
+	if time.Since(lastSentTime) >= 50*time.Millisecond {
+		if err = sendLevelsUpdate(c, levels); err != nil {
+			log.Printf("AudioLevelSSE: Error sending update: %v", err)
+			return
+		}
+		updatedLastSentTime = time.Now()
+	}
+
+	return
+}
+
+// handleActivityCheck checks for inactive sources and updates the client if needed
+func (h *Handlers) handleActivityCheck(c echo.Context, levels map[string]myaudio.AudioLevelData,
+	lastUpdateTime, lastNonZeroTime map[string]time.Time,
+	inactivityThreshold time.Duration) error {
+
+	if updated := checkSourceActivity(levels, lastUpdateTime, lastNonZeroTime, inactivityThreshold); updated {
+		if err := sendLevelsUpdate(c, levels); err != nil {
+			log.Printf("AudioLevelSSE: Error sending update: %v", err)
+			return err
+		}
+	}
+
+	return nil
+}
+
+// sendHeartbeat sends a heartbeat message to keep the connection alive
+func (h *Handlers) sendHeartbeat(c echo.Context) error {
+	// Send a comment as heartbeat
+	if _, err := fmt.Fprintf(c.Response(), ": heartbeat %d\n\n", time.Now().Unix()); err != nil {
+		if h.debug {
+			log.Printf("AudioLevelSSE: Heartbeat error: %v", err)
+		}
+		return err
+	}
+	c.Response().Flush()
+	return nil
 }
 
 // sendLevelsUpdate sends the current levels data to the client
