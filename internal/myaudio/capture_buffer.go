@@ -94,6 +94,14 @@ func RemoveCaptureBuffer(source string) error {
 	return nil
 }
 
+// HasCaptureBuffer checks if a capture buffer exists for the given source ID
+func HasCaptureBuffer(sourceID string) bool {
+	cbMutex.RLock()
+	defer cbMutex.RUnlock()
+	_, exists := captureBuffers[sourceID]
+	return exists
+}
+
 // InitCaptureBuffers initializes the capture buffers for each capture source.
 // It returns an error if initialization fails for any source.
 func InitCaptureBuffers(durationSeconds, sampleRate, bytesPerSample int, sources []string) error {
@@ -165,6 +173,21 @@ func (cb *CaptureBuffer) Write(data []byte) {
 	// Lock the buffer to prevent concurrent writes or reads from interfering with the update process.
 	cb.lock.Lock()
 	defer cb.lock.Unlock()
+
+	// Basic validation to check if the data length is sensible for audio data
+	if len(data) == 0 {
+		// Skip empty data
+		return
+	}
+
+	if len(data)%cb.bytesPerSample != 0 {
+		// Data length is not aligned with sample size, which might indicate corrupted data
+		// Only log occasionally to avoid flooding logs
+		if time.Now().Second()%10 == 0 {
+			log.Printf("⚠️ Warning: Audio data length (%d) is not aligned with sample size (%d)",
+				len(data), cb.bytesPerSample)
+		}
+	}
 
 	if !cb.initialized {
 		// Initialize the buffer's start time based on the current time.

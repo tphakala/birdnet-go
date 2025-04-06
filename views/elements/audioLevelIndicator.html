@@ -15,6 +15,20 @@
         reconnectDelay: 1000,
         isNavigating: false,
         retryTimeout: null,
+        audioContext: null,
+        audioWorkletNode: null,
+        webSocket: null,
+        isPlaying: false,
+        pcmDataQueue: [],
+        audioBufferSize: 4096, // Reduced to better match incoming chunks (typical size 2048-4096)
+        sampleRate: 48000, // Default sample rate
+        audioLatency: 300, // Reduced from 500 to better match real-time needs
+        pingInterval: null,
+        bufferThreshold: 5, // Reduced to start playback sooner
+        processingStarted: false,
+        jitterBufferSize: 3, // Reduced jitter buffer size to prevent excessive buffering
+        bufferStatsInterval: null, // For buffer health monitoring
+        bufferUnderrunCount: 0, // Count of buffer underruns for diagnostics
 
         isInactive(source) {
             // If we don't have the source in levels at all, consider it inactive
@@ -139,6 +153,440 @@
             };
         },
 
+        initAudio() {
+            if (!this.audioContext) {
+                try {
+                    // Create new AudioContext with explicit sample rate
+                    const contextOptions = {
+                        latencyHint: 'playback', // Changed from 'interactive' to 'playback' for streaming audio
+                        sampleRate: this.sampleRate
+                    };
+                    
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)(contextOptions);
+                    console.log(`Audio context created with sample rate: ${this.audioContext.sampleRate}Hz`);
+                    
+                    // Check if browser supports AudioWorkletNode
+                    if (window.AudioWorkletNode && this.audioContext.audioWorklet) {
+                        // Update the detection for Edge browser and add specific checks
+                        console.log('Browser information:', {
+                            userAgent: navigator.userAgent,
+                            vendor: navigator.vendor,
+                            audioWorkletSupported: !!(window.AudioWorkletNode && this.audioContext.audioWorklet),
+                            isEdge: /Edge\/|Edg\//.test(navigator.userAgent),
+                            isChromium: !!window.chrome,
+                            secureContext: window.isSecureContext
+                        });
+
+                        try {
+                            console.log('Testing basic AudioWorklet functionality...');
+                            
+                            // Load the processor from external files instead of inline code
+                            const processorUrl = '/assets/audio-processors/pcm-audio-processor.js';
+                            const testProcessorUrl = '/assets/audio-processors/test-processor.js';
+                            
+                            // Define the continuation function in the correct scope
+                            const continueWithMainWorklet = () => {
+                                console.log('Attempting to load AudioWorklet from URL:', processorUrl);
+                                
+                                // Add the audio worklet with the full processor code
+                                this.audioContext.audioWorklet.addModule(processorUrl)
+                                .then(() => {
+                                    console.log('AudioWorklet loaded successfully');
+                                    
+                                    // Create the worklet node with proper options
+                                    const workletNode = new AudioWorkletNode(this.audioContext, 'pcm-audio-processor', {
+                                        // Use 128 samples per block for better real-time performance
+                                        processorOptions: {
+                                            numberOfInputs: 0,
+                                            numberOfOutputs: 1,
+                                            outputChannelCount: [1]
+                                        }
+                                    });
+                                    
+                                    // Setup message handling from the worklet
+                                    workletNode.port.onmessage = (event) => {
+                                        if (event.data.type === 'stats') {
+                                            console.log(`Worklet buffer queue: ${event.data.queueLength}`);
+                                        }
+                                    };
+                                    
+                                    // Connect the node to the audio output
+                                    workletNode.connect(this.audioContext.destination);
+                                    
+                                    // Store the node for later access
+                                    this.audioWorkletNode = workletNode;
+                                    
+                                    console.log('Audio system initialized with AudioWorkletNode');
+                                    
+                                }).catch(err => {
+                                    console.error('AudioWorklet failed to load:', {
+                                        name: err.name,
+                                        message: err.message,
+                                        stack: err.stack,
+                                        errorObject: err
+                                    });
+                                    
+                                    // Check for specific error conditions
+                                    if (err.name === 'SecurityError') {
+                                        console.error('Security error loading AudioWorklet. This may be due to cross-origin issues or Content Security Policy restrictions.');
+                                    } else if (err.name === 'SyntaxError') {
+                                        console.error('Syntax error in AudioWorklet processor code. Check for JavaScript errors in the processor.');
+                                    } else if (err.message && err.message.includes('timeout')) {
+                                        console.error('Loading the AudioWorklet timed out. This may be due to browser restrictions or resource limitations.');
+                                    }
+                                    
+                                    console.log('Falling back to ScriptProcessorNode...');
+                                    this.fallbackToScriptProcessor();
+                                });
+                            };
+                            
+                            // Optional: Try loading a test processor first
+                            if (false) { // Set to true if you need to debug worklet loading issues
+                                // This tests if the issue is with complex processor code
+                                this.audioContext.audioWorklet.addModule(testProcessorUrl)
+                                .then(() => {
+                                    console.log('Test AudioWorklet loaded successfully');
+                                    continueWithMainWorklet();
+                                })
+                                .catch(staticErr => {
+                                    console.error('Test AudioWorklet failed:', staticErr);
+                                    // Continue with main worklet approach anyway
+                                    continueWithMainWorklet();
+                                });
+                            } else {
+                                continueWithMainWorklet();
+                            }
+                        } catch (e) {
+                            console.error('Error during AudioWorklet initialization test:', e);
+                            this.fallbackToScriptProcessor();
+                        }
+                    } else {
+                        console.log('AudioWorkletNode not supported, falling back to ScriptProcessorNode');
+                        this.fallbackToScriptProcessor();
+                    }
+                } catch (error) {
+                    console.error('Error initializing audio system:', error);
+                }
+            }
+        },
+
+        // Add fallback to ScriptProcessorNode for browsers that don't support AudioWorkletNode
+        fallbackToScriptProcessor() {
+            try {
+                // Create a ScriptProcessorNode (deprecated but widely supported)
+                const bufferSize = this.audioBufferSize;
+                const scriptNode = this.audioContext.createScriptProcessor(
+                    bufferSize, // Buffer size
+                    1,          // Number of input channels (not used)
+                    1           // Number of output channels
+                );
+                
+                // Set up the audio processing callback with improved buffer management
+                scriptNode.onaudioprocess = (audioProcessingEvent) => {
+                    const outputBuffer = audioProcessingEvent.outputBuffer;
+                    const outputData = outputBuffer.getChannelData(0);
+                    
+                    // Initialize with silence
+                    for (let i = 0; i < outputData.length; i++) {
+                        outputData[i] = 0;
+                    }
+                    
+                    // Only process if we have enough data or already started
+                    if (this.processingStarted || this.pcmDataQueue.length >= this.bufferThreshold) {
+                        if (!this.processingStarted) {
+                            console.log(`Starting audio processing with ${this.pcmDataQueue.length} buffers queued`);
+                            this.processingStarted = true;
+                        }
+                        
+                        // Track position in output buffer
+                        let outputPosition = 0;
+                        
+                        // Process multiple packets until output buffer is full
+                        while (outputPosition < outputData.length && this.pcmDataQueue.length > 0) {
+                            const chunk = this.pcmDataQueue.shift();
+                            const samplesToProcess = Math.min(outputData.length - outputPosition, Math.floor(chunk.length / 2));
+                            
+                            // Convert Int16 PCM to Float32
+                            for (let i = 0; i < samplesToProcess; i++) {
+                                const lo = chunk[i*2];
+                                const hi = chunk[i*2+1];
+                                let sample = (hi << 8) | lo;
+                                
+                                if (sample > 32767) {
+                                    sample -= 65536;
+                                }
+                                
+                                outputData[outputPosition++] = sample / 32768.0;
+                            }
+                            
+                            // If we didn't use the entire chunk, put the rest back
+                            if (samplesToProcess * 2 < chunk.length) {
+                                const remainingChunk = chunk.slice(samplesToProcess * 2);
+                                this.pcmDataQueue.unshift(remainingChunk);
+                                break;
+                            }
+                        }
+                        
+                        if (Math.random() < 0.01) {
+                            console.log(`Filled ${outputPosition}/${outputData.length} samples, queue: ${this.pcmDataQueue.length}`);
+                        }
+                        
+                        // Check if we ran out of data
+                        if (outputPosition < outputData.length && this.pcmDataQueue.length === 0) {
+                            this.bufferUnderrunCount++;
+                            if (outputPosition < outputData.length / 2) {
+                                console.warn('Significant buffer underrun - resetting processing');
+                                this.processingStarted = false;
+                            }
+                        }
+                    }
+                };
+                
+                // Connect the ScriptProcessorNode to the audio output
+                scriptNode.connect(this.audioContext.destination);
+                
+                // Store the node for later access
+                this.audioWorkletNode = scriptNode;
+                
+                console.log(`Audio system initialized with ScriptProcessorNode (buffer size: ${bufferSize})`);
+            } catch (error) {
+                console.error('Error initializing fallback audio system:', error);
+            }
+        },
+
+        setupWebSocketForSource(sourceId) {
+            // Close any existing connection
+            if (this.webSocket) {
+                this.webSocket.close();
+                this.webSocket = null;
+            }
+            
+            // Clear any existing queued audio data
+            this.pcmDataQueue = [];
+            this.processingStarted = false;
+            this.bufferUnderrunCount = 0;
+            
+            // Set up buffer stats monitoring
+            if (this.bufferStatsInterval) {
+                clearInterval(this.bufferStatsInterval);
+            }
+            
+            this.bufferStatsInterval = setInterval(() => {
+                if (this.isPlaying) {
+                    const samples = this.pcmDataQueue.reduce((acc, chunk) => acc + Math.floor(chunk.length / 2), 0);
+                    const bufferTimeMs = (samples / this.sampleRate) * 1000;
+                    console.log(`Buffer health: ${this.pcmDataQueue.length} packets, ~${samples} samples (${bufferTimeMs.toFixed(1)}ms), underruns: ${this.bufferUnderrunCount}`);
+                }
+            }, 2000);
+            
+            // Create a new WebSocket connection
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/audio-stream/${sourceId}`;
+            
+            try {
+                this.webSocket = new WebSocket(wsUrl);
+                
+                this.webSocket.binaryType = 'arraybuffer';
+                
+                // Handle connection open
+                this.webSocket.onopen = () => {
+                    console.log(`WebSocket connected to ${sourceId}`);
+                    // Resume the AudioContext if it was suspended
+                    if (this.audioContext && this.audioContext.state === 'suspended') {
+                        this.audioContext.resume().catch(err => {
+                            console.error('Failed to resume audio context:', err);
+                        });
+                    }
+                };
+                
+                // Handle incoming audio data with improved buffering
+                this.webSocket.onmessage = (event) => {
+                    if (event.data instanceof ArrayBuffer) {
+                        // Convert ArrayBuffer to Uint8Array for processing
+                        const audioData = new Uint8Array(event.data);
+                        
+                        // Skip empty or very small chunks
+                        if (audioData.length < 32) {
+                            console.warn(`Received unusually small audio chunk: ${audioData.length} bytes`);
+                            return;
+                        }
+                        
+                        // Log data details occasionally
+                        if (Math.random() < 0.01) {
+                            const samples = Math.floor(audioData.length / 2);
+                            const durationMs = (samples / this.sampleRate) * 1000;
+                            console.log(`Received audio data: ${audioData.length} bytes (${samples} samples, ${durationMs.toFixed(1)}ms), queue: ${this.pcmDataQueue.length} packets`);
+                            
+                            // Check format - sample a few values
+                            if (audioData.length >= 8) {
+                                // Convert first few samples (16-bit) from little-endian
+                                const samples = [];
+                                for (let i = 0; i < 4; i++) {
+                                    const lo = audioData[i*2];
+                                    const hi = audioData[i*2+1];
+                                    let sample = (hi << 8) | lo;
+                                    if (sample > 32767) sample -= 65536;
+                                    samples.push(sample);
+                                }
+                                console.log(`Sample values: ${samples.join(', ')}`);
+                            }
+                        }
+                        
+                        // If using AudioWorkletNode, send directly to the worklet
+                        if (this.audioWorkletNode && this.audioWorkletNode.port) {
+                            // Send to worklet if we're connected and ready
+                            if (this.audioContext && this.audioContext.state === 'running') {
+                                try {
+                                    this.audioWorkletNode.port.postMessage({
+                                        type: 'buffer',
+                                        buffer: audioData
+                                    });
+                                } catch (err) {
+                                    console.error('Error sending data to AudioWorklet:', err);
+                                    // Fall back to queue if there's an error
+                                    this.pcmDataQueue.push(audioData);
+                                }
+                            } else {
+                                // Queue the data until the context is running
+                                this.pcmDataQueue.push(audioData);
+                            }
+                        } else {
+                            // Otherwise add to our queue for ScriptProcessorNode
+                            this.pcmDataQueue.push(audioData);
+                            
+                            // Keep queue at a reasonable size to prevent memory issues
+                            const maxQueueSize = 12; // Reduced from 15
+                            const minQueueSize = 3;  // Minimum to maintain
+                            
+                            // Improved queue management strategy
+                            if (this.pcmDataQueue.length > maxQueueSize) {
+                                // Drop packets strategically rather than just the oldest
+                                if (this.pcmDataQueue.length > maxQueueSize + 3) {
+                                    // For severe overflow, drop multiple packets
+                                    const toRemove = Math.min(3, this.pcmDataQueue.length - maxQueueSize);
+                                    this.pcmDataQueue.splice(1, toRemove); // Keep newest and oldest
+                                    if (Math.random() < 0.1) {
+                                        console.warn(`Severe overflow: removed ${toRemove} packets`);
+                                    }
+                                } else {
+                                    // For minor overflow, drop middle packets (preserves audio transitions)
+                                    const middleIndex = Math.floor(this.pcmDataQueue.length / 2);
+                                    this.pcmDataQueue.splice(middleIndex, 1);
+                                    if (Math.random() < 0.1) {
+                                        console.log('Queue overflow: removed middle packet');
+                                    }
+                                }
+                            }
+                        }
+                    }
+                };
+                
+                // Handle errors
+                this.webSocket.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    // Don't close the connection here, as the browser will do it automatically
+                };
+                
+                // Handle connection close
+                this.webSocket.onclose = (event) => {
+                    console.log(`WebSocket connection closed with code ${event.code}, reason: ${event.reason}`);
+                    
+                    // Only attempt to reconnect if we're still playing and it wasn't a normal closure
+                    if (this.isPlaying && event.code !== 1000) {
+                        console.log('Attempting to reconnect...');
+                        setTimeout(() => {
+                            if (this.isPlaying) {
+                                this.setupWebSocketForSource(sourceId);
+                            }
+                        }, 1000);
+                    }
+                };
+                
+                // Keep connection alive with periodic pings
+                this.pingInterval = setInterval(() => {
+                    if (this.webSocket && this.webSocket.readyState === WebSocket.OPEN) {
+                        // Send a small ping message
+                        this.webSocket.send('ping');
+                    }
+                }, 20000); // Reduced from 30s to 20s for more reliable connection maintenance
+                
+            } catch (error) {
+                console.error('Error setting up WebSocket:', error);
+            }
+        },
+
+        togglePlayback() {
+            if (!this.selectedSource) {
+                console.error('No audio source selected');
+                return;
+            }
+            
+            // Toggle playback state
+            this.isPlaying = !this.isPlaying;
+            
+            if (this.isPlaying) {
+                // Start playback
+                console.log('Starting audio playback...');
+                
+                // Initialize audio system if needed
+                if (!this.audioContext) {
+                    this.initAudio();
+                } else if (this.audioContext.state === 'closed') {
+                    // If context was closed, create a new one
+                    this.audioContext = null;
+                    this.audioWorkletNode = null;
+                    this.initAudio();
+                }
+                
+                // Resume audio context if it was suspended
+                if (this.audioContext && this.audioContext.state === 'suspended') {
+                    this.audioContext.resume().catch(err => {
+                        console.error('Failed to resume audio context:', err);
+                    });
+                }
+                
+                // Reset processing state
+                this.processingStarted = false;
+                this.pcmDataQueue = [];
+                
+                // Set up WebSocket for streaming
+                this.setupWebSocketForSource(this.selectedSource);
+                
+            } else {
+                // Stop playback
+                console.log('Stopping audio playback...');
+                
+                // Clear the ping interval
+                if (this.pingInterval) {
+                    clearInterval(this.pingInterval);
+                    this.pingInterval = null;
+                }
+                
+                // Close WebSocket connection with normal closure code
+                if (this.webSocket) {
+                    // Use normal closure (1000) to indicate intentional close
+                    this.webSocket.close(1000, 'User stopped playback');
+                    this.webSocket = null;
+                }
+                
+                // Clear the data queue
+                this.pcmDataQueue = [];
+                
+                // Suspend audio context to save power
+                if (this.audioContext && this.audioContext.state === 'running') {
+                    this.audioContext.suspend().catch(err => {
+                        console.error('Failed to suspend audio context:', err);
+                    });
+                }
+                
+                // Clear the buffer stats interval
+                if (this.bufferStatsInterval) {
+                    clearInterval(this.bufferStatsInterval);
+                    this.bufferStatsInterval = null;
+                }
+            }
+        },
+
         init() {
             // Setup initial connection
             this.setupEventSource();
@@ -147,6 +595,24 @@
             document.addEventListener('htmx:beforeRequest', () => {
                 this.isNavigating = true;
                 this.cleanupEventSource();
+                
+                // Clean up audio resources
+                if (this.pingInterval) {
+                    clearInterval(this.pingInterval);
+                    this.pingInterval = null;
+                }
+                
+                if (this.webSocket) {
+                    // Use normal closure code
+                    this.webSocket.close(1000, 'Navigation');
+                    this.webSocket = null;
+                }
+                
+                if (this.audioContext) {
+                    this.audioContext.suspend().catch(err => {
+                        console.error('Failed to suspend audio context:', err);
+                    });
+                }
             });
             
             document.addEventListener('htmx:afterRequest', () => {
@@ -161,8 +627,32 @@
             document.addEventListener('visibilitychange', () => {
                 if (document.hidden) {
                     this.cleanupEventSource();
+                    
+                    // Suspend audio context when page is hidden
+                    if (this.audioContext && this.audioContext.state === 'running') {
+                        this.audioContext.suspend().catch(err => {
+                            console.error('Failed to suspend audio context:', err);
+                        });
+                    }
+                    
+                    // Don't close WebSocket when page is hidden, just allow it to continue running
+                    // This prevents the server from treating tab switching as disconnects
                 } else if (!this.isNavigating) {
                     this.setupEventSource();
+                    
+                    // Resume streaming if needed when page becomes visible again
+                    if (this.isPlaying && this.selectedSource) {
+                        if (this.audioContext && this.audioContext.state === 'suspended') {
+                            this.audioContext.resume().catch(err => {
+                                console.error('Failed to resume audio context:', err);
+                            });
+                        }
+                        
+                        // Only reinitialize WebSocket if it's closed
+                        if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) {
+                            this.setupWebSocketForSource(this.selectedSource);
+                        }
+                    }
                 }
             });
             
@@ -172,6 +662,15 @@
                 document.removeEventListener('visibilitychange', this.cleanupEventSource);
                 document.removeEventListener('htmx:beforeRequest', this.cleanupEventSource);
                 document.removeEventListener('htmx:afterRequest', this.setupEventSource);
+                
+                // Clean up audio resources
+                if (this.webSocket) {
+                    this.webSocket.close();
+                }
+                
+                if (this.audioContext) {
+                    this.audioContext.close();
+                }
             };
         },
         getCurrentLevel() {
@@ -252,17 +751,41 @@
                     <div class="px-4 py-2 text-sm text-base-content/60">No audio sources available</div>
                 </template>
                 <template x-for="(data, source) in levels" :key="source">
-                    <button @click="selectedSource = source; dropdownOpen = false"
-                            class="w-full text-left p-2 text-sm hover:bg-base-200 flex items-center justify-between space-x-2 rounded-md"
-                            :class="{
-                                'bg-base-200': selectedSource === source,
-                                'text-base-content/50': isInactive(source),
-                                'text-base-content': !isInactive(source)
-                            }"
-                            role="menuitem">
-                        <span class="flex-1 whitespace-nowrap" x-text="getSourceDisplayName(source)"></span>
-                        <span x-show="isInactive(source)" class="text-xs text-base-content/50 shrink-0">(silent)</span>
-                    </button>
+                    <div class="flex flex-row items-center w-full p-2 text-sm hover:bg-base-200 rounded-md"
+                         :class="{
+                             'bg-base-200': selectedSource === source,
+                             'text-base-content/50': isInactive(source),
+                             'text-base-content': !isInactive(source)
+                         }">
+                        <!-- Source name area (clickable to select) -->
+                        <button @click="selectedSource = source; dropdownOpen = false" 
+                                class="flex-1 text-left flex items-center justify-between"
+                                role="menuitem">
+                            <span class="flex-1 whitespace-nowrap" x-text="getSourceDisplayName(source)"></span>
+                            <span x-show="isInactive(source)" class="text-xs text-base-content/50 shrink-0 ml-2">(silent)</span>
+                        </button>
+                        
+                        <!-- Play/Stop controls directly in same row -->
+                        <button x-show="selectedSource === source"
+                                @click="togglePlayback(); dropdownOpen = false" 
+                                class="btn btn-xs btn-circle btn-ghost ml-2"
+                                :class="isPlaying ? 'text-error' : 'text-success'">
+                            <template x-if="!isPlaying">
+                                <!-- Play icon (>) -->
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                                </svg>
+                                <span class="sr-only">Play</span>
+                            </template>
+                            <template x-if="isPlaying">
+                                <!-- Stop icon (#) -->
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd" />
+                                </svg>
+                                <span class="sr-only">Stop</span>
+                            </template>
+                        </button>
+                    </div>
                 </template>
             </div>
         </div>

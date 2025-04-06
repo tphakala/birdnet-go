@@ -114,6 +114,7 @@ func (s *Server) initRoutes() {
 	// Special routes
 	s.Echo.GET("/api/v1/sse", s.Handlers.SSE.ServeSSE)
 	s.Echo.GET("/api/v1/audio-level", s.Handlers.WithErrorHandling(s.Handlers.AudioLevelSSE))
+	s.Echo.GET("/api/v1/audio-stream/:sourceID", s.AudioStreamManager.HandleWebSocket)
 	s.Echo.POST("/api/v1/settings/save", h.WithErrorHandling(h.SaveSettings), s.AuthMiddleware)
 	s.Echo.GET("/api/v1/settings/audio/get", h.WithErrorHandling(h.GetAudioDevices), s.AuthMiddleware)
 
