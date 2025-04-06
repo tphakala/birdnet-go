@@ -60,9 +60,9 @@ func checkRateLimit() error {
 
 	// Calculate time until next allowed test
 	nextAllowedTime := lastTestTime.Add(minTestInterval)
-	waitTime := time.Until(nextAllowedTime).Round(time.Second)
+	expiryTime := nextAllowedTime.Unix()
 
-	return fmt.Errorf("rate limit exceeded: please wait %s before testing again", waitTime)
+	return fmt.Errorf("rate limit exceeded: please wait before testing again|%d", expiryTime)
 }
 
 // resolveDNSWithFallback attempts to resolve a hostname using fallback DNS servers if the OS resolver fails
@@ -154,14 +154,15 @@ func simulateFailure() bool {
 
 // TestResult represents the result of a BirdWeather test
 type TestResult struct {
-	Success    bool   `json:"success"`
-	Stage      string `json:"stage"`
-	Message    string `json:"message"`
-	Error      string `json:"error,omitempty"`
-	IsProgress bool   `json:"isProgress,omitempty"`
-	State      string `json:"state,omitempty"`     // Current state: running, completed, failed, timeout
-	Timestamp  string `json:"timestamp,omitempty"` // ISO8601 timestamp of the result
-	ResultID   string `json:"resultId,omitempty"`  // Optional ID for test results like soundscapeID
+	Success         bool   `json:"success"`
+	Stage           string `json:"stage"`
+	Message         string `json:"message"`
+	Error           string `json:"error,omitempty"`
+	IsProgress      bool   `json:"isProgress,omitempty"`
+	State           string `json:"state,omitempty"`           // Current state: running, completed, failed, timeout
+	Timestamp       string `json:"timestamp,omitempty"`       // ISO8601 timestamp of the result
+	ResultID        string `json:"resultId,omitempty"`        // Optional ID for test results like soundscapeID
+	RateLimitExpiry int64  `json:"rateLimitExpiry,omitempty"` // Unix timestamp for when rate limit expires
 }
 
 // TestStage represents a stage in the BirdWeather test process
@@ -300,24 +301,32 @@ func (b *BwClient) testAPIConnectivity(ctx context.Context) TestResult {
 				// Attempt DNS resolution with fallback resolvers
 				ips, resolveErr := resolveDNSWithFallback(hostname)
 				if resolveErr != nil {
-					return fmt.Errorf("all DNS resolution attempts failed: %w", resolveErr)
+					return fmt.Errorf("Failed to connect to BirdWeather API at %s: %w - Could not resolve the BirdWeather API hostname", apiEndpoint, err)
 				}
 
-				// Try to connect using the resolved IP directly
-				for _, ip := range ips {
-					// Create a modified URL with IP instead of hostname
-					// Need to keep the original hostname in HTTP Host header
-					ipEndpoint := replaceHostWithIP(apiEndpoint, ip.String())
+				// If fallback DNS succeeded, it means the system DNS is incorrectly configured
+				// We don't connect directly with IP as that would cause HTTPS certificate validation issues
+				log.Printf("Fallback DNS successfully resolved %s while system DNS failed", hostname)
+				log.Printf("This indicates your system DNS is incorrectly configured")
 
-					log.Printf("Attempting connection with fallback DNS resolved IP: %s", ipEndpoint)
-					err = tryAPIConnection(ctx, ipEndpoint, hostname)
-					if err == nil {
-						log.Printf("✅ Successfully connected to BirdWeather API via fallback DNS resolution")
-						return nil
-					}
+				// Log the resolved IPs for debugging
+				ipStrings := make([]string, len(ips))
+				for i, ip := range ips {
+					ipStrings[i] = ip.String()
+				}
+				log.Printf("Resolved IPs using fallback DNS: %s", strings.Join(ipStrings, ", "))
+
+				// Try connecting again with the original FQDN - this may work if the DNS
+				// resolution failure was transient or if the fallback resolution affected DNS cache
+				log.Printf("Retrying connection with original hostname after fallback DNS resolution")
+				retryErr := tryAPIConnection(ctx, apiEndpoint)
+				if retryErr == nil {
+					log.Printf("✅ Successfully connected to BirdWeather API after fallback DNS resolution")
+					return nil
 				}
 
-				return fmt.Errorf("connection failed using both standard and fallback DNS: %w", err)
+				// Both attempts failed
+				return fmt.Errorf("Failed to connect to BirdWeather API at %s: %w - Failed to perform API Connectivity connection with system DNS. Fallback DNS resolved the hostname, indicating issue with your systems DNS resolver configuration. Please check your network settings.", apiEndpoint, err)
 			}
 
 			// Not a DNS error, return the original error
@@ -393,7 +402,11 @@ func tryAPIConnection(ctx context.Context, apiEndpoint string, hostHeader ...str
 		if errors.As(err, &netErr) && netErr.Timeout() {
 			return fmt.Errorf("API connectivity test timed out while connecting to %s: %w", apiEndpoint, err)
 		}
-		return fmt.Errorf("failed to connect to BirdWeather API at %s: %w", apiEndpoint, err)
+		// Check if this is a DNS error
+		if isDNSError(err) {
+			return fmt.Errorf("Failed to connect to BirdWeather API at %s: %w - Could not resolve the BirdWeather API hostname", apiEndpoint, err)
+		}
+		return fmt.Errorf("Failed to connect to BirdWeather API at %s: %w", apiEndpoint, err)
 	}
 	defer resp.Body.Close()
 

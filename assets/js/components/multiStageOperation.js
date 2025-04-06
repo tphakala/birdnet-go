@@ -15,6 +15,50 @@ document.addEventListener('alpine:init', () => {
             isRunning: false,
             results: [],
             currentStage: null,
+            rateLimitCountdowns: {}, // Store countdown timers by stage
+            
+            // Format seconds to mm:ss
+            formatTimeRemaining(seconds) {
+                if (seconds <= 0) return '00:00';
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = seconds % 60;
+                return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+            },
+            
+            // Update rate limit countdown
+            updateRateLimitCountdown(stage) {
+                const result = this.results.find(r => r.stage === stage);
+                if (!result || !result.rateLimitExpiry) return;
+                
+                const now = Math.floor(Date.now() / 1000);
+                const timeRemaining = Math.max(0, result.rateLimitExpiry - now);
+                
+                // Update the countdown display
+                result.countdownDisplay = this.formatTimeRemaining(timeRemaining);
+                
+                // If countdown reached zero, stop updating and enable retry
+                if (timeRemaining <= 0) {
+                    if (this.rateLimitCountdowns[stage]) {
+                        clearInterval(this.rateLimitCountdowns[stage]);
+                        delete this.rateLimitCountdowns[stage];
+                    }
+                    result.rateLimitExpired = true;
+                    
+                    // Force Alpine to update the UI
+                    this.results = [...this.results];
+                    return;
+                }
+                
+                // Schedule next update
+                if (!this.rateLimitCountdowns[stage]) {
+                    this.rateLimitCountdowns[stage] = setInterval(() => {
+                        this.updateRateLimitCountdown(stage);
+                        
+                        // Force Alpine to detect the change
+                        this.results = [...this.results];
+                    }, 1000);
+                }
+            },
             
             // Helper methods
             isProgressMessage(message) {
@@ -28,10 +72,45 @@ document.addEventListener('alpine:init', () => {
                        lowerMsg.includes('processing');
             },
             
+            // Check if the result indicates a DNS resolution issue
+            isDNSResolutionIssue(result) {
+                if (!result) return false;
+                
+                // Check for DNS-related keywords in error or message
+                const hasDNSError = result.error && (
+                    result.error.toLowerCase().includes('dns') ||
+                    result.error.toLowerCase().includes('resolve') ||
+                    result.error.toLowerCase().includes('no such host') ||
+                    result.error.toLowerCase().includes('name resolution') ||
+                    result.error.toLowerCase().includes('lookup')
+                );
+                
+                const hasDNSMessage = result.message && (
+                    result.message.toLowerCase().includes('dns') ||
+                    result.message.toLowerCase().includes('fallback') ||
+                    result.message.toLowerCase().includes('name resolution') ||
+                    result.message.toLowerCase().includes('system dns is incorrectly configured') ||
+                    result.message.toLowerCase().includes('could not resolve')
+                );
+                
+                return hasDNSError || hasDNSMessage;
+            },
+            
+            // Check if any results have DNS issues
+            hasDNSIssue() {
+                return this.results.some(result => result.dnsIssue === true);
+            },
+            
             // Start the operation
             start(payload = {}, options = {}) {
                 const initialStage = options.initialStage || this.stageOrder[0];
                 const initialMessage = options.initialMessage || `Initializing ${this.operationName}...`;
+                
+                // Clear any existing countdowns
+                Object.keys(this.rateLimitCountdowns).forEach(stage => {
+                    clearInterval(this.rateLimitCountdowns[stage]);
+                    delete this.rateLimitCountdowns[stage];
+                });
                 
                 this.isRunning = true;
                 this.currentStage = initialStage;
@@ -118,6 +197,36 @@ document.addEventListener('alpine:init', () => {
                                                         state,
                                                         success: result.error ? false : result.success
                                                     };
+                                                    
+                                                    // Add DNS issue flag if this is a DNS resolution problem
+                                                    if (this.isDNSResolutionIssue(updatedResult)) {
+                                                        updatedResult.dnsIssue = true;
+                                                    }
+                                                    
+                                                    // Process rate limit expiry if present
+                                                    if (updatedResult.rateLimitExpiry) {
+                                                        // Initialize countdown display
+                                                        const now = Math.floor(Date.now() / 1000);
+                                                        const timeRemaining = Math.max(0, updatedResult.rateLimitExpiry - now);
+                                                        updatedResult.countdownDisplay = this.formatTimeRemaining(timeRemaining);
+                                                        updatedResult.rateLimitExpired = timeRemaining <= 0;
+                                                        
+                                                        // Clear any existing countdown for this stage
+                                                        if (this.rateLimitCountdowns[updatedResult.stage]) {
+                                                            clearInterval(this.rateLimitCountdowns[updatedResult.stage]);
+                                                            delete this.rateLimitCountdowns[updatedResult.stage];
+                                                        }
+                                                        
+                                                        // Start countdown immediately if time remaining
+                                                        if (timeRemaining > 0) {
+                                                            this.rateLimitCountdowns[updatedResult.stage] = setInterval(() => {
+                                                                this.updateRateLimitCountdown(updatedResult.stage);
+                                                            }, 1000);
+                                                        }
+                                                        
+                                                        // Also add a clear "rate limit" property to make it easier to check
+                                                        updatedResult.hasRateLimit = true;
+                                                    }
                                                     
                                                     if (existingIndex >= 0) {
                                                         // Update existing result
@@ -215,6 +324,15 @@ document.addEventListener('alpine:init', () => {
                 this.isRunning = false;
                 this.results = [];
                 this.currentStage = null;
+            },
+            
+            // Clean up intervals on component destroy
+            destroy() {
+                // Clear all countdown timers
+                Object.keys(this.rateLimitCountdowns).forEach(stage => {
+                    clearInterval(this.rateLimitCountdowns[stage]);
+                });
+                this.rateLimitCountdowns = {};
             }
         };
     });

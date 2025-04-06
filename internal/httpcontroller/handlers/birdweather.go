@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -109,57 +110,10 @@ func (h *Handlers) TestBirdWeather(c echo.Context) error {
 	// Stream results to client
 	enc := json.NewEncoder(c.Response())
 	for result := range resultChan {
-		// Modify the result enhancement to handle progress messages
-		if !result.Success {
-			// Log the error with the full details for debugging
-			if result.Error != "" {
-				log.Printf("BirdWeather test error in stage %s: %s", result.Stage, result.Error)
-			}
+		// Process the result
+		h.processBirdWeatherTestResult(&result)
 
-			// Generate a user-friendly troubleshooting hint
-			hint := generateBirdWeatherTroubleshootingHint(&result)
-
-			// Format the error message for the UI
-			// For 404 errors, make sure to show the URL that was attempted
-			if strings.Contains(result.Error, "404") || strings.Contains(result.Error, "not found") {
-				// Extract URL from error message if present
-				url := extractURLFromError(result.Error)
-				errorMsg := result.Error
-				if url != "" {
-					// Make it clear what URL was attempted
-					errorMsg = fmt.Sprintf("URL not found (404): %s", url)
-				}
-
-				result.Message = fmt.Sprintf("%s %s %s",
-					result.Message,
-					errorMsg,
-					hint)
-			} else if hint != "" {
-				result.Message = fmt.Sprintf("%s %s %s",
-					result.Message,
-					result.Error,
-					hint)
-			}
-			result.Error = "" // Clear the error field as we've incorporated it into the message
-		} else {
-			// Explicitly mark progress messages
-			result.IsProgress = strings.Contains(strings.ToLower(result.Message), "running") ||
-				strings.Contains(strings.ToLower(result.Message), "testing") ||
-				strings.Contains(strings.ToLower(result.Message), "establishing")
-
-			// Add a formatted note for the successful completion stages to make them stand out
-			if !result.IsProgress && (result.Stage == stageSoundscapeUpload || result.Stage == stageDetectionPost) {
-				// Add an extra formatting to highlight the verification instructions
-				if strings.Contains(result.Message, "This recording should appear") ||
-					strings.Contains(result.Message, "should be visible on your BirdWeather dashboard") {
-					// HTML is already properly formatted in the message from the testing module
-					// Just add a verification tip that stands out
-					result.Message = fmt.Sprintf("%s Visit your BirdWeather station page to verify this test submission was received.",
-						result.Message)
-				}
-			}
-		}
-
+		// Send the processed result
 		if err := enc.Encode(result); err != nil {
 			// If we can't write to the response, client probably disconnected
 			return nil
@@ -173,6 +127,94 @@ func (h *Handlers) TestBirdWeather(c echo.Context) error {
 	return nil
 }
 
+// processBirdWeatherTestResult processes a BirdWeather test result and adds useful information
+func (h *Handlers) processBirdWeatherTestResult(result *birdweather.TestResult) {
+	// Modify the result enhancement to handle progress messages
+	if !result.Success {
+		// Log the error with the full details for debugging
+		if result.Error != "" {
+			log.Printf("BirdWeather test error in stage %s: %s", result.Stage, result.Error)
+
+			// Check for rate limit error with expiry timestamp
+			if result.Stage == "Starting Test" && strings.Contains(result.Error, "rate limit exceeded") {
+				// Try to parse expiry timestamp
+				parts := strings.Split(result.Error, "|")
+				if len(parts) > 1 {
+					// Extract expiry timestamp
+					expiryStr := strings.TrimSpace(parts[1])
+					expiry, err := strconv.ParseInt(expiryStr, 10, 64)
+					if err == nil {
+						result.RateLimitExpiry = expiry
+						// Update error to remove timestamp part
+						result.Error = parts[0]
+						// Update the message to be more user-friendly
+						result.Message = "Rate limit exceeded: Tests can only be run once per minute."
+					}
+				}
+			}
+		}
+
+		// Generate a user-friendly troubleshooting hint
+		hint := generateBirdWeatherTroubleshootingHint(result)
+
+		// Format the error message for the UI
+		// For 404 errors, make sure to show the URL that was attempted
+		switch {
+		case strings.Contains(result.Error, "404") || strings.Contains(result.Error, "not found"):
+			// Extract URL from error message if present
+			url := extractURLFromError(result.Error)
+			errorMsg := result.Error
+			if url != "" {
+				// Make it clear what URL was attempted
+				errorMsg = fmt.Sprintf("URL not found (404): %s", url)
+			}
+
+			result.Message = fmt.Sprintf("%s %s %s",
+				result.Message,
+				errorMsg,
+				hint)
+		case strings.Contains(result.Error, "Failed to connect to BirdWeather API") && strings.Contains(result.Error, "Could not resolve"):
+			// Handle detailed DNS resolution error specially
+			parts := strings.Split(result.Error, " - ")
+			if len(parts) > 1 {
+				detailedMessage := parts[1]
+				result.Message = fmt.Sprintf("%s: %s %s",
+					result.Message,
+					detailedMessage,
+					hint)
+			} else {
+				result.Message = fmt.Sprintf("%s %s %s",
+					result.Message,
+					result.Error,
+					hint)
+			}
+		case hint != "":
+			result.Message = fmt.Sprintf("%s %s %s",
+				result.Message,
+				result.Error,
+				hint)
+		}
+		result.Error = "" // Clear the error field as we've incorporated it into the message
+	} else {
+		// Explicitly mark progress messages
+		result.IsProgress = strings.Contains(strings.ToLower(result.Message), "running") ||
+			strings.Contains(strings.ToLower(result.Message), "testing") ||
+			strings.Contains(strings.ToLower(result.Message), "establishing")
+
+		// Add a formatted note for the successful completion stages to make them stand out
+		if !result.IsProgress && (result.Stage == stageSoundscapeUpload || result.Stage == stageDetectionPost) {
+			// Add an extra formatting to highlight the verification instructions
+			if strings.Contains(result.Message, "This recording should appear") ||
+				strings.Contains(result.Message, "should be visible on your BirdWeather dashboard") {
+				// HTML is already properly formatted in the message from the testing module
+				// Just add a verification tip that stands out
+				result.Message = fmt.Sprintf("%s Visit your BirdWeather station page to verify this test submission was received.",
+					result.Message)
+			}
+		}
+	}
+}
+
 // generateBirdWeatherTroubleshootingHint provides context-specific troubleshooting suggestions
 func generateBirdWeatherTroubleshootingHint(result *birdweather.TestResult) string {
 	if result.Success {
@@ -181,8 +223,7 @@ func generateBirdWeatherTroubleshootingHint(result *birdweather.TestResult) stri
 
 	// Check for rate limiting errors first
 	if result.Stage == "Starting Test" && strings.Contains(result.Error, "rate limit exceeded") {
-		return "To prevent abuse of the BirdWeather service, we limit how often tests can be run. " +
-			"Please wait the indicated time and try again."
+		return "To prevent abuse of the BirdWeather service, we limit how often tests can be run."
 	}
 
 	// Return troubleshooting hints based on the stage and error message
@@ -193,9 +234,13 @@ func generateBirdWeatherTroubleshootingHint(result *birdweather.TestResult) stri
 			return "The BirdWeather API endpoint returned a 404 error. This may indicate that the BirdWeather service has made changes to their API structure. Please check for any announcements from BirdWeather about API changes, or try again later as the service might be experiencing temporary issues."
 		case strings.Contains(result.Error, "fallback DNS"):
 			return "We attempted to connect using both your system's DNS resolver and public DNS services (Cloudflare, Google, and Quad9), but all attempts failed. This could indicate a more serious connectivity issue or that the BirdWeather service is currently unavailable. Please check your internet connection and try again later."
+		case strings.Contains(result.Error, "Fallback DNS resolved the hostname"):
+			return "Your system's DNS resolver failed to resolve the BirdWeather hostname, but our fallback DNS servers succeeded. This indicates a problem with your DNS configuration. Consider changing your DNS servers to public DNS providers like Google (8.8.8.8, 8.8.4.4) or Cloudflare (1.1.1.1, 1.0.0.1)."
+		case strings.Contains(result.Error, "system DNS is incorrectly configured"):
+			return "Your system's DNS resolver failed to resolve the BirdWeather hostname, but our fallback DNS servers succeeded. This indicates a problem with your DNS configuration. Consider changing your DNS servers to public DNS providers like Google (8.8.8.8, 8.8.4.4) or Cloudflare (1.1.1.1, 1.0.0.1)."
 		case strings.Contains(result.Error, "timeout") || strings.Contains(result.Error, "i/o timeout"):
 			return "Check your internet connection and ensure that app.birdweather.com is accessible from your network. Consider checking for any firewall rules that might be blocking outbound connections."
-		case strings.Contains(result.Error, "no such host") || strings.Contains(result.Error, "DNS"):
+		case strings.Contains(result.Error, "no such host") || strings.Contains(result.Error, "DNS") || strings.Contains(result.Error, "name resolution"):
 			return "Could not resolve the BirdWeather API hostname. We attempted to use alternative DNS servers as a fallback, but all attempts failed. Please check your DNS configuration and internet connectivity."
 		default:
 			return "Unable to connect to the BirdWeather API. Verify your internet connection and network settings."

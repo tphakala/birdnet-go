@@ -33,6 +33,7 @@
 
     <!-- Results -->
     <div x-show="results.length > 0" 
+         x-cloak
          class="space-y-2" 
          role="region" 
          aria-label="{{.operationName}} Results"
@@ -55,6 +56,7 @@
                     <div class="w-5 h-5 flex-shrink-0">
                         <!-- Running/Progress Icon -->
                         <svg x-show="result.state === 'running' && !result.error" 
+                             x-cloak
                              xmlns="http://www.w3.org/2000/svg" 
                              class="text-info animate-spin" 
                              viewBox="0 0 24 24" 
@@ -65,6 +67,7 @@
                         </svg>
                         <!-- Success Icon -->
                         <svg x-show="result.state === 'completed' && !result.error" 
+                             x-cloak
                              xmlns="http://www.w3.org/2000/svg" 
                              class="text-success" 
                              viewBox="0 0 20 20" 
@@ -74,6 +77,7 @@
                         </svg>
                         <!-- Error Icon -->
                         <svg x-show="result.state === 'failed' || result.state === 'timeout' || result.error" 
+                             x-cloak
                              xmlns="http://www.w3.org/2000/svg" 
                              class="text-error" 
                              viewBox="0 0 20 20" 
@@ -86,10 +90,12 @@
                     <div class="flex flex-col">
                         <span class="font-medium" x-text="result.stage"></span>
                         <span x-show="result.state === 'running' && !result.error" 
+                              x-cloak
                               class="text-xs text-info">
                             In Progress...
                         </span>
                         <span x-show="result.state === 'timeout'" 
+                              x-cloak
                               class="text-xs text-error">
                             Timed Out
                         </span>
@@ -102,15 +108,65 @@
                 <template x-if="!result.success || result.error">
                     <div class="space-y-2 mt-1 ml-7">
                         <div class="text-sm" x-text="result.message"></div>
-                        <div x-show="result.error" class="text-sm text-error" x-text="result.error"></div>
-                        <div x-show="result.hint" class="text-sm mt-2" x-text="result.hint"></div>
+                        <div x-show="result.error" x-cloak class="text-sm text-error" x-text="result.error"></div>
+                        <div x-show="result.hint" x-cloak class="text-sm mt-2" x-text="result.hint"></div>
+                        
+                        <!-- Rate Limit Countdown -->
+                        <div x-show="result.rateLimitExpiry" x-cloak class="mt-2 mb-1 p-2 bg-base-300 rounded-md">
+                            <div x-show="!result.rateLimitExpired" x-cloak class="flex items-center space-x-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-base-content" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <div>
+                                    <span class="text-sm font-medium">Wait time remaining:</span>
+                                    <span class="font-mono text-base-content font-bold text-lg ml-2" x-text="result.countdownDisplay || '00:00'"></span>
+                                </div>
+                            </div>
+                            <div x-show="result.rateLimitExpired" x-cloak class="mt-2">
+                                <span class="text-sm">Rate limit expired. You can test again now.</span>
+                                <button @click="reset(); start()" class="btn btn-xs btn-primary mt-1">
+                                    Retry Test
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </template>
             </div>
         </template>
         
+        <!-- DNS Configuration Issue Section -->
+        <div x-show="hasDNSIssue()" 
+             x-cloak
+             class="mt-4 p-3 bg-warning/20 text-base-content rounded border-l-4 border-warning"
+             role="alert"
+             aria-label="DNS Configuration Issue Detected">
+            <div class="flex items-start space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" 
+                     class="h-6 w-6 text-warning flex-shrink-0 mt-0.5" 
+                     fill="none"
+                     viewBox="0 0 24 24"
+                     stroke="currentColor">
+                    <path stroke-linecap="round" 
+                          stroke-linejoin="round" 
+                          stroke-width="2" 
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div>
+                    <h5 class="font-semibold text-base-content mb-2">DNS Configuration Issue Detected</h5>
+                    <p>Your system's DNS configuration may need adjustment for proper network connectivity.</p>
+                    <p class="mt-2">Consider setting your DNS servers to reliable public DNS providers:</p>
+                    <ul class="list-disc ml-4 mt-1">
+                        <li>Google: 8.8.8.8, 8.8.4.4</li>
+                        <li>Cloudflare: 1.1.1.1, 1.0.0.1</li>
+                        <li>Quad9: 9.9.9.9, 149.112.112.112</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
         <!-- Success Completion Message (optional) -->
         <div x-show="{{if .showCompletionMessage}}{{.showCompletionMessage}}{{else}}isCompleteSuccess(){{end}}" 
+             x-cloak
              class="mt-4 p-2 bg-base-200 text-base-content rounded"
              role="alert"
              aria-label="Operation successful">
