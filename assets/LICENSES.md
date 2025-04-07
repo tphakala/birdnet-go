@@ -82,6 +82,11 @@ Source: Apache-2.0
 License: https://github.com/go-audio/wav/blob/v1.1.0/LICENSE
 Source: Apache-2.0
 
+### github.com/go-chi/chi/v5
+
+License: https://github.com/go-chi/chi/blob/v5.1.0/LICENSE
+Source: MIT
+
 ### github.com/go-echarts/go-echarts/v2
 
 License: https://github.com/go-echarts/go-echarts/blob/v2.5.2/LICENSE
@@ -159,7 +164,7 @@ Source: MIT
 
 ### github.com/markbates/goth
 
-License: https://github.com/markbates/goth/blob/v1.80.0/LICENSE.txt
+License: https://github.com/markbates/goth/blob/v1.81.0/LICENSE.txt
 Source: MIT
 
 ### github.com/mattn/go-colorable
@@ -339,7 +344,7 @@ Source: Apache-2.0
 
 ### golang.org/x/crypto/acme
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.36.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.37.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
@@ -354,22 +359,22 @@ Source: BSD-3-Clause
 
 ### golang.org/x/sync/semaphore
 
-License: https://cs.opensource.google/go/x/sync/+/v0.12.0:LICENSE
+License: https://cs.opensource.google/go/x/sync/+/v0.13.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sys/unix
 
-License: https://cs.opensource.google/go/x/sys/+/v0.31.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.32.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term
 
-License: https://cs.opensource.google/go/x/term/+/v0.30.0:LICENSE
+License: https://cs.opensource.google/go/x/term/+/v0.31.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.23.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.24.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
