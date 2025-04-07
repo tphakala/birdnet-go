@@ -35,6 +35,7 @@
         sseStalled: false,
         sseStallRecoveryAttempts: 0,
         lastDataTime: null,
+        _requestedPermission: false,
 
         isInactive(source) {
             // If we don't have the source in levels at all, consider it inactive
@@ -171,6 +172,20 @@
                         latencyHint: 'interactive',
                         sampleRate: this.sampleRate
                     });
+                    
+                    // Request permission for background audio playback in Safari and mobile
+                    if ('audioWorklet' in this.audioContext && !this._requestedPermission) {
+                        this._requestedPermission = true;
+                        
+                        // For Safari and iOS - attempt to enable background audio
+                        if (typeof document.webkitAudioPlaybackAllowed === 'boolean') {
+                            // Attempt to get user gesture to enable audio background playback
+                            this.audioContext.resume().then(() => {
+                                console.log('Audio context resumed for background playback permission');
+                            });
+                        }
+                    }
+                    
                     // Keep this log as it's useful for troubleshooting
                     console.log(`Created AudioContext with sample rate ${this.audioContext.sampleRate}Hz`);
                 }
@@ -397,7 +412,8 @@
                     this.sseStallRecoveryAttempts = 0;
                     this.lastDataTime = Date.now();
                     
-                    if (!document.hidden && this.audioContext && this.audioContext.state === 'suspended') {
+                    // Always resume the audio context when SSE connects, regardless of visibility
+                    if (this.audioContext && this.audioContext.state === 'suspended') {
                         this.audioContext.resume().then(() => {
                         }).catch(err => {
                             console.error('Failed to resume audio context:', err);
@@ -425,17 +441,15 @@
                             }
                             
                             // Drastically reduce audio data logs
-                            // Only log once every ~1000 packets in regular mode
-                            // Almost never log in background mode (~1 in 10000)
                             const shouldLog = document.hidden ? Math.random() < 0.0001 : Math.random() < 0.001;
                                              
                             if (shouldLog) {
                                 const samples = Math.floor(audioData.length / 2);
-                                const durationMs = (samples / this.sampleRate) * 1000;
                                 console.log(`Received audio data: ${audioData.length} bytes, queue: ${this.pcmDataQueue.length} packets`);
                             }
                             
-                            if (!document.hidden && this.audioWorkletNode && this.audioWorkletNode.port) {
+                            // MODIFIED: Always process audio data regardless of visibility
+                            if (this.audioWorkletNode && this.audioWorkletNode.port) {
                                 if (this.audioContext && this.audioContext.state === 'running') {
                                     try {
                                         this.audioWorkletNode.port.postMessage({
@@ -452,6 +466,7 @@
                             } else {
                                 this.pcmDataQueue.push(audioData);
                                 
+                                // You can keep different buffer sizes based on visibility
                                 const maxQueueSize = document.hidden ? 30 : 12; 
                                 const minQueueSize = document.hidden ? 10 : 3;
                                 
@@ -518,7 +533,7 @@
                     // Keep this connection log
                     console.log(`WebSocket connected to ${sourceId}`);
                     
-                    // Resume the AudioContext if it was suspended
+                    // Resume the AudioContext regardless of visibility
                     if (this.audioContext && this.audioContext.state === 'suspended') {
                         this.audioContext.resume().catch(err => {
                             console.error('Failed to resume audio context:', err);
@@ -542,13 +557,10 @@
                         if (Math.random() < 0.001) {
                             const samples = Math.floor(audioData.length / 2);
                             console.log(`Received WS audio data: ${audioData.length} bytes, queue: ${this.pcmDataQueue.length} packets`);
-                            
-                            // Remove sample value logging to reduce console spam
                         }
                         
-                        // If using AudioWorkletNode, send directly to the worklet
+                        // MODIFIED: Always process audio regardless of visibility
                         if (this.audioWorkletNode && this.audioWorkletNode.port) {
-                            // Send to worklet if we're connected and ready
                             if (this.audioContext && this.audioContext.state === 'running') {
                                 try {
                                     this.audioWorkletNode.port.postMessage({
@@ -557,38 +569,28 @@
                                     });
                                 } catch (err) {
                                     console.error('Error sending data to AudioWorklet:', err);
-                                    // Fall back to queue if there's an error
                                     this.pcmDataQueue.push(audioData);
                                 }
                             } else {
-                                // Queue the data until the context is running
                                 this.pcmDataQueue.push(audioData);
                             }
                         } else {
-                            // Otherwise add to our queue for ScriptProcessorNode
                             this.pcmDataQueue.push(audioData);
                             
-                            // Keep queue at a reasonable size to prevent memory issues
-                            const maxQueueSize = 12; // Reduced from 15
-                            const minQueueSize = 3;  // Minimum to maintain
+                            // Use different buffer sizes based on visibility
+                            const maxQueueSize = document.hidden ? 30 : 12;
+                            const minQueueSize = document.hidden ? 10 : 3;
                             
-                            // Improved queue management strategy
                             if (this.pcmDataQueue.length > maxQueueSize) {
-                                // Drop packets strategically rather than just the oldest
                                 if (this.pcmDataQueue.length > maxQueueSize + 3) {
-                                    // For severe overflow, drop multiple packets
                                     const toRemove = Math.min(3, this.pcmDataQueue.length - maxQueueSize);
-                                    this.pcmDataQueue.splice(1, toRemove); // Keep newest and oldest
+                                    this.pcmDataQueue.splice(1, toRemove);
                                     if (Math.random() < 0.1) {
                                         console.warn(`Severe overflow: removed ${toRemove} packets`);
                                     }
                                 } else {
-                                    // For minor overflow, drop middle packets (preserves audio transitions)
                                     const middleIndex = Math.floor(this.pcmDataQueue.length / 2);
                                     this.pcmDataQueue.splice(middleIndex, 1);
-                                    if (Math.random() < 0.1) {
-                                        console.log('Queue overflow: removed middle packet');
-                                    }
                                 }
                             }
                         }
@@ -673,8 +675,8 @@
                     this.initAudio();
                 }
                 
-                // Only resume audio context if page is visible
-                if (!document.hidden && this.audioContext && this.audioContext.state === 'suspended') {
+                // Always resume audio context regardless of visibility
+                if (this.audioContext && this.audioContext.state === 'suspended') {
                     this.audioContext.resume().catch(err => {
                         console.error('Failed to resume audio context:', err);
                     });
@@ -689,6 +691,32 @@
                 // Set up streaming connection
                 this.setupWebSocketForSource(this.selectedSource);
                 
+                // ADD MediaSession API support
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.metadata = new MediaMetadata({
+                        title: 'Bird Audio Stream',
+                        artist: 'BirdNet-Go',
+                        album: 'Live Stream',
+                        // Optional artwork - use favicon as default
+                        artwork: [
+                            { src: '/assets/favicon.ico', sizes: '32x32', type: 'image/x-icon' },
+                        ]
+                    });
+                    
+                    navigator.mediaSession.setActionHandler('play', () => {
+                        this.isPlaying = true;
+                        this.setupWebSocketForSource(this.selectedSource);
+                    });
+                    
+                    navigator.mediaSession.setActionHandler('pause', () => {
+                        this.isPlaying = false;
+                        this.cleanupAudioResources();
+                    });
+                    
+                    // Update playback state
+                    navigator.mediaSession.playbackState = 'playing';
+                }
+                
             } else {
                 // Keep this log to indicate user action
                 console.log('Stopping audio playback...');
@@ -696,8 +724,13 @@
                 // Clean up all resources
                 this.cleanupAudioResources();
                 
-                // Suspend audio context to save power
-                if (this.audioContext && this.audioContext.state === 'running') {
+                // Update mediaSession state if available
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.playbackState = 'paused';
+                }
+                
+                // Only suspend audio context if navigating away
+                if (this.isNavigating && this.audioContext && this.audioContext.state === 'running') {
                     this.audioContext.suspend().catch(err => {
                         console.error('Failed to suspend audio context:', err);
                     });
@@ -744,11 +777,18 @@
                     // When tab goes to background
                     this.cleanupEventSource(); // Still close the audio level EventSource
                     
-                    // Don't close SSE audio stream when in background, but suspend the audio context
-                    if (this.audioContext && this.audioContext.state === 'running') {
-                        this.audioContext.suspend().catch(err => {
-                            console.error('Failed to suspend audio context:', err);
-                        });
+                    // REMOVED: Don't suspend audio context in background
+                    if (this.isPlaying) {
+                        // Adjust buffer size when in background to reduce CPU usage but keep audio flowing
+                        this.bufferThreshold = Math.max(3, this.bufferThreshold);
+                        console.log('Tab in background: continuing audio playback with adjusted buffering');
+                        
+                        // Make sure audio context is running
+                        if (this.audioContext && this.audioContext.state === 'suspended') {
+                            this.audioContext.resume().catch(err => {
+                                console.error('Failed to resume audio context in background:', err);
+                            });
+                        }
                     }
                     
                 } else if (!this.isNavigating) {
@@ -814,35 +854,42 @@
             const name = this.levels[source]?.name || source;
             return name;
         },
-        // Added method to properly clean up resources when stopping playback
+        // Modify the cleanup resources method
         cleanupAudioResources() {
-            // Clear all intervals
-            if (this.bufferStatsInterval) {
-                clearInterval(this.bufferStatsInterval);
-                this.bufferStatsInterval = null;
+            // MODIFY: Only clean up completely if not playing or if navigating away
+            if (!this.isPlaying || this.isNavigating) {
+                // Clear all intervals
+                if (this.bufferStatsInterval) {
+                    clearInterval(this.bufferStatsInterval);
+                    this.bufferStatsInterval = null;
+                }
+                
+                if (this.sseStallCheckInterval) {
+                    clearInterval(this.sseStallCheckInterval);
+                    this.sseStallCheckInterval = null;
+                }
+                
+                if (this.pingInterval) {
+                    clearInterval(this.pingInterval);
+                    this.pingInterval = null;
+                }
+                
+                // Close connections
+                this.closeExistingConnections();
+                
+                // Clear the data queue
+                this.pcmDataQueue = [];
+                
+                // Reset state
+                this.processingStarted = false;
+                this.bufferUnderrunCount = 0;
+                this.sseStalled = false;
+                this.sseStallRecoveryAttempts = 0;
+            } else {
+                // Lighter cleanup that preserves audio playback
+                // Don't close connections or reset state that would interrupt playback
+                console.log('Light cleanup to preserve background audio playback');
             }
-            
-            if (this.sseStallCheckInterval) {
-                clearInterval(this.sseStallCheckInterval);
-                this.sseStallCheckInterval = null;
-            }
-            
-            if (this.pingInterval) {
-                clearInterval(this.pingInterval);
-                this.pingInterval = null;
-            }
-            
-            // Close connections
-            this.closeExistingConnections();
-            
-            // Clear the data queue
-            this.pcmDataQueue = [];
-            
-            // Reset state
-            this.processingStarted = false;
-            this.bufferUnderrunCount = 0;
-            this.sseStalled = false;
-            this.sseStallRecoveryAttempts = 0;
         }
     }" 
     @click.away="dropdownOpen = false">
@@ -852,7 +899,8 @@
             class="w-full h-full relative focus:outline-none group" 
             :aria-expanded="dropdownOpen"
             aria-haspopup="true"
-            :aria-label="'Audio level for ' + (selectedSource ? getSourceDisplayName(selectedSource) : 'No source')">
+            :aria-label="'Audio level for ' + (selectedSource ? getSourceDisplayName(selectedSource) : 'No source')"
+            tabindex="0">
         <svg class="w-full h-full" viewBox="0 0 36 36" aria-hidden="true">
             <!-- Background circle path -->
             <path d="M18 2.0845
@@ -874,16 +922,17 @@
             </path>
         </svg>
         <div class="absolute inset-0 flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path fill-rule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clip-rule="evenodd"></path>
             </svg>
         </div>
+        <!-- Live region to announce volume changes -->
+        <div class="sr-only" aria-live="polite" x-text="'Current audio level: ' + Math.round(getSmoothedVolume()) + ' percent' + (isClipping() ? ', clipping detected' : '')"></div>
     </button>
 
     {{if or (not $.Security.Enabled) $.Security.AccessAllowed}}
     <!-- Tooltip for selected source -->
     <div x-show="selectedSource && !dropdownOpen"
-    class="hidden group-hover:flex absolute left-1/2 transform -translate-x-1/2 -translate-y-full mt-2 px-2 py-1 bg-gray-900 text-gray-50 text-sm rounded whitespace-nowrap z-50">
          x-transition:enter="transition ease-out duration-100"
          x-transition:enter-start="opacity-0"
          x-transition:enter-end="opacity-100"
@@ -891,60 +940,100 @@
          x-transition:leave-start="opacity-100"
          x-transition:leave-end="opacity-0"
          class="invisible group-hover:visible absolute left-1/2 transform -translate-x-1/2 -translate-y-full mt-2 px-2 py-1 bg-gray-900 text-gray-50 text-sm rounded whitespace-nowrap z-50"
-         style="top: -5px;">
+         style="top: -5px;"
+         aria-hidden="true">
         <span x-text="selectedSource ? getSourceDisplayName(selectedSource) : 'No source selected'"></span>
     </div>
     
     <!-- Dropdown menu, shown only for authenticated users -->
-    <template x-if="dropdownOpen">
-        <!-- Dropdown menu container -->
-        <div class="absolute p-1 right-0 mt-2 w-auto min-w-[12rem] max-w-[90vw] overflow-hidden rounded-md shadow-lg bg-base-100 ring-1 ring-black ring-opacity-5 z-50">
-            <div class="py-1" role="none">
-                <template x-if="Object.keys(levels).length === 0">
-                    <div class="px-4 py-2 text-sm text-base-content/60">No audio sources available</div>
-                </template>
-                <template x-for="(data, source) in levels" :key="source">
-                    <div class="flex flex-row items-center w-full p-2 text-sm hover:bg-base-200 rounded-md"
-                         :class="{
-                             'bg-base-200': selectedSource === source,
-                             'text-base-content/50': isInactive(source),
-                             'text-base-content': !isInactive(source)
-                         }">
-                        <!-- Source name area (clickable to select) -->
-                        <button @click="selectedSource = source; dropdownOpen = false" 
-                                class="flex-1 text-left flex items-center justify-between"
-                                role="menuitem">
-                            <span class="flex-1 whitespace-nowrap" x-text="getSourceDisplayName(source)"></span>
-                            <span x-show="isInactive(source)" class="text-xs text-base-content/50 shrink-0 ml-2">(silent)</span>
-                        </button>
-                        
-                        <!-- Play/Stop controls directly in same row -->
-                        <button x-show="selectedSource === source"
-                                @click="togglePlayback(); dropdownOpen = false" 
-                                class="btn btn-xs btn-circle btn-ghost ml-2"
-                                :class="isPlaying ? 'text-error' : 'text-success'">
-                            <template x-if="!isPlaying">
-                                <!-- Play icon (>) -->
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
-                                </svg>
-                                <span class="sr-only">Play</span>
-                            </template>
-                            <template x-if="isPlaying">
-                                <!-- Stop icon (#) -->
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd" />
-                                </svg>
-                                <span class="sr-only">Stop</span>
-                            </template>
-                        </button>
-                    </div>
-                </template>
-            </div>
+    <div x-show="dropdownOpen"
+         role="dialog"
+         aria-modal="true"
+         :aria-label="'Audio Source Selection'"
+         class="absolute p-1 right-0 mt-2 w-auto min-w-[12rem] max-w-[90vw] overflow-hidden rounded-md shadow-lg bg-base-100 ring-1 ring-black ring-opacity-5 z-50"
+         x-transition:enter="transition ease-out duration-100"
+         x-transition:enter-start="opacity-0 scale-95"
+         x-transition:enter-end="opacity-100 scale-100"
+         x-transition:leave="transition ease-in duration-75"
+         x-transition:leave-start="opacity-100 scale-100"
+         x-transition:leave-end="opacity-0 scale-95"
+         @keydown.escape.window="dropdownOpen = false"
+         @keydown.tab="$event.shiftKey || $el.querySelector('.last-focusable').focus()"
+         @keydown.shift.tab="$el.querySelector('.first-focusable').focus()">
+        <div class="py-1" role="menu" aria-orientation="vertical">
+            <template x-if="Object.keys(levels).length === 0">
+                <div class="px-4 py-2 text-sm text-base-content/60" role="menuitem">No audio sources available</div>
+            </template>
+            <template x-for="(data, source) in levels" :key="source">
+                <div class="flex flex-row items-center w-full p-2 text-sm hover:bg-base-200 rounded-md"
+                     :class="{
+                         'bg-base-200': selectedSource === source,
+                         'text-base-content/50': isInactive(source),
+                         'text-base-content': !isInactive(source)
+                     }"
+                     role="menuitem"
+                     :id="'source-item-' + source">
+                    <!-- Source name area (clickable to select) -->
+                    <button @click="selectedSource = source; dropdownOpen = false" 
+                            class="flex-1 text-left flex items-center justify-between"
+                            role="menuitemradio"
+                            :aria-checked="selectedSource === source"
+                            :tabindex="source === Object.keys(levels)[0] ? 0 : -1"
+                            :class="{ 'first-focusable': source === Object.keys(levels)[0] }"
+                            @keydown.right="$event.target.nextElementSibling?.focus()">
+                        <span class="flex-1 whitespace-nowrap" x-text="getSourceDisplayName(source)"></span>
+                        <span x-show="isInactive(source)" class="text-xs text-base-content/50 shrink-0 ml-2" aria-hidden="true">(silent)</span>
+                        <!-- Accessible label that includes silence status -->
+                        <span class="sr-only" x-text="isInactive(source) ? getSourceDisplayName(source) + ' (currently silent)' : getSourceDisplayName(source)"></span>
+                    </button>
+                    
+                    <!-- Play/Stop controls directly in same row -->
+                    <button x-show="selectedSource === source"
+                            @click="togglePlayback(); dropdownOpen = false" 
+                            class="btn btn-xs btn-circle btn-ghost ml-2"
+                            :class="isPlaying ? 'text-error' : 'text-success'"
+                            :aria-label="isPlaying ? 'Stop audio playback' : 'Start audio playback'"
+                            :tabindex="selectedSource === source ? 0 : -1"
+                            :class="{ 'last-focusable': selectedSource === source }"
+                            @keydown.left="$event.target.previousElementSibling?.focus()">
+                        <template x-if="!isPlaying">
+                            <!-- Play icon (>) -->
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                            </svg>
+                        </template>
+                        <template x-if="isPlaying">
+                            <!-- Stop icon (#) -->
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd" />
+                            </svg>
+                        </template>
+                    </button>
+                </div>
+            </template>
         </div>
-    </template>
+    </div>
     
     {{end}}
 
+    <!-- Live region for audio playback status -->
+    <div aria-live="polite" class="sr-only">
+        <span x-show="isPlaying" x-text="'Now playing audio from ' + (selectedSource ? getSourceDisplayName(selectedSource) : 'unknown source')"></span>
+        <span x-show="!isPlaying && selectedSource" x-text="'Audio playback stopped'"></span>
+    </div>
+
 </div>
+
+<!-- Add this script to the bottom for better keyboard navigation -->
+<script>
+document.addEventListener('alpine:init', () => {
+    // A11y: Enhance keyboard interaction for dropdown
+    window.addEventListener('keydown', (e) => {
+        // Close dropdown on escape
+        if (e.key === 'Escape' && Alpine.$data(document.querySelector('[x-data*="dropdownOpen"]')).dropdownOpen) {
+            Alpine.$data(document.querySelector('[x-data*="dropdownOpen"]')).dropdownOpen = false;
+        }
+    });
+});
+</script>
 {{end}} 
