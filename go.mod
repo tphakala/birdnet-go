@@ -1,6 +1,7 @@
 module github.com/tphakala/birdnet-go
 
 go 1.24.1
+
 require (
 	cgt.name/pkg/go-mwclient v1.3.0
 	github.com/antonholmquist/jason v1.0.0
@@ -91,7 +92,7 @@ require (
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/oauth2 v0.28.0
 	golang.org/x/sync v0.12.0 // indirect
-	golang.org/x/sys v0.31.0
+	golang.org/x/sys v0.32.0
 	golang.org/x/time v0.11.0
 	google.golang.org/protobuf v1.36.1 // indirect
 )
