@@ -876,120 +876,8 @@
             }
         },
 
-        togglePlayback() {
-            if (!this.selectedSource) {
-                console.error('No audio source selected');
-                return;
-            }
-            
-            // Toggle playback state
-            this.isPlaying = !this.isPlaying;
-            
-            if (this.isPlaying) {
-                // Keep this log to indicate user action
-                console.log('Starting audio playback...');
-                
-                // Initialize audio system if needed
-                if (!this.audioContext) {
-                    this.initAudio();
-                } else if (this.audioContext.state === 'closed') {
-                    this.audioContext = null;
-                    this.audioWorkletNode = null;
-                    this.initAudio();
-                }
-                
-                // Always resume audio context regardless of visibility
-                if (this.audioContext && this.audioContext.state === 'suspended') {
-                    this.audioContext.resume().catch(err => {
-                        console.error('Failed to resume audio context:', err);
-                    });
-                }
-                
-                // Reset processing state
-                this.processingStarted = false;
-                this.pcmDataQueue = [];
-                this.sseStalled = false;
-                this.sseStallRecoveryAttempts = 0;
-                
-                // Set up streaming connection
-                this.setupWebSocketForSource(this.selectedSource);
-                
-                // Set the playing source to the current selection
-                this.playingSource = this.selectedSource;
-                
-                // ADD MediaSession API support
-                if ('mediaSession' in navigator) {
-                    navigator.mediaSession.metadata = new MediaMetadata({
-                        title: 'Bird Audio Stream',
-                        artist: 'BirdNet-Go',
-                        album: 'Live Stream',
-                        // Optional artwork - use favicon as default
-                        artwork: [
-                            { src: '/assets/favicon.ico', sizes: '32x32', type: 'image/x-icon' },
-                        ]
-                    });
-                    
-                    navigator.mediaSession.setActionHandler('play', () => {
-                        this.isPlaying = true;
-                        this.setupWebSocketForSource(this.selectedSource);
-                    });
-                    
-                    navigator.mediaSession.setActionHandler('pause', () => {
-                        this.isPlaying = false;
-                        this.cleanupAudioResources();
-                    });
-                    
-                    // Update playback state
-                    navigator.mediaSession.playbackState = 'playing';
-                }
-                
-            } else {
-                // Keep this log to indicate user action
-                console.log('Stopping audio playback...');
-                
-                // Reset the playing source
-                this.playingSource = null;
-                
-                // Clean up all resources
-                this.cleanupAudioResources();
-                
-                // Update mediaSession state if available
-                if ('mediaSession' in navigator) {
-                    navigator.mediaSession.playbackState = 'paused';
-                }
-                
-                // Only suspend audio context if navigating away
-                if (this.isNavigating && this.audioContext && this.audioContext.state === 'running') {
-                    this.audioContext.suspend().catch(err => {
-                        console.error('Failed to suspend audio context:', err);
-                    });
-                }
-            }
-        },
-
-        // New function to toggle playback for a specific source
-        toggleSourcePlayback(source) {
-            // If we're already playing this source, stop it
-            if (this.isPlaying && this.playingSource === source) {
-                this.isPlaying = false;
-                this.playingSource = null;
-                this.cleanupAudioResources();
-                
-                // Update mediaSession state if available
-                if ('mediaSession' in navigator) {
-                    navigator.mediaSession.playbackState = 'paused';
-                }
-                return;
-            }
-            
-            // If we're playing a different source, stop it first
-            if (this.isPlaying) {
-                this.cleanupAudioResources();
-            }
-            
-            // Start playing the new source
-            console.log(`Starting audio playback for source: ${source}`);
-            
+        // Initialize or reset audio context
+        initializeAudioContext() {
             // Initialize audio system if needed
             if (!this.audioContext) {
                 this.initAudio();
@@ -1005,34 +893,117 @@
                     console.error('Failed to resume audio context:', err);
                 });
             }
-            
-            // Reset processing state
+        },
+        
+        // Reset stream processing state
+        resetProcessingState() {
             this.processingStarted = false;
             this.pcmDataQueue = [];
             this.sseStalled = false;
             this.sseStallRecoveryAttempts = 0;
-            
-            // Set the playing source and update state
-            this.playingSource = source;
-            this.isPlaying = true;
-            
-            // Set up streaming connection for this source
-            this.setupWebSocketForSource(source);
-            
-            // Update MediaSession API
+        },
+        
+        // Setup media session API
+        setupMediaSession(source) {
             if ('mediaSession' in navigator) {
+                const sourceName = source ? this.getSourceDisplayName(source) : '';
                 navigator.mediaSession.metadata = new MediaMetadata({
-                    title: `Bird Audio Stream - ${this.getSourceDisplayName(source)}`,
+                    title: sourceName ? `Bird Audio Stream - ${sourceName}` : 'Bird Audio Stream',
                     artist: 'BirdNet-Go',
                     album: 'Live Stream',
+                    // Optional artwork - use favicon as default
                     artwork: [
                         { src: '/assets/favicon.ico', sizes: '32x32', type: 'image/x-icon' },
                     ]
                 });
                 
+                navigator.mediaSession.setActionHandler('play', () => {
+                    this.isPlaying = true;
+                    if (this.playingSource) {
+                        this.setupWebSocketForSource(this.playingSource);
+                    }
+                });
+                
+                navigator.mediaSession.setActionHandler('pause', () => {
+                    this.isPlaying = false;
+                    this.cleanupAudioResources();
+                });
+                
                 // Update playback state
                 navigator.mediaSession.playbackState = 'playing';
             }
+        },
+        
+        // Start playing a source
+        startPlayback(source) {
+            console.log(`Starting audio playback for source: ${source}`);
+            
+            this.initializeAudioContext();
+            this.resetProcessingState();
+            
+            // Set state
+            this.playingSource = source;
+            this.isPlaying = true;
+            
+            // Set up streaming connection
+            this.setupWebSocketForSource(source);
+            
+            // Setup media session
+            this.setupMediaSession(source);
+        },
+        
+        // Stop playback
+        stopPlayback() {
+            console.log('Stopping audio playback...');
+            
+            // Reset state
+            this.isPlaying = false;
+            this.playingSource = null;
+            
+            // Clean up resources
+            this.cleanupAudioResources();
+            
+            // Update mediaSession state if available
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.playbackState = 'paused';
+            }
+        },
+
+        togglePlayback() {
+            if (!this.selectedSource) {
+                console.error('No audio source selected');
+                return;
+            }
+            
+            if (this.isPlaying) {
+                this.stopPlayback();
+            } else {
+                this.startPlayback(this.selectedSource);
+            }
+            
+            // Only suspend audio context if navigating away
+            if (!this.isPlaying && this.isNavigating && this.audioContext && this.audioContext.state === 'running') {
+                this.audioContext.suspend().catch(err => {
+                    console.error('Failed to suspend audio context:', err);
+                });
+            }
+        },
+        
+        // Toggle playback for a specific source
+        toggleSourcePlayback(source) {
+            // If we're already playing this source, stop it
+            if (this.isPlaying && this.playingSource === source) {
+                this.stopPlayback();
+                return;
+            }
+            
+            // If we're playing a different source, stop it first
+            if (this.isPlaying) {
+                this.cleanupAudioResources();
+            }
+            
+            // Start playing the new source
+            this.startPlayback(source);
         },
 
         init() {
