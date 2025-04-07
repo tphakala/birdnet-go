@@ -883,6 +883,69 @@ configure_auth() {
     fi
 }
 
+# Function to check if a port is in use
+check_port_availability() {
+    local port="$1"
+    if command_exists nc; then
+        if nc -z localhost "$port" 2>/dev/null; then
+            return 1 # Port is in use
+        else
+            return 0 # Port is available
+        fi
+    elif command_exists lsof; then
+        if lsof -i:"$port" >/dev/null 2>&1; then
+            return 1 # Port is in use
+        else
+            return 0 # Port is available
+        fi
+    elif command_exists ss; then
+        if ss -lnt | grep -q ":$port "; then
+            return 1 # Port is in use
+        else
+            return 0 # Port is available
+        fi
+    else
+        # If we can't check, assume it's available but warn the user
+        print_message "⚠️ Cannot check port availability. Please ensure port $port is free." "$YELLOW"
+        return 0
+    fi
+}
+
+# Function to configure web interface port
+configure_web_port() {
+    # Default port
+    WEB_PORT=8080
+    
+    print_message "\n🔌 Checking web interface port availability..." "$YELLOW"
+    
+    if ! check_port_availability $WEB_PORT; then
+        print_message "❌ Port $WEB_PORT is already in use" "$RED"
+        
+        while true; do
+            print_message "Please enter a different port number (1024-65535): " "$YELLOW" "nonewline"
+            read -r custom_port
+            
+            # Validate port number
+            if [[ "$custom_port" =~ ^[0-9]+$ ]] && [ "$custom_port" -ge 1024 ] && [ "$custom_port" -le 65535 ]; then
+                if check_port_availability "$custom_port"; then
+                    WEB_PORT="$custom_port"
+                    print_message "✅ Port $WEB_PORT is available" "$GREEN"
+                    break
+                else
+                    print_message "❌ Port $custom_port is also in use. Please try another port." "$RED"
+                fi
+            else
+                print_message "❌ Invalid port number. Please enter a number between 1024 and 65535." "$RED"
+            fi
+        done
+    else
+        print_message "✅ Default port $WEB_PORT is available" "$GREEN"
+    fi
+    
+    # Update config file with port
+    sed -i "s/port: 8080/port: $WEB_PORT/" "$CONFIG_FILE"
+}
+
 # Function to add systemd service configuration
 add_systemd_config() {
     # Get timezone
@@ -904,9 +967,9 @@ Requires=docker.service
 [Service]
 Restart=always
 ExecStart=/usr/bin/docker run --rm \\
-    -p 8080:8080 \\
+    -p ${WEB_PORT}:8080 \\
     --env TZ="${TZ}" \\
-    --device=/dev/snd \\
+    ${AUDIO_ENV} \\
     -v ${CONFIG_DIR}:/config \\
     -v ${DATA_DIR}:/data \\
     ${BIRDNET_GO_IMAGE}
@@ -936,6 +999,18 @@ start_birdnet_go() {
     # Check if service started
     if ! sudo systemctl is-active --quiet birdnet-go.service; then
         print_message "❌ Failed to start BirdNET-Go service" "$RED"
+        
+        # Get and display journald logs for troubleshooting
+        print_message "\n📋 Service logs (last 20 entries):" "$YELLOW"
+        sudo journalctl -u birdnet-go.service -n 20 --no-pager
+        
+        print_message "\n❗ If you need help with this issue:" "$RED"
+        print_message "1. Check port availability and permissions" "$YELLOW"
+        print_message "2. Verify your audio device is properly connected and accessible" "$YELLOW"
+        print_message "3. If the issue persists, please open a ticket at:" "$YELLOW"
+        print_message "   https://github.com/tphakala/birdnet-go/issues" "$GREEN"
+        print_message "   Include the logs above in your issue report for faster troubleshooting" "$YELLOW"
+        
         exit 1
     fi
     print_message "✅ BirdNET-Go service started successfully!" "$GREEN"
@@ -958,7 +1033,14 @@ start_birdnet_go() {
         if ! sudo systemctl is-active --quiet birdnet-go.service; then
             print_message "❌ Service stopped unexpectedly" "$RED"
             print_message "Checking service logs:" "$YELLOW"
-            sudo journalctl -u birdnet-go.service -n 50
+            sudo journalctl -u birdnet-go.service -n 50 --no-pager
+            
+            print_message "\n❗ If you need help with this issue:" "$RED"
+            print_message "1. The service started but then crashed" "$YELLOW"
+            print_message "2. Please open a ticket at:" "$YELLOW"
+            print_message "   https://github.com/tphakala/birdnet-go/issues" "$GREEN"
+            print_message "   Include the logs above in your issue report for faster troubleshooting" "$YELLOW"
+            
             exit 1
         fi
         
@@ -970,9 +1052,17 @@ start_birdnet_go() {
     if [ -z "$container_id" ]; then
         print_message "❌ Container failed to start within ${max_attempts} seconds" "$RED"
         print_message "Service logs:" "$YELLOW"
-        sudo journalctl -u birdnet-go.service -n 50
+        sudo journalctl -u birdnet-go.service -n 50 --no-pager
+        
         print_message "\nDocker logs:" "$YELLOW"
         docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | xargs -r docker logs
+        
+        print_message "\n❗ If you need help with this issue:" "$RED"
+        print_message "1. The service started but container didn't initialize properly" "$YELLOW"
+        print_message "2. Please open a ticket at:" "$YELLOW"
+        print_message "   https://github.com/tphakala/birdnet-go/issues" "$GREEN"
+        print_message "   Include the logs above in your issue report for faster troubleshooting" "$YELLOW"
+        
         exit 1
     fi
 
@@ -1124,7 +1214,7 @@ Requires=docker.service
 [Service]
 Restart=always
 ExecStart=/usr/bin/docker run --rm \\
-    -p 8080:8080 \\
+    -p ${WEB_PORT}:8080 \\
     --env TZ="${TZ}" \\
     ${AUDIO_ENV} \\
     -v ${CONFIG_DIR}:/config \\
@@ -1201,6 +1291,7 @@ handle_container_update() {
 CONFIG_DIR="$HOME/birdnet-go-app/config"
 DATA_DIR="$HOME/birdnet-go-app/data"
 CONFIG_FILE="$CONFIG_DIR/config.yaml"
+WEB_PORT=8080  # Default web port
 
 # Function to clean existing installation
 clean_installation() {
@@ -1426,6 +1517,9 @@ download_base_config
 # Now lets query user for configuration
 print_message "\n🔧 Now lets configure some basic settings" "$YELLOW"
 
+# Configure web port
+configure_web_port
+
 # Configure audio input
 configure_audio_input
 
@@ -1463,12 +1557,12 @@ print_message "$DATA_DIR"
 # Get IP address
 IP_ADDR=$(get_ip_address)
 if [ -n "$IP_ADDR" ]; then
-    print_message "🌐 BirdNET-Go web interface is available at http://${IP_ADDR}:8080" "$GREEN"
+    print_message "🌐 BirdNET-Go web interface is available at http://${IP_ADDR}:${WEB_PORT}" "$GREEN"
 fi
 
 # Check if mDNS is available
 if check_mdns; then
     HOSTNAME=$(hostname)
-    print_message "🌐 Also available at http://${HOSTNAME}.local:8080" "$GREEN"
+    print_message "🌐 Also available at http://${HOSTNAME}.local:${WEB_PORT}" "$GREEN"
 fi
 
