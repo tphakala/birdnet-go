@@ -22,12 +22,12 @@
         streamTransport: '{{if .Settings.Realtime.Audio.StreamTransport}}{{.Settings.Realtime.Audio.StreamTransport}}{{else}}auto{{end}}', // Can be 'auto', 'sse', or 'ws'
         isPlaying: false,
         pcmDataQueue: [],
-        audioBufferSize: 4096, // Changed back to 4096 (power of two) as required by ScriptProcessorNode
+        audioBufferSize: 4096, // Must be power of two for ScriptProcessorNode
         incomingChunkSize: 3072, // The actual size of incoming audio chunks from the server
         sampleRate: 48000, // Default sample rate
         audioLatency: 300, // Reduced from 500 to better match real-time needs
         pingInterval: null,
-        bufferThreshold: 3, // Decreased to start playback sooner with fewer packets
+        bufferThreshold: 8, // Increased from 5 to 8 for more initial buffering
         processingStarted: false,
         jitterBufferSize: 3, // Reduced jitter buffer size to prevent excessive buffering
         bufferStatsInterval: null, // For buffer health monitoring
@@ -35,6 +35,19 @@
         sseStalled: false,
         sseStallRecoveryAttempts: 0,
         lastDataTime: null,
+        startupStabilizationCount: 0, // Track startup phase to avoid early resets
+        startupBufferTime: 500, // Initial buffer time in ms before starting playback (increased)
+        lastUnderrunTime: 0, // Track time of last underrun to prevent rapid resets
+        streamInfo: null, // Will store audio stream information from server
+        lastSequence: 0, // Track the last sequence number for packet ordering
+        packetBuffer: [], // Buffer for out-of-order packets
+        adaptiveBuffering: true, // Enable adaptive buffering based on network conditions
+        networkJitter: 0, // Estimated network jitter in milliseconds
+        consecutiveEmptyUnderruns: 0, // Track consecutive empty buffer underruns
+        maxConsecutiveEmptyUnderruns: 5, // Maximum number of consecutive empty buffer underruns before stopping
+        serverDisconnected: false, // Flag to track if server is disconnected
+        reconnectBackoff: 1000, // Initial reconnect delay in ms
+        maxReconnectBackoff: 30000, // Maximum reconnect delay in ms
         _requestedPermission: false,
 
         isInactive(source) {
@@ -232,10 +245,34 @@
                     const outputData = e.outputBuffer.getChannelData(0);
                     let outputPosition = 0;
                     
-                    if (!this.processingStarted && this.pcmDataQueue.length >= this.bufferThreshold) {
-                        // Keep this log as it indicates start of playback
-                        console.log(`Starting audio playback with ${this.pcmDataQueue.length} packets in queue`);
+                    // Calculate buffer duration in milliseconds before starting playback
+                    const totalBufferedSamples = this.pcmDataQueue.reduce((acc, chunk) => 
+                        acc + Math.floor(chunk.length / 2), 0);
+                    const bufferedTimeMs = (totalBufferedSamples / this.sampleRate) * 1000;
+                    
+                    // Don't start processing if server is disconnected or if we have no data
+                    if (this.serverDisconnected) {
+                        // Fill buffer with silence if server is disconnected
+                        for (let i = 0; i < outputData.length; i++) {
+                            outputData[i] = 0;
+                        }
+                        return;
+                    }
+                    
+                    // Only start processing when:
+                    // 1. We have enough packets (count threshold)
+                    // 2. We have enough audio time buffered (time threshold)
+                    // 3. We either have enough data or have been waiting for more than 2 seconds
+                    // 4. We have at least some data (prevent starting with 0 packets)
+                    if (!this.processingStarted && 
+                        ((this.pcmDataQueue.length >= this.bufferThreshold || 
+                          bufferedTimeMs >= this.startupBufferTime || 
+                          (this.lastDataTime && (Date.now() - this.lastDataTime) > 2000)) && 
+                         this.pcmDataQueue.length > 0)) {
+                             
+                        console.log(`Starting audio playback with ${this.pcmDataQueue.length} packets in queue (${bufferedTimeMs.toFixed(0)}ms of audio)`);
                         this.processingStarted = true;
+                        this.consecutiveEmptyUnderruns = 0;
                     }
                     
                     if (this.processingStarted) {
@@ -266,25 +303,93 @@
                             }
                         }
                         
+                        // Handle buffer underruns more gracefully
                         if (outputPosition < outputData.length) {
                             const fillPercentage = Math.round((outputPosition / outputData.length) * 100);
                             
+                            // Fill remaining buffer with zeros
                             for (let i = outputPosition; i < outputData.length; i++) {
                                 outputData[i] = 0;
                             }
                             
-                            // Only log severe underruns (less than 75% filled)
-                            if (fillPercentage < 75) {
+                            // Limit frequency of underrun handling to prevent oscillation
+                            const now = Date.now();
+                            const timeSinceLastUnderrun = now - this.lastUnderrunTime;
+                            
+                            // Check if we had a completely empty buffer (might indicate server disconnect)
+                            const isEmptyUnderrun = fillPercentage === 0;
+                            
+                            // Track consecutive empty underruns
+                            if (isEmptyUnderrun) {
+                                this.consecutiveEmptyUnderruns++;
+                            } else {
+                                this.consecutiveEmptyUnderruns = 0;
+                            }
+                            
+                            // Check for server disconnection based on consecutive empty underruns
+                            const timeSinceLastData = this.lastDataTime ? now - this.lastDataTime : 0;
+                            const serverDisconnected = this.consecutiveEmptyUnderruns >= this.maxConsecutiveEmptyUnderruns || 
+                                                      (timeSinceLastData > 5000 && isEmptyUnderrun);
+                            
+                            // Only log severe underruns and don't process them too frequently
+                            if (fillPercentage < 75 && timeSinceLastUnderrun > 500) {
                                 this.bufferUnderrunCount++;
+                                this.lastUnderrunTime = now;
+                                
+                                if (serverDisconnected) {
+                                    console.warn(`Server appears to be disconnected after ${this.consecutiveEmptyUnderruns} empty buffers and ${timeSinceLastData}ms without data.`);
+                                    this.processingStarted = false;
+                                    this.serverDisconnected = true;
+                                    
+                                    // Stop connection and prevent immediate reconnect
+                                    this.closeExistingConnections();
+                                    
+                                    // Set a timer to attempt reconnection with backoff
+                                    setTimeout(() => {
+                                        console.log(`Attempting to reconnect after server disconnect (backoff: ${this.reconnectBackoff}ms)`);
+                                        this.serverDisconnected = false;
+                                        this.setupWebSocketForSource(this.currentAudioSource);
+                                        
+                                        // Increase backoff for next time, with a maximum
+                                        this.reconnectBackoff = Math.min(this.reconnectBackoff * 1.5, this.maxReconnectBackoff);
+                                    }, this.reconnectBackoff);
+                                    
+                                    return;
+                                }
+                                
                                 console.warn(`Buffer underrun #${this.bufferUnderrunCount} - filled ${fillPercentage}%`);
                                 
-                                if (fillPercentage < 50) {
+                                // Check if we need to reset processing based on severity
+                                // Give more grace during startup (first 5 underruns)
+                                const isStartupPhase = this.startupStabilizationCount < 5;
+                                const isSevereUnderrun = fillPercentage < 25;
+
+                                // During startup, be more lenient with underruns
+                                if (fillPercentage < 50 && !isStartupPhase) {
                                     console.warn('Significant buffer underrun - resetting processing');
                                     this.processingStarted = false;
+                                    this.startupStabilizationCount++; // Increment stability counter
+                                    
+                                    // Progressive buffer threshold increase with each reset
+                                    this.bufferThreshold = Math.min(this.bufferThreshold + 2, 15);
+                                    this.startupBufferTime = Math.min(this.startupBufferTime + 200, 1500);
+                                    
+                                } else if (isStartupPhase && isSevereUnderrun) {
+                                    // During startup, only reset on very severe underruns
+                                    console.warn('Startup phase underrun - resetting with higher threshold');
+                                    this.processingStarted = false;
+                                    this.bufferThreshold = Math.min(this.bufferThreshold + 2, 15); // Larger increases during startup
+                                    this.startupBufferTime = Math.min(this.startupBufferTime + 300, 1500); // More aggressive time increase
+                                    this.startupStabilizationCount++;
                                 }
                             }
+                        } else if (this.startupStabilizationCount < 10) {
+                            // Buffer was fully filled - count toward stabilization
+                            this.startupStabilizationCount++;
+                            this.consecutiveEmptyUnderruns = 0;
                         }
                     } else {
+                        // Fill buffer with silence while waiting for enough data
                         for (let i = 0; i < outputData.length; i++) {
                             outputData[i] = 0;
                         }
@@ -304,25 +409,32 @@
 
         setupWebSocketForSource(sourceId) {
             this.closeExistingConnections();
+            this.currentAudioSource = sourceId;
             
             this.pcmDataQueue = [];
             this.processingStarted = false;
             this.bufferUnderrunCount = 0;
+            this.startupStabilizationCount = 0; // Reset stabilization counter on new connection
+            this.consecutiveEmptyUnderruns = 0;
+            this.serverDisconnected = false;
             
-            this.bufferThreshold = Math.max(2, Math.ceil(this.audioBufferSize / this.incomingChunkSize));
+            // Increase buffer threshold based on buffer size to ensure enough data
+            this.bufferThreshold = Math.max(8, Math.ceil(this.audioBufferSize / this.incomingChunkSize) + 2);
+            this.startupBufferTime = 500; // Reset to initial buffer time
+            this.lastUnderrunTime = 0;
             
             if (this.bufferStatsInterval) {
                 clearInterval(this.bufferStatsInterval);
             }
             
-            // Reduce buffer stats logging frequency to once every 30 seconds, and only if playing
+            // Report buffer health status periodically when playing
             this.bufferStatsInterval = setInterval(() => {
-                if (this.isPlaying && Math.random() < 0.1) { // Only log ~10% of the time
+                if (this.isPlaying && this.processingStarted && !this.serverDisconnected) {
                     const samples = this.pcmDataQueue.reduce((acc, chunk) => acc + Math.floor(chunk.length / 2), 0);
                     const bufferTimeMs = (samples / this.sampleRate) * 1000;
-                    console.log(`Buffer health: ${this.pcmDataQueue.length} packets, ~${samples} samples (${bufferTimeMs.toFixed(1)}ms), underruns: ${this.bufferUnderrunCount}`);
+                    console.log(`Buffer health: ${this.pcmDataQueue.length} packets, ~${bufferTimeMs.toFixed(1)}ms, underruns: ${this.bufferUnderrunCount}`);
                 }
-            }, 30000); // Increased from 2000ms to 30000ms
+            }, 15000); // Report every 15 seconds
             
             if (this.streamTransport === 'sse' || (this.streamTransport === 'auto' && this.isCloudflareOrDocker())) {
                 this.setupSSEForSource(sourceId);
@@ -373,8 +485,11 @@
         },
         
         setupSSEForSource(sourceId) {
+            console.log(`Setting up SSE connection for source ${sourceId}`);
+            
             try {
                 if (this.sseSource) {
+                    console.log('Reusing existing SSE connection');
                     return;
                 }
                 
@@ -382,9 +497,47 @@
                 
                 this.lastDataTime = Date.now();
                 this.sseStalled = false;
+                this.lastSequence = 0;
+                this.packetBuffer = [];
+                this.networkJitter = 0;
+                this.reconnectBackoff = 1000; // Reset reconnect backoff on successful connection
+                
+                // Handle connection errors
+                this.sseSource.onerror = (event) => {
+                    const now = Date.now();
+                    const timeSinceLastData = this.lastDataTime ? now - this.lastDataTime : 0;
+                    
+                    // Don't log too many errors
+                    if (timeSinceLastData > 3000 && !this.serverDisconnected) {
+                        console.error('SSE connection error, no data received for ' + timeSinceLastData + 'ms');
+                        
+                        // Mark as disconnected if we haven't received data for over 5 seconds
+                        if (timeSinceLastData > 5000) {
+                            console.warn('Server appears to be disconnected');
+                            this.serverDisconnected = true;
+                            this.processingStarted = false;
+                            
+                            // Close the existing connection
+                            if (this.sseSource) {
+                                this.sseSource.close();
+                                this.sseSource = null;
+                            }
+                            
+                            // Set a timer to attempt reconnection with backoff
+                            setTimeout(() => {
+                                console.log(`Attempting to reconnect after server disconnect (backoff: ${this.reconnectBackoff}ms)`);
+                                this.serverDisconnected = false;
+                                this.setupWebSocketForSource(sourceId);
+                                
+                                // Increase backoff for next time, with a maximum
+                                this.reconnectBackoff = Math.min(this.reconnectBackoff * 1.5, this.maxReconnectBackoff);
+                            }, this.reconnectBackoff);
+                        }
+                    }
+                };
                 
                 this.sseStallCheckInterval = setInterval(() => {
-                    if (this.sseSource && this.isPlaying) {
+                    if (this.sseSource && this.isPlaying && !this.serverDisconnected) {
                         const stalledTime = Date.now() - this.lastDataTime;
                         // Only log if connection appears stalled for a long time (5+ seconds)
                         if (stalledTime > 5000 && !document.hidden) {
@@ -400,6 +553,22 @@
                                 setTimeout(() => {
                                     this.setupSSEForSource(sourceId);
                                 }, 500);
+                            } else {
+                                // If we've tried to recover multiple times, mark as disconnected
+                                this.serverDisconnected = true;
+                                this.processingStarted = false;
+                                console.warn('Server appears to be disconnected after multiple recovery attempts');
+                                
+                                // Set a timer to attempt reconnection with backoff
+                                setTimeout(() => {
+                                    console.log(`Attempting to reconnect after server disconnect (backoff: ${this.reconnectBackoff}ms)`);
+                                    this.serverDisconnected = false;
+                                    this.sseStallRecoveryAttempts = 0;
+                                    this.setupWebSocketForSource(sourceId);
+                                    
+                                    // Increase backoff for next time, with a maximum
+                                    this.reconnectBackoff = Math.min(this.reconnectBackoff * 1.5, this.maxReconnectBackoff);
+                                }, this.reconnectBackoff);
                             }
                         }
                     }
@@ -411,15 +580,39 @@
                     this.sseStalled = false;
                     this.sseStallRecoveryAttempts = 0;
                     this.lastDataTime = Date.now();
+                    this.serverDisconnected = false;
+                    this.reconnectBackoff = 1000; // Reset backoff after successful connection
                     
                     // Always resume the audio context when SSE connects, regardless of visibility
                     if (this.audioContext && this.audioContext.state === 'suspended') {
-                        this.audioContext.resume().then(() => {
-                        }).catch(err => {
+                        this.audioContext.resume().catch(err => {
                             console.error('Failed to resume audio context:', err);
                         });
                     }
                 };
+                
+                // Handle stream info messages
+                this.sseSource.addEventListener('info', (event) => {
+                    try {
+                        const info = JSON.parse(event.data);
+                        this.streamInfo = info;
+                        
+                        // Update our settings based on stream info
+                        if (info.sampleRate) {
+                            this.sampleRate = info.sampleRate;
+                        }
+                        
+                        if (info.bufferSize) {
+                            this.incomingChunkSize = info.bufferSize;
+                            // Update buffer threshold based on buffer size
+                            this.bufferThreshold = Math.max(8, Math.ceil(this.audioBufferSize / this.incomingChunkSize) + 2);
+                        }
+                        
+                        console.log(`Received stream info: ${info.sampleRate}Hz, ${info.bitDepth}-bit, ${info.channels} channel(s)`);
+                    } catch (error) {
+                        console.error('Error processing stream info:', error);
+                    }
+                });
                 
                 this.sseSource.addEventListener('audio', (event) => {
                     this.lastDataTime = Date.now();
@@ -427,25 +620,52 @@
                     
                     if (event.data) {
                         try {
-                            const base64Data = event.data;
-                            const binaryString = atob(base64Data);
-                            const audioData = new Uint8Array(binaryString.length);
+                            // Parse JSON packet with metadata
+                            const packet = JSON.parse(event.data);
+                            const audioData = this.processAudioData(packet.data);
                             
-                            for (let i = 0; i < binaryString.length; i++) {
-                                audioData[i] = binaryString.charCodeAt(i);
+                            // Calculate network jitter based on packet timestamps
+                            if (this.lastPacketTime) {
+                                const expectedGap = packet.timestamp - this.lastPacketTime;
+                                const actualGap = Date.now() - this.lastPacketReceiveTime;
+                                const jitter = Math.abs(actualGap - expectedGap);
+                                
+                                // Exponential moving average for jitter
+                                this.networkJitter = this.networkJitter * 0.7 + jitter * 0.3;
+                                
+                                // Adjust buffer thresholds based on network jitter
+                                if (this.adaptiveBuffering && !this.processingStarted) {
+                                    // Only adjust during startup
+                                    this.startupBufferTime = Math.max(500, Math.min(1500, this.networkJitter * 3));
+                                }
                             }
+                            
+                            this.lastPacketTime = packet.timestamp;
+                            this.lastPacketReceiveTime = Date.now();
                             
                             if (audioData.length < 32) {
                                 console.warn(`Received unusually small audio chunk: ${audioData.length} bytes`);
                                 return;
                             }
                             
+                            // Handle out-of-order packets (rare with SSE but possible)
+                            if (packet.seq <= this.lastSequence && this.lastSequence > 0) {
+                                // Skip duplicate or older packets
+                                return;
+                            }
+                            
+                            this.lastSequence = packet.seq;
+                            
                             // Drastically reduce audio data logs
                             const shouldLog = document.hidden ? Math.random() < 0.0001 : Math.random() < 0.001;
                                              
-                            if (shouldLog) {
+                            if (shouldLog && this.processingStarted) {
                                 const samples = Math.floor(audioData.length / 2);
-                                console.log(`Received audio data: ${audioData.length} bytes, queue: ${this.pcmDataQueue.length} packets`);
+                                const totalBufferedSamples = this.pcmDataQueue.reduce((acc, chunk) => 
+                                    acc + Math.floor(chunk.length / 2), 0) + samples;
+                                const bufferedTimeMs = (totalBufferedSamples / this.sampleRate) * 1000;
+                                
+                                console.log(`Received audio data: seq=${packet.seq}, ${audioData.length} bytes, queue: ${this.pcmDataQueue.length} packets (${bufferedTimeMs.toFixed(1)}ms buffered), jitter: ${this.networkJitter.toFixed(1)}ms`);
                             }
                             
                             // MODIFIED: Always process audio data regardless of visibility
@@ -466,21 +686,30 @@
                             } else {
                                 this.pcmDataQueue.push(audioData);
                                 
-                                // You can keep different buffer sizes based on visibility
-                                const maxQueueSize = document.hidden ? 30 : 12; 
-                                const minQueueSize = document.hidden ? 10 : 3;
+                                // Use different buffer sizes based on visibility and startup phase
+                                const isStartupPhase = !this.processingStarted || this.startupStabilizationCount < 5;
+                                
+                                // Adaptive max queue size based on network jitter
+                                const jitterPackets = Math.ceil(this.networkJitter / (1000 * this.incomingChunkSize / this.sampleRate / 2));
+                                const maxQueueSize = isStartupPhase ? 
+                                    30 : 
+                                    (document.hidden ? 
+                                        30 : 
+                                        Math.max(15, jitterPackets + 5));
                                 
                                 if (this.pcmDataQueue.length > maxQueueSize) {
                                     if (this.pcmDataQueue.length > maxQueueSize + 3) {
-                                        const toRemove = Math.min(3, this.pcmDataQueue.length - maxQueueSize);
-                                        this.pcmDataQueue.splice(1, toRemove);
-                                        // Only log major overflow in visible state, and only rarely
-                                        if (!document.hidden && Math.random() < 0.02) {
-                                            console.warn(`Queue overflow: removed ${toRemove} packets`);
+                                        // Only trim buffer once fully started to prevent startup issues
+                                        if (this.processingStarted && this.startupStabilizationCount >= 5) {
+                                            const toRemove = Math.min(3, this.pcmDataQueue.length - maxQueueSize);
+                                            // Remove from the middle to preserve newest and oldest data
+                                            const startIndex = Math.floor(this.pcmDataQueue.length / 3);
+                                            this.pcmDataQueue.splice(startIndex, toRemove);
+                                            
+                                            if (!document.hidden && Math.random() < 0.01) {
+                                                console.warn(`Queue management: removed ${toRemove} packets from middle`);
+                                            }
                                         }
-                                    } else {
-                                        const middleIndex = Math.floor(this.pcmDataQueue.length / 2);
-                                        this.pcmDataQueue.splice(middleIndex, 1);
                                     }
                                 }
                             }
@@ -495,17 +724,6 @@
                     console.log('SSE audio stream connected');
                     this.lastDataTime = Date.now();
                 });
-                
-                this.sseSource.onerror = (error) => {
-                    // Keep error logs for troubleshooting
-                    console.error('SSE connection error:', error);
-                    
-                    if (!this.isPlaying) {
-                        this.sseSource.close();
-                        this.sseSource = null;
-                        return;
-                    }
-                };
                 
             } catch (error) {
                 console.error('Error setting up SSE connection:', error);
@@ -890,6 +1108,37 @@
                 // Don't close connections or reset state that would interrupt playback
                 console.log('Light cleanup to preserve background audio playback');
             }
+        },
+        // Function to convert URL-safe base64 to binary data
+        decodeBase64UrlSafe(base64Url) {
+            // Convert the URL-safe base64 to regular base64
+            // Replace URL-safe chars with standard Base64 chars and add padding
+            const base64 = base64Url
+                .replace(/-/g, '+')
+                .replace(/_/g, '/');
+                
+            // Add padding if needed (server is using RawURLEncoding which omits padding)
+            const paddingLength = (4 - (base64.length % 4)) % 4;
+            const paddedBase64 = base64 + '='.repeat(paddingLength);
+            
+            // Now use regular atob with the padded, standard base64 string
+            return paddedBase64;
+        },
+        
+        // Optimized helper for audio data processing - move this outside event handlers
+        processAudioData(data) {
+            // Convert base64 to Uint8Array more efficiently
+            const standardBase64 = this.decodeBase64UrlSafe(data);
+            const binaryString = atob(standardBase64);
+            
+            // Pre-allocate the full array for better performance
+            const audioData = new Uint8Array(binaryString.length);
+            
+            for (let i = 0; i < binaryString.length; i++) {
+                audioData[i] = binaryString.charCodeAt(i);
+            }
+            
+            return audioData;
         }
     }" 
     @click.away="dropdownOpen = false">
