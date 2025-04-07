@@ -18,17 +18,23 @@
         audioContext: null,
         audioWorkletNode: null,
         webSocket: null,
+        sseSource: null,
+        streamTransport: '{{if .Settings.Realtime.Audio.StreamTransport}}{{.Settings.Realtime.Audio.StreamTransport}}{{else}}auto{{end}}', // Can be 'auto', 'sse', or 'ws'
         isPlaying: false,
         pcmDataQueue: [],
-        audioBufferSize: 4096, // Reduced to better match incoming chunks (typical size 2048-4096)
+        audioBufferSize: 4096, // Changed back to 4096 (power of two) as required by ScriptProcessorNode
+        incomingChunkSize: 3072, // The actual size of incoming audio chunks from the server
         sampleRate: 48000, // Default sample rate
         audioLatency: 300, // Reduced from 500 to better match real-time needs
         pingInterval: null,
-        bufferThreshold: 5, // Reduced to start playback sooner
+        bufferThreshold: 3, // Decreased to start playback sooner with fewer packets
         processingStarted: false,
         jitterBufferSize: 3, // Reduced jitter buffer size to prevent excessive buffering
         bufferStatsInterval: null, // For buffer health monitoring
         bufferUnderrunCount: 0, // Count of buffer underruns for diagnostics
+        sseStalled: false,
+        sseStallRecoveryAttempts: 0,
+        lastDataTime: null,
 
         isInactive(source) {
             // If we don't have the source in levels at all, consider it inactive
@@ -154,234 +160,353 @@
         },
 
         initAudio() {
-            if (!this.audioContext) {
-                try {
-                    // Create new AudioContext with explicit sample rate
-                    const contextOptions = {
-                        latencyHint: 'playback', // Changed from 'interactive' to 'playback' for streaming audio
+            // Reduce console logging - only log critical state changes
+            console.log('Initializing audio system...');
+            
+            try {
+                // Create new AudioContext if needed
+                if (!this.audioContext) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.audioContext = new AudioContext({
+                        latencyHint: 'interactive',
                         sampleRate: this.sampleRate
-                    };
-                    
-                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)(contextOptions);
-                    console.log(`Audio context created with sample rate: ${this.audioContext.sampleRate}Hz`);
-                    
-                    // Check if browser supports AudioWorkletNode
-                    if (window.AudioWorkletNode && this.audioContext.audioWorklet) {
-                        // Update the detection for Edge browser and add specific checks
-                        console.log('Browser information:', {
-                            userAgent: navigator.userAgent,
-                            vendor: navigator.vendor,
-                            audioWorkletSupported: !!(window.AudioWorkletNode && this.audioContext.audioWorklet),
-                            isEdge: /Edge\/|Edg\//.test(navigator.userAgent),
-                            isChromium: !!window.chrome,
-                            secureContext: window.isSecureContext
-                        });
-
-                        try {
-                            console.log('Testing basic AudioWorklet functionality...');
-                            
-                            // Load the processor from external files instead of inline code
-                            const processorUrl = '/assets/audio-processors/pcm-audio-processor.js';
-                            const testProcessorUrl = '/assets/audio-processors/test-processor.js';
-                            
-                            // Define the continuation function in the correct scope
-                            const continueWithMainWorklet = () => {
-                                console.log('Attempting to load AudioWorklet from URL:', processorUrl);
-                                
-                                // Add the audio worklet with the full processor code
-                                this.audioContext.audioWorklet.addModule(processorUrl)
-                                .then(() => {
-                                    console.log('AudioWorklet loaded successfully');
-                                    
-                                    // Create the worklet node with proper options
-                                    const workletNode = new AudioWorkletNode(this.audioContext, 'pcm-audio-processor', {
-                                        // Use 128 samples per block for better real-time performance
-                                        processorOptions: {
-                                            numberOfInputs: 0,
-                                            numberOfOutputs: 1,
-                                            outputChannelCount: [1]
-                                        }
-                                    });
-                                    
-                                    // Setup message handling from the worklet
-                                    workletNode.port.onmessage = (event) => {
-                                        if (event.data.type === 'stats') {
-                                            console.log(`Worklet buffer queue: ${event.data.queueLength}`);
-                                        }
-                                    };
-                                    
-                                    // Connect the node to the audio output
-                                    workletNode.connect(this.audioContext.destination);
-                                    
-                                    // Store the node for later access
-                                    this.audioWorkletNode = workletNode;
-                                    
-                                    console.log('Audio system initialized with AudioWorkletNode');
-                                    
-                                }).catch(err => {
-                                    console.error('AudioWorklet failed to load:', {
-                                        name: err.name,
-                                        message: err.message,
-                                        stack: err.stack,
-                                        errorObject: err
-                                    });
-                                    
-                                    // Check for specific error conditions
-                                    if (err.name === 'SecurityError') {
-                                        console.error('Security error loading AudioWorklet. This may be due to cross-origin issues or Content Security Policy restrictions.');
-                                    } else if (err.name === 'SyntaxError') {
-                                        console.error('Syntax error in AudioWorklet processor code. Check for JavaScript errors in the processor.');
-                                    } else if (err.message && err.message.includes('timeout')) {
-                                        console.error('Loading the AudioWorklet timed out. This may be due to browser restrictions or resource limitations.');
-                                    }
-                                    
-                                    console.log('Falling back to ScriptProcessorNode...');
-                                    this.fallbackToScriptProcessor();
-                                });
-                            };
-                            
-                            // Optional: Try loading a test processor first
-                            if (false) { // Set to true if you need to debug worklet loading issues
-                                // This tests if the issue is with complex processor code
-                                this.audioContext.audioWorklet.addModule(testProcessorUrl)
-                                .then(() => {
-                                    console.log('Test AudioWorklet loaded successfully');
-                                    continueWithMainWorklet();
-                                })
-                                .catch(staticErr => {
-                                    console.error('Test AudioWorklet failed:', staticErr);
-                                    // Continue with main worklet approach anyway
-                                    continueWithMainWorklet();
-                                });
-                            } else {
-                                continueWithMainWorklet();
-                            }
-                        } catch (e) {
-                            console.error('Error during AudioWorklet initialization test:', e);
-                            this.fallbackToScriptProcessor();
-                        }
-                    } else {
-                        console.log('AudioWorkletNode not supported, falling back to ScriptProcessorNode');
-                        this.fallbackToScriptProcessor();
-                    }
-                } catch (error) {
-                    console.error('Error initializing audio system:', error);
+                    });
+                    // Keep this log as it's useful for troubleshooting
+                    console.log(`Created AudioContext with sample rate ${this.audioContext.sampleRate}Hz`);
                 }
+                
+                // Check for modern AudioWorklet support
+                if (this.audioContext.audioWorklet) {
+                    // Load audio processor
+                    this.audioContext.audioWorklet.addModule('/assets/audio-processors/pcm-audio-processor.js')
+                        .then(() => {
+                            // Create audio worklet node
+                            const workletNode = new AudioWorkletNode(this.audioContext, 'pcm-audio-processor');
+                            
+                            // Connect the worklet to the audio output
+                            workletNode.connect(this.audioContext.destination);
+                            
+                            // Store the worklet node for later access
+                            this.audioWorkletNode = workletNode;
+                        })
+                        .catch(error => {
+                            // Keep error logs for troubleshooting
+                            console.error('Error loading AudioWorklet:', error);
+                            this.fallbackToScriptProcessor();
+                        });
+                } else {
+                    this.fallbackToScriptProcessor();
+                }
+            } catch (error) {
+                // Keep error logs for troubleshooting
+                console.error('Error initializing audio system:', error);
+                alert('Audio playback initialization failed. Please check console for details.');
             }
         },
 
         // Add fallback to ScriptProcessorNode for browsers that don't support AudioWorkletNode
         fallbackToScriptProcessor() {
+            // Keep this log as it indicates a fallback state
+            console.log('Falling back to ScriptProcessorNode for audio processing');
+            
             try {
-                // Create a ScriptProcessorNode (deprecated but widely supported)
                 const bufferSize = this.audioBufferSize;
-                const scriptNode = this.audioContext.createScriptProcessor(
-                    bufferSize, // Buffer size
-                    1,          // Number of input channels (not used)
-                    1           // Number of output channels
-                );
+                const scriptNode = this.audioContext.createScriptProcessor(bufferSize, 0, 1);
                 
-                // Set up the audio processing callback with improved buffer management
-                scriptNode.onaudioprocess = (audioProcessingEvent) => {
-                    const outputBuffer = audioProcessingEvent.outputBuffer;
-                    const outputData = outputBuffer.getChannelData(0);
+                scriptNode.onaudioprocess = (e) => {
+                    const outputData = e.outputBuffer.getChannelData(0);
+                    let outputPosition = 0;
                     
-                    // Initialize with silence
-                    for (let i = 0; i < outputData.length; i++) {
-                        outputData[i] = 0;
+                    if (!this.processingStarted && this.pcmDataQueue.length >= this.bufferThreshold) {
+                        // Keep this log as it indicates start of playback
+                        console.log(`Starting audio playback with ${this.pcmDataQueue.length} packets in queue`);
+                        this.processingStarted = true;
                     }
                     
-                    // Only process if we have enough data or already started
-                    if (this.processingStarted || this.pcmDataQueue.length >= this.bufferThreshold) {
-                        if (!this.processingStarted) {
-                            console.log(`Starting audio processing with ${this.pcmDataQueue.length} buffers queued`);
-                            this.processingStarted = true;
-                        }
-                        
-                        // Track position in output buffer
-                        let outputPosition = 0;
-                        
-                        // Process multiple packets until output buffer is full
-                        while (outputPosition < outputData.length && this.pcmDataQueue.length > 0) {
-                            const chunk = this.pcmDataQueue.shift();
-                            const samplesToProcess = Math.min(outputData.length - outputPosition, Math.floor(chunk.length / 2));
+                    if (this.processingStarted) {
+                        // Process all data in the queue
+                        while (this.pcmDataQueue.length > 0 && outputPosition < outputData.length) {
+                            const currentChunk = this.pcmDataQueue[0];
                             
-                            // Convert Int16 PCM to Float32
-                            for (let i = 0; i < samplesToProcess; i++) {
-                                const lo = chunk[i*2];
-                                const hi = chunk[i*2+1];
+                            if (!currentChunk || currentChunk.length < 2) {
+                                this.pcmDataQueue.shift();
+                                continue;
+                            }
+                            
+                            // Process 16-bit PCM data (convert to float)
+                            let i;
+                            for (i = 0; i < currentChunk.length - 1 && outputPosition < outputData.length; i += 2) {
+                                const lo = currentChunk[i];
+                                const hi = currentChunk[i + 1];
                                 let sample = (hi << 8) | lo;
-                                
-                                if (sample > 32767) {
-                                    sample -= 65536;
-                                }
+                                if (sample > 32767) sample -= 65536;
                                 
                                 outputData[outputPosition++] = sample / 32768.0;
                             }
                             
-                            // If we didn't use the entire chunk, put the rest back
-                            if (samplesToProcess * 2 < chunk.length) {
-                                const remainingChunk = chunk.slice(samplesToProcess * 2);
-                                this.pcmDataQueue.unshift(remainingChunk);
-                                break;
+                            if (i >= currentChunk.length - 4) {
+                                this.pcmDataQueue.shift();
+                            } else {
+                                this.pcmDataQueue[0] = currentChunk.slice(i);
                             }
                         }
                         
-                        if (Math.random() < 0.01) {
-                            console.log(`Filled ${outputPosition}/${outputData.length} samples, queue: ${this.pcmDataQueue.length}`);
-                        }
-                        
-                        // Check if we ran out of data
-                        if (outputPosition < outputData.length && this.pcmDataQueue.length === 0) {
-                            this.bufferUnderrunCount++;
-                            if (outputPosition < outputData.length / 2) {
-                                console.warn('Significant buffer underrun - resetting processing');
-                                this.processingStarted = false;
+                        if (outputPosition < outputData.length) {
+                            const fillPercentage = Math.round((outputPosition / outputData.length) * 100);
+                            
+                            for (let i = outputPosition; i < outputData.length; i++) {
+                                outputData[i] = 0;
                             }
+                            
+                            // Only log severe underruns (less than 75% filled)
+                            if (fillPercentage < 75) {
+                                this.bufferUnderrunCount++;
+                                console.warn(`Buffer underrun #${this.bufferUnderrunCount} - filled ${fillPercentage}%`);
+                                
+                                if (fillPercentage < 50) {
+                                    console.warn('Significant buffer underrun - resetting processing');
+                                    this.processingStarted = false;
+                                }
+                            }
+                        }
+                    } else {
+                        for (let i = 0; i < outputData.length; i++) {
+                            outputData[i] = 0;
                         }
                     }
                 };
                 
-                // Connect the ScriptProcessorNode to the audio output
                 scriptNode.connect(this.audioContext.destination);
-                
-                // Store the node for later access
                 this.audioWorkletNode = scriptNode;
                 
+                // Keep this log as it indicates initialization success state
                 console.log(`Audio system initialized with ScriptProcessorNode (buffer size: ${bufferSize})`);
             } catch (error) {
+                // Keep error logs for troubleshooting
                 console.error('Error initializing fallback audio system:', error);
             }
         },
 
         setupWebSocketForSource(sourceId) {
-            // Close any existing connection
+            this.closeExistingConnections();
+            
+            this.pcmDataQueue = [];
+            this.processingStarted = false;
+            this.bufferUnderrunCount = 0;
+            
+            this.bufferThreshold = Math.max(2, Math.ceil(this.audioBufferSize / this.incomingChunkSize));
+            
+            if (this.bufferStatsInterval) {
+                clearInterval(this.bufferStatsInterval);
+            }
+            
+            // Reduce buffer stats logging frequency to once every 30 seconds, and only if playing
+            this.bufferStatsInterval = setInterval(() => {
+                if (this.isPlaying && Math.random() < 0.1) { // Only log ~10% of the time
+                    const samples = this.pcmDataQueue.reduce((acc, chunk) => acc + Math.floor(chunk.length / 2), 0);
+                    const bufferTimeMs = (samples / this.sampleRate) * 1000;
+                    console.log(`Buffer health: ${this.pcmDataQueue.length} packets, ~${samples} samples (${bufferTimeMs.toFixed(1)}ms), underruns: ${this.bufferUnderrunCount}`);
+                }
+            }, 30000); // Increased from 2000ms to 30000ms
+            
+            if (this.streamTransport === 'sse' || (this.streamTransport === 'auto' && this.isCloudflareOrDocker())) {
+                this.setupSSEForSource(sourceId);
+            } else {
+                this.setupWebSocketConnection(sourceId);
+            }
+        },
+        
+        isCloudflareOrDocker() {
+            // Check if we're likely behind Cloudflare or in a Docker container
+            const hostName = window.location.hostname;
+            const path = window.location.pathname;
+            
+            // Check for Cloudflare-specific headers or common Docker port mappings
+            const isCloudflareLikely = 
+                document.cookie.indexOf('__cfduid') !== -1 || 
+                document.cookie.indexOf('cf_clearance') !== -1 ||
+                hostName.indexOf('workers.dev') !== -1 ||
+                hostName.indexOf('pages.dev') !== -1;
+                
+            // Check for common Docker port mappings or Traefik
+            const isDockerLikely = 
+                window.location.port && ['8080', '8000', '3000', '5000', '8888'].includes(window.location.port) ||
+                path.indexOf('/proxy/') !== -1 ||
+                document.cookie.indexOf('_traefik_') !== -1;
+                
+            return isCloudflareLikely || isDockerLikely;
+        },
+        
+        closeExistingConnections() {
+            // Clear stall detection interval
+            if (this.sseStallCheckInterval) {
+                clearInterval(this.sseStallCheckInterval);
+                this.sseStallCheckInterval = null;
+            }
+            
+            // Close any existing WebSocket connection
             if (this.webSocket) {
                 this.webSocket.close();
                 this.webSocket = null;
             }
             
-            // Clear any existing queued audio data
-            this.pcmDataQueue = [];
-            this.processingStarted = false;
-            this.bufferUnderrunCount = 0;
-            
-            // Set up buffer stats monitoring
-            if (this.bufferStatsInterval) {
-                clearInterval(this.bufferStatsInterval);
+            // Close any existing SSE connection
+            if (this.sseSource) {
+                this.sseSource.close();
+                this.sseSource = null;
             }
-            
-            this.bufferStatsInterval = setInterval(() => {
-                if (this.isPlaying) {
-                    const samples = this.pcmDataQueue.reduce((acc, chunk) => acc + Math.floor(chunk.length / 2), 0);
-                    const bufferTimeMs = (samples / this.sampleRate) * 1000;
-                    console.log(`Buffer health: ${this.pcmDataQueue.length} packets, ~${samples} samples (${bufferTimeMs.toFixed(1)}ms), underruns: ${this.bufferUnderrunCount}`);
+        },
+        
+        setupSSEForSource(sourceId) {
+            try {
+                if (this.sseSource) {
+                    return;
                 }
-            }, 2000);
-            
+                
+                this.sseSource = new EventSource(`/api/v1/audio-stream/${sourceId}`);
+                
+                this.lastDataTime = Date.now();
+                this.sseStalled = false;
+                
+                this.sseStallCheckInterval = setInterval(() => {
+                    if (this.sseSource && this.isPlaying) {
+                        const stalledTime = Date.now() - this.lastDataTime;
+                        // Only log if connection appears stalled for a long time (5+ seconds)
+                        if (stalledTime > 5000 && !document.hidden) {
+                            console.warn(`SSE connection appears stalled (${stalledTime}ms without data)`);
+                            this.sseStalled = true;
+                            
+                            if (this.sseStallRecoveryAttempts < 3) {
+                                this.sseStallRecoveryAttempts++;
+                                if (this.sseSource) {
+                                    this.sseSource.close();
+                                    this.sseSource = null;
+                                }
+                                setTimeout(() => {
+                                    this.setupSSEForSource(sourceId);
+                                }, 500);
+                            }
+                        }
+                    }
+                }, 2000);
+                
+                this.sseSource.onopen = () => {
+                    // Keep connection established log but make it less verbose
+                    console.log(`SSE connected to ${sourceId}`);
+                    this.sseStalled = false;
+                    this.sseStallRecoveryAttempts = 0;
+                    this.lastDataTime = Date.now();
+                    
+                    if (!document.hidden && this.audioContext && this.audioContext.state === 'suspended') {
+                        this.audioContext.resume().then(() => {
+                        }).catch(err => {
+                            console.error('Failed to resume audio context:', err);
+                        });
+                    }
+                };
+                
+                this.sseSource.addEventListener('audio', (event) => {
+                    this.lastDataTime = Date.now();
+                    this.sseStalled = false;
+                    
+                    if (event.data) {
+                        try {
+                            const base64Data = event.data;
+                            const binaryString = atob(base64Data);
+                            const audioData = new Uint8Array(binaryString.length);
+                            
+                            for (let i = 0; i < binaryString.length; i++) {
+                                audioData[i] = binaryString.charCodeAt(i);
+                            }
+                            
+                            if (audioData.length < 32) {
+                                console.warn(`Received unusually small audio chunk: ${audioData.length} bytes`);
+                                return;
+                            }
+                            
+                            // Drastically reduce audio data logs
+                            // Only log once every ~1000 packets in regular mode
+                            // Almost never log in background mode (~1 in 10000)
+                            const shouldLog = document.hidden ? Math.random() < 0.0001 : Math.random() < 0.001;
+                                             
+                            if (shouldLog) {
+                                const samples = Math.floor(audioData.length / 2);
+                                const durationMs = (samples / this.sampleRate) * 1000;
+                                console.log(`Received audio data: ${audioData.length} bytes, queue: ${this.pcmDataQueue.length} packets`);
+                            }
+                            
+                            if (!document.hidden && this.audioWorkletNode && this.audioWorkletNode.port) {
+                                if (this.audioContext && this.audioContext.state === 'running') {
+                                    try {
+                                        this.audioWorkletNode.port.postMessage({
+                                            type: 'buffer',
+                                            buffer: audioData
+                                        });
+                                    } catch (err) {
+                                        console.error('Error sending data to AudioWorklet:', err);
+                                        this.pcmDataQueue.push(audioData);
+                                    }
+                                } else {
+                                    this.pcmDataQueue.push(audioData);
+                                }
+                            } else {
+                                this.pcmDataQueue.push(audioData);
+                                
+                                const maxQueueSize = document.hidden ? 30 : 12; 
+                                const minQueueSize = document.hidden ? 10 : 3;
+                                
+                                if (this.pcmDataQueue.length > maxQueueSize) {
+                                    if (this.pcmDataQueue.length > maxQueueSize + 3) {
+                                        const toRemove = Math.min(3, this.pcmDataQueue.length - maxQueueSize);
+                                        this.pcmDataQueue.splice(1, toRemove);
+                                        // Only log major overflow in visible state, and only rarely
+                                        if (!document.hidden && Math.random() < 0.02) {
+                                            console.warn(`Queue overflow: removed ${toRemove} packets`);
+                                        }
+                                    } else {
+                                        const middleIndex = Math.floor(this.pcmDataQueue.length / 2);
+                                        this.pcmDataQueue.splice(middleIndex, 1);
+                                    }
+                                }
+                            }
+                        } catch (error) {
+                            console.error('Error processing SSE audio data:', error);
+                        }
+                    }
+                });
+                
+                this.sseSource.addEventListener('connected', () => {
+                    // Keep this log as it indicates successful connection
+                    console.log('SSE audio stream connected');
+                    this.lastDataTime = Date.now();
+                });
+                
+                this.sseSource.onerror = (error) => {
+                    // Keep error logs for troubleshooting
+                    console.error('SSE connection error:', error);
+                    
+                    if (!this.isPlaying) {
+                        this.sseSource.close();
+                        this.sseSource = null;
+                        return;
+                    }
+                };
+                
+            } catch (error) {
+                console.error('Error setting up SSE connection:', error);
+                
+                // Fall back to WebSocket if SSE setup fails
+                if (this.streamTransport === 'auto') {
+                    console.log('Falling back to WebSocket connection');
+                    this.setupWebSocketConnection(sourceId);
+                }
+            }
+        },
+        
+        setupWebSocketConnection(sourceId) {
             // Create a new WebSocket connection
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/audio-stream/${sourceId}`;
+            const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/audio-stream/${sourceId}?transport=ws`;
             
             try {
                 this.webSocket = new WebSocket(wsUrl);
@@ -390,7 +515,9 @@
                 
                 // Handle connection open
                 this.webSocket.onopen = () => {
+                    // Keep this connection log
                     console.log(`WebSocket connected to ${sourceId}`);
+                    
                     // Resume the AudioContext if it was suspended
                     if (this.audioContext && this.audioContext.state === 'suspended') {
                         this.audioContext.resume().catch(err => {
@@ -411,25 +538,12 @@
                             return;
                         }
                         
-                        // Log data details occasionally
-                        if (Math.random() < 0.01) {
+                        // Drastically reduce logging - only about 1 in 1000 messages
+                        if (Math.random() < 0.001) {
                             const samples = Math.floor(audioData.length / 2);
-                            const durationMs = (samples / this.sampleRate) * 1000;
-                            console.log(`Received audio data: ${audioData.length} bytes (${samples} samples, ${durationMs.toFixed(1)}ms), queue: ${this.pcmDataQueue.length} packets`);
+                            console.log(`Received WS audio data: ${audioData.length} bytes, queue: ${this.pcmDataQueue.length} packets`);
                             
-                            // Check format - sample a few values
-                            if (audioData.length >= 8) {
-                                // Convert first few samples (16-bit) from little-endian
-                                const samples = [];
-                                for (let i = 0; i < 4; i++) {
-                                    const lo = audioData[i*2];
-                                    const hi = audioData[i*2+1];
-                                    let sample = (hi << 8) | lo;
-                                    if (sample > 32767) sample -= 65536;
-                                    samples.push(sample);
-                                }
-                                console.log(`Sample values: ${samples.join(', ')}`);
-                            }
+                            // Remove sample value logging to reduce console spam
                         }
                         
                         // If using AudioWorkletNode, send directly to the worklet
@@ -483,20 +597,36 @@
                 
                 // Handle errors
                 this.webSocket.onerror = (error) => {
+                    // Keep error logs
                     console.error('WebSocket error:', error);
-                    // Don't close the connection here, as the browser will do it automatically
+                    
+                    // If using auto transport mode, try falling back to SSE on error
+                    if (this.streamTransport === 'auto' && this.isPlaying) {
+                        if (this.webSocket) {
+                            this.webSocket.close();
+                            this.webSocket = null;
+                        }
+                        this.setupSSEForSource(sourceId);
+                    }
                 };
                 
                 // Handle connection close
                 this.webSocket.onclose = (event) => {
-                    console.log(`WebSocket connection closed with code ${event.code}, reason: ${event.reason}`);
+                    // Only log abnormal closures
+                    if (event.code !== 1000) {
+                        console.log(`WebSocket connection closed with code ${event.code}`);
+                    }
                     
                     // Only attempt to reconnect if we're still playing and it wasn't a normal closure
                     if (this.isPlaying && event.code !== 1000) {
-                        console.log('Attempting to reconnect...');
                         setTimeout(() => {
                             if (this.isPlaying) {
-                                this.setupWebSocketForSource(sourceId);
+                                // If using auto transport mode, try SSE after WebSocket failure
+                                if (this.streamTransport === 'auto') {
+                                    this.setupSSEForSource(sourceId);
+                                } else {
+                                    this.setupWebSocketConnection(sourceId);
+                                }
                             }
                         }, 1000);
                     }
@@ -508,10 +638,16 @@
                         // Send a small ping message
                         this.webSocket.send('ping');
                     }
-                }, 20000); // Reduced from 30s to 20s for more reliable connection maintenance
+                }, 20000);
                 
             } catch (error) {
+                // Keep error logs
                 console.error('Error setting up WebSocket:', error);
+                
+                // Try SSE as fallback
+                if (this.streamTransport === 'auto') {
+                    this.setupSSEForSource(sourceId);
+                }
             }
         },
 
@@ -525,21 +661,20 @@
             this.isPlaying = !this.isPlaying;
             
             if (this.isPlaying) {
-                // Start playback
+                // Keep this log to indicate user action
                 console.log('Starting audio playback...');
                 
                 // Initialize audio system if needed
                 if (!this.audioContext) {
                     this.initAudio();
                 } else if (this.audioContext.state === 'closed') {
-                    // If context was closed, create a new one
                     this.audioContext = null;
                     this.audioWorkletNode = null;
                     this.initAudio();
                 }
                 
-                // Resume audio context if it was suspended
-                if (this.audioContext && this.audioContext.state === 'suspended') {
+                // Only resume audio context if page is visible
+                if (!document.hidden && this.audioContext && this.audioContext.state === 'suspended') {
                     this.audioContext.resume().catch(err => {
                         console.error('Failed to resume audio context:', err);
                     });
@@ -548,41 +683,24 @@
                 // Reset processing state
                 this.processingStarted = false;
                 this.pcmDataQueue = [];
+                this.sseStalled = false;
+                this.sseStallRecoveryAttempts = 0;
                 
-                // Set up WebSocket for streaming
+                // Set up streaming connection
                 this.setupWebSocketForSource(this.selectedSource);
                 
             } else {
-                // Stop playback
+                // Keep this log to indicate user action
                 console.log('Stopping audio playback...');
                 
-                // Clear the ping interval
-                if (this.pingInterval) {
-                    clearInterval(this.pingInterval);
-                    this.pingInterval = null;
-                }
-                
-                // Close WebSocket connection with normal closure code
-                if (this.webSocket) {
-                    // Use normal closure (1000) to indicate intentional close
-                    this.webSocket.close(1000, 'User stopped playback');
-                    this.webSocket = null;
-                }
-                
-                // Clear the data queue
-                this.pcmDataQueue = [];
+                // Clean up all resources
+                this.cleanupAudioResources();
                 
                 // Suspend audio context to save power
                 if (this.audioContext && this.audioContext.state === 'running') {
                     this.audioContext.suspend().catch(err => {
                         console.error('Failed to suspend audio context:', err);
                     });
-                }
-                
-                // Clear the buffer stats interval
-                if (this.bufferStatsInterval) {
-                    clearInterval(this.bufferStatsInterval);
-                    this.bufferStatsInterval = null;
                 }
             }
         },
@@ -602,11 +720,8 @@
                     this.pingInterval = null;
                 }
                 
-                if (this.webSocket) {
-                    // Use normal closure code
-                    this.webSocket.close(1000, 'Navigation');
-                    this.webSocket = null;
-                }
+                // Close all connections
+                this.closeExistingConnections();
                 
                 if (this.audioContext) {
                     this.audioContext.suspend().catch(err => {
@@ -626,31 +741,39 @@
             // Listen for page visibility changes
             document.addEventListener('visibilitychange', () => {
                 if (document.hidden) {
-                    this.cleanupEventSource();
+                    // When tab goes to background
+                    this.cleanupEventSource(); // Still close the audio level EventSource
                     
-                    // Suspend audio context when page is hidden
+                    // Don't close SSE audio stream when in background, but suspend the audio context
                     if (this.audioContext && this.audioContext.state === 'running') {
                         this.audioContext.suspend().catch(err => {
                             console.error('Failed to suspend audio context:', err);
                         });
                     }
                     
-                    // Don't close WebSocket when page is hidden, just allow it to continue running
-                    // This prevents the server from treating tab switching as disconnects
                 } else if (!this.isNavigating) {
+                    // When tab becomes visible again
                     this.setupEventSource();
                     
                     // Resume streaming if needed when page becomes visible again
                     if (this.isPlaying && this.selectedSource) {
-                        if (this.audioContext && this.audioContext.state === 'suspended') {
+                        // Keep this log but make it less frequent by checking if actually playing
+                        console.log('Tab visible again: resuming audio playback');
+                        
+                        // Always try to resume the audio context when tab becomes visible
+                        if (this.audioContext) {
                             this.audioContext.resume().catch(err => {
                                 console.error('Failed to resume audio context:', err);
                             });
                         }
                         
-                        // Only reinitialize WebSocket if it's closed
-                        if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) {
-                            this.setupWebSocketForSource(this.selectedSource);
+                        // Reestablish connection only if needed
+                        if (this.streamTransport === 'sse' || (this.streamTransport === 'auto' && this.isCloudflareOrDocker())) {
+                            if (!this.sseSource) {
+                                this.setupSSEForSource(this.selectedSource);
+                            }
+                        } else if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) {
+                            this.setupWebSocketConnection(this.selectedSource);
                         }
                     }
                 }
@@ -690,6 +813,36 @@
         getSourceDisplayName(source) {
             const name = this.levels[source]?.name || source;
             return name;
+        },
+        // Added method to properly clean up resources when stopping playback
+        cleanupAudioResources() {
+            // Clear all intervals
+            if (this.bufferStatsInterval) {
+                clearInterval(this.bufferStatsInterval);
+                this.bufferStatsInterval = null;
+            }
+            
+            if (this.sseStallCheckInterval) {
+                clearInterval(this.sseStallCheckInterval);
+                this.sseStallCheckInterval = null;
+            }
+            
+            if (this.pingInterval) {
+                clearInterval(this.pingInterval);
+                this.pingInterval = null;
+            }
+            
+            // Close connections
+            this.closeExistingConnections();
+            
+            // Clear the data queue
+            this.pcmDataQueue = [];
+            
+            // Reset state
+            this.processingStarted = false;
+            this.bufferUnderrunCount = 0;
+            this.sseStalled = false;
+            this.sseStallRecoveryAttempts = 0;
         }
     }" 
     @click.away="dropdownOpen = false">
