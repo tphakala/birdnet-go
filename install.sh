@@ -999,6 +999,18 @@ start_birdnet_go() {
     # Check if service started
     if ! sudo systemctl is-active --quiet birdnet-go.service; then
         print_message "❌ Failed to start BirdNET-Go service" "$RED"
+        
+        # Get and display journald logs for troubleshooting
+        print_message "\n📋 Service logs (last 20 entries):" "$YELLOW"
+        sudo journalctl -u birdnet-go.service -n 20 --no-pager
+        
+        print_message "\n❗ If you need help with this issue:" "$RED"
+        print_message "1. Check port availability and permissions" "$YELLOW"
+        print_message "2. Verify your audio device is properly connected and accessible" "$YELLOW"
+        print_message "3. If the issue persists, please open a ticket at:" "$YELLOW"
+        print_message "   https://github.com/tphakala/birdnet-go/issues" "$GREEN"
+        print_message "   Include the logs above in your issue report for faster troubleshooting" "$YELLOW"
+        
         exit 1
     fi
     print_message "✅ BirdNET-Go service started successfully!" "$GREEN"
@@ -1021,7 +1033,14 @@ start_birdnet_go() {
         if ! sudo systemctl is-active --quiet birdnet-go.service; then
             print_message "❌ Service stopped unexpectedly" "$RED"
             print_message "Checking service logs:" "$YELLOW"
-            sudo journalctl -u birdnet-go.service -n 50
+            sudo journalctl -u birdnet-go.service -n 50 --no-pager
+            
+            print_message "\n❗ If you need help with this issue:" "$RED"
+            print_message "1. The service started but then crashed" "$YELLOW"
+            print_message "2. Please open a ticket at:" "$YELLOW"
+            print_message "   https://github.com/tphakala/birdnet-go/issues" "$GREEN"
+            print_message "   Include the logs above in your issue report for faster troubleshooting" "$YELLOW"
+            
             exit 1
         fi
         
@@ -1033,9 +1052,17 @@ start_birdnet_go() {
     if [ -z "$container_id" ]; then
         print_message "❌ Container failed to start within ${max_attempts} seconds" "$RED"
         print_message "Service logs:" "$YELLOW"
-        sudo journalctl -u birdnet-go.service -n 50
+        sudo journalctl -u birdnet-go.service -n 50 --no-pager
+        
         print_message "\nDocker logs:" "$YELLOW"
         docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | xargs -r docker logs
+        
+        print_message "\n❗ If you need help with this issue:" "$RED"
+        print_message "1. The service started but container didn't initialize properly" "$YELLOW"
+        print_message "2. Please open a ticket at:" "$YELLOW"
+        print_message "   https://github.com/tphakala/birdnet-go/issues" "$GREEN"
+        print_message "   Include the logs above in your issue report for faster troubleshooting" "$YELLOW"
+        
         exit 1
     fi
 
