@@ -450,20 +450,35 @@
         closeExistingConnections() {
             // Clear stall detection interval
             if (this.sseStallCheckInterval) {
-                clearInterval(this.sseStallCheckInterval);
-                this.sseStallCheckInterval = null;
+                try {
+                    clearInterval(this.sseStallCheckInterval);
+                } catch (error) {
+                    console.error('Error clearing SSE stall interval:', error);
+                } finally {
+                    this.sseStallCheckInterval = null;
+                }
             }
             
             // Close any existing WebSocket connection
             if (this.webSocket) {
-                this.webSocket.close();
-                this.webSocket = null;
+                try {
+                    this.webSocket.close();
+                } catch (error) {
+                    console.error('Error closing WebSocket connection:', error);
+                } finally {
+                    this.webSocket = null;
+                }
             }
             
             // Close any existing SSE connection
             if (this.sseSource) {
-                this.sseSource.close();
-                this.sseSource = null;
+                try {
+                    this.sseSource.close();
+                } catch (error) {
+                    console.error('Error closing SSE connection:', error);
+                } finally {
+                    this.sseSource = null;
+                }
             }
         },
         
@@ -1162,18 +1177,39 @@
         
         // Optimized helper for audio data processing - move this outside event handlers
         processAudioData(data) {
-            // Convert base64 to Uint8Array more efficiently
-            const standardBase64 = this.decodeBase64UrlSafe(data);
-            const binaryString = atob(standardBase64);
-            
-            // Pre-allocate the full array for better performance
-            const audioData = new Uint8Array(binaryString.length);
-            
-            for (let i = 0; i < binaryString.length; i++) {
-                audioData[i] = binaryString.charCodeAt(i);
+            try {
+                // Input validation
+                if (!data || typeof data !== 'string') {
+                    console.warn('Invalid audio data received:', typeof data);
+                    // Return minimal valid audio data to avoid breaking the audio pipeline
+                    return new Uint8Array(32);
+                }
+                
+                // Convert base64 to Uint8Array more efficiently
+                const standardBase64 = this.decodeBase64UrlSafe(data);
+                
+                try {
+                    const binaryString = atob(standardBase64);
+                    
+                    // Pre-allocate the full array for better performance
+                    const audioData = new Uint8Array(binaryString.length);
+                    
+                    for (let i = 0; i < binaryString.length; i++) {
+                        audioData[i] = binaryString.charCodeAt(i);
+                    }
+                    
+                    return audioData;
+                } catch (error) {
+                    // Handle malformed Base64 input
+                    console.error('Error decoding Base64 data:', error.message);
+                    // Return minimal valid audio data (silent) to prevent audio pipeline from breaking
+                    return new Uint8Array(32);
+                }
+            } catch (error) {
+                console.error('Unexpected error in audio data processing:', error);
+                // Return minimal valid audio data as fallback
+                return new Uint8Array(32);
             }
-            
-            return audioData;
         }
     }" 
     @click.away="dropdownOpen = false">
