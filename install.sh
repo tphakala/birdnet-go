@@ -441,6 +441,8 @@ configure_audio_input() {
             3)
                 print_message "⚠️ Skipping audio input configuration" "$YELLOW"
                 print_message "⚠️ You can configure audio input later in BirdNET-Go web interface at Audio Capture Settings" "$YELLOW"
+                # MODIFIED: Always include device mapping even when skipping configuration
+                AUDIO_ENV="--device /dev/snd"
                 break
                 ;;
             *)
@@ -607,7 +609,8 @@ configure_rtsp_stream() {
             # Comment out audio source section
             sed -i '/source: "sysdefault"/s/^/#/' "$CONFIG_FILE"
             
-            AUDIO_ENV=""
+            # MODIFIED: Always include device mapping even with RTSP
+            AUDIO_ENV="--device /dev/snd"
             return 0
         else
             print_message "❌ Could not connect to RTSP stream. Do you want to:" "$RED"
@@ -1269,6 +1272,11 @@ handle_container_update() {
         return 1
     fi
     
+    # MODIFIED: Always ensure AUDIO_ENV is set during updates
+    if [ -z "$AUDIO_ENV" ]; then
+        AUDIO_ENV="--device /dev/snd"
+    fi
+    
     # Update systemd service if needed
     if [ "$service_needs_update" = "true" ]; then
         print_message "📝 Updating systemd service..." "$YELLOW"
@@ -1292,6 +1300,8 @@ CONFIG_DIR="$HOME/birdnet-go-app/config"
 DATA_DIR="$HOME/birdnet-go-app/data"
 CONFIG_FILE="$CONFIG_DIR/config.yaml"
 WEB_PORT=8080  # Default web port
+# MODIFIED: Set default AUDIO_ENV to always include device mapping
+AUDIO_ENV="--device /dev/snd"
 
 # Function to clean existing installation
 clean_installation() {
