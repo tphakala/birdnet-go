@@ -114,11 +114,32 @@ func (s *Server) initRoutes() {
 	// Special routes
 	s.Echo.GET("/api/v1/sse", s.Handlers.SSE.ServeSSE)
 	s.Echo.GET("/api/v1/audio-level", s.Handlers.WithErrorHandling(s.Handlers.AudioLevelSSE))
+
+	// New SSE-based audio stream route
+	s.Echo.GET("/api/v1/audio-stream-sse/:sourceID", func(c echo.Context) error {
+		// Add server to context for authentication
+		c.Set("server", s)
+		return s.Handlers.WithErrorHandling(s.Handlers.AudioStreamSSE)(c)
+	})
+
+	// Audio stream route with transport selection (SSE preferred, WebSocket fallback)
 	s.Echo.GET("/api/v1/audio-stream/:sourceID", func(c echo.Context) error {
 		// Add server to context for authentication
 		c.Set("server", s)
-		return s.AudioStreamManager.HandleWebSocket(c)
+
+		// Use SSE by default as it works better with Cloudflare and Docker
+		// The client can request WebSocket explicitly with ?transport=ws parameter
+		transport := c.QueryParam("transport")
+
+		if transport == "ws" {
+			// Fallback to WebSocket if explicitly requested
+			return s.AudioStreamManager.HandleWebSocket(c)
+		} else {
+			// Default to SSE for better compatibility
+			return s.Handlers.WithErrorHandling(s.Handlers.AudioStreamSSE)(c)
+		}
 	})
+
 	s.Echo.POST("/api/v1/settings/save", h.WithErrorHandling(h.SaveSettings), s.AuthMiddleware)
 	s.Echo.GET("/api/v1/settings/audio/get", h.WithErrorHandling(h.GetAudioDevices), s.AuthMiddleware)
 
