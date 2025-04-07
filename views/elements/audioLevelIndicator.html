@@ -21,6 +21,7 @@
         sseSource: null,
         streamTransport: '{{if .Settings.Realtime.Audio.StreamTransport}}{{.Settings.Realtime.Audio.StreamTransport}}{{else}}auto{{end}}', // Can be 'auto', 'sse', or 'ws'
         isPlaying: false,
+        playingSource: null, // Track which source is currently playing
         pcmDataQueue: [],
         audioBufferSize: 4096, // Must be power of two for ScriptProcessorNode
         incomingChunkSize: 3072, // The actual size of incoming audio chunks from the server
@@ -491,7 +492,10 @@
                     return;
                 }
                 
-                this.sseSource = new EventSource(`/api/v1/audio-stream/${sourceId}`);
+                // Use the new URL format with query parameter instead of path parameter
+                // to properly handle special characters in source IDs like RTSP URLs
+                const encodedSourceId = encodeURIComponent(sourceId);
+                this.sseSource = new EventSource(`/api/v1/audio-stream-sse?source=${encodedSourceId}`);
                 
                 this.lastDataTime = Date.now();
                 this.sseStalled = false;
@@ -737,7 +741,8 @@
         setupWebSocketConnection(sourceId) {
             // Create a new WebSocket connection
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/audio-stream/${sourceId}?transport=ws`;
+            const encodedSourceId = encodeURIComponent(sourceId);
+            const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/audio-stream?source=${encodedSourceId}&transport=ws`;
             
             try {
                 this.webSocket = new WebSocket(wsUrl);
@@ -871,89 +876,134 @@
             }
         },
 
+        // Initialize or reset audio context
+        initializeAudioContext() {
+            // Initialize audio system if needed
+            if (!this.audioContext) {
+                this.initAudio();
+            } else if (this.audioContext.state === 'closed') {
+                this.audioContext = null;
+                this.audioWorkletNode = null;
+                this.initAudio();
+            }
+            
+            // Always resume audio context regardless of visibility
+            if (this.audioContext && this.audioContext.state === 'suspended') {
+                this.audioContext.resume().catch(err => {
+                    console.error('Failed to resume audio context:', err);
+                });
+            }
+        },
+        
+        // Reset stream processing state
+        resetProcessingState() {
+            this.processingStarted = false;
+            this.pcmDataQueue = [];
+            this.sseStalled = false;
+            this.sseStallRecoveryAttempts = 0;
+        },
+        
+        // Setup media session API
+        setupMediaSession(source) {
+            if ('mediaSession' in navigator) {
+                const sourceName = source ? this.getSourceDisplayName(source) : '';
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: sourceName ? `Bird Audio Stream - ${sourceName}` : 'Bird Audio Stream',
+                    artist: 'BirdNet-Go',
+                    album: 'Live Stream',
+                    // Optional artwork - use favicon as default
+                    artwork: [
+                        { src: '/assets/favicon.ico', sizes: '32x32', type: 'image/x-icon' },
+                    ]
+                });
+                
+                navigator.mediaSession.setActionHandler('play', () => {
+                    this.isPlaying = true;
+                    if (this.playingSource) {
+                        this.setupWebSocketForSource(this.playingSource);
+                    }
+                });
+                
+                navigator.mediaSession.setActionHandler('pause', () => {
+                    this.isPlaying = false;
+                    this.cleanupAudioResources();
+                });
+                
+                // Update playback state
+                navigator.mediaSession.playbackState = 'playing';
+            }
+        },
+        
+        // Start playing a source
+        startPlayback(source) {
+            console.log(`Starting audio playback for source: ${source}`);
+            
+            this.initializeAudioContext();
+            this.resetProcessingState();
+            
+            // Set state
+            this.playingSource = source;
+            this.isPlaying = true;
+            
+            // Set up streaming connection
+            this.setupWebSocketForSource(source);
+            
+            // Setup media session
+            this.setupMediaSession(source);
+        },
+        
+        // Stop playback
+        stopPlayback() {
+            console.log('Stopping audio playback...');
+            
+            // Reset state
+            this.isPlaying = false;
+            this.playingSource = null;
+            
+            // Clean up resources
+            this.cleanupAudioResources();
+            
+            // Update mediaSession state if available
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.playbackState = 'paused';
+            }
+        },
+
         togglePlayback() {
             if (!this.selectedSource) {
                 console.error('No audio source selected');
                 return;
             }
             
-            // Toggle playback state
-            this.isPlaying = !this.isPlaying;
-            
             if (this.isPlaying) {
-                // Keep this log to indicate user action
-                console.log('Starting audio playback...');
-                
-                // Initialize audio system if needed
-                if (!this.audioContext) {
-                    this.initAudio();
-                } else if (this.audioContext.state === 'closed') {
-                    this.audioContext = null;
-                    this.audioWorkletNode = null;
-                    this.initAudio();
-                }
-                
-                // Always resume audio context regardless of visibility
-                if (this.audioContext && this.audioContext.state === 'suspended') {
-                    this.audioContext.resume().catch(err => {
-                        console.error('Failed to resume audio context:', err);
-                    });
-                }
-                
-                // Reset processing state
-                this.processingStarted = false;
-                this.pcmDataQueue = [];
-                this.sseStalled = false;
-                this.sseStallRecoveryAttempts = 0;
-                
-                // Set up streaming connection
-                this.setupWebSocketForSource(this.selectedSource);
-                
-                // ADD MediaSession API support
-                if ('mediaSession' in navigator) {
-                    navigator.mediaSession.metadata = new MediaMetadata({
-                        title: 'Bird Audio Stream',
-                        artist: 'BirdNet-Go',
-                        album: 'Live Stream',
-                        // Optional artwork - use favicon as default
-                        artwork: [
-                            { src: '/assets/favicon.ico', sizes: '32x32', type: 'image/x-icon' },
-                        ]
-                    });
-                    
-                    navigator.mediaSession.setActionHandler('play', () => {
-                        this.isPlaying = true;
-                        this.setupWebSocketForSource(this.selectedSource);
-                    });
-                    
-                    navigator.mediaSession.setActionHandler('pause', () => {
-                        this.isPlaying = false;
-                        this.cleanupAudioResources();
-                    });
-                    
-                    // Update playback state
-                    navigator.mediaSession.playbackState = 'playing';
-                }
-                
+                this.stopPlayback();
             } else {
-                // Keep this log to indicate user action
-                console.log('Stopping audio playback...');
-                
-                // Clean up all resources
-                this.cleanupAudioResources();
-                
-                // Update mediaSession state if available
-                if ('mediaSession' in navigator) {
-                    navigator.mediaSession.playbackState = 'paused';
-                }
-                
-                // Only suspend audio context if navigating away
-                if (this.isNavigating && this.audioContext && this.audioContext.state === 'running') {
-                    this.audioContext.suspend().catch(err => {
-                        console.error('Failed to suspend audio context:', err);
-                    });
-                }
+                this.startPlayback(this.selectedSource);
             }
+            
+            // Only suspend audio context if navigating away
+            if (!this.isPlaying && this.isNavigating && this.audioContext && this.audioContext.state === 'running') {
+                this.audioContext.suspend().catch(err => {
+                    console.error('Failed to suspend audio context:', err);
+                });
+            }
+        },
+        
+        // Toggle playback for a specific source
+        toggleSourcePlayback(source) {
+            // If we're already playing this source, stop it
+            if (this.isPlaying && this.playingSource === source) {
+                this.stopPlayback();
+                return;
+            }
+            
+            // If we're playing a different source, stop it first
+            if (this.isPlaying) {
+                this.cleanupAudioResources();
+            }
+            
+            // Start playing the new source
+            this.startPlayback(source);
         },
 
         init() {
@@ -1308,23 +1358,22 @@
                     </button>
                     
                     <!-- Play/Stop controls directly in same row -->
-                    <button x-show="selectedSource === source"
-                            @click="togglePlayback(); dropdownOpen = false" 
+                    <button 
+                            @click="toggleSourcePlayback(source); dropdownOpen = false" 
                             class="btn btn-xs btn-circle btn-ghost ml-2"
-                            :class="isPlaying ? 'text-error' : 'text-success'"
-                            :aria-label="isPlaying ? 'Stop audio playback' : 'Start audio playback'"
-                            :tabindex="selectedSource === source ? 0 : -1"
-                            :class="{ 'last-focusable': selectedSource === source }"
+                            :class="playingSource === source ? 'text-error' : 'text-success'"
+                            :aria-label="playingSource === source ? 'Stop audio playback' : 'Start audio playback'"
+                            :tabindex="0"
                             @keydown.left="$event.target.previousElementSibling?.focus()">
-                        <template x-if="!isPlaying">
+                        <template x-if="playingSource !== source">
                             <!-- Play icon (>) -->
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
                             </svg>
                         </template>
-                        <template x-if="isPlaying">
+                        <template x-if="playingSource === source">
                             <!-- Stop icon (#) -->
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd" />
                             </svg>
                         </template>
