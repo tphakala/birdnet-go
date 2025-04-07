@@ -44,6 +44,7 @@ func setDefaultConfig() {
 
 	// Audio source configuration
 	viper.SetDefault("realtime.audio.source", "sysdefault")
+	viper.SetDefault("realtime.audio.streamtransport", "sse")
 
 	// Audio export configuration
 	viper.SetDefault("realtime.audio.export.debug", false)
