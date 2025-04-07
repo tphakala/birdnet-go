@@ -39,11 +39,12 @@ type EqualizerSettings struct {
 
 // AudioSettings contains settings for audio processing and export.
 type AudioSettings struct {
-	Source        string   // audio source to use for analysis
-	FfmpegPath    string   // path to ffmpeg, runtime value
-	SoxPath       string   // path to sox, runtime value
-	SoxAudioTypes []string `yaml:"-"` // supported audio types of sox, runtime value
-	Export        struct {
+	Source          string   // audio source to use for analysis
+	FfmpegPath      string   // path to ffmpeg, runtime value
+	SoxPath         string   // path to sox, runtime value
+	SoxAudioTypes   []string `yaml:"-"` // supported audio types of sox, runtime value
+	StreamTransport string   // preferred transport for audio streaming: "auto", "sse", or "ws"
+	Export          struct {
 		Debug     bool   // true to enable audio export debug
 		Enabled   bool   // export audio clips containing indentified bird calls
 		Path      string // path to audio clip export directory

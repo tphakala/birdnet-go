@@ -23,8 +23,10 @@ type AudioDataCallback func(sourceID string, data []byte)
 
 // Global callback registry for broadcasting audio data
 var (
-	broadcastCallbacks     map[string]AudioDataCallback // Map of sourceID -> callback
-	broadcastCallbackMutex sync.RWMutex
+	broadcastCallbacks         map[string]AudioDataCallback // Map of sourceID -> callback
+	broadcastCallbackMutex     sync.RWMutex
+	lastCallbackLogTime        time.Time // Last time we logged active callbacks
+	lastMissingCallbackLogTime time.Time // Last time we logged missing callbacks
 )
 
 func init() {
@@ -53,10 +55,29 @@ func UnregisterBroadcastCallback(sourceID string) {
 func broadcastAudioData(sourceID string, data []byte) {
 	broadcastCallbackMutex.RLock()
 	callback, exists := broadcastCallbacks[sourceID]
+
+	// Debug log: log registered callbacks less frequently (every 5 minutes)
+	// Use a proper timestamp comparison instead of modulus which can cause spurious logging
+	if time.Since(lastCallbackLogTime) > 5*time.Minute {
+		// Create a list of registered callback keys to show what sources are registered
+		var keys []string
+		for k := range broadcastCallbacks {
+			keys = append(keys, k)
+		}
+		log.Printf("🔊 Active audio broadcast callbacks: %v", keys)
+		lastCallbackLogTime = time.Now()
+	}
+
 	broadcastCallbackMutex.RUnlock()
 
 	// If no callback registered for this source, skip all processing
 	if !exists {
+		// Log much less frequently to avoid log spam (once every 5 minutes)
+		if time.Since(lastMissingCallbackLogTime) > 5*time.Minute {
+			log.Printf("⚠️ No broadcast callback registered for source: %s, data length: %d bytes",
+				sourceID, len(data))
+			lastMissingCallbackLogTime = time.Now()
+		}
 		return
 	}
 
