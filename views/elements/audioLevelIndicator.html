@@ -491,7 +491,10 @@
                     return;
                 }
                 
-                this.sseSource = new EventSource(`/api/v1/audio-stream/${sourceId}`);
+                // Use the new URL format with query parameter instead of path parameter
+                // to properly handle special characters in source IDs like RTSP URLs
+                const encodedSourceId = encodeURIComponent(sourceId);
+                this.sseSource = new EventSource(`/api/v1/audio-stream-sse?source=${encodedSourceId}`);
                 
                 this.lastDataTime = Date.now();
                 this.sseStalled = false;
@@ -737,7 +740,8 @@
         setupWebSocketConnection(sourceId) {
             // Create a new WebSocket connection
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/audio-stream/${sourceId}?transport=ws`;
+            const encodedSourceId = encodeURIComponent(sourceId);
+            const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/audio-stream?source=${encodedSourceId}&transport=ws`;
             
             try {
                 this.webSocket = new WebSocket(wsUrl);
