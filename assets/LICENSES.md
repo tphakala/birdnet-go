@@ -344,7 +344,7 @@ Source: Apache-2.0
 
 ### golang.org/x/crypto/acme
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.36.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.37.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
@@ -359,7 +359,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/sync/semaphore
 
-License: https://cs.opensource.google/go/x/sync/+/v0.12.0:LICENSE
+License: https://cs.opensource.google/go/x/sync/+/v0.13.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sys/unix
@@ -374,7 +374,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.23.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.24.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
