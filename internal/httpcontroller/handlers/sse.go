@@ -38,7 +38,7 @@ func NewSSEHandler() *SSEHandler {
 func (h *SSEHandler) ServeSSE(c echo.Context) error {
 	h.Debug("SSE: New connection request from %s", c.Request().RemoteAddr)
 
-	c.Response().Header().Set("Content-Type", "text/event-stream")
+	c.Response().Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	c.Response().Header().Set("Cache-Control", "no-cache")
 	c.Response().Header().Set("Connection", "keep-alive")
 	c.Response().WriteHeader(http.StatusOK)

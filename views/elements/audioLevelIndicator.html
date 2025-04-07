@@ -436,32 +436,15 @@
                 }
             }, 15000); // Report every 15 seconds
             
-            if (this.streamTransport === 'sse' || (this.streamTransport === 'auto' && this.isCloudflareOrDocker())) {
+            // Simply use the configured transport without environment detection
+            if (this.streamTransport === 'sse') {
                 this.setupSSEForSource(sourceId);
-            } else {
+            } else if (this.streamTransport === 'ws') {
                 this.setupWebSocketConnection(sourceId);
+            } else {
+                // For 'auto' mode, we now default to SSE which works reliably in most environments
+                this.setupSSEForSource(sourceId);
             }
-        },
-        
-        isCloudflareOrDocker() {
-            // Check if we're likely behind Cloudflare or in a Docker container
-            const hostName = window.location.hostname;
-            const path = window.location.pathname;
-            
-            // Check for Cloudflare-specific headers or common Docker port mappings
-            const isCloudflareLikely = 
-                document.cookie.indexOf('__cfduid') !== -1 || 
-                document.cookie.indexOf('cf_clearance') !== -1 ||
-                hostName.indexOf('workers.dev') !== -1 ||
-                hostName.indexOf('pages.dev') !== -1;
-                
-            // Check for common Docker port mappings or Traefik
-            const isDockerLikely = 
-                window.location.port && ['8080', '8000', '3000', '5000', '8888'].includes(window.location.port) ||
-                path.indexOf('/proxy/') !== -1 ||
-                document.cookie.indexOf('_traefik_') !== -1;
-                
-            return isCloudflareLikely || isDockerLikely;
         },
         
         closeExistingConnections() {
@@ -728,8 +711,8 @@
             } catch (error) {
                 console.error('Error setting up SSE connection:', error);
                 
-                // Fall back to WebSocket if SSE setup fails
-                if (this.streamTransport === 'auto') {
+                // Fall back to WebSocket if SSE setup fails and we specifically requested WebSocket
+                if (this.streamTransport === 'ws') {
                     console.log('Falling back to WebSocket connection');
                     this.setupWebSocketConnection(sourceId);
                 }
@@ -820,8 +803,9 @@
                     // Keep error logs
                     console.error('WebSocket error:', error);
                     
-                    // If using auto transport mode, try falling back to SSE on error
-                    if (this.streamTransport === 'auto' && this.isPlaying) {
+                    // If using auto mode or errors occur with WebSocket, fall back to SSE
+                    if ((this.streamTransport === 'auto' || this.streamTransport === 'ws') && this.isPlaying) {
+                        console.log('WebSocket error detected, falling back to SSE');
                         if (this.webSocket) {
                             this.webSocket.close();
                             this.webSocket = null;
@@ -841,10 +825,12 @@
                     if (this.isPlaying && event.code !== 1000) {
                         setTimeout(() => {
                             if (this.isPlaying) {
-                                // If using auto transport mode, try SSE after WebSocket failure
+                                // For auto mode, now prefer SSE for more reliable connections
                                 if (this.streamTransport === 'auto') {
+                                    console.log('Using SSE for auto transport mode after WebSocket closure');
                                     this.setupSSEForSource(sourceId);
-                                } else {
+                                } else if (this.streamTransport === 'ws') {
+                                    // Only try WebSocket again if explicitly set to ws mode
                                     this.setupWebSocketConnection(sourceId);
                                 }
                             }
@@ -864,10 +850,9 @@
                 // Keep error logs
                 console.error('Error setting up WebSocket:', error);
                 
-                // Try SSE as fallback
-                if (this.streamTransport === 'auto') {
-                    this.setupSSEForSource(sourceId);
-                }
+                // Try SSE as fallback for all transport modes
+                console.log('Error in WebSocket setup, using SSE as fallback');
+                this.setupSSEForSource(sourceId);
             }
         },
 
@@ -1026,12 +1011,19 @@
                         }
                         
                         // Reestablish connection only if needed
-                        if (this.streamTransport === 'sse' || (this.streamTransport === 'auto' && this.isCloudflareOrDocker())) {
+                        if (this.streamTransport === 'sse') {
                             if (!this.sseSource) {
                                 this.setupSSEForSource(this.selectedSource);
                             }
-                        } else if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) {
-                            this.setupWebSocketConnection(this.selectedSource);
+                        } else if (this.streamTransport === 'ws') {
+                            if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) {
+                                this.setupWebSocketConnection(this.selectedSource);
+                            }
+                        } else {
+                            // For 'auto' mode, we now default to SSE which works reliably in most environments
+                            if (!this.sseSource) {
+                                this.setupSSEForSource(this.selectedSource);
+                            }
                         }
                     }
                 }
@@ -1074,8 +1066,14 @@
         },
         // Modify the cleanup resources method
         cleanupAudioResources() {
+            // Track resources that need cleanup
+            const hasActiveSSE = this.sseSource && this.sseSource.readyState !== 2; // Not CLOSED
+            const hasActiveWS = this.webSocket && this.webSocket.readyState !== WebSocket.CLOSED;
+            
             // MODIFY: Only clean up completely if not playing or if navigating away
             if (!this.isPlaying || this.isNavigating) {
+                // Full cleanup - close everything
+                
                 // Clear all intervals
                 if (this.bufferStatsInterval) {
                     clearInterval(this.bufferStatsInterval);
@@ -1092,7 +1090,7 @@
                     this.pingInterval = null;
                 }
                 
-                // Close connections
+                // Close all connections
                 this.closeExistingConnections();
                 
                 // Clear the data queue
@@ -1103,10 +1101,47 @@
                 this.bufferUnderrunCount = 0;
                 this.sseStalled = false;
                 this.sseStallRecoveryAttempts = 0;
+                this.consecutiveEmptyUnderruns = 0;
+                this.serverDisconnected = false;
             } else {
                 // Lighter cleanup that preserves audio playback
-                // Don't close connections or reset state that would interrupt playback
-                console.log('Light cleanup to preserve background audio playback');
+                
+                // Still clear stale/duplicate resources to prevent memory leaks
+                
+                // Clean up any duplicate or competing connections
+                // If we have SSE, make sure WebSocket is closed and vice versa
+                if (hasActiveSSE && this.webSocket) {
+                    this.webSocket.close();
+                    this.webSocket = null;
+                    
+                    if (this.pingInterval) {
+                        clearInterval(this.pingInterval);
+                        this.pingInterval = null;
+                    }
+                }
+                
+                if (hasActiveWS && this.sseSource) {
+                    this.sseSource.close();
+                    this.sseSource = null;
+                    
+                    if (this.sseStallCheckInterval) {
+                        clearInterval(this.sseStallCheckInterval);
+                        this.sseStallCheckInterval = null;
+                    }
+                }
+                
+                // Clear unused data that's not needed for playback
+                if (this.pcmDataQueue.length > 30) {
+                    // Trim excess buffer data to prevent unbounded growth
+                    this.pcmDataQueue = this.pcmDataQueue.slice(0, 30);
+                }
+                
+                // Reset error counters without disrupting playback
+                this.bufferUnderrunCount = Math.min(this.bufferUnderrunCount, 5);
+                this.sseStallRecoveryAttempts = 0;
+                this.consecutiveEmptyUnderruns = 0;
+                
+                console.log('Light cleanup completed while preserving audio playback');
             }
         },
         // Function to convert URL-safe base64 to binary data
