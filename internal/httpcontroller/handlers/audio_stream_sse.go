@@ -135,7 +135,7 @@ var (
 
 // initializeSSEStreamHeaders sets up the necessary headers for SSE audio stream connection
 func initializeSSEStreamHeaders(c echo.Context) {
-	c.Response().Header().Set(echo.HeaderContentType, "text/event-stream")
+	c.Response().Header().Set(echo.HeaderContentType, "text/event-stream; charset=utf-8")
 	c.Response().Header().Set(echo.HeaderCacheControl, "no-cache")
 	c.Response().Header().Set(echo.HeaderConnection, "keep-alive")
 	c.Response().WriteHeader(http.StatusOK)
