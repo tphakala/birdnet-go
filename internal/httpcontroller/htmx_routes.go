@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -115,17 +116,34 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/api/v1/sse", s.Handlers.SSE.ServeSSE)
 	s.Echo.GET("/api/v1/audio-level", s.Handlers.WithErrorHandling(s.Handlers.AudioLevelSSE))
 
-	// New SSE-based audio stream route
-	s.Echo.GET("/api/v1/audio-stream-sse/:sourceID", func(c echo.Context) error {
+	// Audio stream routes with source handling
+	s.Echo.GET("/api/v1/audio-stream-sse", func(c echo.Context) error {
 		// Add server to context for authentication
 		c.Set("server", s)
+		// Get encoded sourceID from query parameter
+		sourceID := c.QueryParam("source")
+		if sourceID == "" {
+			return echo.NewHTTPError(http.StatusBadRequest, "Source ID is required")
+		}
+		// Set it as a parameter so the handler can access it
+		c.SetParamNames("sourceID")
+		c.SetParamValues(sourceID)
 		return s.Handlers.WithErrorHandling(s.Handlers.AudioStreamSSE)(c)
 	})
 
 	// Audio stream route with transport selection (SSE preferred, WebSocket fallback)
-	s.Echo.GET("/api/v1/audio-stream/:sourceID", func(c echo.Context) error {
+	s.Echo.GET("/api/v1/audio-stream", func(c echo.Context) error {
 		// Add server to context for authentication
 		c.Set("server", s)
+
+		// Get encoded sourceID from query parameter
+		sourceID := c.QueryParam("source")
+		if sourceID == "" {
+			return echo.NewHTTPError(http.StatusBadRequest, "Source ID is required")
+		}
+		// Set it as a parameter so the handler can access it
+		c.SetParamNames("sourceID")
+		c.SetParamValues(sourceID)
 
 		// Use SSE by default as it works better with Cloudflare and Docker
 		// The client can request WebSocket explicitly with ?transport=ws parameter
@@ -136,6 +154,28 @@ func (s *Server) initRoutes() {
 			return s.AudioStreamManager.HandleWebSocket(c)
 		} else {
 			// Default to SSE for better compatibility
+			return s.Handlers.WithErrorHandling(s.Handlers.AudioStreamSSE)(c)
+		}
+	})
+
+	// Keep legacy endpoint format with URL parameter for backward compatibility
+	s.Echo.GET("/api/v1/audio-stream-sse/:sourceID", func(c echo.Context) error {
+		// Add server to context for authentication
+		c.Set("server", s)
+		// Use existing param directly (not recommended but kept for compatibility)
+		return s.Handlers.WithErrorHandling(s.Handlers.AudioStreamSSE)(c)
+	})
+
+	s.Echo.GET("/api/v1/audio-stream/:sourceID", func(c echo.Context) error {
+		// Add server to context for authentication
+		c.Set("server", s)
+
+		// Use existing param directly (not recommended but kept for compatibility)
+		transport := c.QueryParam("transport")
+
+		if transport == "ws" {
+			return s.AudioStreamManager.HandleWebSocket(c)
+		} else {
 			return s.Handlers.WithErrorHandling(s.Handlers.AudioStreamSSE)(c)
 		}
 	})
@@ -249,4 +289,14 @@ func (s *Server) setupStaticFileServing() {
 		s.Echo.Logger.Fatal(err)
 	}
 	s.Echo.StaticFS("/assets", echo.MustSubFS(assetsFS, ""))
+}
+
+// EncodeSourceID properly encodes a source ID to be safely used in URLs
+func EncodeSourceID(sourceID string) string {
+	return url.QueryEscape(sourceID)
+}
+
+// DecodeSourceID decodes a source ID from a URL
+func DecodeSourceID(encodedSourceID string) (string, error) {
+	return url.QueryUnescape(encodedSourceID)
 }
