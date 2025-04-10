@@ -71,6 +71,7 @@ func TestFileTypesEligibleForDeletion(t *testing.T) {
 		{"bubo_bubo_80p_20210102T150405Z.flac", ".flac", true, "FLAC files should be eligible for deletion"},
 		{"bubo_bubo_80p_20210102T150405Z.aac", ".aac", true, "AAC files should be eligible for deletion"},
 		{"bubo_bubo_80p_20210102T150405Z.opus", ".opus", true, "OPUS files should be eligible for deletion"},
+		{"bubo_bubo_80p_20210102T150405Z.m4a", ".m4a", true, "M4A files should be eligible for deletion"},
 
 		// Disallowed file types (should not be eligible for deletion)
 		{"bubo_bubo_80p_20210102T150405Z.txt", ".txt", false, "TXT files should not be eligible for deletion"},
@@ -134,6 +135,7 @@ func TestParseFileInfoWithDifferentExtensions(t *testing.T) {
 		{"bubo_bubo_80p_20210102T150405Z.flac", ".flac", true},
 		{"bubo_bubo_80p_20210102T150405Z.aac", ".aac", true},
 		{"bubo_bubo_80p_20210102T150405Z.opus", ".opus", true},
+		{"bubo_bubo_80p_20210102T150405Z.m4a", ".m4a", true},
 		{"bubo_bubo_80p_20210102T150405Z.txt", ".txt", false}, // Unsupported extension
 	}
 
@@ -439,6 +441,7 @@ func TestUsageBasedCleanupWithAllFileTypes(t *testing.T) {
 			{Path: tempDir + "/anas_platyrhynchos_70p_20210103T150405Z.flac", Species: "anas_platyrhynchos", Confidence: 70, Timestamp: parseTime("20210103T150405Z"), Size: 2048},
 			{Path: tempDir + "/erithacus_rubecula_60p_20210104T150405Z.aac", Species: "erithacus_rubecula", Confidence: 60, Timestamp: parseTime("20210104T150405Z"), Size: 768},
 			{Path: tempDir + "/passer_domesticus_90p_20210105T150405Z.opus", Species: "passer_domesticus", Confidence: 90, Timestamp: parseTime("20210105T150405Z"), Size: 1536},
+			{Path: tempDir + "/turdus_migratorius_95p_20210105T150405Z.m4a", Species: "turdus_migratorius", Confidence: 95, Timestamp: parseTime("20210105T150405Z"), Size: 2560},
 			// Add more instances of bubo_bubo to test min clips per species
 			{Path: tempDir + "/bubo_bubo_75p_20210106T150405Z.wav", Species: "bubo_bubo", Confidence: 75, Timestamp: parseTime("20210106T150405Z"), Size: 1024},
 			{Path: tempDir + "/bubo_bubo_65p_20210107T150405Z.mp3", Species: "bubo_bubo", Confidence: 65, Timestamp: parseTime("20210107T150405Z"), Size: 512},
