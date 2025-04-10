@@ -15,7 +15,7 @@ import (
 )
 
 // allowedFileTypes is the list of file extensions that are allowed to be deleted
-var allowedFileTypes = []string{".wav", ".flac", ".aac", ".opus", ".mp3"}
+var allowedFileTypes = []string{".wav", ".flac", ".aac", ".opus", ".mp3", ".m4a"}
 
 // FileInfo holds information about a file
 type FileInfo struct {

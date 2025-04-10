@@ -112,7 +112,7 @@ func TestAgeBasedCleanupFileTypeEligibility(t *testing.T) {
 // TestAgeBasedFilesAfterFilter tests the filtering of files for age-based cleanup
 func TestAgeBasedFilesAfterFilter(t *testing.T) {
 	db := &MockDB{}
-	allowedTypes := []string{".wav", ".mp3", ".flac", ".aac", ".opus"}
+	allowedTypes := []string{".wav", ".mp3", ".flac", ".aac", ".opus", ".m4a"}
 
 	// Create a temporary directory
 	testDir, err := os.MkdirTemp("", "age_filter_test")
@@ -123,7 +123,7 @@ func TestAgeBasedFilesAfterFilter(t *testing.T) {
 
 	// Let's create files of all relevant types
 	fileTypes := []string{
-		".wav", ".mp3", ".flac", ".aac", ".opus",
+		".wav", ".mp3", ".flac", ".aac", ".opus", ".m4a",
 		".txt", ".jpg", ".png", ".db", ".exe",
 	}
 
