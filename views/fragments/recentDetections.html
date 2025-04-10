@@ -91,7 +91,7 @@
         <div class="audio-player-container relative min-w-[50px]">
           <!-- Spectrogram Image -->
           <img loading="lazy" width="400" src="/api/v1/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram Image"
-            class="w-full h-auto rounded-md object-contain">
+            class="w-full h-auto rounded-md object-contain" onerror="this.onerror=null; this.src='/assets/images/spectrogram-placeholder.svg'">
 
           <!-- Play position indicator -->
           <div id="position-indicator-{{.ID}}" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
@@ -176,7 +176,7 @@
     <div class="audio-player-container relative">
       <!-- Spectrogram Image -->
       <img loading="lazy" src="/api/v1/media/spectrogram?clip={{.ClipName}}" alt="Spectrogram"
-        class="w-full h-auto rounded-md shadow-sm">
+        class="w-full h-auto rounded-md shadow-sm" onerror="this.onerror=null; this.src='/assets/images/spectrogram-placeholder.svg'">
 
       <!-- Play position indicator -->
       <div id="position-indicator-{{.ID}}b" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"

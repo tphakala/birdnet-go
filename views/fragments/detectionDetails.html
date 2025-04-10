@@ -25,7 +25,7 @@
 		<div class="audio-player-container group relative min-w-[50px]">
 			<!-- Spectrogram Image -->
 			<img loading="lazy" src="/api/v1/media/spectrogram?clip={{.Note.ClipName}}" alt="Spectrogram"
-				class="w-full h-auto rounded-lg shadow-sm">
+				class="w-full h-auto rounded-lg shadow-sm" onerror="this.onerror=null; this.src='/assets/images/spectrogram-placeholder.svg'">
 	  
 			<!-- Play position indicator -->
 			<div id="position-indicator-0" class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
