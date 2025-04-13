@@ -199,10 +199,25 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 	// Process each result in item.Results
 	for _, result := range item.Results {
 		var confidenceThreshold float32
+
+		// Parse species string into components
 		scientificName, commonName, _ := observation.ParseSpeciesString(result.Species)
+
+		// Skip processing if we couldn't parse the species properly
+		if commonName == "" && scientificName == "" {
+			if p.Settings.Debug {
+				log.Printf("Skipping species with invalid format: %s", result.Species)
+			}
+			continue
+		}
 
 		// Convert species to lowercase for case-insensitive comparison
 		speciesLowercase := strings.ToLower(commonName)
+
+		// Fall back to using scientific name if common name is empty
+		if speciesLowercase == "" && scientificName != "" {
+			speciesLowercase = strings.ToLower(scientificName)
+		}
 
 		// Handle dog and human detection, this sets LastDogDetection and LastHumanDetection which is
 		// later used to discard detection if privacy filter or dog bark filters are enabled in settings.
