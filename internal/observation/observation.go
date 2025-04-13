@@ -15,17 +15,36 @@ import (
 
 // ParseSpeciesString extracts the scientific name, common name, and species code from the species string.
 func ParseSpeciesString(species string) (scientificName, commonName, speciesCode string) {
-	parts := strings.SplitN(species, "_", 3) // Split into 3 parts at most: scientificName, commonName, speciesCode
-	if len(parts) == 3 {
-		// Return scientificName (parts[0]), commonName (parts[1]), and speciesCode (parts[2])
-		scientificName, commonName, speciesCode = parts[0], parts[1], parts[2]
-		return
+	// Check if the string is empty or contains special characters that would break parsing
+	if species == "" || strings.Contains(species, "\t") || strings.Contains(species, "\n") {
+		return species, species, ""
 	}
-	// Log this to see what is being returned
+
+	// Split the species string by "_" separator
+	parts := strings.SplitN(species, "_", 3) // Split into 3 parts at most: scientificName, commonName, speciesCode
+
+	// Format 1: "ScientificName_CommonName_SpeciesCode" (3 parts)
+	if len(parts) == 3 {
+		return parts[0], parts[1], parts[2]
+	}
+
+	// Format 2: "ScientificName_CommonName" (2 parts) - most common format
+	if len(parts) == 2 {
+		return parts[0], parts[1], ""
+	}
+
+	// If we got here, the format doesn't match expected patterns
+	// Check if it has spaces instead, like "Common Blackbird" with no scientific name
+	if len(parts) == 1 && strings.Contains(species, " ") {
+		// This is likely just a common name without scientific name
+		return "", species, ""
+	}
+
+	// Log this to see what is being returned if format is unexpected
 	fmt.Printf("Species string has an unexpected format: %s\n", species)
-	// Return the original species string for all parts if the format doesn't match the expected
-	scientificName, commonName, speciesCode = species, species, ""
-	return
+
+	// Default fallback - return the original string for all parts
+	return species, species, ""
 }
 
 // New creates and returns a new Note with the provided parameters and current date and time.
