@@ -130,6 +130,7 @@ func GetLabelFilename(modelVersion, localeCode string) (string, error) {
 }
 
 // NormalizeLocale normalizes the input locale string and matches it to a known locale code or full name.
+// If the locale is not supported, it falls back to "en-uk".
 func NormalizeLocale(inputLocale string) (string, error) {
 	inputLocale = strings.ToLower(inputLocale)
 
@@ -145,5 +146,6 @@ func NormalizeLocale(inputLocale string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("unsupported locale: %s", inputLocale)
+	// Fall back to English (UK) if the locale is not supported
+	return "en-uk", nil
 }
