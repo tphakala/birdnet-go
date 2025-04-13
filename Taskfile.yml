@@ -7,7 +7,6 @@ vars:
   TAILWIND_INPUT: tailwind.input.css
   TAILWIND_OUTPUT: assets/tailwind.css
   LABELS_DIR: internal/birdnet/data/labels
-  LABELS_ZIP: internal/birdnet/data/labels.zip
   BUILD_DATE:
     sh: date -u +%Y-%m-%dT%H:%M:%SZ
   VERSION:
@@ -30,7 +29,7 @@ vars:
 
 tasks:
   default:
-    deps: [labels-zip, native-target]
+    deps: [native-target]
 
   # Task for running tests
   test:
@@ -116,17 +115,6 @@ tasks:
       - npm -D install daisyui@4.12.24
       - npx --yes tailwindcss@3.4.17 -i {{.TAILWIND_INPUT}} -o {{.TAILWIND_OUTPUT}} --minify
 
-  labels-zip:
-    vars:
-      ABS_LABELS_ZIP:
-        sh: realpath {{.LABELS_ZIP}}
-    cmds:
-      - cd {{.LABELS_DIR}} && zip -j "{{.ABS_LABELS_ZIP}}" *
-    sources:
-      - "{{.LABELS_DIR}}/*"
-    generates:
-      - "{{.LABELS_ZIP}}"
-
   dev_server:
     cmds:
       - air realtime
@@ -137,7 +125,7 @@ tasks:
       - rm -rf {{.BINARY_DIR}}/* tflite_c *.tar.gz *.zip
 
   linux_amd64:
-    deps: [labels-zip, check-tools, check-tensorflow]
+    deps: [check-tools, check-tensorflow]
     vars:
       TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR_AMD64}}'
       TFLITE_LIB_ARCH: linux_amd64.tar.gz
@@ -152,7 +140,7 @@ tasks:
         go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   linux_arm64:
-    deps: [labels-zip, check-tools, check-tensorflow]
+    deps: [check-tools, check-tensorflow]
     vars:
       TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR_ARM64}}'
       TFLITE_LIB_ARCH: linux_arm64.tar.gz
@@ -170,7 +158,7 @@ tasks:
         go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   windows_amd64:
-    deps: [labels-zip, check-tools, check-tensorflow]
+    deps: [check-tools, check-tensorflow]
     vars:
       TFLITE_LIB_DIR: /usr/x86_64-w64-mingw32/lib
       TFLITE_LIB_ARCH: windows_amd64.zip
@@ -185,7 +173,7 @@ tasks:
         go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}.exe
 
   darwin_amd64:
-    deps: [labels-zip, check-tools, check-tensorflow]
+    deps: [check-tools, check-tensorflow]
     vars:
       TFLITE_LIB_DIR: /opt/homebrew/lib
       TFLITE_LIB_ARCH: darwin_amd64.tar.gz
@@ -199,7 +187,7 @@ tasks:
         go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   darwin_arm64:
-    deps: [labels-zip, check-tools, check-tensorflow]
+    deps: [check-tools, check-tensorflow]
     vars:
       TFLITE_LIB_DIR: /opt/homebrew/lib
       TFLITE_LIB_ARCH: darwin_arm64.tar.gz
