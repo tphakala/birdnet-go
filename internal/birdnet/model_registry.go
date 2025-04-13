@@ -56,10 +56,12 @@ func DetermineModelInfo(modelPathOrID string) (ModelInfo, error) {
 
 		// If we couldn't identify it, create a generic custom model entry
 		return ModelInfo{
-			ID:          "Custom",
-			Name:        "Custom Model",
-			Description: fmt.Sprintf("Custom model from %s", baseName),
-			CustomPath:  modelPathOrID,
+			ID:               "Custom",
+			Name:             "Custom Model",
+			Description:      fmt.Sprintf("Custom model from %s", baseName),
+			CustomPath:       modelPathOrID,
+			DefaultLocale:    "en",
+			SupportedLocales: []string{},
 		}, nil
 	}
 
@@ -84,22 +86,15 @@ func IsLocaleSupported(modelInfo *ModelInfo, locale string) bool {
 		alternateLocale = strings.ReplaceAll(normalizedLocale, "_", "-")
 	}
 
-	// Handle special cases for locale codes
-	specialCaseMap := map[string]string{
-		"id": "in", // Handle both ISO standard "id" and legacy "in" for Indonesia
-		"in": "id",
+	// Create a set of all valid forms of the locale for efficient lookup
+	validForms := map[string]bool{
+		normalizedLocale: true,
+		alternateLocale:  true,
 	}
 
-	specialCaseLocale := ""
-	if special, exists := specialCaseMap[normalizedLocale]; exists {
-		specialCaseLocale = special
-	}
-
+	// Check if any supported locale matches any of our valid forms
 	for _, supported := range modelInfo.SupportedLocales {
-		supportedLower := strings.ToLower(supported)
-		if supportedLower == normalizedLocale ||
-			supportedLower == alternateLocale ||
-			(specialCaseLocale != "" && supportedLower == specialCaseLocale) {
+		if validForms[strings.ToLower(supported)] {
 			return true
 		}
 	}
