@@ -1,3 +1,26 @@
+.PHONY: all warn check-tools check-tensorflow linux_amd64 linux_arm64 windows_amd64 darwin_amd64 darwin_arm64 dev_server clean
+
+# Show warning about Makefile deprecation
+warn:
+	@echo "⚠️  WARNING: This Makefile is no longer maintained and will be removed in a future release."
+	@echo "⚠️  Please use Task instead with: go install github.com/go-task/task/v3/cmd/task@latest"
+	@echo "⚠️  Then run commands with 'task' instead of 'make'."
+	@echo "⚠️  See Taskfile.yml for available tasks."
+	@echo ""
+
+# Default action
+all: warn
+	@$(MAKE) $(NATIVE_TARGET)
+
+# Make sure other important targets also show the warning
+linux_amd64: warn
+linux_arm64: warn
+windows_amd64: warn
+darwin_amd64: warn
+darwin_arm64: warn
+dev_server: warn
+clean: warn
+
 BINARY_DIR := bin
 BINARY_NAME := birdnet-go
 TFLITE_VERSION := v2.17.1
@@ -89,12 +112,7 @@ else
     $(error Build is supported only on Linux and macOS)
 endif
 
-LABELS_FILES := $(wildcard internal/birdnet/data/labels/*)
 LABELS_DIR := internal/birdnet/data/labels
-LABELS_ZIP := internal/birdnet/data/labels.zip
-
-# Default action
-all: $(LABELS_ZIP) $(NATIVE_TARGET)
 
 # Check required tools: go, unzip, git
 check-tools:
@@ -197,15 +215,10 @@ generate-tailwindcss:
 	npx --yes tailwindcss@latest -i $(TAILWIND_INPUT) -o $(TAILWIND_OUTPUT) --minify
 	@echo "Tailwind CSS processed successfully"
 
-# labels.zip depends on all files in the labels directory
-$(LABELS_ZIP): $(LABELS_FILES)
-	@echo "Creating or updating labels.zip from contents of $(LABELS_DIR)/*"
-	@cd $(LABELS_DIR) && zip -j $(CURDIR)/$(LABELS_ZIP) *
-
 # Build for Linux amd64
 linux_amd64: TFLITE_LIB_ARCH=linux_amd64.tar.gz
 linux_amd64: TARGET=linux_amd64
-linux_amd64: $(LABELS_ZIP) check-tools check-tensorflow
+linux_amd64: warn check-tools check-tensorflow
 	$(eval TFLITE_LIB_DIR := $(call get_lib_path,$(TARGET)))
 	$(eval CGO_FLAGS := $(call get_cgo_flags,$(TARGET)))
 	@echo "Building for Linux AMD64 with library path: $(TFLITE_LIB_DIR)"
@@ -215,7 +228,7 @@ linux_amd64: $(LABELS_ZIP) check-tools check-tensorflow
 # Build for Linux arm64
 linux_arm64: TFLITE_LIB_ARCH=linux_arm64.tar.gz
 linux_arm64: TARGET=linux_arm64
-linux_arm64: $(LABELS_ZIP) check-tools check-tensorflow
+linux_arm64: warn check-tools check-tensorflow
 	$(eval TFLITE_LIB_DIR := $(call get_lib_path,$(TARGET)))
 	$(eval CGO_FLAGS := $(call get_cgo_flags,$(TARGET)))
 	@echo "Building for Linux ARM64 with library path: $(TFLITE_LIB_DIR)"
@@ -226,7 +239,7 @@ linux_arm64: $(LABELS_ZIP) check-tools check-tensorflow
 windows_amd64: TFLITE_LIB_ARCH=windows_amd64.zip
 windows_amd64: TFLITE_LIB_EXT=.dll
 windows_amd64: TARGET=windows_amd64
-windows_amd64: $(LABELS_ZIP) check-tools check-tensorflow
+windows_amd64: warn check-tools check-tensorflow
 	$(eval TFLITE_LIB_DIR := $(call get_lib_path,$(TARGET)))
 	$(eval CGO_FLAGS := $(call get_cgo_flags,$(TARGET)))
 	@echo "Building for Windows AMD64 with library path: $(TFLITE_LIB_DIR)"
@@ -236,21 +249,21 @@ windows_amd64: $(LABELS_ZIP) check-tools check-tensorflow
 # macOS Intel build
 darwin_amd64: TFLITE_LIB_ARCH=darwin_amd64.tar.gz
 darwin_amd64: TARGET=darwin_amd64
-darwin_amd64: $(LABELS_ZIP) check-tools check-tensorflow
+darwin_amd64: warn check-tools check-tensorflow
 	@$(MAKE) download-tflite TFLITE_LIB_DIR=$(TFLITE_LIB_DIR) TFLITE_LIB_ARCH=$(TFLITE_LIB_ARCH) TARGET=$(TARGET)
 	$(CGO_FLAGS) GOOS=darwin GOARCH=amd64 CGO_LDFLAGS="-L/opt/homebrew/lib -ltensorflowlite_c" go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
 # macOS ARM build
 darwin_arm64: TFLITE_LIB_ARCH=darwin_arm64.tar.gz
 darwin_arm64: TARGET=darwin_arm64
-darwin_arm64: $(LABELS_ZIP) check-tools check-tensorflow
+darwin_arm64: warn check-tools check-tensorflow
 	@$(MAKE) download-tflite TFLITE_LIB_DIR=$(TFLITE_LIB_DIR) TFLITE_LIB_ARCH=$(TFLITE_LIB_ARCH) TARGET=$(TARGET)
 	$(CGO_FLAGS) GOOS=darwin GOARCH=arm64 CGO_LDFLAGS="-L/opt/homebrew/lib -ltensorflowlite_c" go build $(LDFLAGS) -o $(BINARY_DIR)/$(BINARY_NAME)
 
 dev_server: REALTIME_ARGS=""
-dev_server:
+dev_server: warn
 	$(CGO_FLAGS) air realtime $(REALTIME_ARGS)
 
-clean:
+clean: warn
 	go clean
 	rm -rf $(BINARY_DIR)/* tflite_c *.tar.gz *.zip
