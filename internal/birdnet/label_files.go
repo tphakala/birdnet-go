@@ -23,8 +23,11 @@ func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 		return nil, fmt.Errorf("unsupported model version: %s", modelVersion)
 	}
 
+	// Normalize locale code for consistent handling
+	normalizedLocale := strings.ToLower(localeCode)
+
 	// Get the file name pattern based on the locale code
-	filePattern := fmt.Sprintf("%s_Labels_%s.txt", BirdNET_GLOBAL_6K_V2_4, localeCode)
+	filePattern := fmt.Sprintf("%s_Labels_%s.txt", BirdNET_GLOBAL_6K_V2_4, normalizedLocale)
 
 	// Try to find the exact match
 	data, err := v24LabelFiles.ReadFile(filepath.Join("data", "labels", "V2.4", filePattern))
@@ -33,8 +36,8 @@ func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 	}
 
 	// If the locale has a hyphen (like pt-br), try the underscore version
-	if strings.Contains(localeCode, "-") {
-		altLocale := strings.ReplaceAll(localeCode, "-", "_")
+	if strings.Contains(normalizedLocale, "-") {
+		altLocale := strings.ReplaceAll(normalizedLocale, "-", "_")
 		if strings.ToUpper(altLocale[3:]) == altLocale[3:] {
 			// Adjust format from "pt-br" to "pt_BR"
 			altLocale = altLocale[:3] + strings.ToUpper(altLocale[3:])
@@ -47,7 +50,7 @@ func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 	}
 
 	// Fall back to English if requested locale isn't found
-	if localeCode != "en" && localeCode != "en-uk" {
+	if normalizedLocale != "en" && normalizedLocale != "en-uk" {
 		filePattern = fmt.Sprintf("%s_Labels_en_uk.txt", BirdNET_GLOBAL_6K_V2_4)
 		data, err = v24LabelFiles.ReadFile(filepath.Join("data", "labels", "V2.4", filePattern))
 		if err == nil {

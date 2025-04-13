@@ -73,8 +73,20 @@ func IsLocaleSupported(modelInfo *ModelInfo, locale string) bool {
 		return true
 	}
 
+	// Normalize the input locale to lowercase
+	normalizedLocale := strings.ToLower(locale)
+
+	// Also try with hyphen replaced by underscore and vice versa
+	alternateLocale := normalizedLocale
+	if strings.Contains(normalizedLocale, "-") {
+		alternateLocale = strings.ReplaceAll(normalizedLocale, "-", "_")
+	} else if strings.Contains(normalizedLocale, "_") {
+		alternateLocale = strings.ReplaceAll(normalizedLocale, "_", "-")
+	}
+
 	for _, supported := range modelInfo.SupportedLocales {
-		if supported == locale {
+		supportedLower := strings.ToLower(supported)
+		if supportedLower == normalizedLocale || supportedLower == alternateLocale {
 			return true
 		}
 	}
