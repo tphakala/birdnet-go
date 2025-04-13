@@ -41,7 +41,7 @@ var LocaleCodeMapping = map[string]string{
 	"he":    "he",
 	"hr":    "hr",
 	"hu":    "hu",
-	"id":    "in", // Note: Indonesia uses 'in' in the file naming
+	"id":    "id", // Using proper ISO code for Indonesia
 	"is":    "is",
 	"it":    "it",
 	"ja":    "ja",
@@ -147,5 +147,6 @@ func NormalizeLocale(inputLocale string) (string, error) {
 	}
 
 	// Fall back to English (UK) if the locale is not supported
-	return "en-uk", nil
+	// Return no error but log that we're using a fallback
+	return "en-uk", fmt.Errorf("locale %s not supported, falling back to English (UK)", inputLocale)
 }

@@ -84,9 +84,22 @@ func IsLocaleSupported(modelInfo *ModelInfo, locale string) bool {
 		alternateLocale = strings.ReplaceAll(normalizedLocale, "_", "-")
 	}
 
+	// Handle special cases for locale codes
+	specialCaseMap := map[string]string{
+		"id": "in", // Handle both ISO standard "id" and legacy "in" for Indonesia
+		"in": "id",
+	}
+
+	specialCaseLocale := ""
+	if special, exists := specialCaseMap[normalizedLocale]; exists {
+		specialCaseLocale = special
+	}
+
 	for _, supported := range modelInfo.SupportedLocales {
 		supportedLower := strings.ToLower(supported)
-		if supportedLower == normalizedLocale || supportedLower == alternateLocale {
+		if supportedLower == normalizedLocale ||
+			supportedLower == alternateLocale ||
+			(specialCaseLocale != "" && supportedLower == specialCaseLocale) {
 			return true
 		}
 	}
