@@ -26,7 +26,7 @@ func setDefaultConfig() {
 	viper.SetDefault("birdnet.threshold", 0.8)
 	viper.SetDefault("birdnet.overlap", 0.0)
 	viper.SetDefault("birdnet.threads", 0)
-	viper.SetDefault("birdnet.locale", "en")
+	viper.SetDefault("birdnet.locale", "en-uk")
 	viper.SetDefault("birdnet.latitude", 0.000)
 	viper.SetDefault("birdnet.longitude", 0.000)
 	viper.SetDefault("birdnet.modelpath", "")

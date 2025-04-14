@@ -21,6 +21,9 @@ var ModelLabelMapping = map[string]LabelConfig{
 	},
 }
 
+// IMPORTANT: When adding or modifying locale entries, also update the locale_codes and locale_names arrays
+// in the configure_locale() function in install.sh to keep installation options in sync with app capabilities.
+
 // LocaleCodeMapping maps 2-letter codes to file identifiers for the V2.4 format
 var LocaleCodeMapping = map[string]string{
 	"af":    "af",
