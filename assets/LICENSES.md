@@ -142,11 +142,6 @@ Source: MIT
 License: https://github.com/k3a/html2text/blob/v1.2.1/LICENSE
 Source: MIT
 
-### github.com/klauspost/compress
-
-License: https://github.com/klauspost/compress/blob/v1.17.11/LICENSE
-Source: Apache-2.0
-
 ### github.com/klauspost/cpuid/v2
 
 License: https://github.com/klauspost/cpuid/blob/v2.2.10/LICENSE
@@ -214,12 +209,12 @@ Source: BSD-3-Clause
 
 ### github.com/prometheus/client_golang/prometheus
 
-License: https://github.com/prometheus/client_golang/blob/v1.21.1/LICENSE
+License: https://github.com/prometheus/client_golang/blob/v1.22.0/LICENSE
 Source: Apache-2.0
 
 ### github.com/prometheus/client_model/go
 
-License: https://github.com/prometheus/client_model/blob/v0.6.1/LICENSE
+License: https://github.com/prometheus/client_model/blob/v0.6.2/LICENSE
 Source: Apache-2.0
 
 ### github.com/prometheus/common
@@ -339,7 +334,7 @@ Source: MIT
 
 ### go.uber.org/mock/gomock
 
-License: https://github.com/uber/mock/blob/v0.5.0/LICENSE
+License: https://github.com/uber/mock/blob/v0.5.1/LICENSE
 Source: Apache-2.0
 
 ### golang.org/x/crypto/acme
@@ -349,12 +344,12 @@ Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.38.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.39.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
 
-License: https://cs.opensource.google/go/x/oauth2/+/v0.28.0:LICENSE
+License: https://cs.opensource.google/go/x/oauth2/+/v0.29.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sync/semaphore
@@ -384,7 +379,7 @@ Source: BSD-3-Clause
 
 ### google.golang.org/protobuf
 
-License: https://github.com/protocolbuffers/protobuf-go/blob/v1.36.1/LICENSE
+License: https://github.com/protocolbuffers/protobuf-go/blob/v1.36.6/LICENSE
 Source: BSD-3-Clause
 
 ### gopkg.in/yaml.v3
