@@ -667,8 +667,8 @@ configure_locale() {
     print_message "Available languages:" "$YELLOW"
     
     # Create arrays for locales
-    declare -a locale_codes=("af" "ca" "cs" "zh" "hr" "da" "nl" "en" "et" "fi" "fr" "de" "el" "hu" "is" "id" "it" "ja" "lv" "lt" "no" "pl" "pt" "ru" "sk" "sl" "es" "sv" "th" "uk")
-    declare -a locale_names=("Afrikaans" "Catalan" "Czech" "Chinese" "Croatian" "Danish" "Dutch" "English" "Estonian" "Finnish" "French" "German" "Greek" "Hungarian" "Icelandic" "Indonesia" "Italian" "Japanese" "Latvian" "Lithuania" "Norwegian" "Polish" "Portuguese" "Russian" "Slovak" "Slovenian" "Spanish" "Swedish" "Thai" "Ukrainian")
+    declare -a locale_codes=("af" "ca" "cs" "zh" "hr" "da" "nl" "en-us" "en-uk" "et" "fi" "fr" "de" "el" "hu" "is" "id" "it" "ja" "lv" "lt" "no" "pl" "pt" "ru" "sk" "sl" "es" "sv" "th" "uk")
+    declare -a locale_names=("Afrikaans" "Catalan" "Czech" "Chinese" "Croatian" "Danish" "Dutch" "English American" "English British" "Estonian" "Finnish" "French" "German" "Greek" "Hungarian" "Icelandic" "Indonesia" "Italian" "Japanese" "Latvian" "Lithuania" "Norwegian" "Polish" "Portuguese" "Russian" "Slovak" "Slovenian" "Spanish" "Swedish" "Thai" "Ukrainian")
     
     # Display available locales
     for i in "${!locale_codes[@]}"; do
@@ -971,6 +971,7 @@ Requires=docker.service
 Restart=always
 ExecStart=/usr/bin/docker run --rm \\
     -p ${WEB_PORT}:8080 \\
+    --env CONFIG_PATH=~/birdnet-go-app/config/config.yaml \\
     --env TZ="${TZ}" \\
     ${AUDIO_ENV} \\
     -v ${CONFIG_DIR}:/config \\
