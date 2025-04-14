@@ -13,6 +13,8 @@
   </a>
   <img src="https://badgen.net/badge/OS/Linux%2C%20Windows%2C%20macOS/blue">
 
+  <br>
+
   <!-- Code Quality -->
   <a href="https://golang.org">
     <img src="https://img.shields.io/badge/Built%20with-Go-teal?style=flat-square&logo=go">
@@ -21,10 +23,9 @@
     <img src="https://goreportcard.com/badge/github.com/tphakala/birdnet-go?style=flat-square">
   </a>
 
+  <br>
+
   <!-- Community -->
-  <a href="https://github.com/tphakala/birdnet-go/stargazers">
-    <img src="https://img.shields.io/github/stars/tphakala/birdnet-go?style=flat-square&color=yellow">
-  </a>
   <a href="https://github.com/tphakala/birdnet-go/network/members">
     <img src="https://img.shields.io/github/forks/tphakala/birdnet-go?style=flat-square&color=purple">
   <a href="https://github.com/tphakala/birdnet-go/graphs/contributors">
