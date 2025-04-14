@@ -667,12 +667,12 @@ configure_locale() {
     print_message "Available languages:" "$YELLOW"
     
     # Create arrays for locales
-    declare -a locale_codes=("af" "ca" "cs" "zh" "hr" "da" "nl" "en" "et" "fi" "fr" "de" "el" "hu" "is" "id" "it" "ja" "lv" "lt" "no" "pl" "pt" "ru" "sk" "sl" "es" "sv" "th" "uk")
-    declare -a locale_names=("Afrikaans" "Catalan" "Czech" "Chinese" "Croatian" "Danish" "Dutch" "English" "Estonian" "Finnish" "French" "German" "Greek" "Hungarian" "Icelandic" "Indonesia" "Italian" "Japanese" "Latvian" "Lithuania" "Norwegian" "Polish" "Portuguese" "Russian" "Slovak" "Slovenian" "Spanish" "Swedish" "Thai" "Ukrainian")
+    declare -a locale_codes=("af" "ar" "bg" "ca" "cs" "zh" "hr" "da" "nl" "en" "en-uk" "en-us" "et" "fi" "fr" "de" "el" "he" "hu" "is" "id" "it" "ja" "ko" "lv" "lt" "ml" "no" "pl" "pt" "pt-br" "pt-pt" "ro" "ru" "sr" "sk" "sl" "es" "sv" "th" "tr" "uk")
+    declare -a locale_names=("Afrikaans" "Arabic" "Bulgarian" "Catalan" "Czech" "Chinese" "Croatian" "Danish" "Dutch" "English" "English (UK)" "English (US)" "Estonian" "Finnish" "French" "German" "Greek" "Hebrew" "Hungarian" "Icelandic" "Indonesian" "Italian" "Japanese" "Korean" "Latvian" "Lithuanian" "Malayalam" "Norwegian" "Polish" "Portuguese" "Brazilian Portuguese" "Portuguese (Portugal)" "Romanian" "Russian" "Serbian" "Slovak" "Slovenian" "Spanish" "Swedish" "Thai" "Turkish" "Ukrainian")
     
     # Display available locales
     for i in "${!locale_codes[@]}"; do
-        printf "%2d) %-12s" "$((i+1))" "${locale_names[i]}"
+        printf "%2d) %-20s" "$((i+1))" "${locale_names[i]}"
         if [ $((i % 3)) -eq 2 ]; then
             echo
         fi
