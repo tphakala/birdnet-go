@@ -27,7 +27,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3
 	github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e
-	go.uber.org/mock v0.5.0
+	go.uber.org/mock v0.5.1
 	golang.org/x/crypto v0.37.0
 	golang.org/x/net v0.38.0
 	golang.org/x/term v0.31.0
