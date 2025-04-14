@@ -29,7 +29,7 @@ require (
 	github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e
 	go.uber.org/mock v0.5.0
 	golang.org/x/crypto v0.37.0
-	golang.org/x/net v0.38.0
+	golang.org/x/net v0.39.0
 	golang.org/x/term v0.31.0
 	golang.org/x/text v0.24.0
 	gopkg.in/yaml.v3 v3.0.1
