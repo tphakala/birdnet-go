@@ -4,10 +4,40 @@
   <img src="doc/BirdNET-Go-logo.webp" />
 </p>
 <p align="center">
-<a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">
- <img src="https://badgen.net/badge/License/CC-BY-NC-SA%204.0/green">
- </a>
- <img src="https://badgen.net/badge/OS/Linux%2C%20Windows%2C%20macOS/blue">
+  <!-- Project Status -->
+  <a href="https://github.com/tphakala/birdnet-go/releases">
+    <img src="https://img.shields.io/github/v/release/tphakala/birdnet-go?include_prereleases&style=flat-square&color=blue">
+  </a>
+  <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">
+    <img src="https://badgen.net/badge/License/CC-BY-NC-SA%204.0/green">
+  </a>
+  <img src="https://badgen.net/badge/OS/Linux%2C%20Windows%2C%20macOS/blue">
+
+  <!-- Code Quality -->
+  <a href="https://golang.org">
+    <img src="https://img.shields.io/badge/Built%20with-Go-teal?style=flat-square&logo=go">
+  </a>
+  <a href="https://goreportcard.com/report/github.com/tphakala/birdnet-go">
+    <img src="https://goreportcard.com/badge/github.com/tphakala/birdnet-go?style=flat-square">
+  </a>
+
+  <!-- Community -->
+  <a href="https://github.com/tphakala/birdnet-go/stargazers">
+    <img src="https://img.shields.io/github/stars/tphakala/birdnet-go?style=flat-square&color=yellow">
+  </a>
+  <a href="https://github.com/tphakala/birdnet-go/network/members">
+    <img src="https://img.shields.io/github/forks/tphakala/birdnet-go?style=flat-square&color=purple">
+  <a href="https://github.com/tphakala/birdnet-go/graphs/contributors">
+    <img src="https://img.shields.io/github/contributors/tphakala/birdnet-go?style=flat-square&color=orange">
+  </a>
+  </a>
+  <a href="https://github.com/tphakala/birdnet-go/issues">
+    <img src="https://img.shields.io/github/issues/tphakala/birdnet-go?style=flat-square&color=red">
+  </a>
+
+  <a href="https://coderabbit.ai">
+    <img src="https://img.shields.io/coderabbit/prs/github/tphakala/birdnet-go?utm_source=oss&utm_medium=github&utm_campaign=tphakala%2Fbirdnet-go&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews">
+  </a>
 </p>
 
 BirdNET-Go is an AI solution for continuous avian monitoring and identification
