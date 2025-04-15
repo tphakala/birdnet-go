@@ -11,12 +11,18 @@ import (
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth/gothic"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // IsInLocalSubnet checks if the given IP is in the same subnet as any local network interface
 func IsInLocalSubnet(clientIP net.IP) bool {
 	if clientIP == nil {
 		return false
+	}
+
+	// If running in container, check if client IP is in the same subnet as the host
+	if conf.RunningInContainer() {
+		return conf.IsInHostSubnet(clientIP)
 	}
 
 	addrs, err := net.InterfaceAddrs()
