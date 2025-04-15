@@ -201,7 +201,7 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 		var confidenceThreshold float32
 
 		// Parse species string into components
-		scientificName, commonName, _ := observation.ParseSpeciesString(result.Species)
+		scientificName, commonName, speciesCode := observation.ParseSpeciesString(result.Species)
 
 		// Skip processing if we couldn't parse the species properly
 		if commonName == "" && scientificName == "" {
@@ -209,6 +209,15 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 				log.Printf("Skipping species with invalid format: %s", result.Species)
 			}
 			continue
+		}
+
+		// If using a custom model and the species doesn't have a taxonomy code,
+		// a placeholder code may have been generated. Log this if in debug mode.
+		if p.Settings.BirdNET.ModelPath != "" && p.Settings.Debug && speciesCode != "" {
+			// Check if the code looks like a placeholder (has the pattern XX or similar followed by 6 hex chars)
+			if len(speciesCode) == 8 && (speciesCode[:2] == "XX" || (speciesCode[0] >= 'A' && speciesCode[0] <= 'Z' && speciesCode[1] >= 'A' && speciesCode[1] <= 'Z')) {
+				log.Printf("Using placeholder taxonomy code %s for species %s (%s)", speciesCode, scientificName, commonName)
+			}
 		}
 
 		// Convert species to lowercase for case-insensitive comparison

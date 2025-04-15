@@ -2,7 +2,9 @@
 package birdnet
 
 import (
+	"crypto/sha256"
 	_ "embed" // For embedding data
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -41,10 +43,53 @@ func LoadTaxonomyData(customPath string) (TaxonomyMap, error) {
 	return taxonomyMap, nil
 }
 
+// GeneratePlaceholderCode generates a placeholder eBird code for species not in the taxonomy map
+// This ensures we have a consistent identifier even for species without official codes
+func GeneratePlaceholderCode(speciesName string) string {
+	// Create a hash of the species name to ensure uniqueness
+	hash := sha256.Sum256([]byte(speciesName))
+	// Use the first 6 characters of the hex-encoded hash
+	shortHash := hex.EncodeToString(hash[:])[:6]
+
+	// If species name has scientific and common components, extract them
+	parts := strings.Split(speciesName, "_")
+	var prefix string
+
+	if len(parts) >= 2 {
+		// Use first letters of scientific name as prefix
+		scientific := parts[0]
+		words := strings.Fields(scientific)
+		if len(words) >= 2 {
+			// Get first letter of genus and species (typically first two words)
+			prefix = strings.ToUpper(string(words[0][0]) + string(words[1][0]))
+		} else if len(words) == 1 {
+			// Just use first two letters of the single word
+			if len(words[0]) >= 2 {
+				prefix = strings.ToUpper(words[0][:2])
+			} else {
+				prefix = strings.ToUpper(words[0])
+			}
+		}
+	}
+
+	if prefix == "" {
+		// Fallback if we couldn't extract a meaningful prefix
+		prefix = "XX"
+	}
+
+	// Combine prefix with hash to create a code-like identifier
+	return fmt.Sprintf("%s%s", prefix, shortHash)
+}
+
 // GetSpeciesCodeFromName returns the eBird species code for a given species name
 // in the format "ScientificName_CommonName".
+// If species is not found in the taxonomy map, generates a placeholder code.
 func GetSpeciesCodeFromName(taxonomyMap TaxonomyMap, speciesName string) (string, bool) {
 	code, exists := taxonomyMap[speciesName]
+	if !exists {
+		// If not found in taxonomy, create a placeholder code
+		return GeneratePlaceholderCode(speciesName), false
+	}
 	return code, exists
 }
 
