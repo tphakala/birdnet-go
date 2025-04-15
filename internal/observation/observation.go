@@ -14,6 +14,7 @@ import (
 )
 
 // ParseSpeciesString extracts the scientific name, common name, and species code from the species string.
+// For custom models with species not in the eBird taxonomy, the species code might be a placeholder.
 func ParseSpeciesString(species string) (scientificName, commonName, speciesCode string) {
 	// Check if the string is empty or contains special characters that would break parsing
 	if species == "" || strings.Contains(species, "\t") || strings.Contains(species, "\n") {
@@ -49,6 +50,7 @@ func ParseSpeciesString(species string) (scientificName, commonName, speciesCode
 
 // New creates and returns a new Note with the provided parameters and current date and time.
 // It uses the configuration and parsing functions to set the appropriate fields.
+// For custom models, species may have placeholder taxonomy codes if not in the eBird taxonomy.
 func New(settings *conf.Settings, beginTime, endTime time.Time, species string, confidence float64, source, clipName string, elapsedTime time.Duration) datastore.Note {
 	// Parse the species string to get the scientific name, common name, and species code.
 	scientificName, commonName, speciesCode := ParseSpeciesString(species)
@@ -77,7 +79,7 @@ func New(settings *conf.Settings, beginTime, endTime time.Time, species string, 
 		Source:         audioSource,                  // From the provided configuration settings.
 		BeginTime:      beginTime,                    // Start time of the observation.
 		EndTime:        endTime,                      // End time of the observation.
-		SpeciesCode:    speciesCode,                  // Parsed species code.
+		SpeciesCode:    speciesCode,                  // Parsed species code or placeholder.
 		ScientificName: scientificName,               // Parsed scientific name of the species.
 		CommonName:     commonName,                   // Parsed common name of the species.
 		Confidence:     roundedConfidence,            // Confidence score of the observation.
