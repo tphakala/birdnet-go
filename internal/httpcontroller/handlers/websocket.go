@@ -130,6 +130,10 @@ func (asm *AudioStreamManager) isAudioSourceValid(sourceID, clientIP string) boo
 
 // isLocalNetworkConnection checks if the request is from a local network
 func isLocalNetworkConnection(clientIP net.IP, debugLog bool) bool {
+	if clientIP == nil {
+		return false
+	}
+
 	isLocal := security.IsInLocalSubnet(clientIP)
 	if debugLog {
 		log.Printf("🔐 WebSocket local network check: IP=%s, isLocal=%v", clientIP, isLocal)
