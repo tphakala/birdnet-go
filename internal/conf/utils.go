@@ -446,56 +446,86 @@ func SanitizeRTSPUrl(source string) string {
 
 // GetHostIP returns the host IP address, resolving host.docker.internal if running in a container
 func GetHostIP() (net.IP, error) {
-	// If we're running in a container, try to resolve host.docker.internal
+	// If we're running in a container, try to get the host IP
 	if RunningInContainer() {
-		ips, err := net.LookupIP("host.docker.internal")
-		if err == nil && len(ips) > 0 {
-			for _, ip := range ips {
-				// Return the first non-loopback IPv4 address
-				if ip.To4() != nil && !ip.IsLoopback() {
-					return ip, nil
-				}
-			}
+		// Try various methods to get the host IP from inside the container
+		if ip := resolveDockerHost(); ip != nil {
+			return ip, nil
 		}
 
-		// Fallback for Linux containers where host.docker.internal might not be available
-		// Try resolving the special Docker host gateway address
-		ips, err = net.LookupIP("host-gateway")
-		if err == nil && len(ips) > 0 {
-			for _, ip := range ips {
-				if ip.To4() != nil && !ip.IsLoopback() {
-					return ip, nil
-				}
-			}
-		}
-
-		// If hostname resolution fails, try to read from /proc/net/route to find the default gateway
-		// This works on Linux containers
-		file, err := os.Open("/proc/net/route")
-		if err == nil {
-			defer file.Close()
-			scanner := bufio.NewScanner(file)
-			for scanner.Scan() {
-				line := scanner.Text()
-				fields := strings.Fields(line)
-				if len(fields) >= 3 && fields[1] == "00000000" { // Default route
-					// Convert hex to IP
-					gatewayHex := fields[2]
-					if len(gatewayHex) == 8 {
-						// Reverse the byte order and convert from hex
-						var ip net.IP = make([]byte, 4)
-						for i := 0; i < 4; i++ {
-							b, _ := strconv.ParseUint(gatewayHex[i*2:i*2+2], 16, 8)
-							ip[3-i] = byte(b)
-						}
-						return ip, nil
-					}
-				}
-			}
+		if ip := resolveGatewayFromRoute(); ip != nil {
+			return ip, nil
 		}
 	}
 
-	// If not in container or couldn't resolve host IP, return the first non-loopback IPv4 address
+	// Fall back to local interface IP if not in container or previous methods failed
+	return getLocalInterfaceIP()
+}
+
+// resolveDockerHost attempts to resolve host.docker.internal or host-gateway
+func resolveDockerHost() net.IP {
+	// Try host.docker.internal first (works on Docker for Mac/Windows)
+	if ip := lookupHostname("host.docker.internal"); ip != nil {
+		return ip
+	}
+
+	// Try host-gateway (works on newer Docker versions)
+	return lookupHostname("host-gateway")
+}
+
+// lookupHostname tries to resolve a hostname to a usable IPv4 address
+func lookupHostname(hostname string) net.IP {
+	ips, err := net.LookupIP(hostname)
+	if err == nil && len(ips) > 0 {
+		for _, ip := range ips {
+			// Return the first non-loopback IPv4 address
+			if ip.To4() != nil && !ip.IsLoopback() {
+				return ip
+			}
+		}
+	}
+	return nil
+}
+
+// resolveGatewayFromRoute tries to find the default gateway from /proc/net/route
+func resolveGatewayFromRoute() net.IP {
+	file, err := os.Open("/proc/net/route")
+	if err != nil {
+		return nil
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		fields := strings.Fields(line)
+		// Check for default route (destination 0.0.0.0)
+		if len(fields) >= 3 && fields[1] == "00000000" {
+			return parseGatewayHex(fields[2])
+		}
+	}
+	return nil
+}
+
+// parseGatewayHex converts a hex gateway address to net.IP
+func parseGatewayHex(gatewayHex string) net.IP {
+	if len(gatewayHex) != 8 {
+		return nil
+	}
+
+	ip := make([]byte, 4)
+	for i := 0; i < 4; i++ {
+		b, err := strconv.ParseUint(gatewayHex[i*2:i*2+2], 16, 8)
+		if err != nil {
+			return nil
+		}
+		ip[3-i] = byte(b)
+	}
+	return ip
+}
+
+// getLocalInterfaceIP returns the first non-loopback IPv4 address
+func getLocalInterfaceIP() (net.IP, error) {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get interface addresses: %w", err)
@@ -553,6 +583,6 @@ func getIPv4Subnet(ip net.IP, bits int) net.IP {
 		return nil
 	}
 
-	// Apply the subnet mask
+	// Apply the subnet mask (e.g., for bits=24, this creates a 255.255.255.0 mask)
 	return ipv4.Mask(net.CIDRMask(bits, 32))
 }
