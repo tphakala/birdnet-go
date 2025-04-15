@@ -263,6 +263,7 @@ func (bn *BirdNET) loadLabels() error {
 	return bn.loadExternalLabels()
 }
 
+// loadEmbeddedLabels loads labels from the embedded label files
 func (bn *BirdNET) loadEmbeddedLabels() error {
 	// if locale is not set use english as default
 	if bn.Settings.BirdNET.Locale == "" {
@@ -302,21 +303,8 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 		return fmt.Errorf("error scanning label file: %w", err)
 	}
 
-	// Validate labels against taxonomy
-	complete, missing := IsTaxonomyComplete(bn.TaxonomyMap, bn.Settings.BirdNET.Labels)
-	if !complete {
-		bn.Debug("Warning: %d species are missing from the taxonomy data", len(missing))
-		if bn.Settings.BirdNET.Debug {
-			for i, species := range missing {
-				if i < 10 { // Only show the first 10 to avoid flooding logs
-					bn.Debug("Missing taxonomy: %s", species)
-				} else if i == 10 {
-					bn.Debug("... and %d more", len(missing)-10)
-					break
-				}
-			}
-		}
-	}
+	// Check and log species missing from taxonomy
+	bn.logMissingTaxonomyCodes()
 
 	return nil
 }
@@ -329,7 +317,44 @@ func (bn *BirdNET) loadExternalLabels() error {
 	defer file.Close()
 
 	// Read the file directly as a text file
-	return bn.loadLabelsFromText(file)
+	err = bn.loadLabelsFromText(file)
+	if err != nil {
+		return err
+	}
+
+	// Check and log species missing from taxonomy
+	bn.logMissingTaxonomyCodes()
+
+	return nil
+}
+
+// logMissingTaxonomyCodes checks labels against the taxonomy map and logs information about missing species
+func (bn *BirdNET) logMissingTaxonomyCodes() {
+	// Validate labels against taxonomy
+	complete, missing := IsTaxonomyComplete(bn.TaxonomyMap, bn.Settings.BirdNET.Labels)
+	if !complete {
+		// For custom models, provide more detailed information about missing taxonomy codes
+		if bn.Settings.BirdNET.ModelPath != "" || bn.Settings.BirdNET.LabelPath != "" {
+			bn.Debug("Custom model/labels detected: %d species are missing from the taxonomy data", len(missing))
+			bn.Debug("Placeholder taxonomy codes will be generated for these species")
+		} else {
+			bn.Debug("Warning: %d species are missing from the taxonomy data", len(missing))
+		}
+
+		if bn.Settings.BirdNET.Debug {
+			for i, species := range missing {
+				if i < 10 { // Only show the first 10 to avoid flooding logs
+					code := GeneratePlaceholderCode(species)
+					scientific, common := SplitSpeciesName(species)
+					bn.Debug("Missing taxonomy for '%s' (Sci: '%s', Common: '%s') - using placeholder code: %s",
+						species, scientific, common, code)
+				} else if i == 10 {
+					bn.Debug("... and %d more", len(missing)-10)
+					break
+				}
+			}
+		}
+	}
 }
 
 func (bn *BirdNET) loadLabelsFromText(file *os.File) error {
@@ -504,7 +529,10 @@ func (bn *BirdNET) EnrichResultWithTaxonomy(speciesLabel string) (scientific, co
 	// Try to get the eBird code
 	code, exists := GetSpeciesCodeFromName(bn.TaxonomyMap, speciesLabel)
 	if !exists {
-		return scientific, common, ""
+		// We got a placeholder code for a species not in our taxonomy
+		if bn.Settings.BirdNET.Debug {
+			bn.Debug("Species '%s' not found in taxonomy, using generated placeholder code: %s", speciesLabel, code)
+		}
 	}
 
 	return scientific, common, code
