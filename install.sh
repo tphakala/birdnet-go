@@ -1219,6 +1219,7 @@ Restart=always
 ExecStart=/usr/bin/docker run --rm \\
     -p ${WEB_PORT}:8080 \\
     --env TZ="${TZ}" \\
+    --add-host="host.docker.internal:host-gateway" \\
     ${AUDIO_ENV} \\
     -v ${CONFIG_DIR}:/config \\
     -v ${DATA_DIR}:/data \\
