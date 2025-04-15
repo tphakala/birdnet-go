@@ -138,6 +138,17 @@ func (s *Server) RealIP(c echo.Context) string {
 
 	// Fallback to direct RemoteAddr
 	ip, _, _ := net.SplitHostPort(c.Request().RemoteAddr)
+
+	// If we're running in a container and the client appears to be localhost,
+	// try to resolve the actual host IP
+	if conf.RunningInContainer() && (ip == "127.0.0.1" || ip == "::1" || ip == "localhost") {
+		// Try to get the host IP
+		hostIP, err := conf.GetHostIP()
+		if err == nil && hostIP != nil {
+			return hostIP.String()
+		}
+	}
+
 	return ip
 }
 

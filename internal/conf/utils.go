@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"os/user"
@@ -441,4 +442,147 @@ func SanitizeRTSPUrl(source string) string {
 	}
 
 	return source
+}
+
+// GetHostIP returns the host IP address, resolving host.docker.internal if running in a container
+func GetHostIP() (net.IP, error) {
+	// If we're running in a container, try to get the host IP
+	if RunningInContainer() {
+		// Try various methods to get the host IP from inside the container
+		if ip := resolveDockerHost(); ip != nil {
+			return ip, nil
+		}
+
+		if ip := resolveGatewayFromRoute(); ip != nil {
+			return ip, nil
+		}
+	}
+
+	// Fall back to local interface IP if not in container or previous methods failed
+	return getLocalInterfaceIP()
+}
+
+// resolveDockerHost attempts to resolve host.docker.internal or host-gateway
+func resolveDockerHost() net.IP {
+	// Try host.docker.internal first (works on Docker for Mac/Windows)
+	if ip := lookupHostname("host.docker.internal"); ip != nil {
+		return ip
+	}
+
+	// Try host-gateway (works on newer Docker versions)
+	return lookupHostname("host-gateway")
+}
+
+// lookupHostname tries to resolve a hostname to a usable IPv4 address
+func lookupHostname(hostname string) net.IP {
+	ips, err := net.LookupIP(hostname)
+	if err == nil && len(ips) > 0 {
+		for _, ip := range ips {
+			// Return the first non-loopback IPv4 address
+			if ip.To4() != nil && !ip.IsLoopback() {
+				return ip
+			}
+		}
+	}
+	return nil
+}
+
+// resolveGatewayFromRoute tries to find the default gateway from /proc/net/route
+func resolveGatewayFromRoute() net.IP {
+	file, err := os.Open("/proc/net/route")
+	if err != nil {
+		return nil
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		fields := strings.Fields(line)
+		// Check for default route (destination 0.0.0.0)
+		if len(fields) >= 3 && fields[1] == "00000000" {
+			return parseGatewayHex(fields[2])
+		}
+	}
+	return nil
+}
+
+// parseGatewayHex converts a hex gateway address to net.IP
+func parseGatewayHex(gatewayHex string) net.IP {
+	if len(gatewayHex) != 8 {
+		return nil
+	}
+
+	ip := make([]byte, 4)
+	for i := 0; i < 4; i++ {
+		b, err := strconv.ParseUint(gatewayHex[i*2:i*2+2], 16, 8)
+		if err != nil {
+			return nil
+		}
+		ip[3-i] = byte(b)
+	}
+	return ip
+}
+
+// getLocalInterfaceIP returns the first non-loopback IPv4 address
+func getLocalInterfaceIP() (net.IP, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get interface addresses: %w", err)
+	}
+
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipv4 := ipnet.IP.To4(); ipv4 != nil {
+				return ipv4, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("no suitable IP address found")
+}
+
+// IsInHostSubnet checks if the given IP is in the same subnet as the host
+func IsInHostSubnet(clientIP net.IP) bool {
+	if clientIP == nil {
+		return false
+	}
+
+	// Get the host IP
+	hostIP, err := GetHostIP()
+	if err != nil {
+		log.Printf("Error getting host IP: %v", err)
+		return false
+	}
+
+	// Get the /24 subnet for client
+	clientSubnet := getIPv4Subnet(clientIP, 24)
+	if clientSubnet == nil {
+		return false
+	}
+
+	// Get the /24 subnet for host
+	hostSubnet := getIPv4Subnet(hostIP, 24)
+	if hostSubnet == nil {
+		return false
+	}
+
+	// Compare subnets
+	return clientSubnet.Equal(hostSubnet)
+}
+
+// getIPv4Subnet converts an IP address to its subnet address with specified mask bits
+func getIPv4Subnet(ip net.IP, bits int) net.IP {
+	if ip == nil {
+		return nil
+	}
+
+	// Convert to IPv4 if possible
+	ipv4 := ip.To4()
+	if ipv4 == nil {
+		return nil
+	}
+
+	// Apply the subnet mask (e.g., for bits=24, this creates a 255.255.255.0 mask)
+	return ipv4.Mask(net.CIDRMask(bits, 32))
 }
