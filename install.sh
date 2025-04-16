@@ -1266,12 +1266,12 @@ start_birdnet_go() {
     print_message "⏳ Waiting for application to initialize..." "$YELLOW"
     sleep 5
 
-    # Show logs
-    print_message "\n📝 Container logs:" "$GREEN"
-    docker logs "$container_id"
+    # Show logs from systemd service instead of container
+    print_message "\n📝 Service logs:" "$GREEN"
+    journalctl -u birdnet-go.service -n 20 --no-pager
     
     print_message "\nTo follow logs in real-time, use:" "$YELLOW"
-    print_message "docker logs -f $container_id" "$NC"
+    print_message "journalctl -fu birdnet-go.service" "$NC"
 }
 
 # Function to detect Raspberry Pi model
