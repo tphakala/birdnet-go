@@ -667,8 +667,8 @@ configure_locale() {
     print_message "Available languages:" "$YELLOW"
     
     # Create arrays for locales
-    declare -a locale_codes=("af" "ar" "bg" "ca" "cs" "zh" "hr" "da" "nl" "en-uk" "en-us" "et" "fi" "fr" "de" "el" "he" "hu" "is" "id" "it" "ja" "ko" "lv" "lt" "ml" "no" "pl" "pt" "pt-br" "pt-pt" "ro" "ru" "sr" "sk" "sl" "es" "sv" "th" "tr" "uk")
-    declare -a locale_names=("Afrikaans" "Arabic" "Bulgarian" "Catalan" "Czech" "Chinese" "Croatian" "Danish" "Dutch" "English (UK)" "English (US)" "Estonian" "Finnish" "French" "German" "Greek" "Hebrew" "Hungarian" "Icelandic" "Indonesian" "Italian" "Japanese" "Korean" "Latvian" "Lithuanian" "Malayalam" "Norwegian" "Polish" "Portuguese" "Brazilian Portuguese" "Portuguese (Portugal)" "Romanian" "Russian" "Serbian" "Slovak" "Slovenian" "Spanish" "Swedish" "Thai" "Turkish" "Ukrainian")
+    declare -a locale_codes=("en-uk" "en-us" "af" "ar" "bg" "ca" "cs" "zh" "hr" "da" "nl" "et" "fi" "fr" "de" "el" "he" "hu" "is" "id" "it" "ja" "ko" "lv" "lt" "ml" "no" "pl" "pt" "pt-br" "pt-pt" "ro" "ru" "sr" "sk" "sl" "es" "sv" "th" "tr" "uk")
+    declare -a locale_names=("English (UK)" "English (US)" "Afrikaans" "Arabic" "Bulgarian" "Catalan" "Czech" "Chinese" "Croatian" "Danish" "Dutch" "Estonian" "Finnish" "French" "German" "Greek" "Hebrew" "Hungarian" "Icelandic" "Indonesian" "Italian" "Japanese" "Korean" "Latvian" "Lithuanian" "Malayalam" "Norwegian" "Polish" "Portuguese" "Brazilian Portuguese" "Portuguese (Portugal)" "Romanian" "Russian" "Serbian" "Slovak" "Slovenian" "Spanish" "Swedish" "Thai" "Turkish" "Ukrainian")
     
     # Display available locales
     for i in "${!locale_codes[@]}"; do
@@ -1045,7 +1045,7 @@ stop_birdnet_service() {
     # Wait for container to stop if requested
     if [ "$wait_for_stop" = true ] && check_container_running; then
         local waited=0
-        while check_container_running && [ $waited -lt $max_wait ]; do
+        while check_container_running && [ "$waited" -lt "$max_wait" ]; do
             sleep 1
             ((waited++))
         done
@@ -1198,7 +1198,7 @@ start_birdnet_go() {
         
         # Get and display journald logs for troubleshooting
         print_message "\n📋 Service logs (last 20 entries):" "$YELLOW"
-        sudo journalctl -u birdnet-go.service -n 20 --no-pager
+        journalctl -u birdnet-go.service -n 20 --no-pager
         
         print_message "\n❗ If you need help with this issue:" "$RED"
         print_message "1. Check port availability and permissions" "$YELLOW"
@@ -1218,7 +1218,7 @@ start_birdnet_go() {
     local attempt=1
     local container_id=""
     
-    while [ $attempt -le $max_attempts ]; do
+    while [ "$attempt" -le "$max_attempts" ]; do
         container_id=$(docker ps --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}")
         if [ -n "$container_id" ]; then
             print_message "✅ Container started successfully!" "$GREEN"
@@ -1229,7 +1229,7 @@ start_birdnet_go() {
         if ! sudo systemctl is-active --quiet birdnet-go.service; then
             print_message "❌ Service stopped unexpectedly" "$RED"
             print_message "Checking service logs:" "$YELLOW"
-            sudo journalctl -u birdnet-go.service -n 50 --no-pager
+            journalctl -u birdnet-go.service -n 50 --no-pager
             
             print_message "\n❗ If you need help with this issue:" "$RED"
             print_message "1. The service started but then crashed" "$YELLOW"
@@ -1248,7 +1248,7 @@ start_birdnet_go() {
     if [ -z "$container_id" ]; then
         print_message "❌ Container failed to start within ${max_attempts} seconds" "$RED"
         print_message "Service logs:" "$YELLOW"
-        sudo journalctl -u birdnet-go.service -n 50 --no-pager
+        journalctl -u birdnet-go.service -n 50 --no-pager
         
         print_message "\nDocker logs:" "$YELLOW"
         docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | xargs -r docker logs
