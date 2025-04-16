@@ -667,17 +667,21 @@ configure_locale() {
     print_message "Available languages:" "$YELLOW"
     
     # Create arrays for locales
-    declare -a locale_codes=("af" "ar" "bg" "ca" "cs" "zh" "hr" "da" "nl" "en" "en-uk" "en-us" "et" "fi" "fr" "de" "el" "he" "hu" "is" "id" "it" "ja" "ko" "lv" "lt" "ml" "no" "pl" "pt" "pt-br" "pt-pt" "ro" "ru" "sr" "sk" "sl" "es" "sv" "th" "tr" "uk")
-    declare -a locale_names=("Afrikaans" "Arabic" "Bulgarian" "Catalan" "Czech" "Chinese" "Croatian" "Danish" "Dutch" "English" "English (UK)" "English (US)" "Estonian" "Finnish" "French" "German" "Greek" "Hebrew" "Hungarian" "Icelandic" "Indonesian" "Italian" "Japanese" "Korean" "Latvian" "Lithuanian" "Malayalam" "Norwegian" "Polish" "Portuguese" "Brazilian Portuguese" "Portuguese (Portugal)" "Romanian" "Russian" "Serbian" "Slovak" "Slovenian" "Spanish" "Swedish" "Thai" "Turkish" "Ukrainian")
+    declare -a locale_codes=("en-uk" "en-us" "af" "ar" "bg" "ca" "cs" "zh" "hr" "da" "nl" "et" "fi" "fr" "de" "el" "he" "hu" "is" "id" "it" "ja" "ko" "lv" "lt" "ml" "no" "pl" "pt" "pt-br" "pt-pt" "ro" "ru" "sr" "sk" "sl" "es" "sv" "th" "tr" "uk")
+    declare -a locale_names=("English (UK)" "English (US)" "Afrikaans" "Arabic" "Bulgarian" "Catalan" "Czech" "Chinese" "Croatian" "Danish" "Dutch" "Estonian" "Finnish" "French" "German" "Greek" "Hebrew" "Hungarian" "Icelandic" "Indonesian" "Italian" "Japanese" "Korean" "Latvian" "Lithuanian" "Malayalam" "Norwegian" "Polish" "Portuguese" "Brazilian Portuguese" "Portuguese (Portugal)" "Romanian" "Russian" "Serbian" "Slovak" "Slovenian" "Spanish" "Swedish" "Thai" "Turkish" "Ukrainian")
     
     # Display available locales
     for i in "${!locale_codes[@]}"; do
-        printf "%2d) %-20s" "$((i+1))" "${locale_names[i]}"
-        if [ $((i % 3)) -eq 2 ]; then
+        printf "%2d) %-30s" "$((i+1))" "${locale_names[i]}"
+        if [ $((i % 2)) -eq 1 ]; then
             echo
         fi
     done
     echo
+    # Add a final newline if the last row is incomplete
+    if [ $((${#locale_codes[@]} % 2)) -eq 1 ]; then
+        echo
+    fi
 
     while true; do
         print_message "❓ Select your language (1-${#locale_codes[@]}): " "$YELLOW" "nonewline"
@@ -949,8 +953,8 @@ configure_web_port() {
     sed -i "s/port: 8080/port: $WEB_PORT/" "$CONFIG_FILE"
 }
 
-# Function to add systemd service configuration
-add_systemd_config() {
+# Add this function to generate systemd service content to avoid duplication
+generate_systemd_service_content() {
     # Get timezone
     local TZ
     if [ -f /etc/timezone ]; then
@@ -959,9 +963,7 @@ add_systemd_config() {
         TZ="UTC"
     fi
 
-    # Create systemd service
-    print_message "\n🚀 Creating systemd service..." "$GREEN"
-    sudo tee /etc/systemd/system/birdnet-go.service << EOF
+    cat << EOF
 [Unit]
 Description=BirdNET-Go
 After=docker.service
@@ -981,10 +983,200 @@ ExecStart=/usr/bin/docker run --rm \\
 [Install]
 WantedBy=multi-user.target
 EOF
+}
+
+# Function to add systemd service configuration
+add_systemd_config() {
+    # Create systemd service
+    print_message "\n🚀 Creating systemd service..." "$GREEN"
+    sudo tee /etc/systemd/system/birdnet-go.service << EOF
+$(generate_systemd_service_content)
+EOF
 
     # Reload systemd and enable service
     sudo systemctl daemon-reload
     sudo systemctl enable birdnet-go.service
+}
+
+# Function to check if systemd service file needs update
+check_systemd_service() {
+    local service_file="/etc/systemd/system/birdnet-go.service"
+    local temp_service_file="/tmp/birdnet-go.service.new"
+    local needs_update=false
+    
+    # Create temporary service file with current configuration
+    generate_systemd_service_content > "$temp_service_file"
+
+    # Check if service file exists and compare
+    if [ -f "$service_file" ]; then
+        if ! cmp -s "$service_file" "$temp_service_file"; then
+            needs_update=true
+        fi
+    else
+        needs_update=true
+    fi
+    
+    rm -f "$temp_service_file"
+    echo "$needs_update"
+}
+
+# Function to check if BirdNET container is running
+check_container_running() {
+    if docker ps | grep -q "birdnet-go"; then
+        return 0  # Container is running
+    else
+        return 1  # Container is not running
+    fi
+}
+
+# Function to get all BirdNET containers (including stopped ones)
+get_all_containers() {
+    docker ps -a --filter name=birdnet-go -q
+}
+
+# Function to stop BirdNET service and container
+stop_birdnet_service() {
+    local wait_for_stop=${1:-true}
+    local max_wait=${2:-30}
+    
+    print_message "🛑 Stopping BirdNET-Go service..." "$YELLOW"
+    sudo systemctl stop birdnet-go.service
+    
+    # Wait for container to stop if requested
+    if [ "$wait_for_stop" = true ] && check_container_running; then
+        local waited=0
+        while check_container_running && [ "$waited" -lt "$max_wait" ]; do
+            sleep 1
+            ((waited++))
+        done
+        
+        if check_container_running; then
+            print_message "⚠️ Container still running after $max_wait seconds, forcing stop..." "$YELLOW"
+            get_all_containers | xargs -r docker stop
+        fi
+    fi
+}
+
+# Function to handle container update process
+handle_container_update() {
+    local service_needs_update
+    service_needs_update=$(check_systemd_service)
+    
+    print_message "🔄 Checking for updates..." "$YELLOW"
+    
+    # Stop the service and container
+    stop_birdnet_service
+    
+    # Pull new image
+    print_message "📥 Pulling latest nightly image..." "$YELLOW"
+    if ! docker pull "${BIRDNET_GO_IMAGE}"; then
+        print_message "❌ Failed to pull new image" "$RED"
+        return 1
+    fi
+    
+    # MODIFIED: Always ensure AUDIO_ENV is set during updates
+    if [ -z "$AUDIO_ENV" ]; then
+        AUDIO_ENV="--device /dev/snd"
+    fi
+    
+    # Update systemd service if needed
+    if [ "$service_needs_update" = "true" ]; then
+        print_message "📝 Updating systemd service..." "$YELLOW"
+        add_systemd_config
+    fi
+    
+    # Start the service
+    print_message "🚀 Starting BirdNET-Go service..." "$YELLOW"
+    sudo systemctl daemon-reload
+    if ! sudo systemctl start birdnet-go.service; then
+        print_message "❌ Failed to start service" "$RED"
+        return 1
+    fi
+    
+    print_message "✅ Update completed successfully" "$GREEN"
+    return 0
+}
+
+# Function to check if BirdNET service exists
+check_service_exists() {
+    if systemctl list-unit-files | grep -q birdnet-go.service; then
+        return 0  # Service exists
+    else
+        return 1  # Service does not exist
+    fi
+}
+
+# Function to clean existing installation
+clean_installation() {
+    print_message "🧹 Cleaning existing installation..." "$YELLOW"
+    local cleanup_failed=false
+    
+    # Stop service if it exists
+    if check_service_exists; then
+        stop_birdnet_service false  # Don't wait for container
+        sudo systemctl disable birdnet-go.service
+        sudo rm -f /etc/systemd/system/birdnet-go.service
+        sudo systemctl daemon-reload
+        print_message "✅ Removed systemd service" "$GREEN"
+    fi
+    
+    # Stop and remove containers
+    if docker ps -a | grep -q "birdnet-go"; then
+        print_message "🛑 Stopping and removing BirdNET-Go containers..." "$YELLOW"
+        get_all_containers | xargs -r docker stop
+        get_all_containers | xargs -r docker rm
+        print_message "✅ Removed containers" "$GREEN"
+    fi
+
+    # Remove images
+    if docker images | grep -q "birdnet-go"; then
+        print_message "🗑️ Removing BirdNET-Go images..." "$YELLOW"
+        docker images --filter reference='*birdnet-go*' -q | xargs -r docker rmi -f
+        print_message "✅ Removed images" "$GREEN"
+    fi
+    
+    # Remove data directories
+    if [ -d "$CONFIG_DIR" ] || [ -d "$DATA_DIR" ]; then
+        print_message "📁 Removing data directories..." "$YELLOW"
+        
+        # Try normal removal first
+        if ! rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null; then
+            print_message "⚠️ Some files could not be removed, trying with sudo..." "$YELLOW"
+            
+            # Try with sudo
+            if ! sudo rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null; then
+                print_message "❌ Failed to remove some files even with sudo" "$RED"
+                print_message "The following files could not be removed:" "$RED"
+                
+                # List files that couldn't be removed
+                if [ -d "$CONFIG_DIR" ]; then
+                    find "$CONFIG_DIR" -type f ! -writable 2>/dev/null | while read -r file; do
+                        print_message "  • $file" "$RED"
+                    done
+                fi
+                if [ -d "$DATA_DIR" ]; then
+                    find "$DATA_DIR" -type f ! -writable 2>/dev/null | while read -r file; do
+                        print_message "  • $file" "$RED"
+                    done
+                fi
+                
+                cleanup_failed=true
+            else
+                print_message "✅ Removed data directories (with sudo)" "$GREEN"
+            fi
+        else
+            print_message "✅ Removed data directories" "$GREEN"
+        fi
+    fi
+    
+    if [ "$cleanup_failed" = true ]; then
+        print_message "\n⚠️ Some cleanup operations failed" "$RED"
+        print_message "You may need to manually remove remaining files" "$YELLOW"
+        return 1
+    else
+        print_message "✅ Cleanup completed successfully" "$GREEN"
+        return 0
+    fi
 }
 
 # Function to start BirdNET-Go
@@ -992,7 +1184,7 @@ start_birdnet_go() {
     print_message "\n🚀 Starting BirdNET-Go..." "$GREEN"
     
     # Check if container is already running
-    if docker ps | grep -q "birdnet-go"; then
+    if check_container_running; then
         print_message "✅ BirdNET-Go container is already running" "$GREEN"
         return 0
     fi
@@ -1006,7 +1198,7 @@ start_birdnet_go() {
         
         # Get and display journald logs for troubleshooting
         print_message "\n📋 Service logs (last 20 entries):" "$YELLOW"
-        sudo journalctl -u birdnet-go.service -n 20 --no-pager
+        journalctl -u birdnet-go.service -n 20 --no-pager
         
         print_message "\n❗ If you need help with this issue:" "$RED"
         print_message "1. Check port availability and permissions" "$YELLOW"
@@ -1026,7 +1218,7 @@ start_birdnet_go() {
     local attempt=1
     local container_id=""
     
-    while [ $attempt -le $max_attempts ]; do
+    while [ "$attempt" -le "$max_attempts" ]; do
         container_id=$(docker ps --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}")
         if [ -n "$container_id" ]; then
             print_message "✅ Container started successfully!" "$GREEN"
@@ -1037,7 +1229,7 @@ start_birdnet_go() {
         if ! sudo systemctl is-active --quiet birdnet-go.service; then
             print_message "❌ Service stopped unexpectedly" "$RED"
             print_message "Checking service logs:" "$YELLOW"
-            sudo journalctl -u birdnet-go.service -n 50 --no-pager
+            journalctl -u birdnet-go.service -n 50 --no-pager
             
             print_message "\n❗ If you need help with this issue:" "$RED"
             print_message "1. The service started but then crashed" "$YELLOW"
@@ -1056,7 +1248,7 @@ start_birdnet_go() {
     if [ -z "$container_id" ]; then
         print_message "❌ Container failed to start within ${max_attempts} seconds" "$RED"
         print_message "Service logs:" "$YELLOW"
-        sudo journalctl -u birdnet-go.service -n 50 --no-pager
+        journalctl -u birdnet-go.service -n 50 --no-pager
         
         print_message "\nDocker logs:" "$YELLOW"
         docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | xargs -r docker logs
@@ -1074,12 +1266,12 @@ start_birdnet_go() {
     print_message "⏳ Waiting for application to initialize..." "$YELLOW"
     sleep 5
 
-    # Show logs
-    print_message "\n📝 Container logs:" "$GREEN"
-    docker logs "$container_id"
+    # Show logs from systemd service instead of container
+    print_message "\n📝 Service logs:" "$GREEN"
+    journalctl -u birdnet-go.service -n 20 --no-pager
     
     print_message "\nTo follow logs in real-time, use:" "$YELLOW"
-    print_message "docker logs -f $container_id" "$NC"
+    print_message "journalctl -fu birdnet-go.service" "$NC"
 }
 
 # Function to detect Raspberry Pi model
@@ -1156,7 +1348,7 @@ validate_installation() {
     local checks=0
     
     # Check Docker container
-    if docker ps | grep -q 'birdnet-go'; then
+    if check_container_running; then
         ((checks++))
     fi
     
@@ -1166,7 +1358,7 @@ validate_installation() {
     fi
     
     # Check web interface
-    if curl -s "http://localhost:8080" >/dev/null; then
+    if curl -s "http://localhost:${WEB_PORT}" >/dev/null; then
         ((checks++))
     fi
     
@@ -1194,109 +1386,6 @@ get_container_version() {
     echo "$current_version"
 }
 
-# Function to check if systemd service file needs update
-check_systemd_service() {
-    local service_file="/etc/systemd/system/birdnet-go.service"
-    local temp_service_file="/tmp/birdnet-go.service.new"
-    local needs_update=false
-    
-    # Get timezone
-    local TZ
-    if [ -f /etc/timezone ]; then
-        TZ=$(cat /etc/timezone)
-    else
-        TZ="UTC"
-    fi
-
-    # Create temporary service file with current configuration
-    cat > "$temp_service_file" << EOF
-[Unit]
-Description=BirdNET-Go
-After=docker.service
-Requires=docker.service
-
-[Service]
-Restart=always
-ExecStart=/usr/bin/docker run --rm \\
-    -p ${WEB_PORT}:8080 \\
-    --env TZ="${TZ}" \\
-    --add-host="host.docker.internal:host-gateway" \\
-    ${AUDIO_ENV} \\
-    -v ${CONFIG_DIR}:/config \\
-    -v ${DATA_DIR}:/data \\
-    ${BIRDNET_GO_IMAGE}
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    # Check if service file exists and compare
-    if [ -f "$service_file" ]; then
-        if ! cmp -s "$service_file" "$temp_service_file"; then
-            needs_update=true
-        fi
-    else
-        needs_update=true
-    fi
-    
-    rm -f "$temp_service_file"
-    echo "$needs_update"
-}
-
-# Function to handle container update process
-handle_container_update() {
-    local service_needs_update
-    service_needs_update=$(check_systemd_service)
-    
-    print_message "🔄 Checking for updates..." "$YELLOW"
-    
-    # Stop the service and container
-    print_message "🛑 Stopping BirdNET-Go service..." "$YELLOW"
-    sudo systemctl stop birdnet-go.service
-    
-    # Wait for container to stop
-    local max_wait=30
-    local waited=0
-    while docker ps | grep -q "birdnet-go" && [ $waited -lt $max_wait ]; do
-        sleep 1
-        ((waited++))
-    done
-    
-    if docker ps | grep -q "birdnet-go"; then
-        print_message "⚠️ Container still running after $max_wait seconds, forcing stop..." "$YELLOW"
-        docker ps --filter name=birdnet-go -q | xargs -r docker stop
-    fi
-    
-    # Pull new image
-    print_message "📥 Pulling latest nightly image..." "$YELLOW"
-    if ! docker pull "${BIRDNET_GO_IMAGE}"; then
-        print_message "❌ Failed to pull new image" "$RED"
-        return 1
-    fi
-    
-    # MODIFIED: Always ensure AUDIO_ENV is set during updates
-    if [ -z "$AUDIO_ENV" ]; then
-        AUDIO_ENV="--device /dev/snd"
-    fi
-    
-    # Update systemd service if needed
-    if [ "$service_needs_update" = "true" ]; then
-        print_message "📝 Updating systemd service..." "$YELLOW"
-        add_systemd_config
-    fi
-    
-    # Start the service
-    print_message "🚀 Starting BirdNET-Go service..." "$YELLOW"
-    sudo systemctl daemon-reload
-    if ! sudo systemctl start birdnet-go.service; then
-        print_message "❌ Failed to start service" "$RED"
-        return 1
-    fi
-    
-    print_message "✅ Update completed successfully" "$GREEN"
-    return 0
-}
-
 # Default paths
 CONFIG_DIR="$HOME/birdnet-go-app/config"
 DATA_DIR="$HOME/birdnet-go-app/data"
@@ -1305,82 +1394,8 @@ WEB_PORT=8080  # Default web port
 # MODIFIED: Set default AUDIO_ENV to always include device mapping
 AUDIO_ENV="--device /dev/snd"
 
-# Function to clean existing installation
-clean_installation() {
-    print_message "🧹 Cleaning existing installation..." "$YELLOW"
-    local cleanup_failed=false
-    
-    # Stop service if it exists
-    if systemctl list-unit-files | grep -q birdnet-go.service; then
-        print_message "🛑 Stopping BirdNET-Go service..." "$YELLOW"
-        sudo systemctl stop birdnet-go.service
-        sudo systemctl disable birdnet-go.service
-        sudo rm -f /etc/systemd/system/birdnet-go.service
-        sudo systemctl daemon-reload
-        print_message "✅ Removed systemd service" "$GREEN"
-    fi
-    
-    # Stop and remove containers
-    if docker ps -a | grep -q "birdnet-go"; then
-        print_message "🛑 Stopping and removing BirdNET-Go containers..." "$YELLOW"
-        docker ps -a --filter name=birdnet-go -q | xargs -r docker stop
-        docker ps -a --filter name=birdnet-go -q | xargs -r docker rm
-        print_message "✅ Removed containers" "$GREEN"
-    fi
-    
-    # Remove images
-    if docker images | grep -q "birdnet-go"; then
-        print_message "🗑️ Removing BirdNET-Go images..." "$YELLOW"
-        docker images --filter reference='*birdnet-go*' -q | xargs -r docker rmi -f
-        print_message "✅ Removed images" "$GREEN"
-    fi
-    
-    # Remove data directories
-    if [ -d "$CONFIG_DIR" ] || [ -d "$DATA_DIR" ]; then
-        print_message "📁 Removing data directories..." "$YELLOW"
-        
-        # Try normal removal first
-        if ! rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null; then
-            print_message "⚠️ Some files could not be removed, trying with sudo..." "$YELLOW"
-            
-            # Try with sudo
-            if ! sudo rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null; then
-                print_message "❌ Failed to remove some files even with sudo" "$RED"
-                print_message "The following files could not be removed:" "$RED"
-                
-                # List files that couldn't be removed
-                if [ -d "$CONFIG_DIR" ]; then
-                    find "$CONFIG_DIR" -type f ! -writable 2>/dev/null | while read -r file; do
-                        print_message "  • $file" "$RED"
-                    done
-                fi
-                if [ -d "$DATA_DIR" ]; then
-                    find "$DATA_DIR" -type f ! -writable 2>/dev/null | while read -r file; do
-                        print_message "  • $file" "$RED"
-                    done
-                fi
-                
-                cleanup_failed=true
-            else
-                print_message "✅ Removed data directories (with sudo)" "$GREEN"
-            fi
-        else
-            print_message "✅ Removed data directories" "$GREEN"
-        fi
-    fi
-    
-    if [ "$cleanup_failed" = true ]; then
-        print_message "\n⚠️ Some cleanup operations failed" "$RED"
-        print_message "You may need to manually remove remaining files" "$YELLOW"
-        return 1
-    else
-        print_message "✅ Cleanup completed successfully" "$GREEN"
-        return 0
-    fi
-}
-
 # Check for existing installation first
-if systemctl list-unit-files | grep -q birdnet-go.service || docker ps | grep -q "birdnet-go" || [ -f "$CONFIG_FILE" ]; then
+if check_service_exists || check_container_running || [ -f "$CONFIG_FILE" ]; then
     print_message "🔍 Found existing BirdNET-Go installation" "$YELLOW"
     print_message "1) Check for updates" "$YELLOW"
     print_message "2) Fresh installation" "$YELLOW"
