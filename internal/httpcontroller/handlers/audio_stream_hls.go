@@ -582,9 +582,7 @@ func cleanupStream(sourceID string) {
 
 	// Clean up activity tracking
 	hlsClientActivityMutex.Lock()
-	if _, exists := hlsClientActivity[sourceID]; exists {
-		delete(hlsClientActivity, sourceID)
-	}
+	delete(hlsClientActivity, sourceID)
 	hlsClientActivityMutex.Unlock()
 
 	// Clean up directory
