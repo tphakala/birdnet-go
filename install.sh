@@ -403,7 +403,7 @@ check_birdnet_installation() {
     fi
     
     # Fallback check for containers with birdnet-go in the name
-    if ! $container_exists; then
+    if [ "$container_exists" = false ]; then
         if docker ps -a | grep -q "birdnet-go"; then
             container_exists=true
             debug_output="${debug_output}Container with birdnet name exists. "
@@ -420,7 +420,12 @@ check_birdnet_installation() {
     # print_message "DEBUG: $debug_output Service: $service_exists, Image: $image_exists, Container: $container_exists, Running: $container_running" "$YELLOW"
     
     # Check if Docker components exist (image or containers)
-    local docker_components_exist=$([ "$image_exists" = true ] || [ "$container_exists" = true ] || [ "$container_running" = true ] && echo true || echo false)
+    local docker_components_exist
+    if [ "$image_exists" = true ] || [ "$container_exists" = true ] || [ "$container_running" = true ]; then
+        docker_components_exist=true
+    else
+        docker_components_exist=false
+    fi    
     
     # Full installation: service AND Docker components
     if [ "$service_exists" = true ] && [ "$docker_components_exist" = true ]; then
@@ -1304,7 +1309,7 @@ clean_installation() {
         # Show error list if there were problems
         if [ -n "$error_list" ]; then
             print_message "The following files could not be removed:" "$RED"
-            printf "$error_list"
+            printf '%b' "$error_list" 
             print_message "\n⚠️ Some cleanup operations failed" "$RED"
             print_message "You may need to manually remove remaining files" "$YELLOW"
             return 1
