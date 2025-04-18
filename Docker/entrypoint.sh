@@ -9,16 +9,16 @@ APP_USER="birdnet"
 echo "Starting BirdNET-Go with UID:$APP_UID, GID:$APP_GID"
 
 # Create group if it doesn't exist
-if ! getent group "$APP_GID" > /dev/null 2>&1; then
+if ! getent group | awk -F: '$3 == '"$APP_GID"'' > /dev/null; then
     groupadd -g "$APP_GID" "$APP_USER"
 fi
 
 # Get group name for this GID
-GROUP_NAME=$(getent group "$APP_GID" | cut -d: -f1)
+GROUP_NAME=$(getent group | awk -F: '$3 == '"$APP_GID"' {print $1}')
 export GROUP_NAME
 
 # Create user if it doesn't exist
-if ! getent passwd "$APP_UID" > /dev/null 2>&1; then
+if ! getent passwd | awk -F: '$3 == '"$APP_UID"'' > /dev/null; then
     useradd -u "$APP_UID" -g "$APP_GID" -s /bin/bash -m -d /home/"$APP_USER" "$APP_USER"
 fi
 
@@ -48,12 +48,5 @@ if [ -d "/dev/snd" ]; then
     chmod -R a+rw /dev/snd || true
 fi
 
-# Execute the command as the specified user
-if [ "$1" = "bash" ] || [ "$1" = "sh" ]; then
-    # If the user wants a shell, give them a shell
-    exec gosu "$USER_NAME" "$@"
-else
-    # Otherwise, run the birdnet-go command
-    echo "Starting BirdNET-Go as user $USER_NAME ($APP_UID:$APP_GID)"
-    exec gosu "$USER_NAME" "$@"
-fi
+echo "Starting BirdNET-Go as user $USER_NAME ($APP_UID:$APP_GID)"
+exec gosu "$USER_NAME" "$@"
