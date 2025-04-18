@@ -34,6 +34,11 @@ var (
 	ErrPathTraversal     = errors.New("path traversal attempt detected")
 )
 
+// Limit concurrent spectrogram generations to avoid overloading the system
+const MaxConcurrentSpectrograms = 4
+
+var spectrogramSemaphore = make(chan struct{}, MaxConcurrentSpectrograms)
+
 // sanitizeClipName performs sanity checks on the clip name and ensures it's a relative path
 func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 	// Check if the clip name is empty
@@ -273,6 +278,15 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	}
 	if !exists {
 		h.Debug("ServeSpectrogram: Spectrogram file not found, attempting to create it")
+
+		// Acquire semaphore before generating spectrogram
+		h.Debug("ServeSpectrogram: waiting for available slot for spectrogram generation")
+		spectrogramSemaphore <- struct{}{}
+		defer func() {
+			<-spectrogramSemaphore
+			h.Debug("ServeSpectrogram: released semaphore slot")
+		}()
+
 		// Try to create the spectrogram
 		if err := createSpectrogramWithSoX(fullPath, spectrogramPath, 400); err != nil {
 			h.Debug("ServeSpectrogram: Failed to create spectrogram: %v", err)
