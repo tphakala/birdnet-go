@@ -351,6 +351,38 @@ pull_docker_image() {
     fi
 }
 
+# Helper function to check if BirdNET-Go systemd service exists
+# Returns true (0) if service exists, false (1) otherwise
+detect_birdnet_service() {
+    local debug_info=""
+
+    # Check for service file
+    if [ -f "/etc/systemd/system/birdnet-go.service" ]; then
+        debug_info="service file exists"
+        return 0
+    fi
+    
+    # Check service in unit files
+    if systemctl list-unit-files | grep -q birdnet-go.service; then
+        debug_info="service in unit files"
+        return 0
+    fi
+    
+    # Check active/inactive services
+    if systemctl list-units --all | grep -q birdnet-go.service; then
+        debug_info="service in active/inactive units"
+        return 0
+    fi
+    
+    return 1
+}
+
+# Function to check if BirdNET service exists
+check_service_exists() {
+    detect_birdnet_service
+    return $?
+}
+
 # Function to check if BirdNET-Go is fully installed (service + container)
 check_birdnet_installation() {
     local service_exists=false
@@ -359,10 +391,8 @@ check_birdnet_installation() {
     local container_running=false
     local debug_output=""
 
-    # Consolidated systemd service check
-    if [ -f "/etc/systemd/system/birdnet-go.service" ] || \
-       systemctl list-unit-files | grep -q birdnet-go.service || \
-       systemctl list-units --all | grep -q birdnet-go.service; then
+    # Check for systemd service
+    if detect_birdnet_service; then
         service_exists=true
         debug_output="${debug_output}Systemd service detected. "
     fi
@@ -406,14 +436,17 @@ check_birdnet_installation() {
     # Debug output - uncomment to debug installation check
     # print_message "DEBUG: $debug_output Service: $service_exists, Image: $image_exists, Container: $container_exists, Running: $container_running" "$YELLOW"
     
-    # Full installation: service AND (image OR container)
-    if [ "$service_exists" = true ] && { [ "$image_exists" = true ] || [ "$container_exists" = true ] || [ "$container_running" = true ]; }; then
+    # Check if Docker components exist (image or containers)
+    local docker_components_exist=$([ "$image_exists" = true ] || [ "$container_exists" = true ] || [ "$container_running" = true ] && echo true || echo false)
+    
+    # Full installation: service AND Docker components
+    if [ "$service_exists" = true ] && [ "$docker_components_exist" = true ]; then
         echo "full"  # Full installation with systemd
         return 0
     fi
     
-    # Docker-only installation: container running or image present, but no service
-    if [ "$service_exists" = false ] && { [ "$container_running" = true ] || [ "$image_exists" = true ]; }; then
+    # Docker-only installation: Docker components but no service
+    if [ "$service_exists" = false ] && [ "$docker_components_exist" = true ]; then
         echo "docker"  # Docker-only installation
         return 0
     fi
@@ -1209,18 +1242,6 @@ handle_container_update() {
     return 0
 }
 
-# Function to check if BirdNET service exists
-check_service_exists() {
-    # Consolidated service check
-    if [ -f "/etc/systemd/system/birdnet-go.service" ] || \
-       systemctl list-unit-files | grep -q birdnet-go.service || \
-       systemctl list-units --all | grep -q birdnet-go.service; then
-        return 0  # Service exists
-    fi
-    
-    return 1  # Service does not exist
-}
-
 # Function to clean existing installation but preserve user data
 disable_birdnet_service_and_remove_containers() {
     # Stop service if it exists
@@ -1258,44 +1279,51 @@ clean_installation_preserve_data() {
 # Function to clean existing installation
 clean_installation() {
     print_message "🧹 Cleaning existing installation..." "$YELLOW"
-    local cleanup_failed=false
+    
+    # First stop services and remove containers
     disable_birdnet_service_and_remove_containers
-    # Remove data directories
+    
+    # Unified directory removal with simplified error handling
     if [ -d "$CONFIG_DIR" ] || [ -d "$DATA_DIR" ]; then
         print_message "📁 Removing data directories..." "$YELLOW"
-        # Try normal removal first
-        if ! rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null; then
-            print_message "⚠️ Some files could not be removed, trying with sudo..." "$YELLOW"
-            # Try with sudo
-            if ! sudo rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null; then
-                print_message "❌ Failed to remove some files even with sudo" "$RED"
-                print_message "The following files could not be removed:" "$RED"
-                if [ -d "$CONFIG_DIR" ]; then
-                    find "$CONFIG_DIR" -type f ! -writable 2>/dev/null | while read -r file; do
-                        print_message "  • $file" "$RED"
-                    done
-                fi
-                if [ -d "$DATA_DIR" ]; then
-                    find "$DATA_DIR" -type f ! -writable 2>/dev/null | while read -r file; do
-                        print_message "  • $file" "$RED"
-                    done
-                fi
-                cleanup_failed=true
-            else
-                print_message "✅ Removed data directories (with sudo)" "$GREEN"
-            fi
+        
+        # Create a list of errors
+        local error_list=""
+        
+        # Try to remove directories with regular permissions first
+        rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null || {
+            # If that fails, try with sudo
+            print_message "⚠️ Some files require elevated permissions to remove, trying with sudo..." "$YELLOW"
+            sudo rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null || {
+                # If sudo also fails, collect error information
+                print_message "❌ Some files could not be removed even with sudo" "$RED"
+                
+                # Check which directories still exist and list problematic files
+                for dir in "$CONFIG_DIR" "$DATA_DIR"; do
+                    if [ -d "$dir" ]; then
+                        error_list="${error_list}Files in $dir:\n"
+                        while read -r file; do
+                            error_list="${error_list}  • $file\n"
+                        done < <(find "$dir" -type f ! -writable 2>/dev/null)
+                    fi
+                done
+            }
+        }
+        
+        # Show error list if there were problems
+        if [ -n "$error_list" ]; then
+            print_message "The following files could not be removed:" "$RED"
+            printf "$error_list"
+            print_message "\n⚠️ Some cleanup operations failed" "$RED"
+            print_message "You may need to manually remove remaining files" "$YELLOW"
+            return 1
         else
             print_message "✅ Removed data directories" "$GREEN"
         fi
     fi
-    if [ "$cleanup_failed" = true ]; then
-        print_message "\n⚠️ Some cleanup operations failed" "$RED"
-        print_message "You may need to manually remove remaining files" "$YELLOW"
-        return 1
-    else
-        print_message "✅ Cleanup completed successfully" "$GREEN"
-        return 0
-    fi
+    
+    print_message "✅ Cleanup completed successfully" "$GREEN"
+    return 0
 }
 
 # Function to start BirdNET-Go
@@ -1943,7 +1971,7 @@ if [ -n "$IP_ADDR" ]; then
     print_message "🌐 BirdNET-Go web interface is available at http://${IP_ADDR}:${WEB_PORT}" "$GREEN"
 else
     print_message "⚠️ Could not determine IP address - you may access BirdNET-Go at http://localhost:${WEB_PORT}" "$YELLOW"
-    print_message "To find your IP address manually, run: ip addr or ifconfig" "$YELLOW"
+    print_message "To find your IP address manually, run: ip addr show or nmcli device show" "$YELLOW"
 fi
 
 # Check if mDNS is available
