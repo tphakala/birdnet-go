@@ -1584,254 +1584,247 @@ display_menu() {
     fi
 }
 
-# Function to handle menu selection based on installation type
+# Modularized menu action handlers
+handle_full_install_menu() {
+    local selection="$1"
+    case $selection in
+        1)
+            check_network
+            if handle_container_update; then
+                exit 0
+            else
+                print_message "⚠️ Update failed" "$RED"
+                print_message "❓ Do you want to proceed with fresh installation? (y/n): " "$YELLOW" "nonewline"
+                read -r response
+                if [[ ! "$response" =~ ^[Yy]$ ]]; then
+                    print_message "❌ Installation cancelled" "$RED"
+                    exit 1
+                fi
+                FRESH_INSTALL="true"
+            fi
+            ;;
+        2)
+            print_message "\n⚠️  WARNING: Fresh installation will:" "$RED"
+            print_message "  • Remove all BirdNET-Go containers and images" "$RED"
+            print_message "  • Delete all configuration and data in $CONFIG_DIR" "$RED"
+            print_message "  • Delete all recordings and database in $DATA_DIR" "$RED"
+            print_message "  • Remove systemd service configuration" "$RED"
+            print_message "\n❓ Type 'yes' to proceed with fresh installation: " "$YELLOW" "nonewline"
+            read -r response
+            if [ "$response" = "yes" ]; then
+                clean_installation
+                FRESH_INSTALL="true"
+            else
+                print_message "❌ Installation cancelled" "$RED"
+                exit 1
+            fi
+            ;;
+        3)
+            print_message "\n⚠️  WARNING: Uninstalling BirdNET-Go will:" "$RED"
+            print_message "  • Remove all BirdNET-Go containers and images" "$RED"
+            print_message "  • Delete all configuration and data in $CONFIG_DIR" "$RED"
+            print_message "  • Delete all recordings and database in $DATA_DIR" "$RED"
+            print_message "  • Remove systemd service configuration" "$RED"
+            print_message "\n❓ Type 'yes' to proceed with uninstallation: " "$YELLOW" "nonewline"
+            read -r response
+            if [ "$response" = "yes" ]; then
+                if clean_installation; then
+                    print_message "✅ BirdNET-Go has been successfully uninstalled" "$GREEN"
+                else
+                    print_message "⚠️ Some components could not be removed" "$RED"
+                    print_message "Please check the messages above for details" "$YELLOW"
+                fi
+                exit 0
+            else
+                print_message "❌ Uninstallation cancelled" "$RED"
+                exit 1
+            fi
+            ;;
+        4)
+            print_message "\nℹ️ NOTE: This option will uninstall BirdNET-Go but preserve your data:" "$YELLOW"
+            print_message "  • BirdNET-Go containers and images will be removed" "$YELLOW"
+            print_message "  • Systemd service will be disabled and removed" "$YELLOW"
+            print_message "  • All your data and configuration in $CONFIG_DIR and $DATA_DIR will be preserved" "$GREEN"
+            print_message "\n❓ Type 'yes' to proceed with uninstallation (preserve data): " "$YELLOW" "nonewline"
+            read -r response
+            if [ "$response" = "yes" ]; then
+                if clean_installation_preserve_data; then
+                    print_message "✅ BirdNET-Go has been successfully uninstalled (user data preserved)" "$GREEN"
+                else
+                    print_message "⚠️ Some components could not be removed" "$RED"
+                    print_message "Please check the messages above for details" "$YELLOW"
+                fi
+                exit 0
+            else
+                print_message "❌ Uninstallation cancelled" "$RED"
+                exit 1
+            fi
+            ;;
+        5)
+            print_message "❌ Operation cancelled" "$RED"
+            exit 1
+            ;;
+        *)
+            print_message "❌ Invalid option" "$RED"
+            exit 1
+            ;;
+    esac
+}
+
+handle_docker_install_menu() {
+    local selection="$1"
+    case $selection in
+        1)
+            check_network
+            print_message "\n🔄 Updating BirdNET-Go Docker image..." "$YELLOW"
+            if docker pull "${BIRDNET_GO_IMAGE}"; then
+                print_message "✅ Successfully updated to latest image" "$GREEN"
+                print_message "⚠️ Note: You will need to restart your container to use the updated image" "$YELLOW"
+                exit 0
+            else
+                print_message "❌ Failed to update Docker image" "$RED"
+                exit 1
+            fi
+            ;;
+        2)
+            print_message "\n🔧 Installing BirdNET-Go as systemd service..." "$GREEN"
+            ;;
+        3)
+            print_message "\n⚠️  WARNING: Fresh installation will:" "$RED"
+            print_message "  • Remove all BirdNET-Go containers and images" "$RED"
+            print_message "  • Delete all configuration and data in $CONFIG_DIR" "$RED"
+            print_message "  • Delete all recordings and database in $DATA_DIR" "$RED"
+            print_message "\n❓ Type 'yes' to proceed with fresh installation: " "$YELLOW" "nonewline"
+            read -r response
+            if [ "$response" = "yes" ]; then
+                if docker ps -a | grep -q "birdnet-go"; then
+                    print_message "🛑 Stopping and removing BirdNET-Go containers..." "$YELLOW"
+                    docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | xargs -r docker stop
+                    docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | xargs -r docker rm
+                    print_message "✅ Removed containers" "$GREEN"
+                fi
+                image_base="${BIRDNET_GO_IMAGE%:*}"
+                images_to_remove=$(docker images "${image_base}" -q)
+                if [ -n "${images_to_remove}" ]; then
+                    print_message "🗑️ Removing BirdNET-Go images..." "$YELLOW"
+                    echo "${images_to_remove}" | xargs -r docker rmi -f
+                    print_message "✅ Removed images" "$GREEN"
+                fi
+                if [ -d "$CONFIG_DIR" ] || [ -d "$DATA_DIR" ]; then
+                    print_message "📁 Removing data directories..." "$YELLOW"
+                    rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null || sudo rm -rf "$CONFIG_DIR" "$DATA_DIR"
+                    print_message "✅ Removed data directories" "$GREEN"
+                fi
+                FRESH_INSTALL="true"
+            else
+                print_message "❌ Installation cancelled" "$RED"
+                exit 1
+            fi
+            ;;
+        4)
+            print_message "\n⚠️  WARNING: This will remove BirdNET-Go Docker components:" "$RED"
+            print_message "  • Stop and remove all BirdNET-Go containers" "$RED"
+            print_message "  • Remove all BirdNET-Go Docker images" "$RED"
+            print_message "  • Configuration and data will remain in $CONFIG_DIR and $DATA_DIR" "$GREEN"
+            print_message "\n❓ Type 'yes' to proceed with removal: " "$YELLOW" "nonewline"
+            read -r response
+            if [ "$response" = "yes" ]; then
+                if docker ps -a | grep -q "birdnet-go"; then
+                    print_message "🛑 Stopping and removing BirdNET-Go containers..." "$YELLOW"
+                    docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | xargs -r docker stop
+                    docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | xargs -r docker rm
+                    print_message "✅ Removed containers" "$GREEN"
+                fi
+                image_base="${BIRDNET_GO_IMAGE%:*}"
+                images_to_remove=$(docker images "${image_base}" -q)
+                if [ -n "${images_to_remove}" ]; then
+                    print_message "🗑️ Removing BirdNET-Go images..." "$YELLOW"
+                    echo "${images_to_remove}" | xargs -r docker rmi -f
+                    print_message "✅ Removed images" "$GREEN"
+                fi
+                print_message "✅ BirdNET-Go Docker components removed successfully" "$GREEN"
+                exit 0
+            else
+                print_message "❌ Operation cancelled" "$RED"
+                exit 1
+            fi
+            ;;
+        5)
+            print_message "❌ Operation cancelled" "$RED"
+            exit 1
+            ;;
+        *)
+            print_message "❌ Invalid option" "$RED"
+            exit 1
+            ;;
+    esac
+}
+
+handle_preserved_data_menu() {
+    local selection="$1"
+    case $selection in
+        1)
+            print_message "\n📝 Installing BirdNET-Go using existing data..." "$GREEN"
+            ;;
+        2)
+            print_message "\n⚠️  WARNING: Fresh installation will remove existing data:" "$RED"
+            print_message "  • Delete all configuration and data in $CONFIG_DIR" "$RED"
+            print_message "  • Delete all recordings and database in $DATA_DIR" "$RED"
+            print_message "\n❓ Type 'yes' to proceed with fresh installation: " "$YELLOW" "nonewline"
+            read -r response
+            if [ "$response" = "yes" ]; then
+                if [ -d "$CONFIG_DIR" ] || [ -d "$DATA_DIR" ]; then
+                    print_message "📁 Removing data directories..." "$YELLOW"
+                    rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null || sudo rm -rf "$CONFIG_DIR" "$DATA_DIR"
+                    print_message "✅ Removed existing data directories" "$GREEN"
+                fi
+                FRESH_INSTALL="true"
+            else
+                print_message "❌ Installation cancelled" "$RED"
+                exit 1
+            fi
+            ;;
+        3)
+            print_message "\n⚠️  WARNING: This will permanently delete:" "$RED"
+            print_message "  • All configuration and data in $CONFIG_DIR" "$RED"
+            print_message "  • All recordings and database in $DATA_DIR" "$RED"
+            print_message "\n❓ Type 'yes' to proceed with data removal: " "$YELLOW" "nonewline"
+            read -r response
+            if [ "$response" = "yes" ]; then
+                if [ -d "$CONFIG_DIR" ] || [ -d "$DATA_DIR" ]; then
+                    print_message "📁 Removing data directories..." "$YELLOW"
+                    if ! rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null; then
+                        sudo rm -rf "$CONFIG_DIR" "$DATA_DIR"
+                    fi
+                    print_message "✅ All data has been successfully removed" "$GREEN"
+                fi
+                exit 0
+            else
+                print_message "❌ Operation cancelled" "$RED"
+                exit 1
+            fi
+            ;;
+        4)
+            print_message "❌ Operation cancelled" "$RED"
+            exit 1
+            ;;
+        *)
+            print_message "❌ Invalid option" "$RED"
+            exit 1
+            ;;
+    esac
+}
+
+# Simplified dispatcher
 handle_menu_selection() {
     local installation_type="$1"
     local selection="$2"
-    
     if [ "$installation_type" = "full" ]; then
-        # Menu for full installation with systemd
-        case $selection in
-            1)
-                # First check network connectivity as it's required for updates
-                check_network
-                if handle_container_update; then
-                    exit 0
-                else
-                    print_message "⚠️ Update failed" "$RED"
-                    print_message "❓ Do you want to proceed with fresh installation? (y/n): " "$YELLOW" "nonewline"
-                    read -r response
-                    if [[ ! "$response" =~ ^[Yy]$ ]]; then
-                        print_message "❌ Installation cancelled" "$RED"
-                        exit 1
-                    fi
-                    FRESH_INSTALL="true"
-                fi
-                ;;
-            2)
-                print_message "\n⚠️  WARNING: Fresh installation will:" "$RED"
-                print_message "  • Remove all BirdNET-Go containers and images" "$RED"
-                print_message "  • Delete all configuration and data in $CONFIG_DIR" "$RED"
-                print_message "  • Delete all recordings and database in $DATA_DIR" "$RED"
-                print_message "  • Remove systemd service configuration" "$RED"
-                print_message "\n❓ Type 'yes' to proceed with fresh installation: " "$YELLOW" "nonewline"
-                read -r response
-                if [ "$response" = "yes" ]; then
-                    clean_installation
-                    FRESH_INSTALL="true"
-                else
-                    print_message "❌ Installation cancelled" "$RED"
-                    exit 1
-                fi
-                ;;
-            3)
-                print_message "\n⚠️  WARNING: Uninstalling BirdNET-Go will:" "$RED"
-                print_message "  • Remove all BirdNET-Go containers and images" "$RED"
-                print_message "  • Delete all configuration and data in $CONFIG_DIR" "$RED"
-                print_message "  • Delete all recordings and database in $DATA_DIR" "$RED"
-                print_message "  • Remove systemd service configuration" "$RED"
-                print_message "\n❓ Type 'yes' to proceed with uninstallation: " "$YELLOW" "nonewline"
-                read -r response
-                if [ "$response" = "yes" ]; then
-                    if clean_installation; then
-                        print_message "✅ BirdNET-Go has been successfully uninstalled" "$GREEN"
-                    else
-                        print_message "⚠️ Some components could not be removed" "$RED"
-                        print_message "Please check the messages above for details" "$YELLOW"
-                    fi
-                    exit 0
-                else
-                    print_message "❌ Uninstallation cancelled" "$RED"
-                    exit 1
-                fi
-                ;;
-            4)
-                print_message "\nℹ️ NOTE: This option will uninstall BirdNET-Go but preserve your data:" "$YELLOW"
-                print_message "  • BirdNET-Go containers and images will be removed" "$YELLOW"
-                print_message "  • Systemd service will be disabled and removed" "$YELLOW"
-                print_message "  • All your data and configuration in $CONFIG_DIR and $DATA_DIR will be preserved" "$GREEN"
-                print_message "\n❓ Type 'yes' to proceed with uninstallation (preserve data): " "$YELLOW" "nonewline"
-                read -r response
-                if [ "$response" = "yes" ]; then
-                    if clean_installation_preserve_data; then
-                        print_message "✅ BirdNET-Go has been successfully uninstalled (user data preserved)" "$GREEN"
-                    else
-                        print_message "⚠️ Some components could not be removed" "$RED"
-                        print_message "Please check the messages above for details" "$YELLOW"
-                    fi
-                    exit 0
-                else
-                    print_message "❌ Uninstallation cancelled" "$RED"
-                    exit 1
-                fi
-                ;;
-            5)
-                print_message "❌ Operation cancelled" "$RED"
-                exit 1
-                ;;
-            *)
-                print_message "❌ Invalid option" "$RED"
-                exit 1
-                ;;
-        esac
+        handle_full_install_menu "$selection"
     elif [ "$installation_type" = "docker" ]; then
-        # Menu for Docker-only installation
-        case $selection in
-            1)
-                # First check network connectivity as it's required for updates
-                check_network
-                print_message "\n🔄 Updating BirdNET-Go Docker image..." "$YELLOW"
-                if docker pull "${BIRDNET_GO_IMAGE}"; then
-                    print_message "✅ Successfully updated to latest image" "$GREEN"
-                    print_message "⚠️ Note: You will need to restart your container to use the updated image" "$YELLOW"
-                    exit 0
-                else
-                    print_message "❌ Failed to update Docker image" "$RED"
-                    exit 1
-                fi
-                ;;
-            2)
-                print_message "\n🔧 Installing BirdNET-Go as systemd service..." "$GREEN"
-                # Proceed with systemd service installation
-                # FRESH_INSTALL is already false to preserve existing data
-                ;;
-            3)
-                print_message "\n⚠️  WARNING: Fresh installation will:" "$RED"
-                print_message "  • Remove all BirdNET-Go containers and images" "$RED"
-                print_message "  • Delete all configuration and data in $CONFIG_DIR" "$RED"
-                print_message "  • Delete all recordings and database in $DATA_DIR" "$RED"
-                print_message "\n❓ Type 'yes' to proceed with fresh installation: " "$YELLOW" "nonewline"
-                read -r response
-                if [ "$response" = "yes" ]; then
-                    # Stop and remove containers
-                    if docker ps -a | grep -q "birdnet-go"; then
-                        print_message "🛑 Stopping and removing BirdNET-Go containers..." "$YELLOW"
-                        docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | xargs -r docker stop
-                        docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | xargs -r docker rm
-                        print_message "✅ Removed containers" "$GREEN"
-                    fi
-                    
-                    # Remove images
-                    # Remove images by repository base name (including untagged)
-                    image_base="${BIRDNET_GO_IMAGE%:*}"
-                    images_to_remove=$(docker images "${image_base}" -q)
-                    if [ -n "${images_to_remove}" ]; then
-                        print_message "🗑️ Removing BirdNET-Go images..." "$YELLOW"
-                        echo "${images_to_remove}" | xargs -r docker rmi -f
-                        print_message "✅ Removed images" "$GREEN"
-                    fi
-                    
-                    # Remove data directories
-                    if [ -d "$CONFIG_DIR" ] || [ -d "$DATA_DIR" ]; then
-                        print_message "📁 Removing data directories..." "$YELLOW"
-                        rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null || sudo rm -rf "$CONFIG_DIR" "$DATA_DIR"
-                        print_message "✅ Removed data directories" "$GREEN"
-                    fi
-                    
-                    FRESH_INSTALL="true"
-                else
-                    print_message "❌ Installation cancelled" "$RED"
-                    exit 1
-                fi
-                ;;
-            4)
-                print_message "\n⚠️  WARNING: This will remove BirdNET-Go Docker components:" "$RED"
-                print_message "  • Stop and remove all BirdNET-Go containers" "$RED"
-                print_message "  • Remove all BirdNET-Go Docker images" "$RED"
-                print_message "  • Configuration and data will remain in $CONFIG_DIR and $DATA_DIR" "$GREEN"
-                print_message "\n❓ Type 'yes' to proceed with removal: " "$YELLOW" "nonewline"
-                read -r response
-                if [ "$response" = "yes" ]; then
-                    # Stop and remove containers
-                    if docker ps -a | grep -q "birdnet-go"; then
-                        print_message "🛑 Stopping and removing BirdNET-Go containers..." "$YELLOW"
-                        docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | xargs -r docker stop
-                        docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | xargs -r docker rm
-                        print_message "✅ Removed containers" "$GREEN"
-                    fi
-                    
-                    # Remove images
-                    # Remove images by repository base name (including untagged)
-                    image_base="${BIRDNET_GO_IMAGE%:*}"
-                    images_to_remove=$(docker images "${image_base}" -q)
-                    if [ -n "${images_to_remove}" ]; then
-                        print_message "🗑️ Removing BirdNET-Go images..." "$YELLOW"
-                        echo "${images_to_remove}" | xargs -r docker rmi -f
-                        print_message "✅ Removed images" "$GREEN"
-                    fi
-                    
-                    print_message "✅ BirdNET-Go Docker components removed successfully" "$GREEN"
-                    exit 0
-                else
-                    print_message "❌ Operation cancelled" "$RED"
-                    exit 1
-                fi
-                ;;
-            5)
-                print_message "❌ Operation cancelled" "$RED"
-                exit 1
-                ;;
-            *)
-                print_message "❌ Invalid option" "$RED"
-                exit 1
-                ;;
-        esac
+        handle_docker_install_menu "$selection"
     else
-        # Menu for preserved data only
-        case $selection in
-            1)
-                print_message "\n📝 Installing BirdNET-Go using existing data..." "$GREEN"
-                # Continue with installation using existing data
-                # FRESH_INSTALL is already false
-                ;;
-            2)
-                print_message "\n⚠️  WARNING: Fresh installation will remove existing data:" "$RED"
-                print_message "  • Delete all configuration and data in $CONFIG_DIR" "$RED"
-                print_message "  • Delete all recordings and database in $DATA_DIR" "$RED"
-                print_message "\n❓ Type 'yes' to proceed with fresh installation: " "$YELLOW" "nonewline"
-                read -r response
-                if [ "$response" = "yes" ]; then
-                    # Remove existing data
-                    if [ -d "$CONFIG_DIR" ] || [ -d "$DATA_DIR" ]; then
-                        print_message "📁 Removing data directories..." "$YELLOW"
-                        rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null || sudo rm -rf "$CONFIG_DIR" "$DATA_DIR"
-                        print_message "✅ Removed existing data directories" "$GREEN"
-                    fi
-                    FRESH_INSTALL="true"
-                else
-                    print_message "❌ Installation cancelled" "$RED"
-                    exit 1
-                fi
-                ;;
-            3)
-                print_message "\n⚠️  WARNING: This will permanently delete:" "$RED"
-                print_message "  • All configuration and data in $CONFIG_DIR" "$RED"
-                print_message "  • All recordings and database in $DATA_DIR" "$RED"
-                print_message "\n❓ Type 'yes' to proceed with data removal: " "$YELLOW" "nonewline"
-                read -r response
-                if [ "$response" = "yes" ]; then
-                    if [ -d "$CONFIG_DIR" ] || [ -d "$DATA_DIR" ]; then
-                        print_message "📁 Removing data directories..." "$YELLOW"
-                        if ! rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null; then
-                            sudo rm -rf "$CONFIG_DIR" "$DATA_DIR"
-                        fi
-                        print_message "✅ All data has been successfully removed" "$GREEN"
-                    fi
-                    exit 0
-                else
-                    print_message "❌ Operation cancelled" "$RED"
-                    exit 1
-                fi
-                ;;
-            4)
-                print_message "❌ Operation cancelled" "$RED"
-                exit 1
-                ;;
-            *)
-                print_message "❌ Invalid option" "$RED"
-                exit 1
-                ;;
-        esac
+        handle_preserved_data_menu "$selection"
     fi
 }
 
