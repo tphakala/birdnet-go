@@ -1515,9 +1515,11 @@ if check_preserved_data; then
     PRESERVED_DATA=true
 fi
 
-# Determine what's installed and what to show
-if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
-    if [ "$INSTALLATION_TYPE" = "full" ]; then
+# Function to display menu options based on installation type
+display_menu() {
+    local installation_type="$1"
+    
+    if [ "$installation_type" = "full" ]; then
         print_message "🔍 Found existing BirdNET-Go installation (systemd service)" "$YELLOW"
         print_message "1) Check for updates" "$YELLOW"
         print_message "2) Fresh installation" "$YELLOW"
@@ -1525,7 +1527,8 @@ if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
         print_message "4) Uninstall BirdNET-Go, preserve data" "$YELLOW"
         print_message "5) Exit" "$YELLOW"
         print_message "❓ Select an option (1-5): " "$YELLOW" "nonewline"
-    elif [ "$INSTALLATION_TYPE" = "docker" ]; then
+        return 5  # Return number of options
+    elif [ "$installation_type" = "docker" ]; then
         print_message "🔍 Found existing BirdNET-Go Docker container/image" "$YELLOW"
         print_message "1) Check for updates" "$YELLOW"
         print_message "2) Install as systemd service" "$YELLOW"
@@ -1533,6 +1536,7 @@ if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
         print_message "4) Remove Docker container/image" "$YELLOW"
         print_message "5) Exit" "$YELLOW"
         print_message "❓ Select an option (1-5): " "$YELLOW" "nonewline"
+        return 5  # Return number of options
     else
         print_message "🔍 Found BirdNET-Go data from previous installation" "$YELLOW"
         print_message "1) Install using existing data and configuration" "$YELLOW"
@@ -1540,13 +1544,18 @@ if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
         print_message "3) Remove existing data without installing" "$YELLOW"
         print_message "4) Exit" "$YELLOW"
         print_message "❓ Select an option (1-4): " "$YELLOW" "nonewline"
+        return 4  # Return number of options
     fi
+}
+
+# Function to handle menu selection based on installation type
+handle_menu_selection() {
+    local installation_type="$1"
+    local selection="$2"
     
-    read -r response
-    
-    if [ "$INSTALLATION_TYPE" = "full" ]; then
+    if [ "$installation_type" = "full" ]; then
         # Menu for full installation with systemd
-        case $response in
+        case $selection in
             1)
                 # First check network connectivity as it's required for updates
                 check_network
@@ -1629,9 +1638,9 @@ if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
                 exit 1
                 ;;
         esac
-    elif [ "$INSTALLATION_TYPE" = "docker" ]; then
+    elif [ "$installation_type" = "docker" ]; then
         # Menu for Docker-only installation
-        case $response in
+        case $selection in
             1)
                 # First check network connectivity as it's required for updates
                 check_network
@@ -1727,7 +1736,7 @@ if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
         esac
     else
         # Menu for preserved data only
-        case $response in
+        case $selection in
             1)
                 print_message "\n📝 Installing BirdNET-Go using existing data..." "$GREEN"
                 # Continue with installation using existing data
@@ -1781,6 +1790,24 @@ if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
                 exit 1
                 ;;
         esac
+    fi
+}
+
+# Determine what's installed and what to show
+if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
+    # Display menu based on installation type
+    max_options=$(display_menu "$INSTALLATION_TYPE")
+    
+    # Read user selection
+    read -r response
+    
+    # Validate user selection
+    if [[ "$response" =~ ^[0-9]+$ ]] && [ "$response" -ge 1 ] && [ "$response" -le "$max_options" ]; then
+        # Handle menu selection
+        handle_menu_selection "$INSTALLATION_TYPE" "$response"
+    else
+        print_message "❌ Invalid option" "$RED"
+        exit 1
     fi
 fi
 
