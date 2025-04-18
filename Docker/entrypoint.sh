@@ -29,7 +29,12 @@ USER_NAME=$(getent passwd "$APP_UID" | cut -d: -f1)
 
 # Ensure /config and /data are accessible to the user
 mkdir -p /config /data
-chown -R "$APP_UID":"$APP_GID" /config /data
+chown -R "$APP_UID":"$APP_GID" /config
+chown "$APP_UID":"$APP_GID" /data
+chown "$APP_UID":"$APP_GID" /data/*
+
+# Chown clips directory at background to avoid blocking the main process
+chown -R "$APP_UID":"$APP_GID" /data/clips &
 
 # Create config directory and symlink for the user
 USER_HOME=$(getent passwd "$APP_UID" | cut -d: -f6)
