@@ -291,8 +291,13 @@ func (h *Handlers) AudioStreamHLS(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusForbidden, "Access denied")
 		}
 
-		// Only log errors for missing files
-		if !checkFileExists(stream.PlaylistPath) {
+		// Only log errors for missing files - using secure version
+		fileExists, fileErr := secureCheckFileExists(hlsBaseDir, stream.PlaylistPath)
+		if fileErr != nil {
+			log.Printf("Error validating playlist path: %v", fileErr)
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to validate file path")
+		}
+		if !fileExists {
 			log.Printf("Error: HLS playlist file does not exist at %s", stream.PlaylistPath)
 			return echo.NewHTTPError(http.StatusNotFound, "Playlist file not found")
 		}
@@ -332,8 +337,13 @@ func (h *Handlers) AudioStreamHLS(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusForbidden, "Access denied")
 	}
 
-	// Check if segment file exists
-	if !checkFileExists(segmentPath) {
+	// Check if segment file exists - using secure version
+	fileExists, fileErr := secureCheckFileExists(hlsBaseDir, segmentPath)
+	if fileErr != nil {
+		log.Printf("Error validating segment path: %v", fileErr)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to validate file path")
+	}
+	if !fileExists {
 		log.Printf("Error: HLS segment file does not exist at %s", segmentPath)
 		return echo.NewHTTPError(http.StatusNotFound, "Segment file not found")
 	}
@@ -376,10 +386,21 @@ func updateClientDisconnection(sourceID, clientID string) {
 	registerClientActivity(sourceID, clientID)
 }
 
-// Helper function to check if a file exists
-func checkFileExists(path string) bool {
-	_, err := os.Stat(path)
-	return !os.IsNotExist(err)
+// secureCheckFileExists checks if a file exists while ensuring it's within the base directory
+func secureCheckFileExists(baseDir, path string) (bool, error) {
+	// First validate the path is within the base directory
+	isWithin, err := isPathWithinBase(baseDir, path)
+	if err != nil {
+		return false, fmt.Errorf("failed to validate path: %w", err)
+	}
+
+	if !isWithin {
+		return false, fmt.Errorf("security error: path would be outside base directory")
+	}
+
+	// Now that we've validated the path is safe, check if the file exists
+	_, err = os.Stat(path)
+	return !os.IsNotExist(err), nil
 }
 
 // getOrCreateHLSStream gets an existing stream or creates a new one
@@ -428,7 +449,13 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	}
 
 	// Ensure the directory exists and is empty
-	if checkPathExists(outputDir) {
+	exists, err := secureCheckPathExists(hlsBaseDir, outputDir)
+	if err != nil {
+		streamCancel() // Clean up context
+		return nil, fmt.Errorf("failed to validate output directory: %w", err)
+	}
+
+	if exists {
 		log.Printf("Removing existing output directory: %s", outputDir)
 		if err := os.RemoveAll(outputDir); err != nil {
 			streamCancel() // Clean up context
@@ -585,11 +612,26 @@ func cleanupStream(sourceID string) {
 	delete(hlsClientActivity, sourceID)
 	hlsClientActivityMutex.Unlock()
 
+	// Get HLS directory for secure path checks
+	hlsBaseDir, err := getHLSDirectory()
+	if err != nil {
+		log.Printf("Error getting HLS directory: %v", err)
+		return
+	}
+
 	// Clean up directory
-	if stream.OutputDir != "" && checkPathExists(stream.OutputDir) {
-		log.Printf("Removing stream directory: %s", stream.OutputDir)
-		if err := os.RemoveAll(stream.OutputDir); err != nil {
-			log.Printf("Error removing stream directory: %v", err)
+	if stream.OutputDir != "" {
+		exists, err := secureCheckPathExists(hlsBaseDir, stream.OutputDir)
+		if err != nil {
+			log.Printf("Error validating path: %v", err)
+			return
+		}
+
+		if exists {
+			log.Printf("Removing stream directory: %s", stream.OutputDir)
+			if err := os.RemoveAll(stream.OutputDir); err != nil {
+				log.Printf("Error removing stream directory: %v", err)
+			}
 		}
 	}
 
@@ -834,10 +876,21 @@ func cleanupInactiveStreams() {
 	}
 }
 
-// Helper function to check if a path exists
-func checkPathExists(path string) bool {
-	_, err := os.Stat(path)
-	return !os.IsNotExist(err)
+// secureCheckPathExists checks if a path exists while ensuring it's within the base directory
+func secureCheckPathExists(baseDir, path string) (bool, error) {
+	// First validate the path is within the base directory
+	isWithin, err := isPathWithinBase(baseDir, path)
+	if err != nil {
+		return false, fmt.Errorf("failed to validate path: %w", err)
+	}
+
+	if !isWithin {
+		return false, fmt.Errorf("security error: path would be outside base directory")
+	}
+
+	// Now that we've validated the path is safe, check if the path exists
+	_, err = os.Stat(path)
+	return !os.IsNotExist(err), nil
 }
 
 // StartHLSStream explicitly starts an HLS stream for a source
@@ -904,10 +957,23 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatu
 		return nil, echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Failed to start stream: %v", err))
 	}
 
+	// Get HLS directory for secure path checks
+	hlsBaseDir, err := getHLSDirectory()
+	if err != nil {
+		log.Printf("Error getting HLS directory: %v", err)
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Server configuration error")
+	}
+
 	// Check if the playlist file exists, waiting a short time if needed
 	playlistReady := false
 	for retry := 0; retry < 15; retry++ {
-		if checkFileExists(stream.PlaylistPath) {
+		fileExists, fileErr := secureCheckFileExists(hlsBaseDir, stream.PlaylistPath)
+		if fileErr != nil {
+			log.Printf("Error validating playlist path: %v", fileErr)
+			continue
+		}
+
+		if fileExists {
 			playlistReady = true
 			log.Printf("Playlist file is ready on attempt %d: %s", retry+1, stream.PlaylistPath)
 			break
@@ -997,7 +1063,6 @@ func (h *Handlers) StopHLSClientStream(c echo.Context, sourceID string) error {
 	return nil
 }
 
-// Add this new function to check for active clients
 // syncHLSClientActivity verifies true client activity by checking segment requests
 func syncHLSClientActivity() {
 	hlsClientActivityMutex.Lock()
@@ -1025,6 +1090,13 @@ func syncHLSClientActivity() {
 		if len(clients) == 0 {
 			delete(hlsClientActivity, sourceID)
 		}
+	}
+
+	// Get HLS directory for secure path checks
+	hlsBaseDir, err := getHLSDirectory()
+	if err != nil {
+		log.Printf("Error getting HLS directory: %v", err)
+		return
 	}
 
 	// Now sync client tracking with activity data
@@ -1061,7 +1133,10 @@ func syncHLSClientActivity() {
 						_, _ = stream.FFmpegCmd.Process.Wait()
 					}
 
-					if stream.OutputDir != "" && checkPathExists(stream.OutputDir) {
+					exists, err := secureCheckPathExists(hlsBaseDir, stream.OutputDir)
+					if err != nil {
+						log.Printf("Error validating path: %v", err)
+					} else if exists && stream.OutputDir != "" {
 						_ = os.RemoveAll(stream.OutputDir)
 					}
 
@@ -1071,20 +1146,4 @@ func syncHLSClientActivity() {
 			}(sourceID)
 		}
 	}
-}
-
-// createFIFO creates a named pipe (DEPRECATED - use secureCreateFIFO instead)
-// Kept for backward compatibility
-func createFIFO(path string) error {
-	// Log a warning about using the deprecated function
-	log.Printf("Warning: Using deprecated createFIFO without path validation for %s", path)
-
-	// Get HLS directory to validate path
-	hlsBaseDir, err := getHLSDirectory()
-	if err != nil {
-		return fmt.Errorf("failed to get HLS directory for validation: %w", err)
-	}
-
-	// Use the secure version with validation
-	return secureCreateFIFO(hlsBaseDir, path)
 }
