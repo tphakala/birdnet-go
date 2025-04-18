@@ -109,6 +109,8 @@ tasks:
       - curl -sL https://unpkg.com/leaflet/dist/leaflet.css -o assets/leaflet.css
       - curl -sL https://unpkg.com/htmx.org@2.0 -o assets/htmx.min.js
       - curl -sL https://unpkg.com/alpinejs -o assets/alpinejs.min.js
+      - curl -sL https://cdn.jsdelivr.net/npm/hls.js@latest -o assets/hls.min.js
+      - curl -sL https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js -o assets/howler.min.js
 
   generate-tailwindcss:
     cmds:

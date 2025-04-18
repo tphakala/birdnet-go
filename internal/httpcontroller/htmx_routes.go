@@ -116,6 +116,67 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/api/v1/sse", s.Handlers.SSE.ServeSSE)
 	s.Echo.GET("/api/v1/audio-level", s.Handlers.WithErrorHandling(s.Handlers.AudioLevelSSE))
 
+	// HLS streaming routes
+	s.Echo.GET("/api/v1/audio-stream-hls/:sourceID/*", func(c echo.Context) error {
+		// Add server to context for authentication
+		c.Set("server", s)
+		s.Debug("HLS stream request for path: %s", c.Request().URL.Path)
+		return s.Handlers.WithErrorHandling(s.Handlers.AudioStreamHLS)(c)
+	})
+	s.Echo.GET("/api/v1/audio-stream-hls/:sourceID", func(c echo.Context) error {
+		// Add server to context for authentication
+		c.Set("server", s)
+		s.Debug("HLS stream request for source: %s", c.Param("sourceID"))
+		return s.Handlers.WithErrorHandling(s.Handlers.AudioStreamHLS)(c)
+	})
+
+	// Add HLS stream management routes for client synchronization
+	s.Echo.POST("/api/v1/audio-stream-hls/:sourceID/start", func(c echo.Context) error {
+		// Add server to context for authentication
+		c.Set("server", s)
+		sourceID := c.Param("sourceID")
+		decodedSourceID, err := DecodeSourceID(sourceID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid source ID format")
+		}
+
+		s.Debug("Client requested HLS stream start for source: %s", decodedSourceID)
+
+		// Start the ffmpeg process if not already running
+		err = s.Handlers.StartHLSStream(c, decodedSourceID)
+		if err != nil {
+			return err
+		}
+
+		return c.JSON(http.StatusOK, map[string]string{
+			"status": "started",
+			"source": decodedSourceID,
+		})
+	})
+
+	s.Echo.POST("/api/v1/audio-stream-hls/:sourceID/stop", func(c echo.Context) error {
+		// Add server to context for authentication
+		c.Set("server", s)
+		sourceID := c.Param("sourceID")
+		decodedSourceID, err := DecodeSourceID(sourceID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid source ID format")
+		}
+
+		s.Debug("Client requested HLS stream stop for source: %s", decodedSourceID)
+
+		// Register client disconnect
+		err = s.Handlers.StopHLSClientStream(c, decodedSourceID)
+		if err != nil {
+			return err
+		}
+
+		return c.JSON(http.StatusOK, map[string]string{
+			"status": "stopped",
+			"source": decodedSourceID,
+		})
+	})
+
 	// Audio stream routes with source handling
 	s.Echo.GET("/api/v1/audio-stream-sse", func(c echo.Context) error {
 		// Add server to context for authentication
