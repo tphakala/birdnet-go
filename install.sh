@@ -36,12 +36,29 @@ BIRDNET_GO_IMAGE="ghcr.io/tphakala/birdnet-go:${BIRDNET_GO_VERSION}"
 # Function to get IP address
 get_ip_address() {
     # Get primary IP address, excluding docker and localhost interfaces
-    # Use POSIX-compatible regex instead of -P
-    ip -4 addr show scope global \
-      | grep -vE 'docker|br-|veth' \
-      | grep -oE 'inet ([0-9]+\.){3}[0-9]+' \
-      | awk '{print $2}' \
-      | head -n1
+    local ip=""
+    
+    # Method 1: Try using ip command with POSIX-compatible regex
+    if command_exists ip; then
+        ip=$(ip -4 addr show scope global \
+          | grep -vE 'docker|br-|veth' \
+          | grep -oE 'inet ([0-9]+\.){3}[0-9]+' \
+          | awk '{print $2}' \
+          | head -n1)
+    fi
+    
+    # Method 2: Try hostname command for fallback if ip command didn't work
+    if [ -z "$ip" ] && command_exists hostname; then
+        ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    fi
+    
+    # Method 3: Try ifconfig as last resort
+    if [ -z "$ip" ] && command_exists ifconfig; then
+        ip=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n1 | awk '{print $2}' | sed 's/addr://')
+    fi
+    
+    # Return the IP address or empty string
+    echo "$ip"
 }
 
 # Function to check if mDNS is available
@@ -1004,7 +1021,7 @@ check_port_availability() {
     # Finally try a direct connection with timeout
     else
         # Try to connect to the port, timeout after 1 second
-        if (echo > /dev/tcp/localhost/$port) >/dev/null 2>&1; then
+        if (echo > /dev/tcp/localhost/"$port") >/dev/null 2>&1; then
             return 1 # Port is in use
         else
             return 0 # Port is available
@@ -1924,6 +1941,9 @@ print_message "$DATA_DIR"
 IP_ADDR=$(get_ip_address)
 if [ -n "$IP_ADDR" ]; then
     print_message "🌐 BirdNET-Go web interface is available at http://${IP_ADDR}:${WEB_PORT}" "$GREEN"
+else
+    print_message "⚠️ Could not determine IP address - you may access BirdNET-Go at http://localhost:${WEB_PORT}" "$YELLOW"
+    print_message "To find your IP address manually, run: ip addr or ifconfig" "$YELLOW"
 fi
 
 # Check if mDNS is available
