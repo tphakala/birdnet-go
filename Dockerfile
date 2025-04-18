@@ -74,10 +74,9 @@ RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     jq \
     strace \
     lsof \
-    bash-completion
-
-# Clean up apt cache
-RUN rm -rf /var/lib/apt/lists/*
+    bash-completion \
+    gosu \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set TFLITE_LIB_DIR based on architecture
 ARG TARGETPLATFORM
@@ -97,10 +96,12 @@ RUN ldconfig
 COPY --from=build /home/dev-user/src/BirdNET-Go/reset_auth.sh /usr/bin/
 RUN chmod +x /usr/bin/reset_auth.sh
 
-# Add symlink to /config directory where configs can be stored
-VOLUME /config
-RUN mkdir -p /root/.config && ln -s /config /root/.config/birdnet-go
+# Add entrypoint script for dynamic user creation
+COPY --from=build /home/dev-user/src/BirdNET-Go/Docker/entrypoint.sh /usr/bin/
+RUN chmod +x /usr/bin/entrypoint.sh
 
+# Create config and data directories
+VOLUME /config
 VOLUME /data
 WORKDIR /data
 
@@ -109,5 +110,5 @@ EXPOSE 8080
 
 COPY --from=build /home/dev-user/src/BirdNET-Go/bin /usr/bin/
 
-ENTRYPOINT ["/usr/bin/birdnet-go"]
-CMD ["realtime"]
+ENTRYPOINT ["/usr/bin/entrypoint.sh"]
+CMD ["birdnet-go", "realtime"]
