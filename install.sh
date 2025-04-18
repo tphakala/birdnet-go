@@ -244,6 +244,17 @@ check_prerequisites() {
             fi
         fi
 
+        # Add user to adm group for journalctl access
+        if ! groups "$USER" | grep &>/dev/null "\badm\b"; then
+            if sudo usermod -aG adm "$USER"; then
+                print_message "✅ Added user $USER to adm group" "$GREEN"
+                groups_added=true
+            else
+                print_message "❌ Failed to add user $USER to adm group" "$RED"
+                exit 1
+            fi
+        fi
+
         if [ "$groups_added" = true ]; then
             print_message "Please log out and log back in for group changes to take effect, and rerun install.sh to continue with install" "$YELLOW"
             exit 0
@@ -1085,7 +1096,7 @@ configure_web_port() {
     sed -i "s/port: 8080/port: $WEB_PORT/" "$CONFIG_FILE"
 }
 
-# Add this function to generate systemd service content to avoid duplication
+# Generate systemd service content
 generate_systemd_service_content() {
     # Get timezone
     local TZ
@@ -1094,6 +1105,10 @@ generate_systemd_service_content() {
     else
         TZ="UTC"
     fi
+
+    # Determine host UID/GID even when executed with sudo
+    local HOST_UID=${SUDO_UID:-$(id -u)}
+    local HOST_GID=${SUDO_GID:-$(id -g)}
 
     cat << EOF
 [Unit]
@@ -1107,6 +1122,8 @@ ExecStart=/usr/bin/docker run --rm \\
     --name birdnet-go \\
     -p ${WEB_PORT}:8080 \\
     --env TZ="${TZ}" \\
+    --env BIRDNET_UID=${HOST_UID} \\
+    --env BIRDNET_GID=${HOST_GID} \\
     --add-host="host.docker.internal:host-gateway" \\
     ${AUDIO_ENV} \\
     -v ${CONFIG_DIR}:/config \\
