@@ -1250,9 +1250,12 @@ disable_birdnet_service_and_remove_containers() {
     fi
 
     # Remove images
-    if docker images | grep -q "birdnet-go"; then
+    # Remove images by repository base name (including untagged)
+    image_base="${BIRDNET_GO_IMAGE%:*}"
+    images_to_remove=$(docker images "${image_base}" -q)
+    if [ -n "${images_to_remove}" ]; then
         print_message "🗑️ Removing BirdNET-Go images..." "$YELLOW"
-        docker images --filter reference='*birdnet-go*' -q | xargs -r docker rmi -f
+        echo "${images_to_remove}" | xargs -r docker rmi -f
         print_message "✅ Removed images" "$GREEN"
     fi
 }
@@ -1709,9 +1712,12 @@ handle_menu_selection() {
                     fi
                     
                     # Remove images
-                    if docker images | grep -q "birdnet-go"; then
+                    # Remove images by repository base name (including untagged)
+                    image_base="${BIRDNET_GO_IMAGE%:*}"
+                    images_to_remove=$(docker images "${image_base}" -q)
+                    if [ -n "${images_to_remove}" ]; then
                         print_message "🗑️ Removing BirdNET-Go images..." "$YELLOW"
-                        docker images --filter reference='*birdnet-go*' -q | xargs -r docker rmi -f
+                        echo "${images_to_remove}" | xargs -r docker rmi -f
                         print_message "✅ Removed images" "$GREEN"
                     fi
                     
@@ -1745,9 +1751,12 @@ handle_menu_selection() {
                     fi
                     
                     # Remove images
-                    if docker images | grep -q "birdnet-go"; then
+                    # Remove images by repository base name (including untagged)
+                    image_base="${BIRDNET_GO_IMAGE%:*}"
+                    images_to_remove=$(docker images "${image_base}" -q)
+                    if [ -n "${images_to_remove}" ]; then
                         print_message "🗑️ Removing BirdNET-Go images..." "$YELLOW"
-                        docker images --filter reference='*birdnet-go*' -q | xargs -r docker rmi -f
+                        echo "${images_to_remove}" | xargs -r docker rmi -f
                         print_message "✅ Removed images" "$GREEN"
                     fi
                     
