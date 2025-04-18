@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -24,6 +26,9 @@ type HLSStreamInfo struct {
 	OutputDir    string
 	PlaylistPath string
 	LastAccess   time.Time
+	// Add context and cancellation for managing stream lifecycle
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 var (
@@ -59,6 +64,36 @@ var (
 	hlsLogCooldown = 60 * time.Second
 )
 
+// StreamStatus represents the current status of an HLS stream
+type StreamStatus struct {
+	Status        string `json:"status"`
+	Source        string `json:"source"`
+	PlaylistPath  string `json:"playlist_path,omitempty"`
+	ActiveClients int    `json:"active_clients"`
+	PlaylistReady bool   `json:"playlist_ready"`
+}
+
+// isPathWithinBase checks if a path is contained within a base directory
+func isPathWithinBase(basePath, targetPath string) (bool, error) {
+	// Resolve both paths to absolute, clean paths
+	absBase, err := filepath.Abs(basePath)
+	if err != nil {
+		return false, fmt.Errorf("failed to resolve base path: %w", err)
+	}
+
+	absTarget, err := filepath.Abs(targetPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to resolve target path: %w", err)
+	}
+
+	// Ensure paths are cleaned to remove any ".." components
+	absBase = filepath.Clean(absBase)
+	absTarget = filepath.Clean(absTarget)
+
+	// Check if target path starts with base path
+	return strings.HasPrefix(absTarget, absBase+string(filepath.Separator)) || absTarget == absBase, nil
+}
+
 // getHLSDirectory returns the directory where HLS files should be stored
 func getHLSDirectory() (string, error) {
 	// Get config directory paths
@@ -80,7 +115,13 @@ func getHLSDirectory() (string, error) {
 		return "", fmt.Errorf("failed to create HLS directory: %w", err)
 	}
 
-	return hlsDir, nil
+	// Return the absolute path to ensure all path checks are consistent
+	absPath, err := filepath.Abs(hlsDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path for HLS directory: %w", err)
+	}
+
+	return absPath, nil
 }
 
 // Initialize HLS streaming service
@@ -117,8 +158,13 @@ func init() {
 // AudioStreamHLS handles HLS audio streaming
 // API: GET /api/v1/audio-stream-hls/:sourceID/playlist.m3u8
 func (h *Handlers) AudioStreamHLS(c echo.Context) error {
+	// Create a context that's canceled when the request completes
+	ctx, cancel := context.WithCancel(c.Request().Context())
+	defer cancel() // Ensures cleanup when the function exits
+
 	sourceID := c.Param("sourceID")
 	clientIP := c.RealIP()
+	clientID := clientIP + "-" + c.Request().Header.Get("User-Agent")
 
 	if sourceID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "Source ID is required")
@@ -147,8 +193,11 @@ func (h *Handlers) AudioStreamHLS(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "Audio source not found")
 	}
 
+	// Register client activity at the start of the request
+	registerClientActivity(sourceID, clientID)
+
 	// Get or create HLS stream
-	stream, err := getOrCreateHLSStream(sourceID)
+	stream, err := getOrCreateHLSStream(ctx, sourceID)
 	if err != nil {
 		log.Printf("Error creating HLS stream: %v - source: %s, IP: %s", err, sourceID, clientIP)
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create audio stream")
@@ -159,21 +208,28 @@ func (h *Handlers) AudioStreamHLS(c echo.Context) error {
 	stream.LastAccess = time.Now()
 	hlsStreamMutex.Unlock()
 
+	// Get HLS base directory for security validation
+	hlsBaseDir, err := getHLSDirectory()
+	if err != nil {
+		log.Printf("Error getting HLS directory: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Server configuration error")
+	}
+
 	// Determine what file is being requested
 	requestPath := c.Param("*")
 
 	// Record client activity when they request a segment
 	// This gives us a more accurate view of active clients
 	if strings.HasSuffix(requestPath, ".ts") {
-		clientID := clientIP + "-" + c.Request().Header.Get("User-Agent")
-
-		hlsClientActivityMutex.Lock()
-		if _, exists := hlsClientActivity[sourceID]; !exists {
-			hlsClientActivity[sourceID] = make(map[string]time.Time)
-		}
-		hlsClientActivity[sourceID][clientID] = time.Now()
-		hlsClientActivityMutex.Unlock()
+		registerClientActivity(sourceID, clientID)
 	}
+
+	// Monitor context cancellation for client disconnection
+	go func() {
+		<-ctx.Done()
+		// Request completed or canceled, update last activity
+		updateClientDisconnection(sourceID, clientID)
+	}()
 
 	// Extremely minimal logging - only log initial connection and with cooldown period
 	logKey := sourceID + "-" + clientIP
@@ -207,22 +263,33 @@ func (h *Handlers) AudioStreamHLS(c echo.Context) error {
 	c.Response().Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 	c.Response().Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept")
 
-	// Only log errors for missing files
-	if (requestPath == "" || requestPath == "playlist.m3u8") && !checkFileExists(stream.PlaylistPath) {
-		log.Printf("Error: HLS playlist file does not exist at %s", stream.PlaylistPath)
-		return echo.NewHTTPError(http.StatusNotFound, "Playlist file not found")
-	}
-
-	// Check if segment file exists
-	if requestPath != "" && requestPath != "playlist.m3u8" {
-		segmentPath := filepath.Join(stream.OutputDir, requestPath)
-		if !checkFileExists(segmentPath) {
-			log.Printf("Error: HLS segment file does not exist at %s", segmentPath)
-			return echo.NewHTTPError(http.StatusNotFound, "Segment file not found")
-		}
-	}
-
+	// Validate playlist path request for path traversal prevention
 	if requestPath == "" || requestPath == "playlist.m3u8" {
+		// Sanitize the path
+		cleanPath := filepath.Clean("/" + requestPath)
+		if strings.Contains(cleanPath, "..") || cleanPath == "/" {
+			log.Printf("Warning: Suspicious playlist path requested: %s", requestPath)
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid playlist path")
+		}
+
+		// Verify playlist path is within HLS base directory
+		isWithin, err := isPathWithinBase(hlsBaseDir, stream.PlaylistPath)
+		if err != nil {
+			log.Printf("Error validating playlist path: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to validate file path")
+		}
+
+		if !isWithin {
+			log.Printf("Security warning: Attempted access to playlist outside HLS directory: %s", stream.PlaylistPath)
+			return echo.NewHTTPError(http.StatusForbidden, "Access denied")
+		}
+
+		// Only log errors for missing files
+		if !checkFileExists(stream.PlaylistPath) {
+			log.Printf("Error: HLS playlist file does not exist at %s", stream.PlaylistPath)
+			return echo.NewHTTPError(http.StatusNotFound, "Playlist file not found")
+		}
+
 		// Set proper content type for m3u8 playlist
 		c.Response().Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 		// Add cache control headers to prevent caching
@@ -233,15 +300,73 @@ func (h *Handlers) AudioStreamHLS(c echo.Context) error {
 		return c.File(stream.PlaylistPath)
 	}
 
+	// Validate segment path for path traversal prevention
+	cleanPath := filepath.Clean("/" + requestPath)
+	if strings.Contains(cleanPath, "..") || cleanPath == "/" {
+		log.Printf("Warning: Suspicious segment path requested: %s", requestPath)
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid segment path")
+	}
+
+	// Remove leading slash for concatenation
+	safeRequestPath := cleanPath[1:]
+
+	// Build and validate the full segment path
+	segmentPath := filepath.Join(stream.OutputDir, safeRequestPath)
+
+	// Verify segment path is within the stream output directory
+	isWithin, err := isPathWithinBase(hlsBaseDir, segmentPath)
+	if err != nil {
+		log.Printf("Error validating segment path: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to validate file path")
+	}
+
+	if !isWithin {
+		log.Printf("Security warning: Attempted access to segment file outside HLS directory: %s", segmentPath)
+		return echo.NewHTTPError(http.StatusForbidden, "Access denied")
+	}
+
+	// Check if segment file exists
+	if !checkFileExists(segmentPath) {
+		log.Printf("Error: HLS segment file does not exist at %s", segmentPath)
+		return echo.NewHTTPError(http.StatusNotFound, "Segment file not found")
+	}
+
 	// For .ts segment files
-	if strings.HasSuffix(requestPath, ".ts") {
+	if strings.HasSuffix(safeRequestPath, ".ts") {
 		c.Response().Header().Set("Content-Type", "video/mp2t")
 		// Allow caching of segments for a short time
 		c.Response().Header().Set("Cache-Control", "public, max-age=60")
 	}
 
 	// Serve segment file
-	return c.File(filepath.Join(stream.OutputDir, requestPath))
+	return c.File(segmentPath)
+}
+
+// registerClientActivity records client activity for a source
+func registerClientActivity(sourceID, clientID string) {
+	hlsClientActivityMutex.Lock()
+	defer hlsClientActivityMutex.Unlock()
+
+	if _, exists := hlsClientActivity[sourceID]; !exists {
+		hlsClientActivity[sourceID] = make(map[string]time.Time)
+	}
+	hlsClientActivity[sourceID][clientID] = time.Now()
+
+	// Also register in clients map for consistency
+	hlsStreamClientMutex.Lock()
+	defer hlsStreamClientMutex.Unlock()
+
+	if _, exists := hlsStreamClients[sourceID]; !exists {
+		hlsStreamClients[sourceID] = make(map[string]bool)
+	}
+	hlsStreamClients[sourceID][clientID] = true
+}
+
+// updateClientDisconnection handles client disconnection events
+func updateClientDisconnection(sourceID, clientID string) {
+	// Just mark the last activity time, let the regular cleanup handle the rest
+	// This avoids immediate cleanup which could interrupt other active requests
+	registerClientActivity(sourceID, clientID)
 }
 
 // Helper function to check if a file exists
@@ -251,7 +376,7 @@ func checkFileExists(path string) bool {
 }
 
 // getOrCreateHLSStream gets an existing stream or creates a new one
-func getOrCreateHLSStream(sourceID string) (*HLSStreamInfo, error) {
+func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo, error) {
 	hlsStreamMutex.Lock()
 	defer hlsStreamMutex.Unlock()
 
@@ -265,46 +390,92 @@ func getOrCreateHLSStream(sourceID string) (*HLSStreamInfo, error) {
 
 	log.Printf("Creating new HLS stream for source: %s", sourceID)
 
+	// Create a context that can be canceled to terminate the stream
+	streamCtx, streamCancel := context.WithCancel(ctx)
+
 	// Get HLS directory
 	hlsBaseDir, err := getHLSDirectory()
 	if err != nil {
+		streamCancel() // Clean up context
 		return nil, fmt.Errorf("failed to get HLS directory: %w", err)
 	}
 
 	// Create stream-specific directory
 	// Use a sanitized version of the sourceID for the directory name
-	safeSourceID := strings.ReplaceAll(sourceID, ":", "_")
-	safeSourceID = strings.ReplaceAll(safeSourceID, "/", "_")
-	safeSourceID = strings.ReplaceAll(safeSourceID, "\\", "_")
+	// Apply strict sanitization to prevent directory traversal and other issues
+	reSafe := regexp.MustCompile(`[^A-Za-z0-9_\-]`)
+	safeSourceID := reSafe.ReplaceAllString(sourceID, "_")
+
 	outputDir := filepath.Join(hlsBaseDir, fmt.Sprintf("stream_%s", safeSourceID))
+
+	// Verify the output directory is within the HLS base directory for safety
+	isWithin, err := isPathWithinBase(hlsBaseDir, outputDir)
+	if err != nil {
+		streamCancel() // Clean up context
+		return nil, fmt.Errorf("failed to validate output directory: %w", err)
+	}
+
+	if !isWithin {
+		streamCancel() // Clean up context
+		return nil, fmt.Errorf("security error: output directory would be outside HLS base directory")
+	}
 
 	// Ensure the directory exists and is empty
 	if checkPathExists(outputDir) {
 		log.Printf("Removing existing output directory: %s", outputDir)
 		if err := os.RemoveAll(outputDir); err != nil {
+			streamCancel() // Clean up context
 			return nil, fmt.Errorf("failed to clean HLS directory: %w", err)
 		}
 	}
 
 	log.Printf("Creating new output directory: %s", outputDir)
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		streamCancel() // Clean up context
 		return nil, fmt.Errorf("failed to create HLS directory: %w", err)
 	}
 
 	// Create playlist file path
 	playlistPath := filepath.Join(outputDir, "playlist.m3u8")
 
+	// Verify the playlist file is within the HLS base directory
+	isWithin, err = isPathWithinBase(hlsBaseDir, playlistPath)
+	if err != nil {
+		streamCancel() // Clean up context
+		return nil, fmt.Errorf("failed to validate playlist path: %w", err)
+	}
+
+	if !isWithin {
+		streamCancel() // Clean up context
+		return nil, fmt.Errorf("security error: playlist path would be outside HLS base directory")
+	}
+
 	// Get FFmpeg path from settings
 	ffmpegPath := conf.Setting().Realtime.Audio.FfmpegPath
 	if ffmpegPath == "" {
+		streamCancel() // Clean up context
 		return nil, fmt.Errorf("ffmpeg not configured")
 	}
 
 	// Start FFmpeg process to read from FIFO and create HLS stream
 	fifoPath := filepath.Join(outputDir, "audio.pcm")
+
+	// Verify the FIFO is within the HLS base directory
+	isWithin, err = isPathWithinBase(hlsBaseDir, fifoPath)
+	if err != nil {
+		streamCancel() // Clean up context
+		return nil, fmt.Errorf("failed to validate FIFO path: %w", err)
+	}
+
+	if !isWithin {
+		streamCancel() // Clean up context
+		return nil, fmt.Errorf("security error: FIFO path would be outside HLS base directory")
+	}
+
 	log.Printf("Creating FIFO for HLS stream: %s", fifoPath)
 	if err := createFIFO(fifoPath); err != nil {
 		os.RemoveAll(outputDir)
+		streamCancel() // Clean up context
 		return nil, fmt.Errorf("failed to create FIFO: %w", err)
 	}
 
@@ -333,6 +504,7 @@ func getOrCreateHLSStream(sourceID string) (*HLSStreamInfo, error) {
 	if err := cmd.Start(); err != nil {
 		log.Printf("Error starting FFmpeg: %v", err)
 		os.RemoveAll(outputDir)
+		streamCancel() // Clean up context
 		return nil, fmt.Errorf("failed to start FFmpeg: %w", err)
 	}
 
@@ -345,15 +517,80 @@ func getOrCreateHLSStream(sourceID string) (*HLSStreamInfo, error) {
 		OutputDir:    outputDir,
 		PlaylistPath: playlistPath,
 		LastAccess:   time.Now(),
+		ctx:          streamCtx,
+		cancel:       streamCancel,
 	}
 
 	// Store stream in map
 	hlsStreams[sourceID] = stream
 
 	// Start goroutine to feed audio data to FFmpeg
-	go feedAudioToFFmpeg(sourceID, fifoPath)
+	go feedAudioToFFmpeg(sourceID, fifoPath, streamCtx)
+
+	// Start goroutine to handle context cancellation
+	go func() {
+		<-streamCtx.Done()
+		cleanupStream(sourceID)
+	}()
 
 	return stream, nil
+}
+
+// cleanupStream handles stream cleanup when terminated
+func cleanupStream(sourceID string) {
+	hlsStreamMutex.Lock()
+	stream, exists := hlsStreams[sourceID]
+	if !exists {
+		hlsStreamMutex.Unlock()
+		return
+	}
+
+	log.Printf("Cleaning up HLS stream for source: %s", sourceID)
+
+	// Stop FFmpeg process with a more reliable approach
+	if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
+		log.Printf("Stopping FFmpeg process for source: %s", sourceID)
+
+		// Try SIGTERM first for graceful shutdown
+		err := stream.FFmpegCmd.Process.Signal(syscall.SIGTERM)
+		if err != nil {
+			log.Printf("Error sending SIGTERM to FFmpeg: %v, falling back to Kill", err)
+			// Fall back to Kill if SIGTERM fails
+			_ = stream.FFmpegCmd.Process.Kill()
+		}
+
+		// Wait for process to complete to avoid zombies
+		_, _ = stream.FFmpegCmd.Process.Wait()
+	}
+
+	// Remove from map
+	delete(hlsStreams, sourceID)
+	hlsStreamMutex.Unlock()
+
+	// Clean up client tracking
+	hlsStreamClientMutex.Lock()
+	if clients, exists := hlsStreamClients[sourceID]; exists {
+		log.Printf("Cleaning up %d client references for source: %s", len(clients), sourceID)
+		delete(hlsStreamClients, sourceID)
+	}
+	hlsStreamClientMutex.Unlock()
+
+	// Clean up activity tracking
+	hlsClientActivityMutex.Lock()
+	if _, exists := hlsClientActivity[sourceID]; exists {
+		delete(hlsClientActivity, sourceID)
+	}
+	hlsClientActivityMutex.Unlock()
+
+	// Clean up directory
+	if stream.OutputDir != "" && checkPathExists(stream.OutputDir) {
+		log.Printf("Removing stream directory: %s", stream.OutputDir)
+		if err := os.RemoveAll(stream.OutputDir); err != nil {
+			log.Printf("Error removing stream directory: %v", err)
+		}
+	}
+
+	log.Printf("HLS stream for source %s fully cleaned up", sourceID)
 }
 
 // createFIFO creates a named pipe
@@ -384,7 +621,7 @@ func createFIFO(path string) error {
 }
 
 // feedAudioToFFmpeg pumps audio data to the FFmpeg process
-func feedAudioToFFmpeg(sourceID, fifoPath string) {
+func feedAudioToFFmpeg(sourceID, fifoPath string, ctx context.Context) {
 	log.Printf("Starting audio feed for source %s to FIFO %s", sourceID, fifoPath)
 
 	// Open FIFO for writing (this will block until FFmpeg opens it for reading)
@@ -439,44 +676,21 @@ func feedAudioToFFmpeg(sourceID, fifoPath string) {
 	// Main loop to write audio data to FIFO
 	dataWritten := false
 
-	// Create a done channel to signal termination
-	done := make(chan struct{})
-
-	// Start a goroutine to monitor stream activity
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				// Check if stream is still active
-				hlsStreamMutex.Lock()
-				stream, exists := hlsStreams[sourceID]
-				active := exists && time.Since(stream.LastAccess) < inactivityTimeout
-				hlsStreamMutex.Unlock()
-
-				if !active {
-					log.Printf("Stream inactive, stopping audio feed for source %s", sourceID)
-					close(done)
-					return
-				}
-			case <-done:
+	// Use the provided context for cancellation
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("Context canceled, stopping audio feed for source %s", sourceID)
+			return
+		case data, ok := <-audioChan:
+			if !ok {
+				log.Printf("Audio channel closed for source %s", sourceID)
 				return
 			}
-		}
-	}()
 
-	// Use for-range loop for processing audio data
-	for data := range audioChan {
-		select {
-		case <-done:
-			return
-		default:
 			// Write data to FIFO
 			if _, err := fifo.Write(data); err != nil {
 				log.Printf("Error writing to FIFO: %v", err)
-				close(done)
 				return
 			}
 
@@ -502,41 +716,13 @@ func cleanupInactiveStreams() {
 		log.Printf("Cleaning up inactive HLS stream for source: %s (inactive for %v)",
 			sourceID, now.Sub(stream.LastAccess))
 
-		// Stop FFmpeg process with a more reliable approach
-		if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
-			// Try SIGTERM first for graceful shutdown
-			log.Printf("Sending SIGTERM to FFmpeg process for source: %s", sourceID)
-			err := stream.FFmpegCmd.Process.Signal(syscall.SIGTERM)
-			if err != nil {
-				log.Printf("Error sending SIGTERM to FFmpeg: %v, falling back to Kill", err)
-				// Fall back to Kill if SIGTERM fails
-				_ = stream.FFmpegCmd.Process.Kill()
-			}
-
-			// Wait for process to complete to avoid zombies
-			_, _ = stream.FFmpegCmd.Process.Wait()
-			log.Printf("FFmpeg process for source %s terminated", sourceID)
+		// Cancel the stream context to trigger cleanup
+		if stream.cancel != nil {
+			stream.cancel()
+		} else {
+			// For older streams without context, clean up manually
+			cleanupStream(sourceID)
 		}
-
-		// Clean up client tracking
-		hlsStreamClientMutex.Lock()
-		if clients, exists := hlsStreamClients[sourceID]; exists {
-			log.Printf("Cleaning up %d client references for source: %s", len(clients), sourceID)
-			delete(hlsStreamClients, sourceID)
-		}
-		hlsStreamClientMutex.Unlock()
-
-		// Clean up directory
-		if stream.OutputDir != "" && checkPathExists(stream.OutputDir) {
-			log.Printf("Removing stream directory: %s", stream.OutputDir)
-			if err := os.RemoveAll(stream.OutputDir); err != nil {
-				log.Printf("Error removing stream directory: %v", err)
-			}
-		}
-
-		// Remove from map
-		delete(hlsStreams, sourceID)
-		log.Printf("HLS stream for source %s fully cleaned up", sourceID)
 	}
 }
 
@@ -548,7 +734,7 @@ func checkPathExists(path string) bool {
 
 // StartHLSStream explicitly starts an HLS stream for a source
 // This is called when a client wants to start playing a stream
-func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) error {
+func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatus, error) {
 	clientIP := c.RealIP()
 	clientID := fmt.Sprintf("%s-%d", clientIP, time.Now().UnixNano())
 
@@ -556,7 +742,7 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) error {
 
 	// Check if source exists
 	if !myaudio.HasCaptureBuffer(sourceID) {
-		return echo.NewHTTPError(http.StatusNotFound, "Audio source not found")
+		return nil, echo.NewHTTPError(http.StatusNotFound, "Audio source not found")
 	}
 
 	// First, ensure that any existing stream for this source is fully cleaned up
@@ -604,10 +790,10 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) error {
 	log.Printf("HLS stream for source %s now has %d active clients", sourceID, activeClients)
 
 	// Start the FFmpeg process if it's not already running
-	stream, err := getOrCreateHLSStream(sourceID)
+	stream, err := getOrCreateHLSStream(context.Background(), sourceID)
 	if err != nil {
 		log.Printf("Error creating HLS stream: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Failed to start stream: %v", err))
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Failed to start stream: %v", err))
 	}
 
 	// Check if the playlist file exists, waiting a short time if needed
@@ -622,13 +808,22 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) error {
 		time.Sleep(300 * time.Millisecond)
 	}
 
-	if !playlistReady {
-		log.Printf("Warning: Playlist file not created after waiting: %s", stream.PlaylistPath)
-	} else {
+	status := "starting"
+	if playlistReady {
+		status = "ready"
 		log.Printf("Playlist file is ready: %s", stream.PlaylistPath)
+	} else {
+		log.Printf("Warning: Playlist file not created after waiting: %s", stream.PlaylistPath)
 	}
 
-	return nil
+	// Return stream status information that the controller can use
+	return &StreamStatus{
+		Status:        status,
+		Source:        sourceID,
+		PlaylistPath:  stream.PlaylistPath,
+		ActiveClients: activeClients,
+		PlaylistReady: playlistReady,
+	}, nil
 }
 
 // StopHLSClientStream registers that a client has stopped streaming

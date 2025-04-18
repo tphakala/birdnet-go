@@ -154,7 +154,8 @@
             // Create an audio element for HLS playback
             const audio = document.createElement('audio');
             audio.id = 'hls-audio-player';
-            audio.style.display = 'none';
+            audio.setAttribute('aria-hidden', 'true'); // keep visible to AT
+            audio.classList.add('sr-only');            // visually hidden but AT-accessible
             audio.setAttribute('preload', 'none');
             audio.setAttribute('playsinline', '');
             
@@ -513,7 +514,7 @@
             });
 
             // Listen for page visibility changes
-            document.addEventListener('visibilitychange', () => {
+            const visibilityHandler = () => {
                 if (document.hidden) {
                     // When tab goes to background
                     this.cleanupEventSource(); // Close the audio level EventSource when hidden
@@ -532,12 +533,14 @@
                         this.startHLSPlayback(this.playingSource);
                     }
                 }
-            });
+            };
+            
+            document.addEventListener('visibilitychange', visibilityHandler);
             
             // Clean up on component destroy
             this.$cleanup = () => {
                 this.cleanupEventSource();
-                document.removeEventListener('visibilitychange', this.cleanupEventSource);
+                document.removeEventListener('visibilitychange', visibilityHandler);
                 document.removeEventListener('htmx:beforeRequest', this.cleanupEventSource);
                 document.removeEventListener('htmx:afterRequest', this.setupEventSource);
                 

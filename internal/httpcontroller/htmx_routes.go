@@ -121,12 +121,38 @@ func (s *Server) initRoutes() {
 		// Add server to context for authentication
 		c.Set("server", s)
 		s.Debug("HLS stream request for path: %s", c.Request().URL.Path)
+
+		// Set up context monitoring for client disconnection
+		ctx := c.Request().Context()
+		go func() {
+			<-ctx.Done()
+			// When client disconnects, log it
+			sourceID := c.Param("sourceID")
+			clientIP := c.RealIP()
+			if sourceID != "" {
+				s.Debug("Client %s disconnected from HLS stream: %s", clientIP, sourceID)
+			}
+		}()
+
 		return s.Handlers.WithErrorHandling(s.Handlers.AudioStreamHLS)(c)
 	})
 	s.Echo.GET("/api/v1/audio-stream-hls/:sourceID", func(c echo.Context) error {
 		// Add server to context for authentication
 		c.Set("server", s)
 		s.Debug("HLS stream request for source: %s", c.Param("sourceID"))
+
+		// Set up context monitoring for client disconnection
+		ctx := c.Request().Context()
+		go func() {
+			<-ctx.Done()
+			// When client disconnects, log it
+			sourceID := c.Param("sourceID")
+			clientIP := c.RealIP()
+			if sourceID != "" {
+				s.Debug("Client %s disconnected from HLS stream: %s", clientIP, sourceID)
+			}
+		}()
+
 		return s.Handlers.WithErrorHandling(s.Handlers.AudioStreamHLS)(c)
 	})
 
@@ -143,15 +169,14 @@ func (s *Server) initRoutes() {
 		s.Debug("Client requested HLS stream start for source: %s", decodedSourceID)
 
 		// Start the ffmpeg process if not already running
-		err = s.Handlers.StartHLSStream(c, decodedSourceID)
+		status, err := s.Handlers.StartHLSStream(c, decodedSourceID)
 		if err != nil {
-			return err
+			s.Debug("Error starting HLS stream: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to start streaming")
 		}
 
-		return c.JSON(http.StatusOK, map[string]string{
-			"status": "started",
-			"source": decodedSourceID,
-		})
+		// Return a response with stream status
+		return c.JSON(http.StatusOK, status)
 	})
 
 	s.Echo.POST("/api/v1/audio-stream-hls/:sourceID/stop", func(c echo.Context) error {
@@ -168,7 +193,8 @@ func (s *Server) initRoutes() {
 		// Register client disconnect
 		err = s.Handlers.StopHLSClientStream(c, decodedSourceID)
 		if err != nil {
-			return err
+			s.Debug("Error stopping HLS stream: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to stop streaming")
 		}
 
 		return c.JSON(http.StatusOK, map[string]string{
