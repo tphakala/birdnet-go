@@ -27,7 +27,7 @@
 	<link href="/assets/tailwind.css?v={{.Settings.Version}}" rel="stylesheet" />
 	<link href="/assets/custom.css?v={{.Settings.Version}}" rel="stylesheet" />
 	<!-- htmx -->
-	<script src="/assets/htmx.min.js?v={{.Settings.Version}}"></script>
+	<script src="/assets/htmx.min.js?v={{.Settings.Version}}" defer></script>
 	<!-- Supply CSRF token in all requests, must be executed before any HTMX requests -->
 	<script>
 		// Configure HTMX to include CSRF token in all requests
@@ -58,7 +58,7 @@
 		});
 	</script>
 	<!-- alpine.js -->
-	<script src="/assets/alpinejs.min.js?v={{.Settings.Version}}"></script>
+	<script src="/assets/alpinejs.min.js?v={{.Settings.Version}}" defer></script>
 	<!-- Howler.js - Audio library -->
 	<script src="/assets/howler.min.js?v={{.Settings.Version}}" defer></script>
 	<!-- HLS.js - HLS streaming support -->

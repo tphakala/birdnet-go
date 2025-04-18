@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -216,7 +217,13 @@ func (h *Handlers) AudioStreamHLS(c echo.Context) error {
 	}
 
 	// Determine what file is being requested
-	requestPath := c.Param("*")
+	rawPath := c.Param("*")
+	// Decode %XX sequences first, then continue with validation
+	requestPath, err := url.PathUnescape(rawPath)
+	if err != nil {
+		log.Printf("Invalid URL encoding in path: %s", rawPath)
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid URL encoding")
+	}
 
 	// Record client activity when they request a segment
 	// This gives us a more accurate view of active clients
@@ -473,7 +480,8 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	}
 
 	log.Printf("Creating FIFO for HLS stream: %s", fifoPath)
-	if err := createFIFO(fifoPath); err != nil {
+	// Use the secure version with baseDir parameter
+	if err := secureCreateFIFO(hlsBaseDir, fifoPath); err != nil {
 		os.RemoveAll(outputDir)
 		streamCancel() // Clean up context
 		return nil, fmt.Errorf("failed to create FIFO: %w", err)
@@ -569,10 +577,7 @@ func cleanupStream(sourceID string) {
 
 	// Clean up client tracking
 	hlsStreamClientMutex.Lock()
-	if clients, exists := hlsStreamClients[sourceID]; exists {
-		log.Printf("Cleaning up %d client references for source: %s", len(clients), sourceID)
-		delete(hlsStreamClients, sourceID)
-	}
+	delete(hlsStreamClients, sourceID)
 	hlsStreamClientMutex.Unlock()
 
 	// Clean up activity tracking
@@ -593,8 +598,102 @@ func cleanupStream(sourceID string) {
 	log.Printf("HLS stream for source %s fully cleaned up", sourceID)
 }
 
-// createFIFO creates a named pipe
-func createFIFO(path string) error {
+// secureFS provides filesystem operations with path validation
+type secureFS struct {
+	baseDir string // The base directory that all operations are restricted to
+}
+
+// newSecureFS creates a new secure filesystem with the specified base directory
+func newSecureFS(baseDir string) (*secureFS, error) {
+	// Ensure baseDir is an absolute path
+	absPath, err := filepath.Abs(baseDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve base path: %w", err)
+	}
+
+	// Create the directory if it doesn't exist
+	if err := os.MkdirAll(absPath, 0o755); err != nil {
+		return nil, fmt.Errorf("failed to create base directory: %w", err)
+	}
+
+	return &secureFS{baseDir: absPath}, nil
+}
+
+// validatePath checks if a path is within the allowed base directory
+func (fs *secureFS) validatePath(path string) error {
+	isWithin, err := isPathWithinBase(fs.baseDir, path)
+	if err != nil {
+		return fmt.Errorf("path validation error: %w", err)
+	}
+
+	if !isWithin {
+		return fmt.Errorf("security error: path %s is outside allowed directory %s", path, fs.baseDir)
+	}
+
+	return nil
+}
+
+// MkdirAll creates a directory and all necessary parent directories with path validation
+func (fs *secureFS) MkdirAll(path string, perm os.FileMode) error {
+	if err := fs.validatePath(path); err != nil {
+		return err
+	}
+
+	return os.MkdirAll(path, perm)
+}
+
+// RemoveAll removes a directory and all its contents with path validation
+func (fs *secureFS) RemoveAll(path string) error {
+	if err := fs.validatePath(path); err != nil {
+		return err
+	}
+
+	return os.RemoveAll(path)
+}
+
+// Remove removes a file with path validation
+func (fs *secureFS) Remove(path string) error {
+	if err := fs.validatePath(path); err != nil {
+		return err
+	}
+
+	return os.Remove(path)
+}
+
+// OpenFile opens a file with path validation
+func (fs *secureFS) OpenFile(path string, flag int, perm os.FileMode) (*os.File, error) {
+	if err := fs.validatePath(path); err != nil {
+		return nil, err
+	}
+
+	return os.OpenFile(path, flag, perm)
+}
+
+// Stat returns file info with path validation
+func (fs *secureFS) Stat(path string) (os.FileInfo, error) {
+	if err := fs.validatePath(path); err != nil {
+		return nil, err
+	}
+
+	return os.Stat(path)
+}
+
+// Exists checks if a path exists with validation
+func (fs *secureFS) Exists(path string) bool {
+	if err := fs.validatePath(path); err != nil {
+		return false
+	}
+
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
+}
+
+// CreateFIFO creates a named pipe with path validation
+func (fs *secureFS) CreateFIFO(path string) error {
+	if err := fs.validatePath(path); err != nil {
+		return err
+	}
+
 	// Remove if exists
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		log.Printf("Warning: Error removing existing FIFO: %v", err)
@@ -618,6 +717,17 @@ func createFIFO(path string) error {
 	}
 
 	return fmt.Errorf("failed to create FIFO after retries: %w", err)
+}
+
+// secureCreateFIFO creates a named pipe with path validation
+// This is a transition function that will be replaced by secureFS.CreateFIFO in the future
+func secureCreateFIFO(baseDir, path string) error {
+	fs, err := newSecureFS(baseDir)
+	if err != nil {
+		return fmt.Errorf("failed to initialize secure filesystem: %w", err)
+	}
+
+	return fs.CreateFIFO(path)
 }
 
 // feedAudioToFFmpeg pumps audio data to the FFmpeg process
@@ -963,4 +1073,20 @@ func syncHLSClientActivity() {
 			}(sourceID)
 		}
 	}
+}
+
+// createFIFO creates a named pipe (DEPRECATED - use secureCreateFIFO instead)
+// Kept for backward compatibility
+func createFIFO(path string) error {
+	// Log a warning about using the deprecated function
+	log.Printf("Warning: Using deprecated createFIFO without path validation for %s", path)
+
+	// Get HLS directory to validate path
+	hlsBaseDir, err := getHLSDirectory()
+	if err != nil {
+		return fmt.Errorf("failed to get HLS directory for validation: %w", err)
+	}
+
+	// Use the secure version with validation
+	return secureCreateFIFO(hlsBaseDir, path)
 }

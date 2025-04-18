@@ -204,7 +204,7 @@
             const encodedSourceId = encodeURIComponent(sourceId);
             
             // Set HLS stream URL - use absolute URL to avoid path resolution issues
-            const hlsUrl = window.location.protocol + '//' + window.location.host + '/api/v1/audio-stream-hls/' + encodedSourceId + '/playlist.m3u8';
+            const hlsUrl = `${window.location.origin}/api/v1/audio-stream-hls/${encodedSourceId}/playlist.m3u8`;
             console.log('HLS URL: ' + hlsUrl);
             
             // First, notify the server we want to start streaming this source
@@ -222,8 +222,7 @@
         
         // Notify server that we're starting to stream this source
         notifyStreamStart(encodedSourceId) {
-            const startUrl = window.location.protocol + '//' + window.location.host + 
-                '/api/v1/audio-stream-hls/' + encodedSourceId + '/start';
+            const startUrl = `${window.location.origin}/api/v1/audio-stream-hls/${encodedSourceId}/start`;
                 
             return fetch(startUrl, { method: 'POST' })
                 .then(response => {
@@ -311,7 +310,7 @@
         // Start HLS playback after verifying the playlist URL works
         startHLSPlaybackWithVerifiedURL(hlsUrl, player, sourceId) {
             // Check if HLS.js is supported and needed
-            if (Hls.isSupported()) {
+            if (typeof Hls !== 'undefined' && Hls.isSupported()) {
                 console.log('Using HLS.js for playback');
                 
                 // Clean up existing HLS.js instance if it exists
@@ -409,8 +408,7 @@
             // Notify server that we've stopped playback
             if (this.playingSource) {
                 const encodedSourceId = encodeURIComponent(this.playingSource);
-                const stopUrl = window.location.protocol + '//' + window.location.host + 
-                    '/api/v1/audio-stream-hls/' + encodedSourceId + '/stop';
+                const stopUrl = `${window.location.origin}/api/v1/audio-stream-hls/${encodedSourceId}/stop`;
                 
                 fetch(stopUrl, { method: 'POST' })
                     .then(() => console.log('Server notified of playback stop'))
