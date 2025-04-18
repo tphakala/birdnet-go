@@ -23,7 +23,7 @@ if ! getent passwd | awk -F: '$3 == '"$APP_UID"'' > /dev/null; then
 fi
 
 # Get username for this UID
-USER_NAME=$(getent passwd "$APP_UID" | cut -d: -f1)
+USER_NAME=$(getent passwd | awk -F: '$3 == '"$APP_UID"' {print $1}')
 
 # Ensure /config and /data are accessible to the user
 # Create necessary symlinks for the application
@@ -31,7 +31,7 @@ mkdir -p /config /data
 chown -R "$APP_UID":"$APP_GID" /config /data
 
 # Create config directory and symlink for the user
-USER_HOME=$(getent passwd "$APP_UID" | cut -d: -f6)
+USER_HOME=$(getent passwd | awk -F: '$3 == '"$APP_UID"' {print $6}')
 mkdir -p "$USER_HOME/.config"
 chown "$APP_UID":"$APP_GID" "$USER_HOME/.config"
 if [ ! -L "$USER_HOME/.config/birdnet-go" ]; then
