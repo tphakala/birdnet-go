@@ -974,6 +974,10 @@ generate_systemd_service_content() {
         TZ="UTC"
     fi
 
+    # Determine host UID/GID even when executed with sudo
+    local HOST_UID=${SUDO_UID:-$(id -u)}
+    local HOST_GID=${SUDO_GID:-$(id -g)}
+
     cat << EOF
 [Unit]
 Description=BirdNET-Go
@@ -985,8 +989,8 @@ Restart=always
 ExecStart=/usr/bin/docker run --rm \\
     -p ${WEB_PORT}:8080 \\
     --env TZ="${TZ}" \\
-    --env BIRDNET_UID=$(id -u) \\
-    --env BIRDNET_GID=$(id -g) \\
+    --env BIRDNET_UID=${HOST_UID} \\
+    --env BIRDNET_GID=${HOST_GID} \\
     --add-host="host.docker.internal:host-gateway" \\
     ${AUDIO_ENV} \\
     -v ${CONFIG_DIR}:/config \\

@@ -100,10 +100,8 @@ RUN chmod +x /usr/bin/reset_auth.sh
 COPY --from=build /home/dev-user/src/BirdNET-Go/Docker/entrypoint.sh /usr/bin/
 RUN chmod +x /usr/bin/entrypoint.sh
 
-# Add symlink to /config directory where configs can be stored
+# Create config and data directories
 VOLUME /config
-RUN mkdir -p /root/.config && ln -s /config /root/.config/birdnet-go
-
 VOLUME /data
 WORKDIR /data
 

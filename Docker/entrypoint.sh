@@ -35,7 +35,7 @@ USER_HOME=$(getent passwd "$APP_UID" | cut -d: -f6)
 mkdir -p "$USER_HOME/.config"
 chown "$APP_UID":"$APP_GID" "$USER_HOME/.config"
 if [ ! -L "$USER_HOME/.config/birdnet-go" ]; then
-    su -c "ln -sf /config $USER_HOME/.config/birdnet-go" - "$USER_NAME"
+    gosu "$USER_NAME" ln -sf /config "$USER_HOME/.config/birdnet-go"
 fi
 
 # If audio device present, ensure permissions are correct
