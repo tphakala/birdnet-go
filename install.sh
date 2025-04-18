@@ -342,46 +342,48 @@ check_birdnet_installation() {
     local container_running=false
     local debug_output=""
 
-    # Check for systemd service file
-    if [ -f "/etc/systemd/system/birdnet-go.service" ]; then
+    # Consolidated systemd service check
+    if [ -f "/etc/systemd/system/birdnet-go.service" ] || \
+       systemctl list-unit-files | grep -q birdnet-go.service || \
+       systemctl list-units --all | grep -q birdnet-go.service; then
         service_exists=true
-        debug_output="${debug_output}Service file exists. "
+        debug_output="${debug_output}Systemd service detected. "
     fi
     
-    # Check if service is registered
-    if systemctl list-unit-files | grep -q birdnet-go.service; then
-        service_exists=true
-        debug_output="${debug_output}Service in unit files. "
-    fi
-    
-    # Check if service is active or inactive
-    if systemctl list-units --all | grep -q birdnet-go.service; then
-        service_exists=true
-        debug_output="${debug_output}Service in active/inactive units. "
-    fi
-    
-    # Check for Docker image
-    if docker images --filter reference='*birdnet-go*' -q | grep -q .; then
+    # Streamlined Docker checks
+    # Check for BirdNET-Go images
+    if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "birdnet-go"; then
         image_exists=true
         debug_output="${debug_output}Docker image exists. "
     fi
     
-    # Check for Docker container (running or stopped)
-    if docker ps -a --filter name=birdnet-go -q | grep -q .; then
+    # Check for any BirdNET-Go containers (running or stopped)
+    container_count=$(docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | wc -l)
+    
+    if [ "$container_count" -gt 0 ]; then
         container_exists=true
-        debug_output="${debug_output}Container with name exists. "
+        debug_output="${debug_output}Container exists. "
+        
+        # Check if any of these containers are running
+        running_count=$(docker ps --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | wc -l)
+        if [ "$running_count" -gt 0 ]; then
+            container_running=true
+            debug_output="${debug_output}Container running. "
+        fi
     fi
-
-    # Check for any running BirdNET-Go container (could be unnamed or differently named)
-    if docker ps --filter ancestor="${BIRDNET_GO_IMAGE}" -q | grep -q .; then
-        container_running=true
-        debug_output="${debug_output}Container with image running. "
-    fi
-
-    # Also check for any container with birdnet-go in its name or image
-    if docker ps | grep -q "birdnet-go"; then
-        container_running=true
-        debug_output="${debug_output}Container with birdnet-go name running. "
+    
+    # Fallback check for containers with birdnet-go in the name
+    if ! $container_exists; then
+        if docker ps -a | grep -q "birdnet-go"; then
+            container_exists=true
+            debug_output="${debug_output}Container with birdnet name exists. "
+            
+            # Check if any of these containers are running
+            if docker ps | grep -q "birdnet-go"; then
+                container_running=true
+                debug_output="${debug_output}Container with birdnet name running. "
+            fi
+        fi
     fi
     
     # Debug output - uncomment to debug installation check
@@ -1192,18 +1194,10 @@ handle_container_update() {
 
 # Function to check if BirdNET service exists
 check_service_exists() {
-    # Check if service unit file exists
-    if [ -f "/etc/systemd/system/birdnet-go.service" ]; then
-        return 0  # Service exists
-    fi
-    
-    # Additional check for systemd list-unit-files
-    if systemctl list-unit-files | grep -q birdnet-go.service; then
-        return 0  # Service exists
-    fi
-    
-    # Additional check for active services
-    if systemctl list-units --all | grep -q birdnet-go.service; then
+    # Consolidated service check
+    if [ -f "/etc/systemd/system/birdnet-go.service" ] || \
+       systemctl list-unit-files | grep -q birdnet-go.service || \
+       systemctl list-units --all | grep -q birdnet-go.service; then
         return 0  # Service exists
     fi
     
