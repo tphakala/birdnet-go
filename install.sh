@@ -352,28 +352,11 @@ pull_docker_image() {
 }
 
 # Helper function to check if BirdNET-Go systemd service exists
-# Returns true (0) if service exists, false (1) otherwise
 detect_birdnet_service() {
-    local debug_info=""
-
-    # Check for service file
-    if [ -f "/etc/systemd/system/birdnet-go.service" ]; then
-        debug_info="service file exists"
+    # Check for service unit files on disk
+    if [ -f "/etc/systemd/system/birdnet-go.service" ] || [ -f "/lib/systemd/system/birdnet-go.service" ]; then
         return 0
     fi
-    
-    # Check service in unit files
-    if systemctl list-unit-files | grep -q birdnet-go.service; then
-        debug_info="service in unit files"
-        return 0
-    fi
-    
-    # Check active/inactive services
-    if systemctl list-units --all | grep -q birdnet-go.service; then
-        debug_info="service in active/inactive units"
-        return 0
-    fi
-    
     return 1
 }
 
@@ -1244,14 +1227,19 @@ handle_container_update() {
 
 # Function to clean existing installation but preserve user data
 disable_birdnet_service_and_remove_containers() {
-    # Stop service if it exists
-    if check_service_exists; then
-        stop_birdnet_service false  # Don't wait for container
-        sudo systemctl disable birdnet-go.service
-        sudo rm -f /etc/systemd/system/birdnet-go.service
-        sudo systemctl daemon-reload
-        print_message "✅ Removed systemd service" "$GREEN"
-    fi
+    # Stop and disable the service fully, then remove any unit files and drop-ins
+    sudo systemctl stop birdnet-go.service 2>/dev/null || true
+    sudo systemctl disable --now birdnet-go.service 2>/dev/null || true
+    # Remove unit file and any leftover symlinks
+    sudo rm -f /etc/systemd/system/birdnet-go.service
+    sudo rm -f /etc/systemd/system/multi-user.target.wants/birdnet-go.service
+    # Also remove any system-installed unit and its drop-in directory
+    sudo rm -f /lib/systemd/system/birdnet-go.service
+    sudo rm -rf /etc/systemd/system/birdnet-go.service.d
+    # Reload systemd and clear any failed state
+    sudo systemctl daemon-reload
+    sudo systemctl reset-failed birdnet-go.service 2>/dev/null || true
+    print_message "✅ Removed systemd service" "$GREEN"
 
     # Stop and remove containers
     if docker ps -a | grep -q "birdnet-go"; then
@@ -1841,7 +1829,8 @@ handle_menu_selection() {
 # Determine what's installed and what to show
 if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
     # Display menu based on installation type
-    max_options=$(display_menu "$INSTALLATION_TYPE")
+    display_menu "$INSTALLATION_TYPE"
+    max_options=$?
     
     # Read user selection
     read -r response
