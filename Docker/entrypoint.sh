@@ -28,7 +28,7 @@ fi
 USER_NAME=$(getent passwd "$APP_UID" | cut -d: -f1)
 
 # Ensure /config and /data are accessible to the user
-mkdir -p /config /data
+mkdir -p /config /data/clips
 chown -R "$APP_UID":"$APP_GID" /config
 chown "$APP_UID":"$APP_GID" /data
 chown "$APP_UID":"$APP_GID" /data/*
