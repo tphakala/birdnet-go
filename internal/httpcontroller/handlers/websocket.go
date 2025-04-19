@@ -771,7 +771,7 @@ func (asm *AudioStreamManager) HasActiveClients(sourceID string) bool {
 	return exists && len(clients) > 0
 }
 
-// cleanupClientConnection performs the client disconnection cleanup
+// cleanupClientConnection removes a client connection and performs cleanup
 func (asm *AudioStreamManager) cleanupClientConnection(ws *websocket.Conn, sourceID string) {
 	// Remove client on disconnect
 	asm.clientsMutex.Lock()
@@ -831,4 +831,14 @@ func (asm *AudioStreamManager) cleanupClientConnection(ws *websocket.Conn, sourc
 
 	// Always ensure the connection is closed
 	ws.Close()
+}
+
+// CleanupAllStreams cleans up all HLS streaming resources
+func (asm *AudioStreamManager) CleanupAllStreams() error {
+	if asm.debug {
+		log.Println("AudioStreamManager: Cleaning up all HLS streams")
+	}
+
+	// Call the global CleanupAllStreams function from audio_stream_hls.go
+	return CleanupAllStreams()
 }

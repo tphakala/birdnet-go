@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -32,6 +33,13 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Initialize BirdNET interpreter
 	if err := initializeBirdNET(settings); err != nil {
 		return err
+	}
+
+	// Clean up any leftover HLS streaming files from previous runs
+	if err := cleanupHLSStreamingFiles(); err != nil {
+		log.Printf("⚠️ Warning: Failed to clean up HLS streaming files: %v", err)
+	} else {
+		log.Println("🧹 Cleaned up leftover HLS streaming files")
 	}
 
 	// Initialize occurrence monitor to filter out repeated observations.
@@ -170,6 +178,9 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// start quit signal monitor
 	monitorCtrlC(quitChan)
 
+	// Track the HTTP server for clean shutdown
+	var httpServerRef *httpcontroller.Server = httpServer
+
 	// loop to monitor quit and restart channels
 	for {
 		select {
@@ -178,6 +189,18 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 			close(controlChan)
 			// Stop all analysis buffer monitors
 			bufferManager.RemoveAllMonitors()
+			// Perform HLS resources cleanup
+			log.Println("🧹 Cleaning up HLS resources before shutdown")
+			if err := cleanupHLSStreamingFiles(); err != nil {
+				log.Printf("⚠️ Warning: Failed to clean up HLS streaming files during shutdown: %v", err)
+			}
+			// Shut down HTTP server and clean up its resources
+			if httpServerRef != nil {
+				log.Println("🔌 Shutting down HTTP server")
+				if err := httpServerRef.Shutdown(); err != nil {
+					log.Printf("⚠️ Warning: Error shutting down HTTP server: %v", err)
+				}
+			}
 			// Wait for all goroutines to finish.
 			wg.Wait()
 			// Delete the BirdNET interpreter.
@@ -390,4 +413,65 @@ func initializeBuffers(sources []string) error {
 	}
 
 	return nil
+}
+
+// cleanupHLSStreamingFiles removes any leftover HLS streaming files and directories
+// from previous runs of the application to avoid accumulation of unused files.
+func cleanupHLSStreamingFiles() error {
+	// Get the HLS directory where all streaming files are stored
+	hlsDir, err := getHLSDirectory()
+	if err != nil {
+		return fmt.Errorf("failed to get HLS directory: %w", err)
+	}
+
+	// Check if the directory exists
+	_, err = os.Stat(hlsDir)
+	if os.IsNotExist(err) {
+		// Directory doesn't exist yet, nothing to clean up
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("failed to check HLS directory: %w", err)
+	}
+
+	// Read the directory entries
+	entries, err := os.ReadDir(hlsDir)
+	if err != nil {
+		return fmt.Errorf("failed to read HLS directory: %w", err)
+	}
+
+	// Remove all stream directories
+	for _, entry := range entries {
+		if entry.IsDir() && strings.HasPrefix(entry.Name(), "stream_") {
+			path := filepath.Join(hlsDir, entry.Name())
+			log.Printf("🧹 Removing HLS stream directory: %s", path)
+
+			// Remove the directory and all its contents
+			if err := os.RemoveAll(path); err != nil {
+				return fmt.Errorf("failed to remove HLS stream directory %s: %w", path, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// getHLSDirectory returns the path to the HLS directory
+func getHLSDirectory() (string, error) {
+	// Get config directory paths
+	configPaths, err := conf.GetDefaultConfigPaths()
+	if err != nil {
+		return "", fmt.Errorf("failed to get config paths: %w", err)
+	}
+
+	if len(configPaths) == 0 {
+		return "", fmt.Errorf("no config paths found")
+	}
+
+	// Use the first config path as the base
+	baseDir := configPaths[0]
+
+	// Create HLS directory path
+	hlsDir := filepath.Join(baseDir, "hls")
+
+	return hlsDir, nil
 }

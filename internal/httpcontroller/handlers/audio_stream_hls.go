@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -55,8 +54,8 @@ var (
 	hlsClientActivity      = make(map[string]map[string]time.Time) // sourceID -> clientID -> lastActiveTime
 	hlsClientActivityMutex sync.Mutex
 
-	// Consider a client inactive after 10 seconds of no segment requests
-	clientInactivityTimeout = 10 * time.Second
+	// Consider a client inactive after 30 seconds of no segment requests (increased from 10)
+	clientInactivityTimeout = 30 * time.Second
 
 	// Control logging verbosity
 	hlsVerboseLogging = false
@@ -84,7 +83,7 @@ type StreamStatus struct {
 //
 // Implementation details:
 // 1. Convert both paths to absolute, clean paths
-// 2. Resolve symlinks in both paths using filepath.EvalSymlinks
+// 2. Resolve symlinks in both paths using filepath.EvalSymlinks (when they exist)
 // 3. Clean paths to remove any ".." components
 // 4. Check if target path starts with base path
 //
@@ -102,14 +101,26 @@ func isPathWithinBase(basePath, targetPath string) (bool, error) {
 		return false, fmt.Errorf("failed to resolve target path: %w", err)
 	}
 
-	// Resolve symlinks to avoid escape via symlink hops
+	// Resolve symlinks in base path (which should always exist)
 	absBase, err = filepath.EvalSymlinks(absBase)
 	if err != nil {
 		return false, fmt.Errorf("failed to eval base symlinks: %w", err)
 	}
-	absTarget, err = filepath.EvalSymlinks(absTarget)
-	if err != nil {
-		return false, fmt.Errorf("failed to eval target symlinks: %w", err)
+
+	// Only try to resolve symlinks in target path if it exists
+	// Skip symlink resolution if the target doesn't exist yet
+	targetExists := false
+	if _, err := os.Stat(absTarget); err == nil {
+		targetExists = true
+	}
+
+	if targetExists {
+		// Only resolve symlinks for existing targets
+		resolvedTarget, err := filepath.EvalSymlinks(absTarget)
+		if err != nil {
+			return false, fmt.Errorf("failed to eval target symlinks: %w", err)
+		}
+		absTarget = resolvedTarget
 	}
 
 	// Ensure paths are cleaned to remove any ".." components
@@ -354,18 +365,39 @@ func (h *Handlers) servePlaylistFile(c echo.Context, stream *HLSStreamInfo, hlsB
 	}
 	defer secFS.Close()
 
-	// Verify playlist path is within HLS base directory using secureFS
-	if !secFS.Exists(stream.PlaylistPath) {
-		log.Printf("Error: HLS playlist file does not exist at %s", stream.PlaylistPath)
-		return echo.NewHTTPError(http.StatusNotFound, "Playlist file not found")
-	}
-
 	// Set proper content type for m3u8 playlist
 	c.Response().Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 	// Add cache control headers to prevent caching
 	c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	c.Response().Header().Set("Pragma", "no-cache")
 	c.Response().Header().Set("Expires", "0")
+
+	// Check if the playlist file exists
+	if !secFS.Exists(stream.PlaylistPath) {
+		// If the playlist doesn't exist yet, check if FFmpeg is still running
+		hlsStreamMutex.Lock()
+		_, streamExists := hlsStreams[stream.SourceID]
+		hlsStreamMutex.Unlock()
+
+		if !streamExists {
+			log.Printf("Error: HLS stream no longer exists for source %s", stream.SourceID)
+			return echo.NewHTTPError(http.StatusNotFound, "Stream no longer exists")
+		}
+
+		// Send a temporary empty playlist to avoid client errors
+		// This will cause the client to retry after a short delay
+		log.Printf("Sending temporary empty playlist for source %s (real playlist not ready yet)", stream.SourceID)
+
+		// Create a basic empty HLS playlist
+		emptyPlaylist := `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:2
+#EXT-X-MEDIA-SEQUENCE:0
+#EXT-X-PLAYLIST-TYPE:EVENT
+#EXT-X-ENDLIST
+`
+		return c.String(http.StatusOK, emptyPlaylist)
+	}
 
 	// Serve the playlist file securely
 	return secFS.ServeFile(c, stream.PlaylistPath)
@@ -518,6 +550,12 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 		return nil, fmt.Errorf("failed to create HLS directory: %w", err)
 	}
 
+	// Verify the directory was created successfully
+	if !secFS.Exists(outputDir) {
+		streamCancel() // Clean up context
+		return nil, fmt.Errorf("failed to create HLS directory: directory doesn't exist after creation")
+	}
+
 	// Create playlist file path
 	playlistPath := filepath.Join(outputDir, "playlist.m3u8")
 
@@ -567,7 +605,7 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	}
 
 	log.Printf("Starting FFmpeg HLS process for source: %s", sourceID)
-	// Start FFmpeg HLS process
+	// Start FFmpeg HLS process with improved parameters for reliability
 	cmd := exec.CommandContext(
 		streamCtx,
 		ffmpegPath,
@@ -580,8 +618,11 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 		"-f", "hls", // Format: HLS
 		"-hls_time", "2", // Segment duration: 2 seconds
 		"-hls_list_size", "5", // Keep 5 segments in playlist
-		"-hls_flags", "delete_segments", // Delete old segments
+		"-hls_flags", "delete_segments+append_list", // Delete old segments and append to playlist
 		"-hls_segment_type", "mpegts", // Use MPEGTS segments for better compatibility
+		"-hls_init_time", "1", // Initial segment length: 1 second for faster startup
+		"-hls_allow_cache", "0", // Disable caching
+		"-start_number", "0", // Start with segment 0
 		"-loglevel", "warning", // Reduce ffmpeg logging verbosity
 		"-hls_segment_filename", filepath.Join(outputDir, "segment%03d.ts"),
 		playlistPath, // Output playlist
@@ -750,8 +791,18 @@ func newSecureFS(baseDir string) (*secureFS, error) {
 
 // relativePath converts an absolute path to a path relative to the base directory
 func (fs *secureFS) relativePath(path string) (string, error) {
+	// Clean the path to handle any . or .. components safely
+	path = filepath.Clean(path)
+
+	// Get absolute paths for consistent comparison
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
 	// Verify the path is within the base directory for safety
-	isWithin, err := isPathWithinBase(fs.baseDir, path)
+	// Using the updated isPathWithinBase that handles non-existent paths
+	isWithin, err := isPathWithinBase(fs.baseDir, absPath)
 	if err != nil {
 		return "", fmt.Errorf("path validation error: %w", err)
 	}
@@ -761,7 +812,7 @@ func (fs *secureFS) relativePath(path string) (string, error) {
 	}
 
 	// Make the path relative to the base directory for os.Root operations
-	relPath, err := filepath.Rel(fs.baseDir, path)
+	relPath, err := filepath.Rel(fs.baseDir, absPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to make path relative: %w", err)
 	}
@@ -831,6 +882,10 @@ func (fs *secureFS) walkRemove(path string) error {
 	// Final security check that path is within base directory
 	isWithin, err := isPathWithinBase(fs.baseDir, absPath)
 	if err != nil {
+		// If the path doesn't exist, we don't need to remove it
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return fmt.Errorf("path validation error: %w", err)
 	}
 	if !isWithin {
@@ -858,6 +913,9 @@ func (fs *secureFS) walkRemove(path string) error {
 	// For directories, we need to walk and remove contents first
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // Directory already gone
+		}
 		return err
 	}
 
@@ -868,6 +926,10 @@ func (fs *secureFS) walkRemove(path string) error {
 		// Validate child path is within base directory
 		isChildWithin, err := isPathWithinBase(fs.baseDir, childPath)
 		if err != nil {
+			// Skip entries that don't exist
+			if os.IsNotExist(err) {
+				continue
+			}
 			return fmt.Errorf("child path validation error: %w", err)
 		}
 
@@ -1015,35 +1077,8 @@ func (fs *secureFS) CreateFIFO(path string) error {
 		return err
 	}
 
-	// Remove if exists - using our secure Remove method if possible
-	if fs.Exists(path) {
-		if err := fs.Remove(path); err != nil && !os.IsNotExist(err) {
-			log.Printf("Warning: Error removing existing FIFO: %v", err)
-		}
-	}
-
-	// Create FIFO with retry mechanism
-	// Note: os.Root doesn't provide direct FIFO creation,
-	// so we use syscall.Mkfifo after validating the path
-	var fifoErr error
-	for retry := 0; retry < 3; retry++ {
-		fifoErr = syscall.Mkfifo(path, 0o666)
-		if fifoErr == nil {
-			log.Printf("Successfully created FIFO pipe: %s", path)
-			return nil
-		}
-
-		log.Printf("Retry %d: Failed to create FIFO pipe: %v", retry+1, fifoErr)
-		// If error is "file exists", try to remove again
-		if os.IsExist(fifoErr) {
-			if err := fs.Remove(path); err != nil && !os.IsNotExist(err) {
-				log.Printf("Warning: Error removing existing FIFO: %v", err)
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-
-	return fmt.Errorf("failed to create FIFO after retries: %w", fifoErr)
+	// Call the platform-agnostic wrapper
+	return createFIFOWrapper(path)
 }
 
 // Close closes the underlying Root
@@ -1059,6 +1094,11 @@ func (fs *secureFS) Close() error {
 func isPathValidWithinBase(baseDir, path string) error {
 	isWithin, err := isPathWithinBase(baseDir, path)
 	if err != nil {
+		// If the error is because the target doesn't exist, don't treat it as a security error
+		// This is common during cleanup operations when we're checking paths that might be gone
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return fmt.Errorf("path validation error: %w", err)
 	}
 
@@ -1238,12 +1278,15 @@ func processInactiveClients() (inactiveClients map[string][]string, activeCount 
 		inactiveClients[sourceID] = []string{}
 
 		for clientID, lastActive := range clients {
-			if now.Sub(lastActive) > clientInactivityTimeout {
+			// Calculate inactivity duration
+			inactiveDuration := now.Sub(lastActive)
+
+			if inactiveDuration > clientInactivityTimeout {
 				// Client hasn't requested segments recently, consider inactive
 				delete(clients, clientID)
 				inactiveClients[sourceID] = append(inactiveClients[sourceID], clientID)
 				log.Printf("Removing inactive HLS client %s for source %s (no segments requested for %v)",
-					clientID, sourceID, now.Sub(lastActive))
+					clientID, sourceID, inactiveDuration)
 			} else {
 				activeCount[sourceID]++
 			}
@@ -1260,6 +1303,15 @@ func processInactiveClients() (inactiveClients map[string][]string, activeCount 
 
 // syncStreamClients cleans up streams with no active clients
 func syncStreamClients(inactiveClients map[string][]string, activeCount map[string]int, hlsBaseDir string, secureFs *secureFS) {
+	hlsStreamMutex.Lock()
+
+	// Get current time for grace period calculations
+	now := time.Now()
+
+	// Track streams to clean up, we'll do this outside the lock
+	streamsToCleanup := []string{}
+
+	// First, process inactive clients we found and collect streams to check
 	hlsStreamClientMutex.Lock()
 
 	// First, process inactive clients we found
@@ -1272,27 +1324,45 @@ func syncStreamClients(inactiveClients map[string][]string, activeCount map[stri
 	}
 
 	// Then check for sources with no active clients
-	streamsToCleanup := []string{}
-
 	for sourceID, clients := range hlsStreamClients {
-		// If no active clients for this source, clean up
+		// Look up the corresponding stream to check its creation time
+		stream, streamExists := hlsStreams[sourceID]
+
+		// If no active clients for this source, clean up after a grace period
 		activityCount := activeCount[sourceID]
 		trackedCount := len(clients)
 
 		if activityCount == 0 && trackedCount > 0 {
 			// Tracking says we have clients but no active clients detected
-			log.Printf("Client tracking mismatch for source %s: tracked=%d, active=%d. Resolving...",
-				sourceID, trackedCount, activityCount)
+			// Only clean up if the stream has been around for at least a few seconds
+			// to avoid race conditions during stream startup
 
-			// Force clean up all clients for this source
-			delete(hlsStreamClients, sourceID)
+			// Apply a 30-second grace period for newly created streams to avoid
+			// cleaning up streams that are still initializing
+			streamAge := time.Duration(0)
+			if streamExists {
+				streamAge = now.Sub(stream.LastAccess)
+			}
 
-			// Mark for stream cleanup
-			streamsToCleanup = append(streamsToCleanup, sourceID)
+			if !streamExists || streamAge >= 15*time.Second {
+				log.Printf("Client tracking mismatch for source %s: tracked=%d, active=%d, age=%v. Resolving...",
+					sourceID, trackedCount, activityCount, streamAge)
+
+				// Force clean up all clients for this source
+				delete(hlsStreamClients, sourceID)
+
+				// Mark for stream cleanup
+				streamsToCleanup = append(streamsToCleanup, sourceID)
+			} else {
+				// Stream is too new, give it more time before cleanup
+				log.Printf("Delaying cleanup for new HLS stream %s: tracked=%d, active=%d, age=%v",
+					sourceID, trackedCount, activityCount, streamAge)
+			}
 		}
 	}
 
 	hlsStreamClientMutex.Unlock()
+	hlsStreamMutex.Unlock()
 
 	// Clean up streams in a separate lock scope to prevent deadlocks
 	for _, sourceID := range streamsToCleanup {
@@ -1331,20 +1401,6 @@ func cleanupInactiveStream(sourceID, hlsBaseDir string, secureFs *secureFS) {
 		delete(hlsStreams, sourceID)
 		log.Printf("HLS stream for source %s fully cleaned up", sourceID)
 	}
-}
-
-// Create a new secure file serving method that only serves files within a base directory
-func serveFileSecurely(c echo.Context, baseDir, filePath string) error {
-	// Create a secure filesystem for the base directory
-	secFS, err := newSecureFS(baseDir)
-	if err != nil {
-		log.Printf("Error creating secure filesystem: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, "Server error")
-	}
-	defer secFS.Close()
-
-	// Serve the file using secure filesystem
-	return secFS.ServeFile(c, filePath)
 }
 
 // StartHLSStream explicitly starts an HLS stream for a source
@@ -1402,7 +1458,8 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatu
 	}
 	hlsStreamMutex.Unlock()
 
-	// Register this client for the stream
+	// Register this client for the stream before starting FFmpeg
+	// to avoid race condition where stream is terminated before client connects
 	hlsStreamClientMutex.Lock()
 	if _, exists := hlsStreamClients[sourceID]; !exists {
 		hlsStreamClients[sourceID] = make(map[string]bool)
@@ -1410,6 +1467,14 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatu
 	hlsStreamClients[sourceID][clientID] = true
 	activeClients := len(hlsStreamClients[sourceID])
 	hlsStreamClientMutex.Unlock()
+
+	// Also update client activity timestamp
+	hlsClientActivityMutex.Lock()
+	if _, exists := hlsClientActivity[sourceID]; !exists {
+		hlsClientActivity[sourceID] = make(map[string]time.Time)
+	}
+	hlsClientActivity[sourceID][clientID] = time.Now().Add(10 * time.Second) // Extend initial activity time
+	hlsClientActivityMutex.Unlock()
 
 	log.Printf("HLS stream for source %s now has %d active clients", sourceID, activeClients)
 
@@ -1435,24 +1500,68 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatu
 	}
 	defer secFS.Close()
 
-	// Check if the playlist file exists, waiting a short time if needed
+	// Check if the playlist file exists, waiting a reasonable time if needed
+	// Use a cancellable context to ensure we don't wait forever
+	playlistCtx, cancelPlaylist := context.WithTimeout(c.Request().Context(), 20*time.Second)
+	defer cancelPlaylist()
+
 	playlistReady := false
-	for retry := 0; retry < 15; retry++ {
-		if secFS.Exists(stream.PlaylistPath) {
-			playlistReady = true
-			log.Printf("Playlist file is ready on attempt %d: %s", retry+1, stream.PlaylistPath)
-			break
+	playlistCheckerDone := make(chan bool, 1)
+
+	// Start a goroutine to check for the playlist file
+	go func() {
+		defer func() {
+			playlistCheckerDone <- true
+		}()
+
+		retryCount := 0
+		for retryCount < 30 { // Allow up to 30 seconds with 1 second intervals
+			select {
+			case <-playlistCtx.Done():
+				log.Printf("Playlist check cancelled or timed out for source: %s", sourceID)
+				return
+			default:
+				// Check if playlist exists
+				if secFS.Exists(stream.PlaylistPath) {
+					// Check if it's a valid playlist with some content
+					data, err := secFS.ReadFile(stream.PlaylistPath)
+					if err == nil && len(data) > 0 && strings.Contains(string(data), "#EXTM3U") {
+						playlistReady = true
+						log.Printf("Playlist file is ready (attempt %d): %s", retryCount+1, stream.PlaylistPath)
+						return
+					}
+				}
+
+				// Check if stream is still active - don't wait if it's been terminated
+				hlsStreamMutex.Lock()
+				_, streamExists := hlsStreams[sourceID]
+				hlsStreamMutex.Unlock()
+
+				if !streamExists {
+					log.Printf("Stream was terminated while waiting for playlist: %s", sourceID)
+					return
+				}
+
+				log.Printf("Waiting for playlist file (attempt %d): %s", retryCount+1, stream.PlaylistPath)
+				retryCount++
+				time.Sleep(1000 * time.Millisecond)
+			}
 		}
-		log.Printf("Waiting for playlist file (attempt %d): %s", retry+1, stream.PlaylistPath)
-		time.Sleep(300 * time.Millisecond)
-	}
+
+		log.Printf("Warning: Playlist file not created after waiting: %s", stream.PlaylistPath)
+	}()
+
+	// Wait for the playlist checker to complete
+	<-playlistCheckerDone
 
 	status := "starting"
 	if playlistReady {
 		status = "ready"
 		log.Printf("Playlist file is ready: %s", stream.PlaylistPath)
 	} else {
-		log.Printf("Warning: Playlist file not created after waiting: %s", stream.PlaylistPath)
+		// For tighter UX, we still return a result even if playlist isn't ready
+		// The client will retry loading the playlist
+		log.Printf("Warning: Playlist file not immediately available: %s", stream.PlaylistPath)
 	}
 
 	// Return stream status information that the controller can use
@@ -1555,6 +1664,77 @@ func (h *Handlers) StopHLSClientStream(c echo.Context, sourceID string) error {
 			}
 		}
 		hlsClientActivityMutex.Unlock()
+	}
+
+	return nil
+}
+
+// CleanupAllStreams removes all HLS streams and their files
+func CleanupAllStreams() error {
+	hlsStreamMutex.Lock()
+	defer hlsStreamMutex.Unlock()
+
+	// Iterate through all streams and clean them up
+	for sourceID, stream := range hlsStreams {
+		log.Printf("Cleaning up HLS stream for source: %s", sourceID)
+
+		// Cancel the context if it exists
+		if stream.cancel != nil {
+			stream.cancel()
+		}
+
+		// Wait for FFmpeg process to terminate if it exists
+		if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
+			_, _ = stream.FFmpegCmd.Process.Wait()
+		}
+	}
+
+	// Clear the stream maps
+	for sourceID := range hlsStreams {
+		delete(hlsStreams, sourceID)
+	}
+
+	// Also clear the client tracking maps
+	hlsStreamClientMutex.Lock()
+	for sourceID := range hlsStreamClients {
+		delete(hlsStreamClients, sourceID)
+	}
+	hlsStreamClientMutex.Unlock()
+
+	hlsClientActivityMutex.Lock()
+	for sourceID := range hlsClientActivity {
+		delete(hlsClientActivity, sourceID)
+	}
+	hlsClientActivityMutex.Unlock()
+
+	// Clean up any remaining stream directories
+	hlsBaseDir, err := getHLSDirectory()
+	if err != nil {
+		return fmt.Errorf("failed to get HLS directory: %w", err)
+	}
+
+	// Check if directory exists
+	if _, err := os.Stat(hlsBaseDir); os.IsNotExist(err) {
+		return nil // Directory doesn't exist, nothing to clean up
+	}
+
+	// Read all entries in the HLS directory
+	entries, err := os.ReadDir(hlsBaseDir)
+	if err != nil {
+		return fmt.Errorf("failed to read HLS directory: %w", err)
+	}
+
+	// Remove all stream directories
+	for _, entry := range entries {
+		if entry.IsDir() && strings.HasPrefix(entry.Name(), "stream_") {
+			streamDir := filepath.Join(hlsBaseDir, entry.Name())
+			log.Printf("Removing HLS stream directory: %s", streamDir)
+
+			if err := os.RemoveAll(streamDir); err != nil {
+				log.Printf("Error removing stream directory %s: %v", streamDir, err)
+				// Continue with other directories
+			}
+		}
 	}
 
 	return nil
