@@ -1180,8 +1180,8 @@ func openPlatformSpecificFIFO(pipePath, fifoPath string, openFlags int, secFS *s
 }
 
 // setupAudioCallback sets up the audio callback and channel
-func setupAudioCallback(sourceID string) (chan []byte, func(), error) {
-	audioChan := make(chan []byte, 50)
+func setupAudioCallback(sourceID string) (audioChan chan []byte, cleanup func(), err error) {
+	audioChan = make(chan []byte, 50)
 
 	// Create callback function to handle audio data
 	callback := func(callbackSourceID string, data []byte) {
@@ -1199,7 +1199,7 @@ func setupAudioCallback(sourceID string) (chan []byte, func(), error) {
 	myaudio.RegisterBroadcastCallback(sourceID, callback)
 
 	// Create cleanup function
-	cleanup := func() {
+	cleanup = func() {
 		myaudio.UnregisterBroadcastCallback(sourceID)
 		log.Printf("Unregistered audio callback for source %s", sourceID)
 	}
