@@ -78,8 +78,77 @@ alwaysApply: false
 - Monitor goroutine leaks using runtime statistics
 - Limit concurrency with contexts or semaphores
 - Use `os.Root` (Go 1.24) to sandbox filesystem access
+  - Reliable protection against path traversal vulnerabilities
+  - Basic usage pattern:
+    ```go
+    // Open a directory for sandboxed access
+    root, err := os.OpenRoot("/safe/directory")
+    if err != nil {
+        return err
+    }
+    defer root.Close()
+    
+    // All operations are contained within the root directory
+    file, err := root.Open("config.json")      // Opens /safe/directory/config.json
+    file, err := root.Open("../config.json")   // Still opens /safe/directory/config.json
+    
+    // Create subdirectories safely
+    err := root.Mkdir("uploads", 0755)         // Creates /safe/directory/uploads
+    
+    // For recursive operations, use OpenRoot again
+    subdir, err := root.OpenRoot("uploads")    // Opens /safe/directory/uploads as a new Root
+    defer subdir.Close()
+    ```
+  - Handles symlinks securely (will not follow symlinks outside the root directory)
+  - Prevents time-of-check/time-of-use (TOCTOU) race conditions
+  - Platform-specific implementations (Unix uses openat, Windows uses handle restrictions)
+  - See also: https://go.dev/blog/osroot for complete documentation
 - Consider `runtime.AddCleanup` (Go 1.24) for finalizers if needed
 - Explore `runtime/weak` package (Go 1.24) for weak references in caches
+
+## File System Security
+- Use `os.Root` for all operations where filenames are untrusted or externally provided
+- Replace common unsafe patterns with safe equivalents:
+  - Instead of: `os.Open(filepath.Join(baseDir, untrustedPath))`
+  - Use: `os.OpenInRoot(baseDir, untrustedPath)` (Go 1.24)
+- When building a wrapped filesystem with custom validation, use `os.Root`:
+  ```go
+  // Example secureFS implementation with os.Root
+  type secureFS struct {
+      baseDir string
+      root    *os.Root
+  }
+  
+  func newSecureFS(baseDir string) (*secureFS, error) {
+      // Create base directory if needed
+      if err := os.MkdirAll(baseDir, 0755); err != nil {
+          return nil, err
+      }
+      
+      // Open sandboxed root 
+      root, err := os.OpenRoot(baseDir)
+      if err != nil {
+          return nil, err
+      }
+      
+      return &secureFS{
+          baseDir: baseDir,
+          root:    root,
+      }, nil
+  }
+  
+  // Methods operate within sandbox
+  func (fs *secureFS) OpenFile(relativePath string, flag int, perm os.FileMode) (*os.File, error) {
+      // All paths are relative to root, cannot escape
+      return fs.root.OpenFile(relativePath, flag, perm)
+  }
+  ```
+- For edge cases where extra layers of protection are needed, combine `os.Root` with:
+  - `filepath.IsLocal()` - Validates paths don't contain traversal components
+  - `filepath.EvalSymlinks()` - Resolves symlinks before validation
+- Remember `os.Root` limitations:
+  - Not all operations available (e.g., no `RemoveAll`)
+  - Implementation varies by platform (see docs for platform-specific details)
 
 ## Code Style
 - Functions should be focused and concise (typically under 50 lines)
@@ -92,7 +161,7 @@ alwaysApply: false
   - Use short, clear variable names
   - Acronyms should be consistently cased (HTTP, URL, ID)
 - Document exported functions, types, and packages
-- Name return values in function signatures for better documentation
+- Name return values in function signatures for better documentation and to avoid gocritic unnamedResult errors, especially for functions returning multiple values of the same type
 - Avoid duplicate imports of the same package
 - Group similar declarations together
 - Order struct fields to minimize padding
@@ -180,6 +249,11 @@ alwaysApply: false
 - Use proper line endings
 - Handle filesystem case sensitivity differences
 - Use os.Root (Go 1.24) for sandboxed filesystem access
+  - Be aware of platform-specific behavior:
+  - On Unix: Uses openat() family of syscalls for secure access
+  - On Windows: Uses handle-based access and prevents traversal 
+  - On WASI: Uses the WASI preview 1 filesystem API
+  - On js/WASM: May be vulnerable to TOCTOU races (check docs)
 
 ## Documentation
 - Document all exported types, functions, and packages
