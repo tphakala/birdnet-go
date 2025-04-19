@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -15,11 +17,18 @@ import (
 )
 
 // openPipes tracks all created named pipe handles for later cleanup
-var openPipes []windows.Handle
+// IMPORTANT: Must call CleanupNamedPipes() during application shutdown
+// to prevent handle leaks, especially for long-running applications
+var (
+	openPipes   []windows.Handle
+	openPipesMu sync.Mutex
+)
 
 // createFIFOImpl creates a Windows named pipe
 // Windows doesn't support Unix-style FIFOs, so we create a named pipe
 // using Windows API and emulate FIFO functionality
+// Note: The caller is responsible for ensuring CleanupNamedPipes() is called
+// during shutdown to release all pipe handles
 func createFIFOImpl(path string) error {
 	// Convert Unix-style path to Windows named pipe path
 	// Format: \\.\pipe\[path]
@@ -75,12 +84,21 @@ func createFIFOImpl(path string) error {
 			// Create a placeholder file at the original path location with metadata
 			// This helps us track the named pipe location
 			placeholderInfo := fmt.Sprintf("Windows named pipe: %s", pipeName)
+
+			// Ensure the parent directory exists
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				log.Printf("Warning: Failed to create parent directory for named pipe placeholder: %v", err)
+			}
+
 			if err := os.WriteFile(path, []byte(placeholderInfo), 0o666); err != nil {
 				log.Printf("Warning: Failed to create named pipe placeholder file: %v", err)
 			}
 
-			// Track the handle for later cleanup
+			// Track the handle for later cleanup with proper synchronization
+			openPipesMu.Lock()
 			openPipes = append(openPipes, pipeHandle)
+			openPipesMu.Unlock()
+
 			return nil
 		}
 
@@ -96,7 +114,11 @@ func createFIFOImpl(path string) error {
 
 // CleanupNamedPipes closes all open named pipe handles
 // Call this function during application shutdown to properly release resources
+// This must be called to prevent handle leaks, especially for long-running applications
 func CleanupNamedPipes() {
+	openPipesMu.Lock()
+	defer openPipesMu.Unlock()
+
 	for _, h := range openPipes {
 		_ = windows.CloseHandle(h)
 	}

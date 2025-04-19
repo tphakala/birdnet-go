@@ -439,6 +439,8 @@ func cleanupHLSStreamingFiles() error {
 		return fmt.Errorf("failed to read HLS directory: %w", err)
 	}
 
+	var cleanupErrors []string
+
 	// Remove all stream directories
 	for _, entry := range entries {
 		if entry.IsDir() && strings.HasPrefix(entry.Name(), "stream_") {
@@ -447,9 +449,16 @@ func cleanupHLSStreamingFiles() error {
 
 			// Remove the directory and all its contents
 			if err := os.RemoveAll(path); err != nil {
-				return fmt.Errorf("failed to remove HLS stream directory %s: %w", path, err)
+				log.Printf("⚠️ Warning: Failed to remove HLS stream directory %s: %v", path, err)
+				cleanupErrors = append(cleanupErrors, fmt.Sprintf("%s: %v", path, err))
+				// Continue with other directories
 			}
 		}
+	}
+
+	// Return a combined error if any cleanup operations failed
+	if len(cleanupErrors) > 0 {
+		return fmt.Errorf("failed to remove some HLS stream directories: %s", strings.Join(cleanupErrors, "; "))
 	}
 
 	return nil

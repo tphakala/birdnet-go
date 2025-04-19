@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -97,16 +98,28 @@ func isPathWithinBase(basePath, targetPath string) (bool, error) {
 		return false, fmt.Errorf("failed to eval base symlinks: %w", err)
 	}
 
-	// Check if the target path is a symlink, regardless of whether its target exists
-	// This prevents attackers from creating symlinks to non-existent targets outside the base directory
-	// that could later be created (either by the attacker or through a race condition)
-	lfi, err := os.Lstat(absTarget)
-	if err == nil && (lfi.Mode()&os.ModeSymlink) != 0 {
-		resolvedTarget, err := filepath.EvalSymlinks(absTarget)
-		if err != nil {
-			return false, fmt.Errorf("failed to eval target symlinks: %w", err)
+	// Try to resolve all symlinks in the target path, including intermediate components
+	absTargetResolved, err := filepath.EvalSymlinks(absTarget)
+	if err == nil {
+		// If successful, use the fully resolved path
+		absTarget = absTargetResolved
+	} else {
+		// If the target doesn't exist or there's another issue, we should still
+		// handle the case where intermediate components might be symlinks
+		// This is a fallback that at least checks what we can
+		dir := filepath.Dir(absTarget)
+		for dir != "/" && dir != "." {
+			// Try to resolve symlinks in parent directories
+			resolvedDir, err := filepath.EvalSymlinks(dir)
+			if err == nil && resolvedDir != dir {
+				// Found a parent directory that's a symlink
+				// Reconstruct the target with the resolved parent
+				base := filepath.Base(absTarget)
+				absTarget = filepath.Join(resolvedDir, base)
+				break
+			}
+			dir = filepath.Dir(dir)
 		}
-		absTarget = resolvedTarget
 	}
 
 	// Ensure paths are cleaned to remove any ".." components
@@ -710,8 +723,9 @@ func cleanupStream(sourceID string) {
 //
 // More information: https://go.dev/blog/osroot
 type secureFS struct {
-	baseDir string   // The base directory that all operations are restricted to
-	root    *os.Root // The sandboxed filesystem root
+	baseDir  string   // The base directory that all operations are restricted to
+	root     *os.Root // The sandboxed filesystem root
+	pipeName string   // Platform-specific pipe name for named pipes
 }
 
 // newSecureFS creates a new secure filesystem with the specified base directory
@@ -1030,8 +1044,43 @@ func (sfs *secureFS) CreateFIFO(path string) error {
 		return err
 	}
 
-	// Call the platform-agnostic wrapper
-	return createFIFOWrapper(path)
+	// Call the platform-agnostic wrapper which now returns the pipe name
+	pipeName, err := createFIFOWrapper(path)
+	if err != nil {
+		return err
+	}
+
+	// Store the pipeName in the secureFS instance to retrieve it later
+	sfs.pipeName = pipeName
+	return nil
+}
+
+// GetPipeName returns the platform-specific pipe name for the given path
+// On Windows this returns the Windows named pipe path, on Unix systems
+// this returns the original path
+func (sfs *secureFS) GetPipeName(path string) (string, error) {
+	// Validate the path is within the base directory
+	if err := isPathValidWithinBase(sfs.baseDir, path); err != nil {
+		return "", err
+	}
+
+	// If we have a stored pipe name from CreateFIFO, use that
+	if sfs.pipeName != "" {
+		return sfs.pipeName, nil
+	}
+
+	// Otherwise, determine the platform-specific pipe name based on OS
+	if runtime.GOOS == "windows" {
+		// Convert Unix-style path to Windows named pipe path
+		// Format: \\.\pipe\[path]
+		baseName := filepath.Base(path)
+		ext := filepath.Ext(baseName)
+		pipeName := strings.TrimSuffix(baseName, ext)
+		return `\\.\pipe\` + pipeName, nil
+	}
+
+	// For Unix systems, return the original path
+	return path, nil
 }
 
 // Close closes the underlying Root
@@ -1062,60 +1111,45 @@ func isPathValidWithinBase(baseDir, path string) error {
 	return nil
 }
 
-// feedAudioToFFmpeg pumps audio data to the FFmpeg process
-func feedAudioToFFmpeg(sourceID, fifoPath string, ctx context.Context) {
-	log.Printf("Starting audio feed for source %s to FIFO %s", sourceID, fifoPath)
-
-	// Get HLS directory for path validation
-	hlsBaseDir, err := conf.GetHLSDirectory()
+// setupFIFO prepares and opens the FIFO for writing with platform-specific settings
+func setupFIFO(ctx context.Context, sourceID, fifoPath string, secFS *secureFS) (*os.File, error) {
+	// Get the platform-specific pipe name
+	pipePath, err := secFS.GetPipeName(fifoPath)
 	if err != nil {
-		log.Printf("Error getting HLS directory: %v", err)
-		return
+		return nil, fmt.Errorf("error getting platform-specific pipe name: %w", err)
 	}
 
-	// Create a secure filesystem for operations
-	secFS, err := newSecureFS(hlsBaseDir)
-	if err != nil {
-		log.Printf("Error creating secure filesystem: %v", err)
-		return
+	// Set platform-specific flags for opening FIFO
+	openFlags := getPlatformOpenFlags()
+
+	// Try to open the FIFO with retries
+	return openFIFOWithRetries(ctx, sourceID, fifoPath, pipePath, openFlags, secFS)
+}
+
+// getPlatformOpenFlags returns OS-specific open flags for the FIFO
+func getPlatformOpenFlags() int {
+	if runtime.GOOS == "windows" {
+		return os.O_WRONLY // Windows uses writeable flag without O_NONBLOCK
 	}
-	defer secFS.Close()
+	// Unix systems use non-blocking flag to prevent indefinite blocking if FFmpeg crashes
+	return os.O_WRONLY | syscall.O_NONBLOCK
+}
 
-	// Validate fifoPath before opening
-	isWithin, err := isPathWithinBase(hlsBaseDir, fifoPath)
-	if err != nil {
-		log.Printf("Error validating FIFO path: %v", err)
-		return
-	}
-	if !isWithin {
-		log.Printf("Security error: FIFO path would be outside HLS directory: %s", fifoPath)
-		return
-	}
-
-	// Open FIFO using non-blocking flag to prevent hanging if FFmpeg fails
-	log.Printf("Opening FIFO for writing: %s", fifoPath)
-
-	// Use non-blocking flag to prevent indefinite blocking if FFmpeg crashes
-	openFlags := os.O_WRONLY | syscall.O_NONBLOCK
-
-	// Try to open the FIFO with retries until success or context cancellation
-	var fifo *os.File
+// openFIFOWithRetries attempts to open the FIFO with multiple retries
+func openFIFOWithRetries(ctx context.Context, sourceID, fifoPath, pipePath string, openFlags int, secFS *secureFS) (*os.File, error) {
 	maxRetries := 30
 	retryInterval := 200 * time.Millisecond
 
 	for i := 0; i < maxRetries; i++ {
 		select {
 		case <-ctx.Done():
-			log.Printf("Context canceled while trying to open FIFO for source %s", sourceID)
-			return
+			return nil, fmt.Errorf("context canceled while opening FIFO")
 		default:
-			// Attempt to open the FIFO non-blocking
-			var openErr error
-			fifo, openErr = secFS.OpenFile(fifoPath, openFlags, 0o666)
+			// Attempt to open the FIFO with platform-specific approach
+			fifo, openErr := openPlatformSpecificFIFO(pipePath, fifoPath, openFlags, secFS)
 			if openErr == nil {
-				// Successfully opened
 				log.Printf("FIFO opened successfully for source %s on attempt %d", sourceID, i+1)
-				goto fifoOpened // Break out of the retry loop
+				return fifo, nil
 			}
 
 			if i == 0 || (i+1)%5 == 0 {
@@ -1125,78 +1159,86 @@ func feedAudioToFFmpeg(sourceID, fifoPath string, ctx context.Context) {
 			// Sleep before retrying
 			select {
 			case <-ctx.Done():
-				return
+				return nil, fmt.Errorf("context canceled during retry delay")
 			case <-time.After(retryInterval):
 				// Continue to next attempt
 			}
 		}
 	}
 
-	// If we reached here, we failed to open the FIFO after all retries
-	log.Printf("Failed to open FIFO after %d attempts for source %s", maxRetries, sourceID)
-	return
+	return nil, fmt.Errorf("failed to open FIFO after %d attempts", maxRetries)
+}
 
-fifoOpened:
-	// Ensure we close the FIFO when done
-	defer func() {
-		log.Printf("Closing FIFO for source %s", sourceID)
-		fifo.Close()
-	}()
+// openPlatformSpecificFIFO opens the FIFO using OS-specific approach
+func openPlatformSpecificFIFO(pipePath, fifoPath string, openFlags int, secFS *secureFS) (*os.File, error) {
+	if runtime.GOOS == "windows" {
+		// For Windows, open the named pipe directly
+		return os.OpenFile(pipePath, openFlags, 0o666)
+	}
+	// For Unix systems, use secFS to maintain security
+	return secFS.OpenFile(fifoPath, openFlags, 0o666)
+}
 
-	// Register for audio callbacks
+// setupAudioCallback sets up the audio callback and channel
+func setupAudioCallback(sourceID string) (chan []byte, func(), error) {
 	audioChan := make(chan []byte, 50)
 
-	// Create callback function
+	// Create callback function to handle audio data
 	callback := func(callbackSourceID string, data []byte) {
 		if callbackSourceID == sourceID {
 			select {
 			case audioChan <- data:
 				// Data sent successfully
 			default:
-				// Channel full, clear oldest data
-				select {
-				case <-audioChan:
-					audioChan <- data
-				default:
-					// Try again
-					select {
-					case audioChan <- data:
-					default:
-						// Drop data if still can't send
-					}
-				}
+				handleChannelFull(audioChan, data)
 			}
 		}
 	}
 
 	// Register callback
 	myaudio.RegisterBroadcastCallback(sourceID, callback)
-	defer func() {
-		log.Printf("Unregistering audio callback for source %s", sourceID)
+
+	// Create cleanup function
+	cleanup := func() {
 		myaudio.UnregisterBroadcastCallback(sourceID)
-	}()
+		log.Printf("Unregistered audio callback for source %s", sourceID)
+	}
 
-	log.Printf("Audio feed ready for source %s", sourceID)
+	return audioChan, cleanup, nil
+}
 
-	// Main loop to write audio data to FIFO
+// handleChannelFull handles the case when the audio channel is full
+func handleChannelFull(audioChan chan []byte, data []byte) {
+	// Channel full, clear oldest data
+	select {
+	case <-audioChan:
+		audioChan <- data
+	default:
+		// Try again
+		select {
+		case audioChan <- data:
+		default:
+			// Drop data if still can't send
+		}
+	}
+}
+
+// processFIFOData processes audio data and writes it to the FIFO
+func processFIFOData(ctx context.Context, sourceID string, fifo *os.File, audioChan chan []byte) error {
 	dataWritten := false
 
-	// Use the provided context for cancellation
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("Context canceled, stopping audio feed for source %s", sourceID)
-			return
+			return fmt.Errorf("context canceled")
 		case data, ok := <-audioChan:
 			if !ok {
-				log.Printf("Audio channel closed for source %s", sourceID)
-				return
+				return fmt.Errorf("audio channel closed")
 			}
 
 			// Write data to FIFO
 			if _, err := fifo.Write(data); err != nil {
-				log.Printf("Error writing to FIFO: %v", err)
-				return
+				return fmt.Errorf("error writing to FIFO: %w", err)
 			}
 
 			if !dataWritten {
@@ -1205,6 +1247,74 @@ fifoOpened:
 			}
 		}
 	}
+}
+
+// feedAudioToFFmpeg pumps audio data to the FFmpeg process
+func feedAudioToFFmpeg(sourceID, fifoPath string, ctx context.Context) {
+	log.Printf("Starting audio feed for source %s to FIFO %s", sourceID, fifoPath)
+
+	// Set up secure filesystem
+	secFS, err := setupSecureFS(fifoPath)
+	if err != nil {
+		log.Printf("Error setting up secure filesystem: %v", err)
+		return
+	}
+	defer secFS.Close()
+
+	// Set up and open the FIFO
+	fifo, err := setupFIFO(ctx, sourceID, fifoPath, secFS)
+	if err != nil {
+		log.Printf("Error opening FIFO: %v", err)
+		return
+	}
+	defer func() {
+		log.Printf("Closing FIFO for source %s", sourceID)
+		fifo.Close()
+	}()
+
+	// Set up audio callback
+	audioChan, cleanup, err := setupAudioCallback(sourceID)
+	if err != nil {
+		log.Printf("Error setting up audio callback: %v", err)
+		return
+	}
+	defer cleanup()
+
+	log.Printf("Audio feed ready for source %s", sourceID)
+
+	// Process audio data
+	err = processFIFOData(ctx, sourceID, fifo, audioChan)
+	if err != nil {
+		log.Printf("Audio processing stopped: %v for source %s", err, sourceID)
+	}
+}
+
+// setupSecureFS prepares the secure filesystem and validates paths
+func setupSecureFS(fifoPath string) (*secureFS, error) {
+	// Get HLS directory for path validation
+	hlsBaseDir, err := conf.GetHLSDirectory()
+	if err != nil {
+		return nil, fmt.Errorf("error getting HLS directory: %w", err)
+	}
+
+	// Create a secure filesystem for operations
+	secFS, err := newSecureFS(hlsBaseDir)
+	if err != nil {
+		return nil, fmt.Errorf("error creating secure filesystem: %w", err)
+	}
+
+	// Validate fifoPath before opening
+	isWithin, err := isPathWithinBase(hlsBaseDir, fifoPath)
+	if err != nil {
+		secFS.Close()
+		return nil, fmt.Errorf("error validating FIFO path: %w", err)
+	}
+	if !isWithin {
+		secFS.Close()
+		return nil, fmt.Errorf("security error: FIFO path would be outside HLS directory: %s", fifoPath)
+	}
+
+	return secFS, nil
 }
 
 // cleanupInactiveStreams removes streams that haven't been accessed recently
@@ -1570,6 +1680,7 @@ func (h *Handlers) StopHLSClientStream(c echo.Context, sourceID string) error {
 	clientIP := c.RealIP()
 	var lastClient bool
 	var clientIDToRemove string
+	var remainingClients int
 
 	// First find the client to remove and check if it's the last one
 	hlsStreamClientMutex.Lock()
@@ -1585,18 +1696,25 @@ func (h *Handlers) StopHLSClientStream(c echo.Context, sourceID string) error {
 		// Remove the client if found
 		if clientIDToRemove != "" {
 			delete(clients, clientIDToRemove)
-			log.Printf("Client %s disconnected from HLS stream for source: %s", clientIDToRemove, sourceID)
 
 			// Check if no clients are left
-			lastClient = len(clients) == 0
+			remainingClients = len(clients)
+			lastClient = remainingClients == 0
 			if lastClient {
 				delete(hlsStreamClients, sourceID)
-			} else {
-				log.Printf("HLS stream for source %s still has %d active clients", sourceID, len(clients))
 			}
 		}
 	}
 	hlsStreamClientMutex.Unlock()
+
+	// Log client disconnection - after releasing the mutex
+	if clientIDToRemove != "" {
+		log.Printf("Client %s disconnected from HLS stream for source: %s", clientIDToRemove, sourceID)
+
+		if !lastClient {
+			log.Printf("HLS stream for source %s still has %d active clients", sourceID, remainingClients)
+		}
+	}
 
 	// If this was the last client, clean up the stream in a separate lock scope
 	// Note: We've already released the client mutex, which prevents deadlock
