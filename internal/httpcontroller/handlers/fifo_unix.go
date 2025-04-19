@@ -13,12 +13,17 @@ import (
 
 // createFIFOImpl creates a named pipe (FIFO) on Unix systems
 func createFIFOImpl(path string) error {
-	// Remove if exists
-	if _, err := os.Stat(path); err == nil {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			log.Printf("Warning: Error removing existing FIFO: %v", err)
+	// Helper function for removing existing FIFO
+	removeFIFO := func() {
+		if _, err := os.Stat(path); err == nil {
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				log.Printf("Warning: Error removing existing FIFO: %v", err)
+			}
 		}
 	}
+
+	// Remove if exists initially
+	removeFIFO()
 
 	// Create FIFO with retry mechanism
 	var fifoErr error
@@ -32,9 +37,7 @@ func createFIFOImpl(path string) error {
 		log.Printf("Retry %d: Failed to create FIFO pipe: %v", retry+1, fifoErr)
 		// If error is "file exists", try to remove again
 		if os.IsExist(fifoErr) {
-			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-				log.Printf("Warning: Error removing existing FIFO: %v", err)
-			}
+			removeFIFO()
 			time.Sleep(100 * time.Millisecond)
 		}
 	}

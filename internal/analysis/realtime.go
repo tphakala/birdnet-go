@@ -419,7 +419,7 @@ func initializeBuffers(sources []string) error {
 // from previous runs of the application to avoid accumulation of unused files.
 func cleanupHLSStreamingFiles() error {
 	// Get the HLS directory where all streaming files are stored
-	hlsDir, err := getHLSDirectory()
+	hlsDir, err := conf.GetHLSDirectory()
 	if err != nil {
 		return fmt.Errorf("failed to get HLS directory: %w", err)
 	}
@@ -453,25 +453,4 @@ func cleanupHLSStreamingFiles() error {
 	}
 
 	return nil
-}
-
-// getHLSDirectory returns the path to the HLS directory
-func getHLSDirectory() (string, error) {
-	// Get config directory paths
-	configPaths, err := conf.GetDefaultConfigPaths()
-	if err != nil {
-		return "", fmt.Errorf("failed to get config paths: %w", err)
-	}
-
-	if len(configPaths) == 0 {
-		return "", fmt.Errorf("no config paths found")
-	}
-
-	// Use the first config path as the base
-	baseDir := configPaths[0]
-
-	// Create HLS directory path
-	hlsDir := filepath.Join(baseDir, "hls")
-
-	return hlsDir, nil
 }

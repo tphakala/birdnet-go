@@ -14,6 +14,9 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// openPipes tracks all created named pipe handles for later cleanup
+var openPipes []windows.Handle
+
 // createFIFOImpl creates a Windows named pipe
 // Windows doesn't support Unix-style FIFOs, so we create a named pipe
 // using Windows API and emulate FIFO functionality
@@ -76,9 +79,8 @@ func createFIFOImpl(path string) error {
 				log.Printf("Warning: Failed to create named pipe placeholder file: %v", err)
 			}
 
-			// We deliberately leak the handle here as we want the pipe to remain
-			// available throughout the application lifetime, similar to a FIFO
-			// The OS will clean it up when the process terminates
+			// Track the handle for later cleanup
+			openPipes = append(openPipes, pipeHandle)
 			return nil
 		}
 
@@ -90,4 +92,13 @@ func createFIFOImpl(path string) error {
 	}
 
 	return fmt.Errorf("failed to create Windows named pipe after retries: %v", createErr)
+}
+
+// CleanupNamedPipes closes all open named pipe handles
+// Call this function during application shutdown to properly release resources
+func CleanupNamedPipes() {
+	for _, h := range openPipes {
+		_ = windows.CloseHandle(h)
+	}
+	openPipes = nil
 }

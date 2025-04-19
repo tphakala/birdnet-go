@@ -275,6 +275,9 @@ func (s *Server) Shutdown() error {
 		s.Debug("Error cleaning up audio streams: %v", err)
 	}
 
+	// Close all named-pipe handles created at startup
+	handlers.CleanupNamedPipes()
+
 	// Gracefully shutdown the server
 	return s.Echo.Close()
 }
