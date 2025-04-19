@@ -266,3 +266,18 @@ func (s *Server) Debug(format string, v ...interface{}) {
 		}
 	}
 }
+
+// Shutdown performs cleanup operations and gracefully stops the server
+func (s *Server) Shutdown() error {
+	// Stop audio streaming
+	s.Debug("Cleaning up HLS audio streaming resources")
+	if err := s.AudioStreamManager.CleanupAllStreams(); err != nil {
+		s.Debug("Error cleaning up audio streams: %v", err)
+	}
+
+	// Close all named-pipe handles created at startup
+	handlers.CleanupNamedPipes()
+
+	// Gracefully shutdown the server
+	return s.Echo.Close()
+}

@@ -104,6 +104,38 @@ func GetBasePath(path string) string {
 	return basePath
 }
 
+// GetHLSDirectory returns the directory where HLS files should be stored
+func GetHLSDirectory() (string, error) {
+	// Get config directory paths
+	configPaths, err := GetDefaultConfigPaths()
+	if err != nil {
+		return "", fmt.Errorf("failed to get config paths: %w", err)
+	}
+
+	if len(configPaths) == 0 {
+		return "", fmt.Errorf("no config paths found")
+	}
+
+	// Use the first config path as the base
+	baseDir := configPaths[0]
+
+	// Create HLS directory path
+	hlsDir := filepath.Join(baseDir, "hls")
+
+	// Get absolute path for consistent operations
+	absPath, err := filepath.Abs(hlsDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path for HLS directory: %w", err)
+	}
+
+	// Create directory if it doesn't exist
+	if err := os.MkdirAll(absPath, 0o755); err != nil {
+		return "", fmt.Errorf("failed to create HLS directory: %w", err)
+	}
+
+	return absPath, nil
+}
+
 // PrintUserInfo checks the operating system. If it's Linux, it prints the current user and their group memberships.
 func PrintUserInfo() {
 	// Initialize a flag to check if the user is a member of the audio group
