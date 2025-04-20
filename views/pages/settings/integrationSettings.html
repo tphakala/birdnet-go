@@ -104,6 +104,7 @@
         topic: '{{.Settings.Realtime.MQTT.Topic}}',
         username: '{{.Settings.Realtime.MQTT.Username}}',
         password: '{{.Settings.Realtime.MQTT.Password}}',
+        retain: {{.Settings.Realtime.MQTT.Retain}},
         testResults: [],
         isTesting: false,
         currentTestStage: null
@@ -137,6 +138,11 @@
         mqtt.currentTestStage = null;
     });
     $watch('mqtt.password', () => { 
+        hasChanges = true;
+        mqtt.testResults = [];
+        mqtt.currentTestStage = null;
+    });
+    $watch('mqtt.retain', () => { 
         hasChanges = true;
         mqtt.testResults = [];
         mqtt.currentTestStage = null;
@@ -203,8 +209,29 @@
                 "label" "Password"
                 "placeholder" ""
                 "tooltip" "The MQTT password."}}
+          
+            {{template "checkbox" dict
+                "id" "mqttRetain"
+                "model" "mqtt.retain"
+                "name" "realtime.mqtt.retain"
+                "label" "Retain Messages"
+                "tooltip" "When enabled, MQTT broker will keep the last message on each topic and deliver to new subscribers."}}
 
-            <!-- Multi-Stage Operation Component for MQTT Connection Test -->
+        </div>
+        
+        <!-- Note about MQTT Retain for HomeAssistant - full width -->
+        <div x-show="mqtt.enabled" class="text-sm my-4 px-4 py-3 bg-base-200 rounded-md">
+            <span class="text-info-content">
+                <i class="fa-solid fa-circle-info mr-1"></i><strong>Home Assistant Users:</strong> 
+                It's recommended to enable the retain flag for Home Assistant integration. Without retain, 
+                MQTT sensors will appear as 'unknown' when Home Assistant restarts. With retain enabled, 
+                Home Assistant can retrieve the last known state of the sensor. This is similar to how platforms 
+                like Zigbee2MQTT preserve sensor states across Home Assistant restarts.
+            </span>
+        </div>
+
+        <!-- Multi-Stage Operation Component for MQTT Connection Test -->
+        <div x-show="mqtt.enabled" class="mt-4">
             {{template "multiStageOperation" dict
                 "operationName" "MQTT Connection Test"
                 "apiEndpoint" "/api/v1/mqtt/test"
@@ -213,7 +240,7 @@
                 "buttonLoadingText" "Testing..."
                 "buttonDisabledCondition" "!mqtt.enabled || !mqtt.broker || isRunning"
                 "buttonTooltipMap" "!mqtt.enabled ? 'MQTT must be enabled to test' : !mqtt.broker ? 'MQTT broker must be specified' : isRunning ? 'Test in progress...' : 'Test MQTT connection'"
-                "payload" "{enabled: mqtt.enabled, broker: mqtt.broker, topic: mqtt.topic, username: mqtt.username, password: mqtt.password}"
+                "payload" "{enabled: mqtt.enabled, broker: mqtt.broker, topic: mqtt.topic, username: mqtt.username, password: mqtt.password, retain: mqtt.retain}"
                 "completionMessage" "Please remember to save settings to apply the changes permanently."
             }}
         </div>
