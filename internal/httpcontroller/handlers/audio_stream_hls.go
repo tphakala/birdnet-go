@@ -3,10 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
-	"io"
-	"io/fs"
 	"log"
-	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,14 +11,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
@@ -77,57 +73,6 @@ type StreamStatus struct {
 	PlaylistPath  string `json:"playlist_path,omitempty"`
 	ActiveClients int    `json:"active_clients"`
 	PlaylistReady bool   `json:"playlist_ready"`
-}
-
-// isPathWithinBase checks if targetPath is within or equal to basePath
-func isPathWithinBase(basePath, targetPath string) (bool, error) {
-	// Resolve both paths to absolute, clean paths
-	absBase, err := filepath.Abs(basePath)
-	if err != nil {
-		return false, fmt.Errorf("failed to resolve base path: %w", err)
-	}
-
-	absTarget, err := filepath.Abs(targetPath)
-	if err != nil {
-		return false, fmt.Errorf("failed to resolve target path: %w", err)
-	}
-
-	// Resolve symlinks in base path (which should always exist)
-	absBase, err = filepath.EvalSymlinks(absBase)
-	if err != nil {
-		return false, fmt.Errorf("failed to eval base symlinks: %w", err)
-	}
-
-	// Try to resolve all symlinks in the target path, including intermediate components
-	absTargetResolved, err := filepath.EvalSymlinks(absTarget)
-	if err == nil {
-		// If successful, use the fully resolved path
-		absTarget = absTargetResolved
-	} else {
-		// If the target doesn't exist or there's another issue, we should still
-		// handle the case where intermediate components might be symlinks
-		// This is a fallback that at least checks what we can
-		dir := filepath.Dir(absTarget)
-		for dir != "/" && dir != "." {
-			// Try to resolve symlinks in parent directories
-			resolvedDir, err := filepath.EvalSymlinks(dir)
-			if err == nil && resolvedDir != dir {
-				// Found a parent directory that's a symlink
-				// Reconstruct the target with the resolved parent
-				base := filepath.Base(absTarget)
-				absTarget = filepath.Join(resolvedDir, base)
-				break
-			}
-			dir = filepath.Dir(dir)
-		}
-	}
-
-	// Ensure paths are cleaned to remove any ".." components
-	absBase = filepath.Clean(absBase)
-	absTarget = filepath.Clean(absTarget)
-
-	// Check if target path starts with base path
-	return strings.HasPrefix(absTarget, absBase+string(filepath.Separator)) || absTarget == absBase, nil
 }
 
 // Initialize HLS streaming service
@@ -324,7 +269,7 @@ func (h *Handlers) servePlaylistFile(c echo.Context, stream *HLSStreamInfo, hlsB
 	}
 
 	// Create a secure filesystem for operations
-	secFS, err := newSecureFS(hlsBaseDir)
+	secFS, err := securefs.New(hlsBaseDir)
 	if err != nil {
 		log.Printf("Error creating secure filesystem: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "Server error")
@@ -385,7 +330,7 @@ func (h *Handlers) serveSegmentFile(c echo.Context, stream *HLSStreamInfo, reque
 	segmentPath := filepath.Join(stream.OutputDir, safeRequestPath)
 
 	// Create a secure filesystem for operations
-	secFS, err := newSecureFS(hlsBaseDir)
+	secFS, err := securefs.New(hlsBaseDir)
 	if err != nil {
 		log.Printf("Error creating secure filesystem: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "Server error")
@@ -467,8 +412,8 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 		return nil, fmt.Errorf("failed to get HLS directory: %w", err)
 	}
 
-	// Create a secureFS instance for filesystem operations
-	secFS, err := newSecureFS(hlsBaseDir)
+	// Create a securefs instance for filesystem operations
+	secFS, err := securefs.New(hlsBaseDir)
 	if err != nil {
 		streamCancel() // Clean up context
 		return nil, fmt.Errorf("failed to initialize secure filesystem: %w", err)
@@ -490,7 +435,7 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	outputDir := filepath.Join(hlsBaseDir, fmt.Sprintf("stream_%s", safeSourceID))
 
 	// Verify the output directory is within the HLS base directory for safety
-	isWithin, err := isPathWithinBase(hlsBaseDir, outputDir)
+	isWithin, err := securefs.IsPathWithinBase(hlsBaseDir, outputDir)
 	if err != nil {
 		streamCancel() // Clean up context
 		return nil, fmt.Errorf("failed to validate output directory: %w", err)
@@ -526,7 +471,7 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	playlistPath := filepath.Join(outputDir, "playlist.m3u8")
 
 	// Verify the playlist file is within the HLS base directory
-	isWithin, err = isPathWithinBase(hlsBaseDir, playlistPath)
+	isWithin, err = securefs.IsPathWithinBase(hlsBaseDir, playlistPath)
 	if err != nil {
 		streamCancel() // Clean up context
 		return nil, fmt.Errorf("failed to validate playlist path: %w", err)
@@ -548,7 +493,7 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	fifoPath := filepath.Join(outputDir, "audio.pcm")
 
 	// Verify the FIFO is within the HLS base directory
-	isWithin, err = isPathWithinBase(hlsBaseDir, fifoPath)
+	isWithin, err = securefs.IsPathWithinBase(hlsBaseDir, fifoPath)
 	if err != nil {
 		streamCancel() // Clean up context
 		return nil, fmt.Errorf("failed to validate FIFO path: %w", err)
@@ -560,7 +505,7 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	}
 
 	log.Printf("Creating FIFO for HLS stream: %s", fifoPath)
-	// Use the secure filesystem for FIFO creation
+	// Use secure filesystem for FIFO creation
 	if err := secFS.CreateFIFO(fifoPath); err != nil {
 		// Use secureFS for cleanup
 		if removeErr := secFS.RemoveAll(outputDir); removeErr != nil {
@@ -676,7 +621,7 @@ func cleanupStream(sourceID string) {
 	// Clean up directory using secure filesystem operations
 	if stream.OutputDir != "" {
 		// Create a secure filesystem for cleanup operations
-		secFS, err := newSecureFS(hlsBaseDir)
+		secFS, err := securefs.New(hlsBaseDir)
 		if err != nil {
 			log.Printf("Error creating secure filesystem: %v", err)
 			return
@@ -693,490 +638,6 @@ func cleanupStream(sourceID string) {
 	}
 
 	log.Printf("HLS stream for source %s fully cleaned up", sourceID)
-}
-
-// secureFS provides filesystem operations with path validation
-// using Go 1.24's os.Root for OS-level filesystem sandboxing
-//
-// The os.Root feature introduced in Go 1.24 provides directory-limited filesystem access,
-// preventing path traversal vulnerabilities by enforcing access boundaries at the OS level.
-// This implementation reliably prevents access to files outside the specified directory,
-// including via symlinks, relative paths, or other traversal techniques.
-//
-// Security guarantees:
-// - Prevents directory traversal attacks using "../" or other relative paths
-// - Prevents access via symlinks that point outside the base directory
-// - Prevents time-of-check/time-of-use (TOCTOU) race conditions
-// - Prevents access to reserved Windows device names
-//
-// Example valid usage:
-//
-//	root, err := os.OpenRoot("/safe-directory")
-//	if err != nil {
-//	    return err
-//	}
-//	defer root.Close()
-//
-//	// Operations are safely contained within /safe-directory
-//	file, err := root.Open("user-data.txt")
-//	dir, err := root.OpenRoot("user/uploads")  // Sub-directory sandboxing
-//
-// More information: https://go.dev/blog/osroot
-type secureFS struct {
-	baseDir  string   // The base directory that all operations are restricted to
-	root     *os.Root // The sandboxed filesystem root
-	pipeName string   // Platform-specific pipe name for named pipes
-}
-
-// newSecureFS creates a new secure filesystem with the specified base directory
-// using Go 1.24's os.Root for OS-level sandboxing. All operations through the
-// returned secureFS will be restricted to the specified base directory.
-func newSecureFS(baseDir string) (*secureFS, error) {
-	// Ensure baseDir is an absolute path
-	absPath, err := filepath.Abs(baseDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve base path: %w", err)
-	}
-
-	// Create the directory if it doesn't exist
-	if err := os.MkdirAll(absPath, 0o755); err != nil {
-		return nil, fmt.Errorf("failed to create base directory: %w", err)
-	}
-
-	// Create a sandboxed filesystem with os.Root
-	// This is a Go 1.24 feature that provides OS-level filesystem isolation
-	root, err := os.OpenRoot(absPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create filesystem sandbox: %w", err)
-	}
-
-	return &secureFS{
-		baseDir: absPath,
-		root:    root,
-	}, nil
-}
-
-// relativePath converts an absolute path to a path relative to the base directory
-func (sfs *secureFS) relativePath(path string) (string, error) {
-	// Clean the path to handle any . or .. components safely
-	path = filepath.Clean(path)
-
-	// Get absolute paths for consistent comparison
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return "", fmt.Errorf("failed to get absolute path: %w", err)
-	}
-
-	// Verify the path is within the base directory for safety
-	// Using the updated isPathWithinBase that handles non-existent paths
-	isWithin, err := isPathWithinBase(sfs.baseDir, absPath)
-	if err != nil {
-		return "", fmt.Errorf("path validation error: %w", err)
-	}
-
-	if !isWithin {
-		return "", fmt.Errorf("security error: path %s is outside allowed directory %s", path, sfs.baseDir)
-	}
-
-	// Make the path relative to the base directory for os.Root operations
-	relPath, err := filepath.Rel(sfs.baseDir, absPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to make path relative: %w", err)
-	}
-
-	// Ensure no leading slash which would make a relative path be treated as absolute
-	relPath = strings.TrimPrefix(relPath, string(filepath.Separator))
-
-	return relPath, nil
-}
-
-// MkdirAll creates a directory and all necessary parent directories with path validation
-func (sfs *secureFS) MkdirAll(path string, perm os.FileMode) error {
-	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
-	if err != nil {
-		return err
-	}
-
-	// If the path is the root, it's already created
-	if relPath == "" || relPath == "." {
-		return nil
-	}
-
-	// Create directories recursively
-	components := strings.Split(relPath, string(filepath.Separator))
-	currentPath := ""
-
-	// Create each directory component
-	for i, component := range components {
-		// Skip empty components that might result from path normalization
-		if component == "" {
-			continue
-		}
-
-		// Build the current path
-		if currentPath == "" {
-			currentPath = component
-		} else {
-			currentPath = filepath.Join(currentPath, component)
-		}
-
-		// Try to create the directory using os.Root.Mkdir
-		// Ignore "already exists" errors
-		err := sfs.root.Mkdir(currentPath, perm)
-		if err != nil && !os.IsExist(err) {
-			return fmt.Errorf("failed to create directory component %s: %w", currentPath, err)
-		}
-
-		// If this is the last component, we're done
-		if i == len(components)-1 {
-			return nil
-		}
-	}
-
-	return nil
-}
-
-// walkRemove is a helper function that walks a directory tree and removes files and directories
-// in a secure manner using os.Root operations where possible
-func (sfs *secureFS) walkRemove(path string) error {
-	// Validate the path is within the base directory
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return fmt.Errorf("failed to resolve path: %w", err)
-	}
-
-	// Final security check that path is within base directory
-	isWithin, err := isPathWithinBase(sfs.baseDir, absPath)
-	if err != nil {
-		// If the path doesn't exist, we don't need to remove it
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("path validation error: %w", err)
-	}
-	if !isWithin {
-		return fmt.Errorf("security error: path %s is outside allowed directory %s", absPath, sfs.baseDir)
-	}
-
-	// Get file info to determine if it's a file or directory
-	info, err := os.Stat(absPath)
-	if os.IsNotExist(err) {
-		return nil // Already gone, no error
-	}
-	if err != nil {
-		return err
-	}
-
-	if !info.IsDir() {
-		// For regular files, use os.Root.Remove if possible
-		relPath, err := sfs.relativePath(absPath)
-		if err != nil {
-			return err
-		}
-		return sfs.root.Remove(relPath)
-	}
-
-	// For directories, we need to walk and remove contents first
-	entries, err := os.ReadDir(absPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // Directory already gone
-		}
-		return err
-	}
-
-	// Remove each entry in the directory
-	for _, entry := range entries {
-		childPath := filepath.Join(absPath, entry.Name())
-
-		// Validate child path is within base directory
-		isChildWithin, err := isPathWithinBase(sfs.baseDir, childPath)
-		if err != nil {
-			// Skip entries that don't exist
-			if os.IsNotExist(err) {
-				continue
-			}
-			return fmt.Errorf("child path validation error: %w", err)
-		}
-
-		if !isChildWithin {
-			return fmt.Errorf("security error: child path %s is outside allowed directory %s",
-				childPath, sfs.baseDir)
-		}
-
-		if err := sfs.walkRemove(childPath); err != nil {
-			return err
-		}
-	}
-
-	// Now that the directory is empty, remove it using os.Root if possible
-	relPath, err := sfs.relativePath(absPath)
-	if err != nil {
-		return err
-	}
-	return sfs.root.Remove(relPath)
-}
-
-// RemoveAll removes a directory and all its contents with path validation
-// This implementation provides a more secure alternative to os.RemoveAll by using
-// os.Root operations for each individual file/directory where possible
-func (sfs *secureFS) RemoveAll(path string) error {
-	// Validate the path is within the base directory
-	if err := isPathValidWithinBase(sfs.baseDir, path); err != nil {
-		return err
-	}
-
-	// Use our secure walkRemove implementation
-	return sfs.walkRemove(path)
-}
-
-// Remove removes a file with path validation
-func (sfs *secureFS) Remove(path string) error {
-	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
-	if err != nil {
-		return err
-	}
-
-	// Use os.Root.Remove to safely remove the file
-	return sfs.root.Remove(relPath)
-}
-
-// OpenFile opens a file with path validation
-func (sfs *secureFS) OpenFile(path string, flag int, perm os.FileMode) (*os.File, error) {
-	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
-	if err != nil {
-		return nil, err
-	}
-
-	// Use os.Root.OpenFile to safely open the file
-	return sfs.root.OpenFile(relPath, flag, perm)
-}
-
-// Stat returns file info with path validation
-func (sfs *secureFS) Stat(path string) (fs.FileInfo, error) {
-	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
-	if err != nil {
-		return nil, err
-	}
-
-	// Use os.Root.Stat to safely get file info
-	return sfs.root.Stat(relPath)
-}
-
-// Exists checks if a path exists with validation
-func (sfs *secureFS) Exists(path string) bool {
-	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
-	if err != nil {
-		return false
-	}
-
-	// Use os.Root.Stat to check if the file exists
-	_, err = sfs.root.Stat(relPath)
-	return err == nil
-}
-
-// ReadFile reads a file with path validation and returns its contents
-func (sfs *secureFS) ReadFile(path string) ([]byte, error) {
-	// Open the file using secure methods
-	file, err := sfs.OpenFile(path, os.O_RDONLY, 0)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	// Read the entire file
-	return io.ReadAll(file)
-}
-
-// ServeFile serves a file through an HTTP response
-// This provides a secure alternative to echo.Context.File()
-func (sfs *secureFS) ServeFile(c echo.Context, path string) error {
-	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
-	if err != nil {
-		return err
-	}
-
-	// Open the file using os.Root for sandbox protection
-	file, err := sfs.root.Open(relPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return echo.NewHTTPError(http.StatusNotFound, "File not found")
-		}
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to open file")
-	}
-	defer file.Close()
-
-	// Get file info for content-length
-	stat, err := file.Stat()
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info")
-	}
-
-	// Only serve regular files
-	if !stat.Mode().IsRegular() {
-		return echo.NewHTTPError(http.StatusForbidden, "Not a regular file")
-	}
-
-	// Set content type based on file extension
-	contentType := mime.TypeByExtension(filepath.Ext(path))
-	if contentType != "" {
-		c.Response().Header().Set(echo.HeaderContentType, contentType)
-	}
-
-	// Set content length
-	c.Response().Header().Set(echo.HeaderContentLength, strconv.FormatInt(stat.Size(), 10))
-
-	// Stream the file directly from within the sandbox
-	_, err = io.Copy(c.Response(), file)
-	return err
-}
-
-// CreateFIFO creates a named pipe with path validation
-func (sfs *secureFS) CreateFIFO(path string) error {
-	// Validate the path is within the base directory
-	if err := isPathValidWithinBase(sfs.baseDir, path); err != nil {
-		return err
-	}
-
-	// Call the platform-agnostic wrapper which now returns the pipe name
-	pipeName, err := createFIFOWrapper(path)
-	if err != nil {
-		return err
-	}
-
-	// Store the pipeName in the secureFS instance to retrieve it later
-	sfs.pipeName = pipeName
-	return nil
-}
-
-// GetPipeName returns the platform-specific pipe name for the given path
-// On Windows this returns the Windows named pipe path, on Unix systems
-// this returns the original path
-func (sfs *secureFS) GetPipeName(path string) (string, error) {
-	// Validate the path is within the base directory
-	if err := isPathValidWithinBase(sfs.baseDir, path); err != nil {
-		return "", err
-	}
-
-	// If we have a stored pipe name from CreateFIFO, use that
-	if sfs.pipeName != "" {
-		return sfs.pipeName, nil
-	}
-
-	// Otherwise, determine the platform-specific pipe name based on OS
-	if runtime.GOOS == "windows" {
-		// Convert Unix-style path to Windows named pipe path
-		// Format: \\.\pipe\[path]
-		baseName := filepath.Base(path)
-		ext := filepath.Ext(baseName)
-		pipeName := strings.TrimSuffix(baseName, ext)
-		return `\\.\pipe\` + pipeName, nil
-	}
-
-	// For Unix systems, return the original path
-	return path, nil
-}
-
-// Close closes the underlying Root
-func (sfs *secureFS) Close() error {
-	if sfs.root != nil {
-		return sfs.root.Close()
-	}
-	return nil
-}
-
-// isPathValidWithinBase is a helper that checks if a path is within a base directory
-// and returns an error if not
-func isPathValidWithinBase(baseDir, path string) error {
-	isWithin, err := isPathWithinBase(baseDir, path)
-	if err != nil {
-		// If the error is because the target doesn't exist, don't treat it as a security error
-		// This is common during cleanup operations when we're checking paths that might be gone
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("path validation error: %w", err)
-	}
-
-	if !isWithin {
-		return fmt.Errorf("security error: path %s is outside allowed directory %s", path, baseDir)
-	}
-
-	return nil
-}
-
-// setupFIFO prepares and opens the FIFO for writing with platform-specific settings
-func setupFIFO(ctx context.Context, sourceID, fifoPath string, secFS *secureFS) (*os.File, error) {
-	// Get the platform-specific pipe name
-	pipePath, err := secFS.GetPipeName(fifoPath)
-	if err != nil {
-		return nil, fmt.Errorf("error getting platform-specific pipe name: %w", err)
-	}
-
-	// Set platform-specific flags for opening FIFO
-	openFlags := getPlatformOpenFlags()
-
-	// Try to open the FIFO with retries
-	return openFIFOWithRetries(ctx, sourceID, fifoPath, pipePath, openFlags, secFS)
-}
-
-// getPlatformOpenFlags returns OS-specific open flags for the FIFO
-func getPlatformOpenFlags() int {
-	if runtime.GOOS == "windows" {
-		return os.O_WRONLY // Windows uses writeable flag without O_NONBLOCK
-	}
-	// Unix systems use non-blocking flag to prevent indefinite blocking if FFmpeg crashes
-	return os.O_WRONLY | syscall.O_NONBLOCK
-}
-
-// openFIFOWithRetries attempts to open the FIFO with multiple retries
-func openFIFOWithRetries(ctx context.Context, sourceID, fifoPath, pipePath string, openFlags int, secFS *secureFS) (*os.File, error) {
-	maxRetries := 30
-	retryInterval := 200 * time.Millisecond
-
-	for i := 0; i < maxRetries; i++ {
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("context canceled while opening FIFO")
-		default:
-			// Attempt to open the FIFO with platform-specific approach
-			fifo, openErr := openPlatformSpecificFIFO(pipePath, fifoPath, openFlags, secFS)
-			if openErr == nil {
-				log.Printf("FIFO opened successfully for source %s on attempt %d", sourceID, i+1)
-				return fifo, nil
-			}
-
-			if i == 0 || (i+1)%5 == 0 {
-				log.Printf("Waiting for FFmpeg to open FIFO (attempt %d): %v", i+1, openErr)
-			}
-
-			// Sleep before retrying
-			select {
-			case <-ctx.Done():
-				return nil, fmt.Errorf("context canceled during retry delay")
-			case <-time.After(retryInterval):
-				// Continue to next attempt
-			}
-		}
-	}
-
-	return nil, fmt.Errorf("failed to open FIFO after %d attempts", maxRetries)
-}
-
-// openPlatformSpecificFIFO opens the FIFO using OS-specific approach
-func openPlatformSpecificFIFO(pipePath, fifoPath string, openFlags int, secFS *secureFS) (*os.File, error) {
-	if runtime.GOOS == "windows" {
-		// For Windows, open the named pipe directly
-		return os.OpenFile(pipePath, openFlags, 0o666)
-	}
-	// For Unix systems, use secFS to maintain security
-	return secFS.OpenFile(fifoPath, openFlags, 0o666)
 }
 
 // setupAudioCallback sets up the audio callback and channel
@@ -1290,7 +751,7 @@ func feedAudioToFFmpeg(sourceID, fifoPath string, ctx context.Context) {
 }
 
 // setupSecureFS prepares the secure filesystem and validates paths
-func setupSecureFS(fifoPath string) (*secureFS, error) {
+func setupSecureFS(fifoPath string) (*securefs.SecureFS, error) {
 	// Get HLS directory for path validation
 	hlsBaseDir, err := conf.GetHLSDirectory()
 	if err != nil {
@@ -1298,23 +759,29 @@ func setupSecureFS(fifoPath string) (*secureFS, error) {
 	}
 
 	// Create a secure filesystem for operations
-	secFS, err := newSecureFS(hlsBaseDir)
+	secFS, err := securefs.New(hlsBaseDir)
 	if err != nil {
 		return nil, fmt.Errorf("error creating secure filesystem: %w", err)
 	}
 
 	// Validate fifoPath before opening
-	isWithin, err := isPathWithinBase(hlsBaseDir, fifoPath)
+	isWithin, err := securefs.IsPathWithinBase(hlsBaseDir, fifoPath)
 	if err != nil {
 		secFS.Close()
 		return nil, fmt.Errorf("error validating FIFO path: %w", err)
 	}
 	if !isWithin {
 		secFS.Close()
-		return nil, fmt.Errorf("security error: FIFO path would be outside HLS directory: %s", fifoPath)
+		return nil, fmt.Errorf("security error: path %s is outside allowed directory %s", fifoPath, hlsBaseDir)
 	}
 
 	return secFS, nil
+}
+
+// setupFIFO prepares and opens the FIFO for writing with platform-specific settings
+func setupFIFO(ctx context.Context, sourceID, fifoPath string, secFS *securefs.SecureFS) (*os.File, error) {
+	// Try to open the FIFO with platform-specific settings
+	return secFS.OpenFIFO(ctx, fifoPath)
 }
 
 // cleanupInactiveStreams removes streams that haven't been accessed recently
@@ -1352,7 +819,7 @@ func syncHLSClientActivity() {
 	}
 
 	// Create a secureFS for safe filesystem operations
-	secureFs, err := newSecureFS(hlsBaseDir)
+	secureFs, err := securefs.New(hlsBaseDir)
 	if err != nil {
 		log.Printf("Error creating secure filesystem: %v", err)
 		return
@@ -1402,7 +869,7 @@ func processInactiveClients() (inactiveClients map[string][]string, activeCount 
 }
 
 // syncStreamClients cleans up streams with no active clients
-func syncStreamClients(inactiveClients map[string][]string, activeCount map[string]int, hlsBaseDir string, secureFs *secureFS) {
+func syncStreamClients(inactiveClients map[string][]string, activeCount map[string]int, hlsBaseDir string, secureFs *securefs.SecureFS) {
 	hlsStreamMutex.Lock()
 
 	// Get current time for grace period calculations
@@ -1471,7 +938,7 @@ func syncStreamClients(inactiveClients map[string][]string, activeCount map[stri
 }
 
 // cleanupInactiveStream stops and cleans up an inactive stream
-func cleanupInactiveStream(sourceID, hlsBaseDir string, secureFs *secureFS) {
+func cleanupInactiveStream(sourceID, hlsBaseDir string, secFS *securefs.SecureFS) {
 	hlsStreamMutex.Lock()
 	defer hlsStreamMutex.Unlock()
 
@@ -1489,10 +956,10 @@ func cleanupInactiveStream(sourceID, hlsBaseDir string, secureFs *secureFS) {
 		}
 
 		// Clean up stream directory using secureFS
-		if stream.OutputDir != "" && secureFs != nil {
-			if secureFs.Exists(stream.OutputDir) {
+		if stream.OutputDir != "" && secFS != nil {
+			if secFS.Exists(stream.OutputDir) {
 				log.Printf("Cleaning up stream directory: %s", stream.OutputDir)
-				if err := secureFs.RemoveAll(stream.OutputDir); err != nil {
+				if err := secFS.RemoveAll(stream.OutputDir); err != nil {
 					log.Printf("Error removing stream directory: %v", err)
 				}
 			}
@@ -1538,7 +1005,7 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatu
 			log.Printf("Error getting HLS directory: %v", err)
 		} else if stream.OutputDir != "" {
 			// Use secureFS to remove the directory
-			secFS, err := newSecureFS(hlsBaseDir)
+			secFS, err := securefs.New(hlsBaseDir)
 			if err != nil {
 				log.Printf("Error creating secure filesystem: %v", err)
 			} else {
@@ -1593,7 +1060,7 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatu
 	}
 
 	// Create a secure filesystem for checking playlist
-	secFS, err := newSecureFS(hlsBaseDir)
+	secFS, err := securefs.New(hlsBaseDir)
 	if err != nil {
 		log.Printf("Error creating secure filesystem: %v", err)
 		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Server error")
@@ -1742,7 +1209,7 @@ func (h *Handlers) StopHLSClientStream(c echo.Context, sourceID string) error {
 				log.Printf("Error getting HLS directory: %v", err)
 			} else if stream.OutputDir != "" {
 				// Create a secure filesystem for cleanup
-				secFS, err := newSecureFS(hlsBaseDir)
+				secFS, err := securefs.New(hlsBaseDir)
 				if err != nil {
 					log.Printf("Error creating secure filesystem: %v", err)
 				} else {
@@ -1822,13 +1289,15 @@ func CleanupAllStreams() error {
 		return fmt.Errorf("failed to get HLS directory: %w", err)
 	}
 
-	// Check if directory exists
-	if _, err := os.Stat(hlsBaseDir); os.IsNotExist(err) {
-		return nil // Directory doesn't exist, nothing to clean up
+	// Create a secure filesystem for cleanup
+	secFS, err := securefs.New(hlsBaseDir)
+	if err != nil {
+		return fmt.Errorf("failed to create secure filesystem: %w", err)
 	}
+	defer secFS.Close()
 
-	// Read all entries in the HLS directory
-	entries, err := os.ReadDir(hlsBaseDir)
+	// Read all entries in the HLS directory using SecureFS
+	entries, err := secFS.ReadDir(hlsBaseDir)
 	if err != nil {
 		return fmt.Errorf("failed to read HLS directory: %w", err)
 	}
@@ -1839,11 +1308,16 @@ func CleanupAllStreams() error {
 			streamDir := filepath.Join(hlsBaseDir, entry.Name())
 			log.Printf("Removing HLS stream directory: %s", streamDir)
 
-			if err := os.RemoveAll(streamDir); err != nil {
+			if err := secFS.RemoveAll(streamDir); err != nil {
 				log.Printf("Error removing stream directory %s: %v", streamDir, err)
 				// Continue with other directories
 			}
 		}
+	}
+
+	// Cleanup named pipes if running on Windows
+	if runtime.GOOS == "windows" {
+		securefs.CleanupNamedPipes()
 	}
 
 	return nil

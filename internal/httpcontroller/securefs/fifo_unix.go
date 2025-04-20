@@ -1,7 +1,7 @@
 //go:build !windows
 // +build !windows
 
-package handlers
+package securefs
 
 import (
 	"fmt"
@@ -11,8 +11,9 @@ import (
 	"time"
 )
 
-// createFIFOImpl creates a named pipe (FIFO) on Unix systems
-func createFIFOImpl(path string) error {
+// createFIFOPlatform creates a named pipe (FIFO) on Unix systems
+// It returns the path to the FIFO and any error encountered
+func createFIFOPlatform(path string) (string, error) {
 	// Helper function for removing existing FIFO
 	removeFIFO := func() {
 		if _, err := os.Stat(path); err == nil {
@@ -31,7 +32,7 @@ func createFIFOImpl(path string) error {
 		fifoErr = syscall.Mkfifo(path, 0o600)
 		if fifoErr == nil {
 			log.Printf("Successfully created FIFO pipe: %s", path)
-			return nil
+			return path, nil
 		}
 
 		log.Printf("Retry %d: Failed to create FIFO pipe: %v", retry+1, fifoErr)
@@ -42,5 +43,10 @@ func createFIFOImpl(path string) error {
 		}
 	}
 
-	return fmt.Errorf("failed to create FIFO after retries: %w", fifoErr)
+	return "", fmt.Errorf("failed to create FIFO after retries: %w", fifoErr)
+}
+
+// CleanupNamedPipes is a no-op on non-Windows platforms
+func CleanupNamedPipes() {
+	// This function does nothing on non-Windows platforms
 }

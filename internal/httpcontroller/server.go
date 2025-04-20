@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
+	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -276,7 +277,7 @@ func (s *Server) Shutdown() error {
 	}
 
 	// Close all named-pipe handles created at startup
-	handlers.CleanupNamedPipes()
+	securefs.CleanupNamedPipes()
 
 	// Gracefully shutdown the server
 	return s.Echo.Close()

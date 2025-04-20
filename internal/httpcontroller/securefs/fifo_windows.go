@@ -1,7 +1,7 @@
 //go:build windows
 // +build windows
 
-package handlers
+package securefs
 
 import (
 	"fmt"
@@ -24,18 +24,19 @@ var (
 	openPipesMu sync.Mutex
 )
 
-// createFIFOImpl creates a Windows named pipe
+// createFIFOPlatform creates a Windows named pipe
 // Windows doesn't support Unix-style FIFOs, so we create a named pipe
 // using Windows API and emulate FIFO functionality
+// It returns the named pipe path and any error encountered
 // Note: The caller is responsible for ensuring CleanupNamedPipes() is called
 // during shutdown to release all pipe handles
-func createFIFOImpl(path string) error {
+func createFIFOPlatform(path string) (string, error) {
 	// Convert Unix-style path to Windows named pipe path
 	// Format: \\.\pipe\[path]
-	pipeName := strings.ReplaceAll(path, "/", "\\")
-	pipeName = strings.ReplaceAll(pipeName, ":", "")
-	pipeName = strings.TrimPrefix(pipeName, "\\")
-	pipeName = fmt.Sprintf("\\\\.\\pipe\\%s", pipeName)
+	baseName := filepath.Base(path)
+	ext := filepath.Ext(baseName)
+	pipeName := strings.TrimSuffix(baseName, ext)
+	fullPipeName := fmt.Sprintf("\\\\.\\pipe\\%s", pipeName)
 
 	// Remove any existing file at the path location
 	if _, err := os.Stat(path); err == nil {
@@ -68,7 +69,7 @@ func createFIFOImpl(path string) error {
 
 	for retry := 0; retry < 3; retry++ {
 		pipeHandle, createErr = windows.CreateNamedPipe(
-			windows.StringToUTF16Ptr(pipeName),
+			windows.StringToUTF16Ptr(fullPipeName),
 			openMode,
 			pipeMode,
 			maxInstances,
@@ -79,11 +80,11 @@ func createFIFOImpl(path string) error {
 		)
 
 		if createErr == nil && pipeHandle != windows.InvalidHandle {
-			log.Printf("Successfully created Windows named pipe: %s", pipeName)
+			log.Printf("Successfully created Windows named pipe: %s", fullPipeName)
 
 			// Create a placeholder file at the original path location with metadata
 			// This helps us track the named pipe location
-			placeholderInfo := fmt.Sprintf("Windows named pipe: %s", pipeName)
+			placeholderInfo := fmt.Sprintf("Windows named pipe: %s", fullPipeName)
 
 			// Ensure the parent directory exists
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -99,7 +100,7 @@ func createFIFOImpl(path string) error {
 			openPipes = append(openPipes, pipeHandle)
 			openPipesMu.Unlock()
 
-			return nil
+			return fullPipeName, nil
 		}
 
 		log.Printf("Retry %d: Failed to create Windows named pipe: %v", retry+1, createErr)
@@ -109,7 +110,7 @@ func createFIFOImpl(path string) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	return fmt.Errorf("failed to create Windows named pipe after retries: %v", createErr)
+	return "", fmt.Errorf("failed to create Windows named pipe after retries: %v", createErr)
 }
 
 // CleanupNamedPipes closes all open named pipe handles
