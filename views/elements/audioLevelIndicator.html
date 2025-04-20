@@ -271,8 +271,9 @@
                         
                         // Retry after delay
                         return new Promise(resolve => {
-                            setTimeout(() => {
+                            this.retryTimeout = setTimeout(() => {
                                 resolve(this.loadPlaylistWithRetry(hlsUrl, player, sourceId, retryCount + 1, maxRetries));
+                                this.retryTimeout = null;
                             }, retryDelay);
                         });
                     } else {
