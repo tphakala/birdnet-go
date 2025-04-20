@@ -90,7 +90,11 @@ func TestFIFOOperations(t *testing.T) {
 			}
 
 			// Verify FIFO exists
-			if !sfs.Exists(fifoPath) {
+			exists, err := sfs.Exists(fifoPath)
+			if err != nil {
+				t.Fatalf("Exists check failed with error: %v", err)
+			}
+			if !exists {
 				t.Fatal("FIFO should exist after creation")
 			}
 

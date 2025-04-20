@@ -285,7 +285,7 @@ func (h *Handlers) servePlaylistFile(c echo.Context, stream *HLSStreamInfo, hlsB
 	c.Response().Header().Set("Expires", "0")
 
 	// Check if the playlist file exists
-	if !secFS.Exists(stream.PlaylistPath) {
+	if !secFS.ExistsNoErr(stream.PlaylistPath) {
 		// If the playlist doesn't exist yet, check if FFmpeg is still running
 		hlsStreamMutex.Lock()
 		_, streamExists := hlsStreams[stream.SourceID]
@@ -342,7 +342,7 @@ func (h *Handlers) serveSegmentFile(c echo.Context, stream *HLSStreamInfo, reque
 	}
 
 	// Check if segment file exists using secureFS
-	if !secFS.Exists(segmentPath) {
+	if !secFS.ExistsNoErr(segmentPath) {
 		log.Printf("Error: HLS segment file does not exist at %s", segmentPath)
 		return echo.NewHTTPError(http.StatusNotFound, "Segment file not found")
 	}
@@ -382,6 +382,29 @@ func updateClientDisconnection(sourceID, clientID string) {
 	// Just mark the last activity time, let the regular cleanup handle the rest
 	// This avoids immediate cleanup which could interrupt other active requests
 	registerClientActivity(sourceID, clientID)
+}
+
+// buildFFmpegArgs constructs the command line arguments for the FFmpeg HLS process
+func buildFFmpegArgs(fifoPath, outputDir, playlistPath string) []string {
+	return []string{
+		"-f", "s16le", // Input format: 16-bit PCM
+		"-ar", "48000", // Sample rate: 48kHz
+		"-ac", "1", // Channels: mono
+		"-i", fifoPath, // Input from FIFO
+		"-c:a", "aac", // Codec: AAC
+		"-b:a", "128k", // Bitrate: 128kbps
+		"-f", "hls", // Format: HLS
+		"-hls_time", "2", // Segment duration: 2 seconds
+		"-hls_list_size", "5", // Keep 5 segments in playlist
+		"-hls_flags", "delete_segments+append_list+temp_file", // Delete old segments and append to playlist
+		"-hls_segment_type", "mpegts", // Use MPEGTS segments for better compatibility
+		"-hls_init_time", "1", // Initial segment length: 1 second for faster startup
+		"-hls_allow_cache", "1", // Allow caching
+		"-start_number", "0", // Start with segment 0
+		"-loglevel", "warning", // Reduce ffmpeg logging verbosity
+		"-hls_segment_filename", filepath.Join(outputDir, "segment%03d.ts"),
+		playlistPath, // Output playlist
+	}
 }
 
 // getOrCreateHLSStream gets an existing stream or creates a new one
@@ -454,7 +477,7 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	}
 
 	// Ensure the directory exists and is empty
-	if secFS.Exists(outputDir) {
+	if secFS.ExistsNoErr(outputDir) {
 		log.Printf("Removing existing output directory: %s", outputDir)
 		if err := secFS.RemoveAll(outputDir); err != nil {
 			streamCancel() // Clean up context
@@ -469,7 +492,7 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	}
 
 	// Verify the directory was created successfully
-	if !secFS.Exists(outputDir) {
+	if !secFS.ExistsNoErr(outputDir) {
 		streamCancel() // Clean up context
 		return nil, fmt.Errorf("failed to create HLS directory: directory doesn't exist after creation")
 	}
@@ -526,28 +549,26 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	pipeName := secFS.GetPipeName()
 
 	log.Printf("Starting FFmpeg HLS process for source: %s", sourceID)
-	// Start FFmpeg HLS process with improved parameters for reliability
-	cmd := exec.CommandContext(
-		streamCtx,
-		ffmpegPath,
-		"-f", "s16le", // Input format: 16-bit PCM
-		"-ar", "48000", // Sample rate: 48kHz
-		"-ac", "1", // Channels: mono
-		"-i", fifoPath, // Input from FIFO
-		"-c:a", "aac", // Codec: AAC
-		"-b:a", "96k", // Bitrate: 96kbps
-		"-f", "hls", // Format: HLS
-		"-hls_time", "2", // Segment duration: 2 seconds
-		"-hls_list_size", "5", // Keep 5 segments in playlist
-		"-hls_flags", "delete_segments+append_list", // Delete old segments and append to playlist
-		"-hls_segment_type", "mpegts", // Use MPEGTS segments for better compatibility
-		"-hls_init_time", "1", // Initial segment length: 1 second for faster startup
-		"-hls_allow_cache", "0", // Disable caching
-		"-start_number", "0", // Start with segment 0
-		"-loglevel", "warning", // Reduce ffmpeg logging verbosity
-		"-hls_segment_filename", filepath.Join(outputDir, "segment%03d.ts"),
-		playlistPath, // Output playlist
-	)
+
+	var cmd *exec.Cmd
+
+	// Build the FFmpeg arguments once to avoid duplication
+	ffmpegArgs := buildFFmpegArgs(fifoPath, outputDir, playlistPath)
+
+	// On Linux systems, use the 'nice' command to increase process priority
+	if runtime.GOOS == "linux" {
+		// Use nice value of -10 to increase priority (requires root or appropriate capabilities)
+		// Note: Lower nice values give higher priority (-20 highest, 19 lowest)
+		niceValue := "-10"
+		log.Printf("Using nice command to set higher priority (nice=%s) for FFmpeg on Linux for source: %s", niceValue, sourceID)
+
+		// Create command with nice - prepend nice args to ffmpeg command
+		niceArgs := append([]string{"-n", niceValue, ffmpegPath}, ffmpegArgs...)
+		cmd = exec.CommandContext(streamCtx, "nice", niceArgs...)
+	} else {
+		// For non-Linux systems, use normal command execution
+		cmd = exec.CommandContext(streamCtx, ffmpegPath, ffmpegArgs...)
+	}
 
 	cmd.Stderr = os.Stderr
 
@@ -672,7 +693,7 @@ func cleanupStream(sourceID string) {
 		defer secFS.Close()
 
 		// Check if directory exists using secureFS
-		if secFS.Exists(stream.OutputDir) {
+		if secFS.ExistsNoErr(stream.OutputDir) {
 			log.Printf("Removing stream directory: %s", stream.OutputDir)
 			if err := secFS.RemoveAll(stream.OutputDir); err != nil {
 				log.Printf("Error removing stream directory: %v", err)
@@ -1044,7 +1065,7 @@ func cleanupInactiveStream(sourceID, hlsBaseDir string, secFS *securefs.SecureFS
 
 		// Clean up stream directory using secureFS
 		if stream.OutputDir != "" && secFS != nil {
-			if secFS.Exists(stream.OutputDir) {
+			if secFS.ExistsNoErr(stream.OutputDir) {
 				log.Printf("Cleaning up stream directory: %s", stream.OutputDir)
 				if err := secFS.RemoveAll(stream.OutputDir); err != nil {
 					log.Printf("Error removing stream directory: %v", err)
@@ -1098,7 +1119,7 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatu
 			} else {
 				defer secFS.Close()
 
-				if secFS.Exists(stream.OutputDir) {
+				if secFS.ExistsNoErr(stream.OutputDir) {
 					log.Printf("Removing stream directory: %s", stream.OutputDir)
 					if err := secFS.RemoveAll(stream.OutputDir); err != nil {
 						log.Printf("Error removing stream directory: %v", err)
@@ -1176,7 +1197,7 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatu
 				return
 			default:
 				// Check if playlist exists
-				if secFS.Exists(stream.PlaylistPath) {
+				if secFS.ExistsNoErr(stream.PlaylistPath) {
 					// Check if it's a valid playlist with some content
 					data, err := secFS.ReadFile(stream.PlaylistPath)
 					if err == nil && len(data) > 0 && strings.Contains(string(data), "#EXTM3U") {
@@ -1303,7 +1324,7 @@ func (h *Handlers) StopHLSClientStream(c echo.Context, sourceID string) error {
 					defer secFS.Close()
 
 					// Clean up the directory using secureFS
-					if secFS.Exists(stream.OutputDir) {
+					if secFS.ExistsNoErr(stream.OutputDir) {
 						log.Printf("Cleaning up stream directory: %s", stream.OutputDir)
 						if err := secFS.RemoveAll(stream.OutputDir); err != nil {
 							log.Printf("Error removing stream directory: %v", err)

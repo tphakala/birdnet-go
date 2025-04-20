@@ -372,18 +372,29 @@ func (sfs *SecureFS) Lstat(path string) (fs.FileInfo, error) {
 }
 
 // Exists checks if a path exists with validation
-func (sfs *SecureFS) Exists(path string) bool {
+func (sfs *SecureFS) Exists(path string) (bool, error) {
 	// Get relative path for os.Root operations
 	relPath, err := sfs.relativePath(path)
 	if err != nil {
-		// Log the validation error instead of silently returning false
-		log.Printf("Security warning: Failed to validate path in Exists check: %v", err)
-		return false
+		// Return the validation error instead of silently returning false
+		return false, err
 	}
 
 	// Use os.Root.Stat to check if the file exists
 	_, err = sfs.root.Stat(relPath)
-	return err == nil
+	return err == nil, nil
+}
+
+// ExistsNoErr is a convenience method that returns only a boolean
+// This is helpful for backward compatibility with existing code
+// Note: This method will log security errors rather than returning them
+func (sfs *SecureFS) ExistsNoErr(path string) bool {
+	exists, err := sfs.Exists(path)
+	if err != nil {
+		log.Printf("Security warning: Failed to validate path in Exists check: %v", err)
+		return false
+	}
+	return exists
 }
 
 // ReadFile reads a file with path validation and returns its contents

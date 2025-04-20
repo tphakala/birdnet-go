@@ -73,7 +73,7 @@ func openNamedPipePlatform(sfs *SecureFS, pipePath string) (*os.File, error) {
 	}
 
 	// Open the FIFO through os.Root for security
-	fifo, err := sfs.root.OpenFile(relPath, os.O_WRONLY, 0)
+	fifo, err := sfs.root.OpenFile(relPath, os.O_WRONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open Unix FIFO: %w", err)
 	}

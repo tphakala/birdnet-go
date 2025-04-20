@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -170,6 +171,15 @@ func openNamedPipePlatform(sfs *SecureFS, pipePath string) (*os.File, error) {
 		windows.CloseHandle(h)
 		return nil, fmt.Errorf("failed to create file from pipe handle")
 	}
+
+	// Use runtime.SetFinalizer to cleanup the handle when the file is garbage collected
+	// This isn't perfect (doesn't clean up immediately when file is closed) but prevents leaks
+	runtime.SetFinalizer(file, func(f *os.File) {
+		f.Close()
+		openPipesMu.Lock()
+		delete(openPipes, h)
+		openPipesMu.Unlock()
+	})
 
 	return file, nil
 }

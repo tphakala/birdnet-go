@@ -49,7 +49,11 @@ func TestSecureFSFileOperations(t *testing.T) {
 	}
 
 	// Test Exists
-	if !sfs.Exists(testFile) {
+	exists, err := sfs.Exists(testFile)
+	if err != nil {
+		t.Fatalf("Exists check failed with error: %v", err)
+	}
+	if !exists {
 		t.Fatal("Exists failed: file should exist")
 	}
 
@@ -93,7 +97,11 @@ func TestSecureFSFileOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Remove failed: %v", err)
 	}
-	if sfs.Exists(testFile) {
+	exists, err = sfs.Exists(testFile)
+	if err != nil {
+		t.Fatalf("Exists check failed with error: %v", err)
+	}
+	if exists {
 		t.Fatal("Remove failed: file should not exist")
 	}
 }
@@ -109,7 +117,11 @@ func TestSecureFSDirectoryOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MkdirAll failed: %v", err)
 	}
-	if !sfs.Exists(testDir) {
+	exists, err := sfs.Exists(testDir)
+	if err != nil {
+		t.Fatalf("Exists check failed with error: %v", err)
+	}
+	if !exists {
 		t.Fatal("MkdirAll failed: directory should exist")
 	}
 
@@ -126,7 +138,11 @@ func TestSecureFSDirectoryOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RemoveAll failed: %v", err)
 	}
-	if sfs.Exists(testDir) {
+	exists, err = sfs.Exists(testDir)
+	if err != nil {
+		t.Fatalf("Exists check failed with error: %v", err)
+	}
+	if exists {
 		t.Fatal("RemoveAll failed: directory should not exist")
 	}
 }
