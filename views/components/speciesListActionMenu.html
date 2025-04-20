@@ -25,7 +25,7 @@ Action menu component for species list items
          return typeof $root.speciesSettings !== 'undefined' && 
                 $root.speciesSettings.Config && 
                 $root.speciesSettings.Config[item]?.Actions?.length > 0 && 
-                $root.speciesSettings.Config[item]?.Actions[0]?.ExecuteDefaults === true;
+                $root.speciesSettings.Config[item]?.Actions.some(action => action.ExecuteDefaults === true);
        },
        actionStatusText() {
          if (typeof $root.speciesSettings === 'undefined' || 
