@@ -111,12 +111,13 @@ func buildSafeArguments(params map[string]interface{}, note *datastore.Note) ([]
 			return nil, fmt.Errorf("invalid value for parameter %s: %w", key, err)
 		}
 
-		// Quote the value if it contains spaces or special characters
-		if strings.ContainsAny(strValue, " \t\n\r\"'") {
-			// Escape any existing quotes in the value
-			strValue = strings.ReplaceAll(strValue, `"`, `\"`)
-			// Wrap the value in quotes
-			strValue = fmt.Sprintf(`"%q"`, strValue)
+		// Handle quoting for values that need it
+		if strings.ContainsAny(strValue, " @\"'") {
+			// Check if already quoted to avoid double quoting
+			if !(strings.HasPrefix(strValue, "\"") && strings.HasSuffix(strValue, "\"")) {
+				// Use %q for proper quoting (handles escaping automatically)
+				strValue = fmt.Sprintf("%q", strValue)
+			}
 		}
 
 		arg := fmt.Sprintf("--%s=%s", key, strValue)
