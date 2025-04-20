@@ -2,8 +2,10 @@ package securefs
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -58,6 +60,16 @@ func TestSecureFSFileOperations(t *testing.T) {
 	}
 	if !bytes.Equal(data, testData) {
 		t.Fatalf("ReadFile returned wrong data: got %q, want %q", string(data), string(testData))
+	}
+
+	// Test ReadFile with non-existent file to verify error type
+	nonexistentFile := filepath.Join(tempDir, "nonexistent.txt")
+	_, err = sfs.ReadFile(nonexistentFile)
+	if err == nil {
+		t.Fatal("ReadFile should fail with non-existent file")
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("ReadFile with non-existent file returned wrong error type: got %T, want os.ErrNotExist", err)
 	}
 
 	// Test Stat
@@ -130,17 +142,26 @@ func TestSecureFSPathTraversalPrevention(t *testing.T) {
 	if err == nil {
 		t.Fatal("relativePath should have failed on traversal path")
 	}
+	if !strings.Contains(err.Error(), "security error") {
+		t.Errorf("Expected security error message, got: %v", err)
+	}
 
 	// Attempt to write outside the sandbox
 	err = sfs.WriteFile(traversalPath, []byte("should fail"), 0o644)
 	if err == nil {
 		t.Fatal("WriteFile should have failed for path outside sandbox")
 	}
+	if !strings.Contains(err.Error(), "security error") {
+		t.Errorf("Expected security error message, got: %v", err)
+	}
 
 	// Attempt to read outside the sandbox
 	_, err = sfs.ReadFile(traversalPath)
 	if err == nil {
 		t.Fatal("ReadFile should have failed for path outside sandbox")
+	}
+	if !strings.Contains(err.Error(), "security error") {
+		t.Errorf("Expected security error message, got: %v", err)
 	}
 }
 
@@ -176,6 +197,47 @@ func TestIsPathWithinBase(t *testing.T) {
 	if !isWithin {
 		t.Fatal("IsPathWithinBase failed: same path should be within base")
 	}
+
+	// Test with symlink escape
+	if os.Getuid() == 0 {
+		// Skip if running as root since symlink permissions don't apply
+		t.Skip("Skipping symlink escape test when running as root")
+	}
+
+	// Create a subdirectory to place our symlink
+	insideDir := filepath.Join(tempDir, "inside")
+	if err := os.Mkdir(insideDir, 0o755); err != nil {
+		t.Fatalf("Failed to create test directory: %v", err)
+	}
+
+	// Create a directory outside our base for the symlink to point to
+	outsideDir := filepath.Join(os.TempDir(), "securefs_test_outside")
+	if err := os.MkdirAll(outsideDir, 0o755); err != nil {
+		t.Fatalf("Failed to create outside test directory: %v", err)
+	}
+	defer os.RemoveAll(outsideDir) // Clean up
+
+	// Create a file in the outside directory
+	outsideFile := filepath.Join(outsideDir, "secret.txt")
+	if err := os.WriteFile(outsideFile, []byte("secret data"), 0o644); err != nil {
+		t.Fatalf("Failed to create outside test file: %v", err)
+	}
+
+	// Create a symlink inside our sandbox that points outside
+	symlinkPath := filepath.Join(insideDir, "symlink_escape")
+	if err := os.Symlink(outsideDir, symlinkPath); err != nil {
+		// If symlink creation fails due to permissions, just note it and skip
+		t.Logf("Symlink creation failed (permissions?): %v", err)
+		t.Skip("Skipping symlink test due to permission issues")
+	}
+
+	// Test that IsPathWithinBase detects the symlink escape
+	escapePath := filepath.Join(symlinkPath, "secret.txt")
+	isWithin, _ = IsPathWithinBase(tempDir, escapePath)
+	// We don't care if there's an error, but the path should not be considered within base
+	if isWithin {
+		t.Error("IsPathWithinBase failed to detect symlink escape")
+	}
 }
 
 func TestIsPathValidWithinBase(t *testing.T) {
@@ -194,5 +256,9 @@ func TestIsPathValidWithinBase(t *testing.T) {
 	err = IsPathValidWithinBase(tempDir, invalidPath)
 	if err == nil {
 		t.Fatal("IsPathValidWithinBase should have failed for invalid path")
+	}
+	// Verify the error type or message
+	if !strings.Contains(err.Error(), "security error") {
+		t.Errorf("Expected security error message, got: %v", err)
 	}
 }

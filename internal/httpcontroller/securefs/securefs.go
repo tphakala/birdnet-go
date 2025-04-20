@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -376,6 +376,8 @@ func (sfs *SecureFS) Exists(path string) bool {
 	// Get relative path for os.Root operations
 	relPath, err := sfs.relativePath(path)
 	if err != nil {
+		// Log the validation error instead of silently returning false
+		log.Printf("Security warning: Failed to validate path in Exists check: %v", err)
 		return false
 	}
 
@@ -447,12 +449,9 @@ func (sfs *SecureFS) ServeFile(c echo.Context, path string) error {
 		c.Response().Header().Set(echo.HeaderContentType, contentType)
 	}
 
-	// Set content length
-	c.Response().Header().Set(echo.HeaderContentLength, strconv.FormatInt(stat.Size(), 10))
-
-	// Stream the file directly from within the sandbox
-	_, err = io.Copy(c.Response(), file)
-	return err
+	// Use http.ServeContent which properly handles Range requests for HLS streaming and resumable downloads
+	http.ServeContent(c.Response(), c.Request(), stat.Name(), stat.ModTime(), file)
+	return nil
 }
 
 // SetPipeName sets the platform-specific pipe name for this SecureFS instance

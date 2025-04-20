@@ -319,10 +319,6 @@ func (h *Handlers) servePlaylistFile(c echo.Context, stream *HLSStreamInfo, hlsB
 func (h *Handlers) serveSegmentFile(c echo.Context, stream *HLSStreamInfo, requestPath, hlsBaseDir string) error {
 	// Validate segment path for path traversal prevention
 	cleanPath := filepath.Clean("/" + requestPath)
-	if strings.Contains(cleanPath, "..") || cleanPath == "/" {
-		log.Printf("Warning: Suspicious segment path requested: %s", requestPath)
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid segment path")
-	}
 
 	// Remove leading slash for concatenation
 	safeRequestPath := cleanPath[1:]
@@ -337,6 +333,13 @@ func (h *Handlers) serveSegmentFile(c echo.Context, stream *HLSStreamInfo, reque
 		return echo.NewHTTPError(http.StatusInternalServerError, "Server error")
 	}
 	defer secFS.Close()
+
+	// Use securefs to validate the path is within the stream's output directory
+	isWithin, err := securefs.IsPathWithinBase(stream.OutputDir, segmentPath)
+	if err != nil || !isWithin || cleanPath == "/" {
+		log.Printf("Warning: Suspicious segment path requested: %s", requestPath)
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid segment path")
+	}
 
 	// Check if segment file exists using secureFS
 	if !secFS.Exists(segmentPath) {
@@ -390,17 +393,20 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 		return nil, fmt.Errorf("invalid source ID format: contains unauthorized characters")
 	}
 
+	// Quick check with lock to see if stream already exists
 	hlsStreamMutex.Lock()
-	defer hlsStreamMutex.Unlock()
-
-	// Check if stream already exists
-	if stream, exists := hlsStreams[sourceID]; exists {
+	stream, exists := hlsStreams[sourceID]
+	if exists {
+		hlsStreamMutex.Unlock()
 		if hlsVerboseLogging {
 			log.Printf("Using existing HLS stream for source: %s", sourceID)
 		}
 		return stream, nil
 	}
+	hlsStreamMutex.Unlock()
 
+	// Stream doesn't exist, we need to create it
+	// Do all the heavy work WITHOUT holding the lock
 	log.Printf("Creating new HLS stream for source: %s", sourceID)
 
 	// Create a context that can be canceled to terminate the stream
@@ -558,7 +564,7 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	log.Printf("FFmpeg process started successfully for source: %s", sourceID)
 
 	// Create stream info
-	stream := &HLSStreamInfo{
+	stream = &HLSStreamInfo{
 		SourceID:     sourceID,
 		FFmpegCmd:    cmd,
 		OutputDir:    outputDir,
@@ -569,8 +575,38 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 		cancel:       streamCancel,
 	}
 
-	// Store stream in map
+	// SECOND check with lock to avoid race conditions
+	// Check if another goroutine created a stream for this source while we were working
+	hlsStreamMutex.Lock()
+	existingStream, streamExists := hlsStreams[sourceID]
+	if streamExists {
+		// Another goroutine beat us to it, clean up our stream and use the existing one
+		hlsStreamMutex.Unlock()
+
+		log.Printf("Another goroutine created the stream for %s while we were working, using that one", sourceID)
+
+		// Clean up our stream resources
+		if stream.cancel != nil {
+			stream.cancel()
+		}
+
+		if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
+			if err := stream.FFmpegCmd.Process.Kill(); err != nil {
+				log.Printf("Error killing duplicate FFmpeg process: %v", err)
+			}
+			_, _ = stream.FFmpegCmd.Process.Wait()
+		}
+
+		if err := secFS.RemoveAll(outputDir); err != nil {
+			log.Printf("Error removing duplicate output directory: %v", err)
+		}
+
+		return existingStream, nil
+	}
+
+	// No race condition, store our new stream in the map
 	hlsStreams[sourceID] = stream
+	hlsStreamMutex.Unlock()
 
 	// Start goroutine to feed audio data to FFmpeg
 	go feedAudioToFFmpeg(sourceID, stream.FifoPipe, stream.ctx)
@@ -595,16 +631,18 @@ func cleanupStream(sourceID string) {
 
 	log.Printf("Cleaning up HLS stream for source: %s", sourceID)
 
-	// With exec.CommandContext, the process will be automatically terminated
-	// when the context is canceled. We just need to wait for it to exit cleanly.
-	if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
-		log.Printf("Waiting for FFmpeg process to terminate for source: %s", sourceID)
-		_, _ = stream.FFmpegCmd.Process.Wait()
-	}
+	// Store FFmpegCmd for later wait operation
+	ffmpegCmd := stream.FFmpegCmd
 
-	// Remove from map
+	// Remove from map first, then release lock
 	delete(hlsStreams, sourceID)
 	hlsStreamMutex.Unlock()
+
+	// Now wait without blocking other goroutines
+	if ffmpegCmd != nil && ffmpegCmd.Process != nil {
+		log.Printf("Waiting for FFmpeg process to terminate for source: %s", sourceID)
+		_, _ = ffmpegCmd.Process.Wait()
+	}
 
 	// Clean up client tracking
 	hlsStreamClientMutex.Lock()
@@ -744,10 +782,32 @@ func feedAudioToFFmpeg(sourceID, pipePath string, ctx context.Context) {
 	var openErr error
 
 	if runtime.GOOS == "windows" {
-		// On Windows, open the named pipe directly
-		fifo, openErr = os.OpenFile(pipePath, os.O_WRONLY, 0)
+		// On Windows, retry opening the named pipe with proper handling
+		// The pipe might not be immediately available as FFmpeg needs time to connect
+		var retryCount int
+		const maxRetries = 5
+		for retryCount < maxRetries {
+			// Try to open the pipe
+			fifo, openErr = secFS.OpenNamedPipe(pipePath)
+			if openErr == nil {
+				break // Successfully opened
+			}
+
+			// Check if cancelled before retry
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				// Exponential backoff with jitter (100ms, 200ms, 400ms, etc.)
+				backoff := time.Duration(100*(1<<retryCount)) * time.Millisecond
+				log.Printf("Retry opening named pipe for source %s (attempt %d/%d): %v",
+					sourceID, retryCount+1, maxRetries, openErr)
+				time.Sleep(backoff)
+				retryCount++
+			}
+		}
 	} else {
-		// On Unix, we still need to use secureFS and the original path
+		// On Unix, we use secureFS and the original path
 		fifo, openErr = secFS.OpenFile(fifoPath, os.O_WRONLY, 0)
 	}
 

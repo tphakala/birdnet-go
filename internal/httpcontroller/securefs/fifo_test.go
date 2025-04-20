@@ -16,7 +16,7 @@ func TestFIFOPath(t *testing.T) {
 
 	if runtime.GOOS == "windows" {
 		expectedPrefix := `\\.\pipe\`
-		if fifoPath[:len(expectedPrefix)] != expectedPrefix {
+		if len(fifoPath) < len(expectedPrefix) || fifoPath[:len(expectedPrefix)] != expectedPrefix {
 			t.Errorf("Expected Windows named pipe path to start with %s, got %s", expectedPrefix, fifoPath)
 		}
 	} else if fifoPath != path {
@@ -27,9 +27,9 @@ func TestFIFOPath(t *testing.T) {
 	winPath := `C:\Users\test\pipe.fifo`
 	winFifoPath := GetFIFOPath(winPath)
 	if runtime.GOOS == "windows" {
-		expectedName := `\\.\pipe\pipe`
-		if winFifoPath != expectedName {
-			t.Errorf("Expected Windows pipe name %s, got %s", expectedName, winFifoPath)
+		expectedPrefix := `\\.\pipe\`
+		if len(winFifoPath) < len(expectedPrefix) || winFifoPath[:len(expectedPrefix)] != expectedPrefix {
+			t.Errorf("Expected Windows pipe name to start with %s, got %s", expectedPrefix, winFifoPath)
 		}
 	}
 }

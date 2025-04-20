@@ -3,6 +3,8 @@ package securefs
 import (
 	"context"
 	"fmt"
+	"hash/crc32"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,21 +13,20 @@ import (
 	"time"
 )
 
-// CreateFIFO creates a named pipe with path validation
-// It returns an error if the operation fails
+// CreateFIFO creates a FIFO (named pipe) at the specified path with platform-specific implementation
 func (sfs *SecureFS) CreateFIFO(path string) error {
 	// Validate the path is within the base directory
 	if err := IsPathValidWithinBase(sfs.baseDir, path); err != nil {
-		return err
+		return fmt.Errorf("security error creating FIFO: %w", err)
 	}
 
-	// Call platform-specific FIFO creation
+	// First try to create the FIFO using platform-specific functions
 	pipeName, err := createFIFOPlatform(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating FIFO: %w", err)
 	}
 
-	// Store the pipeName in the securefs instance
+	// Store the pipe name for later reference
 	sfs.pipeName = pipeName
 	return nil
 }
@@ -38,7 +39,8 @@ func GetFIFOPath(path string) string {
 		// Format: \\.\pipe\[path]
 		baseName := filepath.Base(path)
 		ext := filepath.Ext(baseName)
-		pipeName := strings.TrimSuffix(baseName, ext)
+		// Use a hash suffix to avoid name collisions
+		pipeName := fmt.Sprintf("%s_%x", strings.TrimSuffix(baseName, ext), crc32.ChecksumIEEE([]byte(path)))
 		return `\\.\pipe\` + pipeName
 	}
 
@@ -46,29 +48,44 @@ func GetFIFOPath(path string) string {
 	return path
 }
 
-// OpenFIFO opens the FIFO file safely with appropriate platform-specific flags
-// It handles retries and returns the open file handle
+// OpenFIFO opens the FIFO at the given path. It works in a platform-independent manner.
 func (sfs *SecureFS) OpenFIFO(ctx context.Context, path string) (*os.File, error) {
 	// Validate the path is within the base directory
 	if err := IsPathValidWithinBase(sfs.baseDir, path); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("security error opening FIFO: %w", err)
 	}
 
-	// Get platform-specific pipe name
-	var pipePath string
-	if sfs.pipeName != "" {
-		// Use stored pipe name if available
-		pipePath = sfs.pipeName
+	// For non-Windows platforms, this is just a regular file open
+	// Windows support is implemented in the platform-specific file
+	var fifo *os.File
+	var err error
+
+	// Perform platform-specific fifo opening
+	if runtime.GOOS == "windows" && sfs.pipeName != "" {
+		// Use a pipe path from CreateFIFO
+		fifo, err = sfs.OpenNamedPipe(sfs.pipeName)
 	} else {
-		// Otherwise derive it from the path
-		pipePath = GetFIFOPath(path)
+		// For Unix platforms, we can just open the file
+		relPath, err := sfs.relativePath(path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get relative path: %w", err)
+		}
+
+		// On Unix, open the FIFO through os.Root for sandbox security
+		fifo, err = sfs.root.OpenFile(relPath, os.O_WRONLY, 0)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open FIFO: %w", err)
+		}
 	}
 
-	// Set platform-specific flags for opening FIFO
-	openFlags := getPlatformOpenFlags()
+	return fifo, err
+}
 
-	// Try to open the FIFO with retries
-	return openFIFOWithRetries(ctx, path, pipePath, openFlags, sfs)
+// OpenNamedPipe opens a named pipe with platform-specific implementation
+// This is a cross-platform facade that delegates to the platform-specific implementation
+func (sfs *SecureFS) OpenNamedPipe(pipePath string) (*os.File, error) {
+	// This implementation is in the platform-specific file (fifo_windows.go or fifo_unix.go)
+	return openNamedPipePlatform(sfs, pipePath)
 }
 
 // getPlatformOpenFlags returns OS-specific open flags for the FIFO
@@ -97,8 +114,8 @@ func openFIFOWithRetries(ctx context.Context, fifoPath, pipePath string, openFla
 			}
 
 			if i == 0 || (i+1)%5 == 0 {
-				// Log less frequently to avoid flooding logs
-				fmt.Printf("Waiting for reader to open FIFO (attempt %d): %v\n", i+1, openErr)
+				// Use structured logging with proper context instead of fmt.Printf
+				log.Printf("FIFO %s: writer waiting (attempt %d): %v", fifoPath, i+1, openErr)
 			}
 
 			// Sleep before retrying
@@ -117,6 +134,10 @@ func openFIFOWithRetries(ctx context.Context, fifoPath, pipePath string, openFla
 // openPlatformSpecificFIFO opens the FIFO using OS-specific approach
 func openPlatformSpecificFIFO(pipePath, fifoPath string, openFlags int, sfs *SecureFS) (*os.File, error) {
 	if runtime.GOOS == "windows" {
+		// Validate Windows pipe path to ensure it's a valid named pipe path
+		if !strings.HasPrefix(pipePath, `\\.\pipe\`) {
+			return nil, fmt.Errorf("security error: Windows pipe path must start with \\\\.\\pipe\\")
+		}
 		// For Windows, open the named pipe directly
 		return os.OpenFile(pipePath, openFlags, 0o666)
 	}

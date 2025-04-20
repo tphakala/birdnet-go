@@ -4,6 +4,7 @@
 package securefs
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -35,12 +36,13 @@ func createFIFOPlatform(path string) (string, error) {
 			return path, nil
 		}
 
-		log.Printf("Retry %d: Failed to create FIFO pipe: %v", retry+1, fifoErr)
-		// If error is "file exists", try to remove again
-		if os.IsExist(fifoErr) {
-			removeFIFO()
-			time.Sleep(100 * time.Millisecond)
+		if !errors.Is(fifoErr, syscall.EEXIST) {
+			break // fatal – no point in retrying
 		}
+
+		log.Printf("Retry %d: FIFO already exists, removing and retrying", retry+1)
+		removeFIFO()
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	return "", fmt.Errorf("failed to create FIFO after retries: %w", fifoErr)
@@ -49,4 +51,32 @@ func createFIFOPlatform(path string) (string, error) {
 // CleanupNamedPipes is a no-op on non-Windows platforms
 func CleanupNamedPipes() {
 	// This function does nothing on non-Windows platforms
+}
+
+// openNamedPipePlatform is the Unix implementation of opening a named pipe
+// This is a fallback that just uses a regular file open since on Unix
+// platforms we directly use the fifo path
+func openNamedPipePlatform(sfs *SecureFS, pipePath string) (*os.File, error) {
+	// On Unix, we just use the same path that was used to create the FIFO
+	// and open it using the standard file access functions through os.Root
+
+	// Validate that the provided path is the same as what was created
+	if pipePath != sfs.pipeName {
+		return nil, fmt.Errorf("pipe path mismatch: expected %s but got %s",
+			sfs.pipeName, pipePath)
+	}
+
+	// Make the path relative to the base directory
+	relPath, err := sfs.relativePath(pipePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get relative path: %w", err)
+	}
+
+	// Open the FIFO through os.Root for security
+	fifo, err := sfs.root.OpenFile(relPath, os.O_WRONLY, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open Unix FIFO: %w", err)
+	}
+
+	return fifo, nil
 }
