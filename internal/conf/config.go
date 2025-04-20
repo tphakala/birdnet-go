@@ -180,9 +180,10 @@ type RealtimeSettings struct {
 
 // SpeciesAction represents a single action configuration
 type SpeciesAction struct {
-	Type       string   `yaml:"type"`       // Type of action (ExecuteCommand, etc)
-	Command    string   `yaml:"command"`    // Path to the command to execute
-	Parameters []string `yaml:"parameters"` // Action parameters
+	Type            string   `yaml:"type"`            // Type of action (ExecuteCommand, etc)
+	Command         string   `yaml:"command"`         // Path to the command to execute
+	Parameters      []string `yaml:"parameters"`      // Action parameters
+	ExecuteDefaults bool     `yaml:"executeDefaults"` // Whether to also execute default actions
 }
 
 // SpeciesConfig represents configuration for a specific species

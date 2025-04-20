@@ -178,4 +178,108 @@ function saveEditSpecies(editIndex, editSpecies, speciesList, setSpeciesList, se
     setEditIndex(null);
     setEditSpecies('');
     setShowEditSpecies(false);
-} 
+}
+
+/**
+ * Parse species text into scientific and common name components
+ * @param {string} speciesText - The species text to parse
+ * @returns {Object} Object with scientific name, common name, and display name
+ */
+function parseSpeciesText(speciesText) {
+    // Check if the species text is in the format "Scientific Name (Common Name)"
+    const match = speciesText.match(/^(.*?)\s*\((.*?)\)$/);
+    
+    if (match) {
+        const scientificName = match[1].trim();
+        const commonName = match[2].trim();
+        
+        return {
+            scientificName,
+            commonName,
+            displayName: `${commonName} (${scientificName})`
+        };
+    }
+    
+    // If no match, treat the whole text as both scientific and common name
+    return {
+        scientificName: speciesText.trim(),
+        commonName: speciesText.trim(),
+        displayName: speciesText.trim()
+    };
+}
+
+/**
+ * Format a species action object for display or API
+ * @param {Object} action - The action object to format
+ * @param {boolean} forApi - Whether to format for API submission
+ * @returns {Object} Formatted action object
+ */
+function formatSpeciesAction(action, forApi = false) {
+    if (forApi) {
+        return {
+            Type: action.type || 'ExecuteCommand',
+            Command: action.command || '',
+            Parameters: Array.isArray(action.parameters) 
+                ? action.parameters 
+                : (typeof action.parameters === 'string' 
+                    ? action.parameters.split(',').map(p => p.trim()).filter(p => p) 
+                    : []),
+            ExecuteDefaults: action.executeDefaults === true
+        };
+    } else {
+        return {
+            type: action.Type || 'ExecuteCommand',
+            command: action.Command || '',
+            parameters: Array.isArray(action.Parameters) 
+                ? action.Parameters.join(',') 
+                : (typeof action.Parameters === 'string' ? action.Parameters : ''),
+            executeDefaults: action.ExecuteDefaults === true
+        };
+    }
+}
+
+/**
+ * Validate a species action object
+ * @param {Object} action - The action object to validate
+ * @returns {boolean} Whether the action is valid
+ */
+function validateSpeciesAction(action) {
+    // Check if required fields are present and valid
+    if (!action.type || typeof action.type !== 'string') {
+        return false;
+    }
+    
+    if (action.type === 'ExecuteCommand' && (!action.command || typeof action.command !== 'string')) {
+        return false;
+    }
+    
+    // Parameters should be either a string or an array
+    const hasValidParams = 
+        (typeof action.parameters === 'string') || 
+        (Array.isArray(action.parameters)) ||
+        (typeof action.Parameters === 'string') || 
+        (Array.isArray(action.Parameters));
+        
+    if (!hasValidParams) {
+        return false;
+    }
+    
+    // executeDefaults should be a boolean, but we accept undefined (defaults to false)
+    if (action.executeDefaults !== undefined && typeof action.executeDefaults !== 'boolean') {
+        return false;
+    }
+    
+    // ExecuteDefaults should be a boolean, but we accept undefined (defaults to false)
+    if (action.ExecuteDefaults !== undefined && typeof action.ExecuteDefaults !== 'boolean') {
+        return false;
+    }
+    
+    return true;
+}
+
+// Export utilities
+window.speciesUtils = {
+    parseSpeciesText,
+    formatSpeciesAction,
+    validateSpeciesAction
+}; 
