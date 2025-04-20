@@ -431,13 +431,14 @@
             const existingAction = this.speciesSettings.Config[species]?.Actions?.[0];
             
             // Set default or existing action
-            const defaultAction = { Type: 'ExecuteCommand', Command: '', Parameters: [] };
+            const defaultAction = { Type: 'ExecuteCommand', Command: '', Parameters: [], ExecuteDefaults: true };
             const action = existingAction || defaultAction;
             
             this.currentAction = {
                 type: action.Type,
                 command: action.Command,
-                parameters: Array.isArray(action.Parameters) ? action.Parameters.join(',') : ''
+                parameters: Array.isArray(action.Parameters) ? action.Parameters.join(',') : '',
+                executeDefaults: action.ExecuteDefaults !== false  // Default to true unless explicitly set to false
             };
             
             this.showActionsModal = true;
@@ -454,7 +455,8 @@
             const newAction = {
                 Type: this.currentAction.type,
                 Command: this.currentAction.command,
-                Parameters: this.currentAction.parameters.split(',').map(p => p.trim()).filter(p => p)
+                Parameters: this.currentAction.parameters.split(',').map(p => p.trim()).filter(p => p),
+                ExecuteDefaults: this.currentAction.executeDefaults
             };
             
             // Always replace/set the single action
@@ -568,7 +570,12 @@
                             <div class="w-28 flex justify-center mr-2">
                                 <span class="badge badge-sm badge-neutral" x-text="'Threshold: ' + config.Threshold.toFixed(2)"></span>
                             </div>
-                            <span class="badge badge-sm mr-2" x-show="config.Actions?.length > 0">Has Action</span>
+                            <template x-if="config.Actions?.length > 0">
+                                <div class="flex gap-1 mr-2">
+                                    <span class="badge badge-sm badge-accent">Custom Action</span>
+                                    <span x-show="config.Actions[0]?.ExecuteDefaults" class="badge badge-sm badge-info">+Defaults</span>
+                                </div>
+                            </template>
                         </div>
                         
                         <div class="flex-shrink-0">
@@ -638,49 +645,58 @@
             @keydown.escape.window="closeActionsModal()"
             role="dialog"
             aria-labelledby="modal-title"
-            aria-modal="true">
+            aria-modal="true"
+            x-data="{
+                showTooltip: null
+            }">
             <div class="modal-box bg-base-100 max-h-[90vh] overflow-y-auto">
                 <h3 id="modal-title" class="text-lg font-bold mb-4" x-text="'Actions for ' + currentSpecies"></h3>
                 
-                <div class="settings-modal-section">
-                    <label for="actionType">Action Type</label>
-                    <select id="actionType"
-                        x-model="currentAction.type" 
-                        class="select select-bordered select-sm w-full" 
-                        disabled
-                        aria-label="Select action type">
-                        <option value="ExecuteCommand">Execute Command</option>
-                    </select>
+                <div class="mb-4">
+                    {{template "selectField" dict
+                        "id" "actionType"
+                        "model" "currentAction.type"
+                        "name" ""
+                        "label" "Action Type"
+                        "tooltip" "Currently, only Execute Command actions are supported"
+                        "options" (dict
+                            "ExecuteCommand" "Execute Command"
+                        )
+                        "disabled" "true"}}
                 </div>
                 
-                <div class="settings-modal-section">
-                    <label for="commandInput">Command</label>
-                    <input type="text" 
-                        id="commandInput"
-                        x-model="currentAction.command" 
-                        class="input input-bordered input-sm w-full" 
-                        placeholder="/path/to/your/command"
-                        aria-label="Enter command path"
-                        aria-describedby="command-help" />
-                    <p class="help-text" id="command-help">Provide the full path to the command you want to execute</p>
+                <div class="mb-4">
+                    {{template "textField" dict
+                        "id" "commandInput"
+                        "model" "currentAction.command"
+                        "name" ""
+                        "label" "Command"
+                        "placeholder" "/path/to/your/command" 
+                        "tooltip" "Provide the full path to the command or script you want to execute"}}
                 </div>
 
-                <div class="settings-modal-section">
-                    <label for="parametersInput">Parameters</label>
-                    <input type="text" 
-                        id="parametersInput"
-                        x-model="currentAction.parameters" 
-                        class="input input-bordered input-sm w-full" 
-                        placeholder="Parameters will appear here"
-                        readonly
-                        aria-label="Selected parameters"
-                        aria-describedby="parameters-help" />
-                    <p class="help-text" id="parameters-help">Click parameters below to add them to your command</p>
+                <div class="mb-4">
+                    <div class="form-control relative mt-1">
+                        <label class="label justify-start" for="parametersInput">
+                            <span class="label-text">Parameters</span>
+                            <span class="help-icon" @mouseenter="showTooltip = 'parametersInput'"
+                                @mouseleave="showTooltip = null">ⓘ</span>
+                        </label>
+                        <input type="text" 
+                            id="parametersInput"
+                            x-model="currentAction.parameters" 
+                            class="input input-sm input-bordered w-full" 
+                            placeholder="Parameters will appear here"
+                            readonly>
+                        <div x-show="showTooltip === 'parametersInput'" x-cloak
+                            class="tooltip">
+                            These values will be passed to your command in the order listed
+                        </div>
+                    </div>
                 </div>
 
-                <div class="settings-modal-section">
-                    <label>Available Parameters</label>
-                    <p class="help-text mb-2">Click to add parameters to your script:</p>
+                <div class="mb-4">
+                    <div class="font-medium text-sm mb-2">Available Parameters</div>
                     <div class="flex flex-wrap gap-2">
                         <button type="button" 
                             @click.prevent="currentAction.parameters = currentAction.parameters ? currentAction.parameters + ',CommonName' : 'CommonName'" 
@@ -703,10 +719,20 @@
                             @click.prevent="currentAction.parameters = ''" 
                             class="btn btn-xs btn-warning">Clear Parameters</button>
                     </div>
-                    <p class="help-text mt-2">Parameters will be passed to your script in the order they are added</p>
                 </div>
                 
-                <div class="modal-action">
+                <div class="mb-4">
+                    <div class="font-medium text-sm mb-2">Execute Default Actions</div>
+                    
+                    {{template "checkbox" dict
+                        "id" "executeDefaults"
+                        "model" "currentAction.executeDefaults"
+                        "name" ""
+                        "label" "Also run default actions (database storage, notifications, etc.)"
+                        "tooltip" "When enabled, both your custom action and the system's default actions will run. When disabled, only your custom action will execute."}}
+                </div>
+                
+                <div class="modal-action mt-6">
                     <button type="button" 
                         @click.prevent="saveAction()" 
                         class="btn btn-primary btn-sm"

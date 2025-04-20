@@ -85,6 +85,12 @@ realtime:
     locationaccuracy: 500 # accuracy of location in meters
     debug: false          # true to enable birdweather api debug mode
     id: ""                # birdweather ID
+    retrysettings:
+      enabled: true       # enable retry for failed submissions
+      maxretries: 3       # maximum number of retry attempts
+      initialdelay: 30    # initial delay before first retry in seconds
+      maxdelay: 600       # maximum delay between retries in seconds
+      backoffmultiplier: 2.0  # multiplier for exponential backoff
 
   weather:
     provider: yrno
@@ -102,6 +108,13 @@ realtime:
     topic: birdnet        # MQTT topic
     username: birdnet     # MQTT username
     password: secret      # MQTT password
+    retain: false         # true to retain messages
+    retrysettings:
+      enabled: true       # enable retry for failed publications
+      maxretries: 3       # maximum number of retry attempts
+      initialdelay: 10    # initial delay before first retry in seconds
+      maxdelay: 300       # maximum delay between retries in seconds
+      backoffmultiplier: 2.0  # multiplier for exponential backoff
 
   privacyfilter:          # Privacy filter prevents audio clip saving if human voice 
     enabled: true         # is detected durin audio capture
@@ -115,6 +128,20 @@ realtime:
   telemetry:
     enabled: false         # true to enable Prometheus compatible telemetry endpoint
     listen: "0.0.0.0:8090" # IP address and port to listen on
+
+  # Species-specific configurations
+  species:
+    include: []           # Always include these species regardless of confidence
+    exclude: []           # Always exclude these species regardless of confidence
+    config:
+      # Example configuration for a specific species
+      "eurasian blackbird":
+        threshold: 0.6    # Custom confidence threshold for this species
+        actions:
+          - type: ExecuteCommand
+            command: "/path/to/script.sh"
+            parameters: ["commonName", "confidence", "scientificName"]
+            executeDefaults: true  # Set to true to also execute default actions
 
 webserver:
   enabled: true           # true to enable web server
