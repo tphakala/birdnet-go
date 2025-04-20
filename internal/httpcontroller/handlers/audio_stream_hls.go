@@ -301,13 +301,16 @@ func (h *Handlers) servePlaylistFile(c echo.Context, stream *HLSStreamInfo, hlsB
 		log.Printf("Sending temporary empty playlist for source %s (real playlist not ready yet)", stream.SourceID)
 
 		// Create a basic empty HLS playlist
+		// Important: DO NOT include EXT-X-ENDLIST tag which signals the end of the stream
+		// and would cause clients to disconnect and retry, creating a busy loop
 		emptyPlaylist := `#EXTM3U
 #EXT-X-VERSION:3
 #EXT-X-TARGETDURATION:2
 #EXT-X-MEDIA-SEQUENCE:0
 #EXT-X-PLAYLIST-TYPE:EVENT
-#EXT-X-ENDLIST
 `
+		// Add response header to tell client to wait 2 seconds before retry
+		c.Response().Header().Set("Retry-After", "2")
 		return c.String(http.StatusOK, emptyPlaylist)
 	}
 
@@ -401,7 +404,7 @@ func buildFFmpegArgs(fifoPath, outputDir, playlistPath string) []string {
 		"-hls_init_time", "1", // Initial segment length: 1 second for faster startup
 		"-hls_allow_cache", "1", // Allow caching
 		"-start_number", "0", // Start with segment 0
-		"-loglevel", "warning", // Reduce ffmpeg logging verbosity
+		"-loglevel", "verbose", // Set ffmpeg logging level to info
 		"-hls_segment_filename", filepath.Join(outputDir, "segment%03d.ts"),
 		playlistPath, // Output playlist
 	}
@@ -552,27 +555,40 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 
 	var cmd *exec.Cmd
 
-	// Build the FFmpeg arguments once to avoid duplication
+	// Build ffmpeg command
 	ffmpegArgs := buildFFmpegArgs(fifoPath, outputDir, playlistPath)
 
-	// On Linux systems, use the 'nice' command to increase process priority
-	if runtime.GOOS == "linux" {
-		// Use nice value of -10 to increase priority (requires root or appropriate capabilities)
-		// Note: Lower nice values give higher priority (-20 highest, 19 lowest)
-		niceValue := "-10"
-		log.Printf("Using nice command to set higher priority (nice=%s) for FFmpeg on Linux for source: %s", niceValue, sourceID)
+	// Run the ffmpeg command
+	cmd = exec.CommandContext(streamCtx, ffmpegPath, ffmpegArgs...)
 
-		// Create command with nice - prepend nice args to ffmpeg command
-		niceArgs := append([]string{"-n", niceValue, ffmpegPath}, ffmpegArgs...)
-		cmd = exec.CommandContext(streamCtx, "nice", niceArgs...)
-	} else {
-		// For non-Linux systems, use normal command execution
-		cmd = exec.CommandContext(streamCtx, ffmpegPath, ffmpegArgs...)
+	// Create a log file for ffmpeg output in the stream directory
+	logFilePath := filepath.Join(outputDir, "ffmpeg.log")
+
+	// Verify the log file path is within the HLS base directory
+	isWithin, err = securefs.IsPathWithinBase(hlsBaseDir, logFilePath)
+	if err != nil {
+		streamCancel() // Clean up context
+		return nil, fmt.Errorf("failed to validate log file path: %w", err)
 	}
 
-	cmd.Stderr = os.Stderr
+	if !isWithin {
+		streamCancel() // Clean up context
+		return nil, fmt.Errorf("security error: log file path would be outside HLS base directory")
+	}
+
+	// Open the log file using secureFS
+	logFile, err := secFS.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		streamCancel() // Clean up context
+		return nil, fmt.Errorf("failed to create ffmpeg log file: %w", err)
+	}
+
+	// Set both stdout and stderr to the log file
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
 
 	if err := cmd.Start(); err != nil {
+		logFile.Close() // Close the log file
 		log.Printf("Error starting FFmpeg: %v", err)
 		// Use secureFS for cleanup
 		if err := secFS.RemoveAll(outputDir); err != nil {
@@ -582,7 +598,10 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 		return nil, fmt.Errorf("failed to start FFmpeg: %w", err)
 	}
 
-	log.Printf("FFmpeg process started successfully for source: %s", sourceID)
+	// Don't close the log file immediately as it's being used by the command
+	// The OS will close it when the process terminates
+
+	log.Printf("FFmpeg process started successfully for source: %s (logs at %s)", sourceID, logFilePath)
 
 	// Create stream info
 	stream = &HLSStreamInfo{
@@ -706,7 +725,7 @@ func cleanupStream(sourceID string) {
 
 // setupAudioCallback sets up the audio callback and channel
 func setupAudioCallback(sourceID string) (audioChan chan []byte, cleanup func(), err error) {
-	audioChan = make(chan []byte, 50)
+	audioChan = make(chan []byte, 1024)
 
 	// Create callback function to handle audio data
 	callback := func(callbackSourceID string, data []byte) {
@@ -1051,6 +1070,15 @@ func cleanupInactiveStream(sourceID, hlsBaseDir string, secFS *securefs.SecureFS
 	defer hlsStreamMutex.Unlock()
 
 	if stream, exists := hlsStreams[sourceID]; exists {
+		// Check if this is a new stream that just started
+		streamAge := time.Since(stream.LastAccess)
+		if streamAge < 5*time.Second {
+			// Don't clean up streams that are less than 5 seconds old
+			// This gives FFmpeg time to initialize and generate the playlist
+			log.Printf("Skipping cleanup of new HLS stream for source %s (age: %v)", sourceID, streamAge)
+			return
+		}
+
 		log.Printf("Stopping stale HLS stream for source %s (no active clients)", sourceID)
 
 		// Cancel the context, which will terminate the FFmpeg process

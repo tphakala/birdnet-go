@@ -17,10 +17,15 @@
         retryTimeout: null,
         isPlaying: false,
         playingSource: null, // Track which source is currently playing
-        audioPlayer: null, // HLS audio player element
+        audioElement: null, // HTML5 audio element
         hlsPlayer: null, // HLS.js instance
         lastDataTime: null,
         _requestedPermission: false,
+        errorCount: 0,
+        lastErrorTime: null,
+        inErrorCooldown: false,
+        nonFatalErrorCount: 0,
+        lastNonFatalErrorTime: null,
 
         isInactive(source) {
             // If we don't have the source in levels at all, consider it inactive
@@ -126,6 +131,9 @@
                 console.error('EventSource error:', error);
                 this.cleanupEventSource();
                 
+                // Stop audio playback when SSE connection fails (server may be down)
+                this.stopPlayback(true);
+                
                 // Don't attempt reconnection if we're navigating away
                 if (this.isNavigating) {
                     return;
@@ -144,79 +152,120 @@
                 }
             };
         },
-
-        // Initialize or create the audio player element
-        initAudioPlayer() {
-            if (this.audioPlayer) {
-                return this.audioPlayer;
+        
+        // Get or create audio element
+        getAudioElement() {
+            if (!this.audioElement) {
+                // Create a HTML5 audio element for HLS playback
+                const audio = document.createElement('audio');
+                audio.id = 'hls-audio-player';
+                audio.setAttribute('aria-hidden', 'true'); // keep visible to AT
+                audio.classList.add('sr-only');            // visually hidden but AT-accessible
+                audio.setAttribute('preload', 'auto');
+                audio.setAttribute('playsinline', '');
+                
+                // Add event listeners
+                audio.addEventListener('playing', () => {
+                    console.log('Audio playback started');
+                    this.isPlaying = true;
+                    this.hidePlaybackStatus();
+                    this.setupMediaSession(this.playingSource);
+                    
+                    // Reset error counts when playback starts successfully
+                    this.errorCount = 0;
+                    this.lastErrorTime = null;
+                });
+                
+                audio.addEventListener('pause', () => {
+                    console.log('Audio playback paused');
+                    this.isPlaying = false;
+                });
+                
+                audio.addEventListener('ended', () => {
+                    console.log('Audio playback ended');
+                    this.isPlaying = false;
+                });
+                
+                // Improved error handling to prevent loops
+                audio.addEventListener('error', (e) => {
+                    // Get current timestamp
+                    const now = Date.now();
+                    
+                    // Initialize error tracking if needed
+                    if (!this.errorCount) this.errorCount = 0;
+                    if (!this.lastErrorTime) this.lastErrorTime = 0;
+                    
+                    // Check if this is a rapid succession error (within 2 seconds of the last one)
+                    const isRapidError = (now - this.lastErrorTime) < 2000;
+                    
+                    // If we're getting rapid errors, increase the count
+                    if (isRapidError) {
+                        this.errorCount++;
+                        console.warn(`Rapid error #${this.errorCount}: Audio playback error`);
+                        
+                        // If we've had too many rapid errors, assume server is down
+                        if (this.errorCount > 2) {
+                            console.error('Multiple rapid errors detected - server may be unreachable');
+                            this.showPlaybackStatus('Server appears to be offline. Playback stopped.');
+                            this.stopPlayback(true); // Pass true to indicate we're in error recovery
+                            return; // Exit to prevent loop
+                        }
+                    } else {
+                        // Not a rapid error, reset counter but track the error
+                        this.errorCount = 1;
+                        console.error('Audio playback error:', e);
+                    }
+                    
+                    // Update last error time
+                    this.lastErrorTime = now;
+                    
+                    // Set error message - only if not in a rapid succession
+                    if (!isRapidError) {
+                        this.showPlaybackStatus('Playback error: ' + (e.target.error ? e.target.error.message : 'Connection lost'));
+                    }
+                    
+                    // Always mark playback as stopped
+                    this.isPlaying = false;
+                    
+                    // Only call stopPlayback if not in a rapid error sequence
+                    if (!isRapidError) {
+                        this.stopPlayback();
+                    }
+                });
+                
+                // Append to document body
+                document.body.appendChild(audio);
+                this.audioElement = audio;
             }
             
-            // Create an audio element for HLS playback
-            const audio = document.createElement('audio');
-            audio.id = 'hls-audio-player';
-            audio.setAttribute('aria-hidden', 'true'); // keep visible to AT
-            audio.classList.add('sr-only');            // visually hidden but AT-accessible
-            audio.setAttribute('preload', 'none');
-            audio.setAttribute('playsinline', '');
-            
-            // Add event listeners
-            audio.addEventListener('playing', () => {
-                console.log('HLS audio playback started');
-                this.isPlaying = true;
-                
-                // Update mediaSession for media controls if supported
-                this.setupMediaSession(this.playingSource);
-            });
-            
-            audio.addEventListener('pause', () => {
-                console.log('HLS audio playback paused');
-                this.isPlaying = false;
-            });
-            
-            audio.addEventListener('ended', () => {
-                console.log('HLS audio playback ended');
-                this.isPlaying = false;
-            });
-            
-            audio.addEventListener('error', (e) => {
-                console.error('HLS audio playback error:', e);
-                this.isPlaying = false;
-            });
-            
-            // Append to document body
-            document.body.appendChild(audio);
-            this.audioPlayer = audio;
-            
-            return audio;
+            return this.audioElement;
         },
         
         // Start playing HLS stream for the selected source
-        startHLSPlayback(sourceId) {
-            console.log('Starting HLS audio playback for source: ' + sourceId);
+        startPlayback(sourceId) {
+            console.log('Starting audio playback for source: ' + sourceId);
             
-            // Get or create audio player
-            const player = this.initAudioPlayer();
+            // Stop any existing playback
+            this.stopPlayback();
             
             // Set state
             this.playingSource = sourceId;
+            this.showPlaybackStatus('Starting audio stream...');
             
             // Encode source ID to be URL-safe
             const encodedSourceId = encodeURIComponent(sourceId);
             
-            // Set HLS stream URL - use absolute URL to avoid path resolution issues
-            const hlsUrl = `${window.location.origin}/api/v1/audio-stream-hls/${encodedSourceId}/playlist.m3u8`;
-            console.log('HLS URL: ' + hlsUrl);
-            
-            // First, notify the server we want to start streaming this source
-            // This triggers ffmpeg to start generating the playlist
+            // Notify server we want to start streaming this source
             this.notifyStreamStart(encodedSourceId)
                 .then(() => {
-                    // Then attempt to load the playlist with retries
-                    return this.loadPlaylistWithRetry(hlsUrl, player, sourceId);
+                    // After notifying server, set up HLS stream
+                    const hlsUrl = `${window.location.origin}/api/v1/audio-stream-hls/${encodedSourceId}/playlist.m3u8`;
+                    this.setupHLSStream(hlsUrl, sourceId);
                 })
                 .catch(error => {
                     console.error('Error accessing audio stream: ' + error.message);
-                    alert('Error accessing audio stream: ' + error.message);             
+                    this.showPlaybackStatus('Error starting stream: ' + error.message);
+                    setTimeout(() => this.hidePlaybackStatus(), 3000);
                 });
         },
         
@@ -233,54 +282,215 @@
                     return response;
                 });
         },
-        
-        // Attempt to load the playlist with retries
-        loadPlaylistWithRetry(hlsUrl, player, sourceId, retryCount = 0, maxRetries = 5) {
-            const retryDelay = Math.min(1000 * Math.pow(1.5, retryCount), 8000); // Exponential backoff
+
+        // Set up HLS streaming
+        setupHLSStream(hlsUrl, sourceId) {
+            const audio = this.getAudioElement();
             
-            console.log('Attempting to load playlist, attempt ' + (retryCount + 1) + ' of ' + maxRetries);
-            
-            return fetch(hlsUrl)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Failed to fetch playlist: ' + response.status + ' ' + response.statusText);
-                    }
-                    return response.text();
-                })
-                .then(data => {
-                    if (data.length > 0) {
-                        console.log('Playlist loaded successfully after ' + (retryCount + 1) + ' attempts');
-                        this.startHLSPlaybackWithVerifiedURL(hlsUrl, player, sourceId);
-                        return true;
-                    } else {
-                        throw new Error('Empty playlist received');
-                    }
-                })
-                .catch(error => {
-                    console.warn('Playlist load attempt ' + (retryCount + 1) + ' failed: ' + error.message);
-                    
-                    if (retryCount < maxRetries) {
-                        // Show loading status to user
-                        if (retryCount === 0) {
-                            // First retry, show initial message
-                            this.showPlaybackStatus('Starting audio stream, please wait...');
-                        } else {
-                            // Subsequent retries, show progress
-                            this.showPlaybackStatus('Waiting for audio stream... (' + (retryCount + 1) + '/' + maxRetries + ')');
+            // First check if HLS.js is supported
+            if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                console.log('Using HLS.js for playback');
+                
+                // Clean up existing HLS.js instance if it exists
+                if (this.hlsPlayer) {
+                    this.hlsPlayer.destroy();
+                    this.hlsPlayer = null;
+                }
+                
+                // Create new HLS.js instance
+                const hls = new Hls({
+                    debug: false, // Set to true for debugging
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    backBufferLength: 30,
+                    // Modern config approach with shorter timeouts to detect server issues faster
+                    manifestLoadPolicy: {
+                        default: {
+                            maxTimeToFirstByteMs: 5000, // Reduced from 10000 
+                            maxLoadTimeMs: 10000,      // Reduced from 20000
+                            timeoutRetry: {
+                                maxNumRetry: 1,        // Reduced from 2
+                                retryDelayMs: 1000,
+                                maxRetryDelayMs: 0
+                            },
+                            errorRetry: {
+                                maxNumRetry: 1,        // Reduced from 2
+                                retryDelayMs: 1000,
+                                maxRetryDelayMs: 8000
+                            }
                         }
-                        
-                        // Retry after delay
-                        return new Promise(resolve => {
-                            this.retryTimeout = setTimeout(() => {
-                                resolve(this.loadPlaylistWithRetry(hlsUrl, player, sourceId, retryCount + 1, maxRetries));
-                                this.retryTimeout = null;
-                            }, retryDelay);
-                        });
-                    } else {
-                        this.hidePlaybackStatus();
-                        throw new Error('Failed to load playlist after multiple attempts. Please try again later.');
+                    },
+                    playlistLoadPolicy: {
+                        default: {
+                            maxTimeToFirstByteMs: 5000, // Reduced from 10000
+                            maxLoadTimeMs: 10000,       // Reduced from 20000
+                            timeoutRetry: {
+                                maxNumRetry: 1,         // Reduced from 2
+                                retryDelayMs: 1000,
+                                maxRetryDelayMs: 0
+                            },
+                            errorRetry: {
+                                maxNumRetry: 1,         // Reduced from 2
+                                retryDelayMs: 1000,
+                                maxRetryDelayMs: 8000
+                            }
+                        }
+                    },
+                    fragLoadPolicy: {
+                        default: {
+                            maxTimeToFirstByteMs: 5000, // Reduced from 10000
+                            maxLoadTimeMs: 20000,       // Reduced from 120000
+                            timeoutRetry: {
+                                maxNumRetry: 1,         // Reduced from 2
+                                retryDelayMs: 1000,
+                                maxRetryDelayMs: 0
+                            },
+                            errorRetry: {
+                                maxNumRetry: 1,         // Reduced from 2
+                                retryDelayMs: 1000,
+                                maxRetryDelayMs: 8000
+                            }
+                        }
                     }
                 });
+                
+                // Timeout for initial loading - more aggressive detection of server issues
+                const initialLoadTimeout = setTimeout(() => {
+                    if (this.hlsPlayer && !this.isPlaying) {
+                        console.error('Timeout waiting for initial playback');
+                        this.showPlaybackStatus('Server not responding - playback stopped');
+                        this.stopPlayback(true); // Use error recovery mode
+                    }
+                }, 8000); // 8 seconds max to get initial playback
+                
+                // Set up error handling
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        console.error('Fatal HLS.js error:', data.type, data.details);
+                        
+                        // Clear initial load timeout as we've received a definitive error
+                        clearTimeout(initialLoadTimeout);
+                        
+                        switch(data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                // Network errors might indicate server is offline
+                                if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || 
+                                    data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT || 
+                                    data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR || 
+                                    data.details === Hls.ErrorDetails.FRAG_LOAD_TIMEOUT) {
+                                    
+                                    this.showPlaybackStatus('Server appears to be offline or unreachable');
+                                    console.error('HLS server appears to be offline:', data.details);
+                                    this.stopPlayback(true); // Use error recovery mode
+                                } else {
+                                    // Only attempt recovery for non-critical network errors
+                                    console.log('Attempting to recover from network error');
+                                    hls.startLoad();
+                                }
+                                break;
+                                
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.log('Attempting to recover from media error');
+                                hls.recoverMediaError();
+                                break;
+                                
+                            default:
+                                // Cannot recover
+                                this.showPlaybackStatus('Playback error: ' + data.details);
+                                hls.destroy();
+                                this.hlsPlayer = null;
+                                this.stopPlayback(true); // Use error recovery mode
+                                break;
+                        }
+                    } else {
+                        // Non-fatal errors can be logged for debugging
+                        console.warn('Non-fatal HLS error:', data.type, data.details);
+                        
+                        // If we get multiple non-fatal errors in quick succession, it might indicate a problem
+                        const now = Date.now();
+                        if (!this.nonFatalErrorCount) this.nonFatalErrorCount = 0;
+                        if (!this.lastNonFatalErrorTime) this.lastNonFatalErrorTime = 0;
+                        
+                        // Check if this is a rapid succession error (within 3 seconds of the last one)
+                        const isRapidNonFatalError = (now - this.lastNonFatalErrorTime) < 3000;
+                        
+                        if (isRapidNonFatalError) {
+                            this.nonFatalErrorCount++;
+                            
+                            // If we've had too many rapid non-fatal errors, assume there's a problem
+                            if (this.nonFatalErrorCount > 5) {
+                                console.error('Multiple rapid non-fatal errors detected - stopping playback');
+                                this.showPlaybackStatus('Streaming issues detected - stopping playback');
+                                this.stopPlayback(true); // Use error recovery mode
+                            }
+                        } else {
+                            // Reset counter for non-rapid errors
+                            this.nonFatalErrorCount = 1;
+                        }
+                        
+                        this.lastNonFatalErrorTime = now;
+                    }
+                });
+                
+                // Media parsing and ready events
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    console.log('HLS.js manifest parsed');
+                    // Clear initial timeout as manifest is loaded
+                    clearTimeout(initialLoadTimeout);
+                    
+                    // Start playing when manifest is parsed
+                    audio.play().catch(err => {
+                        console.error('Error starting playback:', err);
+                        if (err.name === 'NotAllowedError') {
+                            this.showPlaybackStatus('Click to play (autoplay blocked)');
+                        }
+                    });
+                });
+                
+                // Successfully buffered fragment - update user
+                hls.on(Hls.Events.FRAG_BUFFERED, () => {
+                    console.log('HLS fragment buffered');
+                    // Clear initial timeout as we've buffered content
+                    clearTimeout(initialLoadTimeout);
+                    
+                    if (!this.isPlaying && !audio.paused) {
+                        this.isPlaying = true;
+                        this.hidePlaybackStatus();
+                        
+                        // Reset error counters on successful playback
+                        this.nonFatalErrorCount = 0;
+                        this.errorCount = 0;
+                        this.lastErrorTime = 0;
+                        this.lastNonFatalErrorTime = 0;
+                    }
+                });
+                
+                // Attach to media element and load source
+                hls.attachMedia(audio);
+                
+                // Store HLS instance
+                this.hlsPlayer = hls;
+                
+                // Once media is attached, load the source
+                hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+                    console.log('HLS.js media attached');
+                    hls.loadSource(hlsUrl);
+                });
+                
+            } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+                // Native HLS support (Safari, iOS)
+                console.log('Using native HLS support');
+                audio.src = hlsUrl;
+                audio.play().catch(err => {
+                    console.error('Error starting playback:', err);
+                    if (err.name === 'NotAllowedError') {
+                        this.showPlaybackStatus('Click to play (autoplay blocked)');
+                    }
+                });
+            } else {
+                this.showPlaybackStatus('HLS playback not supported in this browser');
+                console.error('HLS playback not supported');
+            }
         },
         
         // Show playback status message
@@ -308,102 +518,34 @@
             }
         },
         
-        // Start HLS playback after verifying the playlist URL works
-        startHLSPlaybackWithVerifiedURL(hlsUrl, player, sourceId) {
-            // Check if HLS.js is supported and needed
-            if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-                console.log('Using HLS.js for playback');
-                
-                // Clean up existing HLS.js instance if it exists
-                if (this.hlsPlayer) {
-                    this.hlsPlayer.destroy();
-                }
-                
-                // Create new HLS.js instance
-                const hls = new Hls({
-                    debug: false, // Disable debug logging (was true)
-                    enableWorker: true,
-                    lowLatencyMode: true,
-                    backBufferLength: 30
-                });
-                
-                // Bind HLS events
-                hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-                    console.log('HLS.js media attached');
-                    hls.loadSource(hlsUrl);
-                });
-                
-                hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
-                    console.log('HLS.js manifest parsed, found ' + data.levels.length + ' quality levels');
-                    player.play().catch(err => {
-                        console.error('Error starting HLS playback:', err);
-                        if (err.name === 'NotAllowedError') {
-                            console.warn('Autoplay blocked. User interaction required to play audio.');
-                        }
-                    });
-                });
-                
-                hls.on(Hls.Events.ERROR, (event, data) => {
-                    console.error('HLS.js error:', data.type, data.details, data.fatal);
-                    if (data.fatal) {
-                        console.error('Fatal HLS.js error:', data.type, data.details);
-                        switch(data.type) {
-                            case Hls.ErrorTypes.NETWORK_ERROR:
-                                // Try to recover network error
-                                console.log('Trying to recover from HLS network error...');
-                                hls.startLoad();
-                                break;
-                            case Hls.ErrorTypes.MEDIA_ERROR:
-                                console.log('Trying to recover from HLS media error...');
-                                hls.recoverMediaError();
-                                break;
-                            default:
-                                // Cannot recover
-                                hls.destroy();
-                                break;
-                        }
-                    }
-                });
-                
-                // Attach to media element
-                hls.attachMedia(player);
-                this.hlsPlayer = hls;
-                
-            } else if (player.canPlayType('application/vnd.apple.mpegurl')) {
-                // Native HLS support (Safari, iOS)
-                console.log('Using native HLS support');
-                player.src = hlsUrl;
-                player.play().catch(err => {
-                    console.error('Error starting HLS playback:', err);
-                    if (err.name === 'NotAllowedError') {
-                        console.warn('Autoplay blocked. User interaction required to play audio.');
-                    }
-                });
-            } else {
-                console.error('HLS playback not supported on this browser');
-                alert('Your browser does not support HLS audio streaming. Please try a modern browser like Chrome, Firefox, or Safari.');
+        // Stop audio playback
+        stopPlayback(isErrorRecovery = false) {
+            console.log('Stopping audio playback');
+            
+            // Hide any playback status messages if not in error recovery mode
+            if (!isErrorRecovery) {
+                this.hidePlaybackStatus();
             }
             
-            // Setup media session for media controls
-            this.setupMediaSession(sourceId);
-        },
-        
-        // Stop HLS playback
-        stopHLSPlayback() {
-            console.log('Stopping HLS audio playback');
-            
-            // Hide any playback status messages
-            this.hidePlaybackStatus();
-            
-            if (this.audioPlayer) {
-                this.audioPlayer.pause();
-                this.audioPlayer.src = '';
+            // Stop HTML5 audio element
+            if (this.audioElement) {
+                this.audioElement.pause();
+                this.audioElement.src = '';
+                this.audioElement.load(); // Reset and clear any buffered data
             }
             
             // Clean up HLS.js if it exists
             if (this.hlsPlayer) {
                 this.hlsPlayer.destroy();
                 this.hlsPlayer = null;
+            }
+            
+            // Add a cooldown period for error recovery
+            if (isErrorRecovery) {
+                this.inErrorCooldown = true;
+                setTimeout(() => {
+                    this.inErrorCooldown = false;
+                }, 5000); // 5 second cooldown before allowing playback again
             }
             
             // Notify server that we've stopped playback
@@ -441,14 +583,14 @@
                 });
                 
                 navigator.mediaSession.setActionHandler('play', () => {
-                    if (this.audioPlayer) {
-                        this.audioPlayer.play();
+                    if (this.audioElement) {
+                        this.audioElement.play();
                     }
                 });
                 
                 navigator.mediaSession.setActionHandler('pause', () => {
-                    if (this.audioPlayer) {
-                        this.audioPlayer.pause();
+                    if (this.audioElement) {
+                        this.audioElement.pause();
                     }
                 });
                 
@@ -465,31 +607,45 @@
             }
             
             if (this.isPlaying) {
-                this.stopHLSPlayback();
+                this.stopPlayback();
             } else {
-                this.startHLSPlayback(this.selectedSource);
+                this.startPlayback(this.selectedSource);
             }
         },
         
         // Toggle playback for a specific source
         toggleSourcePlayback(source) {
+            // If we're in error cooldown, don't allow playback immediately
+            if (this.inErrorCooldown) {
+                this.showPlaybackStatus('Please wait a moment before trying again...');
+                setTimeout(() => this.hidePlaybackStatus(), 3000);
+                return;
+            }
+
             // If we're already playing this source, stop it
             if (this.isPlaying && this.playingSource === source) {
-                this.stopHLSPlayback();
+                this.stopPlayback();
                 return;
             }
             
             // If we're playing a different source, stop it first
             if (this.isPlaying) {
-                this.stopHLSPlayback();
+                this.stopPlayback();
             }
             
             // Start playing the new source
-            this.startHLSPlayback(source);
+            this.startPlayback(source);
         },
 
         // Initialize component
         init() {
+            // Reset error tracking variables
+            this.errorCount = 0;
+            this.lastErrorTime = 0;
+            this.nonFatalErrorCount = 0;
+            this.lastNonFatalErrorTime = 0;
+            this.inErrorCooldown = false;
+            
             // Setup initial connection for audio levels
             this.setupEventSource();
             
@@ -500,7 +656,7 @@
                 
                 // Stop audio playback if navigating
                 if (this.isPlaying) {
-                    this.stopHLSPlayback();
+                    this.stopPlayback();
                 }
             });
             
@@ -518,7 +674,7 @@
                     // When tab goes to background
                     this.cleanupEventSource(); // Close the audio level EventSource when hidden
                     
-                    // We don't need to pause HLS audio - it can keep playing in background
+                    // We don't need to pause audio - it can keep playing in background
                     console.log('Tab in background: continuing audio playback');
                     
                 } else if (!this.isNavigating) {
@@ -526,10 +682,11 @@
                     this.setupEventSource();
                     
                     // If we were playing and the player has stopped, restart
-                    if (this.playingSource && this.audioPlayer && 
-                        (this.audioPlayer.paused || this.audioPlayer.ended)) {
+                    if (this.playingSource && this.audioElement && 
+                        (this.audioElement.paused || this.audioElement.ended) && 
+                        !this.inErrorCooldown) { // Don't restart if in error cooldown
                         console.log('Tab visible again: resuming audio playback');
-                        this.startHLSPlayback(this.playingSource);
+                        this.startPlayback(this.playingSource);
                     }
                 }
             };
@@ -543,12 +700,12 @@
                 document.removeEventListener('htmx:beforeRequest', this.cleanupEventSource);
                 document.removeEventListener('htmx:afterRequest', this.setupEventSource);
                 
-                // Clean up audio player
-                if (this.audioPlayer) {
-                    this.audioPlayer.pause();
-                    this.audioPlayer.src = '';
-                    this.audioPlayer.remove();
-                    this.audioPlayer = null;
+                // Clean up audio element
+                if (this.audioElement) {
+                    this.audioElement.pause();
+                    this.audioElement.src = '';
+                    this.audioElement.remove();
+                    this.audioElement = null;
                 }
                 
                 // Clean up HLS.js if it exists
