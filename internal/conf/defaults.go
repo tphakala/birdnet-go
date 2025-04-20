@@ -139,6 +139,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.mqtt.topic", "birdnet")
 	viper.SetDefault("realtime.mqtt.username", "")
 	viper.SetDefault("realtime.mqtt.password", "")
+	viper.SetDefault("realtime.mqtt.retain", false)
 	viper.SetDefault("realtime.mqtt.retrysettings.enabled", true)
 	viper.SetDefault("realtime.mqtt.retrysettings.maxretries", 5)
 	viper.SetDefault("realtime.mqtt.retrysettings.initialdelay", 30)

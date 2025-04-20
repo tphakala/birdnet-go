@@ -19,7 +19,7 @@ birdnet:
   threshold: 0.8          # threshold for prediction confidence to report, 0.0 to 1.0
   overlap: 1.5            # overlap between chunks, 0.0 to 2.9
   threads: 0              # 0 to use all available CPU threads
-  locale: en              # language to use for labels
+  locale: en-us           # language to use for labels
   latitude: 00.000        # latitude of recording location for prediction filtering
   longitude: 00.000       # longitude of recording location for prediction filtering
   rangefilter:

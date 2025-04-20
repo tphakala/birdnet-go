@@ -76,6 +76,9 @@ document.addEventListener('alpine:init', () => {
             isDNSResolutionIssue(result) {
                 if (!result) return false;
                 
+                // Only consider it a DNS issue if there was an actual failure
+                if (result.success === true && !result.error) return false;
+                
                 // Check for DNS-related keywords in error or message
                 const hasDNSError = result.error && (
                     result.error.toLowerCase().includes('dns') ||
