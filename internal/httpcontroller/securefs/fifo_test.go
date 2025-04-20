@@ -19,10 +19,8 @@ func TestFIFOPath(t *testing.T) {
 		if fifoPath[:len(expectedPrefix)] != expectedPrefix {
 			t.Errorf("Expected Windows named pipe path to start with %s, got %s", expectedPrefix, fifoPath)
 		}
-	} else {
-		if fifoPath != path {
-			t.Errorf("Expected Unix path to be unchanged, got %s, want %s", fifoPath, path)
-		}
+	} else if fifoPath != path {
+		t.Errorf("Expected Unix path to be unchanged, got %s, want %s", fifoPath, path)
 	}
 
 	// Test with Windows-style path

@@ -28,6 +28,7 @@ type HLSStreamInfo struct {
 	OutputDir    string
 	PlaylistPath string
 	LastAccess   time.Time
+	FifoPipe     string // Windows named pipe path for platform compatibility
 	// Add context and cancellation for managing stream lifecycle
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -515,6 +516,9 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 		return nil, fmt.Errorf("failed to create FIFO: %w", err)
 	}
 
+	// Get the platform-specific pipe name for the FIFO
+	pipeName := secFS.GetPipeName()
+
 	log.Printf("Starting FFmpeg HLS process for source: %s", sourceID)
 	// Start FFmpeg HLS process with improved parameters for reliability
 	cmd := exec.CommandContext(
@@ -560,6 +564,7 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 		OutputDir:    outputDir,
 		PlaylistPath: playlistPath,
 		LastAccess:   time.Now(),
+		FifoPipe:     pipeName, // Store the resolved pipe name
 		ctx:          streamCtx,
 		cancel:       streamCancel,
 	}
@@ -568,7 +573,7 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	hlsStreams[sourceID] = stream
 
 	// Start goroutine to feed audio data to FFmpeg
-	go feedAudioToFFmpeg(sourceID, fifoPath, streamCtx)
+	go feedAudioToFFmpeg(sourceID, stream.FifoPipe, stream.ctx)
 
 	// Start goroutine to handle context cancellation
 	go func() {
@@ -710,26 +715,48 @@ func processFIFOData(ctx context.Context, sourceID string, fifo *os.File, audioC
 	}
 }
 
-// feedAudioToFFmpeg pumps audio data to the FFmpeg process
-func feedAudioToFFmpeg(sourceID, fifoPath string, ctx context.Context) {
-	log.Printf("Starting audio feed for source %s to FIFO %s", sourceID, fifoPath)
+// feedAudioToFFmpeg feeds audio data to FFmpeg via the FIFO
+func feedAudioToFFmpeg(sourceID, pipePath string, ctx context.Context) {
+	log.Printf("Starting audio feed for source %s to pipe %s", sourceID, pipePath)
 
-	// Set up secure filesystem
-	secFS, err := setupSecureFS(fifoPath)
+	// Get HLS directory for path validation
+	hlsBaseDir, err := conf.GetHLSDirectory()
 	if err != nil {
-		log.Printf("Error setting up secure filesystem: %v", err)
+		log.Printf("Error getting HLS directory: %v", err)
+		return
+	}
+
+	// Create a secure filesystem for operations
+	secFS, err := securefs.New(hlsBaseDir)
+	if err != nil {
+		log.Printf("Error creating secure filesystem: %v", err)
 		return
 	}
 	defer secFS.Close()
 
-	// Set up and open the FIFO
-	fifo, err := setupFIFO(ctx, sourceID, fifoPath, secFS)
-	if err != nil {
-		log.Printf("Error opening FIFO: %v", err)
+	// Determine the filesystem path for callbacks
+	// (on Windows we have a named pipe path but still need the original path for callbacks)
+	outputDir := filepath.Join(hlsBaseDir, fmt.Sprintf("stream_%s", sourceID))
+	fifoPath := filepath.Join(outputDir, "audio.pcm")
+
+	// Open the pipe using the provided pipe path
+	var fifo *os.File
+	var openErr error
+
+	if runtime.GOOS == "windows" {
+		// On Windows, open the named pipe directly
+		fifo, openErr = os.OpenFile(pipePath, os.O_WRONLY, 0)
+	} else {
+		// On Unix, we still need to use secureFS and the original path
+		fifo, openErr = secFS.OpenFile(fifoPath, os.O_WRONLY, 0)
+	}
+
+	if openErr != nil {
+		log.Printf("Error opening pipe: %v", openErr)
 		return
 	}
 	defer func() {
-		log.Printf("Closing FIFO for source %s", sourceID)
+		log.Printf("Closing pipe for source %s", sourceID)
 		fifo.Close()
 	}()
 
