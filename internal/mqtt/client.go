@@ -43,6 +43,7 @@ func NewClient(settings *conf.Settings, metrics *telemetry.Metrics) (Client, err
 	config.Username = settings.Realtime.MQTT.Username
 	config.Password = settings.Realtime.MQTT.Password
 	config.Topic = settings.Realtime.MQTT.Topic
+	config.Retain = settings.Realtime.MQTT.Retain
 
 	return &client{
 		config:        config,
@@ -185,7 +186,7 @@ func (c *client) Publish(ctx context.Context, topic, payload string) error {
 
 	go func() {
 		close(publishStarted)
-		token := c.internalClient.Publish(topic, defaultQoS, false, payload)
+		token := c.internalClient.Publish(topic, defaultQoS, c.config.Retain, payload)
 		if !token.WaitTimeout(c.config.PublishTimeout) {
 			done <- fmt.Errorf("publish timeout after %v", c.config.PublishTimeout)
 			return

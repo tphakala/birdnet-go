@@ -38,6 +38,7 @@ type Config struct {
 	Username          string
 	Password          string
 	Topic             string // Default topic for publishing messages
+	Retain            bool   // true to retain messages at the broker
 	ReconnectCooldown time.Duration
 	ReconnectDelay    time.Duration
 	// Connection timeouts

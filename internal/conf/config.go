@@ -146,6 +146,7 @@ type MQTTSettings struct {
 	Topic         string        // MQTT topic
 	Username      string        // MQTT username
 	Password      string        // MQTT password
+	Retain        bool          // true to retain messages
 	RetrySettings RetrySettings // settings for retry mechanism
 }
 
