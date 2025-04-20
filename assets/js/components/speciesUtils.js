@@ -178,4 +178,148 @@ function saveEditSpecies(editIndex, editSpecies, speciesList, setSpeciesList, se
     setEditIndex(null);
     setEditSpecies('');
     setShowEditSpecies(false);
-} 
+}
+
+/**
+ * Parse species text into scientific and common name components
+ * @param {string} speciesText - The species text to parse
+ * @returns {Object} Object with scientific name, common name, and display name
+ */
+function parseSpeciesText(speciesText) {
+    // Check if the species text is in the format "Scientific Name (Common Name)"
+    const match = speciesText.match(/^(.*?)\s*\((.*?)\)$/);
+    
+    if (match) {
+        const scientificName = match[1].trim();
+        const commonName = match[2].trim();
+        
+        return {
+            scientificName,
+            commonName,
+            displayName: `${commonName} (${scientificName})`
+        };
+    }
+    
+    // If no match, treat the whole text as both scientific and common name
+    return {
+        scientificName: speciesText.trim(),
+        commonName: speciesText.trim(),
+        displayName: speciesText.trim()
+    };
+}
+
+/**
+ * Format a species action object for display or API
+ * @param {Object} action - The action object to format
+ * @param {boolean} forApi - Whether to format for API submission
+ * @returns {Object} Formatted action object
+ */
+function formatSpeciesAction(action, forApi = false) {
+/**
+ * Format a species action object for bidirectional conversion between UI display format and API format
+ * 
+ * @param {Object} action - The action object to format, can be in either display format (lowercase keys)
+ *                         or API format (PascalCase keys)
+ * @param {boolean} forApi - Direction of conversion:
+ *                         - true: Convert from UI format to API format (lowercase → PascalCase)
+ *                         - false: Convert from API format to UI format (PascalCase → lowercase)
+ * 
+ * @returns {Object} Formatted action object with appropriate property structure:
+ * 
+ * API format (when forApi=true):
+ * {
+ *   Type: string,             // Action type (e.g., 'ExecuteCommand')
+ *   Command: string,          // Command to execute
+ *   Parameters: string[],     // Array of parameter strings
+ *   ExecuteDefaults: boolean  // Whether to execute with default parameters
+ * }
+ * 
+ * UI display format (when forApi=false):
+ * {
+ *   type: string,             // Action type (e.g., 'ExecuteCommand') 
+ *   command: string,          // Command to execute
+ *   parameters: string,       // Comma-separated parameter string
+ *   executeDefaults: boolean  // Whether to execute with default parameters
+ * }
+ * 
+ * Notes:
+ * - Parameters conversion: comma-separated string ↔ array of strings
+ * - Handles missing properties with appropriate defaults
+ * - Preserves boolean flag values correctly
+ */
+    if (forApi) {
+        return {
+            Type: action.type || 'ExecuteCommand',
+            Command: action.command || '',
+            Parameters: Array.isArray(action.parameters) 
+                ? action.parameters 
+                : (typeof action.parameters === 'string' 
+                    ? action.parameters.split(',').map(p => p.trim()).filter(p => p) 
+                    : []),
+            ExecuteDefaults: action.executeDefaults === true
+        };
+    } else {
+        return {
+            type: action.Type || 'ExecuteCommand',
+            command: action.Command || '',
+            parameters: Array.isArray(action.Parameters) 
+                ? action.Parameters.join(',') 
+                : (typeof action.Parameters === 'string' ? action.Parameters : ''),
+            executeDefaults: action.ExecuteDefaults === true
+        };
+    }
+}
+
+/**
+ * Validate a species action object
+ * @param {Object} action - The action object to validate
+ * @returns {boolean} Whether the action is valid
+ */
+function validateSpeciesAction(action) {
+    // Check if required fields are present and valid
+    const hasValidType = action.type && typeof action.type === 'string';
+    if (!hasValidType) {
+        return false;
+    }
+    
+    const isCommandValid = action.type !== 'ExecuteCommand' || 
+                          (action.command && typeof action.command === 'string');
+    if (!isCommandValid) {
+        return false;
+    }
+    
+    // Parameters should be either a string or an array
+    const hasValidParams = 
+        (typeof action.parameters === 'string') || 
+        (Array.isArray(action.parameters)) ||
+        (typeof action.Parameters === 'string') || 
+        (Array.isArray(action.Parameters));
+        
+    if (!hasValidParams) {
+        return false;
+    }
+    
+    // executeDefaults should be a boolean, but we accept undefined (defaults to false)
+    if (action.executeDefaults !== undefined && typeof action.executeDefaults !== 'boolean') {
+        return false;
+    }
+    
+    // ExecuteDefaults should be a boolean, but we accept undefined (defaults to false)
+    if (action.ExecuteDefaults !== undefined && typeof action.ExecuteDefaults !== 'boolean') {
+        return false;
+    }
+    
+    return true;
+}
+
+// Export utilities
+window.speciesUtils = {
+    updateSpeciesPredictions,
+    addSpeciesToList,
+    removeSpeciesFromList,
+    startEditSpecies,
+    saveEditSpecies,
+    parseSpeciesText,
+    formatSpeciesAction,
+    validateSpeciesAction
+}; 

@@ -20,6 +20,23 @@ Action menu component for species list items
        notInEditMode() {
          return typeof editIndex === 'undefined' || editIndex !== this.safeIndex;
        },
+       // Helpers to check action status
+       hasExecuteDefaults() {
+         return typeof $root.speciesSettings !== 'undefined' && 
+                $root.speciesSettings.Config && 
+                $root.speciesSettings.Config[item]?.Actions?.length > 0 && 
+                $root.speciesSettings.Config[item]?.Actions.some(action => action.ExecuteDefaults === true);
+       },
+       actionStatusText() {
+         const hasActions = $root.speciesSettings?.Config?.[item]?.Actions?.length > 0;
+         if (!hasActions) {
+           return 'Add Action';
+         }
+         
+         return this.hasExecuteDefaults() ? 
+                'Edit Action (with defaults)' : 
+                'Edit Action';
+       },
        updatePosition() {
          this.$nextTick(() => {
            const menu = this.$refs.menu;
@@ -123,7 +140,7 @@ Action menu component for species list items
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
-                <span x-text="typeof $root.speciesSettings !== 'undefined' && $root.speciesSettings.Config && $root.speciesSettings.Config[item]?.Actions?.length ? 'Edit Action' : 'Add Action'"></span>
+                <span x-text="actionStatusText()"></span>
               </span>
             </button>
           </div>

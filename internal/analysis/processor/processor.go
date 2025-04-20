@@ -478,6 +478,7 @@ func (p *Processor) getActionsForItem(detection *Detections) []Action {
 		}
 
 		var actions []Action
+		var executeDefaults bool
 
 		// Add custom actions from the new structure
 		for _, actionConfig := range speciesConfig.Actions {
@@ -493,11 +494,21 @@ func (p *Processor) getActionsForItem(detection *Detections) []Action {
 				// Add notification action handling
 				// ... implementation ...
 			}
+			// If any action has ExecuteDefaults set to true, we'll include default actions
+			if actionConfig.ExecuteDefaults {
+				executeDefaults = true
+			}
 		}
 
-		// If there are custom actions, return only those
-		if len(actions) > 0 {
+		// If there are custom actions, return only those unless executeDefaults is true
+		if len(actions) > 0 && !executeDefaults {
 			return actions
+		}
+
+		// If executeDefaults is true, combine custom and default actions
+		if len(actions) > 0 && executeDefaults {
+			defaultActions := p.getDefaultActions(detection)
+			return append(actions, defaultActions...)
 		}
 	}
 
