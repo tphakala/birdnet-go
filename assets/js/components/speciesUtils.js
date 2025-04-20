@@ -215,6 +215,38 @@ function parseSpeciesText(speciesText) {
  * @returns {Object} Formatted action object
  */
 function formatSpeciesAction(action, forApi = false) {
+/**
+ * Format a species action object for bidirectional conversion between UI display format and API format
+ * 
+ * @param {Object} action - The action object to format, can be in either display format (lowercase keys)
+ *                         or API format (PascalCase keys)
+ * @param {boolean} forApi - Direction of conversion:
+ *                         - true: Convert from UI format to API format (lowercase → PascalCase)
+ *                         - false: Convert from API format to UI format (PascalCase → lowercase)
+ * 
+ * @returns {Object} Formatted action object with appropriate property structure:
+ * 
+ * API format (when forApi=true):
+ * {
+ *   Type: string,             // Action type (e.g., 'ExecuteCommand')
+ *   Command: string,          // Command to execute
+ *   Parameters: string[],     // Array of parameter strings
+ *   ExecuteDefaults: boolean  // Whether to execute with default parameters
+ * }
+ * 
+ * UI display format (when forApi=false):
+ * {
+ *   type: string,             // Action type (e.g., 'ExecuteCommand') 
+ *   command: string,          // Command to execute
+ *   parameters: string,       // Comma-separated parameter string
+ *   executeDefaults: boolean  // Whether to execute with default parameters
+ * }
+ * 
+ * Notes:
+ * - Parameters conversion: comma-separated string ↔ array of strings
+ * - Handles missing properties with appropriate defaults
+ * - Preserves boolean flag values correctly
+ */
     if (forApi) {
         return {
             Type: action.type || 'ExecuteCommand',
@@ -245,11 +277,14 @@ function formatSpeciesAction(action, forApi = false) {
  */
 function validateSpeciesAction(action) {
     // Check if required fields are present and valid
-    if (!action.type || typeof action.type !== 'string') {
+    const hasValidType = action.type && typeof action.type === 'string';
+    if (!hasValidType) {
         return false;
     }
     
-    if (action.type === 'ExecuteCommand' && (!action.command || typeof action.command !== 'string')) {
+    const isCommandValid = action.type !== 'ExecuteCommand' || 
+                          (action.command && typeof action.command === 'string');
+    if (!isCommandValid) {
         return false;
     }
     
