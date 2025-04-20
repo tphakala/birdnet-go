@@ -19,7 +19,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
-	"github.com/tphakala/birdnet-go/internal/observation"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -200,8 +199,9 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 	for _, result := range item.Results {
 		var confidenceThreshold float32
 
-		// Parse species string into components
-		scientificName, commonName, speciesCode := observation.ParseSpeciesString(result.Species)
+		// Use BirdNET's EnrichResultWithTaxonomy instead of ParseSpeciesString
+		// to ensure we get the correct species code from the taxonomy map
+		scientificName, commonName, speciesCode := p.Bn.EnrichResultWithTaxonomy(result.Species)
 
 		// Skip processing if we couldn't parse the species properly
 		if commonName == "" && scientificName == "" {
@@ -276,7 +276,13 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 		// TODO: adjust end time based on detection pending delay
 		beginTime, endTime := item.StartTime, item.StartTime.Add(15*time.Second)
 
-		note := observation.New(p.Settings, beginTime, endTime, result.Species, float64(result.Confidence), item.Source, clipName, item.ElapsedTime)
+		// Use the new function to preserve the species code from the taxonomy lookup
+		note := p.NewWithSpeciesInfo(
+			beginTime, endTime,
+			scientificName, commonName, speciesCode,
+			float64(result.Confidence),
+			item.Source, clipName,
+			item.ElapsedTime)
 
 		// Detection passed all filters, process it
 		detections = append(detections, Detections{
@@ -666,4 +672,50 @@ func (p *Processor) Shutdown() error {
 
 	log.Println("Processor shutdown complete")
 	return nil
+}
+
+// NewWithSpeciesInfo creates a new observation note with pre-parsed species information
+// This ensures that the species code from the taxonomy lookup is preserved
+func (p *Processor) NewWithSpeciesInfo(
+	beginTime, endTime time.Time,
+	scientificName, commonName, speciesCode string,
+	confidence float64,
+	source, clipName string,
+	elapsedTime time.Duration) datastore.Note {
+
+	// detectionTime is time now minus 3 seconds to account for the delay in the detection
+	now := time.Now()
+	date := now.Format("2006-01-02")
+	detectionTime := now.Add(-2 * time.Second)
+	timeStr := detectionTime.Format("15:04:05")
+
+	var audioSource string
+	if p.Settings.Input.Path != "" {
+		audioSource = p.Settings.Input.Path
+	} else {
+		audioSource = source
+	}
+
+	// Round confidence to two decimal places
+	roundedConfidence := math.Round(confidence*100) / 100
+
+	// Return a new Note struct populated with the provided parameters and the current date and time
+	return datastore.Note{
+		SourceNode:     p.Settings.Main.Name,           // From the provided configuration settings
+		Date:           date,                           // Use ISO 8601 date format
+		Time:           timeStr,                        // Use 24-hour time format
+		Source:         audioSource,                    // From the provided configuration settings
+		BeginTime:      beginTime,                      // Start time of the observation
+		EndTime:        endTime,                        // End time of the observation
+		SpeciesCode:    speciesCode,                    // Species code from taxonomy lookup
+		ScientificName: scientificName,                 // Scientific name from taxonomy lookup
+		CommonName:     commonName,                     // Common name from taxonomy lookup
+		Confidence:     roundedConfidence,              // Confidence score of the observation
+		Latitude:       p.Settings.BirdNET.Latitude,    // Geographic latitude where the observation was made
+		Longitude:      p.Settings.BirdNET.Longitude,   // Geographic longitude where the observation was made
+		Threshold:      p.Settings.BirdNET.Threshold,   // Threshold setting from configuration
+		Sensitivity:    p.Settings.BirdNET.Sensitivity, // Sensitivity setting from configuration
+		ClipName:       clipName,                       // Name of the audio clip
+		ProcessingTime: elapsedTime,                    // Time taken to process the observation
+	}
 }
