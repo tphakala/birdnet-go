@@ -220,15 +220,9 @@
         </div>
         
         <!-- Note about MQTT Retain for HomeAssistant - full width -->
-        <div x-show="mqtt.enabled" class="text-sm my-4 px-4 py-3 bg-base-200 rounded-md">
-            <span class="text-info-content">
-                <i class="fa-solid fa-circle-info mr-1"></i><strong>Home Assistant Users:</strong> 
-                It's recommended to enable the retain flag for Home Assistant integration. Without retain, 
-                MQTT sensors will appear as 'unknown' when Home Assistant restarts. With retain enabled, 
-                Home Assistant can retrieve the last known state of the sensor. This is similar to how platforms 
-                like Zigbee2MQTT preserve sensor states across Home Assistant restarts.
-            </span>
-        </div>
+        {{template "noteField" dict
+            "condition" "mqtt.enabled"
+            "content" "<strong>Home Assistant Users:</strong> It's recommended to enable the retain flag for Home Assistant integration. Without retain, MQTT sensors will appear as 'unknown' when Home Assistant restarts. With retain enabled, Home Assistant can retrieve the last known state of the sensor. This is similar to how platforms like Zigbee2MQTT preserve sensor states across Home Assistant restarts."}}
 
         <!-- Multi-Stage Operation Component for MQTT Connection Test -->
         <div x-show="mqtt.enabled" class="mt-4">
