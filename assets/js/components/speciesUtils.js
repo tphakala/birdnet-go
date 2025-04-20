@@ -314,6 +314,11 @@ function validateSpeciesAction(action) {
 
 // Export utilities
 window.speciesUtils = {
+    updateSpeciesPredictions,
+    addSpeciesToList,
+    removeSpeciesFromList,
+    startEditSpecies,
+    saveEditSpecies,
     parseSpeciesText,
     formatSpeciesAction,
     validateSpeciesAction
