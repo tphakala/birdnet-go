@@ -312,15 +312,15 @@ func (s *Server) handleHLSStreamRequest(c echo.Context) error {
 	c.Set("server", s)
 	s.Debug("HLS stream request for path: %s", c.Request().URL.Path)
 
-	// Set up context monitoring for client disconnection
-	ctx := c.Request().Context()
-	go func() {
-		<-ctx.Done()
-		// When client disconnects, log it
-		sourceID := c.Param("sourceID")
-		clientIP := c.RealIP()
-		if sourceID != "" {
+	// Log client disconnection when the request completes
+	sourceID := c.Param("sourceID")
+	clientIP := c.RealIP()
+	defer func() {
+		select {
+		case <-c.Request().Context().Done():
 			s.Debug("Client %s disconnected from HLS stream: %s", clientIP, sourceID)
+		default:
+			// Request completed normally
 		}
 	}()
 

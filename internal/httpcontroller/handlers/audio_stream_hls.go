@@ -703,8 +703,11 @@ func setupFFmpegLogging(secFS *securefs.SecureFS, cmd *exec.Cmd, hlsBaseDir, out
 		return fmt.Errorf("failed to start FFmpeg: %w", err)
 	}
 
-	// Don't close the log file immediately as it's being used by the command
-	// The OS will close it when the process terminates
+	// Close the log file *after* FFmpeg exits to avoid FD leaks
+	go func(f *os.File, p *exec.Cmd) {
+		_ = p.Wait() // blocks until FFmpeg terminates
+		_ = f.Close()
+	}(logFile, cmd)
 
 	log.Printf("FFmpeg process started successfully for source: %s (logs at %s)", outputDir, logFilePath)
 	return nil
@@ -855,9 +858,8 @@ func feedAudioToFFmpeg(sourceID, pipePath string, ctx context.Context) {
 	defer secFS.Close()
 
 	// Determine the filesystem path for callbacks
-	// (on Windows we have a named pipe path but still need the original path for callbacks)
-	outputDir := filepath.Join(hlsBaseDir, fmt.Sprintf("stream_%s", sourceID))
-	fifoPath := filepath.Join(outputDir, "audio.pcm")
+	// Derive paths from the *trusted* pipePath we already have
+	fifoPath := pipePath
 
 	// Open the pipe using the provided pipe path
 	var fifo *os.File
@@ -1105,36 +1107,50 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatu
 			stream.cancel()
 		}
 
-		// Wait for process termination if needed
+		// Get process handle and release lock before waiting
+		var cmd *exec.Cmd
 		if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
-			_, _ = stream.FFmpegCmd.Process.Wait()
+			cmd = stream.FFmpegCmd
 		}
 
-		// Get HLS directory for secure filesystem operations
-		hlsBaseDir, err := conf.GetHLSDirectory()
-		if err != nil {
-			log.Printf("Error getting HLS directory: %v", err)
-		} else if stream.OutputDir != "" {
-			// Use secureFS to remove the directory
-			secFS, err := securefs.New(hlsBaseDir)
-			if err != nil {
-				log.Printf("Error creating secure filesystem: %v", err)
-			} else {
-				defer secFS.Close()
+		// Get output directory for cleanup
+		outputDir := stream.OutputDir
 
-				if secFS.ExistsNoErr(stream.OutputDir) {
-					log.Printf("Removing stream directory: %s", stream.OutputDir)
-					if err := secFS.RemoveAll(stream.OutputDir); err != nil {
-						log.Printf("Error removing stream directory: %v", err)
+		// Remove from map
+		delete(hlsStreams, sourceID)
+		hlsStreamMutex.Unlock()
+
+		// Wait for process termination without holding the lock
+		if cmd != nil && cmd.Process != nil {
+			_, _ = cmd.Process.Wait()
+		}
+
+		// Clean up the output directory
+		if outputDir != "" {
+			// Get HLS directory for secure filesystem operations
+			hlsBaseDir, err := conf.GetHLSDirectory()
+			if err != nil {
+				log.Printf("Error getting HLS directory: %v", err)
+			} else {
+				// Use secureFS to remove the directory
+				secFS, err := securefs.New(hlsBaseDir)
+				if err != nil {
+					log.Printf("Error creating secure filesystem: %v", err)
+				} else {
+					defer secFS.Close()
+
+					if secFS.ExistsNoErr(outputDir) {
+						log.Printf("Removing stream directory: %s", outputDir)
+						if err := secFS.RemoveAll(outputDir); err != nil {
+							log.Printf("Error removing stream directory: %v", err)
+						}
 					}
 				}
 			}
 		}
-
-		// Remove from map
-		delete(hlsStreams, sourceID)
+	} else {
+		hlsStreamMutex.Unlock()
 	}
-	hlsStreamMutex.Unlock()
 
 	// Add client to stream tracking with a longer initial timeout
 	// to give FFmpeg time to start up and generate the playlist
@@ -1512,9 +1528,18 @@ func performStreamCleanup(sourceID string, stream *HLSStreamInfo, reason string)
 		stream.cancel()
 	}
 
-	// Wait for process termination if needed
+	// Get FFmpeg command for waiting without blocking other operations
+	var cmd *exec.Cmd
 	if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
-		_, _ = stream.FFmpegCmd.Process.Wait()
+		cmd = stream.FFmpegCmd
+	}
+
+	// Wait for process termination without blocking other operations
+	if cmd != nil && cmd.Process != nil {
+		go func() {
+			_, _ = cmd.Process.Wait()
+			log.Printf("FFmpeg process for source %s has terminated", sourceID)
+		}()
 	}
 
 	// Clean up the output directory
