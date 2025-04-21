@@ -81,16 +81,53 @@ func GeneratePlaceholderCode(speciesName string) string {
 	return fmt.Sprintf("%s%s", prefix, shortHash)
 }
 
-// GetSpeciesCodeFromName returns the eBird species code for a given species name
-// in the format "ScientificName_CommonName".
+// GetSpeciesCodeFromName returns the eBird species code for a given species name.
+// Extracts and uses only the scientific name portion for lookup.
 // If species is not found in the taxonomy map, generates a placeholder code.
 func GetSpeciesCodeFromName(taxonomyMap TaxonomyMap, speciesName string) (string, bool) {
-	code, exists := taxonomyMap[speciesName]
-	if !exists {
-		// If not found in taxonomy, create a placeholder code
-		return GeneratePlaceholderCode(speciesName), false
+	// Extract scientific name from input
+	var scientificName string
+
+	// Handle "Scientific (Common)" format
+	if strings.Contains(speciesName, " (") && strings.HasSuffix(speciesName, ")") {
+		parts := strings.SplitN(speciesName, " (", 2)
+		if len(parts) == 2 {
+			scientificName = strings.TrimSpace(parts[0])
+		}
+	} else if strings.Contains(speciesName, "_") {
+		// Handle "Scientific_Common" format
+		parts := strings.SplitN(speciesName, "_", 2)
+		if len(parts) == 2 {
+			scientificName = strings.TrimSpace(parts[0])
+		}
 	}
-	return code, exists
+
+	// If we couldn't extract a scientific name, use the whole input
+	if scientificName == "" {
+		scientificName = speciesName
+	}
+
+	// Search for the scientific name in the taxonomy map
+	for taxonName, taxonCode := range taxonomyMap {
+		// Skip entries that are codes mapping to names (codes don't contain underscores)
+		if !strings.Contains(taxonName, "_") {
+			continue
+		}
+
+		// Extract the scientific portion of the taxonomy entry
+		taxonParts := strings.SplitN(taxonName, "_", 2)
+		if len(taxonParts) == 2 {
+			taxonScientific := strings.TrimSpace(taxonParts[0])
+
+			// Compare scientific names
+			if taxonScientific == scientificName {
+				return taxonCode, true
+			}
+		}
+	}
+
+	// If not found in taxonomy, create a placeholder code
+	return GeneratePlaceholderCode(speciesName), false
 }
 
 // GetSpeciesNameFromCode returns the species name in the format "ScientificName_CommonName"
