@@ -117,44 +117,8 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/api/v1/audio-level", s.Handlers.WithErrorHandling(s.Handlers.AudioLevelSSE))
 
 	// HLS streaming routes
-	s.Echo.GET("/api/v1/audio-stream-hls/:sourceID/*", func(c echo.Context) error {
-		// Add server to context for authentication
-		c.Set("server", s)
-		s.Debug("HLS stream request for path: %s", c.Request().URL.Path)
-
-		// Set up context monitoring for client disconnection
-		ctx := c.Request().Context()
-		go func() {
-			<-ctx.Done()
-			// When client disconnects, log it
-			sourceID := c.Param("sourceID")
-			clientIP := c.RealIP()
-			if sourceID != "" {
-				s.Debug("Client %s disconnected from HLS stream: %s", clientIP, sourceID)
-			}
-		}()
-
-		return s.Handlers.WithErrorHandling(s.Handlers.AudioStreamHLS)(c)
-	})
-	s.Echo.GET("/api/v1/audio-stream-hls/:sourceID", func(c echo.Context) error {
-		// Add server to context for authentication
-		c.Set("server", s)
-		s.Debug("HLS stream request for source: %s", c.Param("sourceID"))
-
-		// Set up context monitoring for client disconnection
-		ctx := c.Request().Context()
-		go func() {
-			<-ctx.Done()
-			// When client disconnects, log it
-			sourceID := c.Param("sourceID")
-			clientIP := c.RealIP()
-			if sourceID != "" {
-				s.Debug("Client %s disconnected from HLS stream: %s", clientIP, sourceID)
-			}
-		}()
-
-		return s.Handlers.WithErrorHandling(s.Handlers.AudioStreamHLS)(c)
-	})
+	s.Echo.GET("/api/v1/audio-stream-hls/:sourceID/*", s.handleHLSStreamRequest)
+	s.Echo.GET("/api/v1/audio-stream-hls/:sourceID", s.handleHLSStreamRequest)
 
 	// Add HLS stream management routes for client synchronization
 	s.Echo.POST("/api/v1/audio-stream-hls/:sourceID/start", func(c echo.Context) error {
@@ -186,7 +150,15 @@ func (s *Server) initRoutes() {
 
 		s.Debug("Received HLS client heartbeat")
 
-		return s.Handlers.WithErrorHandling(s.Handlers.ProcessHLSHeartbeat)(c)
+		err := s.Handlers.ProcessHLSHeartbeat(c)
+		if err != nil {
+			s.Debug("Error processing HLS heartbeat: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to process heartbeat")
+		}
+
+		return c.JSON(http.StatusOK, map[string]string{
+			"status": "received",
+		})
 	})
 
 	s.Echo.POST("/api/v1/audio-stream-hls/:sourceID/stop", func(c echo.Context) error {
@@ -322,6 +294,27 @@ func (s *Server) initRoutes() {
 
 	// Set up static file serving
 	s.setupStaticFileServing()
+}
+
+// handleHLSStreamRequest handles requests for HLS stream endpoints
+func (s *Server) handleHLSStreamRequest(c echo.Context) error {
+	// Add server to context for authentication
+	c.Set("server", s)
+	s.Debug("HLS stream request for path: %s", c.Request().URL.Path)
+
+	// Set up context monitoring for client disconnection
+	ctx := c.Request().Context()
+	go func() {
+		<-ctx.Done()
+		// When client disconnects, log it
+		sourceID := c.Param("sourceID")
+		clientIP := c.RealIP()
+		if sourceID != "" {
+			s.Debug("Client %s disconnected from HLS stream: %s", clientIP, sourceID)
+		}
+	}()
+
+	return s.Handlers.WithErrorHandling(s.Handlers.AudioStreamHLS)(c)
 }
 
 // handlePageRequest handles requests for full page routes

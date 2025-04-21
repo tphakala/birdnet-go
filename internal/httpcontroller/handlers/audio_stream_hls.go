@@ -64,6 +64,9 @@ var (
 
 	// Log cooldown - only log once per client per this duration
 	hlsLogCooldown = 60 * time.Second
+
+	// Define global variables and constants for HLS streaming
+	maxStreamLifetime = 6 * time.Hour // Maximum time a stream can live regardless of activity
 )
 
 // StreamStatus represents the current status of an HLS stream
@@ -358,7 +361,7 @@ func buildFFmpegArgs(fifoPath, outputDir, playlistPath string) []string {
 		"-hls_init_time", "1", // Initial segment length: 1 second for faster startup
 		"-hls_allow_cache", "1", // Allow caching
 		"-start_number", "0", // Start with segment 0
-		"-loglevel", "verbose", // Set ffmpeg logging level to info
+		"-loglevel", "info", // Set ffmpeg logging level to info
 		"-hls_segment_filename", filepath.Join(outputDir, "segment%03d.ts"),
 		playlistPath, // Output playlist
 	}
@@ -737,7 +740,7 @@ func feedAudioToFFmpeg(sourceID, pipePath string, ctx context.Context) {
 		// On Windows, retry opening the named pipe with proper handling
 		// The pipe might not be immediately available as FFmpeg needs time to connect
 		var retryCount int
-		const maxRetries = 5
+		const maxRetries = 10
 		for retryCount < maxRetries {
 			// Try to open the pipe
 			fifo, openErr = secFS.OpenNamedPipe(pipePath)
@@ -1249,28 +1252,44 @@ func generateClientID(clientIP, userAgent string) string {
 	return clientIP + "-" + clientType
 }
 
-// ProcessHLSHeartbeat handles client heartbeat signals for HLS streams
-// API: POST /api/v1/audio-stream-hls/heartbeat
-// Clients should send heartbeats regularly, at least once every 2-3 minutes
-// to ensure streams aren't prematurely cleaned up. Recommended heartbeat
-// interval is 60 seconds to provide a safety margin against network issues.
+// ProcessHLSHeartbeat handles client heartbeat messages for HLS streams
 func (h *Handlers) ProcessHLSHeartbeat(c echo.Context) error {
-	// Parse request body
-	var heartbeat HLSHeartbeat
-	if err := c.Bind(&heartbeat); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid heartbeat data")
-	}
-
-	// Ensure source ID is provided
-	if heartbeat.SourceID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "Source ID is required")
-	}
-
-	// Get client IP and generate consistent client ID
 	clientIP := c.RealIP()
 	clientID := generateClientID(clientIP, c.Request().Header.Get("User-Agent"))
 
-	// Check if stream exists to prevent orphaned activity entries
+	// Decode the heartbeat message
+	heartbeat := HLSHeartbeat{}
+	if err := c.Bind(&heartbeat); err != nil {
+		log.Printf("Invalid heartbeat format from %s: %v", clientID, err)
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid heartbeat message")
+	}
+
+	// Handle disconnection announcements
+	if disconnectFlag := c.QueryParam("disconnect"); disconnectFlag == "true" ||
+		c.QueryParam("status") == "disconnect" {
+		log.Printf("Client %s announced disconnection from stream %s",
+			clientID, heartbeat.SourceID)
+
+		// Remove client from tracking
+		hlsStreamClientMutex.Lock()
+		if clients, exists := hlsStreamClients[heartbeat.SourceID]; exists {
+			// Remove the client
+			delete(clients, clientID)
+
+			// Log remaining clients
+			remainingClients := len(clients)
+			log.Printf("Client %s disconnected from HLS stream %s (%d clients remaining)",
+				clientID, heartbeat.SourceID, remainingClients)
+		}
+		hlsStreamClientMutex.Unlock()
+
+		return c.JSON(http.StatusOK, map[string]string{
+			"status": "disconnected",
+			"source": heartbeat.SourceID,
+		})
+	}
+
+	// Validate that the stream exists
 	hlsStreamMutex.Lock()
 	_, streamExists := hlsStreams[heartbeat.SourceID]
 	hlsStreamMutex.Unlock()
@@ -1310,12 +1329,10 @@ func init() {
 	// Configure verbose logging from environment variable or config
 	configureHLSLogging()
 
-	// Start client activity sync - this is the sole mechanism for tracking stream activity
-	// We use a unified approach where activity tracking is based on heartbeats and file requests
-	// Each active stream has its timestamp updated whenever:
-	// 1. A client requests a playlist or segment file
-	// 2. A client sends a heartbeat signal
-	// 3. A new client connects to the stream
+	// Start client activity sync - this is the real-time monitoring system that tracks
+	// stream activity based on client heartbeats and file requests.
+	// Note: This is separate from the longer-running cleanup task that is initialized
+	// in Server.initHLSCleanupTask() which handles more comprehensive resource cleanup
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -1470,4 +1487,103 @@ func isStreamActive(sourceID string) bool {
 	}
 
 	return isActive
+}
+
+// CleanupIdleHLSStreams performs a forced cleanup of all idle HLS streams
+// This function can be called periodically from a background task to ensure
+// resources are freed even when clients disconnect abnormally
+func (h *Handlers) CleanupIdleHLSStreams() {
+	log.Printf("Running HLS stream cleanup task")
+
+	// Get a list of all current streams
+	hlsStreamMutex.Lock()
+	activeStreamIDs := make([]string, 0, len(hlsStreams))
+	for sourceID := range hlsStreams {
+		activeStreamIDs = append(activeStreamIDs, sourceID)
+	}
+	hlsStreamMutex.Unlock()
+
+	// Track cleanup stats
+	cleanupCount := 0
+	maxStreamAge := time.Duration(0)
+	var oldestStreamID string
+
+	// Check each stream for idle time and other criteria
+	for _, sourceID := range activeStreamIDs {
+		// Get last activity time
+		var lastActivity time.Time
+		var inactiveDuration time.Duration
+		hlsStreamActivityMutex.Lock()
+		if activity, exists := hlsStreamActivity[sourceID]; exists {
+			lastActivity = activity
+			inactiveDuration = time.Since(lastActivity)
+		}
+		hlsStreamActivityMutex.Unlock()
+
+		// Track oldest stream for monitoring
+		if inactiveDuration > maxStreamAge {
+			maxStreamAge = inactiveDuration
+			oldestStreamID = sourceID
+		}
+
+		// Check client count
+		clientCount := 0
+		hlsStreamClientMutex.Lock()
+		if clients, exists := hlsStreamClients[sourceID]; exists {
+			clientCount = len(clients)
+		}
+		hlsStreamClientMutex.Unlock()
+
+		// Determine if stream should be cleaned up based on multiple criteria:
+		// 1. No activity within the inactivity timeout
+		// 2. Zero clients and inactive for at least 30 seconds
+		// 3. Stream has been active for more than the max lifetime
+		shouldCleanup := false
+		cleanupReason := ""
+
+		if inactiveDuration > streamInactivityTimeout {
+			shouldCleanup = true
+			cleanupReason = fmt.Sprintf("inactive for %v (exceeds %v timeout)",
+				inactiveDuration, streamInactivityTimeout)
+		} else if clientCount == 0 && inactiveDuration > 30*time.Second {
+			shouldCleanup = true
+			cleanupReason = fmt.Sprintf("no clients for %v", inactiveDuration)
+		} else if inactiveDuration > maxStreamLifetime {
+			shouldCleanup = true
+			cleanupReason = fmt.Sprintf("reached maximum lifetime of %v", maxStreamLifetime)
+		}
+
+		if shouldCleanup {
+			log.Printf("Cleaning up stream %s: %s", sourceID, cleanupReason)
+
+			// Get stream for cleanup
+			hlsStreamMutex.Lock()
+			stream, exists := hlsStreams[sourceID]
+			if exists {
+				// Remove from map before cleanup
+				delete(hlsStreams, sourceID)
+				hlsStreamMutex.Unlock()
+
+				// Perform actual cleanup
+				performStreamCleanup(sourceID, stream, cleanupReason)
+				cleanupCount++
+			} else {
+				hlsStreamMutex.Unlock()
+			}
+		}
+	}
+
+	// Log summary
+	streamCount := len(activeStreamIDs)
+	if streamCount > 0 {
+		log.Printf("HLS cleanup task completed: %d/%d streams cleaned up",
+			cleanupCount, streamCount)
+
+		if oldestStreamID != "" && maxStreamAge > 0 {
+			log.Printf("Oldest active stream: %s (inactive for %v)",
+				oldestStreamID, maxStreamAge)
+		}
+	} else {
+		log.Printf("HLS cleanup task completed: no active streams")
+	}
 }

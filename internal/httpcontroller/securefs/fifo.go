@@ -72,7 +72,7 @@ func (sfs *SecureFS) OpenFIFO(ctx context.Context, path string) (*os.File, error
 		}
 
 		// On Unix, open the FIFO through os.Root for sandbox security
-		fifo, err = sfs.root.OpenFile(relPath, os.O_WRONLY, 0)
+		fifo, err = sfs.root.OpenFile(relPath, getPlatformOpenFlags(), 0)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open FIFO: %w", err)
 		}

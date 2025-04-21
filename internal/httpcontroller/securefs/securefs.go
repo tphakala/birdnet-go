@@ -382,7 +382,13 @@ func (sfs *SecureFS) Exists(path string) (bool, error) {
 
 	// Use os.Root.Stat to check if the file exists
 	_, err = sfs.root.Stat(relPath)
-	return err == nil, nil
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err // propagate unexpected errors
 }
 
 // ExistsNoErr is a convenience method that returns only a boolean

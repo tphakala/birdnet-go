@@ -237,6 +237,28 @@
                 this.heartbeatInterval = null;
             }
             this.heartbeatErrorCount = 0;
+            
+            // Send a final disconnect notification if we were playing something
+            if (this.playingSource) {
+                const heartbeatUrl = `${window.location.origin}/api/v1/audio-stream-hls/heartbeat?disconnect=true`;
+                const heartbeatData = {
+                    source_id: this.playingSource
+                };
+                
+                // Use a simple fetch with timeout to avoid hanging during page navigation
+                fetch(heartbeatUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(heartbeatData),
+                    // Add timeout to prevent hanging during navigation
+                    signal: AbortSignal.timeout(3000)
+                }).catch(error => {
+                    // Just log the error, don't attempt to retry as we're disconnecting anyway
+                    console.warn('Failed to send disconnect notification:', error);
+                });
+            }
         },
         
         // Get or create audio element
@@ -873,6 +895,57 @@
             window.addEventListener('offline', handleOffline);
             window.addEventListener('online', handleOnline);
             
+            // Add page unload handler to notify server
+            const handleUnload = () => {
+                // If currently playing, send a disconnect notification
+                if (this.isPlaying && this.playingSource) {
+                    console.log('Page unloading - notifying server of disconnection');
+                    
+                    // Use navigator.sendBeacon for more reliable delivery during page unload
+                    const heartbeatUrl = `${window.location.origin}/api/v1/audio-stream-hls/heartbeat?disconnect=true`;
+                    const heartbeatData = JSON.stringify({
+                        source_id: this.playingSource
+                    });
+                    
+                    // Try to use sendBeacon API for more reliable delivery during page unload
+                    if (navigator.sendBeacon) {
+                        const blob = new Blob([heartbeatData], { type: 'application/json' });
+                        navigator.sendBeacon(heartbeatUrl, blob);
+                    } else {
+                        // Fallback to synchronous XHR if sendBeacon not available
+                        try {
+                            const xhr = new XMLHttpRequest();
+                            xhr.open('POST', heartbeatUrl, false); // false = synchronous
+                            xhr.setRequestHeader('Content-Type', 'application/json');
+                            xhr.send(heartbeatData);
+                        } catch (e) {
+                            // Ignore errors during unload
+                        }
+                    }
+                    
+                    // Force a stream stop notification as well (belt and suspenders)
+                    if (this.playingSource) {
+                        const encodedSourceId = encodeURIComponent(this.playingSource);
+                        const stopUrl = `${window.location.origin}/api/v1/audio-stream-hls/${encodedSourceId}/stop`;
+                        
+                        if (navigator.sendBeacon) {
+                            navigator.sendBeacon(stopUrl);
+                        } else {
+                            try {
+                                const xhr = new XMLHttpRequest();
+                                xhr.open('POST', stopUrl, false);
+                                xhr.send();
+                            } catch (e) {
+                                // Ignore errors during unload
+                            }
+                        }
+                    }
+                }
+            };
+            
+            window.addEventListener('beforeunload', handleUnload);
+            window.addEventListener('unload', handleUnload);
+            
             // Listen for navigation events
             document.addEventListener('htmx:beforeRequest', () => {
                 this.isNavigating = true;
@@ -925,6 +998,13 @@
                 document.removeEventListener('htmx:afterRequest', this.setupEventSource);
                 window.removeEventListener('offline', handleOffline);
                 window.removeEventListener('online', handleOnline);
+                window.removeEventListener('beforeunload', handleUnload);
+                window.removeEventListener('unload', handleUnload);
+                
+                // Send final disconnect notification
+                if (this.isPlaying && this.playingSource) {
+                    this.stopHeartbeat(); // This will send the disconnect notification
+                }
                 
                 // Stop heartbeat
                 this.stopHeartbeat();
