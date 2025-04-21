@@ -1,112 +1,113 @@
 # Building
 
-Building can be tricky because of the many system development library dependencies. 
-It is recommended to follow the [building locally guide](#building-locally). 
-However, there is also a [devcontainer guide](#devcontainer) with all the dependencies installed inside a container.
+This document describes methods for building BirdNET-Go from source.
 
-## Devcontainer
+There are two primary approaches:
 
-For development in VSCode, a [devcontainer](https://code.visualstudio.com/docs/remote/containers) can be used. 
-Open the project in VSCode and hit `F1` or `Shift-Command-P` on Mac, type `Reopen in Container` and wait for the container to build.
+1.  **Using the Devcontainer (Recommended for Development):** Provides a consistent, pre-configured Docker environment with all dependencies installed. Ideal for contributing or making code changes.
+2.  **Building Locally (Using Task):** Uses the `task` build tool (`Taskfile.yml`) directly on your host machine. Requires manual installation of some prerequisites but is the standard way to build binaries.
 
-The provided [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) contains all required dependencies and 
-also mounts the source code into the container, so one can immediately start coding. 
+## Devcontainer (Recommended for Development)
 
-After the container starts, a development server is started that can be reached at [localhost:8080](http://localhost:8080). 
-The development server will automatically reload on any code changes. 
+For development work within VSCode, using the provided [devcontainer](https://code.visualstudio.com/docs/remote/containers) is highly recommended.
 
-### Notes
+1.  Open the project directory in VSCode.
+2.  Ensure you have Docker installed and the [Remote Development](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack) extension pack.
+3.  Press `F1` or `Shift-Command-P` (Mac) / `Ctrl+Shift+P` (Windows/Linux), type `Reopen in Container`, and select it.
+4.  VSCode will build the container defined in [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) and reopen the project inside it.
 
-**Dependency Changes:** If you make changes to the devcontainer configuration or dependencies, you'll need to rebuild the container using "Rebuild Container" from the command palette.
+**Inside the Devcontainer:**
 
-**VSCode Extensions:** Ensure Docker and [Remote Development](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack) extensions are installed.
+*   All Go, CGO, TensorFlow, FFmpeg, and SoX dependencies are pre-installed.
+*   Your source code is mounted into the container.
+*   An `air` development server ([`.air.toml`](.air.toml)) is automatically started. It watches for code changes (`.go`, `.html`, `.css`, `.js`, etc.) and triggers:
+    *   Tailwind CSS recompilation.
+    *   Go application rebuild.
+    *   Live reload of the running application.
+*   You can access the development web server at [http://localhost:8080](http://localhost:8080).
 
-**Docker Engine:** Ensure the development host has a full Docker engine installation (not just the docker.io runtime package). The full engine is required for buildx support, which enables cross-compilation features. Follow the official [Docker Engine Install On Debian](https://docs.docker.com/engine/install/debian/) guide for installation instructions.
+**Devcontainer Notes:**
 
-## Building locally
+*   **Dependency Changes:** If you modify `.devcontainer/devcontainer.json`, use the "Rebuild Container" command in VSCode.
+*   **Docker Engine:** Ensure your host has a full Docker engine installation (not just `docker.io`), as `buildx` support is needed for potential cross-compilation features within the container.
 
-### Install prerequisites
+## Building Locally (Using Task)
 
-#### Install TensorFlow Lite C library
+This project uses [Task](https://taskfile.dev/) (`Taskfile.yml`) as its build system. It simplifies building, testing, and managing dependencies.
 
-Download precompiled TensorFlow Lite C library for Linux from https://github.com/tphakala/tflite_c/releases/tag/v2.14.0
+### 1. Install Prerequisites
 
-Copy libtensorflowlite_c.so to /usr/local/lib and run ```ldconfig```
+*   **Go:** Install the Go programming language (version 1.21 or later recommended). Follow the [official Go installation guide](https://golang.org/doc/install).
+*   **Task:** Install the `task` executable. Follow the [Task installation guide](https://taskfile.dev/installation/).
+*   **Git:** Needed to clone repositories (BirdNET-Go and TensorFlow headers).
+*   **wget/curl:** Needed by `task` to download TFLite libraries.
+*   **Standard Build Tools:** Ensure you have `gcc`, `make`, etc. (`build-essential` on Debian/Ubuntu).
+*   **(Optional) `air`:** For live-reloading development server locally (if not using the Devcontainer). Install via `go install github.com/cosmtrek/air@latest`.
+*   **(Optional) Node.js/npm:** Required by `task generate-tailwindcss` and `air` for Tailwind CSS generation.
+*   **(Optional) MinGW (for Windows Cross-Compilation):** If building the Windows binary *on Linux*, install `mingw-w64`. On Debian/Ubuntu:
+    ```bash
+    sudo apt update
+    sudo apt install mingw-w64-tools gcc-mingw-w64-x86-64
+    ```
 
-```bash
-sudo cp libtensorflowlite_c.so /usr/local/lib
-sudo ldconfig
-```
+### 2. Prepare Dependencies (Handled mostly by Task)
 
-Clone tensorflow repository, this is required for header files to be present while compiling with CGO
+*   **TensorFlow Lite C Library:** `task` will automatically download the correct pre-compiled library (from [tphakala/tflite_c](https://github.com/tphakala/tflite_c/releases/tag/{{TFLITE_VERSION}})) for your target OS/architecture when you run a build task. It places the library in the expected system path (e.g., `/usr/lib`, `/usr/local/lib`, `/opt/homebrew/lib`, or `/usr/x86_64-w64-mingw32/lib` for Windows cross-compile) and creates necessary symlinks.
+*   **TensorFlow Headers:** `task` checks if TensorFlow source code (needed for C header files for CGO) is present in `$HOME/src/tensorflow`. If not, it clones the specific tag (`{{TFLITE_VERSION}}`) required.
 
-```bash
-mkdir ~/src
-cd ~/src
-git clone https://github.com/tensorflow/tensorflow.git
-```
+### 3. Build BirdNET-Go
 
-Checkout TensorFlow v2.14.0 release
+Navigate to the cloned BirdNET-Go project directory in your terminal.
 
-```bash
-cd tensorflow
-git checkout tags/v2.14.0
-```
+*   **Build for your native OS/Architecture:**
+    ```bash
+    task build # Or simply 'task'
+    ```
+    This automatically detects your OS and architecture and runs the appropriate build task (e.g., `task linux_amd64`). The binary will be placed in the `bin/` directory (e.g., `bin/birdnet-go`).
 
-### Building BirdNET-Go
+*   **Cross-Compile for a specific target:**
+    ```bash
+    # Example: Build for Windows AMD64 (requires MinGW on Linux host)
+    task windows_amd64
 
-Clone BirdNET-Go repository
+    # Example: Build for Linux ARM64 (might require cross-compiler tools if not on ARM64 host)
+    task linux_arm64
 
-```bash
-git clone https://github.com/tphakala/BirdNET-Go.git
-```
+    # Example: Build for macOS ARM64 (Apple Silicon)
+    task darwin_arm64
+    ```
+    See `Taskfile.yml` for all available targets (`linux_amd64`, `linux_arm64`, `windows_amd64`, `darwin_amd64`, `darwin_arm64`). Binaries appear in `bin/` (e.g., `bin/birdnet-go.exe`).
 
-Build BirdNET-Go by make, compiled binary will be placed in go-birdnet/bin directory
+*   **Clean Build Artifacts:**
+    ```bash
+    task clean
+    ```
 
-```bash
-cd BirdNET-Go
-make
-```
+### 4. Run Tests
 
-#### Compiling for Windows
+*   **Run all tests:**
+    ```bash
+    task test
+    ```
+*   **Run tests with verbose output:**
+    ```bash
+    task test-verbose
+    ```
+*   **Run tests with coverage report:**
+    ```bash
+    task test-coverage
+    ```
+    Coverage report will be generated in `coverage/coverage.html`.
 
-Windows build is cross compiled on Linux, for this you need MinGW-w64 on your build system
+### 5. Development with Live Reload (using `air`)
 
-```bash
-  sudo apt install mingw-w64-tools gcc-mingw-w64-x86-64 gcc-mingw-w64-i686
-```
+If you prefer local development with automatic rebuilding and restarting on changes (similar to the Devcontainer experience):
 
-Download precompiled TensorFlow Lite C library for Windows from https://github.com/tphakala/tflite_c/releases/tag/v2.14.0
-
-Copy **libtensorflowlite_c.dll** to /usr/x86_64-w64-mingw32/lib/
-
-```bash
-sudo cp libtensorflowlite_c.dll /usr/x86_64-w64-mingw32/lib/
-```
-
-Clone tensorflow repository, this is required for header files to be present while compiling with CGO
-
-```bash
-mkdir ~/src
-cd ~/src
-git clone https://github.com/tensorflow/tensorflow.git
-```
-
-### Cross compiling BirdNET-Go
-
-Clone BirdNET-Go repository
-
-```bash
-git clone https://github.com/tphakala/BirdNET-Go.git
-```
-
-Build BirdNET-Go by running make windows
-
-```bash
-cd BirdNET-Go
-make windows
-```
-
-Windows executable is in **bin/birdnet.exe**, copy this and **libtensorflowlite_c.so** to your Windows system, library file must be in PATH for birdnet.exe to run properly.
-
-Yes it is correct that you need **libtensorflowlite_c.dll** in /usr/x86_64-w64-mingw32/lib/ for compile process, and on Windows you need **libtensorflowlite_c.so** for runtime. This sounds backwards but this is how it works.
+1.  Ensure `air` is installed (`go install github.com/cosmtrek/air@latest`).
+2.  Ensure Node.js/npm is installed for Tailwind CSS generation.
+3.  Prepare dependencies (TensorFlow headers/library) by running a build task once (e.g., `task build`).
+4.  Start the `air` server:
+    ```bash
+    air
+    ```
+    `air` will use the configuration in [`.air.toml`](.air.toml) to watch files, recompile Tailwind CSS, rebuild the Go binary, and restart the server on changes.

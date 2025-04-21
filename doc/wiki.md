@@ -263,16 +263,16 @@ realtime:
   
   # Species-specific settings
   species:
-    include: []  # Always include these species
-    exclude: []  # Always exclude these species
-    config:  # Per-species configuration
-      "Species Common Name":
-        threshold: 0.8  # Species-specific confidence threshold
-        actions:  # List of actions to execute on detection
-          - type: ExecuteCommand
-            command: "/path/to/script.sh"
-            parameters: ["param1", "param2"]
-            executedefaults: true  # Whether to also execute default actions
+    include: []  # Always include these species, bypassing range/occurrence filters
+    exclude: []  # Always exclude these species, regardless of confidence
+    config:  # Per-species configuration overrides
+      "European Robin": # Use the exact species name from BirdNET labels
+        threshold: 0.75  # Custom confidence threshold for this species
+        actions:  # List of actions to execute on detection (currently only one action per species supported)
+          - type: ExecuteCommand # Action type (only ExecuteCommand supported currently)
+            command: "/path/to/notify_script.sh" # Full path to the script/command
+            parameters: ["CommonName", "Confidence"] # Parameters to pass to the command
+            executedefaults: true  # true: run default actions (DB, MQTT, etc.) AND this command. false: run ONLY this command.
 
 # Web server settings
 webserver:
@@ -467,6 +467,20 @@ sudo journalctl -fu birdnet-go
 5. **Constant 'WARNING: BirdNET processing time exceeded buffer length' messages:**
    - If you have enabled Deep Detection (by setting a high `birdnet.overlap` value, e.g., 2.7), your system might not be powerful enough to keep up with the increased analysis rate. Consider reducing the `birdnet.overlap` value or using more powerful hardware (RPi 4/5 or better recommended for Deep Detection).
 
+#### Updating a Docker Installation (`install.sh` method)
+
+If you installed BirdNET-Go using the recommended `install.sh` script, you can update to the latest version by simply re-running the script:
+
+1.  It is **recommended to download a fresh copy** of the script each time, as it may contain improvements:
+    ```bash
+    curl -fsSL https://github.com/tphakala/birdnet-go/raw/main/install.sh -o install.sh
+    ```
+2.  Run the downloaded script:
+    ```bash
+    bash ./install.sh
+    ```
+3.  The script will detect your installation and offer an "Update" option. Selecting it will stop the service, pull the newest `nightly` image, update the service configuration if needed, and restart BirdNET-Go. Your configuration and data will be preserved.
+
 ### Support Script
 
 For more comprehensive troubleshooting, BirdNET-Go provides a support script that collects diagnostic information while protecting your privacy:
@@ -587,9 +601,43 @@ The application offers several integration points:
 - Built-in connection testers (via Web UI) for BirdWeather and MQTT to verify configuration.
   - The testers perform multi-stage checks (connectivity, authentication, test uploads/publishes) and provide feedback, including troubleshooting hints and rate limit information (for BirdWeather).
 
-## Custom Species Actions
+## Species-Specific Settings
 
-BirdNET-Go supports running custom actions when specific bird species are detected. This can be configured on a per-species basis with different thresholds and actions. Actions currently support executing external commands with parameters.
+BirdNET-Go allows for fine-grained control over how individual species are handled through the `realtime.species` configuration section:
+
+*   **Include List (`include`):** A list of species names (matching the labels used by your BirdNET model/locale) that should *always* be processed and trigger actions if their confidence meets the required threshold. These species bypass any location-based range filtering.
+*   **Exclude List (`exclude`):** A list of species names that should *always* be ignored, regardless of their detection confidence. This is useful for filtering out consistently problematic species or non-bird sounds that might be misidentified.
+*   **Custom Configuration (`config`):** This section allows you to define specific settings for individual species:
+    *   **Custom Threshold:** You can set a unique `threshold` for a species, overriding the global `birdnet.threshold`. This is useful if you want to be more or less strict for specific birds.
+    *   **Custom Actions (`actions`):** You can define a custom action to be triggered when a specific species is detected above its threshold. Currently, only one action per species is supported.
+        *   **Type:** The only supported type is `ExecuteCommand`.
+        *   **Command:** The full path to the script or executable to run.
+        *   **Parameters:** A list of values to pass as arguments to the command. Available values are:
+            *   `CommonName`: The common name of the detected species.
+            *   `ScientificName`: The scientific name of the detected species.
+            *   `Confidence`: The detection confidence score (0.0 to 1.0). Note: This is passed as a float; multiply by 100 in your script if you need a percentage.
+            *   `Time`: The time of the detection (format: HH:MM:SS).
+            *   `Source`: The audio source identifier (e.g., sound card name or RTSP stream URL).
+        *   **ExecuteDefaults:** A boolean value (`true` or `false`).
+            *   If `true` (default), BirdNET-Go will execute **both** your custom command **and** all other configured default actions (like saving to the database, uploading to BirdWeather, sending MQTT messages, etc.).
+            *   If `false`, BirdNET-Go will **only** execute your custom command for this specific species detection and will *skip* all default actions.
+
+Example `config` entry:
+
+```yaml
+realtime:
+  species:
+    config:
+      "Great Tit":
+        threshold: 0.65
+      "Eurasian Magpie":
+        threshold: 0.80
+        actions:
+          - type: ExecuteCommand
+            command: "/home/user/scripts/magpie_alert.sh"
+            parameters: ["CommonName", "Time"]
+            executedefaults: false # Only run the script, don't save to DB etc.
+```
 
 ## Log Rotation
 
