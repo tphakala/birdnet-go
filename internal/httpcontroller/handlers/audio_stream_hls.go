@@ -1083,6 +1083,69 @@ func cleanupInactiveStream(sourceID string) {
 	performStreamCleanup(sourceID, stream, fmt.Sprintf("inactive for %v", streamAge))
 }
 
+// cleanupExistingStream handles cleaning up an existing stream for a source
+// Returns true if a stream was cleaned up
+func (h *Handlers) cleanupExistingStream(sourceID string) bool {
+	// Check if stream exists and get necessary info for cleanup
+	hlsStreamMutex.Lock()
+	stream, exists := hlsStreams[sourceID]
+	if !exists {
+		hlsStreamMutex.Unlock()
+		return false
+	}
+
+	log.Printf("Found existing stream for source %s, ensuring cleanup before restart", sourceID)
+
+	// Cancel the context, which will terminate the FFmpeg process
+	if stream.cancel != nil {
+		stream.cancel()
+	}
+
+	// Get process handle and release lock before waiting
+	var cmd *exec.Cmd
+	if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
+		cmd = stream.FFmpegCmd
+	}
+
+	// Get output directory for cleanup
+	outputDir := stream.OutputDir
+
+	// Remove from map
+	delete(hlsStreams, sourceID)
+	hlsStreamMutex.Unlock()
+
+	// Wait for process termination without holding the lock
+	if cmd != nil && cmd.Process != nil {
+		_, _ = cmd.Process.Wait()
+	}
+
+	// Clean up the output directory
+	if outputDir != "" {
+		// Get HLS directory for secure filesystem operations
+		hlsBaseDir, err := conf.GetHLSDirectory()
+		if err != nil {
+			log.Printf("Error getting HLS directory: %v", err)
+		} else {
+			// Use secureFS to remove the directory
+			secFS, err := securefs.New(hlsBaseDir)
+			if err != nil {
+				log.Printf("Error creating secure filesystem: %v", err)
+			} else {
+				defer secFS.Close()
+
+				if secFS.ExistsNoErr(outputDir) {
+					log.Printf("Removing stream directory: %s", outputDir)
+					if err := secFS.RemoveAll(outputDir); err != nil {
+						log.Printf("Error removing stream directory: %v", err)
+					}
+				}
+			}
+		}
+	}
+
+	return true
+}
+
 // StartHLSStream explicitly starts an HLS stream for a source
 // This is called when a client wants to start playing a stream
 func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatus, error) {
@@ -1096,61 +1159,8 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatu
 		return nil, echo.NewHTTPError(http.StatusNotFound, "Audio source not found")
 	}
 
-	// First, ensure that any existing stream for this source is fully cleaned up
-	// This is important if a previous cleanup didn't complete properly
-	hlsStreamMutex.Lock()
-	if stream, exists := hlsStreams[sourceID]; exists {
-		log.Printf("Found existing stream for source %s, ensuring cleanup before restart", sourceID)
-
-		// Cancel the context, which will terminate the FFmpeg process
-		if stream.cancel != nil {
-			stream.cancel()
-		}
-
-		// Get process handle and release lock before waiting
-		var cmd *exec.Cmd
-		if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
-			cmd = stream.FFmpegCmd
-		}
-
-		// Get output directory for cleanup
-		outputDir := stream.OutputDir
-
-		// Remove from map
-		delete(hlsStreams, sourceID)
-		hlsStreamMutex.Unlock()
-
-		// Wait for process termination without holding the lock
-		if cmd != nil && cmd.Process != nil {
-			_, _ = cmd.Process.Wait()
-		}
-
-		// Clean up the output directory
-		if outputDir != "" {
-			// Get HLS directory for secure filesystem operations
-			hlsBaseDir, err := conf.GetHLSDirectory()
-			if err != nil {
-				log.Printf("Error getting HLS directory: %v", err)
-			} else {
-				// Use secureFS to remove the directory
-				secFS, err := securefs.New(hlsBaseDir)
-				if err != nil {
-					log.Printf("Error creating secure filesystem: %v", err)
-				} else {
-					defer secFS.Close()
-
-					if secFS.ExistsNoErr(outputDir) {
-						log.Printf("Removing stream directory: %s", outputDir)
-						if err := secFS.RemoveAll(outputDir); err != nil {
-							log.Printf("Error removing stream directory: %v", err)
-						}
-					}
-				}
-			}
-		}
-	} else {
-		hlsStreamMutex.Unlock()
-	}
+	// Ensure any existing stream is cleaned up
+	h.cleanupExistingStream(sourceID)
 
 	// Add client to stream tracking with a longer initial timeout
 	// to give FFmpeg time to start up and generate the playlist
@@ -1180,11 +1190,34 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatu
 		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Server configuration error")
 	}
 
+	// Check if playlist is ready
+	playlistReady := h.checkPlaylistReady(c, sourceID, stream, hlsBaseDir)
+
+	// Return stream status information
+	status := "starting"
+	if playlistReady {
+		status = "ready"
+		log.Printf("Playlist file is ready: %s", stream.PlaylistPath)
+	} else {
+		log.Printf("Warning: Playlist file not immediately available: %s", stream.PlaylistPath)
+	}
+
+	return &StreamStatus{
+		Status:        status,
+		Source:        sourceID,
+		PlaylistPath:  stream.PlaylistPath,
+		ActiveClients: activeClients,
+		PlaylistReady: playlistReady,
+	}, nil
+}
+
+// checkPlaylistReady checks if the playlist file exists and is valid
+func (h *Handlers) checkPlaylistReady(c echo.Context, sourceID string, stream *HLSStreamInfo, hlsBaseDir string) bool {
 	// Create a secure filesystem for checking playlist
 	secFS, err := securefs.New(hlsBaseDir)
 	if err != nil {
 		log.Printf("Error creating secure filesystem: %v", err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Server error")
+		return false
 	}
 	defer secFS.Close()
 
@@ -1242,24 +1275,7 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatu
 	// Wait for the playlist checker to complete
 	<-playlistCheckerDone
 
-	status := "starting"
-	if playlistReady {
-		status = "ready"
-		log.Printf("Playlist file is ready: %s", stream.PlaylistPath)
-	} else {
-		// For tighter UX, we still return a result even if playlist isn't ready
-		// The client will retry loading the playlist
-		log.Printf("Warning: Playlist file not immediately available: %s", stream.PlaylistPath)
-	}
-
-	// Return stream status information that the controller can use
-	return &StreamStatus{
-		Status:        status,
-		Source:        sourceID,
-		PlaylistPath:  stream.PlaylistPath,
-		ActiveClients: activeClients,
-		PlaylistReady: playlistReady,
-	}, nil
+	return playlistReady
 }
 
 // StopHLSClientStream registers that a client has stopped streaming
