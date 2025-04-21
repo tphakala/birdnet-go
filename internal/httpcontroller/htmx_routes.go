@@ -148,7 +148,7 @@ func (s *Server) initRoutes() {
 
 		// Return a response with stream status
 		return c.JSON(http.StatusOK, status)
-	})
+	}, s.AuthMiddleware)
 
 	// Add HLS client heartbeat endpoint to track active clients
 	s.Echo.POST("/api/v1/audio-stream-hls/heartbeat", func(c echo.Context) error {
@@ -164,12 +164,9 @@ func (s *Server) initRoutes() {
 			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to process heartbeat")
 		}
 
-		// Set explicit content type for JSON
-		c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-
-		// Simplest possible JSON response with no risk of template rendering issues
-		return c.String(http.StatusOK, "{}")
-	})
+		// Return empty JSON object response
+		return c.JSON(http.StatusOK, map[string]any{})
+	}, s.AuthMiddleware)
 
 	s.Echo.POST("/api/v1/audio-stream-hls/:sourceID/stop", func(c echo.Context) error {
 		// Add server to context for authentication
@@ -193,7 +190,7 @@ func (s *Server) initRoutes() {
 			"status": "stopped",
 			"source": decodedSourceID,
 		})
-	})
+	}, s.AuthMiddleware)
 
 	// Audio stream routes with source handling
 	s.Echo.GET("/api/v1/audio-stream-sse", func(c echo.Context) error {
