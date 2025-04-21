@@ -620,7 +620,7 @@ func getExistingStream(sourceID string) *HLSStreamInfo {
 
 	if exists {
 		if hlsVerboseLogging {
-			log.Printf("�� Using existing HLS stream for source: %s", sourceID)
+			log.Printf("🔄️ Using existing HLS stream for source: %s", sourceID)
 		}
 		return stream
 	}
@@ -989,21 +989,6 @@ func syncHLSClientActivity() {
 				sourceID, inactiveDuration.Seconds(), clientCount)
 		}
 	}
-
-	// Get HLS directory for secure path checks
-	hlsBaseDir, err := conf.GetHLSDirectory()
-	if err != nil {
-		log.Printf("❌ Error getting HLS directory: %v", err)
-		return
-	}
-
-	// Create a secureFS for safe filesystem operations
-	secureFs, err := securefs.New(hlsBaseDir)
-	if err != nil {
-		log.Printf("❌ Error creating secure filesystem: %v", err)
-		return
-	}
-	defer secureFs.Close()
 
 	// Clean up the inactive streams
 	for _, sourceID := range streamsToCleanup {

@@ -124,8 +124,8 @@ func (s *Server) initRoutes() {
 	//
 	// This works because both handlers call the same function and the handler will parse the
 	// path details regardless of which route matched.
-	s.Echo.GET("/api/v1/audio-stream-hls/:sourceID/*", s.handleHLSStreamRequest)
-	s.Echo.GET("/api/v1/audio-stream-hls/:sourceID", s.handleHLSStreamRequest)
+	s.Echo.GET("/api/v1/audio-stream-hls/:sourceID/*", h.WithErrorHandling(s.handleHLSStreamRequest))
+	s.Echo.GET("/api/v1/audio-stream-hls/:sourceID", h.WithErrorHandling(s.handleHLSStreamRequest))
 
 	// Add HLS stream management routes for client synchronization
 	s.Echo.POST("/api/v1/audio-stream-hls/:sourceID/start", func(c echo.Context) error {
