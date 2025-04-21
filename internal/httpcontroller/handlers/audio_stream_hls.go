@@ -892,7 +892,6 @@ func logActiveHLSStreams() {
 	hlsStreamClientMutex.Lock()
 	defer hlsStreamClientMutex.Unlock()
 
-	log.Printf("=== HLS STREAM STATUS ===")
 	for sourceID := range hlsStreams {
 		// Count clients for this stream
 		clientCount := 0
@@ -915,10 +914,9 @@ func logActiveHLSStreams() {
 		}
 		hlsStreamActivityMutex.Unlock()
 
-		log.Printf("Stream: %s | Status: %s | Clients: %d | Last Activity: %0.0f seconds ago",
+		log.Printf("Active Live Stream: %s | Status: %s | Clients: %d | Last Activity: %0.0f seconds ago",
 			sourceID, status, clientCount, timeSinceActivity)
 	}
-	log.Printf("=======================")
 }
 
 // cleanupInactiveStream stops and cleans up an inactive stream
@@ -1541,14 +1539,15 @@ func (h *Handlers) CleanupIdleHLSStreams() {
 		shouldCleanup := false
 		cleanupReason := ""
 
-		if inactiveDuration > streamInactivityTimeout {
+		switch {
+		case inactiveDuration > streamInactivityTimeout:
 			shouldCleanup = true
 			cleanupReason = fmt.Sprintf("inactive for %v (exceeds %v timeout)",
 				inactiveDuration, streamInactivityTimeout)
-		} else if clientCount == 0 && inactiveDuration > 30*time.Second {
+		case clientCount == 0 && inactiveDuration > 30*time.Second:
 			shouldCleanup = true
 			cleanupReason = fmt.Sprintf("no clients for %v", inactiveDuration)
-		} else if inactiveDuration > maxStreamLifetime {
+		case inactiveDuration > maxStreamLifetime:
 			shouldCleanup = true
 			cleanupReason = fmt.Sprintf("reached maximum lifetime of %v", maxStreamLifetime)
 		}

@@ -201,12 +201,9 @@ func (s *Server) initHLSCleanupTask() {
 		s.Debug("Running initial HLS stream cleanup")
 		s.Handlers.CleanupIdleHLSStreams()
 
-		for {
-			select {
-			case <-ticker.C:
-				s.Debug("Running scheduled HLS stream cleanup")
-				s.Handlers.CleanupIdleHLSStreams()
-			}
+		for range ticker.C {
+			s.Debug("Running scheduled HLS stream cleanup")
+			s.Handlers.CleanupIdleHLSStreams()
 		}
 	}()
 

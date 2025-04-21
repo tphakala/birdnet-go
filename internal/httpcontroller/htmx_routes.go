@@ -117,6 +117,13 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/api/v1/audio-level", s.Handlers.WithErrorHandling(s.Handlers.AudioLevelSSE))
 
 	// HLS streaming routes
+	// Note: The route order here is important - Echo matches the first registered route
+	// that fits the pattern. We intentionally register the wildcard route "/:sourceID/*" first
+	// to handle full paths including segment names, and the simpler "/:sourceID" route second
+	// to handle requests for the source's base playlist.
+	//
+	// This works because both handlers call the same function and the handler will parse the
+	// path details regardless of which route matched.
 	s.Echo.GET("/api/v1/audio-stream-hls/:sourceID/*", s.handleHLSStreamRequest)
 	s.Echo.GET("/api/v1/audio-stream-hls/:sourceID", s.handleHLSStreamRequest)
 
