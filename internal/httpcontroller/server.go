@@ -26,21 +26,20 @@ import (
 
 // Server encapsulates Echo server and related configurations.
 type Server struct {
-	Echo               *echo.Echo
-	DS                 datastore.Interface
-	Settings           *conf.Settings
-	OAuth2Server       *security.OAuth2Server
-	DashboardSettings  *conf.Dashboard
-	Logger             *logger.Logger
-	BirdImageCache     *imageprovider.BirdImageCache
-	Handlers           *handlers.Handlers
-	SunCalc            *suncalc.SunCalc
-	AudioLevelChan     chan myaudio.AudioLevelData
-	AudioStreamManager *handlers.AudioStreamManager
-	controlChan        chan string
-	notificationChan   chan handlers.Notification
-	Processor          *processor.Processor
-	APIV2              *api.Controller // Our new JSON API
+	Echo              *echo.Echo
+	DS                datastore.Interface
+	Settings          *conf.Settings
+	OAuth2Server      *security.OAuth2Server
+	DashboardSettings *conf.Dashboard
+	Logger            *logger.Logger
+	BirdImageCache    *imageprovider.BirdImageCache
+	Handlers          *handlers.Handlers
+	SunCalc           *suncalc.SunCalc
+	AudioLevelChan    chan myaudio.AudioLevelData
+	controlChan       chan string
+	notificationChan  chan handlers.Notification
+	Processor         *processor.Processor
+	APIV2             *api.Controller // Our new JSON API
 
 	// Page and partial routes
 	pageRoutes    map[string]PageRouteConfig
@@ -52,17 +51,16 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 	configureDefaultSettings(settings)
 
 	s := &Server{
-		Echo:               echo.New(),
-		DS:                 dataStore,
-		Settings:           settings,
-		BirdImageCache:     birdImageCache,
-		AudioLevelChan:     audioLevelChan,
-		DashboardSettings:  &settings.Realtime.Dashboard,
-		OAuth2Server:       security.NewOAuth2Server(),
-		AudioStreamManager: handlers.NewAudioStreamManager(settings.WebServer.Debug, settings.Security.Host),
-		controlChan:        controlChan,
-		notificationChan:   make(chan handlers.Notification, 10),
-		Processor:          proc,
+		Echo:              echo.New(),
+		DS:                dataStore,
+		Settings:          settings,
+		BirdImageCache:    birdImageCache,
+		AudioLevelChan:    audioLevelChan,
+		DashboardSettings: &settings.Realtime.Dashboard,
+		OAuth2Server:      security.NewOAuth2Server(),
+		controlChan:       controlChan,
+		notificationChan:  make(chan handlers.Notification, 10),
+		Processor:         proc,
 	}
 
 	// Configure an IP extractor
@@ -301,12 +299,6 @@ func (s *Server) Shutdown() error {
 	// Run one final cleanup of HLS streams to terminate all streaming processes
 	s.Debug("Running final HLS stream cleanup before shutdown")
 	s.Handlers.CleanupIdleHLSStreams()
-
-	// Stop audio streaming
-	s.Debug("Cleaning up HLS audio streaming resources")
-	if err := s.AudioStreamManager.CleanupAllStreams(); err != nil {
-		s.Debug("Error cleaning up audio streams: %v", err)
-	}
 
 	// Close all named-pipe handles created at startup
 	securefs.CleanupNamedPipes()
