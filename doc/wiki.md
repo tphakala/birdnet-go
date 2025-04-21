@@ -201,7 +201,7 @@ realtime:
   birdweather:
     enabled: false  # Enable BirdWeather uploads
     debug: false  # Enable debug mode for BirdWeather API
-    id: "00000"  # BirdWeather ID
+    id: "00000"  # BirdWeather ID / Token
     threshold: 0.9  # Threshold of prediction confidence for uploads
     locationaccuracy: 10  # Accuracy of location in meters
     retrysettings:
@@ -217,12 +217,11 @@ realtime:
     pollinterval: 30  # Weather data polling interval in minutes
     debug: false  # Enable debug mode for weather integration
     openweather:
-      enabled: false  # Enable OpenWeather integration
+      enabled: false  # Enable OpenWeather integration (legacy setting, use 'provider' above)
       apikey: ""  # OpenWeather API key
       endpoint: "https://api.openweathermap.org/data/2.5/weather"  # OpenWeather API endpoint
       units: "metric"  # Units of measurement: standard, metric, or imperial
       language: "en"  # Language code for the response
-    backoffmultiplier: 2.0  # Multiplier for exponential backoff
   
   # Privacy and filtering settings
   privacyfilter:
@@ -245,11 +244,11 @@ realtime:
   # MQTT integration
   mqtt:
     enabled: false  # Enable MQTT
-    broker: "localhost:1883"  # MQTT broker URL
+    broker: "localhost:1883"  # MQTT broker URL (e.g., mqtt://host:port or mqtts://host:port)
     topic: "birdnet/detections"  # MQTT topic
     username: ""  # MQTT username
     password: ""  # MQTT password
-    retain: false  # Retain messages
+    retain: false  # Retain messages (useful for Home Assistant)
     retrysettings:
       enabled: true  # Enable retry mechanism
       maxretries: 5  # Maximum number of retry attempts
@@ -260,8 +259,7 @@ realtime:
   # Telemetry settings
   telemetry:
     enabled: false  # Enable Prometheus compatible telemetry endpoint
-    listen: "localhost:9090"  # IP address and port to listen on
-    port: 3306  # MySQL database port
+    listen: "localhost:9090"  # IP address and port to listen on (e.g., 0.0.0.0:9090)
   
   # Species-specific settings
   species:
@@ -335,6 +333,40 @@ output:
     host: localhost  # MySQL database host
     port: 3306  # MySQL database port
 ```
+
+### Command Line Interface
+
+While the primary configuration is done via `config.yaml`, BirdNET-Go also offers several command-line operations:
+
+```bash
+birdnet [command] [flags]
+```
+
+**Available Commands:**
+
+*   `realtime`: (Default) Starts the real-time analysis using the configuration file.
+*   `file`: Analyzes a single audio file. Requires `-i <filepath>`.
+*   `directory`: Analyzes all audio files in a directory. Requires `-i <dirpath>`. Can optionally use `--recursive` and `--watch`.
+*   `benchmark`: Runs a performance benchmark on the current system.
+*   `rangefilter`: Manages the range filter database (used for location-based species filtering).
+    *   `rangefilter update`: Downloads or updates the range filter database.
+    *   `rangefilter info`: Displays information about the current range filter database.
+*   `support`: Generates a support bundle containing logs and configuration (with sensitive data masked) for troubleshooting.
+*   `authors`: Displays author information.
+*   `license`: Displays software license information.
+*   `help`: Shows help for any command.
+
+**Global Flags (can be used with most commands):**
+
+Many configuration options can be overridden via command-line flags (e.g., `--threshold 0.7`, `--locale fr`). Run `birdnet [command] --help` to see all available flags for a specific command. Some common global flags include:
+
+*   `-d, --debug`: Enable debug output.
+*   `-s, --sensitivity`: Set sigmoid sensitivity (0.0 to 1.5).
+*   `-t, --threshold`: Set confidence threshold (0.1 to 1.0).
+*   `-j, --threads`: Set number of CPU threads (0 for auto).
+*   `--locale`: Set language for labels (e.g., `en-us`, `de`).
+*   `--latitude`, `--longitude`: Set location coordinates.
+*   `--overlap`: Set analysis overlap (0.0 to 2.9).
 
 ### Supported Languages for Species Labels
 
@@ -432,6 +464,9 @@ sudo journalctl -fu birdnet-go
    - Check if audio device is working properly: `arecord -d 5 -f S16_LE -r 48000 test.wav`
    - Adjust sensitivity and threshold settings in the configuration file
 
+5. **Constant 'WARNING: BirdNET processing time exceeded buffer length' messages:**
+   - If you have enabled Deep Detection (by setting a high `birdnet.overlap` value, e.g., 2.7), your system might not be powerful enough to keep up with the increased analysis rate. Consider reducing the `birdnet.overlap` value or using more powerful hardware (RPi 4/5 or better recommended for Deep Detection).
+
 ### Support Script
 
 For more comprehensive troubleshooting, BirdNET-Go provides a support script that collects diagnostic information while protecting your privacy:
@@ -507,13 +542,50 @@ BirdNET-Go includes intelligent filtering mechanisms:
 - Species-specific inclusion and exclusion lists
 - Dynamic threshold adjustment based on detection patterns
 
+### Deep Detection
+
+BirdNET-Go includes a "Deep Detection" feature designed to improve detection reliability and reduce false positives, especially when using lower confidence thresholds.
+
+*   **How it works:** Instead of analyzing standard 3-second chunks with a 1.5-second step, Deep Detection significantly increases the analysis frequency by reducing the step size (e.g., to 300ms when overlap is 2.7). BirdNET-Go then requires multiple consecutive positive results (e.g., 4 or more) for the same species within a short time window before confirming a detection.
+*   **Benefits:** This method acts as an additional filter, making it less likely that a single spurious result triggers a detection. It can allow for using lower `birdnet.threshold` values (e.g., 0.3) while maintaining good accuracy.
+*   **Requirements:** This feature significantly increases CPU load as the AI model runs more frequently. It is recommended for Raspberry Pi 4/5 or more powerful systems. If the system cannot keep up, you will see `WARNING: BirdNET processing time exceeded buffer length` messages in the log (see Troubleshooting).
+*   **Enabling/Disabling:**
+    *   When using the recommended `install.sh` script for Docker installations, Deep Detection is **enabled by default**. The script automatically benchmarks your hardware and sets an appropriate high `birdnet.overlap` value.
+    *   For manual installations or to manually adjust, set the `birdnet.overlap` value in your `config.yaml`. High values (e.g., 2.7) enable the feature, while lower values (e.g., 0.0) disable it.
+*   **Reference:** [[GitHub Discussion #302](https://github.com/tphakala/birdnet-go/discussions/302)]
+
+### Live Audio Streaming
+
+BirdNET-Go allows you to listen to the live audio feed directly from the web interface. This is useful for monitoring the audio quality, checking microphone placement, or simply listening to the ambient sounds.
+
+*   **How to Use:**
+    1.  Locate the microphone icon / audio level indicator in the web interface header.
+    2.  Click the icon to open the audio source dropdown.
+    3.  If you have multiple audio sources configured (e.g., a sound card and RTSP streams), select the source you wish to listen to.
+    4.  Click the play icon (▶️) next to the source name.
+    5.  Audio playback will begin using your browser's audio capabilities.
+    6.  Click the stop icon (⏹️) to end the stream.
+*   **Technology:** The live stream uses HLS (HTTP Live Streaming) for broad browser compatibility and efficient delivery.
+*   **Dependency:** This feature requires **FFmpeg** to be installed and accessible by BirdNET-Go. If FFmpeg is not found, the play button may not appear or function.
+*   **Server Interaction:** Starting the live stream initiates audio encoding on the server. The stream uses a heartbeat mechanism to stay active while you are listening. Stopping the stream or closing the browser tab/window signals the server to stop the encoding process, conserving server resources.
+
 ### Integration Options
 
 The application offers several integration points:
-- MQTT support for IoT ecosystems
-- Telemetry endpoint compatible with Prometheus
-- BirdWeather API integration for community data sharing
-- Custom actions that can be triggered on species detection
+- MQTT support for IoT ecosystems.
+  - The `retain` flag in MQTT settings is recommended for Home Assistant integration to ensure sensor states are preserved across restarts.
+- Telemetry endpoint compatible with Prometheus.
+- BirdWeather API integration for community data sharing.
+  - **About BirdWeather:** [BirdWeather.com](https://www.birdweather.com/) is a citizen science platform that collects bird vocalizations from stations around the world. It uses the BirdNET model (developed by Cornell Lab of Ornithology and Chemnitz University of Technology) for identification. Uploading data helps contribute to this global library.
+  - **Getting a BirdWeather ID/Token:** To upload data, you need an ID (also referred to as a Token). This process is now automated:
+    1. Create an account at [app.birdweather.com/login](https://app.birdweather.com/login).
+    2. Go to your account's station page: [app.birdweather.com/account/stations](https://app.birdweather.com/account/stations).
+    3. Create a new station, ensuring the Latitude and Longitude match your BirdNET-Go configuration (`birdnet.latitude` and `birdnet.longitude`).
+    4. Copy the generated station ID/Token into the `realtime.birdweather.id` field in your BirdNET-Go configuration.
+  - **Data Sharing Consent:** By configuring and enabling BirdWeather uploads with your ID/Token, you consent to sharing your soundscape snippets and detection data with BirdWeather.
+- Custom actions that can be triggered on species detection.
+- Built-in connection testers (via Web UI) for BirdWeather and MQTT to verify configuration.
+  - The testers perform multi-stage checks (connectivity, authentication, test uploads/publishes) and provide feedback, including troubleshooting hints and rate limit information (for BirdWeather).
 
 ## Custom Species Actions
 
@@ -527,37 +599,3 @@ The application supports several log rotation strategies:
 - Size-based rotation (with configurable maximum size)
 
 This helps manage log files for long-running installations.
-
-### Command Line Interface
-
-While the primary configuration is done via `config.yaml`, BirdNET-Go also offers several command-line operations:
-
-```bash
-birdnet [command] [flags]
-```
-
-**Available Commands:**
-
-*   `realtime`: (Default) Starts the real-time analysis using the configuration file.
-*   `file`: Analyzes a single audio file. Requires `-i <filepath>`.
-*   `directory`: Analyzes all audio files in a directory. Requires `-i <dirpath>`. Can optionally use `--recursive` and `--watch`.
-*   `benchmark`: Runs a performance benchmark on the current system.
-*   `rangefilter`: Manages the range filter database (used for location-based species filtering).
-    *   `rangefilter update`: Downloads or updates the range filter database.
-    *   `rangefilter info`: Displays information about the current range filter database.
-*   `support`: Generates a support bundle containing logs and configuration (with sensitive data masked) for troubleshooting.
-*   `authors`: Displays author information.
-*   `license`: Displays software license information.
-*   `help`: Shows help for any command.
-
-**Global Flags (can be used with most commands):**
-
-Many configuration options can be overridden via command-line flags (e.g., `--threshold 0.7`, `--locale fr`). Run `birdnet [command] --help` to see all available flags for a specific command. Some common global flags include:
-
-*   `-d, --debug`: Enable debug output.
-*   `-s, --sensitivity`: Set sigmoid sensitivity (0.0 to 1.5).
-*   `-t, --threshold`: Set confidence threshold (0.1 to 1.0).
-*   `-j, --threads`: Set number of CPU threads (0 for auto).
-*   `--locale`: Set language for labels (e.g., `en-us`, `de`).
-*   `--latitude`, `--longitude`: Set location coordinates.
-*   `--overlap`: Set analysis overlap (0.0 to 2.9).
