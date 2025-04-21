@@ -68,93 +68,112 @@
             
             this.cleanupEventSource();
             
-            this.eventSource = new EventSource('/api/v1/audio-level');
-            
-            this.eventSource.onmessage = (event) => {
-                // Skip processing if we're navigating away
-                if (this.isNavigating) {
-                    this.cleanupEventSource();
-                    return;
-                }
+            try {
+                this.eventSource = new EventSource('/api/v1/audio-level');
                 
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'audio-level') {
-                        if (!data.levels) {
-                            return;
-                        }
-                        
-                        // Reset reconnect attempts on successful message
-                        this.reconnectAttempts = 0;
-                        this.reconnectDelay = 1000;
-                        
-                        // Update levels and track zero level times
-                        const oldSources = Object.keys(this.levels);
-                        this.levels = data.levels;
-                        const newSources = Object.keys(this.levels);
-                        
-                        // Track when sources start having zero levels
-                        Object.entries(this.levels).forEach(([source, data]) => {
-                            if (data.level === 0) {
-                                if (!this.zeroLevelTime[source]) {
-                                    this.zeroLevelTime[source] = Date.now();
-                                }
-                            } else {
-                                delete this.zeroLevelTime[source];
-                            }
-                        });
-                        
-                        // Initialize smoothedVolumes for new sources
-                        Object.keys(this.levels).forEach(source => {
-                            if (!(source in this.smoothedVolumes)) {
-                                this.smoothedVolumes[source] = 0;
-                            }
-                        });
-                        
-                        // Set first source as selected if none selected
-                        if (!this.selectedSource || !(this.selectedSource in this.levels)) {
-                            const sources = Object.keys(this.levels);
-                            if (sources.length > 0) {
-                                this.selectedSource = sources[0];
-                            }
-                        }
-                        
-                        // Update smoothed volumes
-                        Object.entries(this.levels).forEach(([source, data]) => {
-                            const oldVolume = this.smoothedVolumes[source] || 0;
-                            this.smoothedVolumes[source] = this.smoothingFactor * data.level + 
-                                (1 - this.smoothingFactor) * oldVolume;
-                        });
+                this.eventSource.onmessage = (event) => {
+                    // Skip processing if we're navigating away
+                    if (this.isNavigating) {
+                        this.cleanupEventSource();
+                        return;
                     }
-                } catch (error) {
-                    console.error('Error processing SSE data:', error);
-                }
-            };
-            
-            this.eventSource.onerror = (error) => {
-                console.error('EventSource error:', error);
-                this.cleanupEventSource();
+                    
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'audio-level') {
+                            if (!data.levels) {
+                                return;
+                            }
+                            
+                            // Reset reconnect attempts on successful message
+                            this.reconnectAttempts = 0;
+                            this.reconnectDelay = 1000;
+                            
+                            // Update levels and track zero level times
+                            const oldSources = Object.keys(this.levels);
+                            this.levels = data.levels;
+                            const newSources = Object.keys(this.levels);
+                            
+                            // Track when sources start having zero levels
+                            Object.entries(this.levels).forEach(([source, data]) => {
+                                if (data.level === 0) {
+                                    if (!this.zeroLevelTime[source]) {
+                                        this.zeroLevelTime[source] = Date.now();
+                                    }
+                                } else {
+                                    delete this.zeroLevelTime[source];
+                                }
+                            });
+                            
+                            // Initialize smoothedVolumes for new sources
+                            Object.keys(this.levels).forEach(source => {
+                                if (!(source in this.smoothedVolumes)) {
+                                    this.smoothedVolumes[source] = 0;
+                                }
+                            });
+                            
+                            // Set first source as selected if none selected
+                            if (!this.selectedSource || !(this.selectedSource in this.levels)) {
+                                const sources = Object.keys(this.levels);
+                                if (sources.length > 0) {
+                                    this.selectedSource = sources[0];
+                                }
+                            }
+                            
+                            // Update smoothed volumes
+                            Object.entries(this.levels).forEach(([source, data]) => {
+                                const oldVolume = this.smoothedVolumes[source] || 0;
+                                this.smoothedVolumes[source] = this.smoothingFactor * data.level + 
+                                    (1 - this.smoothingFactor) * oldVolume;
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Error processing SSE data:', error);
+                    }
+                };
                 
-                // Stop audio playback when SSE connection fails (server may be down)
-                this.stopPlayback(true);
-                
-                // Don't attempt reconnection if we're navigating away
-                if (this.isNavigating) {
-                    return;
-                }
-                
-                // Implement exponential backoff for reconnection
-                if (this.reconnectAttempts < this.maxReconnectAttempts) {
-                    this.retryTimeout = setTimeout(() => {
-                        this.reconnectAttempts++;
-                        this.reconnectDelay = Math.min(this.reconnectDelay * 2, 10000); // Cap at 10 seconds
-                        console.log('Reconnecting to SSE (attempt ' + this.reconnectAttempts + ')...');
-                        this.setupEventSource();
-                    }, this.reconnectDelay);
-                } else {
-                    console.error('Max reconnection attempts reached');
-                }
-            };
+                this.eventSource.onerror = (error) => {
+                    console.error('EventSource error:', error);
+                    this.cleanupEventSource();
+                    
+                    // Don't stop audio playback when SSE connection fails
+                    // This was causing a stop message to be sent to the server unnecessarily
+                    if (this.isPlaying) {
+                        console.warn('EventSource error, but continuing audio playback');
+                        // Only show a transient warning
+                        this.showPlaybackStatus('Audio level updates paused, playback continues');
+                        setTimeout(() => this.hidePlaybackStatus(), 3000);
+                    }
+                    
+                    // Don't attempt reconnection if we're navigating away
+                    if (this.isNavigating) {
+                        return;
+                    }
+                    
+                    // Implement more generous reconnection with exponential backoff
+                    // Increase max retries since EventSource errors shouldn't stop playback
+                    const maxRetries = 10; // Increased from 5
+                    if (this.reconnectAttempts < maxRetries) {
+                        this.retryTimeout = setTimeout(() => {
+                            this.reconnectAttempts++;
+                            // Cap backoff at 15 seconds (increased from 10)
+                            this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, 15000);
+                            console.log('Reconnecting to SSE (attempt ' + this.reconnectAttempts + ')...');
+                            this.setupEventSource();
+                        }, this.reconnectDelay);
+                    } else {
+                        console.error('Max EventSource reconnection attempts reached');
+                        // Even after max retries, don't stop playback
+                        // Just let user know about the situation
+                        this.showPlaybackStatus('Unable to update audio levels, stream continues');
+                        setTimeout(() => this.hidePlaybackStatus(), 5000);
+                    }
+                };
+            } catch (e) {
+                console.error('Error setting up EventSource:', e);
+                // If we can't even set up the EventSource, try again after a delay
+                setTimeout(() => this.setupEventSource(), 5000);
+            }
         },
         
         // Send heartbeat to server to maintain session
@@ -373,18 +392,18 @@
                     enableWorker: true,
                     lowLatencyMode: true,
                     backBufferLength: 30,
-                    // Modern config approach with shorter timeouts to detect server issues faster
+                    // More resilient config with higher retry counts for transient issues
                     manifestLoadPolicy: {
                         default: {
-                            maxTimeToFirstByteMs: 5000, // Reduced from 10000 
-                            maxLoadTimeMs: 10000,      // Reduced from 20000
+                            maxTimeToFirstByteMs: 8000, // Increased from 5000 
+                            maxLoadTimeMs: 15000,       // Increased from 10000
                             timeoutRetry: {
-                                maxNumRetry: 1,        // Reduced from 2
+                                maxNumRetry: 3,         // Increased from 1
                                 retryDelayMs: 1000,
                                 maxRetryDelayMs: 0
                             },
                             errorRetry: {
-                                maxNumRetry: 1,        // Reduced from 2
+                                maxNumRetry: 3,         // Increased from 1
                                 retryDelayMs: 1000,
                                 maxRetryDelayMs: 8000
                             }
@@ -392,15 +411,15 @@
                     },
                     playlistLoadPolicy: {
                         default: {
-                            maxTimeToFirstByteMs: 5000, // Reduced from 10000
-                            maxLoadTimeMs: 10000,       // Reduced from 20000
+                            maxTimeToFirstByteMs: 8000, // Increased from 5000
+                            maxLoadTimeMs: 15000,       // Increased from 10000
                             timeoutRetry: {
-                                maxNumRetry: 1,         // Reduced from 2
+                                maxNumRetry: 3,         // Increased from 1
                                 retryDelayMs: 1000,
                                 maxRetryDelayMs: 0
                             },
                             errorRetry: {
-                                maxNumRetry: 1,         // Reduced from 2
+                                maxNumRetry: 3,         // Increased from 1
                                 retryDelayMs: 1000,
                                 maxRetryDelayMs: 8000
                             }
@@ -408,15 +427,15 @@
                     },
                     fragLoadPolicy: {
                         default: {
-                            maxTimeToFirstByteMs: 5000, // Reduced from 10000
-                            maxLoadTimeMs: 20000,       // Reduced from 120000
+                            maxTimeToFirstByteMs: 8000, // Increased from 5000
+                            maxLoadTimeMs: 30000,       // Increased from 20000
                             timeoutRetry: {
-                                maxNumRetry: 1,         // Reduced from 2
+                                maxNumRetry: 3,         // Increased from 1
                                 retryDelayMs: 1000,
                                 maxRetryDelayMs: 0
                             },
                             errorRetry: {
-                                maxNumRetry: 1,         // Reduced from 2
+                                maxNumRetry: 5,         // Increased from 1
                                 retryDelayMs: 1000,
                                 maxRetryDelayMs: 8000
                             }
@@ -443,33 +462,69 @@
                         
                         switch(data.type) {
                             case Hls.ErrorTypes.NETWORK_ERROR:
-                                // Network errors might indicate server is offline
+                                console.log('Attempting to recover from network error:', data.details);
+                                // For most network errors, try to recover by reloading
                                 if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || 
-                                    data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT || 
-                                    data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR || 
-                                    data.details === Hls.ErrorDetails.FRAG_LOAD_TIMEOUT) {
+                                    data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT) {
                                     
-                                    this.showPlaybackStatus('Server appears to be offline or unreachable');
-                                    console.error('HLS server appears to be offline:', data.details);
-                                    this.stopPlayback(true); // Use error recovery mode
+                                    // Manifest errors might be fatal, but let's try once more
+                                    console.warn('Manifest load issue - trying one more time');
+                                    this.showPlaybackStatus('Network issue - retrying connection...');
+                                    
+                                    // Allow a bit of time for network to recover
+                                    setTimeout(() => {
+                                        if (this.hlsPlayer) {
+                                            hls.loadSource(hlsUrl);
+                                            hls.startLoad();
+                                        }
+                                    }, 2000);
+                                } else if (data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR || 
+                                           data.details === Hls.ErrorDetails.FRAG_LOAD_TIMEOUT) {
+                                    
+                                    // Fragment load errors are often transient
+                                    console.warn('Fragment load issue - trying to continue');
+                                    this.showPlaybackStatus('Network glitch - reconnecting...');
+                                    hls.recoverMediaError();
+                                    
+                                    // Attempt to start loading again after a short delay
+                                    setTimeout(() => {
+                                        if (this.hlsPlayer) {
+                                            hls.startLoad();
+                                        }
+                                    }, 1000);
                                 } else {
-                                    // Only attempt recovery for non-critical network errors
-                                    console.log('Attempting to recover from network error');
+                                    // For other network errors, try a general recovery
                                     hls.startLoad();
                                 }
                                 break;
                                 
                             case Hls.ErrorTypes.MEDIA_ERROR:
                                 console.log('Attempting to recover from media error');
+                                this.showPlaybackStatus('Media issue - recovering...');
                                 hls.recoverMediaError();
                                 break;
                                 
                             default:
-                                // Cannot recover
+                                // Only treat as unrecoverable if it's truly fatal
+                                console.error('Unrecoverable HLS error:', data.details);
                                 this.showPlaybackStatus('Playback error: ' + data.details);
-                                hls.destroy();
-                                this.hlsPlayer = null;
-                                this.stopPlayback(true); // Use error recovery mode
+                                
+                                // Try one final recovery attempt
+                                try {
+                                    hls.destroy();
+                                    this.hlsPlayer = null;
+                                    
+                                    // Wait a moment then try to restart the stream
+                                    setTimeout(() => {
+                                        if (this.playingSource) {
+                                            console.log('Final recovery attempt for source:', this.playingSource);
+                                            this.setupHLSStream(hlsUrl, this.playingSource);
+                                        }
+                                    }, 3000);
+                                } catch (e) {
+                                    console.error('Recovery failed:', e);
+                                    this.stopPlayback(true); // Only stop as last resort
+                                }
                                 break;
                         }
                     } else {
@@ -487,11 +542,17 @@
                         if (isRapidNonFatalError) {
                             this.nonFatalErrorCount++;
                             
-                            // If we've had too many rapid non-fatal errors, assume there's a problem
-                            if (this.nonFatalErrorCount > 5) {
+                            // Significantly increased threshold - only stop after many rapid errors
+                            // as non-fatal buffer stall errors can happen during normal playback
+                            if (this.nonFatalErrorCount > 15) {
                                 console.error('Multiple rapid non-fatal errors detected - stopping playback');
-                                this.showPlaybackStatus('Streaming issues detected - stopping playback');
+                                this.showPlaybackStatus('Persistent streaming issues - stopping playback');
                                 this.stopPlayback(true); // Use error recovery mode
+                            } else if (this.nonFatalErrorCount > 5 && this.nonFatalErrorCount <= 15) {
+                                // For moderate number of errors, just show a warning but continue
+                                console.warn(`Multiple non-fatal errors (${this.nonFatalErrorCount}) - stream may be unstable`);
+                                this.showPlaybackStatus('Stream connection unstable - trying to recover');
+                                setTimeout(() => this.hidePlaybackStatus(), 3000);
                             }
                         } else {
                             // Reset counter for non-rapid errors
@@ -589,8 +650,9 @@
         },
         
         // Stop audio playback
-        stopPlayback(isErrorRecovery = false) {
-            console.log('Stopping audio playback');
+        stopPlayback(isErrorRecovery = false, skipServerNotification = false) {
+            console.log('Stopping audio playback', isErrorRecovery ? '(error recovery mode)' : '', 
+                         skipServerNotification ? '(skipping server notification)' : '');
             
             // Hide any playback status messages if not in error recovery mode
             if (!isErrorRecovery) {
@@ -621,15 +683,8 @@
                 }, 5000); // 5 second cooldown before allowing playback again
             }
             
-            // Notify server that we've stopped playback
-            if (this.playingSource) {
-                const encodedSourceId = encodeURIComponent(this.playingSource);
-                const stopUrl = `${window.location.origin}/api/v1/audio-stream-hls/${encodedSourceId}/stop`;
-                
-                fetch(stopUrl, { method: 'POST' })
-                    .then(() => console.log('Server notified of playback stop'))
-                    .catch(err => console.error('Failed to notify server of playback stop:', err));
-            }
+            // Store current source for potential auto-restart
+            const previousSource = this.playingSource;
             
             // Reset state
             this.isPlaying = false;
@@ -638,6 +693,54 @@
             // Update mediaSession state if available
             if ('mediaSession' in navigator) {
                 navigator.mediaSession.playbackState = 'paused';
+            }
+            
+            // Notify server that we've stopped playback - but only if not in recovery mode
+            // or if specifically instructed to skip notification
+            if (!skipServerNotification && previousSource) {
+                const encodedSourceId = encodeURIComponent(previousSource);
+                const stopUrl = `${window.location.origin}/api/v1/audio-stream-hls/${encodedSourceId}/stop`;
+                
+                // Check if network is available before notifying server
+                if (navigator.onLine) {
+                    fetch(stopUrl, { 
+                        method: 'POST',
+                        // Add timeout to prevent hanging requests
+                        signal: AbortSignal.timeout(5000)
+                    })
+                    .then(() => console.log('Server notified of playback stop'))
+                    .catch(err => {
+                        console.error('Failed to notify server of playback stop:', err);
+                        
+                        // If this was a deliberate user stop (not error recovery),
+                        // and we couldn't notify the server, try again once more
+                        if (!isErrorRecovery) {
+                            console.log('Retrying server notification once');
+                            setTimeout(() => {
+                                fetch(stopUrl, { method: 'POST' })
+                                    .catch(e => console.error('Final attempt to notify server failed:', e));
+                            }, 2000);
+                        }
+                    });
+                } else {
+                    console.warn('Network offline, skipping server notification');
+                }
+            } else if (skipServerNotification) {
+                console.log('Skipping server notification as requested');
+            }
+            
+            // In error recovery, consider auto-restart after a delay if it was a network issue
+            if (isErrorRecovery && navigator.onLine && previousSource) {
+                console.log('In error recovery mode, will attempt auto-restart if network is available');
+                
+                // Only attempt auto-restart for network-related errors if browser shows we're online
+                setTimeout(() => {
+                    if (navigator.onLine && !this.isPlaying && !this.inErrorCooldown && previousSource) {
+                        console.log('Attempting to auto-restart stream after network error');
+                        this.showPlaybackStatus('Attempting to reconnect stream...');
+                        this.startPlayback(previousSource);
+                    }
+                }, 8000); // Wait 8 seconds before attempting auto-restart
             }
         },
         
@@ -688,6 +791,13 @@
         
         // Toggle playback for a specific source
         toggleSourcePlayback(source) {
+            // Check network state first
+            if (!navigator.onLine) {
+                this.showPlaybackStatus('Network unavailable. Please check your connection.');
+                setTimeout(() => this.hidePlaybackStatus(), 3000);
+                return;
+            }
+            
             // If we're in error cooldown, don't allow playback immediately
             if (this.inErrorCooldown) {
                 this.showPlaybackStatus('Please wait a moment before trying again...');
@@ -721,6 +831,47 @@
             
             // Setup initial connection for audio levels
             this.setupEventSource();
+            
+            // Remember last playing source for potential network recovery
+            let lastPlayingSource = null;
+            
+            // Network state handlers
+            const handleOffline = () => {
+                console.warn('Network went offline');
+                
+                // Store current playback state
+                if (this.isPlaying && this.playingSource) {
+                    lastPlayingSource = this.playingSource;
+                    this.showPlaybackStatus('Network disconnected - playback paused');
+                    
+                    // Don't send stop notification since network is down anyway
+                    this.stopPlayback(true, true);
+                }
+            };
+            
+            const handleOnline = () => {
+                console.log('Network connection restored');
+                
+                // If we were playing before, try to resume
+                if (lastPlayingSource && !this.isPlaying) {
+                    this.showPlaybackStatus('Network reconnected - resuming playback');
+                    
+                    // Wait a moment for connection to stabilize
+                    setTimeout(() => {
+                        this.startPlayback(lastPlayingSource);
+                        lastPlayingSource = null;
+                    }, 2000);
+                }
+                
+                // Also restart EventSource if needed
+                if (!this.eventSource) {
+                    this.setupEventSource();
+                }
+            };
+            
+            // Add network state listeners
+            window.addEventListener('offline', handleOffline);
+            window.addEventListener('online', handleOnline);
             
             // Listen for navigation events
             document.addEventListener('htmx:beforeRequest', () => {
@@ -772,6 +923,8 @@
                 document.removeEventListener('visibilitychange', visibilityHandler);
                 document.removeEventListener('htmx:beforeRequest', this.cleanupEventSource);
                 document.removeEventListener('htmx:afterRequest', this.setupEventSource);
+                window.removeEventListener('offline', handleOffline);
+                window.removeEventListener('online', handleOnline);
                 
                 // Stop heartbeat
                 this.stopHeartbeat();
