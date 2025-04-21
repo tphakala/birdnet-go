@@ -367,29 +367,141 @@ func buildFFmpegArgs(fifoPath, outputDir, playlistPath string) []string {
 	}
 }
 
-// getOrCreateHLSStream gets an existing stream or creates a new one
-func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo, error) {
+// validateSourceID validates the sourceID is safe for file paths
+func validateSourceID(sourceID string) (string, error) {
 	// Validate sourceID for security - ensure it only contains safe characters
-	// First apply strict validation to prevent any potential path manipulation
 	safeSourceIDRegex := regexp.MustCompile(`^[A-Za-z0-9_\-]+$`)
 	if !safeSourceIDRegex.MatchString(sourceID) {
-		return nil, fmt.Errorf("invalid source ID format: contains unauthorized characters")
+		return "", fmt.Errorf("invalid source ID format: contains unauthorized characters")
 	}
 
-	// Quick check with lock to see if stream already exists
-	hlsStreamMutex.Lock()
-	stream, exists := hlsStreams[sourceID]
-	if exists {
-		hlsStreamMutex.Unlock()
-		if hlsVerboseLogging {
-			log.Printf("Using existing HLS stream for source: %s", sourceID)
+	// Apply strict sanitization for defense in depth
+	reSafe := regexp.MustCompile(`[^A-Za-z0-9_\-]`)
+	safeSourceID := reSafe.ReplaceAllString(sourceID, "_")
+
+	// Ensure the sanitized ID is still valid
+	if safeSourceID == "" {
+		return "", fmt.Errorf("invalid source ID after sanitization")
+	}
+
+	return safeSourceID, nil
+}
+
+// prepareStreamDirectory creates and validates the output directory
+func prepareStreamDirectory(secFS *securefs.SecureFS, hlsBaseDir, safeSourceID string) (outputDir, playlistPath string, err error) {
+	outputDir = filepath.Join(hlsBaseDir, fmt.Sprintf("stream_%s", safeSourceID))
+
+	// Verify the output directory is within the HLS base directory for safety
+	isWithin, err := securefs.IsPathWithinBase(hlsBaseDir, outputDir)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to validate output directory: %w", err)
+	}
+
+	if !isWithin {
+		return "", "", fmt.Errorf("security error: output directory would be outside HLS base directory")
+	}
+
+	// Ensure the directory exists and is empty
+	if secFS.ExistsNoErr(outputDir) {
+		log.Printf("Removing existing output directory: %s", outputDir)
+		if err := secFS.RemoveAll(outputDir); err != nil {
+			return "", "", fmt.Errorf("failed to clean HLS directory: %w", err)
 		}
+	}
+
+	log.Printf("Creating new output directory: %s", outputDir)
+	if err := secFS.MkdirAll(outputDir, 0o755); err != nil {
+		return "", "", fmt.Errorf("failed to create HLS directory: %w", err)
+	}
+
+	// Verify the directory was created successfully
+	if !secFS.ExistsNoErr(outputDir) {
+		return "", "", fmt.Errorf("failed to create HLS directory: directory doesn't exist after creation")
+	}
+
+	// Create playlist file path
+	playlistPath = filepath.Join(outputDir, "playlist.m3u8")
+
+	// Verify the playlist file is within the HLS base directory
+	isWithin, err = securefs.IsPathWithinBase(hlsBaseDir, playlistPath)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to validate playlist path: %w", err)
+	}
+
+	if !isWithin {
+		return "", "", fmt.Errorf("security error: playlist path would be outside HLS base directory")
+	}
+
+	return outputDir, playlistPath, nil
+}
+
+// setupHLSFifo prepares the FIFO pipe for audio streaming
+func setupHLSFifo(secFS *securefs.SecureFS, hlsBaseDir, outputDir string) (fifoPath, pipeName string, err error) {
+	fifoPath = filepath.Join(outputDir, "audio.pcm")
+
+	// Verify the FIFO is within the HLS base directory
+	isWithin, err := securefs.IsPathWithinBase(hlsBaseDir, fifoPath)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to validate FIFO path: %w", err)
+	}
+
+	if !isWithin {
+		return "", "", fmt.Errorf("security error: FIFO path would be outside HLS base directory")
+	}
+
+	log.Printf("Creating FIFO for HLS stream: %s", fifoPath)
+	// Use secure filesystem for FIFO creation
+	if err := secFS.CreateFIFO(fifoPath); err != nil {
+		return "", "", fmt.Errorf("failed to create FIFO: %w", err)
+	}
+
+	// Get the platform-specific pipe name for the FIFO
+	pipeName = secFS.GetPipeName()
+	return fifoPath, pipeName, nil
+}
+
+// setupFFmpeg creates and starts the FFmpeg process
+func setupFFmpeg(ctx context.Context, sourceID, ffmpegPath, readerPath, outputDir, playlistPath string) (*exec.Cmd, error) {
+	var cmd *exec.Cmd
+
+	if runtime.GOOS == "windows" {
+		// For Windows, use the stdin pipe approach
+		ffmpegArgs := []string{
+			"-f", "s16le", "-ar", "48000", "-ac", "1",
+			"-i", "pipe:0", // Read from stdin
+			"-c:a", "aac", "-b:a", "128k",
+			"-f", "hls", "-hls_time", "2", "-hls_list_size", "5",
+			"-hls_flags", "delete_segments+append_list+temp_file",
+			"-hls_segment_type", "mpegts", "-hls_init_time", "1",
+			"-hls_allow_cache", "1", "-start_number", "0",
+			"-loglevel", "info",
+			"-hls_segment_filename", filepath.Join(outputDir, "segment%03d.ts"),
+			playlistPath,
+		}
+		cmd = exec.CommandContext(ctx, ffmpegPath, ffmpegArgs...)
+	} else {
+		// For Unix platforms, use the standard approach
+		ffmpegArgs := buildFFmpegArgs(readerPath, outputDir, playlistPath)
+		cmd = exec.CommandContext(ctx, ffmpegPath, ffmpegArgs...)
+	}
+
+	return cmd, nil
+}
+
+// getOrCreateHLSStream gets an existing stream or creates a new one
+func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo, error) {
+	// Validate sourceID for security
+	safeSourceID, err := validateSourceID(sourceID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if stream exists
+	if stream := getExistingStream(sourceID); stream != nil {
 		return stream, nil
 	}
-	hlsStreamMutex.Unlock()
 
 	// Stream doesn't exist, we need to create it
-	// Do all the heavy work WITHOUT holding the lock
 	log.Printf("Creating new HLS stream for source: %s", sourceID)
 
 	// Create a context that can be canceled to terminate the stream
@@ -410,66 +522,11 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	}
 	defer secFS.Close()
 
-	// Apply strict sanitization to prevent directory traversal and other issues
-	// Even though we already validated sourceID, apply another layer of sanitization
-	// for defense in depth
-	reSafe := regexp.MustCompile(`[^A-Za-z0-9_\-]`)
-	safeSourceID := reSafe.ReplaceAllString(sourceID, "_")
-
-	// Ensure the sanitized ID is still valid
-	if safeSourceID == "" {
-		streamCancel() // Clean up context
-		return nil, fmt.Errorf("invalid source ID after sanitization")
-	}
-
-	outputDir := filepath.Join(hlsBaseDir, fmt.Sprintf("stream_%s", safeSourceID))
-
-	// Verify the output directory is within the HLS base directory for safety
-	isWithin, err := securefs.IsPathWithinBase(hlsBaseDir, outputDir)
+	// Prepare the output directory and playlist path
+	outputDir, playlistPath, err := prepareStreamDirectory(secFS, hlsBaseDir, safeSourceID)
 	if err != nil {
 		streamCancel() // Clean up context
-		return nil, fmt.Errorf("failed to validate output directory: %w", err)
-	}
-
-	if !isWithin {
-		streamCancel() // Clean up context
-		return nil, fmt.Errorf("security error: output directory would be outside HLS base directory")
-	}
-
-	// Ensure the directory exists and is empty
-	if secFS.ExistsNoErr(outputDir) {
-		log.Printf("Removing existing output directory: %s", outputDir)
-		if err := secFS.RemoveAll(outputDir); err != nil {
-			streamCancel() // Clean up context
-			return nil, fmt.Errorf("failed to clean HLS directory: %w", err)
-		}
-	}
-
-	log.Printf("Creating new output directory: %s", outputDir)
-	if err := secFS.MkdirAll(outputDir, 0o755); err != nil {
-		streamCancel() // Clean up context
-		return nil, fmt.Errorf("failed to create HLS directory: %w", err)
-	}
-
-	// Verify the directory was created successfully
-	if !secFS.ExistsNoErr(outputDir) {
-		streamCancel() // Clean up context
-		return nil, fmt.Errorf("failed to create HLS directory: directory doesn't exist after creation")
-	}
-
-	// Create playlist file path
-	playlistPath := filepath.Join(outputDir, "playlist.m3u8")
-
-	// Verify the playlist file is within the HLS base directory
-	isWithin, err = securefs.IsPathWithinBase(hlsBaseDir, playlistPath)
-	if err != nil {
-		streamCancel() // Clean up context
-		return nil, fmt.Errorf("failed to validate playlist path: %w", err)
-	}
-
-	if !isWithin {
-		streamCancel() // Clean up context
-		return nil, fmt.Errorf("security error: playlist path would be outside HLS base directory")
+		return nil, err
 	}
 
 	// Get FFmpeg path from settings
@@ -479,137 +536,157 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 		return nil, fmt.Errorf("ffmpeg not configured")
 	}
 
-	// Start FFmpeg process to read from FIFO and create HLS stream
-	fifoPath := filepath.Join(outputDir, "audio.pcm")
-
-	// Verify the FIFO is within the HLS base directory
-	isWithin, err = securefs.IsPathWithinBase(hlsBaseDir, fifoPath)
+	// Setup FIFO for audio streaming
+	fifoPath, pipeName, err := setupHLSFifo(secFS, hlsBaseDir, outputDir)
 	if err != nil {
-		streamCancel() // Clean up context
-		return nil, fmt.Errorf("failed to validate FIFO path: %w", err)
-	}
-
-	if !isWithin {
-		streamCancel() // Clean up context
-		return nil, fmt.Errorf("security error: FIFO path would be outside HLS base directory")
-	}
-
-	log.Printf("Creating FIFO for HLS stream: %s", fifoPath)
-	// Use secure filesystem for FIFO creation
-	if err := secFS.CreateFIFO(fifoPath); err != nil {
-		// Use secureFS for cleanup
+		// Cleanup on error
 		if removeErr := secFS.RemoveAll(outputDir); removeErr != nil {
 			log.Printf("Error removing output directory: %v", removeErr)
 		}
 		streamCancel() // Clean up context
-		return nil, fmt.Errorf("failed to create FIFO: %w", err)
+		return nil, err
 	}
 
-	// Get the platform-specific pipe name for the FIFO
-	pipeName := secFS.GetPipeName()
-
-	log.Printf("Starting FFmpeg HLS process for source: %s", sourceID)
-
-	var cmd *exec.Cmd
-
-	// Use the appropriate pipe path based on platform
+	// Setup reader path based on platform
 	readerPath := fifoPath
 	if runtime.GOOS == "windows" {
 		readerPath = pipeName // Use the Windows named pipe path
-
-		// For Windows, we need to use a different approach with FFmpeg
-		// Use 'pipe:' protocol which reads from stdin, then we'll feed it data
-		ffmpegArgs := []string{
-			"-f", "s16le", // Input format: 16-bit PCM
-			"-ar", "48000", // Sample rate: 48kHz
-			"-ac", "1", // Channels: mono
-			"-i", "pipe:0", // Read from stdin instead of using named pipe directly
-			"-c:a", "aac", // Codec: AAC
-			"-b:a", "128k", // Bitrate: 128kbps
-			"-f", "hls", // Format: HLS
-			"-hls_time", "2", // Segment duration: 2 seconds
-			"-hls_list_size", "5", // Keep 5 segments in playlist
-			"-hls_flags", "delete_segments+append_list+temp_file", // Delete old segments and append to playlist
-			"-hls_segment_type", "mpegts", // Use MPEGTS segments for better compatibility
-			"-hls_init_time", "1", // Initial segment length: 1 second for faster startup
-			"-hls_allow_cache", "1", // Allow caching
-			"-start_number", "0", // Start with segment 0
-			"-loglevel", "info", // Set ffmpeg logging level to info
-			"-hls_segment_filename", filepath.Join(outputDir, "segment%03d.ts"),
-			playlistPath, // Output playlist
-		}
-
-		// Run the ffmpeg command with stdin pipe enabled
-		cmd = exec.CommandContext(streamCtx, ffmpegPath, ffmpegArgs...)
-
-		// Set up stdin pipe for feeding data
-		stdin, err := cmd.StdinPipe()
-		if err != nil {
-			streamCancel() // Clean up context
-			return nil, fmt.Errorf("failed to create stdin pipe for FFmpeg: %w", err)
-		}
-
-		// Start audio feeding in a goroutine
-		go func() {
-			defer stdin.Close()
-			log.Printf("Starting audio feed via stdin for source %s", sourceID)
-
-			// Set up audio callback
-			audioChan, cleanup, err := setupAudioCallback(sourceID)
-			if err != nil {
-				log.Printf("Error setting up audio callback: %v", err)
-				return
-			}
-			defer cleanup()
-
-			// Process audio data and write to stdin
-			for {
-				select {
-				case <-streamCtx.Done():
-					log.Printf("Audio feed terminated: context cancelled for source %s", sourceID)
-					return
-				case data, ok := <-audioChan:
-					if !ok {
-						log.Printf("Audio channel closed for source %s", sourceID)
-						return
-					}
-
-					// Write data to FFmpeg's stdin
-					if _, err := stdin.Write(data); err != nil {
-						log.Printf("Error writing to FFmpeg stdin: %v", err)
-						return
-					}
-				}
-			}
-		}()
-	} else {
-		// For Unix systems, use the standard arguments
-		ffmpegArgs := buildFFmpegArgs(readerPath, outputDir, playlistPath)
-
-		// Run the ffmpeg command
-		cmd = exec.CommandContext(streamCtx, ffmpegPath, ffmpegArgs...)
 	}
 
+	// Setup and start FFmpeg
+	cmd, err := setupFFmpeg(streamCtx, sourceID, ffmpegPath, readerPath, outputDir, playlistPath)
+	if err != nil {
+		streamCancel() // Clean up context
+		return nil, fmt.Errorf("failed to setup FFmpeg: %w", err)
+	}
+
+	// Set up Windows-specific stdin pipe handling
+	if runtime.GOOS == "windows" {
+		if err := setupWindowsAudioFeed(streamCtx, sourceID, cmd); err != nil {
+			streamCancel() // Clean up context
+			return nil, err
+		}
+	}
+
+	// Setup FFmpeg logging and start the process
+	if err := setupFFmpegLogging(secFS, cmd, hlsBaseDir, outputDir); err != nil {
+		streamCancel() // Clean up context
+		return nil, err
+	}
+
+	// Create stream info
+	stream := &HLSStreamInfo{
+		SourceID:     sourceID,
+		FFmpegCmd:    cmd,
+		OutputDir:    outputDir,
+		PlaylistPath: playlistPath,
+		FifoPipe:     pipeName, // Store the resolved pipe name
+		ctx:          streamCtx,
+		cancel:       streamCancel,
+	}
+
+	// Check for race condition
+	existingStream := handleRaceCondition(sourceID, stream, secFS, outputDir)
+	if existingStream != nil {
+		return existingStream, nil
+	}
+
+	// Initialize the activity timestamp for the new stream
+	updateStreamActivity(sourceID, "", "stream_creation")
+
+	// Start goroutine to feed audio data to FFmpeg
+	// Only for non-Windows platforms - Windows uses stdin approach
+	if runtime.GOOS != "windows" {
+		go feedAudioToFFmpeg(sourceID, stream.FifoPipe, stream.ctx)
+	}
+
+	// Start goroutine to handle context cancellation
+	go func() {
+		<-streamCtx.Done()
+		cleanupStream(sourceID)
+	}()
+
+	return stream, nil
+}
+
+// getExistingStream checks if a stream already exists for the given source ID
+func getExistingStream(sourceID string) *HLSStreamInfo {
+	hlsStreamMutex.Lock()
+	stream, exists := hlsStreams[sourceID]
+	hlsStreamMutex.Unlock()
+
+	if exists {
+		if hlsVerboseLogging {
+			log.Printf("Using existing HLS stream for source: %s", sourceID)
+		}
+		return stream
+	}
+	return nil
+}
+
+// setupWindowsAudioFeed sets up audio feeding via stdin for Windows
+func setupWindowsAudioFeed(ctx context.Context, sourceID string, cmd *exec.Cmd) error {
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdin pipe for FFmpeg: %w", err)
+	}
+
+	// Start audio feeding in a goroutine
+	go func() {
+		defer stdin.Close()
+		log.Printf("Starting audio feed via stdin for source %s", sourceID)
+
+		// Set up audio callback
+		audioChan, cleanup, err := setupAudioCallback(sourceID)
+		if err != nil {
+			log.Printf("Error setting up audio callback: %v", err)
+			return
+		}
+		defer cleanup()
+
+		// Process audio data and write to stdin
+		for {
+			select {
+			case <-ctx.Done():
+				log.Printf("Audio feed terminated: context cancelled for source %s", sourceID)
+				return
+			case data, ok := <-audioChan:
+				if !ok {
+					log.Printf("Audio channel closed for source %s", sourceID)
+					return
+				}
+
+				// Write data to FFmpeg's stdin
+				if _, err := stdin.Write(data); err != nil {
+					log.Printf("Error writing to FFmpeg stdin: %v", err)
+					return
+				}
+			}
+		}
+	}()
+
+	return nil
+}
+
+// setupFFmpegLogging sets up the logging for FFmpeg and starts the process
+func setupFFmpegLogging(secFS *securefs.SecureFS, cmd *exec.Cmd, hlsBaseDir, outputDir string) error {
 	// Create a log file for ffmpeg output in the stream directory
 	logFilePath := filepath.Join(outputDir, "ffmpeg.log")
 
 	// Verify the log file path is within the HLS base directory
-	isWithin, err = securefs.IsPathWithinBase(hlsBaseDir, logFilePath)
+	isWithin, err := securefs.IsPathWithinBase(hlsBaseDir, logFilePath)
 	if err != nil {
-		streamCancel() // Clean up context
-		return nil, fmt.Errorf("failed to validate log file path: %w", err)
+		return fmt.Errorf("failed to validate log file path: %w", err)
 	}
 
 	if !isWithin {
-		streamCancel() // Clean up context
-		return nil, fmt.Errorf("security error: log file path would be outside HLS base directory")
+		return fmt.Errorf("security error: log file path would be outside HLS base directory")
 	}
 
 	// Open the log file using secureFS
 	logFile, err := secFS.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
-		streamCancel() // Clean up context
-		return nil, fmt.Errorf("failed to create ffmpeg log file: %w", err)
+		return fmt.Errorf("failed to create ffmpeg log file: %w", err)
 	}
 
 	// Set both stdout and stderr to the log file
@@ -623,28 +700,18 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 		if err := secFS.RemoveAll(outputDir); err != nil {
 			log.Printf("Error removing output directory: %v", err)
 		}
-		streamCancel() // Clean up context
-		return nil, fmt.Errorf("failed to start FFmpeg: %w", err)
+		return fmt.Errorf("failed to start FFmpeg: %w", err)
 	}
 
 	// Don't close the log file immediately as it's being used by the command
 	// The OS will close it when the process terminates
 
-	log.Printf("FFmpeg process started successfully for source: %s (logs at %s)", sourceID, logFilePath)
+	log.Printf("FFmpeg process started successfully for source: %s (logs at %s)", outputDir, logFilePath)
+	return nil
+}
 
-	// Create stream info
-	stream = &HLSStreamInfo{
-		SourceID:     sourceID,
-		FFmpegCmd:    cmd,
-		OutputDir:    outputDir,
-		PlaylistPath: playlistPath,
-		FifoPipe:     pipeName, // Store the resolved pipe name
-		ctx:          streamCtx,
-		cancel:       streamCancel,
-	}
-
-	// SECOND check with lock to avoid race conditions
-	// Check if another goroutine created a stream for this source while we were working
+// handleRaceCondition handles the case where another goroutine created the stream while we were working
+func handleRaceCondition(sourceID string, stream *HLSStreamInfo, secFS *securefs.SecureFS, outputDir string) *HLSStreamInfo {
 	hlsStreamMutex.Lock()
 	existingStream, streamExists := hlsStreams[sourceID]
 	if streamExists {
@@ -669,29 +736,14 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 			log.Printf("Error removing duplicate output directory: %v", err)
 		}
 
-		return existingStream, nil
+		return existingStream
 	}
 
 	// No race condition, store our new stream in the map
 	hlsStreams[sourceID] = stream
 	hlsStreamMutex.Unlock()
 
-	// Initialize the activity timestamp for the new stream
-	updateStreamActivity(sourceID, "", "stream_creation")
-
-	// Start goroutine to feed audio data to FFmpeg
-	// Only for non-Windows platforms - Windows uses stdin approach
-	if runtime.GOOS != "windows" {
-		go feedAudioToFFmpeg(sourceID, stream.FifoPipe, stream.ctx)
-	}
-
-	// Start goroutine to handle context cancellation
-	go func() {
-		<-streamCtx.Done()
-		cleanupStream(sourceID)
-	}()
-
-	return stream, nil
+	return nil
 }
 
 // cleanupStream handles stream cleanup when terminated
