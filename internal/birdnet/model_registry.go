@@ -24,10 +24,10 @@ var supportedModels = map[string]ModelInfo{
 		ID:          "BirdNET_GLOBAL_6K_V2.4",
 		Name:        "BirdNET GLOBAL 6K V2.4",
 		Description: "Global model with 6523 species",
-		SupportedLocales: []string{"af", "ar", "bg", "ca", "cs", "da", "de", "el", "en", "en-uk", "es",
+		SupportedLocales: []string{"af", "ar", "bg", "ca", "cs", "da", "de", "el", "en-uk", "en-us", "es",
 			"et", "fi", "fr", "he", "hr", "hu", "id", "is", "it", "ja", "ko", "lt", "lv", "ml", "nl",
 			"no", "pl", "pt", "pt-br", "pt-pt", "ro", "ru", "sk", "sl", "sr", "sv", "th", "tr", "uk", "zh"},
-		DefaultLocale: "en",
+		DefaultLocale: "en-us",
 		NumSpecies:    6523,
 	},
 }
