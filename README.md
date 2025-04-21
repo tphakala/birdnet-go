@@ -47,6 +47,7 @@ BirdNET-Go is an AI solution for continuous avian monitoring and identification
 - Utilizes BirdNET AI model trained with more than 6500 bird species
 - Local processing, Internet connectivity not required
 - Easy to use Web user interface for data visualisation
+- Advanced features like [Deep Detection](doc/wiki.md#deep-detection) for improved accuracy and [Live Audio Streaming](doc/wiki.md#live-audio-streaming).
 - BirdWeather.com API integration
 - Realtime log file output can be used as overlay in OBS for bird feeder streams etc.
 - Minimal runtime dependencies, BirdNET Tensorflow Lite model is embedded in compiled binary
@@ -90,25 +91,26 @@ Usage:
 
 Available Commands:
   authors     Print the list of authors
-  completion  Generate the autocompletion script for the specified shell
+  benchmark   Run performance benchmark
   directory   Analyze all *.wav files in a directory
   file        Analyze an audio file
   help        Help about any command
   license     Print the license of Go-BirdNET
+  rangefilter Manage the range filter database
   realtime    Analyze audio in realtime mode
+  support     Generate a support bundle
 
 Flags:
       --debug               Enable debug output
   -h, --help                help for birdnet
       --locale string       Set the locale for labels. Accepts full name or 2-letter code. (default "finnish")
-      --overlap float       Overlap value between 0.0 and 2.9
+      --overlap float       Overlap value between 0.0 and 2.9 (High values like 2.7 enable Deep Detection)
       --sensitivity float   Sigmoid sensitivity value between 0.0 and 1.5 (default 1)
       --threshold float     Confidency threshold for detections, value between 0.1 to 1.0 (default 0.8)
 
 Use "birdnet [command] --help" for more information about a command.
-```
 
-There is more detailed usage documentation at wiki https://github.com/tphakala/birdnet-go/wiki
+There is more detailed usage documentation at [Wiki](doc/wiki.md)
 
 ## License
 
