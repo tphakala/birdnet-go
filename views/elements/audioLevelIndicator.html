@@ -30,6 +30,7 @@
         heartbeatInterval: null,
         heartbeatFrequency: 20000, // Send heartbeat every 20 seconds
         heartbeatErrorCount: 0,
+        playbackStabilizing: false,
 
         isInactive(source) {
             // If we don't have the source in levels at all, consider it inactive
@@ -240,6 +241,12 @@
             }
             this.heartbeatErrorCount = 0;
             
+            // Don't send disconnect notification during playback stabilization
+            if (this.playbackStabilizing) {
+                console.log('Suppressing disconnect notification during playback stabilization');
+                return;
+            }
+            
             // Send a final disconnect notification if we were playing something
             if (this.playingSource) {
                 const heartbeatUrl = `${window.location.origin}/api/v1/audio-stream-hls/heartbeat?disconnect=true`;
@@ -362,8 +369,18 @@
         startPlayback(sourceId) {
             console.log('Starting audio playback for source: ' + sourceId);
             
-            // Stop any existing playback
-            this.stopPlayback();
+            // If we're already starting playback for this source and still stabilizing, do nothing
+            if (this.playbackStabilizing && this.playingSource === sourceId) {
+                console.log('Ignoring duplicate start request during stabilization');
+                return;
+            }
+            
+            // Add stabilization flag to prevent unwanted disconnect during startup
+            this.playbackStabilizing = true;
+            
+            // Stop any existing playback, but skip server notification if we're restarting the same source
+            const skipNotification = (this.playingSource === sourceId);
+            this.stopPlayback(false, skipNotification);
             
             // Set state
             this.playingSource = sourceId;
@@ -381,8 +398,18 @@
                     
                     // Start heartbeat to let server know we're still connected
                     this.startHeartbeat();
+                    
+                    // Send an immediate heartbeat to ensure connection is registered
+                    setTimeout(() => this.sendHeartbeat(), 500);
+                    
+                    // Clear stabilization flag after a delay
+                    setTimeout(() => {
+                        this.playbackStabilizing = false;
+                        console.log('Playback stabilized');
+                    }, 5000);
                 })
                 .catch(error => {
+                    this.playbackStabilizing = false;
                     console.error('Error accessing audio stream: ' + error.message);
                     this.showPlaybackStatus('Error starting stream: ' + error.message);
                     setTimeout(() => this.hidePlaybackStatus(), 3000);
@@ -682,6 +709,12 @@
         
         // Stop audio playback
         stopPlayback(isErrorRecovery = false, skipServerNotification = false) {
+            // Don't stop playback if we're in stabilization phase and this isn't error recovery
+            if (this.playbackStabilizing && !isErrorRecovery) {
+                console.log('Ignoring stop request during playback stabilization');
+                return;
+            }
+            
             console.log('Stopping audio playback', isErrorRecovery ? '(error recovery mode)' : '', 
                          skipServerNotification ? '(skipping server notification)' : '');
             
@@ -859,6 +892,7 @@
             this.nonFatalErrorCount = 0;
             this.lastNonFatalErrorTime = 0;
             this.inErrorCooldown = false;
+            this.playbackStabilizing = false;
             
             // Setup initial connection for audio levels
             this.setupEventSource();
@@ -976,6 +1010,12 @@
 
             // Listen for page visibility changes
             const visibilityHandler = () => {
+                // Skip all visibility processing during playback stabilization
+                if (this.playbackStabilizing) {
+                    console.log('Ignoring visibility change during playback stabilization');
+                    return;
+                }
+                
                 if (document.hidden) {
                     // When tab goes to background
                     this.cleanupEventSource(); // Close the audio level EventSource when hidden
@@ -992,7 +1032,10 @@
                         (this.audioElement.paused || this.audioElement.ended) && 
                         !this.inErrorCooldown) { // Don't restart if in error cooldown
                         console.log('Tab visible again: resuming audio playback');
-                        this.startPlayback(this.playingSource);
+                        // Add a short delay before restarting playback to avoid race conditions
+                        setTimeout(() => {
+                            this.startPlayback(this.playingSource);
+                        }, 500);
                     }
                 }
             };

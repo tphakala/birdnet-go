@@ -49,6 +49,9 @@ var (
 	hlsStreamActivity      = make(map[string]time.Time) // sourceID -> lastActivityTime
 	hlsStreamActivityMutex sync.Mutex
 
+	// Track client-specific last activity time for false disconnect detection
+	hlsStreamClientLastActivity = make(map[string]time.Time) // sourceID:clientID -> lastActivityTime
+
 	// When no playlist, segment, or heartbeat has been received for this period,
 	// a stream is considered inactive and will be cleaned up
 	streamInactivityTimeout = 5 * time.Minute
@@ -1425,6 +1428,27 @@ func (h *Handlers) ProcessHLSHeartbeat(c echo.Context) error {
 	// Handle disconnection announcements
 	if disconnectFlag := c.QueryParam("disconnect"); disconnectFlag == "true" ||
 		c.QueryParam("status") == "disconnect" {
+
+		// Check if this client was recently connected to the stream (within 10 seconds)
+		// This helps prevent false disconnects during stream initialization
+		isRecentConnection := false
+		hlsStreamActivityMutex.Lock()
+		if lastTime, exists := hlsStreamClientLastActivity[heartbeat.SourceID+":"+clientID]; exists {
+			if time.Since(lastTime) < 10*time.Second {
+				isRecentConnection = true
+				log.Printf("⚠️ Ignoring premature disconnect from client %s for stream %s (too soon after connect)",
+					clientID, heartbeat.SourceID)
+			}
+		}
+		hlsStreamActivityMutex.Unlock()
+
+		// If this is a false disconnect during initialization, just update activity and don't disconnect
+		if isRecentConnection {
+			// Just update activity without disconnecting
+			updateStreamActivity(heartbeat.SourceID, clientID, "continued-connection")
+			return nil
+		}
+
 		log.Printf("👋 Client %s announced disconnection from stream %s",
 			clientID, heartbeat.SourceID)
 
@@ -1466,6 +1490,12 @@ func (h *Handlers) ProcessHLSHeartbeat(c echo.Context) error {
 	if prevTime, exists := hlsStreamActivity[heartbeat.SourceID]; exists {
 		previousActivity = prevTime
 	}
+
+	// Record the time of this client's activity for potential false disconnect detection
+	if hlsStreamClientLastActivity == nil {
+		hlsStreamClientLastActivity = make(map[string]time.Time)
+	}
+	hlsStreamClientLastActivity[heartbeat.SourceID+":"+clientID] = time.Now()
 	hlsStreamActivityMutex.Unlock()
 
 	// Update activity
@@ -1565,6 +1595,13 @@ func performStreamCleanup(sourceID string, stream *HLSStreamInfo, reason string)
 	// Clean up activity tracking
 	hlsStreamActivityMutex.Lock()
 	delete(hlsStreamActivity, sourceID)
+
+	// Clean up client last activity records
+	for key := range hlsStreamClientLastActivity {
+		if strings.HasPrefix(key, sourceID+":") {
+			delete(hlsStreamClientLastActivity, key)
+		}
+	}
 	hlsStreamActivityMutex.Unlock()
 
 	log.Printf("✅ HLS stream for source %s fully cleaned up", sourceID)
