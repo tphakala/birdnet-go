@@ -513,7 +513,13 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	var cmd *exec.Cmd
 
 	// Build ffmpeg command
-	ffmpegArgs := buildFFmpegArgs(fifoPath, outputDir, playlistPath)
+	// Use the appropriate pipe path based on platform
+	readerPath := fifoPath
+	if runtime.GOOS == "windows" {
+		readerPath = pipeName // Use the Windows named pipe path
+	}
+
+	ffmpegArgs := buildFFmpegArgs(readerPath, outputDir, playlistPath)
 
 	// Run the ffmpeg command
 	cmd = exec.CommandContext(streamCtx, ffmpegPath, ffmpegArgs...)
