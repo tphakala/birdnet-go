@@ -62,11 +62,6 @@ Source: MIT
 License: https://github.com/fsnotify/fsnotify/blob/v1.8.0/LICENSE
 Source: BSD-3-Clause
 
-### github.com/gen2brain/malgo
-
-License: https://github.com/gen2brain/malgo/blob/v0.11.23/LICENSE
-Source: Unlicense
-
 ### github.com/go-audio/audio
 
 License: https://github.com/go-audio/audio/blob/v1.0.0/LICENSE
@@ -321,6 +316,11 @@ Source: MIT
 
 License: https://github.com/tphakala/go-tflite/blob/2dad4328ec9e/LICENSE
 Source: MIT
+
+### github.com/tphakala/malgo
+
+License: https://github.com/tphakala/malgo/blob/v0.11.22/LICENSE
+Source: Unlicense
 
 ### github.com/valyala/bytebufferpool
 
