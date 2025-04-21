@@ -7,7 +7,6 @@ require (
 	github.com/antonholmquist/jason v1.0.0
 	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/fatih/color v1.18.0
-	github.com/gen2brain/malgo v0.11.23
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0
 	github.com/go-echarts/go-echarts/v2 v2.5.2
@@ -27,6 +26,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3
 	github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e
+	github.com/tphakala/malgo v0.11.22
 	go.uber.org/mock v0.5.1
 	golang.org/x/crypto v0.37.0
 	golang.org/x/net v0.39.0
