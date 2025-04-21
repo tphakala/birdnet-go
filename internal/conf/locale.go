@@ -34,7 +34,6 @@ var LocaleCodeMapping = map[string]string{
 	"da":    "da",
 	"de":    "de",
 	"el":    "el",
-	"en":    "en_uk", // English (UK) is the default English variant
 	"en-uk": "en_uk",
 	"en-us": "en_us",
 	"es":    "es",
@@ -83,7 +82,6 @@ var LocaleCodes = map[string]string{
 	"da":    "Danish",
 	"nl":    "Dutch",
 	"el":    "Greek",
-	"en":    "English",
 	"en-uk": "English (UK)",
 	"en-us": "English (US)",
 	"et":    "Estonian",
