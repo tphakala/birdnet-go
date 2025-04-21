@@ -43,9 +43,10 @@ type BirdNET struct {
 	AnalysisInterpreter *tflite.Interpreter
 	RangeInterpreter    *tflite.Interpreter
 	Settings            *conf.Settings
-	ModelInfo           ModelInfo   // Information about the current model
-	TaxonomyMap         TaxonomyMap // Mapping of species codes to names and vice versa
-	TaxonomyPath        string      // Path to custom taxonomy file, if used
+	ModelInfo           ModelInfo           // Information about the current model
+	TaxonomyMap         TaxonomyMap         // Mapping of species codes to names and vice versa
+	ScientificIndex     ScientificNameIndex // Index for fast scientific name lookups
+	TaxonomyPath        string              // Path to custom taxonomy file, if used
 	mu                  sync.Mutex
 }
 
@@ -74,7 +75,7 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	}
 
 	// Load taxonomy data
-	bn.TaxonomyMap, err = LoadTaxonomyData(bn.TaxonomyPath)
+	bn.TaxonomyMap, bn.ScientificIndex, err = LoadTaxonomyData(bn.TaxonomyPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load taxonomy data: %w", err)
 	}
@@ -432,7 +433,7 @@ func (bn *BirdNET) ReloadModel() error {
 
 	// Reload taxonomy data if needed
 	var err error
-	bn.TaxonomyMap, err = LoadTaxonomyData(bn.TaxonomyPath)
+	bn.TaxonomyMap, bn.ScientificIndex, err = LoadTaxonomyData(bn.TaxonomyPath)
 	if err != nil {
 		return fmt.Errorf("\033[31m❌ failed to reload taxonomy data: %w\033[0m", err)
 	}
@@ -502,7 +503,7 @@ func (bn *BirdNET) ReloadModel() error {
 
 // GetSpeciesCode returns the eBird species code for a given label
 func (bn *BirdNET) GetSpeciesCode(label string) (string, bool) {
-	return GetSpeciesCodeFromName(bn.TaxonomyMap, label)
+	return GetSpeciesCodeFromName(bn.TaxonomyMap, bn.ScientificIndex, label)
 }
 
 // GetSpeciesWithScientificAndCommonName returns the scientific name and common name for a label
@@ -527,7 +528,7 @@ func (bn *BirdNET) EnrichResultWithTaxonomy(speciesLabel string) (scientific, co
 	scientific, common = SplitSpeciesName(speciesLabel)
 
 	// Try to get the eBird code
-	code, exists := GetSpeciesCodeFromName(bn.TaxonomyMap, speciesLabel)
+	code, exists := GetSpeciesCodeFromName(bn.TaxonomyMap, bn.ScientificIndex, speciesLabel)
 	if !exists {
 		// We got a placeholder code for a species not in our taxonomy
 		if bn.Settings.BirdNET.Debug {

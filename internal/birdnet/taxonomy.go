@@ -17,9 +17,12 @@ var taxonomyData []byte
 // TaxonomyMap is a bidirectional mapping between eBird codes and species names
 type TaxonomyMap map[string]string
 
+// ScientificNameIndex maps scientific names to their corresponding codes
+type ScientificNameIndex map[string]string
+
 // LoadTaxonomyData loads the eBird taxonomy data from the embedded file
 // or from a custom file if provided.
-func LoadTaxonomyData(customPath string) (TaxonomyMap, error) {
+func LoadTaxonomyData(customPath string) (TaxonomyMap, ScientificNameIndex, error) {
 	var data []byte
 	var err error
 
@@ -27,7 +30,7 @@ func LoadTaxonomyData(customPath string) (TaxonomyMap, error) {
 		// Load from custom file if provided
 		data, err = os.ReadFile(customPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read custom taxonomy file %s: %w", customPath, err)
+			return nil, nil, fmt.Errorf("failed to read custom taxonomy file %s: %w", customPath, err)
 		}
 	} else {
 		// Use embedded data
@@ -37,10 +40,28 @@ func LoadTaxonomyData(customPath string) (TaxonomyMap, error) {
 	var taxonomyMap TaxonomyMap
 	err = json.Unmarshal(data, &taxonomyMap)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal taxonomy data: %w", err)
+		return nil, nil, fmt.Errorf("failed to unmarshal taxonomy data: %w", err)
 	}
 
-	return taxonomyMap, nil
+	// Create the scientific name index
+	scientificIndex := CreateScientificNameIndex(taxonomyMap)
+
+	return taxonomyMap, scientificIndex, nil
+}
+
+// CreateScientificNameIndex builds an index mapping scientific names to codes
+func CreateScientificNameIndex(taxonomyMap TaxonomyMap) ScientificNameIndex {
+	index := make(ScientificNameIndex)
+	for taxonName, taxonCode := range taxonomyMap {
+		if strings.Contains(taxonName, "_") {
+			parts := strings.SplitN(taxonName, "_", 2)
+			if len(parts) == 2 {
+				scientificName := strings.TrimSpace(parts[0])
+				index[scientificName] = taxonCode
+			}
+		}
+	}
+	return index
 }
 
 // GeneratePlaceholderCode generates a placeholder eBird code for species not in the taxonomy map
@@ -81,16 +102,39 @@ func GeneratePlaceholderCode(speciesName string) string {
 	return fmt.Sprintf("%s%s", prefix, shortHash)
 }
 
-// GetSpeciesCodeFromName returns the eBird species code for a given species name
-// in the format "ScientificName_CommonName".
+// GetSpeciesCodeFromName returns the eBird species code for a given species name.
+// Extracts and uses only the scientific name portion for lookup.
 // If species is not found in the taxonomy map, generates a placeholder code.
-func GetSpeciesCodeFromName(taxonomyMap TaxonomyMap, speciesName string) (string, bool) {
-	code, exists := taxonomyMap[speciesName]
-	if !exists {
-		// If not found in taxonomy, create a placeholder code
-		return GeneratePlaceholderCode(speciesName), false
+func GetSpeciesCodeFromName(taxonomyMap TaxonomyMap, scientificIndex ScientificNameIndex, speciesName string) (string, bool) {
+	// Extract scientific name from input
+	var scientificName string
+
+	// Handle "Scientific (Common)" format
+	if strings.Contains(speciesName, " (") && strings.HasSuffix(speciesName, ")") {
+		parts := strings.SplitN(speciesName, " (", 2)
+		if len(parts) == 2 {
+			scientificName = strings.TrimSpace(parts[0])
+		}
+	} else if strings.Contains(speciesName, "_") {
+		// Handle "Scientific_Common" format
+		parts := strings.SplitN(speciesName, "_", 2)
+		if len(parts) == 2 {
+			scientificName = strings.TrimSpace(parts[0])
+		}
 	}
-	return code, exists
+
+	// If we couldn't extract a scientific name, use the whole input
+	if scientificName == "" {
+		scientificName = speciesName
+	}
+
+	// Look up in the scientific name index (O(1) operation)
+	if code, exists := scientificIndex[scientificName]; exists {
+		return code, true
+	}
+
+	// If not found in taxonomy, create a placeholder code
+	return GeneratePlaceholderCode(speciesName), false
 }
 
 // GetSpeciesNameFromCode returns the species name in the format "ScientificName_CommonName"
