@@ -14,8 +14,8 @@ import (
 	"unsafe"
 
 	"github.com/fatih/color"
-	"github.com/gen2brain/malgo"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/malgo"
 )
 
 // AudioDataCallback is a function that can be registered to receive audio data
