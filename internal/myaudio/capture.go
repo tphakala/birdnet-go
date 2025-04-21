@@ -381,7 +381,9 @@ func getHardwareDevices(infos []malgo.DeviceInfo) []malgo.DeviceInfo {
 // Returns true if the device is working, false otherwise.
 func TestCaptureDevice(ctx *malgo.AllocatedContext, info *malgo.DeviceInfo) bool {
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
-	deviceConfig.Capture.Format = malgo.FormatS16
+	// Malgo bit depth conversion seems to be broken, so we'll do it manually,
+	// accept default format from capture device
+	//deviceConfig.Capture.Format = malgo.FormatS16
 	deviceConfig.Capture.Channels = conf.NumChannels
 	deviceConfig.Capture.DeviceID = info.ID.Pointer()
 	deviceConfig.SampleRate = conf.SampleRate
@@ -542,17 +544,106 @@ func hexToASCII(hexStr string) (string, error) {
 	return string(bytes), nil
 }
 
+// processAudioFrame handles the processing of a single audio frame received from malgo.
+// It performs format conversion, applies EQ, writes to buffers, broadcasts, and calculates levels.
+func processAudioFrame(
+	pSamples []byte,
+	formatType malgo.FormatType,
+	convertBuffer []byte,
+	settings *conf.Settings,
+	source captureSource,
+	audioLevelChan chan AudioLevelData,
+) (processedSamplesPtr *[]byte, fromPool bool, err error) {
+
+	processedSamples := pSamples // Assume no conversion needed initially
+	processedSamplesPtr = &processedSamples
+
+	if formatType != malgo.FormatS16 && formatType != malgo.FormatU8 {
+		processedSamplesPtr, fromPool, err = ConvertToS16(pSamples, formatType, convertBuffer)
+		if err != nil {
+			log.Printf("❌ Error converting audio format: %v", err)
+			return nil, false, err // Return error
+		}
+		// If conversion happened, update processedSamples for local use
+		processedSamples = *processedSamplesPtr
+	}
+
+	// Apply audio EQ filters if enabled
+	if settings.Realtime.Audio.Equalizer.Enabled {
+		if err := ApplyFilters(processedSamples); err != nil {
+			log.Printf("❌ Error applying audio EQ filters: %v", err)
+			// Decide if this is a fatal error or just log and continue
+		}
+	}
+
+	if err := WriteToAnalysisBuffer("malgo", processedSamples); err != nil {
+		log.Printf("❌ Error writing to analysis buffer: %v", err)
+	}
+	if err := WriteToCaptureBuffer("malgo", processedSamples); err != nil {
+		log.Printf("❌ Error writing to capture buffer: %v", err)
+	}
+
+	// Broadcast audio data to WebSocket clients
+	broadcastAudioData("malgo", processedSamples)
+
+	// Calculate audio level
+	audioLevelData := calculateAudioLevel(processedSamples, "malgo", source.Name)
+
+	// Send level to channel (non-blocking)
+	select {
+	case audioLevelChan <- audioLevelData:
+		// Data sent successfully
+	default:
+		// Channel is full, clear the channel and try again
+		for len(audioLevelChan) > 0 {
+			<-audioLevelChan
+		}
+		select {
+		case audioLevelChan <- audioLevelData:
+		default:
+			log.Printf("⚠️ Audio level channel full even after clearing for source %s", source.Name)
+		}
+	}
+
+	return processedSamplesPtr, fromPool, nil // Return pointer, pool status, and nil error
+}
+
+// handleDeviceStop contains the logic for attempting to restart the audio device
+// when it stops unexpectedly.
+func handleDeviceStop(captureDevice *malgo.Device, quitChan, restartChan chan struct{}, settings *conf.Settings) {
+	go func() {
+		select {
+		case <-quitChan:
+			// Quit signal received, do not restart
+			return
+		case <-time.After(100 * time.Millisecond):
+			// Wait briefly before restarting
+			if settings.Debug {
+				fmt.Println("🔄 Attempting to restart audio device.")
+			}
+			if err := captureDevice.Start(); err != nil {
+				log.Printf("❌ Failed to restart audio device: %v", err)
+				log.Println("🔄 Attempting full audio context restart in 1 second.")
+				time.Sleep(1 * time.Second)
+				select {
+				case restartChan <- struct{}{}:
+				case <-quitChan:
+				}
+			} else if settings.Debug {
+				fmt.Println("🔄 Audio device restarted successfully.")
+			}
+		}
+	}()
+}
+
 func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
 	wg.Add(1)
-	defer func() {
-		wg.Done()
-	}()
+	defer wg.Done()
 
 	if settings.Debug {
 		fmt.Println("Initializing context")
 	}
 
-	// if Linux set malgo.BackendAlsa, else set nil for auto select
 	var backend malgo.Backend
 	switch runtime.GOOS {
 	case "linux":
@@ -575,7 +666,7 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 	defer malgoCtx.Uninit() //nolint:errcheck // We handle errors in the caller
 
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
-	deviceConfig.Capture.Format = malgo.FormatS16
+	// deviceConfig.Capture.Format = malgo.FormatS16 // Let malgo choose or use default
 	deviceConfig.Capture.Channels = conf.NumChannels
 	deviceConfig.SampleRate = conf.SampleRate
 	deviceConfig.Alsa.NoMMap = 1
@@ -587,73 +678,28 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 	}
 
 	var captureDevice *malgo.Device
+	var formatType malgo.FormatType // Declare formatType here
+	var convertBuffer []byte
 
 	onReceiveFrames := func(pSample2, pSamples []byte, framecount uint32) {
-		// Apply audio EQ filters if enabled
-		if settings.Realtime.Audio.Equalizer.Enabled {
-			err := ApplyFilters(pSamples)
-			if err != nil {
-				log.Printf("❌ Error applying audio EQ filters: %v", err)
-			}
-		}
-
-		err = WriteToAnalysisBuffer("malgo", pSamples)
+		// processAudioFrame now uses the captured formatType
+		processedSamplesPtr, fromPool, err := processAudioFrame(
+			pSamples, formatType, convertBuffer, settings, source, audioLevelChan,
+		)
 		if err != nil {
-			log.Printf("❌ Error writing to analysis buffer: %v", err)
-		}
-		err = WriteToCaptureBuffer("malgo", pSamples)
-		if err != nil {
-			log.Printf("❌ Error writing to capture buffer: %v", err)
+			// Error already logged in processAudioFrame
+			return
 		}
 
-		// Broadcast audio data to WebSocket clients
-		broadcastAudioData("malgo", pSamples)
-
-		// Calculate audio level
-		audioLevelData := calculateAudioLevel(pSamples, "malgo", source.Name)
-
-		// Send level to channel (non-blocking)
-		select {
-		case audioLevelChan <- audioLevelData:
-			// Data sent successfully
-		default:
-			// Channel is full, clear the channel
-			for len(audioLevelChan) > 0 {
-				<-audioLevelChan
-			}
-			// Try to send the new data
-			audioLevelChan <- audioLevelData
+		// Remember to return the buffer pointer to pool if it came from there
+		if fromPool {
+			defer ReturnBufferToPool(processedSamplesPtr, fromPool)
 		}
 	}
 
-	// onStopDevice is called when the device stops, either normally or unexpectedly
+	// onStopDevice logic is now in handleDeviceStop
 	onStopDevice := func() {
-		go func() {
-			select {
-			case <-quitChan:
-				// Quit signal has been received, do not attempt to restart
-				return
-			case <-time.After(100 * time.Millisecond):
-				// Wait a bit before restarting to avoid potential rapid restart loops
-				if settings.Debug {
-					fmt.Println("🔄 Attempting to restart audio device.")
-				}
-				err := captureDevice.Start()
-				if err != nil {
-					log.Printf("❌ Failed to restart audio device: %v", err)
-					log.Println("🔄 Attempting full audio context restart in 1 second.")
-					time.Sleep(1 * time.Second)
-					select {
-					case restartChan <- struct{}{}:
-						// Successfully sent restart signal
-					case <-quitChan:
-						// Application is shutting down, don't send restart signal
-					}
-				} else if settings.Debug {
-					fmt.Println("🔄 Audio device restarted successfully.")
-				}
-			}
-		}()
+		handleDeviceStop(captureDevice, quitChan, restartChan, settings)
 	}
 
 	// Device callback to assign function to call when audio data is received
@@ -668,6 +714,14 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 		color.New(color.FgHiYellow).Fprintln(os.Stderr, "❌ Device initialization failed:", err)
 		conf.PrintUserInfo()
 		return
+	}
+
+	// Get the actual format of the capture device
+	formatType = captureDevice.CaptureFormat()
+
+	// Print device info if in debug mode
+	if settings.Debug {
+		printDeviceInfo(captureDevice, formatType)
 	}
 
 	if settings.Debug {
@@ -686,30 +740,44 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 	// print audio device we are attached to
 	color.New(color.FgHiGreen).Printf("Listening on source: %s (%s)\n", source.Name, source.ID)
 
-	// Now, instead of directly waiting on QuitChannel,
-	// check if it's closed in a non-blocking select.
-	// This loop will keep running until QuitChannel is closed.
+	// Loop until quit or restart signal
 	for {
 		select {
 		case <-quitChan:
-			// QuitChannel was closed, clean up and return.
-			//if settings.Debug {
 			fmt.Println("🛑 Stopping audio capture due to quit signal.")
-			//}
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond) // Allow Stop() to execute
 			return
 		case <-restartChan:
-			// Handle restart signal
 			if settings.Debug {
 				fmt.Println("🔄 Restarting audio capture.")
 			}
 			return
 		default:
-			// Do nothing and continue with the loop.
-			// This default case prevents blocking if quitChan is not closed yet.
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
+}
+
+// printDeviceInfo prints detailed information about the initialized capture device.
+func printDeviceInfo(dev *malgo.Device, format malgo.FormatType) {
+	var bitDepth int
+	switch format {
+	case malgo.FormatU8:
+		bitDepth = 8
+	case malgo.FormatS16:
+		bitDepth = 16
+	case malgo.FormatS24:
+		bitDepth = 24
+	case malgo.FormatS32, malgo.FormatF32:
+		bitDepth = 32
+	default:
+		bitDepth = 0 // Unknown
+	}
+	fmt.Printf("🎤 Initialized capture device:\n")
+	fmt.Printf("   Format: %v (%d-bit)\n", format, bitDepth)
+	fmt.Printf("   Channels: %d\n", dev.CaptureChannels())
+	fmt.Printf("   Sample Rate: %d Hz\n", dev.SampleRate())
+	// Add more device info if needed using dev methods
 }
 
 // calculateAudioLevel calculates the RMS (Root Mean Square) of the audio samples
@@ -787,5 +855,142 @@ func calculateAudioLevel(samples []byte, source, name string) AudioLevelData {
 		Clipping: isClipping,
 		Source:   source,
 		Name:     name,
+	}
+}
+
+// Pool of fixed-size byte slices to avoid frequent allocations
+var s16BufferPool = sync.Pool{
+	New: func() interface{} {
+		// Pre-allocate buffers for typical frame size (2048 bytes for malgo / 1024 16-bit samples)
+		buffer := make([]byte, 2048)
+		return &buffer // Return a pointer to avoid allocations
+	},
+}
+
+// ConvertToS16WithBuffer converts audio samples from higher bit depths to 16-bit format
+// using a caller-provided or pooled buffer to minimize allocations.
+// This version is optimized for real-time processing with fixed-size frames.
+//
+// Parameters:
+//   - samples: Input audio samples
+//   - sourceFormat: Source format (malgo.FormatS24, malgo.FormatS32, malgo.FormatF32)
+//   - outputBuffer: Optional pre-allocated output buffer (pass nil to use pool)
+//
+// Returns:
+//   - outputBufferPtr: A pointer to the slice of the output buffer containing the converted data
+//   - fromPool: Boolean indicating if the output buffer is from the pool
+//   - err: Error if conversion fails
+func ConvertToS16(samples []byte, sourceFormat malgo.FormatType, outputBuffer []byte) (outputBufferPtr *[]byte, fromPool bool, err error) {
+	if len(samples) == 0 {
+		empty := []byte{}
+		return &empty, false, nil
+	}
+
+	var bytesPerSample int
+	switch sourceFormat {
+	case malgo.FormatS24:
+		bytesPerSample = 3
+	case malgo.FormatS32, malgo.FormatF32:
+		bytesPerSample = 4
+	default:
+		return nil, false, fmt.Errorf("unsupported source format: %v", sourceFormat)
+	}
+
+	// Ensure we have complete samples
+	validSampleCount := len(samples) / bytesPerSample
+	if validSampleCount == 0 {
+		empty := []byte{}
+		return &empty, false, nil
+	}
+
+	// Calculate required output size
+	requiredSize := validSampleCount * 2 // 2 bytes per sample for 16-bit
+
+	// Use provided buffer, pool buffer, or allocate new one based on outputBuffer status
+	switch {
+	case outputBuffer == nil:
+		// No buffer provided, get from pool or allocate new
+		if requiredSize <= 2048 {
+			outputBufferPtr = s16BufferPool.Get().(*[]byte)
+			outputBuffer = *outputBufferPtr // Dereference for internal use
+			fromPool = true
+		} else {
+			newBuffer := make([]byte, requiredSize)
+			outputBuffer = newBuffer
+			outputBufferPtr = &newBuffer
+		}
+	case len(outputBuffer) < requiredSize:
+		// Provided buffer is too small
+		err = fmt.Errorf("output buffer too small: need %d bytes, got %d",
+			requiredSize, len(outputBuffer))
+		return // Return named values
+	default:
+		// Use the provided buffer
+		outputBufferPtr = &outputBuffer
+	}
+
+	// Convert samples into the dereferenced buffer
+	actualOutputBuffer := *outputBufferPtr
+	for i := 0; i < validSampleCount; i++ {
+		srcIdx := i * bytesPerSample
+		dstIdx := i * 2
+
+		switch sourceFormat {
+		case malgo.FormatS24:
+			// Convert 24-bit (3 bytes) to 16-bit
+			val := int32(samples[srcIdx]) | int32(samples[srcIdx+1])<<8 | int32(samples[srcIdx+2])<<16
+			// Sign extend if the most significant bit is set
+			if (val & 0x800000) != 0 {
+				val |= int32(-0x1000000)
+			}
+			// Shift right by 8 bits to get a 16-bit value
+			val >>= 8
+			// Clamp to 16-bit range
+			if val > 32767 {
+				val = 32767
+			} else if val < -32768 {
+				val = -32768
+			}
+			binary.LittleEndian.PutUint16(actualOutputBuffer[dstIdx:dstIdx+2], uint16(val))
+
+		case malgo.FormatS32:
+			// Convert 32-bit integer to 16-bit
+			val := int32(binary.LittleEndian.Uint32(samples[srcIdx : srcIdx+4]))
+			val >>= 16
+			// Clamp to 16-bit range
+			if val > 32767 {
+				val = 32767
+			} else if val < -32768 {
+				val = -32768
+			}
+			binary.LittleEndian.PutUint16(actualOutputBuffer[dstIdx:dstIdx+2], uint16(val))
+
+		case malgo.FormatF32:
+			// Convert 32-bit float to 16-bit integer
+			bits := binary.LittleEndian.Uint32(samples[srcIdx : srcIdx+4])
+			val := math.Float32frombits(bits)
+			// Scale float [-1.0, 1.0] to 16-bit integer range
+			val *= 32767.0
+			// Clamp to 16-bit range
+			if val > 32767.0 {
+				val = 32767.0
+			} else if val < -32768.0 {
+				val = -32768.0
+			}
+			binary.LittleEndian.PutUint16(actualOutputBuffer[dstIdx:dstIdx+2], uint16(int16(val)))
+		}
+	}
+
+	// Adjust the slice length of the buffer pointed to
+	*outputBufferPtr = (*outputBufferPtr)[:requiredSize]
+
+	// Return the pointer to the buffer (err is nil by default)
+	return
+}
+
+// ReturnBufferToPool returns a buffer pointer to the pool if it came from the pool
+func ReturnBufferToPool(bufferPtr *[]byte, fromPool bool) {
+	if fromPool && bufferPtr != nil && *bufferPtr != nil {
+		s16BufferPool.Put(bufferPtr)
 	}
 }
