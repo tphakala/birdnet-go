@@ -35,6 +35,8 @@ BirdNET-Go has been successfully tested on:
 
 For 24/7 real-time detection, the Raspberry Pi 3B+ is more than sufficient. It can process 3-second segments in approximately 500ms.
 
+See the [Recommended Hardware](hardware.md) document for detailed recommendations on hardware for optimal performance, especially regarding the web interface and advanced features.
+
 Note: TPU accelerators such as Coral.AI are not supported due to incompatibility with the BirdNET tflite model.
 
 ## Installation
@@ -539,6 +541,22 @@ BirdNET-Go offers advanced audio processing capabilities:
 - Configurable equalizer with multiple filter types (LowPass, HighPass, BandPass, etc.)
 - Audio export in multiple formats (WAV, MP3, FLAC)
 - Retention policies for managing exported audio clips
+
+### Audio Clip Retention
+
+If you enable audio clip exporting (`realtime.audio.export.enabled: true`), BirdNET-Go can automatically manage disk space by deleting older recordings based on configured retention policies. This prevents your disk from filling up over time.
+
+The cleanup task runs periodically (every few minutes) to check if clips need to be deleted based on the selected policy.
+
+Configure these options under `realtime.audio.export.retention` in your `config.yaml`:
+
+*   **`policy`**: Sets the retention strategy. Options are:
+    *   **`none`** (Default): No automatic deletion. You are responsible for managing the clip files.
+    *   **`age`**: Deletes clips older than the specified `maxage`.
+    *   **`usage`**: Deletes the oldest clips *only when* the disk usage of the partition containing the clips directory exceeds the `maxusage` percentage. This policy tries to keep at least `minclips` per species, deleting the oldest clips first when cleanup is needed.
+*   **`maxage`**: (Used with `policy: age`) Maximum age for clips (e.g., `30d` for 30 days, `7d` for 7 days, `24h` for 24 hours). Clips older than this will be deleted.
+*   **`maxusage`**: (Used with `policy: usage`) The target maximum disk usage percentage (e.g., `85%`). Cleanup triggers when usage exceeds this threshold.
+*   **`minclips`**: (Used with `policy: usage`) The minimum number of clips to keep for each species, even when cleaning up based on disk usage. This ensures you retain at least some recent examples per species.
 
 ### Security Features
 
