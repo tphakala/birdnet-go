@@ -157,15 +157,25 @@ func (s *Server) initRoutes() {
 
 		s.Debug("Received HLS client heartbeat")
 
+		// Extract disconnect status
+		isDisconnect := c.QueryParam("disconnect") == "true" || c.QueryParam("status") == "disconnect"
+
+		// Process the heartbeat (but don't write response)
 		err := s.Handlers.ProcessHLSHeartbeat(c)
 		if err != nil {
 			s.Debug("Error processing HLS heartbeat: %v", err)
 			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to process heartbeat")
 		}
 
-		return c.JSON(http.StatusOK, map[string]string{
-			"status": "received",
-		})
+		// Set explicit content type for JSON
+		c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
+
+		// Simplest possible JSON response with no risk of template rendering issues
+		if isDisconnect {
+			return c.String(http.StatusOK, "{}")
+		} else {
+			return c.String(http.StatusOK, "{}")
+		}
 	})
 
 	s.Echo.POST("/api/v1/audio-stream-hls/:sourceID/stop", func(c echo.Context) error {

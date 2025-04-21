@@ -512,17 +512,83 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 
 	var cmd *exec.Cmd
 
-	// Build ffmpeg command
 	// Use the appropriate pipe path based on platform
 	readerPath := fifoPath
 	if runtime.GOOS == "windows" {
 		readerPath = pipeName // Use the Windows named pipe path
+
+		// For Windows, we need to use a different approach with FFmpeg
+		// Use 'pipe:' protocol which reads from stdin, then we'll feed it data
+		ffmpegArgs := []string{
+			"-f", "s16le", // Input format: 16-bit PCM
+			"-ar", "48000", // Sample rate: 48kHz
+			"-ac", "1", // Channels: mono
+			"-i", "pipe:0", // Read from stdin instead of using named pipe directly
+			"-c:a", "aac", // Codec: AAC
+			"-b:a", "128k", // Bitrate: 128kbps
+			"-f", "hls", // Format: HLS
+			"-hls_time", "2", // Segment duration: 2 seconds
+			"-hls_list_size", "5", // Keep 5 segments in playlist
+			"-hls_flags", "delete_segments+append_list+temp_file", // Delete old segments and append to playlist
+			"-hls_segment_type", "mpegts", // Use MPEGTS segments for better compatibility
+			"-hls_init_time", "1", // Initial segment length: 1 second for faster startup
+			"-hls_allow_cache", "1", // Allow caching
+			"-start_number", "0", // Start with segment 0
+			"-loglevel", "info", // Set ffmpeg logging level to info
+			"-hls_segment_filename", filepath.Join(outputDir, "segment%03d.ts"),
+			playlistPath, // Output playlist
+		}
+
+		// Run the ffmpeg command with stdin pipe enabled
+		cmd = exec.CommandContext(streamCtx, ffmpegPath, ffmpegArgs...)
+
+		// Set up stdin pipe for feeding data
+		stdin, err := cmd.StdinPipe()
+		if err != nil {
+			streamCancel() // Clean up context
+			return nil, fmt.Errorf("failed to create stdin pipe for FFmpeg: %w", err)
+		}
+
+		// Start audio feeding in a goroutine
+		go func() {
+			defer stdin.Close()
+			log.Printf("Starting audio feed via stdin for source %s", sourceID)
+
+			// Set up audio callback
+			audioChan, cleanup, err := setupAudioCallback(sourceID)
+			if err != nil {
+				log.Printf("Error setting up audio callback: %v", err)
+				return
+			}
+			defer cleanup()
+
+			// Process audio data and write to stdin
+			for {
+				select {
+				case <-streamCtx.Done():
+					log.Printf("Audio feed terminated: context cancelled for source %s", sourceID)
+					return
+				case data, ok := <-audioChan:
+					if !ok {
+						log.Printf("Audio channel closed for source %s", sourceID)
+						return
+					}
+
+					// Write data to FFmpeg's stdin
+					if _, err := stdin.Write(data); err != nil {
+						log.Printf("Error writing to FFmpeg stdin: %v", err)
+						return
+					}
+				}
+			}
+		}()
+	} else {
+		// For Unix systems, use the standard arguments
+		ffmpegArgs := buildFFmpegArgs(readerPath, outputDir, playlistPath)
+
+		// Run the ffmpeg command
+		cmd = exec.CommandContext(streamCtx, ffmpegPath, ffmpegArgs...)
 	}
-
-	ffmpegArgs := buildFFmpegArgs(readerPath, outputDir, playlistPath)
-
-	// Run the ffmpeg command
-	cmd = exec.CommandContext(streamCtx, ffmpegPath, ffmpegArgs...)
 
 	// Create a log file for ffmpeg output in the stream directory
 	logFilePath := filepath.Join(outputDir, "ffmpeg.log")
@@ -614,7 +680,10 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	updateStreamActivity(sourceID, "", "stream_creation")
 
 	// Start goroutine to feed audio data to FFmpeg
-	go feedAudioToFFmpeg(sourceID, stream.FifoPipe, stream.ctx)
+	// Only for non-Windows platforms - Windows uses stdin approach
+	if runtime.GOOS != "windows" {
+		go feedAudioToFFmpeg(sourceID, stream.FifoPipe, stream.ctx)
+	}
 
 	// Start goroutine to handle context cancellation
 	go func() {
@@ -1257,6 +1326,7 @@ func generateClientID(clientIP, userAgent string) string {
 }
 
 // ProcessHLSHeartbeat handles client heartbeat messages for HLS streams
+// Returns success flag instead of writing directly to avoid duplicate responses
 func (h *Handlers) ProcessHLSHeartbeat(c echo.Context) error {
 	clientIP := c.RealIP()
 	clientID := generateClientID(clientIP, c.Request().Header.Get("User-Agent"))
@@ -1287,10 +1357,8 @@ func (h *Handlers) ProcessHLSHeartbeat(c echo.Context) error {
 		}
 		hlsStreamClientMutex.Unlock()
 
-		return c.JSON(http.StatusOK, map[string]string{
-			"status": "disconnected",
-			"source": heartbeat.SourceID,
-		})
+		// Don't write the response - let the route handler do it
+		return nil
 	}
 
 	// Validate that the stream exists
@@ -1304,7 +1372,8 @@ func (h *Handlers) ProcessHLSHeartbeat(c echo.Context) error {
 			log.Printf("Ignoring heartbeat from %s for non-existent stream %s",
 				clientID, heartbeat.SourceID)
 		}
-		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+		// Don't write the response - let the route handler do it
+		return nil
 	}
 
 	// Store previous activity time for logging
@@ -1325,7 +1394,8 @@ func (h *Handlers) ProcessHLSHeartbeat(c echo.Context) error {
 			timeSinceLastActivity.Seconds(), heartbeat.SourceID)
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	// Don't write the response - let the route handler do it
+	return nil
 }
 
 // Initialize HLS streaming service

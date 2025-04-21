@@ -201,7 +201,9 @@
                 }
                 // Reset error count on success
                 this.heartbeatErrorCount = 0;
-                return response.json();
+                
+                // Just mark it as successful, don't parse the JSON
+                return;
             })
             .catch(error => {
                 console.warn('Failed to send heartbeat:', error);
@@ -254,7 +256,14 @@
                     body: JSON.stringify(heartbeatData),
                     // Add timeout to prevent hanging during navigation
                     signal: AbortSignal.timeout(3000)
-                }).catch(error => {
+                })
+                .then(response => {
+                    // Just verify we got a response, no need to parse it
+                    if (response.ok) {
+                        console.log('Successfully sent disconnect notification');
+                    }
+                })
+                .catch(error => {
                     // Just log the error, don't attempt to retry as we're disconnecting anyway
                     console.warn('Failed to send disconnect notification:', error);
                 });
