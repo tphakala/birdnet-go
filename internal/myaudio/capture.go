@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -586,30 +587,38 @@ func processAudioFrame(
 	isOriginalPSamples := (len(processedSamples) > 0 && len(pSamples) > 0 && &processedSamples[0] == &pSamples[0]) || (len(processedSamples) == 0 && len(pSamples) == 0)
 	finalBufferPtr = currentBufferPtr // Assume we use the current buffer initially
 	fromPool = needsReturn            // Pass along pool status
+	var safeCopyPtr *[]byte           // To hold pointer if we get from pool for copying
 
 	switch {
 	case needsReturn:
-		// Buffer came from the pool - MUST copy for safety
-		safeCopy := make([]byte, len(processedSamples))
-		copy(safeCopy, processedSamples)
-		bufferToUse = safeCopy
-		// Return the original pooled buffer *now*
+		// Buffer came from the pool (currentBufferPtr) - MUST copy for safety
+		safeCopyPtr = s16BufferPool.Get().(*[]byte)        // Get a fresh buffer for the copy
+		safeCopy := (*safeCopyPtr)[:len(processedSamples)] // Slice it to the needed length
+		copy(safeCopy, processedSamples)                   // Copy the data
+		bufferToUse = safeCopy                             // This is the safe buffer to use downstream
+
+		// Return the original pooled buffer (pointed to by currentBufferPtr) *now*
 		ReturnBufferToPool(currentBufferPtr, needsReturn)
-		// Update finalBufferPtr to point to the safe copy
-		finalBufferPtr = &bufferToUse
-		fromPool = false // The final buffer is no longer the pooled one
+
+		// Update finalBufferPtr to point to the *new* pooled buffer holding the safe copy
+		finalBufferPtr = safeCopyPtr
+		fromPool = true // The final buffer IS now considered pooled
+
 	case isOriginalPSamples:
 		// Using the original pSamples buffer directly - MUST copy for safety
-		safeCopy := make([]byte, len(processedSamples))
-		copy(safeCopy, processedSamples)
-		bufferToUse = safeCopy
-		// Update finalBufferPtr to point to the safe copy
-		finalBufferPtr = &bufferToUse
-		// fromPool is already false
+		safeCopyPtr = s16BufferPool.Get().(*[]byte)        // Get a buffer for the copy
+		safeCopy := (*safeCopyPtr)[:len(processedSamples)] // Slice it
+		copy(safeCopy, processedSamples)                   // Copy data
+		bufferToUse = safeCopy                             // Use the copy
+
+		// Update finalBufferPtr to point to the pooled buffer holding the safe copy
+		finalBufferPtr = safeCopyPtr
+		fromPool = true // The final buffer IS now considered pooled
+
 	default:
 		// Buffer was newly allocated or provided (not pooled, not pSamples) - Safe to use directly
 		bufferToUse = processedSamples
-		// finalBufferPtr already points to this buffer
+		// finalBufferPtr already points to this buffer (currentBufferPtr)
 		// fromPool is already false
 	}
 	// --- End Buffer Safety Handling ---
@@ -659,30 +668,39 @@ func processAudioFrame(
 
 // handleDeviceStop contains the logic for attempting to restart the audio device
 // when it stops unexpectedly.
-func handleDeviceStop(captureDevice *malgo.Device, quitChan, restartChan chan struct{}, settings *conf.Settings) {
-	go func() {
-		select {
-		case <-quitChan:
-			// Quit signal received, do not restart
-			return
-		case <-time.After(100 * time.Millisecond):
-			// Wait briefly before restarting
-			if settings.Debug {
-				fmt.Println("🔄 Attempting to restart audio device.")
-			}
-			if err := captureDevice.Start(); err != nil {
-				log.Printf("❌ Failed to restart audio device: %v", err)
-				log.Println("🔄 Attempting full audio context restart in 1 second.")
-				time.Sleep(1 * time.Second)
+func handleDeviceStop(captureDevice *malgo.Device, quitChan, restartChan chan struct{}, settings *conf.Settings, restarting *atomic.Int32) {
+	// Ensure the flag is reset when this attempt concludes.
+	defer restarting.Store(0)
+
+	select {
+	case <-quitChan:
+		// Quit signal received, do not restart
+		return
+	case <-time.After(100 * time.Millisecond):
+		// Wait briefly before restarting
+		if settings.Debug {
+			fmt.Println("🔄 Attempting to restart audio device.")
+		}
+		if err := captureDevice.Start(); err != nil {
+			log.Printf("❌ Failed to restart audio device: %v", err)
+			log.Println("🔄 Attempting full audio context restart in 1 second.")
+			time.Sleep(1 * time.Second)
+			// Before sending the signal, check if we are already quitting.
+			select {
+			case <-quitChan:
+				return // Don't send restart if quitting
+			default:
+				// Try sending the restart signal, but don't block if quitChan closes.
 				select {
 				case restartChan <- struct{}{}:
 				case <-quitChan:
 				}
-			} else if settings.Debug {
-				fmt.Println("🔄 Audio device restarted successfully.")
 			}
+		} else if settings.Debug {
+			fmt.Println("🔄 Audio device restarted successfully.")
+			// Flag reset by defer
 		}
-	}()
+	}
 }
 
 func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
@@ -728,29 +746,36 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 
 	var captureDevice *malgo.Device
 	var formatType malgo.FormatType // Declare formatType here
-	var convertBuffer []byte
+	var scratchBuffer []byte        // Dedicated buffer for conversion destination
+	var restarting atomic.Int32     // Flag to prevent concurrent restarts
 
 	onReceiveFrames := func(pSample2, pSamples []byte, framecount uint32) {
 		// processAudioFrame now handles pooling internally and returns buffer info
+		// Pass scratchBuffer as the potential destination for conversion
 		finalBufferPtr, fromPool, err := processAudioFrame(
-			pSamples, formatType, convertBuffer, settings, source, audioLevelChan,
+			pSamples, formatType, scratchBuffer, settings, source, audioLevelChan,
 		)
 		if err != nil {
 			// Error already logged in processAudioFrame
 			return
 		}
 
-		// If the final buffer didn't come from the pool (it was allocated or provided),
-		// update convertBuffer so we can potentially reuse it next time.
-		if !fromPool && finalBufferPtr != nil {
-			convertBuffer = *finalBufferPtr
+		// If the buffer came from the pool (either originally or as a safeCopy),
+		// return it now that processing for this frame is done.
+		if fromPool && finalBufferPtr != nil {
+			ReturnBufferToPool(finalBufferPtr, fromPool)
 		}
-		// No need for defer or explicit pool handling here anymore
+		// NOTE: We are NOT updating scratchBuffer here. It remains independent.
+		// If ConvertToS16 consistently needs a larger buffer than scratchBuffer provides,
+		// it will keep allocating, which is less optimal but safe.
+		// A more advanced optimization could resize scratchBuffer based on ConvertToS16 feedback.
 	}
 
-	// onStopDevice logic is now in handleDeviceStop
+	// onStopDevice logic is now in handleDeviceStop, guarded by atomic flag
 	onStopDevice := func() {
-		handleDeviceStop(captureDevice, quitChan, restartChan, settings)
+		if restarting.CompareAndSwap(0, 1) {
+			go handleDeviceStop(captureDevice, quitChan, restartChan, settings, &restarting)
+		}
 	}
 
 	// Device callback to assign function to call when audio data is received
