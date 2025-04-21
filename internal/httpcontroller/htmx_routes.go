@@ -116,6 +116,82 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/api/v1/sse", s.Handlers.SSE.ServeSSE)
 	s.Echo.GET("/api/v1/audio-level", s.Handlers.WithErrorHandling(s.Handlers.AudioLevelSSE))
 
+	// HLS streaming routes
+	// Note: The route order here is important - Echo matches the first registered route
+	// that fits the pattern. We intentionally register the wildcard route "/:sourceID/*" first
+	// to handle full paths including segment names, and the simpler "/:sourceID" route second
+	// to handle requests for the source's base playlist.
+	//
+	// This works because both handlers call the same function and the handler will parse the
+	// path details regardless of which route matched.
+	s.Echo.GET("/api/v1/audio-stream-hls/:sourceID/*", h.WithErrorHandling(s.handleHLSStreamRequest))
+	s.Echo.GET("/api/v1/audio-stream-hls/:sourceID", h.WithErrorHandling(s.handleHLSStreamRequest))
+
+	// Add HLS stream management routes for client synchronization
+	s.Echo.POST("/api/v1/audio-stream-hls/:sourceID/start", func(c echo.Context) error {
+		// Add server to context for authentication
+		c.Set("server", s)
+		sourceID := c.Param("sourceID")
+		decodedSourceID, err := DecodeSourceID(sourceID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid source ID format")
+		}
+
+		s.Debug("Client requested HLS stream start for source: %s", decodedSourceID)
+
+		// Start the ffmpeg process if not already running
+		status, err := s.Handlers.StartHLSStream(c, decodedSourceID)
+		if err != nil {
+			s.Debug("Error starting HLS stream: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to start streaming")
+		}
+
+		// Return a response with stream status
+		return c.JSON(http.StatusOK, status)
+	}, s.AuthMiddleware)
+
+	// Add HLS client heartbeat endpoint to track active clients
+	s.Echo.POST("/api/v1/audio-stream-hls/heartbeat", func(c echo.Context) error {
+		// Add server to context for authentication
+		c.Set("server", s)
+
+		s.Debug("Received HLS client heartbeat")
+
+		// Process the heartbeat (but don't write response)
+		err := s.Handlers.ProcessHLSHeartbeat(c)
+		if err != nil {
+			s.Debug("Error processing HLS heartbeat: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to process heartbeat")
+		}
+
+		// Return empty JSON object response
+		return c.JSON(http.StatusOK, map[string]any{})
+	}, s.AuthMiddleware)
+
+	s.Echo.POST("/api/v1/audio-stream-hls/:sourceID/stop", func(c echo.Context) error {
+		// Add server to context for authentication
+		c.Set("server", s)
+		sourceID := c.Param("sourceID")
+		decodedSourceID, err := DecodeSourceID(sourceID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid source ID format")
+		}
+
+		s.Debug("Client requested HLS stream stop for source: %s", decodedSourceID)
+
+		// Register client disconnect
+		err = s.Handlers.StopHLSClientStream(c, decodedSourceID)
+		if err != nil {
+			s.Debug("Error stopping HLS stream: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to stop streaming")
+		}
+
+		return c.JSON(http.StatusOK, map[string]string{
+			"status": "stopped",
+			"source": decodedSourceID,
+		})
+	}, s.AuthMiddleware)
+
 	// Audio stream routes with source handling
 	s.Echo.GET("/api/v1/audio-stream-sse", func(c echo.Context) error {
 		// Add server to context for authentication
@@ -225,6 +301,27 @@ func (s *Server) initRoutes() {
 
 	// Set up static file serving
 	s.setupStaticFileServing()
+}
+
+// handleHLSStreamRequest handles requests for HLS stream endpoints
+func (s *Server) handleHLSStreamRequest(c echo.Context) error {
+	// Add server to context for authentication
+	c.Set("server", s)
+	s.Debug("HLS stream request for path: %s", c.Request().URL.Path)
+
+	// Log client disconnection when the request completes
+	sourceID := c.Param("sourceID")
+	clientIP := c.RealIP()
+	defer func() {
+		select {
+		case <-c.Request().Context().Done():
+			s.Debug("Client %s disconnected from HLS stream: %s", clientIP, sourceID)
+		default:
+			// Request completed normally
+		}
+	}()
+
+	return s.Handlers.WithErrorHandling(s.Handlers.AudioStreamHLS)(c)
 }
 
 // handlePageRequest handles requests for full page routes

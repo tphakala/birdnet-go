@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -14,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
+	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -158,6 +160,7 @@ func (s *Server) initializeServer() {
 	s.initLogger()
 	s.configureMiddleware()
 	s.initRoutes()
+	s.initHLSCleanupTask() // Initialize HLS cleanup task
 
 	// Initialize the JSON API v2
 	s.Debug("Initializing JSON API v2")
@@ -182,6 +185,32 @@ func (s *Server) initializeServer() {
 			}
 			return next(c)
 		}
+	})
+}
+
+// initHLSCleanupTask initializes a background task to clean up idle HLS streams
+func (s *Server) initHLSCleanupTask() {
+	s.Debug("Initializing HLS stream cleanup task")
+
+	// Run cleanup every 5 minutes
+	ticker := time.NewTicker(5 * time.Minute)
+
+	go func() {
+		// Do initial cleanup after a short delay
+		time.Sleep(1 * time.Minute)
+		s.Debug("Running initial HLS stream cleanup")
+		s.Handlers.CleanupIdleHLSStreams()
+
+		for range ticker.C {
+			s.Debug("Running scheduled HLS stream cleanup")
+			s.Handlers.CleanupIdleHLSStreams()
+		}
+	}()
+
+	// Ensure ticker is stopped on server shutdown
+	s.Echo.Server.RegisterOnShutdown(func() {
+		s.Debug("Stopping HLS cleanup task")
+		ticker.Stop()
 	})
 }
 
@@ -265,4 +294,23 @@ func (s *Server) Debug(format string, v ...interface{}) {
 			log.Printf(format, v...)
 		}
 	}
+}
+
+// Shutdown performs cleanup operations and gracefully stops the server
+func (s *Server) Shutdown() error {
+	// Run one final cleanup of HLS streams to terminate all streaming processes
+	s.Debug("Running final HLS stream cleanup before shutdown")
+	s.Handlers.CleanupIdleHLSStreams()
+
+	// Stop audio streaming
+	s.Debug("Cleaning up HLS audio streaming resources")
+	if err := s.AudioStreamManager.CleanupAllStreams(); err != nil {
+		s.Debug("Error cleaning up audio streams: %v", err)
+	}
+
+	// Close all named-pipe handles created at startup
+	securefs.CleanupNamedPipes()
+
+	// Gracefully shutdown the server
+	return s.Echo.Close()
 }

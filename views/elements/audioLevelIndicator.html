@@ -15,41 +15,22 @@
         reconnectDelay: 1000,
         isNavigating: false,
         retryTimeout: null,
-        audioContext: null,
-        audioWorkletNode: null,
-        webSocket: null,
-        sseSource: null,
-        streamTransport: '{{if .Settings.Realtime.Audio.StreamTransport}}{{.Settings.Realtime.Audio.StreamTransport}}{{else}}auto{{end}}', // Can be 'auto', 'sse', or 'ws'
         isPlaying: false,
         playingSource: null, // Track which source is currently playing
-        pcmDataQueue: [],
-        audioBufferSize: 4096, // Must be power of two for ScriptProcessorNode
-        incomingChunkSize: 3072, // The actual size of incoming audio chunks from the server
-        sampleRate: 48000, // Default sample rate
-        audioLatency: 300, // Reduced from 500 to better match real-time needs
-        pingInterval: null,
-        bufferThreshold: 8, // Increased from 5 to 8 for more initial buffering
-        processingStarted: false,
-        jitterBufferSize: 3, // Reduced jitter buffer size to prevent excessive buffering
-        bufferStatsInterval: null, // For buffer health monitoring
-        bufferUnderrunCount: 0, // Count of buffer underruns for diagnostics
-        sseStalled: false,
-        sseStallRecoveryAttempts: 0,
+        audioElement: null, // HTML5 audio element
+        hlsPlayer: null, // HLS.js instance
         lastDataTime: null,
-        startupStabilizationCount: 0, // Track startup phase to avoid early resets
-        startupBufferTime: 500, // Initial buffer time in ms before starting playback (increased)
-        lastUnderrunTime: 0, // Track time of last underrun to prevent rapid resets
-        streamInfo: null, // Will store audio stream information from server
-        lastSequence: 0, // Track the last sequence number for packet ordering
-        packetBuffer: [], // Buffer for out-of-order packets
-        adaptiveBuffering: true, // Enable adaptive buffering based on network conditions
-        networkJitter: 0, // Estimated network jitter in milliseconds
-        consecutiveEmptyUnderruns: 0, // Track consecutive empty buffer underruns
-        maxConsecutiveEmptyUnderruns: 5, // Maximum number of consecutive empty buffer underruns before stopping
-        serverDisconnected: false, // Flag to track if server is disconnected
-        reconnectBackoff: 1000, // Initial reconnect delay in ms
-        maxReconnectBackoff: 30000, // Maximum reconnect delay in ms
         _requestedPermission: false,
+        errorCount: 0,
+        lastErrorTime: null,
+        inErrorCooldown: false,
+        nonFatalErrorCount: 0,
+        lastNonFatalErrorTime: null,
+        // Heartbeat tracking
+        heartbeatInterval: null,
+        heartbeatFrequency: 20000, // Send heartbeat every 20 seconds
+        heartbeatErrorCount: 0,
+        playbackStabilizing: false,
 
         isInactive(source) {
             // If we don't have the source in levels at all, consider it inactive
@@ -88,827 +69,751 @@
             
             this.cleanupEventSource();
             
-            this.eventSource = new EventSource('/api/v1/audio-level');
-            
-            this.eventSource.onmessage = (event) => {
-                // Skip processing if we're navigating away
-                if (this.isNavigating) {
-                    this.cleanupEventSource();
-                    return;
-                }
-                
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'audio-level') {
-                        if (!data.levels) {
-                            return;
-                        }
-                        
-                        // Reset reconnect attempts on successful message
-                        this.reconnectAttempts = 0;
-                        this.reconnectDelay = 1000;
-                        
-                        // Update levels and track zero level times
-                        const oldSources = Object.keys(this.levels);
-                        this.levels = data.levels;
-                        const newSources = Object.keys(this.levels);
-                        
-                        // Track when sources start having zero levels
-                        Object.entries(this.levels).forEach(([source, data]) => {
-                            if (data.level === 0) {
-                                if (!this.zeroLevelTime[source]) {
-                                    this.zeroLevelTime[source] = Date.now();
-                                }
-                            } else {
-                                delete this.zeroLevelTime[source];
-                            }
-                        });
-                        
-                        // Initialize smoothedVolumes for new sources
-                        Object.keys(this.levels).forEach(source => {
-                            if (!(source in this.smoothedVolumes)) {
-                                this.smoothedVolumes[source] = 0;
-                            }
-                        });
-                        
-                        // Set first source as selected if none selected
-                        if (!this.selectedSource || !(this.selectedSource in this.levels)) {
-                            const sources = Object.keys(this.levels);
-                            if (sources.length > 0) {
-                                this.selectedSource = sources[0];
-                            }
-                        }
-                        
-                        // Update smoothed volumes
-                        Object.entries(this.levels).forEach(([source, data]) => {
-                            const oldVolume = this.smoothedVolumes[source] || 0;
-                            this.smoothedVolumes[source] = this.smoothingFactor * data.level + 
-                                (1 - this.smoothingFactor) * oldVolume;
-                        });
-                    }
-                } catch (error) {
-                    console.error('Error processing SSE data:', error);
-                }
-            };
-            
-            this.eventSource.onerror = (error) => {
-                console.error('EventSource error:', error);
-                this.cleanupEventSource();
-                
-                // Don't attempt reconnection if we're navigating away
-                if (this.isNavigating) {
-                    return;
-                }
-                
-                // Implement exponential backoff for reconnection
-                if (this.reconnectAttempts < this.maxReconnectAttempts) {
-                    this.retryTimeout = setTimeout(() => {
-                        this.reconnectAttempts++;
-                        this.reconnectDelay = Math.min(this.reconnectDelay * 2, 10000); // Cap at 10 seconds
-                        console.log(`Reconnecting to SSE (attempt ${this.reconnectAttempts})...`);
-                        this.setupEventSource();
-                    }, this.reconnectDelay);
-                } else {
-                    console.error('Max reconnection attempts reached');
-                }
-            };
-        },
-
-        initAudio() {
-            // Reduce console logging - only log critical state changes
-            console.log('Initializing audio system...');
-            
             try {
-                // Create new AudioContext if needed
-                if (!this.audioContext) {
-                    const AudioContext = window.AudioContext || window.webkitAudioContext;
-                    this.audioContext = new AudioContext({
-                        latencyHint: 'interactive',
-                        sampleRate: this.sampleRate
-                    });
-                    
-                    // Request permission for background audio playback in Safari and mobile
-                    if ('audioWorklet' in this.audioContext && !this._requestedPermission) {
-                        this._requestedPermission = true;
-                        
-                        // For Safari and iOS - attempt to enable background audio
-                        if (typeof document.webkitAudioPlaybackAllowed === 'boolean') {
-                            // Attempt to get user gesture to enable audio background playback
-                            this.audioContext.resume().then(() => {
-                                console.log('Audio context resumed for background playback permission');
-                            });
-                        }
-                    }
-                    
-                    // Keep this log as it's useful for troubleshooting
-                    console.log(`Created AudioContext with sample rate ${this.audioContext.sampleRate}Hz`);
-                }
+                this.eventSource = new EventSource('/api/v1/audio-level');
                 
-                // Check for modern AudioWorklet support
-                if (this.audioContext.audioWorklet) {
-                    // Load audio processor
-                    this.audioContext.audioWorklet.addModule('/assets/audio-processors/pcm-audio-processor.js')
-                        .then(() => {
-                            // Create audio worklet node
-                            const workletNode = new AudioWorkletNode(this.audioContext, 'pcm-audio-processor');
-                            
-                            // Connect the worklet to the audio output
-                            workletNode.connect(this.audioContext.destination);
-                            
-                            // Store the worklet node for later access
-                            this.audioWorkletNode = workletNode;
-                        })
-                        .catch(error => {
-                            // Keep error logs for troubleshooting
-                            console.error('Error loading AudioWorklet:', error);
-                            this.fallbackToScriptProcessor();
-                        });
-                } else {
-                    this.fallbackToScriptProcessor();
-                }
-            } catch (error) {
-                // Keep error logs for troubleshooting
-                console.error('Error initializing audio system:', error);
-                alert('Audio playback initialization failed. Please check console for details.');
-            }
-        },
-
-        // Add fallback to ScriptProcessorNode for browsers that don't support AudioWorkletNode
-        fallbackToScriptProcessor() {
-            // Keep this log as it indicates a fallback state
-            console.log('Falling back to ScriptProcessorNode for audio processing');
-            
-            try {
-                const bufferSize = this.audioBufferSize;
-                const scriptNode = this.audioContext.createScriptProcessor(bufferSize, 0, 1);
-                
-                scriptNode.onaudioprocess = (e) => {
-                    const outputData = e.outputBuffer.getChannelData(0);
-                    let outputPosition = 0;
-                    
-                    // Calculate buffer duration in milliseconds before starting playback
-                    const totalBufferedSamples = this.pcmDataQueue.reduce((acc, chunk) => 
-                        acc + Math.floor(chunk.length / 2), 0);
-                    const bufferedTimeMs = (totalBufferedSamples / this.sampleRate) * 1000;
-                    
-                    // Don't start processing if server is disconnected or if we have no data
-                    if (this.serverDisconnected) {
-                        // Fill buffer with silence if server is disconnected
-                        for (let i = 0; i < outputData.length; i++) {
-                            outputData[i] = 0;
-                        }
+                this.eventSource.onmessage = (event) => {
+                    // Skip processing if we're navigating away
+                    if (this.isNavigating) {
+                        this.cleanupEventSource();
                         return;
                     }
                     
-                    // Only start processing when:
-                    // 1. We have enough packets (count threshold)
-                    // 2. We have enough audio time buffered (time threshold)
-                    // 3. We either have enough data or have been waiting for more than 2 seconds
-                    // 4. We have at least some data (prevent starting with 0 packets)
-                    if (!this.processingStarted && 
-                        ((this.pcmDataQueue.length >= this.bufferThreshold || 
-                          bufferedTimeMs >= this.startupBufferTime || 
-                          (this.lastDataTime && (Date.now() - this.lastDataTime) > 2000)) && 
-                         this.pcmDataQueue.length > 0)) {
-                             
-                        console.log(`Starting audio playback with ${this.pcmDataQueue.length} packets in queue (${bufferedTimeMs.toFixed(0)}ms of audio)`);
-                        this.processingStarted = true;
-                        this.consecutiveEmptyUnderruns = 0;
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'audio-level') {
+                            if (!data.levels) {
+                                return;
+                            }
+                            
+                            // Reset reconnect attempts on successful message
+                            this.reconnectAttempts = 0;
+                            this.reconnectDelay = 1000;
+                            
+                            // Update levels and track zero level times
+                            const oldSources = Object.keys(this.levels);
+                            this.levels = data.levels;
+                            const newSources = Object.keys(this.levels);
+                            
+                            // Track when sources start having zero levels
+                            Object.entries(this.levels).forEach(([source, data]) => {
+                                if (data.level === 0) {
+                                    if (!this.zeroLevelTime[source]) {
+                                        this.zeroLevelTime[source] = Date.now();
+                                    }
+                                } else {
+                                    delete this.zeroLevelTime[source];
+                                }
+                            });
+                            
+                            // Initialize smoothedVolumes for new sources
+                            Object.keys(this.levels).forEach(source => {
+                                if (!(source in this.smoothedVolumes)) {
+                                    this.smoothedVolumes[source] = 0;
+                                }
+                            });
+                            
+                            // Set first source as selected if none selected
+                            if (!this.selectedSource || !(this.selectedSource in this.levels)) {
+                                const sources = Object.keys(this.levels);
+                                if (sources.length > 0) {
+                                    this.selectedSource = sources[0];
+                                }
+                            }
+                            
+                            // Update smoothed volumes
+                            Object.entries(this.levels).forEach(([source, data]) => {
+                                const oldVolume = this.smoothedVolumes[source] || 0;
+                                this.smoothedVolumes[source] = this.smoothingFactor * data.level + 
+                                    (1 - this.smoothingFactor) * oldVolume;
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Error processing SSE data:', error);
+                    }
+                };
+                
+                this.eventSource.onerror = (error) => {
+                    console.error('EventSource error:', error);
+                    this.cleanupEventSource();
+                    
+                    // Don't stop audio playback when SSE connection fails
+                    // This was causing a stop message to be sent to the server unnecessarily
+                    if (this.isPlaying) {
+                        console.warn('EventSource error, but continuing audio playback');
+                        // Only show a transient warning
+                        this.showPlaybackStatus('Audio level updates paused, playback continues');
+                        setTimeout(() => this.hidePlaybackStatus(), 3000);
                     }
                     
-                    if (this.processingStarted) {
-                        // Process all data in the queue
-                        while (this.pcmDataQueue.length > 0 && outputPosition < outputData.length) {
-                            const currentChunk = this.pcmDataQueue[0];
-                            
-                            if (!currentChunk || currentChunk.length < 2) {
-                                this.pcmDataQueue.shift();
-                                continue;
-                            }
-                            
-                            // Process 16-bit PCM data (convert to float)
-                            let i;
-                            for (i = 0; i < currentChunk.length - 1 && outputPosition < outputData.length; i += 2) {
-                                const lo = currentChunk[i];
-                                const hi = currentChunk[i + 1];
-                                let sample = (hi << 8) | lo;
-                                if (sample > 32767) sample -= 65536;
-                                
-                                outputData[outputPosition++] = sample / 32768.0;
-                            }
-                            
-                            if (i >= currentChunk.length - 4) {
-                                this.pcmDataQueue.shift();
-                            } else {
-                                this.pcmDataQueue[0] = currentChunk.slice(i);
-                            }
-                        }
+                    // Don't attempt reconnection if we're navigating away
+                    if (this.isNavigating) {
+                        return;
+                    }
+                    
+                    // Implement more generous reconnection with exponential backoff
+                    // Increase max retries since EventSource errors shouldn't stop playback
+                    const maxRetries = 10; // Increased from 5
+                    if (this.reconnectAttempts < maxRetries) {
+                        this.retryTimeout = setTimeout(() => {
+                            this.reconnectAttempts++;
+                            // Cap backoff at 15 seconds (increased from 10)
+                            this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, 15000);
+                            console.log('Reconnecting to SSE (attempt ' + this.reconnectAttempts + ')...');
+                            this.setupEventSource();
+                        }, this.reconnectDelay);
+                    } else {
+                        console.error('Max EventSource reconnection attempts reached');
+                        // Even after max retries, don't stop playback
+                        // Just let user know about the situation
+                        this.showPlaybackStatus('Unable to update audio levels, stream continues');
+                        setTimeout(() => this.hidePlaybackStatus(), 5000);
+                    }
+                };
+            } catch (e) {
+                console.error('Error setting up EventSource:', e);
+                // If we can't even set up the EventSource, try again after a delay
+                setTimeout(() => this.setupEventSource(), 5000);
+            }
+        },
+        
+        // Send heartbeat to server to maintain session
+        sendHeartbeat() {
+            // Only send heartbeat if we're playing something
+            if (!this.isPlaying || !this.playingSource) {
+                return;
+            }
+            
+            const heartbeatUrl = `${window.location.origin}/api/v1/audio-stream-hls/heartbeat`;
+            const heartbeatData = {
+                source_id: this.playingSource
+            };
+            
+            fetch(heartbeatUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(heartbeatData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Heartbeat failed: ' + response.status);
+                }
+                // Reset error count on success
+                this.heartbeatErrorCount = 0;
+                
+                // Just mark it as successful, don't parse the JSON
+                return;
+            })
+            .catch(error => {
+                console.warn('Failed to send heartbeat:', error);
+                this.heartbeatErrorCount++;
+                
+                // If too many consecutive heartbeat failures, assume connection lost
+                if (this.heartbeatErrorCount > 3) {
+                    console.error('Multiple heartbeat failures - connection may be lost');
+                    
+                    // Don't stop playback though - the HLS player will detect media errors
+                    // and we don't want to interrupt playback unnecessarily
+                }
+            });
+        },
+        
+        // Start heartbeat interval
+        startHeartbeat() {
+            this.stopHeartbeat(); // Clear any existing interval
+            
+            // Start new heartbeat interval
+            this.heartbeatInterval = setInterval(() => {
+                this.sendHeartbeat();
+            }, this.heartbeatFrequency);
+            
+            // Send initial heartbeat immediately
+            this.sendHeartbeat();
+        },
+        
+        // Stop heartbeat interval
+        stopHeartbeat() {
+            if (this.heartbeatInterval) {
+                clearInterval(this.heartbeatInterval);
+                this.heartbeatInterval = null;
+            }
+            this.heartbeatErrorCount = 0;
+            
+            // Don't send disconnect notification during playback stabilization
+            if (this.playbackStabilizing) {
+                console.log('Suppressing disconnect notification during playback stabilization');
+                return;
+            }
+            
+            // Send a final disconnect notification if we were playing something
+            if (this.playingSource) {
+                const heartbeatUrl = `${window.location.origin}/api/v1/audio-stream-hls/heartbeat?disconnect=true`;
+                const heartbeatData = {
+                    source_id: this.playingSource
+                };
+                
+                // Use a simple fetch with timeout to avoid hanging during page navigation
+                fetch(heartbeatUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(heartbeatData),
+                    // Add timeout to prevent hanging during navigation
+                    signal: AbortSignal.timeout(3000)
+                })
+                .then(response => {
+                    // Just verify we got a response, no need to parse it
+                    if (response.ok) {
+                        console.log('Successfully sent disconnect notification');
+                    }
+                })
+                .catch(error => {
+                    // Just log the error, don't attempt to retry as we're disconnecting anyway
+                    console.warn('Failed to send disconnect notification:', error);
+                });
+            }
+        },
+        
+        // Get or create audio element
+        getAudioElement() {
+            if (!this.audioElement) {
+                // Create a HTML5 audio element for HLS playback
+                const audio = document.createElement('audio');
+                audio.id = 'hls-audio-player';
+                audio.setAttribute('aria-hidden', 'true'); // keep visible to AT
+                audio.classList.add('sr-only');            // visually hidden but AT-accessible
+                audio.setAttribute('preload', 'auto');
+                audio.setAttribute('playsinline', '');
+                
+                // Add event listeners
+                audio.addEventListener('playing', () => {
+                    console.log('Audio playback started');
+                    this.isPlaying = true;
+                    this.hidePlaybackStatus();
+                    this.setupMediaSession(this.playingSource);
+                    
+                    // Reset error counts when playback starts successfully
+                    this.errorCount = 0;
+                    this.lastErrorTime = null;
+                });
+                
+                audio.addEventListener('pause', () => {
+                    console.log('Audio playback paused');
+                    this.isPlaying = false;
+                });
+                
+                audio.addEventListener('ended', () => {
+                    console.log('Audio playback ended');
+                    this.isPlaying = false;
+                });
+                
+                // Improved error handling to prevent loops
+                audio.addEventListener('error', (e) => {
+                    // Get current timestamp
+                    const now = Date.now();
+                    
+                    // Initialize error tracking if needed
+                    if (!this.errorCount) this.errorCount = 0;
+                    if (!this.lastErrorTime) this.lastErrorTime = 0;
+                    
+                    // Check if this is a rapid succession error (within 2 seconds of the last one)
+                    const isRapidError = (now - this.lastErrorTime) < 2000;
+                    
+                    // If we're getting rapid errors, increase the count
+                    if (isRapidError) {
+                        this.errorCount++;
+                        console.warn(`Rapid error #${this.errorCount}: Audio playback error`);
                         
-                        // Handle buffer underruns more gracefully
-                        if (outputPosition < outputData.length) {
-                            const fillPercentage = Math.round((outputPosition / outputData.length) * 100);
-                            
-                            // Fill remaining buffer with zeros
-                            for (let i = outputPosition; i < outputData.length; i++) {
-                                outputData[i] = 0;
-                            }
-                            
-                            // Limit frequency of underrun handling to prevent oscillation
-                            const now = Date.now();
-                            const timeSinceLastUnderrun = now - this.lastUnderrunTime;
-                            
-                            // Check if we had a completely empty buffer (might indicate server disconnect)
-                            const isEmptyUnderrun = fillPercentage === 0;
-                            
-                            // Track consecutive empty underruns
-                            if (isEmptyUnderrun) {
-                                this.consecutiveEmptyUnderruns++;
-                            } else {
-                                this.consecutiveEmptyUnderruns = 0;
-                            }
-                            
-                            // Check for server disconnection based on consecutive empty underruns
-                            const timeSinceLastData = this.lastDataTime ? now - this.lastDataTime : 0;
-                            const serverDisconnected = this.consecutiveEmptyUnderruns >= this.maxConsecutiveEmptyUnderruns || 
-                                                      (timeSinceLastData > 5000 && isEmptyUnderrun);
-                            
-                            // Only log severe underruns and don't process them too frequently
-                            if (fillPercentage < 75 && timeSinceLastUnderrun > 500) {
-                                this.bufferUnderrunCount++;
-                                this.lastUnderrunTime = now;
-                                
-                                if (serverDisconnected) {
-                                    console.warn(`Server appears to be disconnected after ${this.consecutiveEmptyUnderruns} empty buffers and ${timeSinceLastData}ms without data.`);
-                                    this.processingStarted = false;
-                                    this.serverDisconnected = true;
-                                    
-                                    // Stop connection and prevent immediate reconnect
-                                    this.closeExistingConnections();
-                                    
-                                    // Set a timer to attempt reconnection with backoff
-                                    setTimeout(() => {
-                                        console.log(`Attempting to reconnect after server disconnect (backoff: ${this.reconnectBackoff}ms)`);
-                                        this.serverDisconnected = false;
-                                        this.setupWebSocketForSource(this.currentAudioSource);
-                                        
-                                        // Increase backoff for next time, with a maximum
-                                        this.reconnectBackoff = Math.min(this.reconnectBackoff * 1.5, this.maxReconnectBackoff);
-                                    }, this.reconnectBackoff);
-                                    
-                                    return;
-                                }
-                                
-                                console.warn(`Buffer underrun #${this.bufferUnderrunCount} - filled ${fillPercentage}%`);
-                                
-                                // Check if we need to reset processing based on severity
-                                // Give more grace during startup (first 5 underruns)
-                                const isStartupPhase = this.startupStabilizationCount < 5;
-                                const isSevereUnderrun = fillPercentage < 25;
-
-                                // During startup, be more lenient with underruns
-                                if (fillPercentage < 50 && !isStartupPhase) {
-                                    console.warn('Significant buffer underrun - resetting processing');
-                                    this.processingStarted = false;
-                                    this.startupStabilizationCount++; // Increment stability counter
-                                    
-                                    // Progressive buffer threshold increase with each reset
-                                    this.bufferThreshold = Math.min(this.bufferThreshold + 2, 15);
-                                    this.startupBufferTime = Math.min(this.startupBufferTime + 200, 1500);
-                                    
-                                } else if (isStartupPhase && isSevereUnderrun) {
-                                    // During startup, only reset on very severe underruns
-                                    console.warn('Startup phase underrun - resetting with higher threshold');
-                                    this.processingStarted = false;
-                                    this.bufferThreshold = Math.min(this.bufferThreshold + 2, 15); // Larger increases during startup
-                                    this.startupBufferTime = Math.min(this.startupBufferTime + 300, 1500); // More aggressive time increase
-                                    this.startupStabilizationCount++;
-                                }
-                            }
-                        } else if (this.startupStabilizationCount < 10) {
-                            // Buffer was fully filled - count toward stabilization
-                            this.startupStabilizationCount++;
-                            this.consecutiveEmptyUnderruns = 0;
+                        // If we've had too many rapid errors, assume server is down
+                        if (this.errorCount > 2) {
+                            console.error('Multiple rapid errors detected - server may be unreachable');
+                            this.showPlaybackStatus('Server appears to be offline. Playback stopped.');
+                            this.stopPlayback(true); // Pass true to indicate we're in error recovery
+                            return; // Exit to prevent loop
                         }
                     } else {
-                        // Fill buffer with silence while waiting for enough data
-                        for (let i = 0; i < outputData.length; i++) {
-                            outputData[i] = 0;
-                        }
+                        // Not a rapid error, reset counter but track the error
+                        this.errorCount = 1;
+                        console.error('Audio playback error:', e);
                     }
-                };
+                    
+                    // Update last error time
+                    this.lastErrorTime = now;
+                    
+                    // Set error message - only if not in a rapid succession
+                    if (!isRapidError) {
+                        this.showPlaybackStatus('Playback error: ' + (e.target.error ? e.target.error.message : 'Connection lost'));
+                    }
+                    
+                    // Always mark playback as stopped
+                    this.isPlaying = false;
+                    
+                    // Only call stopPlayback if not in a rapid error sequence
+                    if (!isRapidError) {
+                        this.stopPlayback();
+                    }
+                });
                 
-                scriptNode.connect(this.audioContext.destination);
-                this.audioWorkletNode = scriptNode;
-                
-                // Keep this log as it indicates initialization success state
-                console.log(`Audio system initialized with ScriptProcessorNode (buffer size: ${bufferSize})`);
-            } catch (error) {
-                // Keep error logs for troubleshooting
-                console.error('Error initializing fallback audio system:', error);
+                // Append to document body
+                document.body.appendChild(audio);
+                this.audioElement = audio;
             }
+            
+            return this.audioElement;
+        },
+        
+        // Start playing HLS stream for the selected source
+        startPlayback(sourceId) {
+            console.log('Starting audio playback for source: ' + sourceId);
+            
+            // If we're already starting playback for this source and still stabilizing, do nothing
+            if (this.playbackStabilizing && this.playingSource === sourceId) {
+                console.log('Ignoring duplicate start request during stabilization');
+                return;
+            }
+            
+            // Add stabilization flag to prevent unwanted disconnect during startup
+            this.playbackStabilizing = true;
+            
+            // Stop any existing playback, but skip server notification if we're restarting the same source
+            const skipNotification = (this.playingSource === sourceId);
+            this.stopPlayback(false, skipNotification);
+            
+            // Set state
+            this.playingSource = sourceId;
+            this.showPlaybackStatus('Starting audio stream...');
+            
+            // Encode source ID to be URL-safe
+            const encodedSourceId = encodeURIComponent(sourceId);
+            
+            // Notify server we want to start streaming this source
+            this.notifyStreamStart(encodedSourceId)
+                .then(() => {
+                    // After notifying server, set up HLS stream
+                    const hlsUrl = `${window.location.origin}/api/v1/audio-stream-hls/${encodedSourceId}/playlist.m3u8`;
+                    this.setupHLSStream(hlsUrl, sourceId);
+                    
+                    // Start heartbeat to let server know we're still connected
+                    this.startHeartbeat();
+                    
+                    // Send an immediate heartbeat to ensure connection is registered
+                    setTimeout(() => this.sendHeartbeat(), 500);
+                    
+                    // Clear stabilization flag after a delay
+                    setTimeout(() => {
+                        this.playbackStabilizing = false;
+                        console.log('Playback stabilized');
+                    }, 5000);
+                })
+                .catch(error => {
+                    this.playbackStabilizing = false;
+                    console.error('Error accessing audio stream: ' + error.message);
+                    this.showPlaybackStatus('Error starting stream: ' + error.message);
+                    setTimeout(() => this.hidePlaybackStatus(), 3000);
+                });
+        },
+        
+        // Notify server that we're starting to stream this source
+        notifyStreamStart(encodedSourceId) {
+            const startUrl = `${window.location.origin}/api/v1/audio-stream-hls/${encodedSourceId}/start`;
+                
+            return fetch(startUrl, { method: 'POST' })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to start stream: ' + response.status + ' ' + response.statusText);
+                    }
+                    console.log('Server notified to start streaming');
+                    return response;
+                });
         },
 
-        setupWebSocketForSource(sourceId) {
-            this.closeExistingConnections();
-            this.currentAudioSource = sourceId;
+        // Set up HLS streaming
+        setupHLSStream(hlsUrl, sourceId) {
+            const audio = this.getAudioElement();
             
-            this.pcmDataQueue = [];
-            this.processingStarted = false;
-            this.bufferUnderrunCount = 0;
-            this.startupStabilizationCount = 0; // Reset stabilization counter on new connection
-            this.consecutiveEmptyUnderruns = 0;
-            this.serverDisconnected = false;
-            
-            // Increase buffer threshold based on buffer size to ensure enough data
-            this.bufferThreshold = Math.max(8, Math.ceil(this.audioBufferSize / this.incomingChunkSize) + 2);
-            this.startupBufferTime = 500; // Reset to initial buffer time
-            this.lastUnderrunTime = 0;
-            
-            if (this.bufferStatsInterval) {
-                clearInterval(this.bufferStatsInterval);
-            }
-            
-            // Report buffer health status periodically when playing
-            this.bufferStatsInterval = setInterval(() => {
-                if (this.isPlaying && this.processingStarted && !this.serverDisconnected) {
-                    const samples = this.pcmDataQueue.reduce((acc, chunk) => acc + Math.floor(chunk.length / 2), 0);
-                    const bufferTimeMs = (samples / this.sampleRate) * 1000;
-                    console.log(`Buffer health: ${this.pcmDataQueue.length} packets, ~${bufferTimeMs.toFixed(1)}ms, underruns: ${this.bufferUnderrunCount}`);
-                }
-            }, 15000); // Report every 15 seconds
-            
-            // Simply use the configured transport without environment detection
-            if (this.streamTransport === 'sse') {
-                this.setupSSEForSource(sourceId);
-            } else if (this.streamTransport === 'ws') {
-                this.setupWebSocketConnection(sourceId);
-            } else {
-                // For 'auto' mode, we now default to SSE which works reliably in most environments
-                this.setupSSEForSource(sourceId);
-            }
-        },
-        
-        closeExistingConnections() {
-            // Clear stall detection interval
-            if (this.sseStallCheckInterval) {
-                try {
-                    clearInterval(this.sseStallCheckInterval);
-                } catch (error) {
-                    console.error('Error clearing SSE stall interval:', error);
-                } finally {
-                    this.sseStallCheckInterval = null;
-                }
-            }
-            
-            // Close any existing WebSocket connection
-            if (this.webSocket) {
-                try {
-                    this.webSocket.close();
-                } catch (error) {
-                    console.error('Error closing WebSocket connection:', error);
-                } finally {
-                    this.webSocket = null;
-                }
-            }
-            
-            // Close any existing SSE connection
-            if (this.sseSource) {
-                try {
-                    this.sseSource.close();
-                } catch (error) {
-                    console.error('Error closing SSE connection:', error);
-                } finally {
-                    this.sseSource = null;
-                }
-            }
-        },
-        
-        setupSSEForSource(sourceId) {
-            console.log(`Setting up SSE connection for source ${sourceId}`);
-            
-            try {
-                if (this.sseSource) {
-                    console.log('Reusing existing SSE connection');
-                    return;
+            // First check if HLS.js is supported
+            if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                console.log('Using HLS.js for playback');
+                
+                // Clean up existing HLS.js instance if it exists
+                if (this.hlsPlayer) {
+                    this.hlsPlayer.destroy();
+                    this.hlsPlayer = null;
                 }
                 
-                // Use the new URL format with query parameter instead of path parameter
-                // to properly handle special characters in source IDs like RTSP URLs
-                const encodedSourceId = encodeURIComponent(sourceId);
-                this.sseSource = new EventSource(`/api/v1/audio-stream-sse?source=${encodedSourceId}`);
-                
-                this.lastDataTime = Date.now();
-                this.sseStalled = false;
-                this.lastSequence = 0;
-                this.packetBuffer = [];
-                this.networkJitter = 0;
-                this.reconnectBackoff = 1000; // Reset reconnect backoff on successful connection
-                
-                // Handle connection errors
-                this.sseSource.onerror = (event) => {
-                    const now = Date.now();
-                    const timeSinceLastData = this.lastDataTime ? now - this.lastDataTime : 0;
-                    
-                    // Don't log too many errors
-                    if (timeSinceLastData > 3000 && !this.serverDisconnected) {
-                        console.error('SSE connection error, no data received for ' + timeSinceLastData + 'ms');
-                        
-                        // Mark as disconnected if we haven't received data for over 5 seconds
-                        if (timeSinceLastData > 5000) {
-                            console.warn('Server appears to be disconnected');
-                            this.serverDisconnected = true;
-                            this.processingStarted = false;
-                            
-                            // Close the existing connection
-                            if (this.sseSource) {
-                                this.sseSource.close();
-                                this.sseSource = null;
+                // Create new HLS.js instance
+                const hls = new Hls({
+                    debug: false, // Set to true for debugging
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    backBufferLength: 30,
+                    // More resilient config with higher retry counts for transient issues
+                    manifestLoadPolicy: {
+                        default: {
+                            maxTimeToFirstByteMs: 8000, // Increased from 5000 
+                            maxLoadTimeMs: 15000,       // Increased from 10000
+                            timeoutRetry: {
+                                maxNumRetry: 3,         // Increased from 1
+                                retryDelayMs: 1000,
+                                maxRetryDelayMs: 0
+                            },
+                            errorRetry: {
+                                maxNumRetry: 3,         // Increased from 1
+                                retryDelayMs: 1000,
+                                maxRetryDelayMs: 8000
                             }
-                            
-                            // Set a timer to attempt reconnection with backoff
-                            setTimeout(() => {
-                                console.log(`Attempting to reconnect after server disconnect (backoff: ${this.reconnectBackoff}ms)`);
-                                this.serverDisconnected = false;
-                                this.setupWebSocketForSource(sourceId);
-                                
-                                // Increase backoff for next time, with a maximum
-                                this.reconnectBackoff = Math.min(this.reconnectBackoff * 1.5, this.maxReconnectBackoff);
-                            }, this.reconnectBackoff);
+                        }
+                    },
+                    playlistLoadPolicy: {
+                        default: {
+                            maxTimeToFirstByteMs: 8000, // Increased from 5000
+                            maxLoadTimeMs: 15000,       // Increased from 10000
+                            timeoutRetry: {
+                                maxNumRetry: 3,         // Increased from 1
+                                retryDelayMs: 1000,
+                                maxRetryDelayMs: 0
+                            },
+                            errorRetry: {
+                                maxNumRetry: 3,         // Increased from 1
+                                retryDelayMs: 1000,
+                                maxRetryDelayMs: 8000
+                            }
+                        }
+                    },
+                    fragLoadPolicy: {
+                        default: {
+                            maxTimeToFirstByteMs: 8000, // Increased from 5000
+                            maxLoadTimeMs: 30000,       // Increased from 20000
+                            timeoutRetry: {
+                                maxNumRetry: 3,         // Increased from 1
+                                retryDelayMs: 1000,
+                                maxRetryDelayMs: 0
+                            },
+                            errorRetry: {
+                                maxNumRetry: 5,         // Increased from 1
+                                retryDelayMs: 1000,
+                                maxRetryDelayMs: 8000
+                            }
                         }
                     }
-                };
+                });
                 
-                this.sseStallCheckInterval = setInterval(() => {
-                    if (this.sseSource && this.isPlaying && !this.serverDisconnected) {
-                        const stalledTime = Date.now() - this.lastDataTime;
-                        // Only log if connection appears stalled for a long time (5+ seconds)
-                        if (stalledTime > 5000 && !document.hidden) {
-                            console.warn(`SSE connection appears stalled (${stalledTime}ms without data)`);
-                            this.sseStalled = true;
-                            
-                            if (this.sseStallRecoveryAttempts < 3) {
-                                this.sseStallRecoveryAttempts++;
-                                if (this.sseSource) {
-                                    this.sseSource.close();
-                                    this.sseSource = null;
-                                }
-                                setTimeout(() => {
-                                    this.setupSSEForSource(sourceId);
-                                }, 500);
-                            } else {
-                                // If we've tried to recover multiple times, mark as disconnected
-                                this.serverDisconnected = true;
-                                this.processingStarted = false;
-                                console.warn('Server appears to be disconnected after multiple recovery attempts');
-                                
-                                // Set a timer to attempt reconnection with backoff
-                                setTimeout(() => {
-                                    console.log(`Attempting to reconnect after server disconnect (backoff: ${this.reconnectBackoff}ms)`);
-                                    this.serverDisconnected = false;
-                                    this.sseStallRecoveryAttempts = 0;
-                                    this.setupWebSocketForSource(sourceId);
+                // Timeout for initial loading - more aggressive detection of server issues
+                const initialLoadTimeout = setTimeout(() => {
+                    if (this.hlsPlayer && !this.isPlaying) {
+                        console.error('Timeout waiting for initial playback');
+                        this.showPlaybackStatus('Server not responding - playback stopped');
+                        this.stopPlayback(true); // Use error recovery mode
+                    }
+                }, 8000); // 8 seconds max to get initial playback
+                
+                // Set up error handling
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        console.error('Fatal HLS.js error:', data.type, data.details);
+                        
+                        // Clear initial load timeout as we've received a definitive error
+                        clearTimeout(initialLoadTimeout);
+                        
+                        switch(data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                console.log('Attempting to recover from network error:', data.details);
+                                // For most network errors, try to recover by reloading
+                                if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || 
+                                    data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT) {
                                     
-                                    // Increase backoff for next time, with a maximum
-                                    this.reconnectBackoff = Math.min(this.reconnectBackoff * 1.5, this.maxReconnectBackoff);
-                                }, this.reconnectBackoff);
-                            }
-                        }
-                    }
-                }, 2000);
-                
-                this.sseSource.onopen = () => {
-                    // Keep connection established log but make it less verbose
-                    console.log(`SSE connected to ${sourceId}`);
-                    this.sseStalled = false;
-                    this.sseStallRecoveryAttempts = 0;
-                    this.lastDataTime = Date.now();
-                    this.serverDisconnected = false;
-                    this.reconnectBackoff = 1000; // Reset backoff after successful connection
-                    
-                    // Always resume the audio context when SSE connects, regardless of visibility
-                    if (this.audioContext && this.audioContext.state === 'suspended') {
-                        this.audioContext.resume().catch(err => {
-                            console.error('Failed to resume audio context:', err);
-                        });
-                    }
-                };
-                
-                // Handle stream info messages
-                this.sseSource.addEventListener('info', (event) => {
-                    try {
-                        const info = JSON.parse(event.data);
-                        this.streamInfo = info;
-                        
-                        // Update our settings based on stream info
-                        if (info.sampleRate) {
-                            this.sampleRate = info.sampleRate;
-                        }
-                        
-                        if (info.bufferSize) {
-                            this.incomingChunkSize = info.bufferSize;
-                            // Update buffer threshold based on buffer size
-                            this.bufferThreshold = Math.max(8, Math.ceil(this.audioBufferSize / this.incomingChunkSize) + 2);
-                        }
-                        
-                        console.log(`Received stream info: ${info.sampleRate}Hz, ${info.bitDepth}-bit, ${info.channels} channel(s)`);
-                    } catch (error) {
-                        console.error('Error processing stream info:', error);
-                    }
-                });
-                
-                this.sseSource.addEventListener('audio', (event) => {
-                    this.lastDataTime = Date.now();
-                    this.sseStalled = false;
-                    
-                    if (event.data) {
-                        try {
-                            // Parse JSON packet with metadata
-                            const packet = JSON.parse(event.data);
-                            const audioData = this.processAudioData(packet.data);
-                            
-                            // Calculate network jitter based on packet timestamps
-                            if (this.lastPacketTime) {
-                                const expectedGap = packet.timestamp - this.lastPacketTime;
-                                const actualGap = Date.now() - this.lastPacketReceiveTime;
-                                const jitter = Math.abs(actualGap - expectedGap);
-                                
-                                // Exponential moving average for jitter
-                                this.networkJitter = this.networkJitter * 0.7 + jitter * 0.3;
-                                
-                                // Adjust buffer thresholds based on network jitter
-                                if (this.adaptiveBuffering && !this.processingStarted) {
-                                    // Only adjust during startup
-                                    this.startupBufferTime = Math.max(500, Math.min(1500, this.networkJitter * 3));
-                                }
-                            }
-                            
-                            this.lastPacketTime = packet.timestamp;
-                            this.lastPacketReceiveTime = Date.now();
-                            
-                            if (audioData.length < 32) {
-                                console.warn(`Received unusually small audio chunk: ${audioData.length} bytes`);
-                                return;
-                            }
-                            
-                            // Handle out-of-order packets (rare with SSE but possible)
-                            if (packet.seq <= this.lastSequence && this.lastSequence > 0) {
-                                // Skip duplicate or older packets
-                                return;
-                            }
-                            
-                            this.lastSequence = packet.seq;
-                            
-                            // Drastically reduce audio data logs
-                            const shouldLog = document.hidden ? Math.random() < 0.0001 : Math.random() < 0.001;
-                                             
-                            if (shouldLog && this.processingStarted) {
-                                const samples = Math.floor(audioData.length / 2);
-                                const totalBufferedSamples = this.pcmDataQueue.reduce((acc, chunk) => 
-                                    acc + Math.floor(chunk.length / 2), 0) + samples;
-                                const bufferedTimeMs = (totalBufferedSamples / this.sampleRate) * 1000;
-                                
-                                console.log(`Received audio data: seq=${packet.seq}, ${audioData.length} bytes, queue: ${this.pcmDataQueue.length} packets (${bufferedTimeMs.toFixed(1)}ms buffered), jitter: ${this.networkJitter.toFixed(1)}ms`);
-                            }
-                            
-                            // MODIFIED: Always process audio data regardless of visibility
-                            if (this.audioWorkletNode && this.audioWorkletNode.port) {
-                                if (this.audioContext && this.audioContext.state === 'running') {
-                                    try {
-                                        this.audioWorkletNode.port.postMessage({
-                                            type: 'buffer',
-                                            buffer: audioData
-                                        });
-                                    } catch (err) {
-                                        console.error('Error sending data to AudioWorklet:', err);
-                                        this.pcmDataQueue.push(audioData);
-                                    }
-                                } else {
-                                    this.pcmDataQueue.push(audioData);
-                                }
-                            } else {
-                                this.pcmDataQueue.push(audioData);
-                                
-                                // Use different buffer sizes based on visibility and startup phase
-                                const isStartupPhase = !this.processingStarted || this.startupStabilizationCount < 5;
-                                
-                                // Adaptive max queue size based on network jitter
-                                const jitterPackets = Math.ceil(this.networkJitter / (1000 * this.incomingChunkSize / this.sampleRate / 2));
-                                const maxQueueSize = isStartupPhase ? 
-                                    30 : 
-                                    (document.hidden ? 
-                                        30 : 
-                                        Math.max(15, jitterPackets + 5));
-                                
-                                if (this.pcmDataQueue.length > maxQueueSize) {
-                                    if (this.pcmDataQueue.length > maxQueueSize + 3) {
-                                        // Only trim buffer once fully started to prevent startup issues
-                                        if (this.processingStarted && this.startupStabilizationCount >= 5) {
-                                            const toRemove = Math.min(3, this.pcmDataQueue.length - maxQueueSize);
-                                            // Remove from the middle to preserve newest and oldest data
-                                            const startIndex = Math.floor(this.pcmDataQueue.length / 3);
-                                            this.pcmDataQueue.splice(startIndex, toRemove);
-                                            
-                                            if (!document.hidden && Math.random() < 0.01) {
-                                                console.warn(`Queue management: removed ${toRemove} packets from middle`);
-                                            }
+                                    // Manifest errors might be fatal, but let's try once more
+                                    console.warn('Manifest load issue - trying one more time');
+                                    this.showPlaybackStatus('Network issue - retrying connection...');
+                                    
+                                    // Allow a bit of time for network to recover
+                                    setTimeout(() => {
+                                        if (this.hlsPlayer) {
+                                            hls.loadSource(hlsUrl);
+                                            hls.startLoad();
                                         }
-                                    }
+                                    }, 2000);
+                                } else if (data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR || 
+                                           data.details === Hls.ErrorDetails.FRAG_LOAD_TIMEOUT) {
+                                    
+                                    // Fragment load errors are often transient
+                                    console.warn('Fragment load issue - trying to continue');
+                                    this.showPlaybackStatus('Network glitch - reconnecting...');
+                                    hls.recoverMediaError();
+                                    
+                                    // Attempt to start loading again after a short delay
+                                    setTimeout(() => {
+                                        if (this.hlsPlayer) {
+                                            hls.startLoad();
+                                        }
+                                    }, 1000);
+                                } else {
+                                    // For other network errors, try a general recovery
+                                    hls.startLoad();
                                 }
-                            }
-                        } catch (error) {
-                            console.error('Error processing SSE audio data:', error);
-                        }
-                    }
-                });
-                
-                this.sseSource.addEventListener('connected', () => {
-                    // Keep this log as it indicates successful connection
-                    console.log('SSE audio stream connected');
-                    this.lastDataTime = Date.now();
-                });
-                
-            } catch (error) {
-                console.error('Error setting up SSE connection:', error);
-                
-                // Fall back to WebSocket if SSE setup fails and we specifically requested WebSocket
-                if (this.streamTransport === 'ws') {
-                    console.log('Falling back to WebSocket connection');
-                    this.setupWebSocketConnection(sourceId);
-                }
-            }
-        },
-        
-        setupWebSocketConnection(sourceId) {
-            // Create a new WebSocket connection
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const encodedSourceId = encodeURIComponent(sourceId);
-            const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/audio-stream?source=${encodedSourceId}&transport=ws`;
-            
-            try {
-                this.webSocket = new WebSocket(wsUrl);
-                
-                this.webSocket.binaryType = 'arraybuffer';
-                
-                // Handle connection open
-                this.webSocket.onopen = () => {
-                    // Keep this connection log
-                    console.log(`WebSocket connected to ${sourceId}`);
-                    
-                    // Resume the AudioContext regardless of visibility
-                    if (this.audioContext && this.audioContext.state === 'suspended') {
-                        this.audioContext.resume().catch(err => {
-                            console.error('Failed to resume audio context:', err);
-                        });
-                    }
-                };
-                
-                // Handle incoming audio data with improved buffering
-                this.webSocket.onmessage = (event) => {
-                    if (event.data instanceof ArrayBuffer) {
-                        // Convert ArrayBuffer to Uint8Array for processing
-                        const audioData = new Uint8Array(event.data);
-                        
-                        // Skip empty or very small chunks
-                        if (audioData.length < 32) {
-                            console.warn(`Received unusually small audio chunk: ${audioData.length} bytes`);
-                            return;
-                        }
-                        
-                        // Drastically reduce logging - only about 1 in 1000 messages
-                        if (Math.random() < 0.001) {
-                            const samples = Math.floor(audioData.length / 2);
-                            console.log(`Received WS audio data: ${audioData.length} bytes, queue: ${this.pcmDataQueue.length} packets`);
-                        }
-                        
-                        // MODIFIED: Always process audio regardless of visibility
-                        if (this.audioWorkletNode && this.audioWorkletNode.port) {
-                            if (this.audioContext && this.audioContext.state === 'running') {
+                                break;
+                                
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.log('Attempting to recover from media error');
+                                this.showPlaybackStatus('Media issue - recovering...');
+                                hls.recoverMediaError();
+                                break;
+                                
+                            default:
+                                // Only treat as unrecoverable if it's truly fatal
+                                console.error('Unrecoverable HLS error:', data.details);
+                                this.showPlaybackStatus('Playback error: ' + data.details);
+                                
+                                // Try one final recovery attempt
                                 try {
-                                    this.audioWorkletNode.port.postMessage({
-                                        type: 'buffer',
-                                        buffer: audioData
-                                    });
-                                } catch (err) {
-                                    console.error('Error sending data to AudioWorklet:', err);
-                                    this.pcmDataQueue.push(audioData);
+                                    hls.destroy();
+                                    this.hlsPlayer = null;
+                                    
+                                    // Wait a moment then try to restart the stream
+                                    setTimeout(() => {
+                                        if (this.playingSource) {
+                                            console.log('Final recovery attempt for source:', this.playingSource);
+                                            this.setupHLSStream(hlsUrl, this.playingSource);
+                                        }
+                                    }, 3000);
+                                } catch (e) {
+                                    console.error('Recovery failed:', e);
+                                    this.stopPlayback(true); // Only stop as last resort
                                 }
-                            } else {
-                                this.pcmDataQueue.push(audioData);
+                                break;
+                        }
+                    } else {
+                        // Non-fatal errors can be logged for debugging
+                        console.warn('Non-fatal HLS error:', data.type, data.details);
+                        
+                        // If we get multiple non-fatal errors in quick succession, it might indicate a problem
+                        const now = Date.now();
+                        if (!this.nonFatalErrorCount) this.nonFatalErrorCount = 0;
+                        if (!this.lastNonFatalErrorTime) this.lastNonFatalErrorTime = 0;
+                        
+                        // Check if this is a rapid succession error (within 3 seconds of the last one)
+                        const isRapidNonFatalError = (now - this.lastNonFatalErrorTime) < 3000;
+                        
+                        if (isRapidNonFatalError) {
+                            this.nonFatalErrorCount++;
+                            
+                            // Significantly increased threshold - only stop after many rapid errors
+                            // as non-fatal buffer stall errors can happen during normal playback
+                            if (this.nonFatalErrorCount > 15) {
+                                console.error('Multiple rapid non-fatal errors detected - stopping playback');
+                                this.showPlaybackStatus('Persistent streaming issues - stopping playback');
+                                this.stopPlayback(true); // Use error recovery mode
+                            } else if (this.nonFatalErrorCount > 5 && this.nonFatalErrorCount <= 15) {
+                                // For moderate number of errors, just show a warning but continue
+                                console.warn(`Multiple non-fatal errors (${this.nonFatalErrorCount}) - stream may be unstable`);
+                                this.showPlaybackStatus('Stream connection unstable - trying to recover');
+                                setTimeout(() => this.hidePlaybackStatus(), 3000);
                             }
                         } else {
-                            this.pcmDataQueue.push(audioData);
-                            
-                            // Use different buffer sizes based on visibility
-                            const maxQueueSize = document.hidden ? 30 : 12;
-                            const minQueueSize = document.hidden ? 10 : 3;
-                            
-                            if (this.pcmDataQueue.length > maxQueueSize) {
-                                if (this.pcmDataQueue.length > maxQueueSize + 3) {
-                                    const toRemove = Math.min(3, this.pcmDataQueue.length - maxQueueSize);
-                                    this.pcmDataQueue.splice(1, toRemove);
-                                    if (Math.random() < 0.1) {
-                                        console.warn(`Severe overflow: removed ${toRemove} packets`);
-                                    }
-                                } else {
-                                    const middleIndex = Math.floor(this.pcmDataQueue.length / 2);
-                                    this.pcmDataQueue.splice(middleIndex, 1);
-                                }
-                            }
+                            // Reset counter for non-rapid errors
+                            this.nonFatalErrorCount = 1;
                         }
+                        
+                        this.lastNonFatalErrorTime = now;
                     }
-                };
+                });
                 
-                // Handle errors
-                this.webSocket.onerror = (error) => {
-                    // Keep error logs
-                    console.error('WebSocket error:', error);
+                // Media parsing and ready events
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    console.log('HLS.js manifest parsed');
+                    // Clear initial timeout as manifest is loaded
+                    clearTimeout(initialLoadTimeout);
                     
-                    // If using auto mode or errors occur with WebSocket, fall back to SSE
-                    if ((this.streamTransport === 'auto' || this.streamTransport === 'ws') && this.isPlaying) {
-                        console.log('WebSocket error detected, falling back to SSE');
-                        if (this.webSocket) {
-                            this.webSocket.close();
-                            this.webSocket = null;
+                    // Start playing when manifest is parsed
+                    audio.play().catch(err => {
+                        console.error('Error starting playback:', err);
+                        if (err.name === 'NotAllowedError') {
+                            this.showPlaybackStatus('Click to play (autoplay blocked)');
                         }
-                        this.setupSSEForSource(sourceId);
-                    }
-                };
+                    });
+                });
                 
-                // Handle connection close
-                this.webSocket.onclose = (event) => {
-                    // Only log abnormal closures
-                    if (event.code !== 1000) {
-                        console.log(`WebSocket connection closed with code ${event.code}`);
-                    }
+                // Successfully buffered fragment - update user
+                hls.on(Hls.Events.FRAG_BUFFERED, () => {
+                    console.log('HLS fragment buffered');
+                    // Clear initial timeout as we've buffered content
+                    clearTimeout(initialLoadTimeout);
                     
-                    // Only attempt to reconnect if we're still playing and it wasn't a normal closure
-                    if (this.isPlaying && event.code !== 1000) {
-                        setTimeout(() => {
-                            if (this.isPlaying) {
-                                // For auto mode, now prefer SSE for more reliable connections
-                                if (this.streamTransport === 'auto') {
-                                    console.log('Using SSE for auto transport mode after WebSocket closure');
-                                    this.setupSSEForSource(sourceId);
-                                } else if (this.streamTransport === 'ws') {
-                                    // Only try WebSocket again if explicitly set to ws mode
-                                    this.setupWebSocketConnection(sourceId);
-                                }
-                            }
-                        }, 1000);
+                    if (!this.isPlaying && !audio.paused) {
+                        this.isPlaying = true;
+                        this.hidePlaybackStatus();
+                        
+                        // Reset error counters on successful playback
+                        this.nonFatalErrorCount = 0;
+                        this.errorCount = 0;
+                        this.lastErrorTime = 0;
+                        this.lastNonFatalErrorTime = 0;
                     }
-                };
+                });
                 
-                // Keep connection alive with periodic pings
-                this.pingInterval = setInterval(() => {
-                    if (this.webSocket && this.webSocket.readyState === WebSocket.OPEN) {
-                        // Send a small ping message
-                        this.webSocket.send('ping');
+                // Attach to media element and load source
+                hls.attachMedia(audio);
+                
+                // Store HLS instance
+                this.hlsPlayer = hls;
+                
+                // Once media is attached, load the source
+                hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+                    console.log('HLS.js media attached');
+                    hls.loadSource(hlsUrl);
+                });
+                
+            } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+                // Native HLS support (Safari, iOS)
+                console.log('Using native HLS support');
+                audio.src = hlsUrl;
+                audio.play().catch(err => {
+                    console.error('Error starting playback:', err);
+                    if (err.name === 'NotAllowedError') {
+                        this.showPlaybackStatus('Click to play (autoplay blocked)');
                     }
-                }, 20000);
-                
-            } catch (error) {
-                // Keep error logs
-                console.error('Error setting up WebSocket:', error);
-                
-                // Try SSE as fallback for all transport modes
-                console.log('Error in WebSocket setup, using SSE as fallback');
-                this.setupSSEForSource(sourceId);
+                });
+            } else {
+                this.showPlaybackStatus('HLS playback not supported in this browser');
+                console.error('HLS playback not supported');
             }
         },
-
-        // Initialize or reset audio context
-        initializeAudioContext() {
-            // Initialize audio system if needed
-            if (!this.audioContext) {
-                this.initAudio();
-            } else if (this.audioContext.state === 'closed') {
-                this.audioContext = null;
-                this.audioWorkletNode = null;
-                this.initAudio();
+        
+        // Show playback status message
+        showPlaybackStatus(message) {
+            // Create status element if it doesn't exist
+            let statusEl = document.getElementById('hls-playback-status');
+            if (!statusEl) {
+                statusEl = document.createElement('div');
+                statusEl.id = 'hls-playback-status';
+                statusEl.className = 'fixed bottom-4 right-4 bg-primary text-primary-content p-2 rounded shadow-lg z-50';
+                statusEl.setAttribute('role', 'status');
+                statusEl.setAttribute('aria-live', 'polite');
+                document.body.appendChild(statusEl);
             }
             
-            // Always resume audio context regardless of visibility
-            if (this.audioContext && this.audioContext.state === 'suspended') {
-                this.audioContext.resume().catch(err => {
-                    console.error('Failed to resume audio context:', err);
-                });
+            statusEl.textContent = message;
+            statusEl.style.display = 'block';
+        },
+        
+        // Hide playback status
+        hidePlaybackStatus() {
+            const statusEl = document.getElementById('hls-playback-status');
+            if (statusEl) {
+                statusEl.style.display = 'none';
             }
         },
         
-        // Reset stream processing state
-        resetProcessingState() {
-            this.processingStarted = false;
-            this.pcmDataQueue = [];
-            this.sseStalled = false;
-            this.sseStallRecoveryAttempts = 0;
+        // Stop audio playback
+        stopPlayback(isErrorRecovery = false, skipServerNotification = false) {
+            // Don't stop playback if we're in stabilization phase and this isn't error recovery
+            if (this.playbackStabilizing && !isErrorRecovery) {
+                console.log('Ignoring stop request during playback stabilization');
+                return;
+            }
+            
+            console.log('Stopping audio playback', isErrorRecovery ? '(error recovery mode)' : '', 
+                         skipServerNotification ? '(skipping server notification)' : '');
+            
+            // Hide any playback status messages if not in error recovery mode
+            if (!isErrorRecovery) {
+                this.hidePlaybackStatus();
+            }
+            
+            // Stop heartbeat immediately
+            this.stopHeartbeat();
+            
+            // Stop HTML5 audio element
+            if (this.audioElement) {
+                this.audioElement.pause();
+                this.audioElement.src = '';
+                this.audioElement.load(); // Reset and clear any buffered data
+            }
+            
+            // Clean up HLS.js if it exists
+            if (this.hlsPlayer) {
+                this.hlsPlayer.destroy();
+                this.hlsPlayer = null;
+            }
+            
+            // Add a cooldown period for error recovery
+            if (isErrorRecovery) {
+                this.inErrorCooldown = true;
+                setTimeout(() => {
+                    this.inErrorCooldown = false;
+                }, 5000); // 5 second cooldown before allowing playback again
+            }
+            
+            // Store current source for potential auto-restart
+            const previousSource = this.playingSource;
+            
+            // Reset state
+            this.isPlaying = false;
+            this.playingSource = null;
+            
+            // Update mediaSession state if available
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.playbackState = 'paused';
+            }
+            
+            // Notify server that we've stopped playback - but only if not in recovery mode
+            // or if specifically instructed to skip notification
+            if (!skipServerNotification && previousSource) {
+                const encodedSourceId = encodeURIComponent(previousSource);
+                const stopUrl = `${window.location.origin}/api/v1/audio-stream-hls/${encodedSourceId}/stop`;
+                
+                // Check if network is available before notifying server
+                if (navigator.onLine) {
+                    fetch(stopUrl, { 
+                        method: 'POST',
+                        // Add timeout to prevent hanging requests
+                        signal: AbortSignal.timeout(5000)
+                    })
+                    .then(() => console.log('Server notified of playback stop'))
+                    .catch(err => {
+                        console.error('Failed to notify server of playback stop:', err);
+                        
+                        // If this was a deliberate user stop (not error recovery),
+                        // and we couldn't notify the server, try again once more
+                        if (!isErrorRecovery) {
+                            console.log('Retrying server notification once');
+                            setTimeout(() => {
+                                fetch(stopUrl, { method: 'POST' })
+                                    .catch(e => console.error('Final attempt to notify server failed:', e));
+                            }, 2000);
+                        }
+                    });
+                } else {
+                    console.warn('Network offline, skipping server notification');
+                }
+            } else if (skipServerNotification) {
+                console.log('Skipping server notification as requested');
+            }
+            
+            // In error recovery, consider auto-restart after a delay if it was a network issue
+            if (isErrorRecovery && navigator.onLine && previousSource) {
+                console.log('In error recovery mode, will attempt auto-restart if network is available');
+                
+                // Only attempt auto-restart for network-related errors if browser shows we're online
+                setTimeout(() => {
+                    if (navigator.onLine && !this.isPlaying && !this.inErrorCooldown && previousSource) {
+                        console.log('Attempting to auto-restart stream after network error');
+                        this.showPlaybackStatus('Attempting to reconnect stream...');
+                        this.startPlayback(previousSource);
+                    }
+                }, 8000); // Wait 8 seconds before attempting auto-restart
+            }
         },
         
-        // Setup media session API
+        // Setup media session API for media controls
         setupMediaSession(source) {
             if ('mediaSession' in navigator) {
                 const sourceName = source ? this.getSourceDisplayName(source) : '';
                 navigator.mediaSession.metadata = new MediaMetadata({
-                    title: sourceName ? `Bird Audio Stream - ${sourceName}` : 'Bird Audio Stream',
+                    title: sourceName ? 'Bird Audio Stream - ' + sourceName : 'Bird Audio Stream',
                     artist: 'BirdNet-Go',
                     album: 'Live Stream',
                     // Optional artwork - use favicon as default
@@ -918,15 +823,15 @@
                 });
                 
                 navigator.mediaSession.setActionHandler('play', () => {
-                    this.isPlaying = true;
-                    if (this.playingSource) {
-                        this.setupWebSocketForSource(this.playingSource);
+                    if (this.audioElement) {
+                        this.audioElement.play();
                     }
                 });
                 
                 navigator.mediaSession.setActionHandler('pause', () => {
-                    this.isPlaying = false;
-                    this.cleanupAudioResources();
+                    if (this.audioElement) {
+                        this.audioElement.pause();
+                    }
                 });
                 
                 // Update playback state
@@ -934,41 +839,7 @@
             }
         },
         
-        // Start playing a source
-        startPlayback(source) {
-            console.log(`Starting audio playback for source: ${source}`);
-            
-            this.initializeAudioContext();
-            this.resetProcessingState();
-            
-            // Set state
-            this.playingSource = source;
-            this.isPlaying = true;
-            
-            // Set up streaming connection
-            this.setupWebSocketForSource(source);
-            
-            // Setup media session
-            this.setupMediaSession(source);
-        },
-        
-        // Stop playback
-        stopPlayback() {
-            console.log('Stopping audio playback...');
-            
-            // Reset state
-            this.isPlaying = false;
-            this.playingSource = null;
-            
-            // Clean up resources
-            this.cleanupAudioResources();
-            
-            // Update mediaSession state if available
-            if ('mediaSession' in navigator) {
-                navigator.mediaSession.playbackState = 'paused';
-            }
-        },
-
+        // Toggle playback for currently selected source
         togglePlayback() {
             if (!this.selectedSource) {
                 console.error('No audio source selected');
@@ -980,17 +851,24 @@
             } else {
                 this.startPlayback(this.selectedSource);
             }
-            
-            // Only suspend audio context if navigating away
-            if (!this.isPlaying && this.isNavigating && this.audioContext && this.audioContext.state === 'running') {
-                this.audioContext.suspend().catch(err => {
-                    console.error('Failed to suspend audio context:', err);
-                });
-            }
         },
         
         // Toggle playback for a specific source
         toggleSourcePlayback(source) {
+            // Check network state first
+            if (!navigator.onLine) {
+                this.showPlaybackStatus('Network unavailable. Please check your connection.');
+                setTimeout(() => this.hidePlaybackStatus(), 3000);
+                return;
+            }
+            
+            // If we're in error cooldown, don't allow playback immediately
+            if (this.inErrorCooldown) {
+                this.showPlaybackStatus('Please wait a moment before trying again...');
+                setTimeout(() => this.hidePlaybackStatus(), 3000);
+                return;
+            }
+
             // If we're already playing this source, stop it
             if (this.isPlaying && this.playingSource === source) {
                 this.stopPlayback();
@@ -999,35 +877,126 @@
             
             // If we're playing a different source, stop it first
             if (this.isPlaying) {
-                this.cleanupAudioResources();
+                this.stopPlayback();
             }
             
             // Start playing the new source
             this.startPlayback(source);
         },
 
+        // Initialize component
         init() {
-            // Setup initial connection
+            // Reset error tracking variables
+            this.errorCount = 0;
+            this.lastErrorTime = 0;
+            this.nonFatalErrorCount = 0;
+            this.lastNonFatalErrorTime = 0;
+            this.inErrorCooldown = false;
+            this.playbackStabilizing = false;
+            
+            // Setup initial connection for audio levels
             this.setupEventSource();
+            
+            // Remember last playing source for potential network recovery
+            let lastPlayingSource = null;
+            
+            // Network state handlers
+            const handleOffline = () => {
+                console.warn('Network went offline');
+                
+                // Store current playback state
+                if (this.isPlaying && this.playingSource) {
+                    lastPlayingSource = this.playingSource;
+                    this.showPlaybackStatus('Network disconnected - playback paused');
+                    
+                    // Don't send stop notification since network is down anyway
+                    this.stopPlayback(true, true);
+                }
+            };
+            
+            const handleOnline = () => {
+                console.log('Network connection restored');
+                
+                // If we were playing before, try to resume
+                if (lastPlayingSource && !this.isPlaying) {
+                    this.showPlaybackStatus('Network reconnected - resuming playback');
+                    
+                    // Wait a moment for connection to stabilize
+                    setTimeout(() => {
+                        this.startPlayback(lastPlayingSource);
+                        lastPlayingSource = null;
+                    }, 2000);
+                }
+                
+                // Also restart EventSource if needed
+                if (!this.eventSource) {
+                    this.setupEventSource();
+                }
+            };
+            
+            // Add network state listeners
+            window.addEventListener('offline', handleOffline);
+            window.addEventListener('online', handleOnline);
+            
+            // Add page unload handler to notify server
+            const handleUnload = () => {
+                // If currently playing, send a disconnect notification
+                if (this.isPlaying && this.playingSource) {
+                    console.log('Page unloading - notifying server of disconnection');
+                    
+                    // Use navigator.sendBeacon for more reliable delivery during page unload
+                    const heartbeatUrl = `${window.location.origin}/api/v1/audio-stream-hls/heartbeat?disconnect=true`;
+                    const heartbeatData = JSON.stringify({
+                        source_id: this.playingSource
+                    });
+                    
+                    // Try to use sendBeacon API for more reliable delivery during page unload
+                    if (navigator.sendBeacon) {
+                        const blob = new Blob([heartbeatData], { type: 'application/json' });
+                        navigator.sendBeacon(heartbeatUrl, blob);
+                    } else {
+                        // Fallback to synchronous XHR if sendBeacon not available
+                        try {
+                            const xhr = new XMLHttpRequest();
+                            xhr.open('POST', heartbeatUrl, false); // false = synchronous
+                            xhr.setRequestHeader('Content-Type', 'application/json');
+                            xhr.send(heartbeatData);
+                        } catch (e) {
+                            // Ignore errors during unload
+                        }
+                    }
+                    
+                    // Force a stream stop notification as well (belt and suspenders)
+                    if (this.playingSource) {
+                        const encodedSourceId = encodeURIComponent(this.playingSource);
+                        const stopUrl = `${window.location.origin}/api/v1/audio-stream-hls/${encodedSourceId}/stop`;
+                        
+                        if (navigator.sendBeacon) {
+                            navigator.sendBeacon(stopUrl);
+                        } else {
+                            try {
+                                const xhr = new XMLHttpRequest();
+                                xhr.open('POST', stopUrl, false);
+                                xhr.send();
+                            } catch (e) {
+                                // Ignore errors during unload
+                            }
+                        }
+                    }
+                }
+            };
+            
+            window.addEventListener('beforeunload', handleUnload);
+            window.addEventListener('unload', handleUnload);
             
             // Listen for navigation events
             document.addEventListener('htmx:beforeRequest', () => {
                 this.isNavigating = true;
                 this.cleanupEventSource();
                 
-                // Clean up audio resources
-                if (this.pingInterval) {
-                    clearInterval(this.pingInterval);
-                    this.pingInterval = null;
-                }
-                
-                // Close all connections
-                this.closeExistingConnections();
-                
-                if (this.audioContext) {
-                    this.audioContext.suspend().catch(err => {
-                        console.error('Failed to suspend audio context:', err);
-                    });
+                // Stop audio playback if navigating
+                if (this.isPlaying) {
+                    this.stopPlayback();
                 }
             });
             
@@ -1040,226 +1009,98 @@
             });
 
             // Listen for page visibility changes
-            document.addEventListener('visibilitychange', () => {
+            const visibilityHandler = () => {
+                // Skip all visibility processing during playback stabilization
+                if (this.playbackStabilizing) {
+                    console.log('Ignoring visibility change during playback stabilization');
+                    return;
+                }
+                
                 if (document.hidden) {
                     // When tab goes to background
-                    this.cleanupEventSource(); // Still close the audio level EventSource
+                    this.cleanupEventSource(); // Close the audio level EventSource when hidden
                     
-                    // REMOVED: Don't suspend audio context in background
-                    if (this.isPlaying) {
-                        // Adjust buffer size when in background to reduce CPU usage but keep audio flowing
-                        this.bufferThreshold = Math.max(3, this.bufferThreshold);
-                        console.log('Tab in background: continuing audio playback with adjusted buffering');
-                        
-                        // Make sure audio context is running
-                        if (this.audioContext && this.audioContext.state === 'suspended') {
-                            this.audioContext.resume().catch(err => {
-                                console.error('Failed to resume audio context in background:', err);
-                            });
-                        }
-                    }
+                    // We don't need to pause audio - it can keep playing in background
+                    console.log('Tab in background: continuing audio playback');
                     
                 } else if (!this.isNavigating) {
                     // When tab becomes visible again
                     this.setupEventSource();
                     
-                    // Resume streaming if needed when page becomes visible again
-                    if (this.isPlaying && this.selectedSource) {
-                        // Keep this log but make it less frequent by checking if actually playing
+                    // If we were playing and the player has stopped, restart
+                    if (this.playingSource && this.audioElement && 
+                        (this.audioElement.paused || this.audioElement.ended) && 
+                        !this.inErrorCooldown) { // Don't restart if in error cooldown
                         console.log('Tab visible again: resuming audio playback');
-                        
-                        // Always try to resume the audio context when tab becomes visible
-                        if (this.audioContext) {
-                            this.audioContext.resume().catch(err => {
-                                console.error('Failed to resume audio context:', err);
-                            });
-                        }
-                        
-                        // Reestablish connection only if needed
-                        if (this.streamTransport === 'sse') {
-                            if (!this.sseSource) {
-                                this.setupSSEForSource(this.selectedSource);
-                            }
-                        } else if (this.streamTransport === 'ws') {
-                            if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) {
-                                this.setupWebSocketConnection(this.selectedSource);
-                            }
-                        } else {
-                            // For 'auto' mode, we now default to SSE which works reliably in most environments
-                            if (!this.sseSource) {
-                                this.setupSSEForSource(this.selectedSource);
-                            }
-                        }
+                        // Add a short delay before restarting playback to avoid race conditions
+                        setTimeout(() => {
+                            this.startPlayback(this.playingSource);
+                        }, 500);
                     }
                 }
-            });
+            };
+            
+            document.addEventListener('visibilitychange', visibilityHandler);
             
             // Clean up on component destroy
             this.$cleanup = () => {
                 this.cleanupEventSource();
-                document.removeEventListener('visibilitychange', this.cleanupEventSource);
+                document.removeEventListener('visibilitychange', visibilityHandler);
                 document.removeEventListener('htmx:beforeRequest', this.cleanupEventSource);
                 document.removeEventListener('htmx:afterRequest', this.setupEventSource);
+                window.removeEventListener('offline', handleOffline);
+                window.removeEventListener('online', handleOnline);
+                window.removeEventListener('beforeunload', handleUnload);
+                window.removeEventListener('unload', handleUnload);
                 
-                // Clean up audio resources
-                if (this.webSocket) {
-                    this.webSocket.close();
+                // Send final disconnect notification
+                if (this.isPlaying && this.playingSource) {
+                    this.stopHeartbeat(); // This will send the disconnect notification
                 }
                 
-                if (this.audioContext) {
-                    this.audioContext.close();
+                // Stop heartbeat
+                this.stopHeartbeat();
+                
+                // Clean up audio element
+                if (this.audioElement) {
+                    this.audioElement.pause();
+                    this.audioElement.src = '';
+                    this.audioElement.remove();
+                    this.audioElement = null;
+                }
+                
+                // Clean up HLS.js if it exists
+                if (this.hlsPlayer) {
+                    this.hlsPlayer.destroy();
+                    this.hlsPlayer = null;
                 }
             };
         },
+        
+        // Get current audio level
         getCurrentLevel() {
             const level = this.selectedSource && this.levels[this.selectedSource] ? 
                 this.levels[this.selectedSource].level : 0;
             return level;
         },
+        
+        // Check if audio is clipping
         isClipping() {
             const clipping = this.selectedSource && this.levels[this.selectedSource] ? 
                 this.levels[this.selectedSource].clipping : false;
             return clipping;
         },
+        
+        // Get smoothed volume for visualization
         getSmoothedVolume() {
             const volume = this.selectedSource ? this.smoothedVolumes[this.selectedSource] || 0 : 0;
             return volume;
         },
+        
+        // Get display name for a source
         getSourceDisplayName(source) {
             const name = this.levels[source]?.name || source;
             return name;
-        },
-        // Modify the cleanup resources method
-        cleanupAudioResources() {
-            // Track resources that need cleanup
-            const hasActiveSSE = this.sseSource && this.sseSource.readyState !== 2; // Not CLOSED
-            const hasActiveWS = this.webSocket && this.webSocket.readyState !== WebSocket.CLOSED;
-            
-            // MODIFY: Only clean up completely if not playing or if navigating away
-            if (!this.isPlaying || this.isNavigating) {
-                // Full cleanup - close everything
-                
-                // Clear all intervals
-                if (this.bufferStatsInterval) {
-                    clearInterval(this.bufferStatsInterval);
-                    this.bufferStatsInterval = null;
-                }
-                
-                if (this.sseStallCheckInterval) {
-                    clearInterval(this.sseStallCheckInterval);
-                    this.sseStallCheckInterval = null;
-                }
-                
-                if (this.pingInterval) {
-                    clearInterval(this.pingInterval);
-                    this.pingInterval = null;
-                }
-                
-                // Close all connections
-                this.closeExistingConnections();
-                
-                // Clear the data queue
-                this.pcmDataQueue = [];
-                
-                // Reset state
-                this.processingStarted = false;
-                this.bufferUnderrunCount = 0;
-                this.sseStalled = false;
-                this.sseStallRecoveryAttempts = 0;
-                this.consecutiveEmptyUnderruns = 0;
-                this.serverDisconnected = false;
-            } else {
-                // Lighter cleanup that preserves audio playback
-                
-                // Still clear stale/duplicate resources to prevent memory leaks
-                
-                // Clean up any duplicate or competing connections
-                // If we have SSE, make sure WebSocket is closed and vice versa
-                if (hasActiveSSE && this.webSocket) {
-                    this.webSocket.close();
-                    this.webSocket = null;
-                    
-                    if (this.pingInterval) {
-                        clearInterval(this.pingInterval);
-                        this.pingInterval = null;
-                    }
-                }
-                
-                if (hasActiveWS && this.sseSource) {
-                    this.sseSource.close();
-                    this.sseSource = null;
-                    
-                    if (this.sseStallCheckInterval) {
-                        clearInterval(this.sseStallCheckInterval);
-                        this.sseStallCheckInterval = null;
-                    }
-                }
-                
-                // Clear unused data that's not needed for playback
-                if (this.pcmDataQueue.length > 30) {
-                    // Trim excess buffer data to prevent unbounded growth
-                    this.pcmDataQueue = this.pcmDataQueue.slice(0, 30);
-                }
-                
-                // Reset error counters without disrupting playback
-                this.bufferUnderrunCount = Math.min(this.bufferUnderrunCount, 5);
-                this.sseStallRecoveryAttempts = 0;
-                this.consecutiveEmptyUnderruns = 0;
-                
-                console.log('Light cleanup completed while preserving audio playback');
-            }
-        },
-        // Function to convert URL-safe base64 to binary data
-        decodeBase64UrlSafe(base64Url) {
-            // Convert the URL-safe base64 to regular base64
-            // Replace URL-safe chars with standard Base64 chars and add padding
-            const base64 = base64Url
-                .replace(/-/g, '+')
-                .replace(/_/g, '/');
-                
-            // Add padding if needed (server is using RawURLEncoding which omits padding)
-            const paddingLength = (4 - (base64.length % 4)) % 4;
-            const paddedBase64 = base64 + '='.repeat(paddingLength);
-            
-            // Now use regular atob with the padded, standard base64 string
-            return paddedBase64;
-        },
-        
-        // Optimized helper for audio data processing - move this outside event handlers
-        processAudioData(data) {
-            try {
-                // Input validation
-                if (!data || typeof data !== 'string') {
-                    console.warn('Invalid audio data received:', typeof data);
-                    // Return minimal valid audio data to avoid breaking the audio pipeline
-                    return new Uint8Array(32);
-                }
-                
-                // Convert base64 to Uint8Array more efficiently
-                const standardBase64 = this.decodeBase64UrlSafe(data);
-                
-                try {
-                    const binaryString = atob(standardBase64);
-                    
-                    // Pre-allocate the full array for better performance
-                    const audioData = new Uint8Array(binaryString.length);
-                    
-                    for (let i = 0; i < binaryString.length; i++) {
-                        audioData[i] = binaryString.charCodeAt(i);
-                    }
-                    
-                    return audioData;
-                } catch (error) {
-                    // Handle malformed Base64 input
-                    console.error('Error decoding Base64 data:', error.message);
-                    // Return minimal valid audio data (silent) to prevent audio pipeline from breaking
-                    return new Uint8Array(32);
-                }
-            } catch (error) {
-                console.error('Unexpected error in audio data processing:', error);
-                // Return minimal valid audio data as fallback
-                return new Uint8Array(32);
-            }
         }
     }" 
     @click.away="dropdownOpen = false">
@@ -1287,7 +1128,7 @@
                     fill="none" 
                     :stroke="isClipping() ? '#EF4444' : '#10B981'" 
                     stroke-width="3" 
-                    :stroke-dasharray="`${getSmoothedVolume()}, 100`"
+                    :stroke-dasharray="getSmoothedVolume() + ', 100'"
                     stroke-linecap="round">
             </path>
         </svg>
