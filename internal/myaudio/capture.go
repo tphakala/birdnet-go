@@ -545,49 +545,98 @@ func hexToASCII(hexStr string) (string, error) {
 }
 
 // processAudioFrame handles the processing of a single audio frame received from malgo.
-// It performs format conversion, applies EQ, writes to buffers, broadcasts, and calculates levels.
+// It performs format conversion, applies EQ, writes to buffers, broadcasts, calculates levels,
+// and handles buffer safety for shared/pooled buffers.
+// Returns:
+//   - *[]byte: Pointer to the final processed buffer (could be original, pooled, or new)
+//   - bool: True if the returned buffer pointer points to a buffer from the pool
+//   - error: If a critical step fails
 func processAudioFrame(
 	pSamples []byte,
 	formatType malgo.FormatType,
-	convertBuffer []byte,
+	convertBuffer []byte, // Can be nil, used if provided
 	settings *conf.Settings,
 	source captureSource,
 	audioLevelChan chan AudioLevelData,
-) (processedSamplesPtr *[]byte, fromPool bool, err error) {
+) (finalBufferPtr *[]byte, fromPool bool, err error) { // Updated return signature
 
-	processedSamples := pSamples // Assume no conversion needed initially
-	processedSamplesPtr = &processedSamples
+	processedSamples := pSamples             // Start with original samples
+	needsReturn := false                     // Flag if we got something from pool
+	var currentBufferPtr *[]byte = &pSamples // Track the buffer source/identity
+	var conversionError error
 
 	if formatType != malgo.FormatS16 && formatType != malgo.FormatU8 {
-		processedSamplesPtr, fromPool, err = ConvertToS16(pSamples, formatType, convertBuffer)
-		if err != nil {
-			log.Printf("❌ Error converting audio format: %v", err)
-			return nil, false, err // Return error
+		// Perform conversion, potentially getting a pooled buffer
+		var poolUsed bool
+		var convertedBufferPtr *[]byte
+		convertedBufferPtr, poolUsed, conversionError = ConvertToS16(pSamples, formatType, convertBuffer)
+		if conversionError != nil {
+			log.Printf("❌ Error converting audio format: %v", conversionError)
+			return nil, false, conversionError // Return the specific error
 		}
-		// If conversion happened, update processedSamples for local use
-		processedSamples = *processedSamplesPtr
+		// Update to use the converted data
+		processedSamples = *convertedBufferPtr
+		currentBufferPtr = convertedBufferPtr // Track the potentially pooled or provided/new buffer
+		needsReturn = poolUsed
 	}
 
-	// Apply audio EQ filters if enabled
+	// --- Buffer Safety Handling ---
+	var bufferToUse []byte
+	// Check if currentBufferPtr points to the same underlying data as pSamples
+	isOriginalPSamples := (len(processedSamples) > 0 && len(pSamples) > 0 && &processedSamples[0] == &pSamples[0]) || (len(processedSamples) == 0 && len(pSamples) == 0)
+	finalBufferPtr = currentBufferPtr // Assume we use the current buffer initially
+	fromPool = needsReturn            // Pass along pool status
+
+	switch {
+	case needsReturn:
+		// Buffer came from the pool - MUST copy for safety
+		safeCopy := make([]byte, len(processedSamples))
+		copy(safeCopy, processedSamples)
+		bufferToUse = safeCopy
+		// Return the original pooled buffer *now*
+		ReturnBufferToPool(currentBufferPtr, needsReturn)
+		// Update finalBufferPtr to point to the safe copy
+		finalBufferPtr = &bufferToUse
+		fromPool = false // The final buffer is no longer the pooled one
+	case isOriginalPSamples:
+		// Using the original pSamples buffer directly - MUST copy for safety
+		safeCopy := make([]byte, len(processedSamples))
+		copy(safeCopy, processedSamples)
+		bufferToUse = safeCopy
+		// Update finalBufferPtr to point to the safe copy
+		finalBufferPtr = &bufferToUse
+		// fromPool is already false
+	default:
+		// Buffer was newly allocated or provided (not pooled, not pSamples) - Safe to use directly
+		bufferToUse = processedSamples
+		// finalBufferPtr already points to this buffer
+		// fromPool is already false
+	}
+	// --- End Buffer Safety Handling ---
+
+	// Apply audio EQ filters if enabled (use the safe bufferToUse)
 	if settings.Realtime.Audio.Equalizer.Enabled {
-		if err := ApplyFilters(processedSamples); err != nil {
-			log.Printf("❌ Error applying audio EQ filters: %v", err)
-			// Decide if this is a fatal error or just log and continue
+		if eqErr := ApplyFilters(bufferToUse); eqErr != nil {
+			log.Printf("❌ Error applying audio EQ filters: %v", eqErr)
+			// Non-fatal, just log
 		}
 	}
 
-	if err := WriteToAnalysisBuffer("malgo", processedSamples); err != nil {
-		log.Printf("❌ Error writing to analysis buffer: %v", err)
+	// Write to buffers (use the safe bufferToUse)
+	if writeErr := WriteToAnalysisBuffer("malgo", bufferToUse); writeErr != nil {
+		log.Printf("❌ Error writing to analysis buffer: %v", writeErr)
+		// Potentially non-fatal, log and continue
 	}
-	if err := WriteToCaptureBuffer("malgo", processedSamples); err != nil {
-		log.Printf("❌ Error writing to capture buffer: %v", err)
+	if writeErr := WriteToCaptureBuffer("malgo", bufferToUse); writeErr != nil {
+		log.Printf("❌ Error writing to capture buffer: %v", writeErr)
+		// Potentially non-fatal, log and continue
 	}
 
-	// Broadcast audio data to WebSocket clients
-	broadcastAudioData("malgo", processedSamples)
+	// Broadcast audio data (use the safe bufferToUse)
+	broadcastAudioData("malgo", bufferToUse)
 
-	// Calculate audio level
-	audioLevelData := calculateAudioLevel(processedSamples, "malgo", source.Name)
+	// Calculate audio level (use the safe bufferToUse)
+	audioLevelData := calculateAudioLevel(bufferToUse, "malgo", source.Name)
 
 	// Send level to channel (non-blocking)
 	select {
@@ -605,7 +654,7 @@ func processAudioFrame(
 		}
 	}
 
-	return processedSamplesPtr, fromPool, nil // Return pointer, pool status, and nil error
+	return finalBufferPtr, fromPool, nil // Return pointer, pool status, and nil error
 }
 
 // handleDeviceStop contains the logic for attempting to restart the audio device
@@ -682,8 +731,8 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 	var convertBuffer []byte
 
 	onReceiveFrames := func(pSample2, pSamples []byte, framecount uint32) {
-		// processAudioFrame now uses the captured formatType
-		processedSamplesPtr, fromPool, err := processAudioFrame(
+		// processAudioFrame now handles pooling internally and returns buffer info
+		finalBufferPtr, fromPool, err := processAudioFrame(
 			pSamples, formatType, convertBuffer, settings, source, audioLevelChan,
 		)
 		if err != nil {
@@ -691,10 +740,12 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 			return
 		}
 
-		// Remember to return the buffer pointer to pool if it came from there
-		if fromPool {
-			defer ReturnBufferToPool(processedSamplesPtr, fromPool)
+		// If the final buffer didn't come from the pool (it was allocated or provided),
+		// update convertBuffer so we can potentially reuse it next time.
+		if !fromPool && finalBufferPtr != nil {
+			convertBuffer = *finalBufferPtr
 		}
+		// No need for defer or explicit pool handling here anymore
 	}
 
 	// onStopDevice logic is now in handleDeviceStop
@@ -991,6 +1042,8 @@ func ConvertToS16(samples []byte, sourceFormat malgo.FormatType, outputBuffer []
 // ReturnBufferToPool returns a buffer pointer to the pool if it came from the pool
 func ReturnBufferToPool(bufferPtr *[]byte, fromPool bool) {
 	if fromPool && bufferPtr != nil && *bufferPtr != nil {
-		s16BufferPool.Put(bufferPtr)
+		// Reset slice length to its capacity before returning to pool
+		full := (*bufferPtr)[:cap(*bufferPtr)]
+		s16BufferPool.Put(&full)
 	}
 }
