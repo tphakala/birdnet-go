@@ -27,7 +27,6 @@ type HLSStreamInfo struct {
 	FFmpegCmd    *exec.Cmd
 	OutputDir    string
 	PlaylistPath string
-	LastAccess   time.Time
 	FifoPipe     string // Windows named pipe path for platform compatibility
 	// Add context and cancellation for managing stream lifecycle
 	ctx    context.Context
@@ -39,25 +38,25 @@ var (
 	hlsStreams     = make(map[string]*HLSStreamInfo)
 	hlsStreamMutex sync.Mutex
 
-	// Clean up inactive streams every 5 minutes
-	cleanupInterval = 5 * time.Minute
-
-	// Consider a stream inactive after 2 minutes without access
-	inactivityTimeout = 2 * time.Minute
-
-	// Track active clients per stream
+	// Track active clients per stream - each entry represents a distinct IP address
 	hlsStreamClients     = make(map[string]map[string]bool) // sourceID -> clientID -> true
 	hlsStreamClientMutex sync.Mutex
 
-	// Track client activity with timestamps
-	hlsClientActivity      = make(map[string]map[string]time.Time) // sourceID -> clientID -> lastActiveTime
-	hlsClientActivityMutex sync.Mutex
+	// Master activity tracking system - this is the unified way to track activity
+	// Each stream has a master activity timestamp that's updated when ANY client
+	// requests EITHER a playlist or segment file or sends a heartbeat.
+	// As long as any client is active, the stream stays alive.
+	hlsStreamActivity      = make(map[string]time.Time) // sourceID -> lastActivityTime
+	hlsStreamActivityMutex sync.Mutex
 
-	// Consider a client inactive after 30 seconds of no segment requests (increased from 10)
-	clientInactivityTimeout = 30 * time.Second
+	// When no playlist, segment, or heartbeat has been received for this period,
+	// a stream is considered inactive and will be cleaned up
+	streamInactivityTimeout = 5 * time.Minute
 
-	// Control logging verbosity
-	hlsVerboseLogging = false
+	// Logging configuration
+	hlsVerboseLogging        = false                 // Controlled by environment
+	hlsVerboseLoggingTimeout = 5 * time.Minute       // How long to keep verbose logging enabled at startup
+	hlsVerboseEnvVar         = "HLS_VERBOSE_LOGGING" // Environment variable to control logging
 
 	// Store the last log time per client+source to reduce log spam
 	hlsClientLogTime      = make(map[string]time.Time)
@@ -76,35 +75,10 @@ type StreamStatus struct {
 	PlaylistReady bool   `json:"playlist_ready"`
 }
 
-// Initialize HLS streaming service
-func init() {
-	// Start cleanup goroutine
-	go func() {
-		ticker := time.NewTicker(cleanupInterval)
-		defer ticker.Stop()
-
-		for range ticker.C {
-			cleanupInactiveStreams()
-		}
-	}()
-
-	// Start client activity sync
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-
-		for range ticker.C {
-			syncHLSClientActivity()
-		}
-	}()
-
-	// Create HLS directory if needed
-	hlsDir, err := conf.GetHLSDirectory()
-	if err != nil {
-		log.Printf("Warning: Failed to create HLS directory: %v", err)
-	} else {
-		log.Printf("HLS streaming directory initialized at: %s", hlsDir)
-	}
+// HLSHeartbeat represents a client heartbeat message
+type HLSHeartbeat struct {
+	SourceID string `json:"source_id"`
+	ClientID string `json:"client_id,omitempty"` // Optional, server can identify client from request
 }
 
 // AudioStreamHLS handles HLS audio streaming
@@ -120,8 +94,8 @@ func (h *Handlers) AudioStreamHLS(c echo.Context) error {
 		return err
 	}
 
-	// Register client activity at the start of the request
-	registerClientActivity(sourceID, clientID)
+	// Register client in client list and update stream activity
+	updateStreamActivity(sourceID, clientID, "request")
 
 	// Get or create HLS stream
 	stream, err := getOrCreateHLSStream(ctx, sourceID)
@@ -129,11 +103,6 @@ func (h *Handlers) AudioStreamHLS(c echo.Context) error {
 		log.Printf("Error creating HLS stream: %v - source: %s", err, sourceID)
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create audio stream")
 	}
-
-	// Update access time
-	hlsStreamMutex.Lock()
-	stream.LastAccess = time.Now()
-	hlsStreamMutex.Unlock()
 
 	// Determine what file is being requested
 	rawPath := c.Param("*")
@@ -144,14 +113,8 @@ func (h *Handlers) AudioStreamHLS(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid URL encoding")
 	}
 
-	// Record client activity when they request a segment
-	// This gives us a more accurate view of active clients
-	if strings.HasSuffix(requestPath, ".ts") {
-		registerClientActivity(sourceID, clientID)
-	}
-
-	// Monitor context cancellation for client disconnection
-	go h.monitorClientDisconnection(ctx, sourceID, clientID)
+	// No need to monitor context for this anymore - handled by heartbeats
+	// NOTE: We're removing the call to monitorClientDisconnection
 
 	// Log client connection if needed
 	h.logClientConnection(sourceID, c.RealIP(), requestPath)
@@ -161,9 +124,15 @@ func (h *Handlers) AudioStreamHLS(c echo.Context) error {
 
 	// Serve the appropriate file based on request
 	if requestPath == "" || requestPath == "playlist.m3u8" {
+		if hlsVerboseLogging {
+			log.Printf("Serving playlist for source %s requested by %s", sourceID, clientID)
+		}
 		return h.servePlaylistFile(c, stream, hlsBaseDir)
 	}
 
+	if hlsVerboseLogging && strings.HasSuffix(requestPath, ".ts") {
+		log.Printf("Serving segment %s for source %s requested by %s", requestPath, sourceID, clientID)
+	}
 	return h.serveSegmentFile(c, stream, requestPath, hlsBaseDir)
 }
 
@@ -171,7 +140,9 @@ func (h *Handlers) AudioStreamHLS(c echo.Context) error {
 func (h *Handlers) validateHLSRequest(c echo.Context) (sourceID, clientID, hlsBaseDir string, err error) {
 	sourceID = c.Param("sourceID")
 	clientIP := c.RealIP()
-	clientID = clientIP + "-" + c.Request().Header.Get("User-Agent")
+
+	// Create a standardized client ID using the helper function
+	clientID = generateClientID(clientIP, c.Request().Header.Get("User-Agent"))
 
 	if sourceID == "" {
 		return "", "", "", echo.NewHTTPError(http.StatusBadRequest, "Source ID is required")
@@ -217,13 +188,6 @@ func (h *Handlers) validateHLSRequest(c echo.Context) (sourceID, clientID, hlsBa
 	return sourceID, clientID, baseDir, nil
 }
 
-// monitorClientDisconnection watches for client disconnection
-func (h *Handlers) monitorClientDisconnection(ctx context.Context, sourceID, clientID string) {
-	<-ctx.Done()
-	// Request completed or canceled, update last activity
-	updateClientDisconnection(sourceID, clientID)
-}
-
 // logClientConnection logs client connection information
 func (h *Handlers) logClientConnection(sourceID, clientIP, requestPath string) {
 	logKey := sourceID + "-" + clientIP
@@ -262,6 +226,13 @@ func (h *Handlers) addCorsHeaders(c echo.Context) {
 
 // servePlaylistFile serves the HLS playlist file
 func (h *Handlers) servePlaylistFile(c echo.Context, stream *HLSStreamInfo, hlsBaseDir string) error {
+	// Update stream activity - playlist requests indicate active client
+	updateStreamActivity(stream.SourceID, "", "playlist_request")
+
+	if hlsVerboseLogging {
+		log.Printf("Updated activity timestamp for stream %s due to playlist request", stream.SourceID)
+	}
+
 	// Sanitize the path
 	cleanPath := filepath.Clean("/playlist.m3u8")
 	if strings.Contains(cleanPath, "..") || cleanPath == "/" {
@@ -326,6 +297,9 @@ func (h *Handlers) serveSegmentFile(c echo.Context, stream *HLSStreamInfo, reque
 	// Remove leading slash for concatenation
 	safeRequestPath := cleanPath[1:]
 
+	// For all requests, update stream activity - this indicates active playback
+	updateStreamActivity(stream.SourceID, "", "segment_request")
+
 	// Build the full segment path
 	segmentPath := filepath.Join(stream.OutputDir, safeRequestPath)
 
@@ -361,30 +335,10 @@ func (h *Handlers) serveSegmentFile(c echo.Context, stream *HLSStreamInfo, reque
 	return secFS.ServeFile(c, segmentPath)
 }
 
-// registerClientActivity records client activity for a source
+// registerClientActivity is now just a wrapper around updateStreamActivity
+// for backward compatibility
 func registerClientActivity(sourceID, clientID string) {
-	// Consistent lock order: first stream clients, then client activity
-	hlsStreamClientMutex.Lock()
-	if _, exists := hlsStreamClients[sourceID]; !exists {
-		hlsStreamClients[sourceID] = make(map[string]bool)
-	}
-	hlsStreamClients[sourceID][clientID] = true
-	hlsStreamClientMutex.Unlock()
-
-	// Use a separate lock scope for client activity
-	hlsClientActivityMutex.Lock()
-	if _, exists := hlsClientActivity[sourceID]; !exists {
-		hlsClientActivity[sourceID] = make(map[string]time.Time)
-	}
-	hlsClientActivity[sourceID][clientID] = time.Now()
-	hlsClientActivityMutex.Unlock()
-}
-
-// updateClientDisconnection handles client disconnection events
-func updateClientDisconnection(sourceID, clientID string) {
-	// Just mark the last activity time, let the regular cleanup handle the rest
-	// This avoids immediate cleanup which could interrupt other active requests
-	registerClientActivity(sourceID, clientID)
+	updateStreamActivity(sourceID, clientID, "registration")
 }
 
 // buildFFmpegArgs constructs the command line arguments for the FFmpeg HLS process
@@ -577,7 +531,7 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	}
 
 	// Open the log file using secureFS
-	logFile, err := secFS.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	logFile, err := secFS.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		streamCancel() // Clean up context
 		return nil, fmt.Errorf("failed to create ffmpeg log file: %w", err)
@@ -609,7 +563,6 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 		FFmpegCmd:    cmd,
 		OutputDir:    outputDir,
 		PlaylistPath: playlistPath,
-		LastAccess:   time.Now(),
 		FifoPipe:     pipeName, // Store the resolved pipe name
 		ctx:          streamCtx,
 		cancel:       streamCancel,
@@ -648,6 +601,9 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	hlsStreams[sourceID] = stream
 	hlsStreamMutex.Unlock()
 
+	// Initialize the activity timestamp for the new stream
+	updateStreamActivity(sourceID, "", "stream_creation")
+
 	// Start goroutine to feed audio data to FFmpeg
 	go feedAudioToFFmpeg(sourceID, stream.FifoPipe, stream.ctx)
 
@@ -671,56 +627,12 @@ func cleanupStream(sourceID string) {
 
 	log.Printf("Cleaning up HLS stream for source: %s", sourceID)
 
-	// Store FFmpegCmd for later wait operation
-	ffmpegCmd := stream.FFmpegCmd
-
 	// Remove from map first, then release lock
 	delete(hlsStreams, sourceID)
 	hlsStreamMutex.Unlock()
 
-	// Now wait without blocking other goroutines
-	if ffmpegCmd != nil && ffmpegCmd.Process != nil {
-		log.Printf("Waiting for FFmpeg process to terminate for source: %s", sourceID)
-		_, _ = ffmpegCmd.Process.Wait()
-	}
-
-	// Clean up client tracking
-	hlsStreamClientMutex.Lock()
-	delete(hlsStreamClients, sourceID)
-	hlsStreamClientMutex.Unlock()
-
-	// Clean up activity tracking
-	hlsClientActivityMutex.Lock()
-	delete(hlsClientActivity, sourceID)
-	hlsClientActivityMutex.Unlock()
-
-	// Get HLS directory for secure path checks
-	hlsBaseDir, err := conf.GetHLSDirectory()
-	if err != nil {
-		log.Printf("Error getting HLS directory: %v", err)
-		return
-	}
-
-	// Clean up directory using secure filesystem operations
-	if stream.OutputDir != "" {
-		// Create a secure filesystem for cleanup operations
-		secFS, err := securefs.New(hlsBaseDir)
-		if err != nil {
-			log.Printf("Error creating secure filesystem: %v", err)
-			return
-		}
-		defer secFS.Close()
-
-		// Check if directory exists using secureFS
-		if secFS.ExistsNoErr(stream.OutputDir) {
-			log.Printf("Removing stream directory: %s", stream.OutputDir)
-			if err := secFS.RemoveAll(stream.OutputDir); err != nil {
-				log.Printf("Error removing stream directory: %v", err)
-			}
-		}
-	}
-
-	log.Printf("HLS stream for source %s fully cleaned up", sourceID)
+	// Use the centralized cleanup function
+	performStreamCleanup(sourceID, stream, "context cancelled")
 }
 
 // setupAudioCallback sets up the audio callback and channel
@@ -877,66 +789,71 @@ func feedAudioToFFmpeg(sourceID, pipePath string, ctx context.Context) {
 	}
 }
 
-// setupSecureFS prepares the secure filesystem and validates paths
-func setupSecureFS(fifoPath string) (*securefs.SecureFS, error) {
-	// Get HLS directory for path validation
-	hlsBaseDir, err := conf.GetHLSDirectory()
-	if err != nil {
-		return nil, fmt.Errorf("error getting HLS directory: %w", err)
-	}
-
-	// Create a secure filesystem for operations
-	secFS, err := securefs.New(hlsBaseDir)
-	if err != nil {
-		return nil, fmt.Errorf("error creating secure filesystem: %w", err)
-	}
-
-	// Validate fifoPath before opening
-	isWithin, err := securefs.IsPathWithinBase(hlsBaseDir, fifoPath)
-	if err != nil {
-		secFS.Close()
-		return nil, fmt.Errorf("error validating FIFO path: %w", err)
-	}
-	if !isWithin {
-		secFS.Close()
-		return nil, fmt.Errorf("security error: path %s is outside allowed directory %s", fifoPath, hlsBaseDir)
-	}
-
-	return secFS, nil
-}
-
-// setupFIFO prepares and opens the FIFO for writing with platform-specific settings
-func setupFIFO(ctx context.Context, sourceID, fifoPath string, secFS *securefs.SecureFS) (*os.File, error) {
-	// Try to open the FIFO with platform-specific settings
-	return secFS.OpenFIFO(ctx, fifoPath)
-}
-
-// cleanupInactiveStreams removes streams that haven't been accessed recently
-func cleanupInactiveStreams() {
-	hlsStreamMutex.Lock()
-	defer hlsStreamMutex.Unlock()
-
-	now := time.Now()
-	for sourceID, stream := range hlsStreams {
-		if now.Sub(stream.LastAccess) <= inactivityTimeout {
-			continue
-		}
-
-		log.Printf("Cleaning up inactive HLS stream for source: %s (inactive for %v)",
-			sourceID, now.Sub(stream.LastAccess))
-
-		// Cancel the stream context to trigger cleanup
-		if stream.cancel != nil {
-			stream.cancel()
-		}
-		// All streams should have context now, so we don't need the fallback anymore
-	}
-}
-
-// syncHLSClientActivity verifies true client activity by checking segment requests
+// syncHLSClientActivity checks for inactive streams based on heartbeat timeouts
+// This is the sole mechanism for cleaning up inactive streams - we rely on activity
+// timestamps updated by client heartbeats and file requests
 func syncHLSClientActivity() {
-	// Process inactive clients first
-	inactiveClients, activeCount := processInactiveClients()
+	// Check for inactive streams and store streams to clean up
+	streamsToCleanup := []string{}
+
+	// First, get a list of all current streams
+	hlsStreamMutex.Lock()
+	activeStreamIDs := make([]string, 0, len(hlsStreams))
+	for sourceID := range hlsStreams {
+		activeStreamIDs = append(activeStreamIDs, sourceID)
+	}
+	hlsStreamMutex.Unlock()
+
+	// Check each stream's activity - we check for each known stream
+	// rather than iterating hlsStreamActivity to catch any potential orphans
+	for _, sourceID := range activeStreamIDs {
+		if !isStreamActive(sourceID) {
+			// Get duration for logging
+			var inactiveDuration time.Duration
+			hlsStreamActivityMutex.Lock()
+			if lastActivity, exists := hlsStreamActivity[sourceID]; exists {
+				inactiveDuration = time.Since(lastActivity)
+				// Delete from activity map
+				delete(hlsStreamActivity, sourceID)
+			}
+			hlsStreamActivityMutex.Unlock()
+
+			// Count clients for logging
+			clientCount := 0
+			hlsStreamClientMutex.Lock()
+			if clients, exists := hlsStreamClients[sourceID]; exists {
+				clientCount = len(clients)
+			}
+			hlsStreamClientMutex.Unlock()
+
+			// Log the cleanup
+			log.Printf("Stream %s inactive for %v (exceeds %v timeout), marking for cleanup. Client count: %d",
+				sourceID, inactiveDuration, streamInactivityTimeout, clientCount)
+
+			// Add to cleanup list
+			streamsToCleanup = append(streamsToCleanup, sourceID)
+		} else if hlsVerboseLogging {
+			// Get last activity time for verbose logging
+			var inactiveDuration time.Duration
+			hlsStreamActivityMutex.Lock()
+			if lastActivity, exists := hlsStreamActivity[sourceID]; exists {
+				inactiveDuration = time.Since(lastActivity)
+			}
+			hlsStreamActivityMutex.Unlock()
+
+			// Count clients for verbose logging
+			clientCount := 0
+			hlsStreamClientMutex.Lock()
+			if clients, exists := hlsStreamClients[sourceID]; exists {
+				clientCount = len(clients)
+			}
+			hlsStreamClientMutex.Unlock()
+
+			// Log active stream status
+			log.Printf("Stream %s last activity: %0.0f seconds ago, active clients: %d",
+				sourceID, inactiveDuration.Seconds(), clientCount)
+		}
+	}
 
 	// Get HLS directory for secure path checks
 	hlsBaseDir, err := conf.GetHLSDirectory()
@@ -953,164 +870,94 @@ func syncHLSClientActivity() {
 	}
 	defer secureFs.Close()
 
-	// Sync client tracking with activity data
-	syncStreamClients(inactiveClients, activeCount, hlsBaseDir, secureFs)
-}
-
-// processInactiveClients cleans up inactive clients and returns active client counts and inactive client IDs
-func processInactiveClients() (inactiveClients map[string][]string, activeCount map[string]int) {
-	hlsClientActivityMutex.Lock()
-	defer hlsClientActivityMutex.Unlock()
-
-	now := time.Now()
-	activeCount = make(map[string]int)
-	inactiveClients = make(map[string][]string)
-
-	// Check for inactive clients
-	for sourceID, clients := range hlsClientActivity {
-		activeCount[sourceID] = 0
-		inactiveClients[sourceID] = []string{}
-
-		for clientID, lastActive := range clients {
-			// Calculate inactivity duration
-			inactiveDuration := now.Sub(lastActive)
-
-			if inactiveDuration > clientInactivityTimeout {
-				// Client hasn't requested segments recently, consider inactive
-				delete(clients, clientID)
-				inactiveClients[sourceID] = append(inactiveClients[sourceID], clientID)
-				log.Printf("Removing inactive HLS client %s for source %s (no segments requested for %v)",
-					clientID, sourceID, inactiveDuration)
-			} else {
-				activeCount[sourceID]++
-			}
-		}
-
-		// Remove source entry if no clients left
-		if len(clients) == 0 {
-			delete(hlsClientActivity, sourceID)
-		}
-	}
-
-	return inactiveClients, activeCount
-}
-
-// syncStreamClients cleans up streams with no active clients
-func syncStreamClients(inactiveClients map[string][]string, activeCount map[string]int, hlsBaseDir string, secureFs *securefs.SecureFS) {
-	hlsStreamMutex.Lock()
-
-	// Get current time for grace period calculations
-	now := time.Now()
-
-	// Track streams to clean up, we'll do this outside the lock
-	streamsToCleanup := []string{}
-
-	// First, process inactive clients we found and collect streams to check
-	hlsStreamClientMutex.Lock()
-
-	// First, process inactive clients we found
-	for sourceID, clientIDs := range inactiveClients {
-		if clients, exists := hlsStreamClients[sourceID]; exists {
-			for _, clientID := range clientIDs {
-				delete(clients, clientID)
-			}
-		}
-	}
-
-	// Then check for sources with no active clients
-	for sourceID, clients := range hlsStreamClients {
-		// Look up the corresponding stream to check its creation time
-		stream, streamExists := hlsStreams[sourceID]
-
-		// If no active clients for this source, clean up after a grace period
-		activityCount := activeCount[sourceID]
-		trackedCount := len(clients)
-
-		if activityCount == 0 && trackedCount > 0 {
-			// Tracking says we have clients but no active clients detected
-			// Only clean up if the stream has been around for at least a few seconds
-			// to avoid race conditions during stream startup
-
-			// Apply a 30-second grace period for newly created streams to avoid
-			// cleaning up streams that are still initializing
-			streamAge := time.Duration(0)
-			if streamExists {
-				streamAge = now.Sub(stream.LastAccess)
-			}
-
-			if !streamExists || streamAge >= 15*time.Second {
-				log.Printf("Client tracking mismatch for source %s: tracked=%d, active=%d, age=%v. Resolving...",
-					sourceID, trackedCount, activityCount, streamAge)
-
-				// Force clean up all clients for this source
-				delete(hlsStreamClients, sourceID)
-
-				// Mark for stream cleanup
-				streamsToCleanup = append(streamsToCleanup, sourceID)
-			} else {
-				// Stream is too new, give it more time before cleanup
-				log.Printf("Delaying cleanup for new HLS stream %s: tracked=%d, active=%d, age=%v",
-					sourceID, trackedCount, activityCount, streamAge)
-			}
-		}
-	}
-
-	hlsStreamClientMutex.Unlock()
-	hlsStreamMutex.Unlock()
-
-	// Clean up streams in a separate lock scope to prevent deadlocks
+	// Clean up the inactive streams
 	for _, sourceID := range streamsToCleanup {
-		cleanupInactiveStream(sourceID, hlsBaseDir, secureFs)
+		cleanupInactiveStream(sourceID)
+	}
+
+	// Debug logging
+	if hlsVerboseLogging {
+		logActiveHLSStreams()
 	}
 }
 
-// cleanupInactiveStream stops and cleans up an inactive stream
-func cleanupInactiveStream(sourceID, hlsBaseDir string, secFS *securefs.SecureFS) {
+// logActiveHLSStreams logs information about all active streams
+func logActiveHLSStreams() {
 	hlsStreamMutex.Lock()
 	defer hlsStreamMutex.Unlock()
 
-	if stream, exists := hlsStreams[sourceID]; exists {
-		// Check if this is a new stream that just started
-		streamAge := time.Since(stream.LastAccess)
-		if streamAge < 5*time.Second {
-			// Don't clean up streams that are less than 5 seconds old
-			// This gives FFmpeg time to initialize and generate the playlist
-			log.Printf("Skipping cleanup of new HLS stream for source %s (age: %v)", sourceID, streamAge)
-			return
+	hlsStreamClientMutex.Lock()
+	defer hlsStreamClientMutex.Unlock()
+
+	log.Printf("=== HLS STREAM STATUS ===")
+	for sourceID := range hlsStreams {
+		// Count clients for this stream
+		clientCount := 0
+		if clients, exists := hlsStreamClients[sourceID]; exists {
+			clientCount = len(clients)
 		}
 
-		log.Printf("Stopping stale HLS stream for source %s (no active clients)", sourceID)
-
-		// Cancel the context, which will terminate the FFmpeg process
-		if stream.cancel != nil {
-			stream.cancel()
+		// Get activity info for this stream
+		active := isStreamActive(sourceID)
+		status := "ACTIVE"
+		if !active {
+			status = "INACTIVE"
 		}
 
-		// Wait for process termination if needed
-		if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
-			_, _ = stream.FFmpegCmd.Process.Wait()
+		// Get time since last activity
+		var timeSinceActivity float64
+		hlsStreamActivityMutex.Lock()
+		if timestamp, exists := hlsStreamActivity[sourceID]; exists {
+			timeSinceActivity = time.Since(timestamp).Seconds()
 		}
+		hlsStreamActivityMutex.Unlock()
 
-		// Clean up stream directory using secureFS
-		if stream.OutputDir != "" && secFS != nil {
-			if secFS.ExistsNoErr(stream.OutputDir) {
-				log.Printf("Cleaning up stream directory: %s", stream.OutputDir)
-				if err := secFS.RemoveAll(stream.OutputDir); err != nil {
-					log.Printf("Error removing stream directory: %v", err)
-				}
-			}
-		}
-
-		delete(hlsStreams, sourceID)
-		log.Printf("HLS stream for source %s fully cleaned up", sourceID)
+		log.Printf("Stream: %s | Status: %s | Clients: %d | Last Activity: %0.0f seconds ago",
+			sourceID, status, clientCount, timeSinceActivity)
 	}
+	log.Printf("=======================")
+}
+
+// cleanupInactiveStream stops and cleans up an inactive stream
+func cleanupInactiveStream(sourceID string) {
+	hlsStreamMutex.Lock()
+
+	stream, exists := hlsStreams[sourceID]
+	if !exists {
+		hlsStreamMutex.Unlock()
+		return
+	}
+
+	// Check if this is a new stream that just started
+	// Get activity timestamp from the activity map
+	var streamAge time.Duration
+	hlsStreamActivityMutex.Lock()
+	if activityTime, hasActivity := hlsStreamActivity[sourceID]; hasActivity {
+		streamAge = time.Since(activityTime)
+	}
+	hlsStreamActivityMutex.Unlock()
+
+	if streamAge < 30*time.Second {
+		// Don't clean up streams that are less than 30 seconds old
+		// This gives FFmpeg time to initialize and generate the playlist
+		log.Printf("Skipping cleanup of new HLS stream for source %s (age: %v)", sourceID, streamAge)
+		hlsStreamMutex.Unlock()
+		return
+	}
+
+	// Remove from map before cleanup to prevent new connections
+	delete(hlsStreams, sourceID)
+	hlsStreamMutex.Unlock()
+
+	// Use the centralized cleanup function
+	performStreamCleanup(sourceID, stream, fmt.Sprintf("inactive for %v", streamAge))
 }
 
 // StartHLSStream explicitly starts an HLS stream for a source
 // This is called when a client wants to start playing a stream
 func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatus, error) {
 	clientIP := c.RealIP()
-	clientID := fmt.Sprintf("%s-%d", clientIP, time.Now().UnixNano())
+	clientID := generateClientID(clientIP, c.Request().Header.Get("User-Agent"))
 
 	log.Printf("Client %s requested to start HLS stream for source: %s", clientID, sourceID)
 
@@ -1161,23 +1008,17 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatu
 	}
 	hlsStreamMutex.Unlock()
 
-	// Register this client for the stream before starting FFmpeg
-	// to avoid race condition where stream is terminated before client connects
-	hlsStreamClientMutex.Lock()
-	if _, exists := hlsStreamClients[sourceID]; !exists {
-		hlsStreamClients[sourceID] = make(map[string]bool)
-	}
-	hlsStreamClients[sourceID][clientID] = true
-	activeClients := len(hlsStreamClients[sourceID])
-	hlsStreamClientMutex.Unlock()
+	// Add client to stream tracking with a longer initial timeout
+	// to give FFmpeg time to start up and generate the playlist
+	updateStreamActivity(sourceID, clientID, "stream_start", 30*time.Second)
 
-	// Also update client activity timestamp
-	hlsClientActivityMutex.Lock()
-	if _, exists := hlsClientActivity[sourceID]; !exists {
-		hlsClientActivity[sourceID] = make(map[string]time.Time)
+	// Log the client count
+	hlsStreamClientMutex.Lock()
+	activeClients := 0
+	if clients, exists := hlsStreamClients[sourceID]; exists {
+		activeClients = len(clients)
 	}
-	hlsClientActivity[sourceID][clientID] = time.Now().Add(10 * time.Second) // Extend initial activity time
-	hlsClientActivityMutex.Unlock()
+	hlsStreamClientMutex.Unlock()
 
 	log.Printf("HLS stream for source %s now has %d active clients", sourceID, activeClients)
 
@@ -1281,102 +1122,54 @@ func (h *Handlers) StartHLSStream(c echo.Context, sourceID string) (*StreamStatu
 // When the last client disconnects, we'll stop the FFmpeg process
 func (h *Handlers) StopHLSClientStream(c echo.Context, sourceID string) error {
 	clientIP := c.RealIP()
-	var lastClient bool
-	var clientIDToRemove string
-	var remainingClients int
+	clientID := generateClientID(clientIP, c.Request().Header.Get("User-Agent"))
 
-	// First find the client to remove and check if it's the last one
+	// Remove client from tracking
 	hlsStreamClientMutex.Lock()
+	lastClient := false
 	if clients, exists := hlsStreamClients[sourceID]; exists {
-		// Find the client ID to remove
-		for clientID := range clients {
-			if strings.HasPrefix(clientID, clientIP+"-") {
-				clientIDToRemove = clientID
-				break
-			}
+		// Remove the client
+		delete(clients, clientID)
+
+		// Check if this was the last client
+		lastClient = len(clients) == 0
+
+		// If no clients left, remove the source entry
+		if lastClient {
+			delete(hlsStreamClients, sourceID)
 		}
 
-		// Remove the client if found
-		if clientIDToRemove != "" {
-			delete(clients, clientIDToRemove)
-
-			// Check if no clients are left
-			remainingClients = len(clients)
-			lastClient = remainingClients == 0
-			if lastClient {
-				delete(hlsStreamClients, sourceID)
-			}
-		}
-	}
-	hlsStreamClientMutex.Unlock()
-
-	// Log client disconnection - after releasing the mutex
-	if clientIDToRemove != "" {
-		log.Printf("Client %s disconnected from HLS stream for source: %s", clientIDToRemove, sourceID)
-
+		// Log the disconnection
+		remainingClients := len(clients)
+		log.Printf("Client %s disconnected from HLS stream for source: %s", clientID, sourceID)
 		if !lastClient {
 			log.Printf("HLS stream for source %s still has %d active clients", sourceID, remainingClients)
 		}
 	}
+	hlsStreamClientMutex.Unlock()
 
-	// If this was the last client, clean up the stream in a separate lock scope
-	// Note: We've already released the client mutex, which prevents deadlock
+	// If this was the last client, stop the stream immediately
 	if lastClient {
 		hlsStreamMutex.Lock()
-		if stream, exists := hlsStreams[sourceID]; exists {
+		stream, exists := hlsStreams[sourceID]
+		if exists {
 			log.Printf("Last client disconnected, stopping FFmpeg for source: %s", sourceID)
 
-			// Cancel the context, which will terminate the FFmpeg process
-			if stream.cancel != nil {
-				stream.cancel()
-			}
-
-			// Wait for process termination if needed
-			if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
-				_, _ = stream.FFmpegCmd.Process.Wait()
-			}
-
-			// Clean up the stream
+			// Remove from map immediately to prevent new clients
 			delete(hlsStreams, sourceID)
+			hlsStreamMutex.Unlock()
 
-			// Get HLS directory for secure path operations
-			hlsBaseDir, err := conf.GetHLSDirectory()
-			if err != nil {
-				log.Printf("Error getting HLS directory: %v", err)
-			} else if stream.OutputDir != "" {
-				// Create a secure filesystem for cleanup
-				secFS, err := securefs.New(hlsBaseDir)
-				if err != nil {
-					log.Printf("Error creating secure filesystem: %v", err)
-				} else {
-					defer secFS.Close()
-
-					// Clean up the directory using secureFS
-					if secFS.ExistsNoErr(stream.OutputDir) {
-						log.Printf("Cleaning up stream directory: %s", stream.OutputDir)
-						if err := secFS.RemoveAll(stream.OutputDir); err != nil {
-							log.Printf("Error removing stream directory: %v", err)
-						}
-					}
-				}
-			}
-
-			log.Printf("HLS stream stopped for source: %s", sourceID)
+			// Use consolidated cleanup function
+			performStreamCleanup(sourceID, stream, "last client disconnected")
+		} else {
+			hlsStreamMutex.Unlock()
 		}
-		hlsStreamMutex.Unlock()
 	}
 
-	// Clean up client activity tracking in a separate lock scope
-	if clientIDToRemove != "" {
-		hlsClientActivityMutex.Lock()
-		if clients, exists := hlsClientActivity[sourceID]; exists {
-			delete(clients, clientIDToRemove)
-			if len(clients) == 0 {
-				delete(hlsClientActivity, sourceID)
-			}
-		}
-		hlsClientActivityMutex.Unlock()
-	}
+	// Also remove from activity tracking
+	hlsStreamActivityMutex.Lock()
+	delete(hlsStreamActivity, sourceID)
+	hlsStreamActivityMutex.Unlock()
 
 	return nil
 }
@@ -1384,40 +1177,20 @@ func (h *Handlers) StopHLSClientStream(c echo.Context, sourceID string) error {
 // CleanupAllStreams removes all HLS streams and their files
 func CleanupAllStreams() error {
 	hlsStreamMutex.Lock()
-	defer hlsStreamMutex.Unlock()
 
-	// Iterate through all streams and clean them up
+	// Make a copy of all streams to clean up
+	streamsToClean := make(map[string]*HLSStreamInfo)
 	for sourceID, stream := range hlsStreams {
-		log.Printf("Cleaning up HLS stream for source: %s", sourceID)
-
-		// Cancel the context if it exists
-		if stream.cancel != nil {
-			stream.cancel()
-		}
-
-		// Wait for FFmpeg process to terminate if it exists
-		if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
-			_, _ = stream.FFmpegCmd.Process.Wait()
-		}
-	}
-
-	// Clear the stream maps
-	for sourceID := range hlsStreams {
+		streamsToClean[sourceID] = stream
+		// Also remove from streams map
 		delete(hlsStreams, sourceID)
 	}
+	hlsStreamMutex.Unlock()
 
-	// Also clear the client tracking maps
-	hlsStreamClientMutex.Lock()
-	for sourceID := range hlsStreamClients {
-		delete(hlsStreamClients, sourceID)
+	// Clean up each stream individually
+	for sourceID, stream := range streamsToClean {
+		performStreamCleanup(sourceID, stream, "server shutdown")
 	}
-	hlsStreamClientMutex.Unlock()
-
-	hlsClientActivityMutex.Lock()
-	for sourceID := range hlsClientActivity {
-		delete(hlsClientActivity, sourceID)
-	}
-	hlsClientActivityMutex.Unlock()
 
 	// Clean up any remaining stream directories
 	hlsBaseDir, err := conf.GetHLSDirectory()
@@ -1457,4 +1230,244 @@ func CleanupAllStreams() error {
 	}
 
 	return nil
+}
+
+// generateClientID creates a standardized client ID from IP and user agent
+// This ensures we consistently identify the same client across different parts of the code
+func generateClientID(clientIP, userAgent string) string {
+	clientType := "HLSPlayer"
+
+	switch {
+	case strings.Contains(userAgent, "Mozilla"):
+		clientType = "Browser"
+	case strings.Contains(userAgent, "VLC"):
+		clientType = "VLC"
+	case strings.Contains(userAgent, "FFmpeg"):
+		clientType = "FFmpeg"
+	}
+
+	return clientIP + "-" + clientType
+}
+
+// ProcessHLSHeartbeat handles client heartbeat signals for HLS streams
+// API: POST /api/v1/audio-stream-hls/heartbeat
+// Clients should send heartbeats regularly, at least once every 2-3 minutes
+// to ensure streams aren't prematurely cleaned up. Recommended heartbeat
+// interval is 60 seconds to provide a safety margin against network issues.
+func (h *Handlers) ProcessHLSHeartbeat(c echo.Context) error {
+	// Parse request body
+	var heartbeat HLSHeartbeat
+	if err := c.Bind(&heartbeat); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid heartbeat data")
+	}
+
+	// Ensure source ID is provided
+	if heartbeat.SourceID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "Source ID is required")
+	}
+
+	// Get client IP and generate consistent client ID
+	clientIP := c.RealIP()
+	clientID := generateClientID(clientIP, c.Request().Header.Get("User-Agent"))
+
+	// Check if stream exists to prevent orphaned activity entries
+	hlsStreamMutex.Lock()
+	_, streamExists := hlsStreams[heartbeat.SourceID]
+	hlsStreamMutex.Unlock()
+
+	if !streamExists {
+		// Don't update activity for non-existent streams
+		if hlsVerboseLogging {
+			log.Printf("Ignoring heartbeat from %s for non-existent stream %s",
+				clientID, heartbeat.SourceID)
+		}
+		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	}
+
+	// Store previous activity time for logging
+	var previousActivity time.Time
+	hlsStreamActivityMutex.Lock()
+	if prevTime, exists := hlsStreamActivity[heartbeat.SourceID]; exists {
+		previousActivity = prevTime
+	}
+	hlsStreamActivityMutex.Unlock()
+
+	// Update activity
+	updateStreamActivity(heartbeat.SourceID, clientID, "heartbeat")
+
+	// Log additional information about heartbeat if verbose logging is enabled
+	if hlsVerboseLogging && !previousActivity.IsZero() {
+		timeSinceLastActivity := time.Since(previousActivity)
+		log.Printf("Heartbeat extended stream lifetime by %0.0f seconds for %s",
+			timeSinceLastActivity.Seconds(), heartbeat.SourceID)
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// Initialize HLS streaming service
+func init() {
+	// Configure verbose logging from environment variable or config
+	configureHLSLogging()
+
+	// Start client activity sync - this is the sole mechanism for tracking stream activity
+	// We use a unified approach where activity tracking is based on heartbeats and file requests
+	// Each active stream has its timestamp updated whenever:
+	// 1. A client requests a playlist or segment file
+	// 2. A client sends a heartbeat signal
+	// 3. A new client connects to the stream
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			syncHLSClientActivity()
+		}
+	}()
+
+	// Create HLS directory if needed
+	hlsDir, err := conf.GetHLSDirectory()
+	if err != nil {
+		log.Printf("Warning: Failed to create HLS directory: %v", err)
+	} else {
+		log.Printf("HLS streaming directory initialized at: %s", hlsDir)
+	}
+}
+
+// configureHLSLogging sets up HLS verbose logging based on environment variable
+func configureHLSLogging() {
+	// Check environment variable first
+	if envValue := os.Getenv(hlsVerboseEnvVar); envValue != "" {
+		if envValue == "1" || strings.EqualFold(envValue, "true") {
+			hlsVerboseLogging = true
+			log.Printf("HLS verbose logging enabled via environment variable %s", hlsVerboseEnvVar)
+			return
+		} else if envValue == "0" || strings.EqualFold(envValue, "false") {
+			hlsVerboseLogging = false
+			log.Printf("HLS verbose logging explicitly disabled via environment variable %s", hlsVerboseEnvVar)
+			return
+		}
+	}
+
+	// If not configured via environment, enable temporarily for diagnostics
+	hlsVerboseLogging = true
+	log.Printf("HLS verbose logging enabled temporarily for %v", hlsVerboseLoggingTimeout)
+	go func() {
+		time.Sleep(hlsVerboseLoggingTimeout)
+		hlsVerboseLogging = false
+		log.Printf("HLS verbose logging disabled after diagnostic period")
+	}()
+}
+
+// performStreamCleanup provides a centralized cleanup function for HLS streams
+// to reduce code duplication across different cleanup scenarios
+func performStreamCleanup(sourceID string, stream *HLSStreamInfo, reason string) {
+	log.Printf("Cleaning up HLS stream for source %s: %s", sourceID, reason)
+
+	// Cancel the context to terminate the FFmpeg process
+	if stream.cancel != nil {
+		stream.cancel()
+	}
+
+	// Wait for process termination if needed
+	if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
+		_, _ = stream.FFmpegCmd.Process.Wait()
+	}
+
+	// Clean up the output directory
+	if stream.OutputDir != "" {
+		// Get HLS directory for secure path operations
+		hlsBaseDir, err := conf.GetHLSDirectory()
+		if err != nil {
+			log.Printf("Error getting HLS directory: %v", err)
+			return
+		}
+
+		// Create a secure filesystem for cleanup
+		secFS, err := securefs.New(hlsBaseDir)
+		if err != nil {
+			log.Printf("Error creating secure filesystem: %v", err)
+			return
+		}
+		defer secFS.Close()
+
+		// Remove the directory
+		if secFS.ExistsNoErr(stream.OutputDir) {
+			log.Printf("Cleaning up stream directory: %s", stream.OutputDir)
+			if err := secFS.RemoveAll(stream.OutputDir); err != nil {
+				log.Printf("Error removing stream directory: %v", err)
+			}
+		}
+	}
+
+	// Clean up client tracking
+	hlsStreamClientMutex.Lock()
+	delete(hlsStreamClients, sourceID)
+	hlsStreamClientMutex.Unlock()
+
+	// Clean up activity tracking
+	hlsStreamActivityMutex.Lock()
+	delete(hlsStreamActivity, sourceID)
+	hlsStreamActivityMutex.Unlock()
+
+	log.Printf("HLS stream for source %s fully cleaned up", sourceID)
+}
+
+// updateStreamActivity records any activity for a stream and its clients
+// This is the ONLY place where stream activity should be updated
+func updateStreamActivity(sourceID, clientID, activityType string, gracePeriod ...time.Duration) {
+	// Track the client if provided
+	if clientID != "" {
+		hlsStreamClientMutex.Lock()
+		if _, exists := hlsStreamClients[sourceID]; !exists {
+			hlsStreamClients[sourceID] = make(map[string]bool)
+		}
+		hlsStreamClients[sourceID][clientID] = true
+		clientCount := len(hlsStreamClients[sourceID])
+		hlsStreamClientMutex.Unlock()
+
+		if hlsVerboseLogging {
+			log.Printf("Client %s activity (%s) recorded for stream %s (total clients: %d)",
+				clientID, activityType, sourceID, clientCount)
+		}
+	}
+
+	// Always update the activity timestamp
+	hlsStreamActivityMutex.Lock()
+
+	// Apply grace period if provided
+	extraTime := time.Duration(0)
+	if len(gracePeriod) > 0 {
+		extraTime = gracePeriod[0]
+		if hlsVerboseLogging && extraTime > 0 {
+			log.Printf("Adding grace period of %v to stream %s activity timestamp", extraTime, sourceID)
+		}
+	}
+
+	hlsStreamActivity[sourceID] = time.Now().Add(extraTime)
+	hlsStreamActivityMutex.Unlock()
+}
+
+// isStreamActive checks if a stream has had activity within the timeout period
+func isStreamActive(sourceID string) bool {
+	hlsStreamActivityMutex.Lock()
+	defer hlsStreamActivityMutex.Unlock()
+
+	lastActivity, exists := hlsStreamActivity[sourceID]
+	if !exists {
+		if hlsVerboseLogging {
+			log.Printf("Stream %s has no activity record", sourceID)
+		}
+		return false
+	}
+
+	timeSinceActivity := time.Since(lastActivity)
+	isActive := timeSinceActivity <= streamInactivityTimeout
+
+	if hlsVerboseLogging && !isActive {
+		log.Printf("Stream %s inactive: %0.0f seconds > %0.0f seconds timeout",
+			sourceID, timeSinceActivity.Seconds(), streamInactivityTimeout.Seconds())
+	}
+
+	return isActive
 }

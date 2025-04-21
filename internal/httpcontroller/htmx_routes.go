@@ -179,6 +179,16 @@ func (s *Server) initRoutes() {
 		return c.JSON(http.StatusOK, status)
 	})
 
+	// Add HLS client heartbeat endpoint to track active clients
+	s.Echo.POST("/api/v1/audio-stream-hls/heartbeat", func(c echo.Context) error {
+		// Add server to context for authentication
+		c.Set("server", s)
+
+		s.Debug("Received HLS client heartbeat")
+
+		return s.Handlers.WithErrorHandling(s.Handlers.ProcessHLSHeartbeat)(c)
+	})
+
 	s.Echo.POST("/api/v1/audio-stream-hls/:sourceID/stop", func(c echo.Context) error {
 		// Add server to context for authentication
 		c.Set("server", s)

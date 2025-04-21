@@ -26,6 +26,10 @@
         inErrorCooldown: false,
         nonFatalErrorCount: 0,
         lastNonFatalErrorTime: null,
+        // Heartbeat tracking
+        heartbeatInterval: null,
+        heartbeatFrequency: 20000, // Send heartbeat every 20 seconds
+        heartbeatErrorCount: 0,
 
         isInactive(source) {
             // If we don't have the source in levels at all, consider it inactive
@@ -153,6 +157,69 @@
             };
         },
         
+        // Send heartbeat to server to maintain session
+        sendHeartbeat() {
+            // Only send heartbeat if we're playing something
+            if (!this.isPlaying || !this.playingSource) {
+                return;
+            }
+            
+            const heartbeatUrl = `${window.location.origin}/api/v1/audio-stream-hls/heartbeat`;
+            const heartbeatData = {
+                source_id: this.playingSource
+            };
+            
+            fetch(heartbeatUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(heartbeatData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Heartbeat failed: ' + response.status);
+                }
+                // Reset error count on success
+                this.heartbeatErrorCount = 0;
+                return response.json();
+            })
+            .catch(error => {
+                console.warn('Failed to send heartbeat:', error);
+                this.heartbeatErrorCount++;
+                
+                // If too many consecutive heartbeat failures, assume connection lost
+                if (this.heartbeatErrorCount > 3) {
+                    console.error('Multiple heartbeat failures - connection may be lost');
+                    
+                    // Don't stop playback though - the HLS player will detect media errors
+                    // and we don't want to interrupt playback unnecessarily
+                }
+            });
+        },
+        
+        // Start heartbeat interval
+        startHeartbeat() {
+            this.stopHeartbeat(); // Clear any existing interval
+            
+            // Start new heartbeat interval
+            this.heartbeatInterval = setInterval(() => {
+                this.sendHeartbeat();
+            }, this.heartbeatFrequency);
+            
+            // Send initial heartbeat immediately
+            this.sendHeartbeat();
+        },
+        
+        // Stop heartbeat interval
+        stopHeartbeat() {
+            if (this.heartbeatInterval) {
+                clearInterval(this.heartbeatInterval);
+                this.heartbeatInterval = null;
+            }
+            this.heartbeatErrorCount = 0;
+        },
+        
         // Get or create audio element
         getAudioElement() {
             if (!this.audioElement) {
@@ -261,6 +328,9 @@
                     // After notifying server, set up HLS stream
                     const hlsUrl = `${window.location.origin}/api/v1/audio-stream-hls/${encodedSourceId}/playlist.m3u8`;
                     this.setupHLSStream(hlsUrl, sourceId);
+                    
+                    // Start heartbeat to let server know we're still connected
+                    this.startHeartbeat();
                 })
                 .catch(error => {
                     console.error('Error accessing audio stream: ' + error.message);
@@ -527,6 +597,9 @@
                 this.hidePlaybackStatus();
             }
             
+            // Stop heartbeat immediately
+            this.stopHeartbeat();
+            
             // Stop HTML5 audio element
             if (this.audioElement) {
                 this.audioElement.pause();
@@ -699,6 +772,9 @@
                 document.removeEventListener('visibilitychange', visibilityHandler);
                 document.removeEventListener('htmx:beforeRequest', this.cleanupEventSource);
                 document.removeEventListener('htmx:afterRequest', this.setupEventSource);
+                
+                // Stop heartbeat
+                this.stopHeartbeat();
                 
                 // Clean up audio element
                 if (this.audioElement) {
