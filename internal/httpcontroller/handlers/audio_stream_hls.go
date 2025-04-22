@@ -349,22 +349,66 @@ func registerClientActivity(sourceID, clientID string) {
 
 // buildFFmpegArgs constructs the command line arguments for the FFmpeg HLS process
 func buildFFmpegArgs(fifoPath, outputDir, playlistPath string) []string {
+	// Get live stream settings from config
+	liveStreamSettings := conf.Setting().WebServer.LiveStream
+
+	// Set default values if not configured
+	bitrate := 128 // Default bitrate in kbps
+	if liveStreamSettings.BitRate > 0 {
+		// Enforce bitrate limits between 16 and 320 kbps
+		switch {
+		case liveStreamSettings.BitRate < 16:
+			bitrate = 16
+			log.Printf("⚠️ Configured bitrate %d kbps is too low, using minimum 16 kbps", liveStreamSettings.BitRate)
+		case liveStreamSettings.BitRate > 320:
+			bitrate = 320
+			log.Printf("⚠️ Configured bitrate %d kbps is too high, using maximum 320 kbps", liveStreamSettings.BitRate)
+		default:
+			bitrate = liveStreamSettings.BitRate
+		}
+	}
+
+	sampleRate := 48000
+	if liveStreamSettings.SampleRate > 0 {
+		sampleRate = liveStreamSettings.SampleRate
+	}
+
+	segmentLength := 2 // Default segment length in seconds
+	if liveStreamSettings.SegmentLength > 0 {
+		// Enforce segment length limits between 1 and 30 seconds
+		switch {
+		case liveStreamSettings.SegmentLength < 1:
+			segmentLength = 1
+			log.Printf("⚠️ Configured segment length %d seconds is too short, using minimum 1 second", liveStreamSettings.SegmentLength)
+		case liveStreamSettings.SegmentLength > 30:
+			segmentLength = 30
+			log.Printf("⚠️ Configured segment length %d seconds is too long, using maximum 30 seconds", liveStreamSettings.SegmentLength)
+		default:
+			segmentLength = liveStreamSettings.SegmentLength
+		}
+	}
+
+	logLevel := "info"
+	if liveStreamSettings.FfmpegLogLevel != "" {
+		logLevel = liveStreamSettings.FfmpegLogLevel
+	}
+
 	return []string{
 		"-f", "s16le", // Input format: 16-bit PCM
-		"-ar", "48000", // Sample rate: 48kHz
+		"-ar", fmt.Sprintf("%d", sampleRate), // Sample rate from config
 		"-ac", "1", // Channels: mono
 		"-i", fifoPath, // Input from FIFO
 		"-c:a", "aac", // Codec: AAC
-		"-b:a", "128k", // Bitrate: 128kbps
+		"-b:a", fmt.Sprintf("%dk", bitrate), // Bitrate from config with limits
 		"-f", "hls", // Format: HLS
-		"-hls_time", "2", // Segment duration: 2 seconds
+		"-hls_time", fmt.Sprintf("%d", segmentLength), // Segment duration from config with limits
 		"-hls_list_size", "5", // Keep 5 segments in playlist
 		"-hls_flags", "delete_segments+append_list+temp_file", // Delete old segments and append to playlist
 		"-hls_segment_type", "mpegts", // Use MPEGTS segments for better compatibility
 		"-hls_init_time", "1", // Initial segment length: 1 second for faster startup
 		"-hls_allow_cache", "1", // Allow caching
 		"-start_number", "0", // Start with segment 0
-		"-loglevel", "info", // Set ffmpeg logging level to info
+		"-loglevel", logLevel, // Set ffmpeg logging level from config
 		"-hls_segment_filename", filepath.Join(outputDir, "segment%03d.ts"),
 		playlistPath, // Output playlist
 	}
