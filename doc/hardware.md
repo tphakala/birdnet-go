@@ -61,6 +61,8 @@ This document outlines the recommended hardware configurations for running BirdN
 
 ### Microphones
 
+**Important Note:** BirdNET AI processes all audio as mono only. Always use mono microphones for optimal performance. Stereo microphones can introduce phase errors which may reduce detection accuracy.
+
 #### DIY Microphone (Best Performance)
 
 * **Recommended Capsule:** PUI Audio AOM-5024L-HD-R
@@ -79,12 +81,11 @@ This document outlines the recommended hardware configurations for running BirdN
 
 #### Pre-made Microphone Options
 
-* **USB Lavalier (LAV) Microphones:**
-  * Pros: Simple plug-and-play setup, compact size, better suited for bird detection
-  * Cons: Still generally higher self-noise, lower sensitivity than DIY option
+* ** Lavalier (LAV) Microphones:**
   * Recommended models:
-    * **Boya USB BY-LM40** (frequently recommended in the community)
-    * Other omnidirectional lavalier microphones with USB connectivity
+    * **Boya USB BY-LM40** (frequently recommended in the community), in reality not very sensitive meaning audio captured is quite low volume
+    * **Clippy EM272 Mono Microphone** - High quality omnidirectional microphone with excellent sensitivity and low self-noise [Available here](https://micbooster.com/clippy-and-pluggy-microphones/65-1084-clippy-em272-microphone.html)
+    * Other omnidirectional lavalier microphones
 
 ## Storage
 
