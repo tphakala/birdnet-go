@@ -112,6 +112,9 @@ func processFiles(files []FileInfo, speciesMonthCount map[string]map[string]int,
 				continue
 			}
 
+			// Sleep a while to throttle the cleanup
+			time.Sleep(100 * time.Millisecond)
+
 			subDir := filepath.Dir(file.Path)
 			if !canDeleteFile(file, subDir, speciesMonthCount, minClipsPerSpecies, debug) {
 				continue
