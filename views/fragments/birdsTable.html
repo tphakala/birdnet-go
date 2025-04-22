@@ -40,7 +40,7 @@
     {{range $index, $element := .NotesWithIndex}}
     <tr>
       <!-- Species row -->
-      <th scope="row" class="py-1 px-2 sm:px-4 font-medium">
+      <th scope="row" class="py-1 px-2 sm:px-4 font-medium whitespace-nowrap">
         <a href="#" hx-get="/api/v1/detections?species={{urlquery .Note.CommonName}}&date={{urlquery $.SelectedDate}}&queryType=species" hx-target="#mainContent" hx-trigger="click" hx-push-url="true">{{title .Note.CommonName}}
         </a>
       </th>
