@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -136,6 +137,9 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 				}
 				continue
 			}
+
+			// Sleep a while to throttle the cleanup
+			time.Sleep(100 * time.Millisecond)
 
 			// Delete the file
 			if debug {
