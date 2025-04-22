@@ -174,6 +174,13 @@ func setDefaultConfig() {
 	viper.SetDefault("webserver.log.maxsize", 1048576)
 	viper.SetDefault("webserver.log.rotationday", time.Sunday)
 
+	// Live stream configuration
+	viper.SetDefault("webserver.livestream.debug", false)
+	viper.SetDefault("webserver.livestream.bitrate", 128)
+	viper.SetDefault("webserver.livestream.sampleRate", 48000)
+	viper.SetDefault("webserver.livestream.segmentLength", 2)
+	viper.SetDefault("webserver.livestream.ffmpegLogLevel", "info")
+
 	// File output configuration
 	viper.SetDefault("output.file.enabled", true)
 	viper.SetDefault("output.file.path", "output/")

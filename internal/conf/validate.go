@@ -126,18 +126,22 @@ func validateBirdNETSettings(settings *BirdNETConfig) error {
 }
 
 // validateWebServerSettings validates the WebServer-specific settings
-func validateWebServerSettings(settings *struct {
-	Debug   bool
-	Enabled bool
-	Port    string
-	Log     LogConfig
-}) error {
+func validateWebServerSettings(settings *WebServerSettings) error {
 	if settings.Enabled {
 		// Check if port is provided when enabled
 		if settings.Port == "" {
 			return errors.New("WebServer port is required when enabled")
 		}
 		// You might want to add more specific port validation here
+	}
+
+	// Validate LiveStream settings
+	if settings.LiveStream.BitRate < 16 || settings.LiveStream.BitRate > 320 {
+		return fmt.Errorf("LiveStream bitrate must be between 16 and 320 kbps, got %d", settings.LiveStream.BitRate)
+	}
+
+	if settings.LiveStream.SegmentLength < 1 || settings.LiveStream.SegmentLength > 30 {
+		return fmt.Errorf("LiveStream segment length must be between 1 and 30 seconds, got %d", settings.LiveStream.SegmentLength)
 	}
 
 	return nil
