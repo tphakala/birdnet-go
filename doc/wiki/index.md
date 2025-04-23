@@ -15,12 +15,6 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 * [Manual Docker Installation](installation.md#manual-docker-installation-advanced-linux-only) - Advanced Docker setup
 * [Manual Binary Installation](installation.md#manual-binary-installation-all-platforms) - Windows, macOS, and Linux binary installation
 
-## Usage Guides
-
-* [Realtime Analysis](https://github.com/tphakala/birdnet-go/wiki/Realtime-Analysis) - Setting up and using real-time audio analysis
-* [File Analysis](https://github.com/tphakala/birdnet-go/wiki/File-Analysis) - Analyzing audio files for bird sounds
-* [Configuration](guide.md#configuration) - Detailed configuration options and file formats
-
 ## Advanced Features
 
 * [Web Dashboard](guide.md#web-dashboard) - Using the visualization dashboard
