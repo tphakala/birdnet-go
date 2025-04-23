@@ -21,7 +21,7 @@ This script streamlines the installation process on compatible Linux systems (De
 *   Creates necessary directories (`~/birdnet-go-app/config` and `~/birdnet-go-app/data`) for persistent configuration and data storage.
 *   Downloads a base `config.yaml` file.
 *   Guides you through initial configuration (web port, audio input source, audio export format, locale, location, optional password protection).
-*   Optimizes performance settings (like `birdnet.overlap` for [Deep Detection](wiki.md#deep-detection)) based on detected hardware (e.g., Raspberry Pi model).
+*   Optimizes performance settings (like `birdnet.overlap` for [Deep Detection](guide.md#deep-detection)) based on detected hardware (e.g., Raspberry Pi model).
 *   Creates and enables a systemd service (`birdnet-go.service`) for automatic startup and management.
 
 **How to run:**
@@ -123,7 +123,7 @@ docker run -ti --rm \\
 
 *   You need to create the host directories (`</path/on/host/to/config>`, `</path/on/host/to/data>`) before running the command.
 *   Ensure the user running the command has the correct permissions to access Docker and the specified host directories.
-*   You will need to manually create/edit the `config.yaml` file in your mapped config directory. Refer to the [Configuration](wiki.md#configuration) section in the Wiki.
+*   You will need to manually create/edit the `config.yaml` file in your mapped config directory. Refer to the [Configuration](guide.md#configuration) section in the Wiki.
 *   You are responsible for managing the container's lifecycle (starting, stopping, updating).
 
 ## Manual Binary Installation (All platforms)
@@ -133,11 +133,11 @@ This method does not use Docker but requires manual dependency installation.
 1.  **Download Binary:** Go to the [BirdNET-Go Releases page](https://github.com/tphakala/birdnet-go/releases) and download the pre-compiled binary suitable for your operating system (Linux, macOS, Windows) and architecture.
 2.  **Download TFLite Library:** Download the corresponding TensorFlow Lite C library from [tphakala/tflite\_c Releases](https://github.com/tphakala/tflite_c/releases). Follow the installation instructions there (copying the `.so`, `.dylib`, or `.dll` file to the correct system path or the BirdNET-Go executable directory). Version `v2.17.1` or newer is recommended for best performance (XNNPACK support).
 3.  **Install Dependencies:**
-    *   **FFmpeg:** Required for RTSP stream capture, audio export to formats other than WAV (MP3, AAC, FLAC, Opus), and the [Live Audio Streaming](wiki.md#live-audio-streaming) feature. Install using your system's package manager (e.g., `sudo apt install ffmpeg` on Debian/Ubuntu, `brew install ffmpeg` on macOS).
+    *   **FFmpeg:** Required for RTSP stream capture, audio export to formats other than WAV (MP3, AAC, FLAC, Opus), and the [Live Audio Streaming](guide.md#live-audio-streaming) feature. Install using your system's package manager (e.g., `sudo apt install ffmpeg` on Debian/Ubuntu, `brew install ffmpeg` on macOS).
     *   **SoX:** Required for rendering spectrograms in the web interface. Install using your system's package manager (e.g., `sudo apt install sox` on Debian/Ubuntu, `brew install sox` on macOS).
 4.  **Place Executable:** Extract the downloaded BirdNET-Go binary and place it in your desired directory.
 5.  **Run BirdNET-Go:** Open a terminal or command prompt, navigate to the directory containing the `birdnet-go` executable, and run it (e.g., `./birdnet-go`).
-6.  **Configuration:** On the first run, BirdNET-Go will create a default `config.yaml` file. Edit this file according to your needs. See the [Configuration](wiki.md#configuration) section in the Wiki for details and default file locations per OS.
+6.  **Configuration:** On the first run, BirdNET-Go will create a default `config.yaml` file. Edit this file according to your needs. See the [Configuration](guide.md#configuration) section in the Wiki for details and default file locations per OS.
 7.  **Process Management:** You are responsible for managing the BirdNET-Go process (running it in the background, ensuring it restarts on boot, etc.) using tools like `systemd`, `supervisor`, `screen`, or Task Scheduler (Windows).
 
 ## Systemd Service Details (`install.sh` Method)
