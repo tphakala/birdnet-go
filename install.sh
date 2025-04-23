@@ -837,8 +837,8 @@ configure_locale() {
             LOCALE_CODE="${locale_codes[$((selection-1))]}"
             print_message "✅ Selected language: " "$GREEN" "nonewline"
             print_message "${locale_names[$((selection-1))]}"
-            # Update config file
-            sed -i "s/locale: en/locale: ${LOCALE_CODE}/" "$CONFIG_FILE"
+            # Update config file - fixed to replace the entire locale value
+            sed -i "s/locale: [a-zA-Z0-9_-]*/locale: ${LOCALE_CODE}/" "$CONFIG_FILE"
             break
         else
             print_message "❌ Invalid selection. Please try again." "$RED"
