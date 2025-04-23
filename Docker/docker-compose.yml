@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  birdnet-go:
+    image: ghcr.io/tphakala/birdnet-go:nightly
+    container_name: birdnet-go
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    environment:
+      - TZ=${TZ:-UTC}
+      - BIRDNET_UID=${BIRDNET_UID:-1000}
+      - BIRDNET_GID=${BIRDNET_GID:-1000}
+      # Optional: uncomment to configure via environment variables
+      # - BIRDNET_LOCALE=en-us
+      # - BIRDNET_LATITUDE=60.192059
+      # - BIRDNET_LONGITUDE=24.945831
+      # - BIRDNET_SENSITIVITY=1.0
+      # - BIRDNET_OVERLAP=1.5
+    volumes:
+      - ./config:/config
+      - ./data:/data
+    # Mount HLS stream segment files directory as tmpfs (RAM disk)
+    tmpfs:
+      - /config/hls:exec,size=50M,uid=${BIRDNET_UID:-1000},gid=${BIRDNET_GID:-1000},mode=0755
+    # For ALSA audio input (sound card)
+    devices:
+      - /dev/snd:/dev/snd
+    # Add any host mappings needed
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+ 
+  # Optional: Add Cloudflared for secure internet access through Cloudflare Tunnel
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: birdnet-cloudflared
+  #   restart: unless-stopped
+  #   # Two options for running cloudflared:
+  #   # 1. Using a tunnel token (recommended for most users)
+  #   command: tunnel run
+  #   environment:
+  #     - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+  #   # 2. Alternative: Using config file (uncomment these and comment the above)
+  #   # command: tunnel --config /etc/cloudflared/config.yml run
+  #   # volumes:
+  #   #   - ./cloudflared:/etc/cloudflared
+  #   depends_on:
+  #     - birdnet-go
+      
+volumes:
+  config:
+    driver: local
+  data:
+    driver: local
