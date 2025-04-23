@@ -68,7 +68,7 @@ The installation script includes several features:
 
 For users who prefer Docker Compose for container management, BirdNET-Go can also be set up using this approach. Docker Compose offers more flexibility and makes it easier to manage container configurations.
 
-A [premade docker-compose.yml](../Docker/docker-compose.yml) file is available in the repository. This file includes:
+A [premade docker-compose.yml](../../Docker/docker-compose.yml) file is available in the repository. This file includes:
 
 - The BirdNET-Go container configuration with the latest nightly image
 - Environment variables for customization (timezone, user permissions, etc.)
