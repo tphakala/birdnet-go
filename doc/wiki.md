@@ -68,6 +68,15 @@ The installation script includes several features:
 
 For users who prefer Docker Compose for container management, BirdNET-Go can also be set up using this approach. Docker Compose offers more flexibility and makes it easier to manage container configurations.
 
+A [premade docker-compose.yml](../Docker/docker-compose.yml) file is available in the repository. This file includes:
+
+- The BirdNET-Go container configuration with the latest nightly image
+- Environment variables for customization (timezone, user permissions, etc.)
+- Volume mounts for persistent configuration and data storage
+- RAM disk (tmpfs) for HLS streaming segments to improve performance
+- Device mounts for sound card access
+- An optional Cloudflared service (commented out) for secure internet access
+
 See the [Docker Compose Guide](docker_compose_guide.md) for detailed instructions on setting up BirdNET-Go with Docker Compose, including internet access configuration using Cloudflare Tunnel and security options.
 
 ### Manual Installation
@@ -531,6 +540,19 @@ BirdNET-Go includes a web dashboard that provides visualization and management c
 - Optional thumbnails for visual identification
 - Configurable display limits
 - Images are automatically cached in the background to improve loading performance.
+
+### Remote Internet Access
+
+BirdNET-Go can be securely exposed to the internet, allowing you to monitor your birds from anywhere. The **recommended method** is using Cloudflare Tunnel (cloudflared), which provides:
+
+- **Enhanced Security**: No need to open ports on your router/firewall
+- **End-to-End Encryption**: All traffic is securely encrypted
+- **Performance Benefits**: Static content like spectrograms and audio clips are cached on Cloudflare's global network
+- **Simple Setup**: Works with any BirdNET-Go installation method (Docker, Docker Compose, or binary)
+
+For detailed setup instructions and security best practices, see the dedicated [Cloudflare Tunnel Guide](cloudflare_tunnel_guide.md).
+
+> **IMPORTANT SECURITY WARNING**: When exposing BirdNET-Go to the internet, always enable authentication through one of the available methods (Basic Auth, Google OAuth, or GitHub OAuth). Without authentication, anyone with your URL can access your system, delete your data, change settings, and view your location. See the [Authentication section](cloudflare_tunnel_guide.md#enabling-authentication) of the guide for details.
 
 ### Weather Integration
 

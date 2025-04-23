@@ -17,7 +17,7 @@ This guide provides instructions for setting up and running BirdNET-Go using Doc
    ```
 
 2. **Create the docker-compose.yml file:**
-   Create a file named `docker-compose.yml` in this directory and copy the content from the example below.
+   Create a file named `docker-compose.yml` in this directory and copy the content from the [premade docker-compose.yml](../Docker/docker-compose.yml) file in the repository, or the example below.
 
 3. **Create config and data directories:**
    ```bash
@@ -65,9 +65,17 @@ The configuration includes a RAM disk (tmpfs) mount for the HLS streaming segmen
 
 ## Internet Access Using Cloudflare Tunnel
 
-The advanced Docker Compose configuration includes an option to use Cloudflare Tunnel (via cloudflared) to securely expose your BirdNET-Go instance to the internet without port forwarding.
+The Docker Compose configuration includes an option to use Cloudflare Tunnel (cloudflared) to securely expose your BirdNET-Go instance to the internet without opening ports on your router/firewall.
 
-### Setting Up Cloudflare Tunnel
+**For comprehensive instructions and security best practices, see the dedicated [Cloudflare Tunnel Guide](cloudflare_tunnel_guide.md).**
+
+Key benefits of using Cloudflare Tunnel:
+- Enhanced security with no open ports on your network
+- End-to-end encryption for all traffic
+- Performance optimization through Cloudflare's content caching
+- Protection against DDoS and other attacks
+
+### Quick Setup Overview
 
 1. **Prerequisites:**
    - A Cloudflare account
@@ -77,47 +85,18 @@ The advanced Docker Compose configuration includes an option to use Cloudflare T
    - Go to the [Cloudflare Zero Trust dashboard](https://dash.teams.cloudflare.com/)
    - Navigate to Access > Tunnels
    - Click "Create a tunnel"
-   - Give your tunnel a name (e.g., "BirdNET-Go")
    - Copy the provided tunnel token
 
 3. **Configure Docker Compose:**
    - In your `.env` file, add: `CLOUDFLARE_TUNNEL_TOKEN=your-tunnel-token`
-   - Uncomment the cloudflared service in docker-compose.advanced.yml
+   - Uncomment the cloudflared service in docker-compose.yml
 
-4. **Configure the tunnel in Cloudflare dashboard:**
-   - Add a public hostname (e.g., `birdnet.yourdomain.com`)
-   - Set the service to `http://birdnet-go:8080`
-   - Save the configuration
-
-5. **Start the services:**
+4. **Start the services:**
    ```bash
-   docker-compose -f docker-compose.advanced.yml up -d
+   docker-compose up -d
    ```
 
-Your BirdNET-Go instance will now be accessible at `https://birdnet.yourdomain.com` from anywhere on the internet, with Cloudflare providing security and encryption.
-
-### Using Config File (Alternative Method)
-
-For more advanced configuration, you can use a config file instead of a token:
-
-1. Create a `cloudflared` directory and add your credentials:
-   ```bash
-   mkdir -p cloudflared
-   ```
-
-2. Create `cloudflared/config.yml` with:
-   ```yaml
-   tunnel: your-tunnel-id
-   credentials-file: /etc/cloudflared/credentials.json
-   ingress:
-     - hostname: birdnet.yourdomain.com
-       service: http://birdnet-go:8080
-     - service: http_status:404
-   ```
-
-3. Add your credentials file obtained from Cloudflare dashboard to `cloudflared/credentials.json`
-
-4. Modify docker-compose.advanced.yml to use the config file method instead of token
+> **IMPORTANT**: When exposing BirdNET-Go to the internet, always enable authentication to prevent unauthorized access. See the [Cloudflare Tunnel Guide](cloudflare_tunnel_guide.md#enabling-authentication) for details on security implications and configuration.
 
 ### Port Configuration
 
