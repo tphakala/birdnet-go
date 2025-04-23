@@ -76,6 +76,15 @@ If you installed BirdNET-Go using the `install.sh` script, updating is straightf
 
 For a more flexible containerized approach than the manual Docker installation, you can use Docker Compose which offers better configurability and easier management.
 
+A [premade docker-compose.yml](../Docker/docker-compose.yml) file is available in the repository. This file includes:
+
+- The BirdNET-Go container configuration with the latest nightly image
+- Environment variables for customization (timezone, user permissions, etc.)
+- Volume mounts for persistent configuration and data storage
+- RAM disk (tmpfs) for HLS streaming segments to improve performance
+- Device mounts for sound card access
+- An optional Cloudflared service (commented out) for secure internet access
+
 Please refer to the [Docker Compose Guide](docker_compose_guide.md) for detailed instructions on setting up BirdNET-Go with Docker Compose.
 
 ## Manual Docker Installation (Advanced, Linux only)
