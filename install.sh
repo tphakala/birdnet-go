@@ -1130,9 +1130,9 @@ Requires=docker.service
 
 [Service]
 Restart=always
-# Create tmpfs mount for HLS segments
+# Create tmpfs mount for HLS segments (only if not already mounted)
 ExecStartPre=/bin/mkdir -p ${CONFIG_DIR}/hls
-ExecStartPre=/bin/mount -t tmpfs -o size=50M,mode=0755,uid=${HOST_UID},gid=${HOST_GID},exec tmpfs ${CONFIG_DIR}/hls
+ExecStartPre=/usr/bin/sh -c '[ -n "$(findmnt -n ${CONFIG_DIR}/hls)" ] || /bin/mount -t tmpfs -o size=50M,mode=0755,uid=${HOST_UID},gid=${HOST_GID},noexec tmpfs ${CONFIG_DIR}/hls'
 ExecStart=/usr/bin/docker run --rm \\
     --name birdnet-go \\
     -p ${WEB_PORT}:8080 \\
@@ -1145,7 +1145,7 @@ ExecStart=/usr/bin/docker run --rm \\
     -v ${DATA_DIR}:/data \\
     ${BIRDNET_GO_IMAGE}
 # Ensure tmpfs is unmounted on service stop
-ExecStopPost=/bin/umount -f ${CONFIG_DIR}/hls || true
+ExecStopPost=/bin/sh -c '[ -n "$(findmnt -n ${CONFIG_DIR}/hls)" ] && /bin/umount -f ${CONFIG_DIR}/hls || true'
 
 [Install]
 WantedBy=multi-user.target
