@@ -330,25 +330,29 @@ func (h *Handlers) serveSegmentFile(c echo.Context, stream *HLSStreamInfo, reque
 		return echo.NewHTTPError(http.StatusNotFound, "Segment file not found")
 	}
 
-	// For .ts segment files
-	if strings.HasSuffix(safeRequestPath, ".ts") {
-		c.Response().Header().Set("Content-Type", "video/mp2t")
+	// Set appropriate Content-Type based on file extension
+	switch filepath.Ext(safeRequestPath) {
+	case ".ts":
+		// For .ts segment files
+		c.Response().Header().Set("Content-Type", "audio/mp2t")
 		// Allow caching of segments for a short time
 		c.Response().Header().Set("Cache-Control", "public, max-age=60")
+	case ".m4s":
+		c.Response().Header().Set("Content-Type", "audio/iso.segment")
+		// Allow caching of segments for a short time
+		c.Response().Header().Set("Cache-Control", "public, max-age=60")
+	case ".mp4":
+		c.Response().Header().Set("Content-Type", "audio/mp4")
+		// Allow caching of initialization segments
+		c.Response().Header().Set("Cache-Control", "public, max-age=3600")
 	}
 
 	// Serve the segment file securely
 	return secFS.ServeFile(c, segmentPath)
 }
 
-// registerClientActivity is now just a wrapper around updateStreamActivity
-// for backward compatibility
-func registerClientActivity(sourceID, clientID string) {
-	updateStreamActivity(sourceID, clientID, "registration")
-}
-
 // buildFFmpegArgs constructs the command line arguments for the FFmpeg HLS process
-func buildFFmpegArgs(fifoPath, outputDir, playlistPath string) []string {
+func buildFFmpegArgs(inputSource, outputDir, playlistPath string) []string {
 	// Get live stream settings from config
 	liveStreamSettings := conf.Setting().WebServer.LiveStream
 
@@ -388,30 +392,46 @@ func buildFFmpegArgs(fifoPath, outputDir, playlistPath string) []string {
 		}
 	}
 
-	logLevel := "info"
+	logLevel := "warning"
 	if liveStreamSettings.FfmpegLogLevel != "" {
 		logLevel = liveStreamSettings.FfmpegLogLevel
 	}
 
-	return []string{
+	// Base arguments, starting with input format if needed
+	args := []string{}
+
+	// Input format arguments common to both FIFO and pipe:0
+	inputFormatArgs := []string{
 		"-f", "s16le", // Input format: 16-bit PCM
 		"-ar", fmt.Sprintf("%d", sampleRate), // Sample rate from config
 		"-ac", "1", // Channels: mono
-		"-i", fifoPath, // Input from FIFO
+	}
+
+	args = append(args, inputFormatArgs...)
+	args = append(args, "-i", inputSource)
+
+	// Common output arguments
+	outputArgs := []string{
 		"-c:a", "aac", // Codec: AAC
 		"-b:a", fmt.Sprintf("%dk", bitrate), // Bitrate from config with limits
 		"-f", "hls", // Format: HLS
 		"-hls_time", fmt.Sprintf("%d", segmentLength), // Segment duration from config with limits
-		"-hls_list_size", "5", // Keep 5 segments in playlist
-		"-hls_flags", "delete_segments+append_list+temp_file", // Delete old segments and append to playlist
-		"-hls_segment_type", "mpegts", // Use MPEGTS segments for better compatibility
-		"-hls_init_time", "1", // Initial segment length: 1 second for faster startup
+		"-hls_list_size", "3", // Keep 3 segments in playlist
+		"-hls_flags", "delete_segments+temp_file", // Delete old segments and use temp files
+		"-hls_segment_type", "fmp4", // Use fmp4 segments
+		"-hls_fmp4_init_filename", "init.mp4",
+		"-hls_init_time", "3", // Initial segment length: 3 seconds for faster startup
 		"-hls_allow_cache", "1", // Allow caching
+		"-movflags", "faststart+empty_moov+separate_moof",
 		"-start_number", "0", // Start with segment 0
 		"-loglevel", logLevel, // Set ffmpeg logging level from config
-		"-hls_segment_filename", filepath.Join(outputDir, "segment%03d.ts"),
+		"-hls_segment_filename", filepath.Join(outputDir, "segment%03d.m4s"),
 		playlistPath, // Output playlist
 	}
+
+	args = append(args, outputArgs...)
+
+	return args
 }
 
 // validateSourceID validates the sourceID is safe for file paths
@@ -510,28 +530,17 @@ func setupHLSFifo(secFS *securefs.SecureFS, hlsBaseDir, outputDir string) (fifoP
 // setupFFmpeg creates and starts the FFmpeg process
 func setupFFmpeg(ctx context.Context, sourceID, ffmpegPath, readerPath, outputDir, playlistPath string) (*exec.Cmd, error) {
 	var cmd *exec.Cmd
+	var ffmpegArgs []string
 
 	if runtime.GOOS == "windows" {
-		// For Windows, use the stdin pipe approach
-		ffmpegArgs := []string{
-			"-f", "s16le", "-ar", "48000", "-ac", "1",
-			"-i", "pipe:0", // Read from stdin
-			"-c:a", "aac", "-b:a", "128k",
-			"-f", "hls", "-hls_time", "2", "-hls_list_size", "5",
-			"-hls_flags", "delete_segments+append_list+temp_file",
-			"-hls_segment_type", "mpegts", "-hls_init_time", "1",
-			"-hls_allow_cache", "1", "-start_number", "0",
-			"-loglevel", "info",
-			"-hls_segment_filename", filepath.Join(outputDir, "segment%03d.ts"),
-			playlistPath,
-		}
-		cmd = exec.CommandContext(ctx, ffmpegPath, ffmpegArgs...)
+		// For Windows, use the stdin pipe approach by calling buildFFmpegArgs
+		ffmpegArgs = buildFFmpegArgs("pipe:0", outputDir, playlistPath)
 	} else {
 		// For Unix platforms, use the standard approach
-		ffmpegArgs := buildFFmpegArgs(readerPath, outputDir, playlistPath)
-		cmd = exec.CommandContext(ctx, ffmpegPath, ffmpegArgs...)
+		ffmpegArgs = buildFFmpegArgs(readerPath, outputDir, playlistPath)
 	}
 
+	cmd = exec.CommandContext(ctx, ffmpegPath, ffmpegArgs...)
 	return cmd, nil
 }
 
@@ -1594,7 +1603,7 @@ func performStreamCleanup(sourceID string, stream *HLSStreamInfo, reason string)
 
 	// Clean up the output directory
 	if stream.OutputDir != "" {
-		// Get HLS directory for secure path operations
+		// Get HLS directory for secure filesystem operations
 		hlsBaseDir, err := conf.GetHLSDirectory()
 		if err != nil {
 			log.Printf("Error getting HLS directory: %v", err)
