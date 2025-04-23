@@ -62,6 +62,7 @@ type Interface interface {
 	GetHourlyAnalyticsData(date string, species string) ([]HourlyAnalyticsData, error)
 	GetDailyAnalyticsData(startDate, endDate string, species string) ([]DailyAnalyticsData, error)
 	GetDetectionTrends(period string, limit int) ([]DailyAnalyticsData, error)
+	GetAllLockedNotes() ([]Note, error)
 }
 
 // DataStore implements StoreInterface using a GORM database.

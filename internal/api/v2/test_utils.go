@@ -236,6 +236,11 @@ func (m *MockDataStore) GetDetectionTrends(period string, limit int) ([]datastor
 	return args.Get(0).([]datastore.DailyAnalyticsData), args.Error(1)
 }
 
+func (m *MockDataStore) GetAllLockedNotes() ([]datastore.Note, error) {
+	args := m.Called()
+	return args.Get(0).([]datastore.Note), args.Error(1)
+}
+
 // TestImageProvider implements the imageprovider.Provider interface for testing
 // with a function field for easier test setup.
 // Use this when you need a simple mock with customizable behavior via FetchFunc.

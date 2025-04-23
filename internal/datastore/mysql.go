@@ -76,3 +76,16 @@ func (m *MySQLStore) UpdateNote(id string, updates map[string]interface{}) error
 }
 
 // Save stores a note and its associated results as a single transaction in the database.
+
+// GetAllLockedNotes returns all notes that have an entry in the note_locks table
+func (ms *MySQLStore) GetAllLockedNotes() ([]Note, error) {
+	var notes []Note
+	
+	// Use a join between notes and note_locks tables to find all locked notes
+	err := ms.DB.Joins("JOIN note_locks ON notes.id = note_locks.note_id").Find(&notes).Error
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving locked notes: %w", err)
+	}
+	
+	return notes, nil
+}

@@ -1,0 +1,9 @@
+{{define "locked-detections"}}
+<div class="card col-span-12 bg-base-100 shadow-sm">
+    <!-- Use the reusable detectionsList template with queryType=locked parameter -->
+    {{template "detectionsList" dict 
+        "ContainerId" "locked-detections-content" 
+        "ApiEndpoint" "/api/v1/detections?queryType=locked"
+        "ContainerClass" "w-full"}}
+</div>
+{{end}}

@@ -113,6 +113,8 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 		notes, totalResults, err = c.getSpeciesDetections(species, date, hour, duration, numResults, offset)
 	case "search":
 		notes, totalResults, err = c.getSearchDetections(search, numResults, offset)
+	case "locked":
+		notes, totalResults, err = c.getLockedDetections(numResults, offset)
 	default: // "all" or any other value
 		notes, totalResults, err = c.getAllDetections(numResults, offset)
 	}
@@ -278,6 +280,68 @@ func (c *Controller) getSearchDetections(search string, numResults, offset int) 
 	}{notes, totalCount}, cache.DefaultExpiration)
 
 	return notes, totalCount, nil
+}
+
+// getLockedDetections handles locked query type logic
+func (c *Controller) getLockedDetections(numResults, offset int) ([]datastore.Note, int64, error) {
+	// Generate a cache key based on parameters
+	cacheKey := fmt.Sprintf("locked:%d:%d", numResults, offset)
+
+	// Check if data is in cache
+	if cachedData, found := c.detectionCache.Get(cacheKey); found {
+		cachedResult := cachedData.(struct {
+			Notes []datastore.Note
+			Total int64
+		})
+		return cachedResult.Notes, cachedResult.Total, nil
+	}
+
+	// If not in cache, query the database
+	notes, err := c.GetLockedDetections(numResults, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	totalCount, err := c.CountLockedDetections()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Cache the results
+	c.detectionCache.Set(cacheKey, struct {
+		Notes []datastore.Note
+		Total int64
+	}{notes, totalCount}, cache.DefaultExpiration)
+
+	return notes, totalCount, nil
+}
+
+// GetLockedDetections retrieves locked detections from the datastore
+func (c *Controller) GetLockedDetections(numResults, offset int) ([]datastore.Note, error) {
+	// Use the existing interface method to get locked notes
+	allLockedNotes, err := c.DS.GetAllLockedNotes()
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply pagination manually since we got all locked notes
+	start := offset
+	end := offset + numResults
+	if start >= len(allLockedNotes) {
+		return []datastore.Note{}, nil
+	}
+	if end > len(allLockedNotes) {
+		end = len(allLockedNotes)
+	}
+
+	notes := allLockedNotes[start:end]
+
+	return notes, nil
+}
+
+// CountLockedDetections counts the total number of locked detections
+func (c *Controller) CountLockedDetections() (int64, error) {
+	// Query the datastore to count locked detections
+	return c.DS.CountSearchResults("")
 }
 
 // getAllDetections handles default/all query type logic

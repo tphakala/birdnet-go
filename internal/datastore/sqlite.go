@@ -181,3 +181,16 @@ func (s *SQLiteStore) Close() error {
 func (s *SQLiteStore) UpdateNote(id string, updates map[string]interface{}) error {
 	return s.DB.Model(&Note{}).Where("id = ?", id).Updates(updates).Error
 }
+
+// GetAllLockedNotes returns all notes that have an entry in the note_locks table
+func (s *SQLiteStore) GetAllLockedNotes() ([]Note, error) {
+	var notes []Note
+	
+	// Use a join between notes and note_locks tables to find all locked notes
+	err := s.DB.Joins("JOIN note_locks ON notes.id = note_locks.note_id").Find(&notes).Error
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving locked notes: %w", err)
+	}
+	
+	return notes, nil
+}

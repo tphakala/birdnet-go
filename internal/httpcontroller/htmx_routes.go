@@ -64,6 +64,7 @@ func (s *Server) initRoutes() {
 	s.pageRoutes = map[string]PageRouteConfig{
 		"/":          {Path: "/", TemplateName: "dashboard", Title: "Dashboard"},
 		"/dashboard": {Path: "/dashboard", TemplateName: "dashboard", Title: "Dashboard"},
+		"/locked-detections":{Path: "/locked-detections", TemplateName: "locked-detections", Title: "Locked Detections"},
 		"/logs":      {Path: "/logs", TemplateName: "logs", Title: "Logs"},
 		"/stats":     {Path: "/stats", TemplateName: "stats", Title: "Statistics"},
 		"/about":     {Path: "/about", TemplateName: "about", Title: "About BirdNET-Go"},
@@ -91,6 +92,7 @@ func (s *Server) initRoutes() {
 		"/api/v1/detections":         {Path: "/api/v1/detections", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.Detections)},
 		"/api/v1/detections/recent":  {Path: "/api/v1/detections/recent", TemplateName: "recentDetections", Title: "Recent Detections", Handler: h.WithErrorHandling(h.RecentDetections)},
 		"/api/v1/detections/details": {Path: "/api/v1/detections/details", TemplateName: "detectionDetails", Title: "Detection Details", Handler: h.WithErrorHandling(h.DetectionDetails)},
+		"/api/v1/detections/locked":  {Path: "/api/v1/detections/locked", TemplateName: "listDetections", Title: "Locked Recordings", Handler: h.WithErrorHandling(h.LockedFilesHandler)},
 		"/api/v1/top-birds":          {Path: "/api/v1/top-birds", TemplateName: "birdsTableHTML", Title: "Top Birds", Handler: h.WithErrorHandling(h.TopBirds)},
 		"/api/v1/notes":              {Path: "/api/v1/notes", TemplateName: "notes", Title: "All Notes", Handler: h.WithErrorHandling(h.GetAllNotes)},
 		"/api/v1/media/spectrogram":  {Path: "/api/v1/media/spectrogram", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.ServeSpectrogram)},

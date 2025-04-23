@@ -21,6 +21,8 @@
                 Results for {{.Species}} on {{.Date}}
                 {{else if eq .QueryType "search"}}
                 Search Results for "{{.Search}}"
+                {{else if eq .QueryType "locked"}}
+                Locked Detections {{if .Search}}matching "{{.Search}}"{{end}}
                 {{else}}
                 All Detections for {{.Date}}
                 {{end}}
@@ -121,7 +123,7 @@
                         {{else}}
                             <div class="status-badge unverified">unverified</div>
                         {{end}}
-                        {{if .Lock}}
+                        {{if or .Lock}}
                             <div class="status-badge locked">locked</div>
                         {{end}}
                         {{if .Comments}}
@@ -217,5 +219,19 @@
     </div>
     {{end}}
 </section>
+{{end}}
+
+{{/* Add the original detectionsList template for backward compatibility */}}
+{{define "detectionsList"}}
+<div id="{{.ContainerId}}" 
+     hx-get="{{.ApiEndpoint}}" 
+     hx-trigger="{{if .HxTrigger}}{{.HxTrigger}}{{else}}load, refreshListEvent from:body{{end}}"
+     {{if .HxTarget}}hx-target="{{.HxTarget}}"{{end}}
+     {{if .HxSwap}}hx-swap="{{.HxSwap}}"{{end}}
+     class="{{if .ContainerClass}}{{.ContainerClass}}{{end}}">
+    <div class="flex justify-center py-8">
+        <div class="loading loading-spinner loading-lg"></div>
+    </div>
+</div>
 
 {{end}}

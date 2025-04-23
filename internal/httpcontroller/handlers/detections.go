@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -27,7 +28,7 @@ type DetectionRequest struct {
 	Search     string `query:"search"`
 	NumResults int    `query:"numResults"`
 	Offset     int    `query:"offset"`
-	QueryType  string `query:"queryType"` // "hourly", "species", "search", or "all"
+	QueryType  string `query:"queryType"` // "hourly", "species", "search", "locked", or "all"
 }
 
 // NoteWithWeather extends the Note struct with weather and time of day information
@@ -83,6 +84,56 @@ func (h *Handlers) Detections(c echo.Context) error {
 		}
 		notes, err = h.DS.SearchNotes(req.Search, false, req.NumResults, req.Offset)
 		totalResults, _ = h.DS.CountSearchResults(req.Search)
+	case "locked":
+		// Get all locked notes
+		allLockedNotes, err := h.DS.GetAllLockedNotes()
+		if err != nil {
+			return h.NewHandlerError(err, "Failed to get locked detections", http.StatusInternalServerError)
+		}
+		
+		 // Filter notes by search query if provided
+		var filteredNotes []datastore.Note
+		if req.Search != "" {
+			h.Debug("Filtering locked detections with search term: %q", req.Search)
+			// Case insensitive search across multiple fields
+			searchLower := strings.ToLower(req.Search)
+			for _, note := range allLockedNotes {
+				// Search in common name, scientific name, date and time
+				if strings.Contains(strings.ToLower(note.CommonName), searchLower) ||
+				   strings.Contains(strings.ToLower(note.ScientificName), searchLower) ||
+				   strings.Contains(strings.ToLower(note.Date), searchLower) ||
+				   strings.Contains(strings.ToLower(note.Time), searchLower) ||
+				   strings.Contains(strings.ToLower(note.ClipName), searchLower) {
+					filteredNotes = append(filteredNotes, note)
+				}
+			}
+			h.Debug("Found %d locked detections matching search %q out of %d total", 
+					len(filteredNotes), req.Search, len(allLockedNotes))
+		} else {
+			filteredNotes = allLockedNotes
+		}
+
+		// Sort the notes by date and time with newest on top
+		sort.Slice(filteredNotes, func(i, j int) bool {
+			dateTimeI := filteredNotes[i].Date + " " + filteredNotes[i].Time
+			dateTimeJ := filteredNotes[j].Date + " " + filteredNotes[j].Time
+			return dateTimeI > dateTimeJ // Descending order (newest first)
+		})
+
+		totalResults = int64(len(filteredNotes))
+
+		// Apply pagination - calculate end index
+		end := req.Offset + req.NumResults
+		if end > len(filteredNotes) {
+			end = len(filteredNotes)
+		}
+
+		// Extract paginated subset
+		if req.Offset < len(filteredNotes) {
+			notes = filteredNotes[req.Offset:end]
+		} else {
+			notes = []datastore.Note{}
+		}
 	default:
 		return h.NewHandlerError(fmt.Errorf("invalid query type"), "Invalid query type specified", http.StatusBadRequest)
 	}
@@ -115,6 +166,13 @@ func (h *Handlers) Detections(c echo.Context) error {
 		showingTo = int(totalResults)
 	}
 
+	// Calculate previous and next page offsets
+	previousOffset := req.Offset - req.NumResults
+	if previousOffset < 0 {
+		previousOffset = 0
+	}
+	nextOffset := req.Offset + req.NumResults
+
 	// Prepare data for rendering in the template
 	data := struct {
 		Date              string
@@ -134,6 +192,8 @@ func (h *Handlers) Detections(c echo.Context) error {
 		ShowingTo         int
 		ItemsPerPage      int
 		WeatherEnabled    bool
+		PreviousOffset    int
+		NextOffset        int
 		Security          map[string]interface{}
 	}{
 		Date:              req.Date,
@@ -153,6 +213,8 @@ func (h *Handlers) Detections(c echo.Context) error {
 		ShowingTo:         showingTo,
 		ItemsPerPage:      itemsPerPage,
 		WeatherEnabled:    weatherEnabled,
+		PreviousOffset:    previousOffset,
+		NextOffset:        nextOffset,
 		Security: map[string]interface{}{
 			"Enabled":       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
 			"AccessAllowed": h.Server.IsAccessAllowed(c),
@@ -753,4 +815,185 @@ func (h *Handlers) LockDetection(c echo.Context) error {
 	c.Response().Header().Set("HX-Trigger", "refreshListEvent")
 
 	return c.NoContent(http.StatusOK)
+}
+
+// LockedFilesHandler renders a page showing all locked detections
+// API: GET /locked-detections
+func (h *Handlers) LockedFilesHandler(c echo.Context) error {
+    h.Debug("LockedFilesHandler called from %s with method %s", c.Request().URL.String(), c.Request().Method)
+    h.Debug("LockedFilesHandler: Request headers: %v", c.Request().Header)
+    
+    isApiRequest := strings.HasPrefix(c.Path(), "/api/")
+    isHtmxRequest := c.Request().Header.Get("HX-Request") == "true"
+    
+    if isApiRequest || isHtmxRequest {
+        // Set up request parameters
+        req := new(DetectionRequest)
+        numResultsStr := c.QueryParam("numResults")
+        offsetStr := c.QueryParam("offset")
+        searchQuery := c.QueryParam("search")
+        
+        h.Debug("LockedFilesHandler: search query = %q", searchQuery)
+        
+        // Set default values
+        req.QueryType = "locked"
+        req.NumResults = 20
+        req.Search = searchQuery
+        
+        // Parse parameters
+        if numResultsStr != "" {
+            if parsed, err := strconv.Atoi(numResultsStr); err == nil && parsed > 0 {
+                req.NumResults = parsed
+            }
+        }
+        
+        if offsetStr != "" {
+            if parsed, err := strconv.Atoi(offsetStr); err == nil {
+                req.Offset = parsed
+            }
+        }
+        
+        // Get all locked notes
+        h.Debug("LockedFilesHandler: Fetching ALL locked notes directly")
+        allLockedNotes, err := h.DS.GetAllLockedNotes()
+        if err != nil {
+            h.Debug("LockedFilesHandler: Error fetching locked notes: %v", err)
+            return h.NewHandlerError(err, "Failed to get locked detections", http.StatusInternalServerError)
+        }
+        
+        // Filter by search query if provided
+        var filteredNotes []datastore.Note
+        if searchQuery != "" {
+            h.Debug("LockedFilesHandler: Filtering with search term: %q", searchQuery)
+            searchLower := strings.ToLower(searchQuery)
+            for _, note := range allLockedNotes {
+                if strings.Contains(strings.ToLower(note.CommonName), searchLower) ||
+                   strings.Contains(strings.ToLower(note.ScientificName), searchLower) ||
+                   strings.Contains(strings.ToLower(note.Date), searchLower) ||
+                   strings.Contains(strings.ToLower(note.Time), searchLower) ||
+                   strings.Contains(strings.ToLower(note.ClipName), searchLower) {
+                    filteredNotes = append(filteredNotes, note)
+                }
+            }
+            h.Debug("LockedFilesHandler: Found %d notes matching search %q", len(filteredNotes), searchQuery)
+        } else {
+            filteredNotes = allLockedNotes
+        }
+        
+        // Sort notes by date and time, newest first
+        sort.Slice(filteredNotes, func(i, j int) bool {
+            dateTimeI := filteredNotes[i].Date + " " + filteredNotes[i].Time
+            dateTimeJ := filteredNotes[j].Date + " " + filteredNotes[j].Time
+            return dateTimeI > dateTimeJ
+        })
+        
+        totalResults := int64(len(filteredNotes))
+        h.Debug("LockedFilesHandler: Total filtered notes: %d", totalResults)
+        
+        // Apply pagination
+        var notes []datastore.Note
+        start := req.Offset
+        end := req.Offset + req.NumResults
+        
+        if start < len(filteredNotes) {
+            if end > len(filteredNotes) {
+                end = len(filteredNotes)
+            }
+            notes = filteredNotes[start:end]
+            h.Debug("LockedFilesHandler: Paginated notes: %d (range %d:%d)", len(notes), start, end)
+        } else {
+            notes = []datastore.Note{}
+            h.Debug("LockedFilesHandler: No notes after pagination")
+        }
+        
+        
+        // Add weather and time of day information
+        notesWithWeather, err := h.addWeatherAndTimeOfDay(notes)
+        if err != nil {
+            h.Debug("LockedFilesHandler: Error adding weather data: %v", err)
+            return h.NewHandlerError(err, "Failed to add weather data", http.StatusInternalServerError)
+        }
+        
+        // Calculate pagination info
+        currentPage := (req.Offset / req.NumResults) + 1
+        totalPages := int(math.Ceil(float64(totalResults) / float64(req.NumResults)))
+        showingFrom := req.Offset + 1
+        if totalResults == 0 {
+            showingFrom = 0
+        }
+        showingTo := req.Offset + len(notes)
+        if showingTo > int(totalResults) {
+            showingTo = int(totalResults)
+        }
+        
+        // Calculate previous and next page offsets
+        previousOffset := req.Offset - req.NumResults
+        if previousOffset < 0 {
+            previousOffset = 0
+        }
+        nextOffset := req.Offset + req.NumResults
+        
+        // Check if weather provider is set
+        weatherEnabled := h.Settings.Realtime.Weather.Provider != "none"
+        
+        // Create data structure compatible with listDetections template
+        data := struct {
+            Date              string
+            Hour              string
+            Duration          int
+            Species           string
+            Search            string
+            Notes             []NoteWithWeather
+            NumResults        int
+            Offset            int
+            QueryType         string
+            DashboardSettings *conf.Dashboard
+            TotalResults      int64
+            CurrentPage       int
+            TotalPages        int
+            ShowingFrom       int
+            ShowingTo         int
+            ItemsPerPage      int
+            WeatherEnabled    bool
+            PreviousOffset    int
+            NextOffset        int
+            Security          map[string]interface{}
+        }{
+            QueryType:         "locked",
+            Notes:             notesWithWeather,
+            NumResults:        req.NumResults,
+            Offset:            req.Offset,
+            Search:            searchQuery,
+            DashboardSettings: h.DashboardSettings,
+            TotalResults:      totalResults,
+            CurrentPage:       currentPage,
+            TotalPages:        totalPages,
+            ShowingFrom:       showingFrom,
+            ShowingTo:         showingTo,
+            ItemsPerPage:      20,
+            WeatherEnabled:    weatherEnabled,
+            PreviousOffset:    previousOffset,
+            NextOffset:        nextOffset,
+            Security: map[string]interface{}{
+                "Enabled":       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
+                "AccessAllowed": h.Server.IsAccessAllowed(c),
+            },
+        }
+        
+        h.Debug("LockedFilesHandler: Rendering template with %d notes", len(notesWithWeather))
+        return c.Render(http.StatusOK, "listDetections", data)
+    }
+    
+    // For regular page loads
+    return c.Render(http.StatusOK, "index", echo.Map{
+        "Title":       "Locked Detections",
+        "Page":        "locked-detections",
+        "ActiveMenu":  "lockeddetections",
+        "Settings":    h.Settings,
+        "ShowFooter":  true,
+        "Security": map[string]interface{}{
+            "Enabled":       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
+            "AccessAllowed": h.Server.IsAccessAllowed(c),
+        },
+    })
 }

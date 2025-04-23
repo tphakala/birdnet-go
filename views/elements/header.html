@@ -11,16 +11,16 @@
     <div class="text-base sm:text-xl lg:text-2xl font-bold" role="heading" aria-level="1">{{.Title}}</div>
     
     <div class="flex-grow flex justify-center relative">
-        {{if eq .Title "Dashboard"}}
+        {{if or (eq .Title "Dashboard") (eq .Title "Locked Detections")}}
         <!-- Search input -->
         <div class="relative w-full md:w-3/4 lg:w-4/5 xl:w-5/6 max-w-4xl mx-auto" role="search">
             <input type="text" 
                 name="search"
-                aria-label="Search detections"
-                placeholder="Search detections"
-                hx-get="/api/v1/detections?queryType=search"
+                aria-label="{{if eq .Title "Locked Detections"}}Search locked detections{{else}}Search detections{{end}}"
+                placeholder="{{if eq .Title "Locked Detections"}}Search locked detections...{{else}}Search detections{{end}}"
+                hx-get="{{if eq .Title "Locked Detections"}}/api/v1/detections?queryType=locked{{else}}/api/v1/detections?queryType=search{{end}}"
                 hx-params="search"
-                hx-trigger="keyup[isNotArrowKey(event)] delay:200ms, change delay:200ms" 
+                hx-trigger="keyup[isNotArrowKey(event)] delay:200ms, change delay:200ms, search" 
                 hx-target="#mainContent"
                 hx-swap="innerHTML"
                 hx-push-url="true"
