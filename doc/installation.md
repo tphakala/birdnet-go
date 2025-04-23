@@ -2,12 +2,12 @@
 
 This document provides instructions for installing BirdNET-Go.
 
-There are three main ways to install BirdNET-Go:
+There are four main ways to install BirdNET-Go:
 
 1.  **Using `install.sh` (Recommended for Linux):** This script automates the setup of BirdNET-Go within a Docker container, including dependencies, configuration prompts, performance optimization, and systemd service creation. This is the easiest and recommended method for supported Linux distributions (Debian 11+, Ubuntu 20.04+, Raspberry Pi OS Bullseye+).
-2.  **Manual Docker Installation (Advanced):** Manually run the BirdNET-Go Docker container. This offers more control but requires managing the container lifecycle yourself.
-3.  **Manual Binary Installation:** Download pre-compiled binaries. This avoids Docker but requires manually installing dependencies (TensorFlow Lite C library, FFmpeg, SoX) and managing the application process.
-4.  **Using Docker Compose:** Set up BirdNET-Go using Docker Compose for a more flexible containerized approach. See the [Docker Compose Guide](docker_compose_guide.md) for detailed instructions.
+2.  **Using Docker Compose (Linux only):** Set up BirdNET-Go using Docker Compose for a more flexible containerized approach. This offers better configurability and easier management than manual Docker installation. See the [Docker Compose Guide](docker_compose_guide.md) for detailed instructions.
+3.  **Manual Docker Installation (Advanced, Linux only):** Manually run the BirdNET-Go Docker container. This offers more control but requires managing the container lifecycle yourself.
+4.  **Manual Binary Installation (All platforms):** Download pre-compiled binaries. This is currently the only supported method for Windows and macOS users. This approach avoids Docker but requires manually installing dependencies (TensorFlow Lite C library, FFmpeg, SoX) and managing the application process.
 
 ## Recommended Method: `install.sh` (Linux)
 
@@ -72,7 +72,13 @@ If you installed BirdNET-Go using the `install.sh` script, updating is straightf
     *   Restart the BirdNET-Go service with the new image.
     *   Your existing configuration and data in `~/birdnet-go-app/` will be preserved.
 
-## Manual Docker Installation (Advanced)
+## Using Docker Compose (Linux only)
+
+For a more flexible containerized approach than the manual Docker installation, you can use Docker Compose which offers better configurability and easier management.
+
+Please refer to the [Docker Compose Guide](docker_compose_guide.md) for detailed instructions on setting up BirdNET-Go with Docker Compose.
+
+## Manual Docker Installation (Advanced, Linux only)
 
 This method requires Docker to be installed on your system. See the [official Docker installation guide](https://docs.docker.com/engine/install/).
 
@@ -111,7 +117,7 @@ docker run -ti --rm \\
 *   You will need to manually create/edit the `config.yaml` file in your mapped config directory. Refer to the [Configuration](wiki.md#configuration) section in the Wiki.
 *   You are responsible for managing the container's lifecycle (starting, stopping, updating).
 
-## Manual Binary Installation
+## Manual Binary Installation (All platforms)
 
 This method does not use Docker but requires manual dependency installation.
 
