@@ -141,8 +141,6 @@
                     // This was causing a stop message to be sent to the server unnecessarily
                     if (this.isPlaying) {
                         console.warn('EventSource error, but continuing audio playback');
-                        // Only show a transient warning
-                        this.showPlaybackStatus('Audio level updates paused, playback continues');
                         setTimeout(() => this.hidePlaybackStatus(), 3000);
                     }
                     
@@ -448,8 +446,10 @@
                 const hls = new Hls({
                     debug: false, // Set to true for debugging
                     enableWorker: true,
-                    lowLatencyMode: true,
-                    backBufferLength: 30,
+                    lowLatencyMode: false,
+                    backBufferLength: 10,
+                    liveSyncDurationCount: 5,   // Number of segments to stay from live edge
+                    liveMaxLatencyDurationCount: 30, // Maximum latency to tolerate
                     // More resilient config with higher retry counts for transient issues
                     manifestLoadPolicy: {
                         default: {
