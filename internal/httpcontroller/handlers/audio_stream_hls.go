@@ -338,13 +338,16 @@ func (h *Handlers) serveSegmentFile(c echo.Context, stream *HLSStreamInfo, reque
 		// Allow caching of segments for a short time
 		c.Response().Header().Set("Cache-Control", "public, max-age=60")
 	case ".m4s":
-		c.Response().Header().Set("Content-Type", "audio/iso.segment")
+		// RFC 4337 / common practice for fMP4 HLS segments
+		c.Response().Header().Set("Content-Type", "video/iso.segment")
 		// Allow caching of segments for a short time
 		c.Response().Header().Set("Cache-Control", "public, max-age=60")
 	case ".mp4":
 		c.Response().Header().Set("Content-Type", "audio/mp4")
 		// Allow caching of initialization segments
 		c.Response().Header().Set("Cache-Control", "public, max-age=3600")
+	default:
+		c.Response().Header().Set("Content-Type", "application/octet-stream")
 	}
 
 	// Serve the segment file securely
@@ -412,6 +415,7 @@ func buildFFmpegArgs(inputSource, outputDir, playlistPath string) []string {
 
 	// Common output arguments
 	outputArgs := []string{
+		"-y",          // overwrite existing files if they survived a previous run
 		"-c:a", "aac", // Codec: AAC
 		"-b:a", fmt.Sprintf("%dk", bitrate), // Bitrate from config with limits
 		"-f", "hls", // Format: HLS
@@ -425,7 +429,7 @@ func buildFFmpegArgs(inputSource, outputDir, playlistPath string) []string {
 		"-movflags", "faststart+empty_moov+separate_moof",
 		"-start_number", "0", // Start with segment 0
 		"-loglevel", logLevel, // Set ffmpeg logging level from config
-		"-hls_segment_filename", filepath.Join(outputDir, "segment%03d.m4s"),
+		"-hls_segment_filename", filepath.ToSlash(filepath.Join(outputDir, "segment%03d.m4s")),
 		playlistPath, // Output playlist
 	}
 
