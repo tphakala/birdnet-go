@@ -76,7 +76,7 @@ If you installed BirdNET-Go using the `install.sh` script, updating is straightf
 
 For a more flexible containerized approach than the manual Docker installation, you can use Docker Compose which offers better configurability and easier management.
 
-A [premade docker-compose.yml](../Docker/docker-compose.yml) file is available in the repository. This file includes:
+A [premade docker-compose.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.yml) file is available in the repository. This file includes:
 
 - The BirdNET-Go container configuration with the latest nightly image
 - Environment variables for customization (timezone, user permissions, etc.)
