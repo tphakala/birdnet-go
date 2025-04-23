@@ -377,6 +377,15 @@ check_service_exists() {
     return $?
 }
 
+# Function to safely execute docker commands, suppressing errors if Docker isn't installed
+safe_docker() {
+    if command_exists docker; then
+        docker "$@" 2>/dev/null
+        return $?
+    fi
+    return 1
+}
+
 # Function to check if BirdNET-Go is fully installed (service + container)
 check_birdnet_installation() {
     local service_exists=false
@@ -391,38 +400,41 @@ check_birdnet_installation() {
         debug_output="${debug_output}Systemd service detected. "
     fi
     
-    # Streamlined Docker checks
-    # Check for BirdNET-Go images
-    if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "birdnet-go"; then
-        image_exists=true
-        debug_output="${debug_output}Docker image exists. "
-    fi
-    
-    # Check for any BirdNET-Go containers (running or stopped)
-    container_count=$(docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | wc -l)
-    
-    if [ "$container_count" -gt 0 ]; then
-        container_exists=true
-        debug_output="${debug_output}Container exists. "
-        
-        # Check if any of these containers are running
-        running_count=$(docker ps --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | wc -l)
-        if [ "$running_count" -gt 0 ]; then
-            container_running=true
-            debug_output="${debug_output}Container running. "
+    # Only check Docker components if Docker is installed
+    if command_exists docker; then
+        # Streamlined Docker checks
+        # Check for BirdNET-Go images
+        if safe_docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "birdnet-go"; then
+            image_exists=true
+            debug_output="${debug_output}Docker image exists. "
         fi
-    fi
-    
-    # Fallback check for containers with birdnet-go in the name
-    if [ "$container_exists" = false ]; then
-        if docker ps -a | grep -q "birdnet-go"; then
+        
+        # Check for any BirdNET-Go containers (running or stopped)
+        container_count=$(safe_docker ps -a --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | wc -l)
+        
+        if [ "$container_count" -gt 0 ]; then
             container_exists=true
-            debug_output="${debug_output}Container with birdnet name exists. "
+            debug_output="${debug_output}Container exists. "
             
             # Check if any of these containers are running
-            if docker ps | grep -q "birdnet-go"; then
+            running_count=$(safe_docker ps --filter "ancestor=${BIRDNET_GO_IMAGE}" --format "{{.ID}}" | wc -l)
+            if [ "$running_count" -gt 0 ]; then
                 container_running=true
-                debug_output="${debug_output}Container with birdnet name running. "
+                debug_output="${debug_output}Container running. "
+            fi
+        fi
+        
+        # Fallback check for containers with birdnet-go in the name
+        if [ "$container_exists" = false ]; then
+            if safe_docker ps -a | grep -q "birdnet-go"; then
+                container_exists=true
+                debug_output="${debug_output}Container with birdnet name exists. "
+                
+                # Check if any of these containers are running
+                if safe_docker ps | grep -q "birdnet-go"; then
+                    container_running=true
+                    debug_output="${debug_output}Container with birdnet name running. "
+                fi
             fi
         fi
     fi
@@ -1118,6 +1130,9 @@ Requires=docker.service
 
 [Service]
 Restart=always
+# Create tmpfs mount for HLS segments
+ExecStartPre=/bin/mkdir -p ${CONFIG_DIR}/hls
+ExecStartPre=/bin/mount -t tmpfs -o size=50M,mode=0755,uid=${HOST_UID},gid=${HOST_GID},exec tmpfs ${CONFIG_DIR}/hls
 ExecStart=/usr/bin/docker run --rm \\
     --name birdnet-go \\
     -p ${WEB_PORT}:8080 \\
@@ -1129,6 +1144,8 @@ ExecStart=/usr/bin/docker run --rm \\
     -v ${CONFIG_DIR}:/config \\
     -v ${DATA_DIR}:/data \\
     ${BIRDNET_GO_IMAGE}
+# Ensure tmpfs is unmounted on service stop
+ExecStopPost=/bin/umount -f ${CONFIG_DIR}/hls || true
 
 [Install]
 WantedBy=multi-user.target
@@ -1172,7 +1189,7 @@ check_systemd_service() {
 
 # Function to check if BirdNET container is running
 check_container_running() {
-    if docker ps | grep -q "birdnet-go"; then
+    if command_exists docker && safe_docker ps | grep -q "birdnet-go"; then
         return 0  # Container is running
     else
         return 1  # Container is not running
@@ -1181,7 +1198,11 @@ check_container_running() {
 
 # Function to get all BirdNET containers (including stopped ones)
 get_all_containers() {
-    docker ps -a --filter name=birdnet-go -q
+    if command_exists docker; then
+        safe_docker ps -a --filter name=birdnet-go -q
+    else
+        echo ""
+    fi
 }
 
 # Function to stop BirdNET service and container
@@ -1533,14 +1554,19 @@ validate_installation() {
 # Function to get current container version
 get_container_version() {
     local image_name="$1"
-    local current_version
+    local current_version=""
+    
+    if ! command_exists docker; then
+        echo ""
+        return
+    fi
     
     # Try to get the version from the running container first
-    current_version=$(docker ps --format "{{.Image}}" | grep "birdnet-go" | cut -d: -f2)
+    current_version=$(safe_docker ps --format "{{.Image}}" | grep "birdnet-go" | cut -d: -f2)
     
     # If no running container, check if image exists locally
     if [ -z "$current_version" ]; then
-        current_version=$(docker images --format "{{.Tag}}" "$image_name" | head -n1)
+        current_version=$(safe_docker images --format "{{.Tag}}" "$image_name" | head -n1)
     fi
     
     echo "$current_version"
