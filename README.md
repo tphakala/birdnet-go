@@ -48,7 +48,7 @@ BirdNET-Go is an AI solution for continuous avian monitoring and identification
 - Local processing, Internet connectivity not required
 - Easy to use Web user interface for data visualisation
 - Supports over 40 languages for species names
-- Advanced features like [Deep Detection](doc/wiki.md#deep-detection) for improved accuracy and [Live Audio Streaming](doc/wiki.md#live-audio-streaming).
+- Advanced features like [Deep Detection](doc/wiki/guide.md#deep-detection) for improved accuracy and [Live Audio Streaming](doc/wiki/guide.md#live-audio-streaming).
 - BirdWeather.com API integration
 - Realtime log file output can be used as overlay in OBS for bird feeder streams etc.
 - Minimal runtime dependencies, BirdNET Tensorflow Lite model is embedded in compiled binary
@@ -76,10 +76,10 @@ skills and a keen interest in contributing to a nature-focused project, I'd love
 
 <img src="doc/BirdNET-Go-dashboard.webp" />
 
-For detailed installation instructions, see the [installation documentation](doc/installation.md). For securing your BirdNET-Go installation, see the [security documentation](doc/security.md). See [recommended hardware](doc/hardware.md) for optimal performance.
+For detailed installation instructions, see the [installation documentation](doc/wiki/installation.md). For securing your BirdNET-Go installation, see the [security documentation](doc/wiki/security.md). See [recommended hardware](doc/wiki/hardware.md) for optimal performance.
 
 ## Building
-For instructions on how to build the project, see the [building documentation](doc/building.md).
+For instructions on how to build the project, see the [building documentation](doc/wiki/building.md).
 
 
 ## Usage
@@ -111,7 +111,7 @@ Flags:
 
 Use "birdnet [command] --help" for more information about a command.
 
-There is more detailed usage documentation at [Wiki](doc/wiki.md)
+There is more detailed usage documentation at [Wiki](doc/wiki/guide.md)
 
 ## License
 
