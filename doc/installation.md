@@ -7,6 +7,7 @@ There are three main ways to install BirdNET-Go:
 1.  **Using `install.sh` (Recommended for Linux):** This script automates the setup of BirdNET-Go within a Docker container, including dependencies, configuration prompts, performance optimization, and systemd service creation. This is the easiest and recommended method for supported Linux distributions (Debian 11+, Ubuntu 20.04+, Raspberry Pi OS Bullseye+).
 2.  **Manual Docker Installation (Advanced):** Manually run the BirdNET-Go Docker container. This offers more control but requires managing the container lifecycle yourself.
 3.  **Manual Binary Installation:** Download pre-compiled binaries. This avoids Docker but requires manually installing dependencies (TensorFlow Lite C library, FFmpeg, SoX) and managing the application process.
+4.  **Using Docker Compose:** Set up BirdNET-Go using Docker Compose for a more flexible containerized approach. See the [Docker Compose Guide](docker_compose_guide.md) for detailed instructions.
 
 ## Recommended Method: `install.sh` (Linux)
 
