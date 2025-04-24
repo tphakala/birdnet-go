@@ -67,7 +67,7 @@ func openNamedPipePlatform(sfs *SecureFS, pipePath string) (*os.File, error) {
 	}
 
 	// Make the path relative to the base directory
-	relPath, err := sfs.relativePath(pipePath)
+	relPath, err := sfs.RelativePath(pipePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get relative path: %w", err)
 	}

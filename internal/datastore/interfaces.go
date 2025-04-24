@@ -2,6 +2,7 @@
 package datastore
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -62,6 +63,8 @@ type Interface interface {
 	GetHourlyAnalyticsData(date string, species string) ([]HourlyAnalyticsData, error)
 	GetDailyAnalyticsData(startDate, endDate string, species string) ([]DailyAnalyticsData, error)
 	GetDetectionTrends(period string, limit int) ([]DailyAnalyticsData, error)
+	// Search functionality
+	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 }
 
 // DataStore implements StoreInterface using a GORM database.
@@ -959,4 +962,219 @@ func (ds *DataStore) CountHourlyDetections(date, hour string, duration int) (int
 	}
 
 	return count, nil
+}
+
+// SearchFilters defines parameters for filtering detection records
+type SearchFilters struct {
+	Species        string
+	DateStart      string
+	DateEnd        string
+	ConfidenceMin  float64
+	ConfidenceMax  float64
+	VerifiedOnly   bool
+	UnverifiedOnly bool
+	LockedOnly     bool
+	UnlockedOnly   bool
+	Device         string
+	Page           int
+	PerPage        int
+	SortBy         string
+	Ctx            context.Context // Add context for cancellation/timeout
+}
+
+// sanitise validates and normalises the search filters, returning an error for invalid combinations.
+func (f *SearchFilters) sanitise() error {
+	if f.Page <= 0 {
+		f.Page = 1
+	}
+	// Default and cap PerPage
+	if f.PerPage <= 0 || f.PerPage > 200 {
+		f.PerPage = 20 // Default/max page size
+	}
+	// Default ConfidenceMax if not set or zero
+	if f.ConfidenceMax == 0 {
+		f.ConfidenceMax = 1.0
+	}
+	// Validate confidence range
+	if f.ConfidenceMin > f.ConfidenceMax {
+		return errors.New("confidence_min must be <= confidence_max")
+	}
+	// Validate mutually exclusive Verified flags
+	if f.VerifiedOnly && f.UnverifiedOnly {
+		return errors.New("verified_only and unverified_only cannot both be true")
+	}
+	// Validate mutually exclusive Locked flags
+	if f.LockedOnly && f.UnlockedOnly {
+		return errors.New("locked_only and unlocked_only cannot both be true")
+	}
+	return nil
+}
+
+// applySpeciesFilter applies the species filter to a GORM query
+func applySpeciesFilter(query *gorm.DB, species string) *gorm.DB {
+	if species != "" {
+		likeParam := "%" + species + "%"
+		return query.Where("notes.scientific_name LIKE ? OR notes.common_name LIKE ?", likeParam, likeParam)
+	}
+	return query
+}
+
+// applyCommonFilters applies common search filters to a GORM query
+func applyCommonFilters(query *gorm.DB, filters *SearchFilters) *gorm.DB {
+	query = applySpeciesFilter(query, filters.Species)
+
+	if filters.DateStart != "" {
+		query = query.Where("notes.date >= ?", filters.DateStart)
+	}
+	if filters.DateEnd != "" {
+		query = query.Where("notes.date <= ?", filters.DateEnd)
+	}
+
+	query = query.Where("notes.confidence >= ? AND notes.confidence <= ?",
+		filters.ConfidenceMin, filters.ConfidenceMax)
+
+	if filters.VerifiedOnly {
+		query = query.Where("note_reviews.verified = ?", "correct")
+	} else if filters.UnverifiedOnly {
+		query = query.Where("note_reviews.verified IS NULL OR note_reviews.verified != ?", "correct")
+	}
+
+	if filters.LockedOnly {
+		query = query.Where("note_locks.id IS NOT NULL")
+	} else if filters.UnlockedOnly {
+		query = query.Where("note_locks.id IS NULL")
+	}
+
+	if filters.Device != "" {
+		query = query.Where("notes.source_node LIKE ?", "%"+filters.Device+"%")
+	}
+
+	return query
+}
+
+// SearchDetections retrieves detections based on the given filters
+func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error) {
+	// Sanitise filters first
+	if err := filters.sanitise(); err != nil {
+		return nil, 0, fmt.Errorf("invalid search filters: %w", err)
+	}
+
+	// Build the query with GORM query builder
+	query := ds.DB.Table("notes")
+
+	// Select necessary fields, including potentially null fields from joins
+	query = query.Select("notes.id, notes.date, notes.time, notes.scientific_name, notes.common_name, notes.confidence, " +
+		"notes.latitude, notes.longitude, notes.clip_name, notes.source, notes.source_node, " +
+		"note_reviews.verified AS review_verified, " + // Select review status
+		"note_locks.id IS NOT NULL AS is_locked") // Select lock status as boolean
+
+	// Use LEFT JOINs to fetch optional review and lock data
+	query = query.Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id")
+	query = query.Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id")
+
+	// Apply filters
+	query = applyCommonFilters(query, filters)
+
+	// --- Count Query ---
+	// Create a separate query for counting to avoid issues with GROUP BY if added later
+	countQuery := ds.DB.Table("notes").
+		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
+		Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id")
+
+	// Apply the *same* filters to the count query
+	countQuery = applyCommonFilters(countQuery, filters)
+
+	// Get total count using the separate count query
+	var total int64
+	err := countQuery.WithContext(filters.Ctx).Count(&total).Error // Apply context
+	if err != nil {
+		return nil, 0, fmt.Errorf("count query failed: %w", err)
+	}
+	// --- End Count Query ---
+
+	// Apply sorting to the main query
+	switch filters.SortBy {
+	case "date_asc":
+		query = query.Order("notes.date ASC, notes.time ASC")
+	case "species_asc":
+		query = query.Order("notes.common_name ASC")
+	case "confidence_desc":
+		query = query.Order("notes.confidence DESC")
+	default:
+		query = query.Order("notes.date DESC, notes.time DESC") // Default sort by date, newest first
+	}
+
+	// Apply pagination (PerPage and Page are already sanitised)
+	limit := filters.PerPage
+	offset := (filters.Page - 1) * limit
+	query = query.Limit(limit).Offset(offset)
+
+	// Define a struct to scan results into, including joined fields
+	type ScannedResult struct {
+		ID             uint
+		Date           string
+		Time           string
+		ScientificName string
+		CommonName     string
+		Confidence     float64
+		Latitude       float64
+		Longitude      float64
+		ClipName       string
+		Source         string
+		SourceNode     string
+		ReviewVerified *string // Use pointer to handle NULL for review status
+		IsLocked       bool    // Boolean result from IS NOT NULL
+	}
+
+	// Execute the query
+	var scannedResults []ScannedResult
+	if err := query.WithContext(filters.Ctx).Scan(&scannedResults).Error; err != nil { // Apply context
+		return nil, 0, fmt.Errorf("search query failed: %w", err)
+	}
+
+	// Convert ScannedResult objects to DetectionRecord objects
+	results := make([]DetectionRecord, 0, len(scannedResults))
+	for i := range scannedResults {
+		scanned := &scannedResults[i] // Use pointer to avoid copy
+		// Determine verification status
+		verifiedStatus := "unverified" // Default
+		if scanned.ReviewVerified != nil {
+			verifiedStatus = *scanned.ReviewVerified
+		}
+
+		// Parse timestamp string to time.Time
+		timestamp, err := time.Parse("2006-01-02 15:04:05", scanned.Date+" "+scanned.Time)
+		if err != nil {
+			log.Printf("Warning: Failed to parse timestamp '%s %s' for note ID %d: %v. Using current time.", scanned.Date, scanned.Time, scanned.ID, err)
+			timestamp = time.Now() // Fallback
+		}
+
+		// Calculate week from date if needed
+		week := 0
+		if t, err := time.Parse("2006-01-02", scanned.Date); err == nil {
+			_, week = t.ISOWeek()
+		}
+
+		// Create detection record
+		record := DetectionRecord{
+			ID:             fmt.Sprintf("%d", scanned.ID),
+			Timestamp:      timestamp,
+			ScientificName: scanned.ScientificName,
+			CommonName:     scanned.CommonName,
+			Confidence:     scanned.Confidence,
+			Latitude:       scanned.Latitude,
+			Longitude:      scanned.Longitude,
+			Week:           week,
+			AudioFilePath:  scanned.ClipName,
+			Verified:       verifiedStatus,   // Use derived status
+			Locked:         scanned.IsLocked, // Use derived status
+			HasAudio:       scanned.ClipName != "",
+			Device:         scanned.SourceNode,
+			Source:         scanned.Source,
+		}
+
+		results = append(results, record)
+	}
+
+	return results, int(total), nil
 }

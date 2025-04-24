@@ -121,3 +121,21 @@ type ImageCache struct {
 	AuthorURL      string    // The URL of the author's page or profile
 	CachedAt       time.Time `gorm:"index"` // When the image was cached
 }
+
+// DetectionRecord represents a bird detection record for search results
+type DetectionRecord struct {
+	ID             string    `json:"id"`
+	Timestamp      time.Time `json:"timestamp"`
+	ScientificName string    `json:"scientificName,omitempty"`
+	CommonName     string    `json:"commonName,omitempty"`
+	Confidence     float64   `json:"confidence,omitempty"`
+	Latitude       float64   `json:"latitude,omitempty"`
+	Longitude      float64   `json:"longitude,omitempty"`
+	Week           int       `json:"week,omitempty"`
+	AudioFilePath  string    `json:"audioFilePath,omitempty"`
+	Verified       string    `json:"verified,omitempty"`
+	Locked         bool      `json:"locked,omitempty"`
+	HasAudio       bool      `json:"hasAudio,omitempty"`
+	Device         string    `json:"device,omitempty"`
+	Source         string    `json:"source,omitempty"`
+}
