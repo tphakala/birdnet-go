@@ -9,61 +9,63 @@
   - Maintain this architecture for any future enhancements to the search functionality
 */}}
 
-<div class="col-span-12 space-y-4" x-data="searchUI">
+<div class="col-span-12 space-y-4" x-data="searchUI" role="region" aria-label="Bird Detection Search">
     <!-- Search Form -->
     <div class="card bg-base-100 shadow-sm">
-        <div class="card-body">
-            <h2 class="card-title">Search Filters</h2>
+        <div class="card-body p-4 m-2">
+            <h2 class="card-title" id="search-filters-heading">Search Filters</h2>
             
-            <form class="mt-4 space-y-6" @submit.prevent="submitSearch()">
-                <!-- Basic Filters -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- Species Search -->
+            <form id="searchForm" class="space-y-4" @submit.prevent="submitSearch(1)" x-ref="searchForm" aria-labelledby="search-filters-heading">
+                <!-- Basic Search Fields -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Species -->
                     <div class="form-control">
-                        <label class="label">
-                            <span class="label-text">Species</span>
-                        </label>
-                        <div class="flex w-full">
-                            <input 
-                                type="text" 
-                                x-model="speciesSearchTerm" 
-                                placeholder="Search by species name" 
-                                class="input input-bordered w-full"
-                            />
-                        </div>
-                        <label class="label">
-                            <span class="label-text-alt">Enter common or scientific name</span>
-                        </label>
+                        {{template "textField" dict 
+                          "id" "species" 
+                          "label" "Species" 
+                          "model" "speciesSearchTerm" 
+                          "placeholder" "Enter species name"
+                          "tooltip" "Enter full or partial species name (not case sensitive)"
+                        }}
                     </div>
                     
                     <!-- Date Range -->
                     <div class="form-control">
-                        <label class="label">
+                        <label class="label" id="dateRangeLabel">
                             <span class="label-text">Date Range</span>
+                            <span class="help-icon" 
+                                @mouseenter="showTooltip = 'dateRange'"
+                                @mouseleave="showTooltip = null"
+                                @focus="showTooltip = 'dateRange'"
+                                @blur="showTooltip = null"
+                                role="button"
+                                tabindex="0"
+                                aria-label="Help for Date Range"
+                                aria-controls="dateRangeTooltip">ⓘ</span>
                         </label>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            <div>
-                                <input 
-                                    type="date" 
-                                    x-model="dateRange.start" 
-                                    class="input input-bordered w-full" 
-                                    placeholder="Start date"
-                                />
-                                <label class="label">
-                                    <span class="label-text-alt">Start date</span>
-                                </label>
-                            </div>
-                            <div>
-                                <input 
-                                    type="date" 
-                                    x-model="dateRange.end" 
-                                    class="input input-bordered w-full" 
-                                    placeholder="End date"
-                                />
-                                <label class="label">
-                                    <span class="label-text-alt">End date</span>
-                                </label>
-                            </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2" role="group" aria-labelledby="dateRangeLabel">
+                            {{template "dateInput" dict 
+                              "id" "startDate" 
+                              "model" "dateRange.start" 
+                              "placeholder" "Start Date"
+                              "altLabel" "From"
+                              "tooltip" "Start date for search range (inclusive)"
+                            }}
+                            {{template "dateInput" dict 
+                              "id" "endDate" 
+                              "model" "dateRange.end" 
+                              "placeholder" "End Date"
+                              "altLabel" "To"
+                              "tooltip" "End date for search range (inclusive)"
+                            }}
+                        </div>
+                        <div x-show="showTooltip === 'dateRange'" 
+                             x-cloak 
+                             :aria-hidden="showTooltip !== 'dateRange'"
+                             class="tooltip"
+                             id="dateRangeTooltip"
+                             role="tooltip">
+                            Filter detections by date range (leave empty for all dates)
                         </div>
                     </div>
                 </div>
@@ -74,6 +76,8 @@
                         type="button"
                         class="btn btn-sm btn-ghost" 
                         @click="advancedFilters = !advancedFilters"
+                        aria-expanded="advancedFilters"
+                        aria-controls="advancedFiltersSection"
                     >
                         <span x-text="advancedFilters ? 'Hide Advanced Filters' : 'Show Advanced Filters'"></span>
                         <svg 
@@ -83,6 +87,7 @@
                             fill="none" 
                             viewBox="0 0 24 24" 
                             stroke="currentColor"
+                            aria-hidden="true"
                         >
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                         </svg>
@@ -90,14 +95,14 @@
                 </div>
                 
                 <!-- Advanced Filters Section -->
-                <div x-show="advancedFilters" x-transition class="space-y-6">
+                <div x-show="advancedFilters" x-transition class="space-y-2" id="advancedFiltersSection">
                     <!-- Confidence Range -->
                     <div class="form-control">
-                        <label class="label">
+                        <label class="label" id="confidenceRangeLabel">
                             <span class="label-text">Confidence Range (%)</span>
                             <span class="label-text-alt" x-bind:text="confidenceRange.min + '% - ' + confidenceRange.max + '%'"></span>
                         </label>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6" role="group" aria-labelledby="confidenceRangeLabel">
                             <div>
                                 <input 
                                     type="range" 
@@ -105,6 +110,11 @@
                                     max="100" 
                                     x-model.number="confidenceRange.min" 
                                     class="range range-xs" 
+                                    aria-label="Minimum confidence percentage"
+                                    aria-valuemin="0"
+                                    aria-valuemax="100"
+                                    :aria-valuenow="confidenceRange.min"
+                                    :aria-valuetext="confidenceRange.min + '%'"
                                 />
                                 <div class="flex justify-between text-xs px-2">
                                     <span>0%</span>
@@ -119,6 +129,11 @@
                                     max="100" 
                                     x-model.number="confidenceRange.max" 
                                     class="range range-xs" 
+                                    aria-label="Maximum confidence percentage"
+                                    aria-valuemin="0"
+                                    aria-valuemax="100"
+                                    :aria-valuenow="confidenceRange.max"
+                                    :aria-valuetext="confidenceRange.max + '%'"
                                 />
                                 <div class="flex justify-between text-xs px-2">
                                     <span>0%</span>
@@ -128,34 +143,37 @@
                             </div>
                         </div>
                         <!-- Confidence error message -->
-                        <div x-show="confidenceError" class="text-error text-sm mt-1" x-text="confidenceError"></div>
+                        <div x-show="confidenceError" class="text-error text-sm mt-1" role="alert" x-text="confidenceError"></div>
                     </div>
                     
-                    <!-- Status Filters -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Status & Time of Day Filters -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <!-- Verified Status -->
-                        <div class="form-control">
-                            <label class="label">
-                                <span class="label-text">Verified Status</span>
-                            </label>
-                            <select x-model="verifiedStatus" class="select select-bordered w-full">
-                                <option value="any">Any Status</option>
-                                <option value="verified">Verified Only</option>
-                                <option value="unverified">Unverified Only</option>
-                            </select>
-                        </div>
-                        
-                        <!-- Locked Status -->
-                        <div class="form-control">
-                            <label class="label">
-                                <span class="label-text">Locked Status</span>
-                            </label>
-                            <select x-model="lockedStatus" class="select select-bordered w-full">
-                                <option value="any">Any Status</option>
-                                <option value="locked">Locked Only</option>
-                                <option value="unlocked">Unlocked Only</option>
-                            </select>
-                        </div>
+                        {{template "selectField" dict 
+                            "id" "verifiedStatusFilter" 
+                            "label" "Verified Status" 
+                            "model" "verifiedStatus" 
+                            "options" (dict "any" "Any Status" "verified" "Verified Only" "unverified" "Unverified Only") 
+                            "tooltip" "Filter detections based on their verification status."
+                        }}
+
+                        <!-- Locked Status (Restored) -->
+                        {{template "selectField" dict 
+                            "id" "lockedStatusFilter" 
+                            "label" "Locked Status" 
+                            "model" "lockedStatus" 
+                            "options" (dict "any" "Any Status" "locked" "Locked Only" "unlocked" "Unlocked Only") 
+                            "tooltip" "Filter detections based on whether they are locked (preventing changes)."
+                        }}
+
+                        <!-- Time of Day -->
+                        {{template "selectField" dict 
+                            "id" "timeOfDayFilter" 
+                            "label" "Time of Day" 
+                            "model" "timeOfDayFilter" 
+                            "options" (dict "any" "Any Time" "day" "Day Only" "night" "Night Only" "sunrise" "Sunrise +/- 30min" "sunset" "Sunset +/- 30min") 
+                            "tooltip" "Filter detections based on the calculated time of day (Day, Night, Sunrise, Sunset)."
+                        }}
                     </div>
                 </div>
                 
@@ -165,6 +183,7 @@
                         type="button" 
                         class="btn btn-ghost" 
                         @click="resetForm()"
+                        aria-label="Reset all search filters"
                     >
                         Reset
                     </button>
@@ -172,12 +191,13 @@
                         type="submit" 
                         class="btn btn-primary"
                         :disabled="isLoading"
+                        aria-label="Search for bird detections"
                     >
                         <template x-if="isLoading">
-                            <span class="loading loading-spinner loading-sm mr-2"></span>
+                            <span class="loading loading-spinner loading-sm mr-2" aria-hidden="true"></span>
                         </template>
                         <template x-if="!isLoading">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                                 <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"></path>
                             </svg>
                         </template>
@@ -190,41 +210,41 @@
 
     <!-- Results Area -->
     <div class="card bg-base-100 shadow-sm">
-        <div class="card-body">
+        <div class="card-body p-4 m-2">
             <div class="flex items-center justify-between">
-                <h2 class="card-title">Search Results</h2>
+                <h2 class="card-title" id="search-results-heading">Search Results</h2>
                 
                 <!-- Results Count & Sorting -->
                 <div x-show="formSubmitted" x-transition class="flex items-center gap-4">
-                    <span class="text-sm text-base-content/70" x-text="totalResults + ' result' + (totalResults !== 1 ? 's' : '')"></span>
+                    <span class="text-sm text-base-content/70" x-text="totalResults + ' result' + (totalResults !== 1 ? 's' : '')" aria-live="polite"></span>
                     <div class="dropdown dropdown-end">
-                        <div tabindex="0" role="button" class="btn btn-sm btn-outline">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20">
+                        <div tabindex="0" role="button" class="btn btn-sm btn-outline" aria-haspopup="true" aria-expanded="false" aria-label="Sort results">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" aria-hidden="true">
                                 <path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z"/>
                             </svg>
                             Sort
                         </div>
-                        <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-                            <li><a @click="changeSort('date_desc')">Date (Newest First)</a></li>
-                            <li><a @click="changeSort('date_asc')">Date (Oldest First)</a></li>
-                            <li><a @click="changeSort('species_asc')">Species (A-Z)</a></li>
-                            <li><a @click="changeSort('confidence_desc')">Confidence (High-Low)</a></li>
+                        <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52" role="menu">
+                            <li role="menuitem"><a @click="changeSort('date_desc')">Date (Newest First)</a></li>
+                            <li role="menuitem"><a @click="changeSort('date_asc')">Date (Oldest First)</a></li>
+                            <li role="menuitem"><a @click="changeSort('species_asc')">Species (A-Z)</a></li>
+                            <li role="menuitem"><a @click="changeSort('confidence_desc')">Confidence (High-Low)</a></li>
                         </ul>
                     </div>
                 </div>
             </div>
             
             <!-- Error message -->
-            <div x-show="errorMessage" class="alert alert-error mt-4">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div x-show="errorMessage" class="alert alert-error mt-4" role="alert">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
                 <span x-text="errorMessage"></span>
             </div>
             
             <!-- When no search performed yet -->
-            <div x-show="!formSubmitted" class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <div x-show="!formSubmitted" class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]" aria-labelledby="search-results-heading">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
                 </svg>
                 <p class="text-base-content/50 text-center mt-4">No search performed yet</p>
@@ -232,21 +252,22 @@
             </div>
             
             <!-- Loading indicator -->
-            <div x-show="isLoading && formSubmitted" class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]">
-                <span class="loading loading-spinner loading-lg text-primary"></span>
+            <div x-show="isLoading && formSubmitted" class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]" aria-live="polite" aria-busy="true">
+                <span class="loading loading-spinner loading-lg text-primary" aria-hidden="true"></span>
                 <p class="text-base-content/50 text-center mt-4">Loading results...</p>
             </div>
             
             <!-- Search results table - only visible when search performed -->
-            <div x-show="formSubmitted && !isLoading && results.length > 0" x-transition class="overflow-x-auto mt-4">
+            <div x-show="formSubmitted && !isLoading && results.length > 0" x-transition class="overflow-x-auto mt-4" aria-labelledby="search-results-heading">
                 <table class="table w-full">
                     <thead>
                         <tr>
-                            <th>Date & Time</th>
-                            <th>Species</th>
-                            <th>Confidence</th>
-                            <th>Status</th>
-                            <th>Actions</th>
+                            <th scope="col">Date & Time</th>
+                            <th scope="col">Time of Day</th>
+                            <th scope="col">Species</th>
+                            <th scope="col">Confidence</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -256,6 +277,51 @@
                                 <!-- Main row -->
                                 <tr :class="index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'">
                                     <td x-text="formatDate(result.timestamp)"></td>
+                                    <td>
+                                        <div class="flex items-center">
+                                            <!-- Time of Day icons and text -->
+                                            <template x-if="result.timeOfDay === 'day'">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                                                </svg>
+                                            </template>
+                                            <template x-if="result.timeOfDay === 'night'">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                                                </svg>
+                                            </template>
+                                            <template x-if="result.timeOfDay === 'sunrise'">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <path d="M17 18a5 5 0 0 0-10 0"></path>
+                                                    <line x1="12" y1="2" x2="12" y2="9"></line>
+                                                    <line x1="4.22" y1="10.22" x2="5.64" y2="11.64"></line>
+                                                    <line x1="1" y1="18" x2="3" y2="18"></line>
+                                                    <line x1="21" y1="18" x2="23" y2="18"></line>
+                                                    <line x1="18.36" y1="11.64" x2="19.78" y2="10.22"></line>
+                                                    <line x1="23" y1="22" x2="1" y2="22"></line>
+                                                    <polyline points="8 6 12 2 16 6"></polyline>
+                                                </svg>
+                                            </template>
+                                            <template x-if="result.timeOfDay === 'sunset'">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <path d="M17 18a5 5 0 0 0-10 0"></path>
+                                                    <line x1="12" y1="9" x2="12" y2="2"></line>
+                                                    <line x1="4.22" y1="10.22" x2="5.64" y2="11.64"></line>
+                                                    <line x1="1" y1="18" x2="3" y2="18"></line>
+                                                    <line x1="21" y1="18" x2="23" y2="18"></line>
+                                                    <line x1="18.36" y1="11.64" x2="19.78" y2="10.22"></line>
+                                                    <line x1="23" y1="22" x2="1" y2="22"></line>
+                                                    <polyline points="16 5 12 9 8 5"></polyline>
+                                                </svg>
+                                            </template>
+                                            <template x-if="result.timeOfDay !== 'day' && result.timeOfDay !== 'night' && result.timeOfDay !== 'sunrise' && result.timeOfDay !== 'sunset'">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            </template>
+                                            <span x-text="result.timeOfDay || 'Unknown'"></span>
+                                        </div>
+                                    </td>
                                     <td>
                                         <div class="flex items-center gap-2">
                                             <div>
@@ -267,7 +333,7 @@
                                     <td>
                                         <div class="flex items-center">
                                             <div class="flex items-center gap-2 w-full">
-                                                <div class="w-16 h-4 rounded-full overflow-hidden bg-base-200">
+                                                <div class="w-16 h-4 rounded-full overflow-hidden bg-base-200" role="progressbar" :aria-valuenow="(result.confidence * 100).toFixed(0)" aria-valuemin="0" aria-valuemax="100" :aria-valuetext="(result.confidence * 100).toFixed(0) + '%'">
                                                     <div class="h-full"
                                                          :class="{
                                                             'bg-success': result.confidence >= 0.8,
@@ -293,21 +359,29 @@
                                     </td>
                                     <td>
                                         <div class="flex gap-1">
-                                            <button class="btn btn-xs btn-square" @click.prevent="playAudioFromRow(result.id)"
-                                                    :disabled="!result.hasAudio">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <button class="btn btn-xs btn-square" 
+                                                    @click.prevent="playAudioFromRow(result.id)"
+                                                    :disabled="!result.hasAudio"
+                                                    :aria-label="'Play audio for ' + (result.commonName || 'Unknown species')"
+                                                    aria-pressed="false">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
                                                 </svg>
                                             </button>
-                                            <button class="btn btn-xs btn-square" @click="window.location.href = `/api/v2/detections/${result.id}`">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <button class="btn btn-xs btn-square" 
+                                                    @click="window.location.href = `/api/v2/detections/${result.id}`"
+                                                    :aria-label="'View details for ' + (result.commonName || 'Unknown species')">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                                                 </svg>
                                             </button>
                                             <button class="btn btn-xs btn-square expand-btn"
                                                     @click.prevent="toggleExpand(result.id)"
-                                                    :data-id="result.id">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" :class="{'rotate-180': isExpanded(result.id)}">
+                                                    :data-id="result.id"
+                                                    :aria-label="(isExpanded(result.id) ? 'Collapse' : 'Expand') + ' details for ' + (result.commonName || 'Unknown species')"
+                                                    :aria-expanded="isExpanded(result.id)"
+                                                    :aria-controls="'expanded-row-' + result.id">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" :class="{'rotate-180': isExpanded(result.id)}" aria-hidden="true">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                                                 </svg>
                                             </button>
@@ -316,136 +390,257 @@
                                 </tr>
 
                                 <!-- Expanded row - associated with the result above -->
-                                <tr x-show="isExpanded(result.id)" class="expanded-row">
-                                    <td colspan="5" class="p-0 border-t-0">
+                                <tr x-show="isExpanded(result.id)" class="expanded-row" :id="'expanded-row-' + result.id">
+                                    <td colspan="6" class="p-0 border-t-0">
                                         <div class="p-4 bg-base-200">
                                             <!-- Expanded content -->
                                             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                                <!-- Weather Information Container -->
-                                                <div class="bg-base-200 rounded-box p-4" x-data="{
-                                                    weather: null,
-                                                    loading: true,
-                                                    error: null,
-                                                    
-                                                    init() {
-                                                        this.fetchWeatherInfo(result.id);
-                                                    },
-                                                    
-                                                    fetchWeatherInfo(resultId) {
-                                                        fetch(`/api/v2/weather/detection/${resultId}`)
-                                                            .then(response => {
-                                                                if (!response.ok) {
-                                                                    throw new Error('Weather data not available');
-                                                                }
-                                                                return response.json();
-                                                            })
-                                                            .then(data => {
-                                                                this.weather = data;
-                                                                this.loading = false;
-                                                            })
-                                                            .catch(err => {
-                                                                console.error('Error fetching weather data:', err);
-                                                                this.error = err.message;
-                                                                this.loading = false;
-                                                            });
-                                                    }
-                                                }">
-                                                    <h3 class="text-lg font-semibold text-base-content mb-3">Weather Information</h3>
-                                                    
-                                                    <!-- Loading state -->
-                                                    <div x-show="loading" class="py-4 flex justify-center">
-                                                        <svg class="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                                                        </svg>
-                                                    </div>
-                                                    
-                                                    <!-- Error state -->
-                                                    <div x-show="!loading && error" class="py-4">
-                                                        <div class="text-error flex items-center">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                                                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                                                            </svg>
-                                                            <span x-text="error"></span>
+                                                <!-- Left column -->
+                                                <div class="space-y-4">
+                                                    <!-- Recording info -->
+                                                    <div class="bg-base-300 p-3 rounded-md">
+                                                        <h3 class="font-semibold text-base-content mb-2">Recording Details</h3>
+                                                        <div class="grid grid-cols-2 gap-2 text-sm">
+                                                            <div>
+                                                                <p class="text-base-content/60">Date</p>
+                                                                <p class="font-medium" x-text="formatDate(result.timestamp)"></p>
+                                                            </div>
+                                                            <div>
+                                                                <p class="text-base-content/60">Time</p>
+                                                                <p class="font-medium" x-text="formatTime(result.timestamp)"></p>
+                                                            </div>
+                                                            <div>
+                                                                <p class="text-base-content/60">Location</p>
+                                                                <p class="font-medium" x-text="result.location || 'Unknown'"></p>
+                                                            </div>
+                                                            <div>
+                                                                <p class="text-base-content/60">Recording ID</p>
+                                                                <p class="font-medium" x-text="result.id"></p>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     
-                                                    <!-- Weather data (when available) -->
-                                                    <div x-show="!loading && !error && weather" class="grid grid-cols-2 gap-2 text-sm">
-                                                        <div class="flex items-center">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
-                                                            </svg>
-                                                            <div>
-                                                                <div class="text-base-content/70">Temperature</div>
-                                                                <div class="font-medium" x-text="weather?.temperature ? `${weather.temperature}°C` : 'N/A'"></div>
-                                                            </div>
+                                                    <!-- Audio Player -->
+                                                    <div class="bg-base-300 p-3 rounded-md">
+                                                        <h3 class="font-semibold text-base-content mb-2">Audio</h3>
+                                                        <div x-show="!result.hasAudio" class="text-sm text-base-content/60">
+                                                            No audio available for this detection
                                                         </div>
-                                                        <div class="flex items-center">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                                                            </svg>
-                                                            <div>
-                                                                <div class="text-base-content/70">Weather</div>
-                                                                <div class="font-medium" x-text="weather?.condition || 'N/A'"></div>
+                                                        <div x-show="result.hasAudio" class="space-y-2">
+                                                            <div class="flex items-center gap-2">
+                                                                <button 
+                                                                    @click.prevent="playAudioFromRow(result.id)"
+                                                                    class="btn btn-sm btn-circle"
+                                                                    :class="{'btn-primary': isCurrentPlaying(result.id)}"
+                                                                    aria-label="Play or pause audio"
+                                                                    :aria-pressed="isCurrentPlaying(result.id)"
+                                                                >
+                                                                    <svg 
+                                                                        x-show="!isCurrentPlaying(result.id)" 
+                                                                        xmlns="http://www.w3.org/2000/svg" 
+                                                                        class="h-4 w-4" 
+                                                                        viewBox="0 0 20 20" 
+                                                                        fill="currentColor"
+                                                                        aria-hidden="true"
+                                                                    >
+                                                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664z" clip-rule="evenodd" />
+                                                                    </svg>
+                                                                    <svg 
+                                                                        x-show="isCurrentPlaying(result.id)" 
+                                                                        xmlns="http://www.w3.org/2000/svg" 
+                                                                        class="h-4 w-4" 
+                                                                        viewBox="0 0 20 20" 
+                                                                        fill="currentColor"
+                                                                        aria-hidden="true"
+                                                                    >
+                                                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                                                    </svg>
+                                                                </button>
+                                                                <div class="flex-1">
+                                                                    <div 
+                                                                        class="w-full bg-base-100 h-2 rounded-full overflow-hidden cursor-pointer relative"
+                                                                        @click="seekAudio($event)"
+                                                                        role="slider"
+                                                                        aria-label="Audio playback position"
+                                                                        aria-valuemin="0"
+                                                                        aria-valuemax="100"
+                                                                        :aria-valuenow="audioProgress"
+                                                                        :aria-valuetext="audioProgress + '%'"
+                                                                        tabindex="0"
+                                                                        @keydown.left.prevent="seekBackward(5)"
+                                                                        @keydown.right.prevent="seekForward(5)"
+                                                                    >
+                                                                        <div 
+                                                                            class="absolute top-0 left-0 h-full bg-primary" 
+                                                                            :style="'width:' + audioProgress + '%'"
+                                                                            aria-hidden="true"
+                                                                        ></div>
+                                                                    </div>
+                                                                </div>
+                                                                <span class="text-xs" x-text="formatDuration(audioCurrentTime) + ' / ' + formatDuration(audioDuration)"></span>
                                                             </div>
-                                                        </div>
-                                                        <div class="flex items-center">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                                                            </svg>
-                                                            <div>
-                                                                <div class="text-base-content/70">Wind</div>
-                                                                <div class="font-medium" x-text="weather?.windSpeed ? `${weather.windSpeed} km/h` : 'N/A'"></div>
-                                                            </div>
-                                                        </div>
-                                                        <div class="flex items-center">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                            </svg>
-                                                            <div>
-                                                                <div class="text-base-content/70">Humidity</div>
-                                                                <div class="font-medium" x-text="weather?.humidity ? `${weather.humidity}%` : 'N/A'"></div>
+                                                            <div class="flex gap-2 justify-end">
+                                                                <a 
+                                                                    :href="'/api/v2/detections/' + result.id + '/audio'" 
+                                                                    download 
+                                                                    class="btn btn-xs btn-ghost"
+                                                                    aria-label="Download audio file"
+                                                                >
+                                                                    <svg 
+                                                                        xmlns="http://www.w3.org/2000/svg" 
+                                                                        class="h-4 w-4 mr-1" 
+                                                                        fill="none" 
+                                                                        viewBox="0 0 24 24" 
+                                                                        stroke="currentColor"
+                                                                        aria-hidden="true"
+                                                                    >
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                                    </svg>
+                                                                    Download
+                                                                </a>
                                                             </div>
                                                         </div>
                                                     </div>
                                                 </div>
-
-                                                <!-- Audio Player Container -->
-                                                <div class="bg-base-200 rounded-box p-4">
-                                                    <h3 class="text-lg font-semibold mb-2">Audio Player</h3>
-                                                    
-                                                    <div class="audio-player-container relative">
-                                                        <!-- Hidden audio element -->
-                                                        <audio :id="'audio-' + result.id" class="hidden" :src="'/api/v2/audio/' + result.id"></audio>
-                                                        
-                                                        <!-- Spectrogram Image -->
-                                                        <img :src="'/api/v2/spectrogram/' + result.id + '?width=400'" alt="Spectrogram" 
-                                                            class="w-full rounded object-cover" />
-                                                        
-                                                        <!-- Play position indicator -->
-                                                        <div :id="'position-indicator-' + result.id" class="absolute top-0 bottom-0 w-0.5 bg-primary pointer-events-none"
-                                                            style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
-                                                        
-                                                        <!-- Audio controls overlay -->
-                                                        <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md">
-                                                            <div class="flex items-center justify-between">
-                                                                <button :id="'playPause-' + result.id" class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
-                                                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                                    </svg>
-                                                                </button>
-                                                                <div :id="'progress-' + result.id" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
-                                                                    <div class="bg-primary h-1.5 rounded-full" style="width: 0%"></div>
-                                                                </div>
-                                                                <span :id="'currentTime-' + result.id" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-                                                                <a :href="'/api/v2/audio/' + result.id" download class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
-                                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                                                                    </svg>
-                                                                </a>
+                                                
+                                                <!-- Right column -->
+                                                <div class="space-y-4">
+                                                    <!-- Species info -->
+                                                    <div class="bg-base-300 p-3 rounded-md">
+                                                        <h3 class="font-semibold text-base-content mb-2">Species Information</h3>
+                                                        <div class="flex flex-col gap-2">
+                                                            <div>
+                                                                <p class="text-base-content/60">Common Name</p>
+                                                                <p class="font-medium" x-text="result.commonName || 'Unknown'"></p>
                                                             </div>
+                                                            <div>
+                                                                <p class="text-base-content/60">Scientific Name</p>
+                                                                <p class="font-medium italic" x-text="result.scientificName || 'Unknown'"></p>
+                                                            </div>
+                                                            <div>
+                                                                <p class="text-base-content/60">Confidence</p>
+                                                                <div class="flex items-center gap-2">
+                                                                    <div 
+                                                                        class="w-24 h-3 rounded-full overflow-hidden bg-base-200"
+                                                                        role="progressbar"
+                                                                        :aria-valuenow="(result.confidence * 100).toFixed(0)"
+                                                                        aria-valuemin="0"
+                                                                        aria-valuemax="100"
+                                                                        :aria-valuetext="(result.confidence * 100).toFixed(0) + '%'"
+                                                                    >
+                                                                        <div 
+                                                                            class="h-full"
+                                                                            :class="{
+                                                                                'bg-success': result.confidence >= 0.8,
+                                                                                'bg-warning': result.confidence >= 0.4 && result.confidence < 0.8,
+                                                                                'bg-error': result.confidence < 0.4
+                                                                            }"
+                                                                            :style="'width: ' + (result.confidence * 100) + '%'"
+                                                                        ></div>
+                                                                    </div>
+                                                                    <span class="font-semibold" x-text="(result.confidence * 100).toFixed(0) + '%'"></span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <!-- Actions -->
+                                                    <div class="bg-base-300 p-3 rounded-md">
+                                                        <h3 class="font-semibold text-base-content mb-2">Actions</h3>
+                                                        <div class="flex flex-wrap gap-2">
+                                                            <a 
+                                                                :href="'/api/v2/detections/' + result.id" 
+                                                                class="btn btn-sm btn-primary"
+                                                                aria-label="View full details for this detection"
+                                                            >
+                                                                <svg 
+                                                                    xmlns="http://www.w3.org/2000/svg" 
+                                                                    class="h-4 w-4 mr-1" 
+                                                                    fill="none" 
+                                                                    viewBox="0 0 24 24" 
+                                                                    stroke="currentColor"
+                                                                    aria-hidden="true"
+                                                                >
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                                                </svg>
+                                                                View Details
+                                                            </a>
+                                                            
+                                                            <button 
+                                                                @click="verifyDetection(result.id, result.verified === 'correct' ? '' : 'correct')" 
+                                                                class="btn btn-sm"
+                                                                :class="{'btn-success': result.verified === 'correct', 'btn-outline': result.verified !== 'correct'}"
+                                                                :disabled="result.locked || isUpdating"
+                                                                aria-label="Mark as verified"
+                                                                :aria-pressed="result.verified === 'correct'"
+                                                            >
+                                                                <svg 
+                                                                    xmlns="http://www.w3.org/2000/svg" 
+                                                                    class="h-4 w-4 mr-1" 
+                                                                    fill="none" 
+                                                                    viewBox="0 0 24 24" 
+                                                                    stroke="currentColor"
+                                                                    aria-hidden="true"
+                                                                >
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                                                </svg>
+                                                                <span x-text="result.verified === 'correct' ? 'Verified' : 'Verify'"></span>
+                                                            </button>
+                                                            
+                                                            <button 
+                                                                @click="verifyDetection(result.id, result.verified === 'false_positive' ? '' : 'false_positive')" 
+                                                                class="btn btn-sm"
+                                                                :class="{'btn-error': result.verified === 'false_positive', 'btn-outline': result.verified !== 'false_positive'}"
+                                                                :disabled="result.locked || isUpdating"
+                                                                aria-label="Mark as false positive"
+                                                                :aria-pressed="result.verified === 'false_positive'"
+                                                            >
+                                                                <svg 
+                                                                    xmlns="http://www.w3.org/2000/svg" 
+                                                                    class="h-4 w-4 mr-1" 
+                                                                    fill="none" 
+                                                                    viewBox="0 0 24 24" 
+                                                                    stroke="currentColor"
+                                                                    aria-hidden="true"
+                                                                >
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                                                </svg>
+                                                                <span x-text="result.verified === 'false_positive' ? 'False' : 'Mark False'"></span>
+                                                            </button>
+                                                            
+                                                            <button 
+                                                                @click="toggleLock(result.id)" 
+                                                                class="btn btn-sm"
+                                                                :class="{'btn-neutral': result.locked, 'btn-outline': !result.locked}"
+                                                                :disabled="isUpdating"
+                                                                :aria-label="(result.locked ? 'Unlock' : 'Lock') + ' this detection'"
+                                                                :aria-pressed="result.locked"
+                                                            >
+                                                                <svg 
+                                                                    x-show="!result.locked" 
+                                                                    xmlns="http://www.w3.org/2000/svg" 
+                                                                    class="h-4 w-4 mr-1" 
+                                                                    fill="none" 
+                                                                    viewBox="0 0 24 24" 
+                                                                    stroke="currentColor"
+                                                                    aria-hidden="true"
+                                                                >
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                                                </svg>
+                                                                <svg 
+                                                                    x-show="result.locked" 
+                                                                    xmlns="http://www.w3.org/2000/svg" 
+                                                                    class="h-4 w-4 mr-1" 
+                                                                    fill="none" 
+                                                                    viewBox="0 0 24 24" 
+                                                                    stroke="currentColor"
+                                                                    aria-hidden="true"
+                                                                >
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/>
+                                                                </svg>
+                                                                <span x-text="result.locked ? 'Unlock' : 'Lock'"></span>
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -453,7 +648,7 @@
                                         </div>
                                     </td>
                                 </tr>
-                            </tbody> <!-- End wrapper -->
+                            </tbody>
                         </template>
                     </tbody>
                 </table>
@@ -511,6 +706,15 @@
 
 <script>
     document.addEventListener('alpine:init', () => {
+        // Define the inputField component 
+        Alpine.data('inputField', (id, label, model, name, placeholder) => ({
+            id: id,
+            name: name || model.toLowerCase(),
+            model: model,
+            placeholder: placeholder || `Enter ${label}`,
+            showPassword: false
+        }));
+        
         Alpine.data('searchUI', () => ({
             speciesSearchTerm: '',
             dateRange: {
@@ -523,6 +727,7 @@
             },
             verifiedStatus: 'any',
             lockedStatus: 'any',
+            timeOfDayFilter: 'any',
             formSubmitted: false,
             advancedFilters: false,
             isLoading: false,
@@ -535,6 +740,7 @@
             expanded: {},
             confidenceError: '',
             initializedPlayers: {}, // Track initialized players
+            showTooltip: null, // Add missing property for tooltips
             
             // Form validation methods
             validateForm() {
@@ -557,23 +763,31 @@
                 this.expanded = {}; // Reset expanded state when loading new results
                 
                 try {
+                    // Build request body
+                    const requestBody = {
+                        species: this.speciesSearchTerm,
+                        dateStart: this.dateRange.start,
+                        dateEnd: this.dateRange.end,
+                        confidenceMin: this.confidenceRange.min / 100,
+                        confidenceMax: this.confidenceRange.max / 100,
+                        verifiedStatus: this.verifiedStatus,
+                        lockedStatus: this.lockedStatus,
+                        timeOfDay: this.timeOfDayFilter,
+                        page: this.currentPage,
+                        sortBy: this.sortBy
+                    };
+                    
+                    // Debug output for search parameters
+                    console.log('Search parameters:', JSON.stringify(requestBody, null, 2));
+                    console.log('timeOfDayFilter value:', this.timeOfDayFilter);
+                    
                     const response = await fetch('/api/v2/search', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                             'X-CSRF-Token': document.querySelector('meta[name=\'csrf-token\']').content
                         },
-                        body: JSON.stringify({
-                            species: this.speciesSearchTerm,
-                            dateStart: this.dateRange.start,
-                            dateEnd: this.dateRange.end,
-                            confidenceMin: this.confidenceRange.min / 100,
-                            confidenceMax: this.confidenceRange.max / 100,
-                            verifiedStatus: this.verifiedStatus,
-                            lockedStatus: this.lockedStatus,
-                            page: this.currentPage,
-                            sortBy: this.sortBy
-                        })
+                        body: JSON.stringify(requestBody)
                     });
                     
                     if (!response.ok) {
@@ -603,6 +817,7 @@
                 this.confidenceRange.max = 100;
                 this.verifiedStatus = 'any';
                 this.lockedStatus = 'any';
+                this.timeOfDayFilter = 'any';
                 this.formSubmitted = false;
                 this.results = [];
                 this.errorMessage = '';
