@@ -18,6 +18,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"golang.org/x/sync/singleflight"
 )
 
 // safeFilenamePattern is kept if needed elsewhere, but SecureFS handles validation now
@@ -267,7 +268,10 @@ func parseRange(rangeHeader string, size int64) ([]httpRange, error) {
 // Limit concurrent spectrogram generations to avoid overloading the system
 const maxConcurrentSpectrograms = 4
 
-var spectrogramSemaphore = make(chan struct{}, maxConcurrentSpectrograms)
+var (
+	spectrogramSemaphore = make(chan struct{}, maxConcurrentSpectrograms)
+	spectrogramGroup     singleflight.Group // Prevents duplicate generations
+)
 
 // generateSpectrogram creates a spectrogram image for the given audio file path (relative to SecureFS root).
 // It accepts a context for cancellation and timeout.
@@ -320,33 +324,49 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		return "", fmt.Errorf("error checking for existing spectrogram '%s': %w", relSpectrogramPath, err)
 	}
 
-	// --- Generate Spectrogram ---
-	// Spectrogram does not exist, create it using absolute paths.
-	if err := createSpectrogramWithSoX(ctx, absAudioPath, absSpectrogramPath, width, c.Settings); err != nil {
-		log.Printf("SoX failed for '%s', falling back to FFmpeg: %v", absAudioPath, err)
-		// Pass the context down to the fallback function as well.
-		if err2 := createSpectrogramWithFFmpeg(ctx, absAudioPath, absSpectrogramPath, width, c.Settings); err2 != nil {
-			// Check for context errors specifically (propagate them up)
-			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err2, context.DeadlineExceeded) {
-				// Return the specific context error to be handled by the caller
-				if errors.Is(err, context.DeadlineExceeded) {
-					return "", err
-				}
-				return "", err2
-			}
-			if errors.Is(err, context.Canceled) || errors.Is(err2, context.Canceled) {
-				// Return the specific context error to be handled by the caller
-				if errors.Is(err, context.Canceled) {
-					return "", err
-				}
-				return "", err2
-			}
-			// Return a combined error for general failures
-			return "", fmt.Errorf("failed to generate spectrogram with SoX for '%s': %w, and with FFmpeg: %w", absAudioPath, err, err2)
+	// Generate a unique key for this spectrogram generation request
+	// Include both the path and width to ensure uniqueness
+	spectrogramKey := fmt.Sprintf("%s:%d", relSpectrogramPath, width)
+
+	// Use singleflight to prevent duplicate generations
+	_, err, _ = spectrogramGroup.Do(spectrogramKey, func() (interface{}, error) {
+		// Double-check if the file exists now (in case another goroutine just created it)
+		if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
+			return nil, nil // File exists, no need to generate
 		}
-		log.Printf("Successfully generated spectrogram for '%s' using FFmpeg fallback", absAudioPath)
-	} else {
-		log.Printf("Successfully generated spectrogram for '%s' using SoX", absAudioPath)
+
+		// --- Generate Spectrogram ---
+		if err := createSpectrogramWithSoX(ctx, absAudioPath, absSpectrogramPath, width, c.Settings); err != nil {
+			log.Printf("SoX failed for '%s', falling back to FFmpeg: %v", absAudioPath, err)
+			// Pass the context down to the fallback function as well.
+			if err2 := createSpectrogramWithFFmpeg(ctx, absAudioPath, absSpectrogramPath, width, c.Settings); err2 != nil {
+				// Check for context errors specifically (propagate them up)
+				if errors.Is(err, context.DeadlineExceeded) || errors.Is(err2, context.DeadlineExceeded) {
+					// Return the specific context error to be handled by the caller
+					if errors.Is(err, context.DeadlineExceeded) {
+						return nil, err
+					}
+					return nil, err2
+				}
+				if errors.Is(err, context.Canceled) || errors.Is(err2, context.Canceled) {
+					// Return the specific context error to be handled by the caller
+					if errors.Is(err, context.Canceled) {
+						return nil, err
+					}
+					return nil, err2
+				}
+				// Return a combined error for general failures
+				return nil, fmt.Errorf("failed to generate spectrogram with SoX for '%s': %w, and with FFmpeg: %w", absAudioPath, err, err2)
+			}
+			log.Printf("Successfully generated spectrogram for '%s' using FFmpeg fallback", absAudioPath)
+		} else {
+			log.Printf("Successfully generated spectrogram for '%s' using SoX", absAudioPath)
+		}
+		return nil, nil
+	})
+
+	if err != nil {
+		return "", fmt.Errorf("failed to generate spectrogram: %w", err)
 	}
 
 	// Return the relative path of the newly created spectrogram

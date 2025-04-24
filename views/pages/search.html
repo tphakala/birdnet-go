@@ -108,6 +108,7 @@
                                 />
                                 <div class="flex justify-between text-xs px-2">
                                     <span>0%</span>
+                                    <span x-text="confidenceRange.min + '%'"></span>
                                     <span>100%</span>
                                 </div>
                             </div>
@@ -121,6 +122,7 @@
                                 />
                                 <div class="flex justify-between text-xs px-2">
                                     <span>0%</span>
+                                    <span x-text="confidenceRange.max + '%'"></span>
                                     <span>100%</span>
                                 </div>
                             </div>
@@ -264,16 +266,18 @@
                                     </td>
                                     <td>
                                         <div class="flex items-center">
-                                            <div class="w-16 h-2 rounded-full overflow-hidden bg-base-200">
-                                                <div class="h-full"
-                                                     :class="{
-                                                        'bg-success': result.confidence >= 0.8,
-                                                        'bg-warning': result.confidence >= 0.4 && result.confidence < 0.8,
-                                                        'bg-error': result.confidence < 0.4
-                                                     }"
-                                                     :style="'width: ' + (result.confidence * 100) + '%'"></div>
+                                            <div class="flex items-center gap-2 w-full">
+                                                <div class="w-16 h-4 rounded-full overflow-hidden bg-base-200">
+                                                    <div class="h-full"
+                                                         :class="{
+                                                            'bg-success': result.confidence >= 0.8,
+                                                            'bg-warning': result.confidence >= 0.4 && result.confidence < 0.8,
+                                                            'bg-error': result.confidence < 0.4
+                                                         }"
+                                                         :style="'width: ' + (result.confidence * 100) + '%'"></div>
+                                                </div>
+                                                <span class="ml-1 font-semibold" x-text="(result.confidence * 100).toFixed(0) + '%'"></span>
                                             </div>
-                                            <span class="ml-2" x-bind:text="Math.round(result.confidence * 100) + '%'"></span>
                                         </div>
                                     </td>
                                     <td>
@@ -346,7 +350,7 @@
                                                             });
                                                     }
                                                 }">
-                                                    <h3 class="text-lg font-semibold text-gray-800 mb-3">Weather Information</h3>
+                                                    <h3 class="text-lg font-semibold text-base-content mb-3">Weather Information</h3>
                                                     
                                                     <!-- Loading state -->
                                                     <div x-show="loading" class="py-4 flex justify-center">
@@ -836,14 +840,6 @@
                 console.log('Expand button clicked via event delegation');
             }
         });
-
-        // Dispatch a custom event to initialize audio players that were already in the DOM
-        // This helps ensure that players load correctly when the page first loads
-        setTimeout(() => {
-            document.dispatchEvent(new CustomEvent('htmx:afterSettle', {
-                detail: { elt: document.body }
-            }));
-        }, 500);
     });
 </script>
 
