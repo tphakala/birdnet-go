@@ -628,6 +628,15 @@
             toggleExpand(recordId) {
                 console.log('Toggle expand clicked for ID:', recordId);
                 
+                // Pause audio if collapsing and currently playing
+                if (this.expanded[recordId]) { // Check if it was expanded before toggling
+                    const audioElement = document.getElementById(`audio-${recordId}`);
+                    if (audioElement && !audioElement.paused) {
+                        audioElement.pause();
+                        console.log('Paused audio for collapsed row:', recordId);
+                    }
+                }
+
                 // Use the spread operator for reactivity
                 this.expanded = {
                     ...this.expanded, 
