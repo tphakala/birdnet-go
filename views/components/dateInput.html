@@ -20,6 +20,8 @@
         <span class="help-icon ml-auto" 
               @mouseenter="showTooltip = '{{.id}}'" 
               @mouseleave="showTooltip = null"
+              @focus="showTooltip = '{{.id}}'"
+              @blur="showTooltip = null"
               aria-label="Show help for {{.altLabel}}"
               role="button"
               tabindex="0">ⓘ</span>
@@ -27,10 +29,11 @@
     </label>
     {{end}}
     {{if .tooltip}}
-    <div x-show="showTooltip === '{{.id}}'" 
-         x-cloak 
-         class="tooltip" {{/* Adjusted to match textField tooltip */}}
-         id="{{.id}}Tooltip" 
+    <div x-show="showTooltip === '{{.id}}'"
+         x-cloak
+         :aria-hidden="showTooltip !== '{{.id}}'"
+         class="tooltip"
+         id="{{.id}}Tooltip"
          role="tooltip">
         {{.tooltip}}
     </div>

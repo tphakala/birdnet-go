@@ -8,6 +8,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+// sunriseSetWindowMinutes defines the time window (in minutes) around sunrise and sunset
+const sunriseSetWindowMinutes = 30
 
 // StoreInterface abstracts the underlying database implementation and defines the interface for database operations.
 type Interface interface {
@@ -70,8 +74,9 @@ type Interface interface {
 
 // DataStore implements StoreInterface using a GORM database.
 type DataStore struct {
-	DB      *gorm.DB         // GORM database instance
-	SunCalc *suncalc.SunCalc // Instance for calculating sun times (Assumed initialized)
+	DB            *gorm.DB         // GORM database instance
+	SunCalc       *suncalc.SunCalc // Instance for calculating sun times (Assumed initialized)
+	sunTimesCache sync.Map         // Thread-safe map for caching sun times by date
 }
 
 // NewDataStore creates a new DataStore instance based on the provided configuration context.
@@ -1153,7 +1158,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 	}
 
 	var conditions []*gorm.DB
-	window := 30 * time.Minute // Define window for sunrise/sunset
+	window := time.Duration(sunriseSetWindowMinutes) * time.Minute // Define window for sunrise/sunset
 
 	// Optimization: Group dates by week and calculate sun times once per week
 	// Store weekly sun calculations
@@ -1352,29 +1357,35 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 		}
 
 		// Calculate time of day
-		timeOfDay := "Unknown"
+		timeOfDay := "unknown"
 		if ds.SunCalc != nil {
-			if sunEvents, err := ds.SunCalc.GetSunEventTimes(timestamp); err == nil {
+			// Get date string for cache key
+			dateStr := scanned.Date
+
+			// Get or calculate sun times for this date
+			sunEvents, err := ds.getSunEventsForDate(dateStr, timestamp)
+			if err == nil {
 				// Convert all times to the same format for comparison
 				detTime := timestamp.Format("15:04:05")
 				sunriseTime := sunEvents.Sunrise.Format("15:04:05")
 				sunsetTime := sunEvents.Sunset.Format("15:04:05")
 
-				// Define sunrise/sunset window (30 minutes before and after)
-				sunriseStart := sunEvents.Sunrise.Add(-30 * time.Minute).Format("15:04:05")
-				sunriseEnd := sunEvents.Sunrise.Add(30 * time.Minute).Format("15:04:05")
-				sunsetStart := sunEvents.Sunset.Add(-30 * time.Minute).Format("15:04:05")
-				sunsetEnd := sunEvents.Sunset.Add(30 * time.Minute).Format("15:04:05")
+				// Define sunrise/sunset window (using constant)
+				window := time.Duration(sunriseSetWindowMinutes) * time.Minute
+				sunriseStart := sunEvents.Sunrise.Add(-window).Format("15:04:05")
+				sunriseEnd := sunEvents.Sunrise.Add(window).Format("15:04:05")
+				sunsetStart := sunEvents.Sunset.Add(-window).Format("15:04:05")
+				sunsetEnd := sunEvents.Sunset.Add(window).Format("15:04:05")
 
 				switch {
 				case detTime >= sunriseStart && detTime <= sunriseEnd:
-					timeOfDay = "Sunrise"
+					timeOfDay = "sunrise"
 				case detTime >= sunsetStart && detTime <= sunsetEnd:
-					timeOfDay = "Sunset"
+					timeOfDay = "sunset"
 				case detTime >= sunriseTime && detTime < sunsetTime:
-					timeOfDay = "Day"
+					timeOfDay = "day"
 				default:
-					timeOfDay = "Night"
+					timeOfDay = "night"
 				}
 			}
 		}
@@ -1402,4 +1413,37 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 	}
 
 	return results, int(total), nil
+}
+
+// getSunEventsForDate retrieves sun times for a given date
+func (ds *DataStore) getSunEventsForDate(dateStr string, timestamp time.Time) (suncalc.SunEventTimes, error) {
+	// Check if the sun times are already cached
+	if cached, exists := ds.getCachedSunTimes(dateStr); exists {
+		return cached, nil
+	}
+
+	// Calculate sun times for the given date
+	sunTimes, err := ds.SunCalc.GetSunEventTimes(timestamp)
+	if err != nil {
+		return suncalc.SunEventTimes{}, fmt.Errorf("failed to get sun times for date %s: %w", dateStr, err)
+	}
+
+	// Cache the calculated sun times
+	ds.cacheSunTimes(dateStr, sunTimes)
+
+	return sunTimes, nil
+}
+
+// getCachedSunTimes retrieves sun times from the cache
+func (ds *DataStore) getCachedSunTimes(dateStr string) (suncalc.SunEventTimes, bool) {
+	cached, exists := ds.sunTimesCache.Load(dateStr)
+	if exists {
+		return cached.(suncalc.SunEventTimes), true
+	}
+	return suncalc.SunEventTimes{}, false
+}
+
+// cacheSunTimes caches sun times
+func (ds *DataStore) cacheSunTimes(dateStr string, sunTimes suncalc.SunEventTimes) {
+	ds.sunTimesCache.Store(dateStr, sunTimes)
 }

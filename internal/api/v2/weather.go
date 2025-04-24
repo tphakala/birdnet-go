@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // DailyWeatherResponse represents the API response for daily weather data
@@ -310,8 +311,8 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 		sunTimes, sunErr := c.SunCalc.GetSunEventTimes(detectionTime)
 		if sunErr != nil {
 			c.logger.Printf("WARN: [Weather API] Failed to get sun times for date %s for detection %s: %v. Cannot determine TimeOfDay.", date, id, sunErr)
-		} else if !detectionTime.Before(sunTimes.Sunrise) && !detectionTime.After(sunTimes.Sunset) {
-			timeOfDay = "Day"
+		} else {
+			timeOfDay = c.calculateTimeOfDay(detectionTime, &sunTimes)
 		}
 	}
 	// --- End TimeOfDay Calculation ---
@@ -435,4 +436,29 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 	}
 
 	return ctx.JSON(http.StatusOK, response)
+}
+
+// calculateTimeOfDay determines the time of day based on the detection time and sun events
+func (c *Controller) calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTimes) string {
+	// Convert all times to the same format for comparison
+	detTime := detectionTime.Format("15:04:05")
+	sunriseTime := sunEvents.Sunrise.Format("15:04:05")
+	sunsetTime := sunEvents.Sunset.Format("15:04:05")
+
+	// Define sunrise/sunset window (30 minutes before and after)
+	sunriseStart := sunEvents.Sunrise.Add(-30 * time.Minute).Format("15:04:05")
+	sunriseEnd := sunEvents.Sunrise.Add(30 * time.Minute).Format("15:04:05")
+	sunsetStart := sunEvents.Sunset.Add(-30 * time.Minute).Format("15:04:05")
+	sunsetEnd := sunEvents.Sunset.Add(30 * time.Minute).Format("15:04:05")
+
+	switch {
+	case detTime >= sunriseStart && detTime <= sunriseEnd:
+		return "Sunrise"
+	case detTime >= sunsetStart && detTime <= sunsetEnd:
+		return "Sunset"
+	case detTime >= sunriseTime && detTime < sunsetTime:
+		return "Day"
+	default:
+		return "Night"
+	}
 }
