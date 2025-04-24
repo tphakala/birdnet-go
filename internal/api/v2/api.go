@@ -83,6 +83,7 @@ func (c *Controller) initRoutes() {
 		name string
 		fn   func()
 	}{
+		{"search routes", c.initSearchRoutes},
 		{"detection routes", c.initDetectionRoutes},
 		{"analytics routes", c.initAnalyticsRoutes},
 		{"weather routes", c.initWeatherRoutes},
