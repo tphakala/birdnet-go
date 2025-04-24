@@ -24,9 +24,16 @@ var safeFilenamePattern = regexp.MustCompile(`^[a-zA-Z0-9_\-.]+$`)
 
 // Initialize media routes
 func (c *Controller) initMediaRoutes() {
-	// Add media routes to the API group
+	// Original filename-based routes (keep for backward compatibility)
 	c.Group.GET("/media/audio/:filename", c.ServeAudioClip)
 	c.Group.GET("/media/spectrogram/:filename", c.ServeSpectrogram)
+
+	// Add ID-based routes for the new frontend (full path matching frontend requests)
+	c.Echo.GET("/api/v2/audio/:id", c.ServeAudioByID)
+	c.Echo.GET("/api/v2/spectrogram/:id", c.ServeSpectrogramByID)
+
+	// Convenient combined endpoint for both audio and URLs
+	c.Group.GET("/media/audio", c.ServeAudioByQueryID)
 }
 
 // validateMediaPath ensures that a file path is within the allowed export directory and has a valid filename
@@ -245,6 +252,169 @@ func getContentType(filename string) string {
 	}
 }
 
+// ServeAudioByID serves an audio clip file based on note ID
+func (c *Controller) ServeAudioByID(ctx echo.Context) error {
+	// Get note ID from request
+	noteID := ctx.Param("id")
+	if noteID == "" {
+		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
+	}
+
+	// Fetch clip path for this note ID
+	clipPath, err := c.DS.GetNoteClipPath(noteID)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusNotFound)
+	}
+
+	// If the path is empty, no clip exists
+	if clipPath == "" {
+		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available for this note", http.StatusNotFound)
+	}
+
+	// Check if the clipPath is an absolute path or just a filename
+	var fullPath string
+	if filepath.IsAbs(clipPath) {
+		// It's already an absolute path
+		fullPath = clipPath
+	} else {
+		// It's just a filename, so join with the export directory
+		fullPath = filepath.Join(c.Settings.Realtime.Audio.Export.Path, clipPath)
+	}
+
+	// Verify the file exists
+	if _, err := os.Stat(fullPath); err != nil {
+		if os.IsNotExist(err) {
+			return c.HandleError(ctx, err, "Audio file not found", http.StatusNotFound)
+		}
+		return c.HandleError(ctx, err, "Error accessing audio file", http.StatusInternalServerError)
+	}
+
+	// Get the filename for content type determination
+	filename := filepath.Base(fullPath)
+
+	// Get content type based on file extension
+	contentType := getContentType(filename)
+
+	// Set appropriate headers
+	ctx.Response().Header().Set("Content-Type", contentType)
+	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
+
+	// Serve the file directly
+	return ctx.File(fullPath)
+}
+
+// ServeSpectrogramByID serves a spectrogram image based on note ID
+func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
+	// Get note ID from request
+	noteID := ctx.Param("id")
+	if noteID == "" {
+		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
+	}
+
+	// Fetch clip path for this note ID
+	clipPath, err := c.DS.GetNoteClipPath(noteID)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusNotFound)
+	}
+
+	// If the path is empty, no clip exists
+	if clipPath == "" {
+		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available for this note", http.StatusNotFound)
+	}
+
+	// Parse width parameter
+	width := 800 // Default width
+	widthStr := ctx.QueryParam("width")
+	if widthStr != "" {
+		parsedWidth, err := strconv.Atoi(widthStr)
+		if err == nil && parsedWidth > 0 && parsedWidth <= 2000 { // Add upper limit for width
+			width = parsedWidth
+		}
+	}
+
+	// Check if the clipPath is an absolute path or just a filename
+	var audioPath string
+	if filepath.IsAbs(clipPath) {
+		// It's already an absolute path
+		audioPath = clipPath
+	} else {
+		// It's just a filename, so join with the export directory
+		audioPath = filepath.Join(c.Settings.Realtime.Audio.Export.Path, clipPath)
+	}
+
+	// Verify the audio file exists
+	if _, err := os.Stat(audioPath); err != nil {
+		if os.IsNotExist(err) {
+			return c.HandleError(ctx, err, "Audio file not found", http.StatusNotFound)
+		}
+		return c.HandleError(ctx, err, "Error accessing audio file", http.StatusInternalServerError)
+	}
+
+	// Get the directory and base filename without extension
+	audioDir := filepath.Dir(audioPath)
+	baseFilename := strings.TrimSuffix(filepath.Base(audioPath), filepath.Ext(audioPath))
+
+	// Generate spectrogram filename with width
+	spectrogramFilename := fmt.Sprintf("%s_%d.png", baseFilename, width)
+	spectrogramPath := filepath.Join(audioDir, spectrogramFilename)
+
+	// Check if the spectrogram already exists
+	if _, err := os.Stat(spectrogramPath); err != nil {
+		if os.IsNotExist(err) {
+			// Spectrogram doesn't exist, generate it
+			spectrogramPath, err = c.generateSpectrogram(audioPath, width)
+			if err != nil {
+				return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
+			}
+		} else {
+			return c.HandleError(ctx, err, "Error accessing spectrogram file", http.StatusInternalServerError)
+		}
+	}
+
+	// Set appropriate headers for an image
+	ctx.Response().Header().Set("Content-Type", "image/png")
+	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", spectrogramFilename))
+
+	// Serve the spectrogram image
+	return ctx.File(spectrogramPath)
+}
+
+// ServeAudioByQueryID serves an audio clip using query parameter for ID
+func (c *Controller) ServeAudioByQueryID(ctx echo.Context) error {
+	// Get ID from query parameter
+	noteID := ctx.QueryParam("id")
+	if noteID == "" {
+		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required as query parameter", http.StatusBadRequest)
+	}
+
+	// Set as path parameter and delegate to the ID handler
+	ctx.SetParamNames("id")
+	ctx.SetParamValues(noteID)
+	return c.ServeAudioByID(ctx)
+}
+
+// generateSpectrogram creates a spectrogram image for the given audio file
+func (c *Controller) generateSpectrogram(audioPath string, width int) (string, error) {
+	// Extract base filename without extension
+	baseFilename := strings.TrimSuffix(filepath.Base(audioPath), filepath.Ext(audioPath))
+
+	// Generate spectrogram filename with width
+	exportPath := c.Settings.Realtime.Audio.Export.Path
+	spectrogramFilename := fmt.Sprintf("%s_%d.png", baseFilename, width)
+
+	// Validate the spectrogram path
+	spectrogramPath, err := c.validateMediaPath(exportPath, spectrogramFilename)
+	if err != nil {
+		return "", fmt.Errorf("invalid spectrogram path: %w", err)
+	}
+
+	// TODO: Implement the spectrogram generation logic
+	// This will depend on the specific libraries you're using for spectrogram generation
+
+	// For now, we'll just return an error indicating this isn't implemented yet
+	return spectrogramPath, fmt.Errorf("spectrogram generation not implemented yet")
+}
+
 // ServeSpectrogram serves a spectrogram image for an audio clip
 func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	filename := ctx.Param("filename")
@@ -301,26 +471,4 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 
 	// Serve the spectrogram image
 	return ctx.File(spectrogramPath)
-}
-
-// generateSpectrogram creates a spectrogram image for the given audio file
-func (c *Controller) generateSpectrogram(audioPath string, width int) (string, error) {
-	// Extract base filename without extension
-	baseFilename := strings.TrimSuffix(filepath.Base(audioPath), filepath.Ext(audioPath))
-
-	// Generate spectrogram filename with width
-	exportPath := c.Settings.Realtime.Audio.Export.Path
-	spectrogramFilename := fmt.Sprintf("%s_%d.png", baseFilename, width)
-
-	// Validate the spectrogram path
-	spectrogramPath, err := c.validateMediaPath(exportPath, spectrogramFilename)
-	if err != nil {
-		return "", fmt.Errorf("invalid spectrogram path: %w", err)
-	}
-
-	// TODO: Implement the spectrogram generation logic
-	// This will depend on the specific libraries you're using for spectrogram generation
-
-	// For now, we'll just return an error indicating this isn't implemented yet
-	return spectrogramPath, fmt.Errorf("spectrogram generation not implemented yet")
 }
