@@ -732,7 +732,7 @@ func (c *Controller) GetDetectionTimeOfDay(ctx echo.Context) error {
 	}
 
 	// Determine time of day based on the detection time and sun events
-	timeOfDay := calculateTimeOfDay(detectionTime, sunEvents)
+	timeOfDay := calculateTimeOfDay(detectionTime, &sunEvents)
 
 	// Return the time of day
 	return ctx.JSON(http.StatusOK, TimeOfDayResponse{
@@ -741,7 +741,7 @@ func (c *Controller) GetDetectionTimeOfDay(ctx echo.Context) error {
 }
 
 // calculateTimeOfDay determines the time of day based on the detection time and sun events
-func calculateTimeOfDay(detectionTime time.Time, sunEvents suncalc.SunEventTimes) string {
+func calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTimes) string {
 	// Convert all times to the same format for comparison
 	detTime := detectionTime.Format("15:04:05")
 	sunriseTime := sunEvents.Sunrise.Format("15:04:05")

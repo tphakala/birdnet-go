@@ -301,18 +301,17 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 	detectionTimeStr := date + " " + note.Time
 	loc := time.Local
 	detectionTime, err := time.ParseInLocation("2006-01-02 15:04:05", detectionTimeStr, loc)
-	if err != nil {
+	switch {
+	case err != nil:
 		c.logger.Printf("WARN: [Weather API] Failed to parse detection time '%s' in location %s for detection %s: %v. Cannot determine TimeOfDay accurately.", detectionTimeStr, loc.String(), id, err)
-	} else if c.SunCalc == nil {
+	case c.SunCalc == nil:
 		c.logger.Printf("WARN: [Weather API] SunCalc not initialized. Cannot determine TimeOfDay for detection %s.", id)
-	} else {
+	default:
 		sunTimes, sunErr := c.SunCalc.GetSunEventTimes(detectionTime)
 		if sunErr != nil {
 			c.logger.Printf("WARN: [Weather API] Failed to get sun times for date %s for detection %s: %v. Cannot determine TimeOfDay.", date, id, sunErr)
-		} else {
-			if !detectionTime.Before(sunTimes.Sunrise) && !detectionTime.After(sunTimes.Sunset) {
-				timeOfDay = "Day"
-			}
+		} else if !detectionTime.Before(sunTimes.Sunrise) && !detectionTime.After(sunTimes.Sunset) {
+			timeOfDay = "Day"
 		}
 	}
 	// --- End TimeOfDay Calculation ---
