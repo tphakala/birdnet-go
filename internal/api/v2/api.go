@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -47,8 +49,28 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		logger = log.Default()
 	}
 
-	// Initialize SecureFS for the media export path
+	// Validate and Initialize SecureFS for the media export path
 	mediaPath := settings.Realtime.Audio.Export.Path
+
+	// --- Sanity checks for mediaPath ---
+	if mediaPath == "" {
+		return nil, fmt.Errorf("settings.realtime.audio.export.path must not be empty")
+	}
+	if !filepath.IsAbs(mediaPath) {
+		return nil, fmt.Errorf("settings.realtime.audio.export.path must be absolute, got %q", mediaPath)
+	}
+	fi, err := os.Stat(mediaPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("settings.realtime.audio.export.path directory does not exist: %q", mediaPath)
+		}
+		return nil, fmt.Errorf("error checking settings.realtime.audio.export.path %q: %w", mediaPath, err)
+	}
+	if !fi.IsDir() {
+		return nil, fmt.Errorf("settings.realtime.audio.export.path is not a directory: %q", mediaPath)
+	}
+	// --- End sanity checks ---
+
 	sfs, err := securefs.New(mediaPath) // Create SecureFS rooted at the export path
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize secure filesystem for media: %w", err)
