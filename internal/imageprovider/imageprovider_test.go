@@ -182,6 +182,9 @@ func (m *mockStore) GetHourlyAnalyticsData(date, species string) ([]datastore.Ho
 func (m *mockStore) GetSpeciesSummaryData() ([]datastore.SpeciesSummaryData, error) {
 	return []datastore.SpeciesSummaryData{}, nil
 }
+func (m *mockStore) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
+	return nil, 0, nil
+}
 
 // mockFailingStore is a mock implementation that simulates database failures
 type mockFailingStore struct {
