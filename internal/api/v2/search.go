@@ -26,6 +26,7 @@ type SearchRequest struct {
 	VerifiedStatus string  `json:"verifiedStatus"`
 	LockedStatus   string  `json:"lockedStatus"`
 	DeviceFilter   string  `json:"deviceFilter"`
+	TimeOfDay      string  `json:"timeOfDay"`
 	Page           int     `json:"page"`
 	SortBy         string  `json:"sortBy"`
 }
@@ -45,6 +46,11 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
 	}
+
+	// Debug logging for the request parameters
+	c.Debug("Search request: Species='%s', DateStart='%s', DateEnd='%s', ConfidenceMin=%f, ConfidenceMax=%f, VerifiedStatus='%s', LockedStatus='%s', TimeOfDay='%s', Page=%d, SortBy='%s'",
+		req.Species, req.DateStart, req.DateEnd, req.ConfidenceMin, req.ConfidenceMax, req.VerifiedStatus,
+		req.LockedStatus, req.TimeOfDay, req.Page, req.SortBy)
 
 	// Validate request
 	if req.Page < 1 {
@@ -88,6 +94,15 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 	}
 	if !validLockedStatus[req.LockedStatus] {
 		return c.HandleError(ctx, nil, "Invalid locked status. Use 'any', 'locked', or 'unlocked'", http.StatusBadRequest)
+	}
+
+	// Validate time of day
+	validTimeOfDay := map[string]bool{"any": true, "day": true, "night": true, "sunrise": true, "sunset": true}
+	if req.TimeOfDay == "" {
+		req.TimeOfDay = "any"
+	}
+	if !validTimeOfDay[req.TimeOfDay] {
+		return c.HandleError(ctx, nil, "Invalid time of day. Use 'any', 'day', 'night', 'sunrise', or 'sunset'", http.StatusBadRequest)
 	}
 
 	// Set default values
@@ -140,6 +155,7 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 		LockedOnly:     req.LockedStatus == "locked",
 		UnlockedOnly:   req.LockedStatus == "unlocked",
 		Device:         req.DeviceFilter,
+		TimeOfDay:      req.TimeOfDay,
 		Page:           req.Page,
 		PerPage:        20, // Configure as needed
 		SortBy:         req.SortBy,
