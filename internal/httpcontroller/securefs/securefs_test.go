@@ -154,7 +154,7 @@ func TestSecureFSPathTraversalPrevention(t *testing.T) {
 
 	// Test path traversal prevention
 	traversalPath := filepath.Join(tempDir, "..", "outside.txt")
-	_, err := sfs.relativePath(traversalPath)
+	_, err := sfs.RelativePath(traversalPath)
 	if err == nil {
 		t.Fatal("relativePath should have failed on traversal path")
 	}
