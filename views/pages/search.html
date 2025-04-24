@@ -1,5 +1,14 @@
 {{define "search"}}
 
+{{/* 
+  IMPORTANT IMPLEMENTATION NOTES:
+  - DO NOT USE HTMX for any data requests on this page
+  - Use ONLY JSON API endpoints with fetch/Alpine.js for all data operations
+  - This page is part of migration away from HTMX to pure JSON API architecture
+  - All search functionality must use JSON API endpoints with proper fetch requests
+  - Maintain this architecture for any future enhancements to the search functionality
+*/}}
+
 <div class="col-span-12 space-y-4" x-data="{
     speciesSearchTerm: '',
     dateRange: {
@@ -15,6 +24,13 @@
     deviceFilter: '',
     formSubmitted: false,
     advancedFilters: false,
+    isLoading: false,
+    currentPage: 1,
+    totalPages: 1,
+    results: [],
+    totalResults: 0,
+    sortBy: 'date_desc',
+    errorMessage: '',
     
     // Form validation methods
     validateForm() {
@@ -23,10 +39,48 @@
     },
     
     // Form submission
-    submitSearch() {
-        if (this.validateForm()) {
+    async submitSearch(page = 1) {
+        if (!this.validateForm()) return;
+        
+        this.isLoading = true;
+        this.errorMessage = '';
+        this.currentPage = page;
+        
+        try {
+            const response = await fetch('/api/v2/search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': document.querySelector('meta[name=\'csrf-token\']').content
+                },
+                body: JSON.stringify({
+                    species: this.speciesSearchTerm,
+                    dateStart: this.dateRange.start,
+                    dateEnd: this.dateRange.end,
+                    confidenceMin: this.confidenceRange.min / 100,
+                    confidenceMax: this.confidenceRange.max / 100,
+                    verifiedStatus: this.verifiedStatus,
+                    lockedStatus: this.lockedStatus,
+                    page: this.currentPage,
+                    sortBy: this.sortBy
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Server responded with ${response.status}`);
+            }
+            
+            const data = await response.json();
+            this.results = data.results || [];
+            this.totalResults = data.total || 0;
+            this.totalPages = data.pages || 1;
             this.formSubmitted = true;
-            // In a future implementation, this would trigger an HTMX request
+        } catch (error) {
+            console.error('Search error:', error);
+            this.errorMessage = `Search failed: ${error.message}`;
+            this.results = [];
+        } finally {
+            this.isLoading = false;
         }
     },
     
@@ -41,6 +95,27 @@
         this.lockedStatus = 'any';
         this.deviceFilter = '';
         this.formSubmitted = false;
+        this.results = [];
+        this.errorMessage = '';
+    },
+    
+    // Format date for display
+    formatDate(dateString) {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        return date.toLocaleString();
+    },
+    
+    // Handle pagination
+    goToPage(page) {
+        if (page < 1 || page > this.totalPages) return;
+        this.submitSearch(page);
+    },
+    
+    // Handle sorting
+    changeSort(sortOption) {
+        this.sortBy = sortOption;
+        this.submitSearch(1);
     }
 }">
     <!-- Search Form -->
@@ -186,19 +261,6 @@
                             </select>
                         </div>
                     </div>
-                    
-                    <!-- Recording Device -->
-                    <div class="form-control">
-                        <label class="label">
-                            <span class="label-text">Recording Device</span>
-                        </label>
-                        <input 
-                            type="text" 
-                            x-model="deviceFilter" 
-                            placeholder="Filter by recording device" 
-                            class="input input-bordered w-full"
-                        />
-                    </div>
                 </div>
                 
                 <!-- Form Action Buttons -->
@@ -213,10 +275,16 @@
                     <button 
                         type="submit" 
                         class="btn btn-primary"
+                        :disabled="isLoading"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
-                        </svg>
+                        <template x-if="isLoading">
+                            <span class="loading loading-spinner loading-sm mr-2"></span>
+                        </template>
+                        <template x-if="!isLoading">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+                            </svg>
+                        </template>
                         Search
                     </button>
                 </div>
@@ -232,7 +300,7 @@
                 
                 <!-- Results Count & Sorting (visible when search performed) -->
                 <div x-show="formSubmitted" x-transition class="flex items-center gap-4">
-                    <span class="text-sm text-base-content/70">0 results</span>
+                    <span class="text-sm text-base-content/70" x-text="`${totalResults} result${totalResults !== 1 ? 's' : ''}`"></span>
                     <div class="dropdown dropdown-end">
                         <div tabindex="0" role="button" class="btn btn-sm btn-outline">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
@@ -241,13 +309,21 @@
                             Sort
                         </div>
                         <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-                            <li><a>Date (Newest First)</a></li>
-                            <li><a>Date (Oldest First)</a></li>
-                            <li><a>Species (A-Z)</a></li>
-                            <li><a>Confidence (High-Low)</a></li>
+                            <li><a @click="changeSort('date_desc')">Date (Newest First)</a></li>
+                            <li><a @click="changeSort('date_asc')">Date (Oldest First)</a></li>
+                            <li><a @click="changeSort('species_asc')">Species (A-Z)</a></li>
+                            <li><a @click="changeSort('confidence_desc')">Confidence (High-Low)</a></li>
                         </ul>
                     </div>
                 </div>
+            </div>
+            
+            <!-- Error message -->
+            <div x-show="errorMessage" class="alert alert-error mt-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span x-text="errorMessage"></span>
             </div>
             
             <!-- When no search performed yet -->
@@ -259,8 +335,14 @@
                 <p class="text-base-content/50 text-center text-sm">Use the search filters above to find bird detections</p>
             </div>
             
+            <!-- Loading indicator -->
+            <div x-show="isLoading && formSubmitted" class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]">
+                <span class="loading loading-spinner loading-lg text-primary"></span>
+                <p class="text-base-content/50 text-center mt-4">Loading results...</p>
+            </div>
+            
             <!-- Search results table - only visible when search performed -->
-            <div x-show="formSubmitted" x-transition class="overflow-x-auto mt-4">
+            <div x-show="formSubmitted && !isLoading && results.length > 0" x-transition class="overflow-x-auto mt-4">
                 <table class="table table-zebra w-full">
                     <thead>
                         <tr>
@@ -268,84 +350,88 @@
                             <th>Species</th>
                             <th>Confidence</th>
                             <th>Status</th>
-                            <th>Device</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- Empty state - when search returns no results -->
-                        <tr>
-                            <td colspan="6" class="text-center py-8">
-                                <div class="flex flex-col items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <p class="mt-2 text-base-content/70">No results found</p>
-                                    <p class="text-sm text-base-content/50">Try adjusting your search filters</p>
-                                </div>
-                            </td>
-                        </tr>
-                        
-                        <!-- This will be populated with actual search results -->
-                        <!-- Example row for visualization purposes -->
-                        <!-- 
-                        <tr>
-                            <td>2023-04-15 08:45:22</td>
-                            <td>
-                                <div class="flex items-center gap-2">
-                                    <div class="avatar placeholder">
-                                        <div class="bg-neutral-focus text-neutral-content rounded-full w-8">
-                                            <span class="text-xs">AM</span>
+                        <template x-for="(result, index) in results" :key="result.id">
+                            <tr>
+                                <td x-text="formatDate(result.timestamp)"></td>
+                                <td>
+                                    <div class="flex items-center gap-2">
+                                        <div class="avatar placeholder">
+                                            <div class="bg-neutral-focus text-neutral-content rounded-full w-8">
+                                                <span class="text-xs" x-text="result.commonName ? result.commonName.substring(0, 2).toUpperCase() : '--'"></span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div class="font-bold" x-text="result.commonName || 'Unknown'"></div>
+                                            <div class="text-xs opacity-50" x-text="result.scientificName || ''"></div>
                                         </div>
                                     </div>
-                                    <div>
-                                        <div class="font-bold">American Robin</div>
-                                        <div class="text-xs opacity-50">Turdus migratorius</div>
+                                </td>
+                                <td>
+                                    <div class="flex items-center">
+                                        <div class="w-16 h-2 rounded-full overflow-hidden bg-base-200">
+                                            <div class="h-full" 
+                                                 :class="{
+                                                    'bg-success': result.confidence >= 0.8,
+                                                    'bg-warning': result.confidence >= 0.4 && result.confidence < 0.8,
+                                                    'bg-error': result.confidence < 0.4
+                                                 }"
+                                                 :style="`width: ${result.confidence * 100}%`"></div>
+                                        </div>
+                                        <span class="ml-2" x-text="`${Math.round(result.confidence * 100)}%`"></span>
                                     </div>
-                                </div>
-                            </td>
-                            <td>
-                                <div class="flex items-center">
-                                    <div class="w-16 h-2 rounded-full overflow-hidden bg-base-200">
-                                        <div class="h-full bg-success" style="width: 85%"></div>
+                                </td>
+                                <td>
+                                    <div class="flex gap-1 flex-wrap">
+                                        <div class="status-badge" :class="{
+                                            'correct': result.verified === 'correct',
+                                            'false': result.verified === 'false_positive',
+                                            'unverified': result.verified !== 'correct' && result.verified !== 'false_positive'
+                                        }" x-text="result.verified === 'correct' ? 'Verified' : (result.verified === 'false_positive' ? 'False' : 'Unverified')"></div>
+                                        <div class="status-badge" :class="{'locked': result.locked, 'unverified': !result.locked}"
+                                             x-text="result.locked ? 'Locked' : 'Unlocked'"></div>
                                     </div>
-                                    <span class="ml-2">85%</span>
-                                </div>
-                            </td>
-                            <td>
-                                <div class="flex gap-1">
-                                    <div class="badge badge-outline badge-success">Verified</div>
-                                    <div class="badge badge-outline">Unlocked</div>
-                                </div>
-                            </td>
-                            <td>Device A</td>
-                            <td>
-                                <div class="flex gap-1">
-                                    <button class="btn btn-xs btn-square">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                                        </svg>
-                                    </button>
-                                    <button class="btn btn-xs btn-square">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        -->
+                                </td>
+                                <td>
+                                    <div class="flex gap-1">
+                                        <button class="btn btn-xs btn-square" @click="window.location.href = `/api/v2/media/audio?id=${result.id}`"
+                                                :disabled="!result.hasAudio">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                                            </svg>
+                                        </button>
+                                        <button class="btn btn-xs btn-square" @click="window.location.href = `/api/v2/detections/${result.id}`">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
                     </tbody>
                 </table>
             </div>
             
+            <!-- Empty state - when search returns no results -->
+            <div x-show="formSubmitted && !isLoading && results.length === 0 && !errorMessage" class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p class="mt-2 text-base-content/70">No results found</p>
+                <p class="text-sm text-base-content/50">Try adjusting your search filters</p>
+            </div>
+            
             <!-- Pagination - visible when results are available -->
-            <div x-show="formSubmitted" x-transition class="flex justify-center mt-6">
+            <div x-show="formSubmitted && !isLoading && totalPages > 1" class="flex justify-center mt-6">
                 <div class="join">
-                    <button class="join-item btn">«</button>
-                    <button class="join-item btn">Page 1</button>
-                    <button class="join-item btn">»</button>
+                    <button class="join-item btn" @click="goToPage(currentPage - 1)" :disabled="currentPage <= 1">«</button>
+                    <button class="join-item btn">Page <span x-text="currentPage"></span> of <span x-text="totalPages"></span></button>
+                    <button class="join-item btn" @click="goToPage(currentPage + 1)" :disabled="currentPage >= totalPages">»</button>
                 </div>
             </div>
         </div>
