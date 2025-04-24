@@ -413,7 +413,7 @@
                                                     
                                                     <div class="audio-player-container relative">
                                                         <!-- Hidden audio element -->
-                                                        <audio :id="'audio-' + result.id" class="hidden" :src="'/api/v2/audio/' + result.id"></audio>
+                                                        <audio :id="'audio-' + result.id" class="hidden" :src="'/api/v2/media/audio?id=' + result.id"></audio>
                                                         
                                                         <!-- Spectrogram Image -->
                                                         <img :src="'/api/v2/spectrogram/' + result.id + '?width=400'" alt="Spectrogram" 
@@ -531,6 +531,7 @@
             errorMessage: '',
             expanded: {},
             confidenceError: '',
+            initializedPlayers: {}, // Track initialized players
             
             // Form validation methods
             validateForm() {
@@ -654,6 +655,12 @@
             initAudioPlayer(recordId) {
                 console.log('Initializing audio player for ID:', recordId);
                 
+                // Prevent re-initialization
+                if (this.initializedPlayers[recordId]) {
+                    console.log('Audio player already initialized for ID:', recordId);
+                    return;
+                }
+                
                 const audioElement = document.getElementById(`audio-${recordId}`);
                 const playPauseButton = document.getElementById(`playPause-${recordId}`);
                 const progressBar = document.getElementById(`progress-${recordId}`);
@@ -753,6 +760,10 @@
                 
                 // Initial update
                 updateProgress();
+                
+                // Mark as initialized
+                this.initializedPlayers[recordId] = true;
+                console.log('Audio player successfully initialized for ID:', recordId);
             }
         }));
     });
