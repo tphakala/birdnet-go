@@ -3,170 +3,190 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// safeFilenamePattern defines the acceptable characters for filenames
-// Basic pattern: Only allow alphanumeric, underscore, hyphen, and period
-var safeFilenamePattern = regexp.MustCompile(`^[a-zA-Z0-9_\-.]+$`)
-
-// Unicode-aware pattern: Allows Unicode letters and numbers plus safe symbols
-// Uncomment and use this pattern if Unicode support is needed
+// safeFilenamePattern is kept if needed elsewhere, but SecureFS handles validation now
 // var safeFilenamePattern = regexp.MustCompile(`^[\p{L}\p{N}_\-.]+$`)
 
 // Initialize media routes
 func (c *Controller) initMediaRoutes() {
-	// Original filename-based routes (keep for backward compatibility)
+	// Original filename-based routes (keep for backward compatibility if needed, but ensure they use SFS)
 	c.Group.GET("/media/audio/:filename", c.ServeAudioClip)
 	c.Group.GET("/media/spectrogram/:filename", c.ServeSpectrogram)
 
-	// Add ID-based routes for the new frontend (full path matching frontend requests)
+	// ID-based routes using SFS
 	c.Echo.GET("/api/v2/audio/:id", c.ServeAudioByID)
 	c.Echo.GET("/api/v2/spectrogram/:id", c.ServeSpectrogramByID)
 
-	// Convenient combined endpoint for both audio and URLs
+	// Convenient combined endpoint (redirects to ID-based internally)
 	c.Group.GET("/media/audio", c.ServeAudioByQueryID)
 }
 
-// validateMediaPath ensures that a file path is within the allowed export directory and has a valid filename
-// It also creates the export path directory if it doesn't exist
-func (c *Controller) validateMediaPath(exportPath, filename string) (string, error) {
-	// Check if filename is empty
-	if filename == "" {
-		return "", fmt.Errorf("empty filename")
+// getContentType determines the content type based on file extension (can remain as helper)
+func getContentType(filename string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".mp3":
+		return "audio/mpeg"
+	case ".wav":
+		return "audio/wav"
+	case ".ogg":
+		return "audio/ogg"
+	case ".flac":
+		return "audio/flac"
+	default:
+		// Default to octet-stream if unknown, letting ServeFile handle it
+		return "application/octet-stream"
 	}
-
-	// Allow only filenames with safe characters
-	if !safeFilenamePattern.MatchString(filename) {
-		return "", fmt.Errorf("invalid filename characters")
-	}
-
-	// Create the export directory if it doesn't exist
-	if _, err := os.Stat(exportPath); os.IsNotExist(err) {
-		if err := os.MkdirAll(exportPath, 0o755); err != nil {
-			return "", fmt.Errorf("failed to create export directory: %w", err)
-		}
-	}
-
-	// Sanitize the filename to prevent path traversal
-	filename = filepath.Base(filename)
-
-	// Create the full path
-	fullPath := filepath.Join(exportPath, filename)
-
-	// Get absolute paths for comparison
-	absExportPath, err := filepath.Abs(exportPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve export path: %w", err)
-	}
-
-	absFullPath, err := filepath.Abs(fullPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve file path: %w", err)
-	}
-
-	// Verify the path is still within the export directory after normalization
-	if !strings.HasPrefix(absFullPath, absExportPath) {
-		return "", fmt.Errorf("path traversal attempt detected")
-	}
-
-	return fullPath, nil
 }
 
-// ServeAudioClip serves an audio clip file
+// ServeAudioClip serves an audio clip file by filename using SecureFS
 func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 	filename := ctx.Param("filename")
-	exportPath := c.Settings.Realtime.Audio.Export.Path
+	// Construct the conceptual path within the SecureFS base directory
+	// Note: We don't need the exportPath directly here, SecureFS handles it.
+	// We pass the filename which SecureFS expects to find relative to its baseDir.
+	return c.SFS.ServeFile(ctx, filename)
+}
 
-	// Validate and sanitize the path
-	fullPath, err := c.validateMediaPath(exportPath, filename)
-	if err != nil {
-		return c.HandleError(ctx, err, "Invalid file request", http.StatusBadRequest)
+// ServeAudioByID serves an audio clip file based on note ID using SecureFS
+func (c *Controller) ServeAudioByID(ctx echo.Context) error {
+	noteID := ctx.Param("id")
+	if noteID == "" {
+		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
 	}
 
-	// Check if the file exists
-	fileInfo, err := os.Stat(fullPath)
+	clipPath, err := c.DS.GetNoteClipPath(noteID)
 	if err != nil {
+		// Check if error is due to record not found
+		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") { // Adapt based on datastore error type
+			return c.HandleError(ctx, err, "Clip path not found for note ID", http.StatusNotFound)
+		}
+		return c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusInternalServerError)
+	}
+
+	if clipPath == "" {
+		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available for this note", http.StatusNotFound)
+	}
+
+	// Serve the file using SecureFS. It handles path validation (relative/absolute within baseDir).
+	// ServeFile internally calls relativePath which ensures the path is within the SecureFS baseDir.
+	return c.SFS.ServeFile(ctx, clipPath)
+}
+
+// ServeSpectrogramByID serves a spectrogram image based on note ID using SecureFS
+func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
+	noteID := ctx.Param("id")
+	if noteID == "" {
+		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
+	}
+
+	clipPath, err := c.DS.GetNoteClipPath(noteID)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
+			return c.HandleError(ctx, err, "Clip path not found for note ID", http.StatusNotFound)
+		}
+		return c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusInternalServerError)
+	}
+
+	if clipPath == "" {
+		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available for this note", http.StatusNotFound)
+	}
+
+	width := 800 // Default width
+	widthStr := ctx.QueryParam("width")
+	if widthStr != "" {
+		parsedWidth, err := strconv.Atoi(widthStr)
+		if err == nil && parsedWidth > 0 && parsedWidth <= 2000 {
+			width = parsedWidth
+		}
+	}
+
+	// Use the SecureFS GenerateSpectrogram method (to be implemented in securefs.go)
+	// Update: Call the controller's generateSpectrogram method instead
+	// Pass the request context for cancellation/timeout
+	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, width)
+	if err != nil {
+		// Handle specific errors if GenerateSpectrogram provides them (e.g., source audio not found)
 		if os.IsNotExist(err) {
-			return c.HandleError(ctx, err, "Audio file not found", http.StatusNotFound)
+			return c.HandleError(ctx, err, "Source audio file not found", http.StatusNotFound)
 		}
-		return c.HandleError(ctx, err, "Error accessing audio file", http.StatusInternalServerError)
+		// Check for context errors specifically
+		if errors.Is(err, context.DeadlineExceeded) {
+			return c.HandleError(ctx, err, "Spectrogram generation timed out", http.StatusRequestTimeout)
+		}
+		if errors.Is(err, context.Canceled) {
+			return c.HandleError(ctx, err, "Spectrogram generation canceled by client", http.StatusRequestTimeout) // Or another appropriate code
+		}
+		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
 	}
 
-	// If file is smaller than 1MB, just serve it directly for efficiency
-	if fileInfo.Size() < 1024*1024 {
-		return ctx.File(fullPath)
+	// Serve the generated spectrogram using SecureFS
+	// Pass the path returned by GenerateSpectrogram (which should be relative to SFS base)
+	return c.SFS.ServeFile(ctx, spectrogramPath)
+}
+
+// ServeAudioByQueryID serves an audio clip using query parameter for ID
+func (c *Controller) ServeAudioByQueryID(ctx echo.Context) error {
+	noteID := ctx.QueryParam("id")
+	if noteID == "" {
+		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required as query parameter", http.StatusBadRequest)
 	}
 
-	// For larger files, check if we have a Range header for partial content
-	rangeHeader := ctx.Request().Header.Get("Range")
-	if rangeHeader == "" {
-		// No range requested, serve the full file
-		return ctx.File(fullPath)
+	// Delegate to the ID handler
+	ctx.SetParamNames("id")
+	ctx.SetParamValues(noteID)
+	return c.ServeAudioByID(ctx)
+}
+
+// ServeSpectrogram serves a spectrogram image by filename using SecureFS
+func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
+	filename := ctx.Param("filename")
+
+	width := 800 // Default width
+	widthStr := ctx.QueryParam("width")
+	if widthStr != "" {
+		parsedWidth, err := strconv.Atoi(widthStr)
+		if err == nil && parsedWidth > 0 && parsedWidth <= 2000 {
+			width = parsedWidth
+		}
 	}
 
-	// Parse the Range header
-	ranges, err := parseRange(rangeHeader, fileInfo.Size())
+	// Use SecureFS GenerateSpectrogram, passing the filename relative to the baseDir
+	// Update: Call the controller's generateSpectrogram method instead
+	// Pass the request context for cancellation/timeout
+	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, width)
 	if err != nil {
-		// If range is invalid, return a 416 Range Not Satisfiable response
-		return ctx.NoContent(http.StatusRequestedRangeNotSatisfiable)
+		if os.IsNotExist(err) { // Check if the original audio file was not found
+			return c.HandleError(ctx, err, "Source audio file not found", http.StatusNotFound)
+		}
+		// Check for context errors specifically
+		if errors.Is(err, context.DeadlineExceeded) {
+			return c.HandleError(ctx, err, "Spectrogram generation timed out", http.StatusRequestTimeout)
+		}
+		if errors.Is(err, context.Canceled) {
+			return c.HandleError(ctx, err, "Spectrogram generation canceled by client", http.StatusRequestTimeout) // Or another appropriate code
+		}
+		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
 	}
 
-	// If multiple ranges are requested, just use the first one
-	// This is more efficient than serving the full file
-	if len(ranges) > 0 {
-		// Use the first range in the request
-		rangeToServe := ranges[0]
-
-		// Get the content type based on file extension
-		contentType := getContentType(fullPath)
-
-		// Open the file
-		file, err := os.Open(fullPath)
-		if err != nil {
-			return c.HandleError(ctx, err, "Error opening audio file", http.StatusInternalServerError)
-		}
-		defer file.Close()
-
-		// Set up the response for partial content
-		start, length := rangeToServe.start, rangeToServe.length
-		ctx.Response().Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, start+length-1, fileInfo.Size()))
-		ctx.Response().Header().Set("Accept-Ranges", "bytes")
-		ctx.Response().Header().Set("Content-Type", contentType)
-		ctx.Response().Header().Set("Content-Length", fmt.Sprintf("%d", length))
-		ctx.Response().WriteHeader(http.StatusPartialContent)
-
-		// Seek to the start position
-		_, err = file.Seek(start, 0)
-		if err != nil {
-			return c.HandleError(ctx, err, "Error seeking audio file", http.StatusInternalServerError)
-		}
-
-		// Copy the requested range to the response
-		_, err = io.CopyN(ctx.Response(), file, length)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}
-
-	// If we somehow get here with no valid ranges, serve the full file
-	return ctx.File(fullPath)
+	// Serve the generated spectrogram using SecureFS
+	return c.SFS.ServeFile(ctx, spectrogramPath)
 }
 
 // httpRange specifies the byte range to be sent to the client
@@ -241,239 +261,89 @@ func parseRange(rangeHeader string, size int64) ([]httpRange, error) {
 	return ranges, nil
 }
 
-// getContentType determines the content type based on file extension
-func getContentType(filename string) string {
-	ext := strings.ToLower(filepath.Ext(filename))
-	switch ext {
-	case ".mp3":
-		return "audio/mpeg"
-	case ".wav":
-		return "audio/wav"
-	case ".ogg":
-		return "audio/ogg"
-	case ".flac":
-		return "audio/flac"
-	default:
-		return "application/octet-stream"
-	}
-}
-
-// ServeAudioByID serves an audio clip file based on note ID
-func (c *Controller) ServeAudioByID(ctx echo.Context) error {
-	// Get note ID from request
-	noteID := ctx.Param("id")
-	if noteID == "" {
-		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
-	}
-
-	// Fetch clip path for this note ID
-	clipPath, err := c.DS.GetNoteClipPath(noteID)
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusNotFound)
-	}
-
-	// If the path is empty, no clip exists
-	if clipPath == "" {
-		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available for this note", http.StatusNotFound)
-	}
-
-	// Check if the clipPath is an absolute path or just a filename
-	var fullPath string
-	if filepath.IsAbs(clipPath) {
-		// It's already an absolute path
-		fullPath = clipPath
-	} else {
-		// It's just a filename, so join with the export directory and validate
-		var err error
-		fullPath, err = c.validateMediaPath(c.Settings.Realtime.Audio.Export.Path, clipPath)
-		if err != nil {
-			return c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
-		}
-	}
-
-	// Verify the file exists
-	if _, err := os.Stat(fullPath); err != nil {
-		if os.IsNotExist(err) {
-			return c.HandleError(ctx, err, "Audio file not found", http.StatusNotFound)
-		}
-		return c.HandleError(ctx, err, "Error accessing audio file", http.StatusInternalServerError)
-	}
-
-	// Get the filename for content type determination
-	filename := filepath.Base(fullPath)
-
-	// Get content type based on file extension
-	contentType := getContentType(filename)
-
-	// Set appropriate headers
-	ctx.Response().Header().Set("Content-Type", contentType)
-	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
-
-	// Serve the file directly
-	return ctx.File(fullPath)
-}
-
-// ServeSpectrogramByID serves a spectrogram image based on note ID
-func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
-	// Get note ID from request
-	noteID := ctx.Param("id")
-	if noteID == "" {
-		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
-	}
-
-	// Fetch clip path for this note ID
-	clipPath, err := c.DS.GetNoteClipPath(noteID)
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusNotFound)
-	}
-
-	// If the path is empty, no clip exists
-	if clipPath == "" {
-		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available for this note", http.StatusNotFound)
-	}
-
-	// Parse width parameter
-	width := 800 // Default width
-	widthStr := ctx.QueryParam("width")
-	if widthStr != "" {
-		parsedWidth, err := strconv.Atoi(widthStr)
-		if err == nil && parsedWidth > 0 && parsedWidth <= 2000 { // Add upper limit for width
-			width = parsedWidth
-		}
-	}
-
-	// Check if the clipPath is an absolute path or just a filename
-	var audioPath string
-	if filepath.IsAbs(clipPath) {
-		// It's already an absolute path
-		audioPath = clipPath
-	} else {
-		// It's just a filename, so join with the export directory and validate
-		var err error
-		audioPath, err = c.validateMediaPath(c.Settings.Realtime.Audio.Export.Path, clipPath)
-		if err != nil {
-			return c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
-		}
-	}
-
-	// Use the internal helper to serve the spectrogram
-	return c.serveSpectrogramInternal(ctx, audioPath, width)
-}
-
-// ServeAudioByQueryID serves an audio clip using query parameter for ID
-func (c *Controller) ServeAudioByQueryID(ctx echo.Context) error {
-	// Get ID from query parameter
-	noteID := ctx.QueryParam("id")
-	if noteID == "" {
-		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required as query parameter", http.StatusBadRequest)
-	}
-
-	// Set as path parameter and delegate to the ID handler
-	ctx.SetParamNames("id")
-	ctx.SetParamValues(noteID)
-	return c.ServeAudioByID(ctx)
-}
-
-// ServeSpectrogram serves a spectrogram image for an audio clip based on filename
-func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
-	filename := ctx.Param("filename")
-	exportPath := c.Settings.Realtime.Audio.Export.Path
-
-	// Parse width parameter
-	width := 800 // Default width
-	widthStr := ctx.QueryParam("width")
-	if widthStr != "" {
-		parsedWidth, err := strconv.Atoi(widthStr)
-		if err == nil && parsedWidth > 0 && parsedWidth <= 2000 { // Add upper limit for width
-			width = parsedWidth
-		}
-	}
-
-	// Validate and sanitize the path for the audio file
-	audioPath, err := c.validateMediaPath(exportPath, filename)
-	if err != nil {
-		return c.HandleError(ctx, err, "Invalid file request", http.StatusBadRequest)
-	}
-
-	// Use the internal helper to serve the spectrogram
-	return c.serveSpectrogramInternal(ctx, audioPath, width)
-}
-
-// serveSpectrogramInternal is a helper function to handle common spectrogram serving logic
-func (c *Controller) serveSpectrogramInternal(ctx echo.Context, audioPath string, width int) error {
-	// Verify the audio file exists
-	if _, err := os.Stat(audioPath); err != nil {
-		if os.IsNotExist(err) {
-			return c.HandleError(ctx, err, "Audio file not found", http.StatusNotFound)
-		}
-		return c.HandleError(ctx, err, "Error accessing audio file", http.StatusInternalServerError)
-	}
-
-	// Generate the spectrogram or get path to existing one
-	spectrogramPath, err := c.generateSpectrogram(audioPath, width)
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
-	}
-
-	// Get the base filename without extension for the response header
-	// Use the original audioPath to derive the filename for the header
-	baseFilename := strings.TrimSuffix(filepath.Base(audioPath), filepath.Ext(audioPath))
-	spectrogramFilename := fmt.Sprintf("%s_%d.png", baseFilename, width)
-
-	// Set appropriate headers for an image
-	ctx.Response().Header().Set("Content-Type", "image/png")
-	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", spectrogramFilename))
-
-	// Serve the spectrogram image
-	return ctx.File(spectrogramPath)
-}
-
-// generateSpectrogram creates a spectrogram image for the given audio file
-func (c *Controller) generateSpectrogram(audioPath string, width int) (string, error) {
-	// Extract base filename without extension
-	baseFilename := strings.TrimSuffix(filepath.Base(audioPath), filepath.Ext(audioPath))
-
-	// Get the directory of the audio file
-	audioDir := filepath.Dir(audioPath)
-
-	// Generate spectrogram filename with width
-	spectrogramFilename := fmt.Sprintf("%s_%d.png", baseFilename, width)
-	spectrogramPath := filepath.Join(audioDir, spectrogramFilename)
-
-	// Check if the spectrogram already exists
-	if _, err := os.Stat(spectrogramPath); err == nil {
-		return spectrogramPath, nil
-	}
-
-	// Check if the audio file exists
-	if _, err := os.Stat(audioPath); err != nil {
-		return "", fmt.Errorf("audio file does not exist: %w", err)
-	}
-
-	// Create the spectrogram using SoX or FFmpeg
-	if err := createSpectrogramWithSoX(audioPath, spectrogramPath, width, c.Settings); err != nil {
-		// Fallback to FFmpeg if SoX fails
-		if err2 := createSpectrogramWithFFmpeg(audioPath, spectrogramPath, width, c.Settings); err2 != nil {
-			return "", fmt.Errorf("failed to generate spectrogram with SoX: %w, and with FFmpeg: %w", err, err2)
-		}
-	}
-
-	return spectrogramPath, nil
-}
-
 // Limit concurrent spectrogram generations to avoid overloading the system
 const maxConcurrentSpectrograms = 4
 
 var spectrogramSemaphore = make(chan struct{}, maxConcurrentSpectrograms)
 
-// createSpectrogramWithSoX generates a spectrogram for an audio file using ffmpeg and SoX.
-// It supports various audio formats by using ffmpeg to pipe the audio to SoX when necessary.
-func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int, settings *conf.Settings) error {
-	// Get ffmpeg and sox paths from settings
+// generateSpectrogram creates a spectrogram image for the given audio file path (relative to SecureFS root).
+// It accepts a context for cancellation and timeout.
+// It returns the relative path to the generated spectrogram, suitable for use with c.SFS.ServeFile.
+func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, width int) (string, error) {
+	// Validate the input audio path and get its path relative to the secure base directory.
+	relAudioPath, err := c.SFS.RelativePath(audioPath)
+	if err != nil {
+		return "", fmt.Errorf("invalid audio path: %w", err)
+	}
+
+	// Check if the audio file exists within the secure context
+	if _, err := c.SFS.Stat(relAudioPath); err != nil {
+		return "", err // Return error (e.g., os.ErrNotExist) to caller
+	}
+
+	// --- Calculate paths ---
+	// Absolute path on the host filesystem required for external commands (sox, ffmpeg)
+	absAudioPath := filepath.Join(c.SFS.BaseDir(), relAudioPath)
+
+	// Get the base filename and directory relative to the secure root
+	relBaseFilename := strings.TrimSuffix(filepath.Base(relAudioPath), filepath.Ext(relAudioPath))
+	relAudioDir := filepath.Dir(relAudioPath)
+
+	// Generate spectrogram filename with width (relative path)
+	spectrogramFilename := fmt.Sprintf("%s_%d.png", relBaseFilename, width)
+	relSpectrogramPath := filepath.Join(relAudioDir, spectrogramFilename)
+
+	// Absolute path for the spectrogram on the host filesystem
+	absSpectrogramPath := filepath.Join(c.SFS.BaseDir(), relSpectrogramPath)
+
+	// Check if the spectrogram already exists using secure Stat
+	if _, err := c.SFS.Stat(relSpectrogramPath); err == nil {
+		// Spectrogram exists, return its relative path
+		return relSpectrogramPath, nil
+	} else if !os.IsNotExist(err) {
+		// An unexpected error occurred checking for the spectrogram
+		return "", fmt.Errorf("error checking for existing spectrogram: %w", err)
+	}
+
+	// --- Generate Spectrogram ---
+	// Spectrogram does not exist, create it.
+	// Pass the context down to the generation functions.
+	if err := createSpectrogramWithSoX(ctx, absAudioPath, absSpectrogramPath, width, c.Settings); err != nil {
+		log.Printf("SoX failed, falling back to FFmpeg: %v", err)
+		// Pass the context down to the fallback function as well.
+		if err2 := createSpectrogramWithFFmpeg(ctx, absAudioPath, absSpectrogramPath, width, c.Settings); err2 != nil {
+			// Check for context errors specifically (propagate them up)
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err2, context.DeadlineExceeded) {
+				// Return the specific context error to be handled by the caller
+				if errors.Is(err, context.DeadlineExceeded) {
+					return "", err
+				}
+				return "", err2
+			}
+			if errors.Is(err, context.Canceled) || errors.Is(err2, context.Canceled) {
+				// Return the specific context error to be handled by the caller
+				if errors.Is(err, context.Canceled) {
+					return "", err
+				}
+				return "", err2
+			}
+			// Return a combined error for general failures
+			return "", fmt.Errorf("failed to generate spectrogram with SoX: %w, and with FFmpeg: %w", err, err2)
+		}
+	}
+
+	// Return the relative path of the newly created spectrogram
+	return relSpectrogramPath, nil
+}
+
+// --- Spectrogram Generation Helpers ---
+
+// createSpectrogramWithSoX generates a spectrogram using ffmpeg and SoX.
+// Accepts a context for timeout and cancellation.
+// Requires absolute paths for external commands.
+func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrogramPath string, width int, settings *conf.Settings) error {
 	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
 	soxBinary := settings.Realtime.Audio.SoxPath
-
-	// Verify ffmpeg and SoX paths
 	if ffmpegBinary == "" {
 		return fmt.Errorf("ffmpeg path not set in settings")
 	}
@@ -481,17 +351,17 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int, 
 		return fmt.Errorf("SoX path not set in settings")
 	}
 
-	// Acquire semaphore to limit concurrent spectrogram generations
+	// Create context with timeout (use the passed-in context as parent)
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
 	spectrogramSemaphore <- struct{}{}
 	defer func() { <-spectrogramSemaphore }()
 
-	// Set height based on width
 	heightStr := strconv.Itoa(width / 2)
 	widthStr := strconv.Itoa(width)
 
-	// Determine if we need to use ffmpeg based on file extension
-	ext := strings.ToLower(filepath.Ext(audioClipPath))
-	// remove prefix dot
+	ext := strings.ToLower(filepath.Ext(absAudioClipPath))
 	ext = strings.TrimPrefix(ext, ".")
 	useFFmpeg := true
 	for _, soxType := range settings.Realtime.Audio.SoxAudioTypes {
@@ -504,111 +374,79 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int, 
 	var cmd *exec.Cmd
 	var soxCmd *exec.Cmd
 
-	// Decode audio using ffmpeg and pipe to sox for spectrogram creation
 	if useFFmpeg {
-		// Build ffmpeg command arguments
-		ffmpegArgs := []string{"-hide_banner", "-i", audioClipPath, "-f", "sox", "-"}
+		ffmpegArgs := []string{"-hide_banner", "-i", absAudioClipPath, "-f", "sox", "-"}
+		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath)...)
 
-		// Build SoX command arguments
-		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath)...)
-
-		// Set up commands
 		if runtime.GOOS == "windows" {
-			cmd = exec.Command(ffmpegBinary, ffmpegArgs...)
-			soxCmd = exec.Command(soxBinary, soxArgs...)
+			cmd = exec.CommandContext(ctx, ffmpegBinary, ffmpegArgs...)
+			soxCmd = exec.CommandContext(ctx, soxBinary, soxArgs...)
 		} else {
-			cmd = exec.Command("nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
-			soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
+			cmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
+			soxCmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
 		}
 
-		// Set up pipe between ffmpeg and sox
 		var err error
 		soxCmd.Stdin, err = cmd.StdoutPipe()
 		if err != nil {
 			return fmt.Errorf("error creating pipe: %w", err)
 		}
 
-		// Capture combined output
 		var ffmpegOutput, soxOutput bytes.Buffer
 		cmd.Stderr = &ffmpegOutput
 		soxCmd.Stderr = &soxOutput
 
-		// Allow other goroutines to run before starting SoX
 		runtime.Gosched()
-
-		// Start sox command
 		if err := soxCmd.Start(); err != nil {
 			return fmt.Errorf("error starting SoX command: %w", err)
 		}
 
-		// Run ffmpeg command
 		if err := cmd.Run(); err != nil {
-			// Stop the SoX command to clean up resources
 			if killErr := soxCmd.Process.Kill(); killErr != nil {
 				log.Printf("Failed to kill SoX process: %v", killErr)
 			}
-
-			// Wait for SoX to finish and collect its error, if any
 			waitErr := soxCmd.Wait()
-
-			// Prepare additional error information
 			var additionalInfo string
-			if waitErr != nil && !errors.Is(waitErr, os.ErrProcessDone) {
+			if waitErr != nil && !os.IsNotExist(waitErr) {
 				additionalInfo = fmt.Sprintf("sox wait error: %v", waitErr)
 			}
-
 			return fmt.Errorf("ffmpeg command failed: %w\nffmpeg output: %s\nsox output: %s\n%s",
 				err, ffmpegOutput.String(), soxOutput.String(), additionalInfo)
 		}
 
-		// Allow other goroutines to run before waiting for SoX to finish
 		runtime.Gosched()
-
-		// Wait for sox command to finish
 		if err := soxCmd.Wait(); err != nil {
 			return fmt.Errorf("SoX command failed: %w\nffmpeg output: %s\nsox output: %s",
 				err, ffmpegOutput.String(), soxOutput.String())
 		}
-
-		// Allow other goroutines to run after SoX finishes
 		runtime.Gosched()
 	} else {
-		// Use SoX directly for supported formats
-		soxArgs := append([]string{audioClipPath}, getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath)...)
+		soxArgs := append([]string{absAudioClipPath}, getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath)...)
 
 		if runtime.GOOS == "windows" {
-			soxCmd = exec.Command(soxBinary, soxArgs...)
+			soxCmd = exec.CommandContext(ctx, soxBinary, soxArgs...)
 		} else {
-			soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
+			soxCmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
 		}
 
-		// Capture output
 		var soxOutput bytes.Buffer
 		soxCmd.Stderr = &soxOutput
 		soxCmd.Stdout = &soxOutput
 
-		// Allow other goroutines to run before running SoX
 		runtime.Gosched()
-
-		// Run SoX command
 		if err := soxCmd.Run(); err != nil {
 			return fmt.Errorf("SoX command failed: %w\nOutput: %s", err, soxOutput.String())
 		}
-
-		// Allow other goroutines to run after SoX finishes
 		runtime.Gosched()
 	}
-
 	return nil
 }
 
-// getSoxSpectrogramArgs returns the common SoX arguments for generating a spectrogram
-func getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath string) []string {
-	// Default settings for spectrogram generation
+// getSoxSpectrogramArgs returns the common SoX arguments.
+func getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath string) []string {
 	const audioLength = "15"
 	const dynamicRange = "100"
-
-	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-d", audioLength, "-z", dynamicRange, "-o", spectrogramPath}
+	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-d", audioLength, "-z", dynamicRange, "-o", absSpectrogramPath}
 	width, _ := strconv.Atoi(widthStr)
 	if width < 800 {
 		args = append(args, "-r")
@@ -616,55 +454,49 @@ func getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath string) []string
 	return args
 }
 
-// createSpectrogramWithFFmpeg generates a spectrogram for an audio file using only ffmpeg.
-// It supports various audio formats and is used as a fallback if SoX fails.
-func createSpectrogramWithFFmpeg(audioClipPath, spectrogramPath string, width int, settings *conf.Settings) error {
-	// Get ffmpeg path from settings
+// createSpectrogramWithFFmpeg generates a spectrogram using only ffmpeg.
+// Accepts a context for timeout and cancellation.
+func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpectrogramPath string, width int, settings *conf.Settings) error {
 	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
-
-	// Verify ffmpeg path
 	if ffmpegBinary == "" {
 		return fmt.Errorf("ffmpeg path not set in settings")
 	}
 
-	// Acquire semaphore to limit concurrent spectrogram generations
+	// Create context with timeout (use the passed-in context as parent)
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
 	spectrogramSemaphore <- struct{}{}
 	defer func() { <-spectrogramSemaphore }()
 
-	// Set height based on width
 	height := width / 2
 	heightStr := strconv.Itoa(height)
 	widthStr := strconv.Itoa(width)
 
-	// Build ffmpeg command arguments
 	ffmpegArgs := []string{
 		"-hide_banner",
-		"-y", // answer yes to overwriting the output file if it already exists
-		"-i", audioClipPath,
+		"-y",
+		"-i", absAudioClipPath,
 		"-lavfi", fmt.Sprintf("showspectrumpic=s=%sx%s:legend=0:gain=3:drange=100", widthStr, heightStr),
-		"-frames:v", "1", // Generate only one frame instead of animation
-		spectrogramPath,
+		"-frames:v", "1",
+		absSpectrogramPath,
 	}
 
-	// Determine the command based on the OS
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		// Directly use ffmpeg command on Windows
-		cmd = exec.Command(ffmpegBinary, ffmpegArgs...)
+		cmd = exec.CommandContext(ctx, ffmpegBinary, ffmpegArgs...)
 	} else {
-		// Prepend 'nice' to the command on Unix-like systems
-		cmd = exec.Command("nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
+		cmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
 	}
 
-	// Capture combined output
 	var output bytes.Buffer
 	cmd.Stderr = &output
 	cmd.Stdout = &output
 
-	// Run ffmpeg command
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("ffmpeg command failed: %w\nOutput: %s", err, output.String())
 	}
-
 	return nil
 }
+
+// HandleError method should exist on Controller, typically defined in controller.go or api.go

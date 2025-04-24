@@ -3,6 +3,7 @@ package api
 
 import (
 	"crypto/rand"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -33,15 +35,23 @@ type Controller struct {
 	settingsMutex       sync.RWMutex // Mutex for settings operations
 	detectionCache      *cache.Cache // Cache for detection queries
 	startTime           *time.Time
+	SFS                 *securefs.SecureFS // Add SecureFS instance
 }
 
-// New creates a new API controller
+// New creates a new API controller, returning an error if initialization fails.
 func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
-	controlChan chan string, logger *log.Logger) *Controller {
+	controlChan chan string, logger *log.Logger) (*Controller, error) {
 
 	if logger == nil {
 		logger = log.Default()
+	}
+
+	// Initialize SecureFS for the media export path
+	mediaPath := settings.Realtime.Audio.Export.Path
+	sfs, err := securefs.New(mediaPath) // Create SecureFS rooted at the export path
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize secure filesystem for media: %w", err)
 	}
 
 	c := &Controller{
@@ -53,6 +63,7 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		controlChan:    controlChan,
 		logger:         logger,
 		detectionCache: cache.New(5*time.Minute, 10*time.Minute),
+		SFS:            sfs, // Assign SecureFS instance
 	}
 
 	// Create v2 API group
@@ -70,7 +81,7 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	// Initialize routes
 	c.initRoutes()
 
-	return c
+	return c, nil // Return controller and nil error
 }
 
 // initRoutes registers all API endpoints
@@ -188,6 +199,13 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 // Shutdown performs cleanup of all resources used by the API controller
 // This should be called when the application is shutting down
 func (c *Controller) Shutdown() {
+	// Close SecureFS if initialized
+	if c.SFS != nil {
+		if err := c.SFS.Close(); err != nil {
+			c.logger.Printf("Error closing SecureFS: %v", err)
+		}
+	}
+
 	// Call shutdown methods of individual components
 	// Currently, only the system component needs cleanup
 	StopCPUMonitoring()

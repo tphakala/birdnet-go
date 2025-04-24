@@ -457,7 +457,10 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 	controlChan := make(chan string)
 
 	// Create API controller
-	controller := New(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger)
+	controller, err := New(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger)
+	if err != nil {
+		t.Fatalf("Failed to create test API controller: %v", err)
+	}
 
 	return e, mockDS, controller
 }

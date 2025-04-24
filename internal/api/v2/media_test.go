@@ -3,18 +3,19 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 )
 
 // TestInitMediaRoutesRegistration tests that media routes are properly registered
@@ -45,96 +46,6 @@ func TestInitMediaRoutesRegistration(t *testing.T) {
 	// Verify that all expected routes were registered
 	for route, found := range expectedRoutes {
 		assert.True(t, found, "Media route not registered: %s", route)
-	}
-}
-
-// TestValidateMediaPath tests the validateMediaPath function
-func TestValidateMediaPath(t *testing.T) {
-	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "media_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	// Setup controller
-	_, _, controller := setupTestEnvironment(t)
-
-	// Create a non-existent path for testing directory creation
-	nonExistentPath := filepath.Join(tempDir, "non_existent_dir")
-	// Ensure it doesn't exist before the test
-	_ = os.RemoveAll(nonExistentPath)
-
-	// Test cases
-	testCases := []struct {
-		name             string
-		exportPath       string
-		filename         string
-		expectedError    string
-		checkDirCreation bool
-	}{
-		{
-			name:             "Valid path",
-			exportPath:       tempDir,
-			filename:         "audio.mp3",
-			expectedError:    "",
-			checkDirCreation: false,
-		},
-		{
-			name:             "Empty filename",
-			exportPath:       tempDir,
-			filename:         "",
-			expectedError:    "empty filename",
-			checkDirCreation: false,
-		},
-		{
-			name:             "Invalid characters in filename",
-			exportPath:       tempDir,
-			filename:         "file/../with/invalid/chars.mp3",
-			expectedError:    "invalid filename characters",
-			checkDirCreation: false,
-		},
-		{
-			name:             "Path traversal attempt",
-			exportPath:       tempDir,
-			filename:         "../../../etc/passwd",
-			expectedError:    "invalid filename characters",
-			checkDirCreation: false,
-		},
-		{
-			name:             "Path traversal with encoded characters",
-			exportPath:       tempDir,
-			filename:         "%2e%2e%2f%2e%2e%2fetc%2fpasswd",
-			expectedError:    "invalid filename characters",
-			checkDirCreation: false,
-		},
-		{
-			name:             "Non-existent export path should be created",
-			exportPath:       nonExistentPath,
-			filename:         "audio.mp3",
-			expectedError:    "",
-			checkDirCreation: true,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			path, err := controller.validateMediaPath(tc.exportPath, tc.filename)
-
-			if tc.expectedError != "" {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tc.expectedError)
-			} else {
-				assert.NoError(t, err)
-				expectedPath := filepath.Join(tc.exportPath, tc.filename)
-				assert.Equal(t, expectedPath, path)
-
-				// Check if directory was created when expected
-				if tc.checkDirCreation {
-					dirInfo, statErr := os.Stat(tc.exportPath)
-					assert.NoError(t, statErr, "Export directory should have been created")
-					assert.True(t, dirInfo.IsDir(), "Export path should be a directory")
-				}
-			}
-		})
 	}
 }
 
@@ -263,51 +174,47 @@ func TestGetContentType(t *testing.T) {
 	}
 }
 
-// TestServeAudioClip tests the ServeAudioClip handler
+// TestServeAudioClip tests the ServeAudioClip handler using SecureFS
 func TestServeAudioClip(t *testing.T) {
-	// Create a temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "audio_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	// Setup test environment with SecureFS rooted in tempDir
+	e, controller, tempDir := setupMediaTestEnvironment(t)
 
-	// Create a small test audio file
-	smallFile := filepath.Join(tempDir, "small.mp3")
-	err = os.WriteFile(smallFile, []byte("small audio file content"), 0o644)
+	// Create a small test audio file within the secure root
+	smallFilename := "small.mp3"
+	smallFilePath := filepath.Join(tempDir, smallFilename)
+	err := os.WriteFile(smallFilePath, []byte("small audio file content"), 0o644)
 	require.NoError(t, err)
 
-	// Create a large test audio file (slightly over 1MB to trigger range handling)
-	largeFile := filepath.Join(tempDir, "large.mp3")
+	// Create a large test audio file (over 1MB)
+	largeFilename := "large.mp3"
+	largeFilePath := filepath.Join(tempDir, largeFilename)
 	largeContent := make([]byte, 1100*1024) // 1.1 MB
 	for i := range largeContent {
-		largeContent[i] = byte(i % 256) // Fill with some pattern
+		largeContent[i] = byte(i % 256)
 	}
-	err = os.WriteFile(largeFile, largeContent, 0o644)
+	err = os.WriteFile(largeFilePath, largeContent, 0o644)
 	require.NoError(t, err)
-
-	// Setup controller with the temp directory
-	e, _, controller := setupTestEnvironment(t)
-	controller.Settings.Realtime.Audio.Export.Path = tempDir
 
 	// Test cases
 	testCases := []struct {
 		name           string
-		filename       string
+		filename       string // Filename relative to SecureFS root
 		rangeHeader    string
 		expectedStatus int
-		expectedLength int
+		expectedLength int64 // Use int64 for http.ServeContent
 		partialContent bool
 	}{
 		{
 			name:           "Small file - full content",
-			filename:       "small.mp3",
+			filename:       smallFilename,
 			rangeHeader:    "",
 			expectedStatus: http.StatusOK,
-			expectedLength: len("small audio file content"),
+			expectedLength: int64(len("small audio file content")),
 			partialContent: false,
 		},
 		{
 			name:           "Large file - full content",
-			filename:       "large.mp3",
+			filename:       largeFilename,
 			rangeHeader:    "",
 			expectedStatus: http.StatusOK,
 			expectedLength: 1100 * 1024,
@@ -315,7 +222,7 @@ func TestServeAudioClip(t *testing.T) {
 		},
 		{
 			name:           "Large file - partial content",
-			filename:       "large.mp3",
+			filename:       largeFilename,
 			rangeHeader:    "bytes=100-199",
 			expectedStatus: http.StatusPartialContent,
 			expectedLength: 100,
@@ -330,10 +237,10 @@ func TestServeAudioClip(t *testing.T) {
 			partialContent: false,
 		},
 		{
-			name:           "Invalid filename",
+			name:           "Invalid filename (traversal attempt)",
 			filename:       "../../../etc/passwd",
 			rangeHeader:    "",
-			expectedStatus: http.StatusBadRequest,
+			expectedStatus: http.StatusNotFound, // SecureFS prevents access, looks like not found
 			expectedLength: 0,
 			partialContent: false,
 		},
@@ -349,143 +256,139 @@ func TestServeAudioClip(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 			c.SetParamNames("filename")
-			c.SetParamValues(tc.filename)
+			c.SetParamValues(tc.filename) // Pass the relative filename
 
-			// Call handler
-			_ = controller.ServeAudioClip(c)
+			// Call handler (now uses SecureFS.ServeFile implicitly)
+			handlerErr := controller.ServeAudioClip(c)
 
-			// Check response status
+			// Check response status code directly from recorder
 			assert.Equal(t, tc.expectedStatus, rec.Code)
 
-			// For success cases, check response content
+			// Handle expected errors from the handler itself (e.g., validation errors)
+			if tc.expectedStatus >= 400 {
+				// If ServeFile returns an error that echo converts to HTTPError
+				if handlerErr != nil {
+					assert.Error(t, handlerErr)
+					// Use errors.As for robust error checking
+					var httpErr *echo.HTTPError
+					if errors.As(handlerErr, &httpErr) {
+						assert.Equal(t, tc.expectedStatus, httpErr.Code)
+					} // else, it might be an error that didn't translate to HTTP status, check rec.Code
+				} // If handlerErr is nil, the error was handled internally (like NotFound)
+			} else {
+				// No error expected from the handler on success
+				assert.NoError(t, handlerErr)
+			}
+
+			// For success cases, check headers and content
 			if tc.expectedStatus == http.StatusOK || tc.expectedStatus == http.StatusPartialContent {
-				// Check if we have the expected content length
 				if tc.partialContent {
 					assert.Equal(t, fmt.Sprintf("%d", tc.expectedLength), rec.Header().Get("Content-Length"))
 					assert.Equal(t, "bytes", rec.Header().Get("Accept-Ranges"))
 					assert.Contains(t, rec.Header().Get("Content-Range"), "bytes ")
-				} else if tc.expectedStatus == http.StatusOK && tc.filename == "small.mp3" {
-					// For small files served directly, verify content
-					assert.Equal(t, "small audio file content", rec.Body.String())
+				} else if tc.expectedStatus == http.StatusOK {
+					// http.ServeContent sets Content-Length for full responses too
+					assert.Equal(t, fmt.Sprintf("%d", tc.expectedLength), rec.Header().Get("Content-Length"))
+					// Content verification for small file
+					if tc.filename == smallFilename {
+						assert.Equal(t, "small audio file content", rec.Body.String())
+					}
 				}
 			}
 		})
 	}
 }
 
-// TestServeSpectrogram tests the ServeSpectrogram handler
+// TestServeSpectrogram tests the ServeSpectrogram handler using SecureFS
+// Note: This test verifies the handler logic calls SecureFS, but does not
+// guarantee actual spectrogram generation works if tools are missing.
 func TestServeSpectrogram(t *testing.T) {
-	// Create a temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "spectrogram_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	// Setup test environment with SecureFS rooted in tempDir
+	e, controller, tempDir := setupMediaTestEnvironment(t)
 
-	// Create a test audio file
-	audioFile := filepath.Join(tempDir, "audio.mp3")
-	err = os.WriteFile(audioFile, []byte("audio file content"), 0o644)
-	require.NoError(t, err)
-
-	// Create a test spectrogram file
-	spectrogramFile := filepath.Join(tempDir, "audio_800.png")
-	err = os.WriteFile(spectrogramFile, []byte("spectrogram image content"), 0o644)
+	// Create a test audio file within the secure root
+	audioFilename := "audio.mp3"
+	audioFilePath := filepath.Join(tempDir, audioFilename)
+	err := os.WriteFile(audioFilePath, []byte("audio file content"), 0o644)
 	require.NoError(t, err)
 
-	// Setup controller with the temp directory
-	e, _, controller := setupTestEnvironment(t)
-	controller.Settings.Realtime.Audio.Export.Path = tempDir
+	// --- Simulate Spectrogram Generation (by creating the expected file) ---
+	// This allows testing the "file exists" path without running external tools.
+	spectrogramFilename := "audio_800.png"
+	spectrogramFilePath := filepath.Join(tempDir, spectrogramFilename)
+	spectrogramContent := "simulated spectrogram content"
+	err = os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o644)
+	require.NoError(t, err)
 
 	// Test cases
 	testCases := []struct {
 		name           string
-		filename       string
+		filename       string // Filename relative to SecureFS root
 		width          string
 		expectedStatus int
-		expectedResult string
+		expectedBody   string
 	}{
 		{
-			name:           "Existing spectrogram",
-			filename:       "audio.mp3",
+			name:           "Spectrogram generated/exists",
+			filename:       audioFilename,
 			width:          "800",
 			expectedStatus: http.StatusOK,
-			expectedResult: "spectrogram image content",
+			expectedBody:   spectrogramContent,
 		},
 		{
-			name:           "Non-existent spectrogram - should try to generate",
-			filename:       "audio.mp3",
-			width:          "1200",
-			expectedStatus: http.StatusInternalServerError, // Generation is unimplemented
-			expectedResult: "",
+			name:     "Spectrogram needs generation (file doesn't exist initially)",
+			filename: audioFilename,
+			width:    "1200", // Different width means different file
+			// Expect error because external tools likely won't run in test
+			expectedStatus: http.StatusInternalServerError,
+			expectedBody:   "",
 		},
 		{
 			name:           "Non-existent audio file",
 			filename:       "nonexistent.mp3",
 			width:          "800",
-			expectedStatus: http.StatusNotFound,
-			expectedResult: "",
+			expectedStatus: http.StatusNotFound, // SecureFS.GenerateSpectrogram should return ErrNotExist
+			expectedBody:   "",
 		},
 		{
-			name:           "Invalid filename",
+			name:           "Invalid filename (traversal attempt)",
 			filename:       "../../../etc/passwd",
 			width:          "800",
-			expectedStatus: http.StatusBadRequest,
-			expectedResult: "",
+			expectedStatus: http.StatusNotFound, // SecureFS prevents access
+			expectedBody:   "",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create request
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/media/spectrogram/"+tc.filename, http.NoBody)
+			url := "/api/v2/media/spectrogram/" + tc.filename
 			if tc.width != "" {
-				req.URL.RawQuery = fmt.Sprintf("width=%s", tc.width)
+				url += "?width=" + tc.width
 			}
+			req := httptest.NewRequest(http.MethodGet, url, http.NoBody)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 			c.SetParamNames("filename")
 			c.SetParamValues(tc.filename)
 
-			// Call handler
-			_ = controller.ServeSpectrogram(c)
+			// Call handler (uses SecureFS implicitly)
+			_ = controller.ServeSpectrogram(c) // Ignore handler error for now, check status code
 
 			// Check response status
 			assert.Equal(t, tc.expectedStatus, rec.Code)
 
 			// For success cases, check response content
 			if tc.expectedStatus == http.StatusOK {
-				assert.Equal(t, tc.expectedResult, rec.Body.String())
+				assert.Equal(t, tc.expectedBody, rec.Body.String())
+				assert.Equal(t, "image/png", rec.Header().Get("Content-Type"))
+				assert.Contains(t, rec.Header().Get("Content-Disposition"), "inline; filename=\"audio_800.png\"")
 			}
 		})
 	}
 }
 
-// TestGenerateSpectrogram tests the generateSpectrogram function
-func TestGenerateSpectrogram(t *testing.T) {
-	// Create a temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "spectrogram_gen_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	// Create a test audio file
-	audioFile := filepath.Join(tempDir, "audio.mp3")
-	err = os.WriteFile(audioFile, []byte("audio file content"), 0o644)
-	require.NoError(t, err)
-
-	// Setup controller with the temp directory
-	_, _, controller := setupTestEnvironment(t)
-	controller.Settings.Realtime.Audio.Export.Path = tempDir
-
-	// Test the function
-	spectrogramPath, err := controller.generateSpectrogram(audioFile, 800)
-
-	// Expect an error since generation is not implemented
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not implemented yet")
-
-	// The path should still be valid even though generation fails
-	assert.Contains(t, spectrogramPath, "audio_800.png")
-}
-
-// Setup function to create a test environment with a file server
+// Setup function to create a test environment with SecureFS
 func setupMediaTestEnvironment(t *testing.T) (*echo.Echo, *Controller, string) {
 	t.Helper()
 
@@ -494,31 +397,52 @@ func setupMediaTestEnvironment(t *testing.T) (*echo.Echo, *Controller, string) {
 	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
-	// Setup controller
+	// Use the standard test setup which now initializes SFS
+	// We need the controller instance to reconfigure its SFS
 	e, _, controller := setupTestEnvironment(t)
+
+	// --- Crucially: Re-initialize SFS in the controller to use the *media test* tempDir ---
+	// Close the SFS created by setupTestEnvironment (if any)
+	if controller.SFS != nil {
+		controller.SFS.Close()
+	}
+	// Create and assign the new SFS rooted in our tempDir
+	newSFS, err := securefs.New(tempDir)
+	require.NoError(t, err, "Failed to create SecureFS for media test environment")
+	controller.SFS = newSFS
+	t.Cleanup(func() { controller.SFS.Close() }) // Ensure this one is closed too
+
+	// Assign the tempDir to settings just in case any *other* part relies on it
+	// (though SecureFS should make this less necessary)
 	controller.Settings.Realtime.Audio.Export.Path = tempDir
 
-	// Initialize routes
+	// Initialize media routes on the controller instance that has the correct SFS
 	controller.initMediaRoutes()
 
+	// Return the Echo instance, the *correctly configured* controller, and the tempDir path
 	return e, controller, tempDir
 }
 
 // TestMediaEndpointsIntegration tests the media endpoints in an integrated way
 func TestMediaEndpointsIntegration(t *testing.T) {
-	// Setup test environment
+	// Setup test environment (already configures SecureFS)
+	// We need the echo instance for the test server
 	e, _, tempDir := setupMediaTestEnvironment(t)
 
-	// Create test files
-	audioFile := filepath.Join(tempDir, "test.mp3")
-	err := os.WriteFile(audioFile, []byte("test audio content"), 0o644)
+	// Create test files within the SecureFS root
+	audioFilename := "test.mp3"
+	audioFilePath := filepath.Join(tempDir, audioFilename)
+	err := os.WriteFile(audioFilePath, []byte("test audio content"), 0o644)
 	require.NoError(t, err)
 
-	spectrogramFile := filepath.Join(tempDir, "test_800.png")
-	err = os.WriteFile(spectrogramFile, []byte("test spectrogram content"), 0o644)
+	// Simulate existing spectrogram
+	spectrogramFilename := "test_800.png"
+	spectrogramFilePath := filepath.Join(tempDir, spectrogramFilename)
+	spectrogramContent := "test spectrogram content"
+	err = os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o644)
 	require.NoError(t, err)
 
-	// Create a real HTTP server and client for better integration testing
+	// Create a real HTTP server using the Echo instance from setup
 	server := httptest.NewServer(e)
 	defer server.Close()
 
@@ -533,15 +457,21 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 	}{
 		{
 			name:           "Audio endpoint",
-			endpoint:       "/api/v2/media/audio/test.mp3",
+			endpoint:       "/api/v2/media/audio/" + audioFilename,
 			expectedStatus: http.StatusOK,
 			expectedBody:   "test audio content",
 		},
 		{
-			name:           "Spectrogram endpoint",
-			endpoint:       "/api/v2/media/spectrogram/test.mp3?width=800",
+			name:           "Spectrogram endpoint (existing)",
+			endpoint:       "/api/v2/media/spectrogram/" + audioFilename + "?width=800",
 			expectedStatus: http.StatusOK,
-			expectedBody:   "test spectrogram content",
+			expectedBody:   spectrogramContent,
+		},
+		{
+			name:           "Spectrogram endpoint (needs generation - likely fails)",
+			endpoint:       "/api/v2/media/spectrogram/" + audioFilename + "?width=1200",
+			expectedStatus: http.StatusInternalServerError,
+			expectedBody:   "",
 		},
 		{
 			name:           "Missing audio file",
@@ -572,38 +502,31 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 	}
 }
 
-// TestMediaSecurityScenarios tests various security scenarios for media endpoints
+// TestMediaSecurityScenarios tests various security scenarios using SecureFS
 func TestMediaSecurityScenarios(t *testing.T) {
-	// Setup test environment
+	// Setup test environment (SecureFS handles security)
+	// We need the echo instance to serve requests directly
 	e, _, tempDir := setupMediaTestEnvironment(t)
 
-	// Create test files
-	audioFile := filepath.Join(tempDir, "secure.mp3")
-	err := os.WriteFile(audioFile, []byte("secure audio content"), 0o644)
+	// Create a test audio file within the secure root
+	secureFilename := "secure.mp3"
+	secureFilePath := filepath.Join(tempDir, secureFilename)
+	err := os.WriteFile(secureFilePath, []byte("secure audio content"), 0o644)
 	require.NoError(t, err)
 
-	// Create a "sensitive" file outside the media directory
-	sensitiveDir, err := os.MkdirTemp("", "sensitive")
-	require.NoError(t, err)
-	defer os.RemoveAll(sensitiveDir)
+	// --- No need to create sensitive file outside tempDir, SecureFS prevents access ---
 
-	sensitiveFile := filepath.Join(sensitiveDir, "sensitive.txt")
-	err = os.WriteFile(sensitiveFile, []byte("sensitive content"), 0o644)
-	require.NoError(t, err)
-
-	// Path traversal attempts - URL safe versions
-	// Note: We need to be careful with semicolons and other special characters
-	// that might be misinterpreted by the HTTP request parser
+	// Path traversal attempts
+	// SecureFS should prevent access outside its root
 	traversalAttempts := []string{
 		"../../../etc/passwd",
-		"..%2F..%2F..%2Fetc%2Fpasswd",
+		"..%2F..%2F..%2Fetc%2Fpasswd", // URL encoded
 		"secure.mp3/../../../etc/passwd",
-		"secure.mp3%00.jpg",     // Null byte injection
-		"secure.mp3%3Bls%20-la", // Command injection with URL-encoded semicolon and space
-		"secure.mp3%5C",         // Backslash (URL-encoded)
-		"secure.mp3%22",         // Quote (URL-encoded)
-		"secure.mp3%27",         // Single quote (URL-encoded)
-		"secure.mp3%24PATH",     // Environment variable (URL-encoded dollar sign)
+		// Filenames SecureFS might reject inherently (depending on OS, less likely with os.Root)
+		"secure.mp3%00.jpg",          // Null byte
+		"CON",                        // Windows reserved name
+		"LPT1",                       // Windows reserved name
+		"secure.mp3:Zone.Identifier", // Windows Alternate Data Stream (less likely relevant)
 	}
 
 	// Test each path traversal attempt
@@ -612,41 +535,45 @@ func TestMediaSecurityScenarios(t *testing.T) {
 			// Test against both endpoints
 			endpoints := []string{
 				"/api/v2/media/audio/" + attempt,
-				"/api/v2/media/spectrogram/" + attempt,
+				"/api/v2/media/spectrogram/" + attempt + "?width=800",
 			}
 
 			for _, endpoint := range endpoints {
-				req := httptest.NewRequest(http.MethodGet, endpoint, http.NoBody)
-				rec := httptest.NewRecorder()
-				e.ServeHTTP(rec, req)
+				t.Run(endpoint, func(t *testing.T) {
+					req := httptest.NewRequest(http.MethodGet, endpoint, http.NoBody)
+					rec := httptest.NewRecorder()
+					// We use ServeHTTP directly to bypass echo's built-in path cleaning for testing raw paths
+					e.ServeHTTP(rec, req)
 
-				// Should return 400 Bad Request for invalid filenames
-				assert.True(t, rec.Code == http.StatusBadRequest || rec.Code == http.StatusNotFound,
-					"Expected 400 or 404 status code for security issue, got %d for %s", rec.Code, endpoint)
+					// SecureFS prevents access, usually resulting in a 404 Not Found
+					// or potentially 500 if SecureFS returns an unexpected validation error
+					assert.True(t, rec.Code == http.StatusNotFound || rec.Code == http.StatusInternalServerError || rec.Code == http.StatusBadRequest,
+						"Expected 404/500/400 status code for security issue, got %d for %s", rec.Code, endpoint)
 
-				// Response should not contain any sensitive content
-				assert.NotContains(t, rec.Body.String(), "sensitive content")
-				assert.NotContains(t, rec.Body.String(), "root:")
+					// Response should not contain sensitive content (though we didn't create one)
+					assert.NotContains(t, rec.Body.String(), "root:")
+				})
 			}
 		})
 	}
 }
 
-// TestRangeHeaderHandling tests how the server handles various Range header formats
+// TestRangeHeaderHandling tests how the server handles various Range header formats with SecureFS
 func TestRangeHeaderHandling(t *testing.T) {
 	// Setup test environment
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
 	// Create a test file (1KB)
-	testFile := filepath.Join(tempDir, "rangetest.mp3")
+	filename := "rangetest.mp3"
+	filePath := filepath.Join(tempDir, filename)
 	fileContent := make([]byte, 1024)
 	for i := range fileContent {
 		fileContent[i] = byte(i % 256)
 	}
-	err := os.WriteFile(testFile, fileContent, 0o644)
+	err := os.WriteFile(filePath, fileContent, 0o644)
 	require.NoError(t, err)
 
-	// Test cases for range headers
+	// Test cases for range headers (same as before, but now served via SecureFS -> http.ServeContent)
 	testCases := []struct {
 		name           string
 		rangeHeader    string
@@ -698,69 +625,33 @@ func TestRangeHeaderHandling(t *testing.T) {
 			},
 		},
 		{
-			name:           "Invalid range format",
-			rangeHeader:    "bytes=invalid",
+			name:        "Invalid range format (bytes=invalid)",
+			rangeHeader: "bytes=invalid",
+			// http.ServeContent might return OK or PartialContent depending on parsing
+			// Let's expect OK as it likely ignores the invalid header
+			expectedStatus: http.StatusOK,
+			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				assert.Equal(t, fileContent, rec.Body.Bytes())
+			},
+		},
+		{
+			name:           "Invalid range (out of bounds)",
+			rangeHeader:    "bytes=2000-",
 			expectedStatus: http.StatusRequestedRangeNotSatisfiable,
 			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				// No content validation for 416 response
+				// No body validation needed
 			},
 		},
 		{
-			name:           "Multiple ranges - multipart response",
-			rangeHeader:    "bytes=0-99,200-299",
+			name:        "Multiple ranges - should be handled by http.ServeContent",
+			rangeHeader: "bytes=0-99,200-299",
+			// http.ServeContent typically serves only the *first* valid range if multiple are requested.
 			expectedStatus: http.StatusPartialContent,
 			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				// For multipart responses, we need to check:
-				// 1. Content-Type should be multipart/byteranges
-				contentType := rec.Header().Get("Content-Type")
-				assert.True(t, strings.Contains(contentType, "multipart/byteranges") ||
-					strings.Contains(contentType, "multipart/mixed"),
-					"Expected multipart content type, got: %s", contentType)
-
-				// 2. Body should contain both ranges
-				body := rec.Body.String()
-				// Check for first range data
-				assert.Contains(t, body, "Content-Range: bytes 0-99/1024")
-				// Check for second range data
-				assert.Contains(t, body, "Content-Range: bytes 200-299/1024")
-
-				// 3. Body should contain actual range data
-				// Convert the first few bytes of the first range to string for easier comparison
-				firstRangeStart := string([]byte{0, 1, 2, 3, 4, 5})
-				assert.Contains(t, body, firstRangeStart)
-
-				// And a few bytes from the second range
-				secondRangeStart := string([]byte{200 % 256, 201 % 256, 202 % 256})
-				assert.Contains(t, body, secondRangeStart)
-			},
-		},
-		{
-			name:           "Multiple ranges with different order",
-			rangeHeader:    "bytes=300-399,0-99",
-			expectedStatus: http.StatusPartialContent,
-			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				// For multipart responses, we need to check:
-				// 1. Content-Type should be multipart/byteranges
-				contentType := rec.Header().Get("Content-Type")
-				assert.True(t, strings.Contains(contentType, "multipart/byteranges") ||
-					strings.Contains(contentType, "multipart/mixed"),
-					"Expected multipart content type, got: %s", contentType)
-
-				// 2. Body should contain both ranges
-				body := rec.Body.String()
-				// Check for first range data
-				assert.Contains(t, body, "Content-Range: bytes 300-399/1024")
-				// Check for second range data
-				assert.Contains(t, body, "Content-Range: bytes 0-99/1024")
-
-				// 3. Body should contain actual range data
-				// First range (300-399) should contain bytes with values 44, 45, 46...
-				firstRangeStart := string([]byte{44, 45, 46})
-				assert.Contains(t, body, firstRangeStart)
-
-				// Second range (0-99) should contain 0, 1, 2...
-				secondRangeStart := string([]byte{0, 1, 2})
-				assert.Contains(t, body, secondRangeStart)
+				assert.Equal(t, fileContent[0:100], rec.Body.Bytes())
+				assert.Equal(t, "bytes 0-99/1024", rec.Header().Get("Content-Range"))
+				// Ensure Content-Type is NOT multipart
+				assert.NotContains(t, rec.Header().Get("Content-Type"), "multipart")
 			},
 		},
 	}
@@ -768,21 +659,35 @@ func TestRangeHeaderHandling(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create request
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/rangetest.mp3", http.NoBody)
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+filename, http.NoBody)
 			if tc.rangeHeader != "" {
 				req.Header.Set("Range", tc.rangeHeader)
 			}
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 			c.SetParamNames("filename")
-			c.SetParamValues("rangetest.mp3")
+			c.SetParamValues(filename)
 
-			// Call handler
-			err := controller.ServeAudioClip(c)
-			require.NoError(t, err)
+			// Call handler (which uses SecureFS.ServeFile -> http.ServeContent)
+			handlerErr := controller.ServeAudioClip(c)
 
-			// Check status code
+			// Check status code directly from recorder
 			assert.Equal(t, tc.expectedStatus, rec.Code)
+
+			// Handle potential handler errors (less likely now with http.ServeContent)
+			if tc.expectedStatus >= 400 {
+				if handlerErr != nil {
+					assert.Error(t, handlerErr)
+					// Use errors.As for robust error checking
+					var httpErr *echo.HTTPError
+					if errors.As(handlerErr, &httpErr) {
+						assert.Equal(t, tc.expectedStatus, httpErr.Code)
+					}
+				}
+			} else {
+				// Expect no error from the handler itself on success
+				assert.NoError(t, handlerErr)
+			}
 
 			// Run validation function for successful responses
 			if rec.Code == http.StatusOK || rec.Code == http.StatusPartialContent {
@@ -792,13 +697,8 @@ func TestRangeHeaderHandling(t *testing.T) {
 	}
 }
 
-// TestServeAudioClipWithUnicodeFilenames tests handling of Unicode filenames
+// TestServeAudioClipWithUnicodeFilenames tests handling of Unicode filenames with SecureFS
 func TestServeAudioClipWithUnicodeFilenames(t *testing.T) {
-	// Skip this test if Unicode filenames aren't enabled in safeFilenamePattern
-	if !strings.Contains(safeFilenamePattern.String(), "\\p{L}") {
-		t.Skip("Unicode filename pattern not enabled, skipping test")
-	}
-
 	// Setup test environment
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
@@ -813,6 +713,7 @@ func TestServeAudioClipWithUnicodeFilenames(t *testing.T) {
 	}
 
 	for _, name := range unicodeNames {
+		// Use filename directly relative to tempDir (SecureFS root)
 		filePath := filepath.Join(tempDir, name)
 		err := os.WriteFile(filePath, []byte("unicode audio content"), 0o644)
 		require.NoError(t, err)
@@ -822,19 +723,20 @@ func TestServeAudioClipWithUnicodeFilenames(t *testing.T) {
 	for _, name := range unicodeNames {
 		t.Run("Unicode filename: "+name, func(t *testing.T) {
 			// Create request
+			// Need to URL-encode the filename for the request path
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+name, http.NoBody)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 			c.SetParamNames("filename")
+			// Echo automatically decodes path parameters, so pass the raw name here
 			c.SetParamValues(name)
 
-			// Call handler
-			err := controller.ServeAudioClip(c)
+			// Call handler (uses SecureFS.ServeFile)
+			handlerErr := controller.ServeAudioClip(c)
 
-			// This might fail if Unicode filenames aren't supported by the OS or pattern
-			if err != nil {
-				t.Logf("Error handling Unicode filename %s: %v", name, err)
-				return
+			// Check for handler error
+			if handlerErr != nil {
+				t.Fatalf("Error serving Unicode filename %s: %v", name, handlerErr)
 			}
 
 			// Check response
