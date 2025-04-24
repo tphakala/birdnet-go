@@ -148,9 +148,10 @@ func IsPathValidWithinBase(baseDir, path string) error {
 	return nil
 }
 
-// relativePath converts an absolute path to a path relative to the base directory
-// This is used internally to prepare paths for os.Root operations
-func (sfs *SecureFS) relativePath(path string) (string, error) {
+// RelativePath converts an absolute path to a path relative to the base directory
+// and validates it against the SecureFS root.
+// This is used internally and potentially by callers needing the relative path.
+func (sfs *SecureFS) RelativePath(path string) (string, error) {
 	// Clean the path to handle any . or .. components safely
 	path = filepath.Clean(path)
 
@@ -195,7 +196,7 @@ func (sfs *SecureFS) relativePath(path string) (string, error) {
 // MkdirAll creates a directory and all necessary parent directories with path validation
 func (sfs *SecureFS) MkdirAll(path string, perm os.FileMode) error {
 	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
+	relPath, err := sfs.RelativePath(path)
 	if err != nil {
 		return err
 	}
@@ -244,7 +245,7 @@ func (sfs *SecureFS) MkdirAll(path string, perm os.FileMode) error {
 // os.Root operations for each individual file/directory where possible
 func (sfs *SecureFS) RemoveAll(path string) error {
 	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
+	relPath, err := sfs.RelativePath(path)
 	if err != nil {
 		return err
 	}
@@ -301,7 +302,7 @@ func (sfs *SecureFS) RemoveAll(path string) error {
 // Remove removes a file with path validation
 func (sfs *SecureFS) Remove(path string) error {
 	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
+	relPath, err := sfs.RelativePath(path)
 	if err != nil {
 		return err
 	}
@@ -313,7 +314,7 @@ func (sfs *SecureFS) Remove(path string) error {
 // OpenFile opens a file with path validation
 func (sfs *SecureFS) OpenFile(path string, flag int, perm os.FileMode) (*os.File, error) {
 	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
+	relPath, err := sfs.RelativePath(path)
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +326,7 @@ func (sfs *SecureFS) OpenFile(path string, flag int, perm os.FileMode) (*os.File
 // Open opens a file for reading with path validation
 func (sfs *SecureFS) Open(path string) (*os.File, error) {
 	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
+	relPath, err := sfs.RelativePath(path)
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +339,7 @@ func (sfs *SecureFS) Open(path string) (*os.File, error) {
 // This provides a way to further restrict operations to a subdirectory
 func (sfs *SecureFS) OpenRoot(path string) (*os.Root, error) {
 	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
+	relPath, err := sfs.RelativePath(path)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +351,7 @@ func (sfs *SecureFS) OpenRoot(path string) (*os.Root, error) {
 // Stat returns file info with path validation
 func (sfs *SecureFS) Stat(path string) (fs.FileInfo, error) {
 	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
+	relPath, err := sfs.RelativePath(path)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +363,7 @@ func (sfs *SecureFS) Stat(path string) (fs.FileInfo, error) {
 // Lstat returns file info without following symlinks
 func (sfs *SecureFS) Lstat(path string) (fs.FileInfo, error) {
 	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
+	relPath, err := sfs.RelativePath(path)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +375,7 @@ func (sfs *SecureFS) Lstat(path string) (fs.FileInfo, error) {
 // Exists checks if a path exists with validation
 func (sfs *SecureFS) Exists(path string) (bool, error) {
 	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
+	relPath, err := sfs.RelativePath(path)
 	if err != nil {
 		// Return the validation error instead of silently returning false
 		return false, err
@@ -434,7 +435,7 @@ func (sfs *SecureFS) WriteFile(path string, data []byte, perm os.FileMode) error
 // This provides a secure alternative to echo.Context.File()
 func (sfs *SecureFS) ServeFile(c echo.Context, path string) error {
 	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
+	relPath, err := sfs.RelativePath(path)
 	if err != nil {
 		return err
 	}
@@ -493,7 +494,7 @@ func (sfs *SecureFS) Close() error {
 // a list of directory entries, securely using os.Root.
 func (sfs *SecureFS) ReadDir(path string) ([]os.DirEntry, error) {
 	// Get relative path for os.Root operations
-	relPath, err := sfs.relativePath(path)
+	relPath, err := sfs.RelativePath(path)
 	if err != nil {
 		return nil, err
 	}
@@ -517,4 +518,9 @@ func (sfs *SecureFS) ReadDir(path string) ([]os.DirEntry, error) {
 	}
 
 	return entries, nil
+}
+
+// BaseDir returns the absolute base directory path of the secure filesystem.
+func (sfs *SecureFS) BaseDir() string {
+	return sfs.baseDir
 }

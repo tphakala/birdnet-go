@@ -66,7 +66,7 @@ func (sfs *SecureFS) OpenFIFO(ctx context.Context, path string) (*os.File, error
 		fifo, err = sfs.OpenNamedPipe(sfs.pipeName)
 	} else {
 		// For Unix platforms, we can just open the file
-		relPath, err := sfs.relativePath(path)
+		relPath, err := sfs.RelativePath(path)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get relative path: %w", err)
 		}
