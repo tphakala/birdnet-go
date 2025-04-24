@@ -86,7 +86,8 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 
 	// Serve the file using SecureFS. It handles path validation (relative/absolute within baseDir).
 	// ServeFile internally calls relativePath which ensures the path is within the SecureFS baseDir.
-	return c.SFS.ServeFile(ctx, clipPath)
+	// Use ServeRelativeFile as clipPath is already relative to the baseDir
+	return c.SFS.ServeRelativeFile(ctx, clipPath)
 }
 
 // ServeSpectrogramByID serves a spectrogram image based on note ID using SecureFS
@@ -138,7 +139,8 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 
 	// Serve the generated spectrogram using SecureFS
 	// Pass the path returned by GenerateSpectrogram (which should be relative to SFS base)
-	return c.SFS.ServeFile(ctx, spectrogramPath)
+	// Use ServeRelativeFile as spectrogramPath is already relative to the baseDir
+	return c.SFS.ServeRelativeFile(ctx, spectrogramPath)
 }
 
 // ServeAudioByQueryID serves an audio clip using query parameter for ID
@@ -186,7 +188,8 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	}
 
 	// Serve the generated spectrogram using SecureFS
-	return c.SFS.ServeFile(ctx, spectrogramPath)
+	// Use ServeRelativeFile as spectrogramPath is already relative to the baseDir
+	return c.SFS.ServeRelativeFile(ctx, spectrogramPath)
 }
 
 // httpRange specifies the byte range to be sent to the client
@@ -270,19 +273,26 @@ var spectrogramSemaphore = make(chan struct{}, maxConcurrentSpectrograms)
 // It accepts a context for cancellation and timeout.
 // It returns the relative path to the generated spectrogram, suitable for use with c.SFS.ServeFile.
 func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, width int) (string, error) {
-	// Validate the input audio path and get its path relative to the secure base directory.
-	relAudioPath, err := c.SFS.RelativePath(audioPath)
+	// The audioPath from the DB is already relative to the baseDir. Validate it.
+	relAudioPath, err := c.SFS.ValidateRelativePath(audioPath) // Use the new validator
 	if err != nil {
-		return "", fmt.Errorf("invalid audio path: %w", err)
+		// Wrap the error for clarity
+		return "", fmt.Errorf("invalid audio path '%s': %w", audioPath, err)
 	}
 
-	// Check if the audio file exists within the secure context
-	if _, err := c.SFS.Stat(relAudioPath); err != nil {
-		return "", err // Return error (e.g., os.ErrNotExist) to caller
+	// Check if the audio file exists within the secure context using the validated relative path
+	// Use StatRel as relAudioPath is already validated and relative to baseDir
+	if _, err := c.SFS.StatRel(relAudioPath); err != nil {
+		// Handle file not found specifically, otherwise wrap
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("audio file not found at '%s': %w", relAudioPath, err)
+		}
+		return "", fmt.Errorf("error checking audio file '%s': %w", relAudioPath, err)
 	}
 
 	// --- Calculate paths ---
 	// Absolute path on the host filesystem required for external commands (sox, ffmpeg)
+	// Construct using BaseDir and the validated relative path
 	absAudioPath := filepath.Join(c.SFS.BaseDir(), relAudioPath)
 
 	// Get the base filename and directory relative to the secure root
@@ -291,25 +301,29 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 
 	// Generate spectrogram filename with width (relative path)
 	spectrogramFilename := fmt.Sprintf("%s_%d.png", relBaseFilename, width)
+	// Join relative directory and filename
 	relSpectrogramPath := filepath.Join(relAudioDir, spectrogramFilename)
+	// Ensure the resulting path is clean and still relative
+	relSpectrogramPath = filepath.Clean(relSpectrogramPath)
+	relSpectrogramPath = strings.TrimPrefix(relSpectrogramPath, string(filepath.Separator))
 
 	// Absolute path for the spectrogram on the host filesystem
 	absSpectrogramPath := filepath.Join(c.SFS.BaseDir(), relSpectrogramPath)
 
-	// Check if the spectrogram already exists using secure Stat
-	if _, err := c.SFS.Stat(relSpectrogramPath); err == nil {
+	// Check if the spectrogram already exists using secure Stat with the relative path
+	// Use StatRel as relSpectrogramPath is constructed relative to baseDir
+	if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
 		// Spectrogram exists, return its relative path
 		return relSpectrogramPath, nil
 	} else if !os.IsNotExist(err) {
 		// An unexpected error occurred checking for the spectrogram
-		return "", fmt.Errorf("error checking for existing spectrogram: %w", err)
+		return "", fmt.Errorf("error checking for existing spectrogram '%s': %w", relSpectrogramPath, err)
 	}
 
 	// --- Generate Spectrogram ---
-	// Spectrogram does not exist, create it.
-	// Pass the context down to the generation functions.
+	// Spectrogram does not exist, create it using absolute paths.
 	if err := createSpectrogramWithSoX(ctx, absAudioPath, absSpectrogramPath, width, c.Settings); err != nil {
-		log.Printf("SoX failed, falling back to FFmpeg: %v", err)
+		log.Printf("SoX failed for '%s', falling back to FFmpeg: %v", absAudioPath, err)
 		// Pass the context down to the fallback function as well.
 		if err2 := createSpectrogramWithFFmpeg(ctx, absAudioPath, absSpectrogramPath, width, c.Settings); err2 != nil {
 			// Check for context errors specifically (propagate them up)
@@ -328,8 +342,11 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 				return "", err2
 			}
 			// Return a combined error for general failures
-			return "", fmt.Errorf("failed to generate spectrogram with SoX: %w, and with FFmpeg: %w", err, err2)
+			return "", fmt.Errorf("failed to generate spectrogram with SoX for '%s': %w, and with FFmpeg: %w", absAudioPath, err, err2)
 		}
+		log.Printf("Successfully generated spectrogram for '%s' using FFmpeg fallback", absAudioPath)
+	} else {
+		log.Printf("Successfully generated spectrogram for '%s' using SoX", absAudioPath)
 	}
 
 	// Return the relative path of the newly created spectrogram
