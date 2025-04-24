@@ -3,8 +3,11 @@ package api
 
 import (
 	"crypto/rand"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -14,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -33,15 +37,43 @@ type Controller struct {
 	settingsMutex       sync.RWMutex // Mutex for settings operations
 	detectionCache      *cache.Cache // Cache for detection queries
 	startTime           *time.Time
+	SFS                 *securefs.SecureFS // Add SecureFS instance
 }
 
-// New creates a new API controller
+// New creates a new API controller, returning an error if initialization fails.
 func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
-	controlChan chan string, logger *log.Logger) *Controller {
+	controlChan chan string, logger *log.Logger) (*Controller, error) {
 
 	if logger == nil {
 		logger = log.Default()
+	}
+
+	// Validate and Initialize SecureFS for the media export path
+	mediaPath := settings.Realtime.Audio.Export.Path
+
+	// --- Sanity checks for mediaPath ---
+	if mediaPath == "" {
+		return nil, fmt.Errorf("settings.realtime.audio.export.path must not be empty")
+	}
+	if !filepath.IsAbs(mediaPath) {
+		return nil, fmt.Errorf("settings.realtime.audio.export.path must be absolute, got %q", mediaPath)
+	}
+	fi, err := os.Stat(mediaPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("settings.realtime.audio.export.path directory does not exist: %q", mediaPath)
+		}
+		return nil, fmt.Errorf("error checking settings.realtime.audio.export.path %q: %w", mediaPath, err)
+	}
+	if !fi.IsDir() {
+		return nil, fmt.Errorf("settings.realtime.audio.export.path is not a directory: %q", mediaPath)
+	}
+	// --- End sanity checks ---
+
+	sfs, err := securefs.New(mediaPath) // Create SecureFS rooted at the export path
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize secure filesystem for media: %w", err)
 	}
 
 	c := &Controller{
@@ -53,6 +85,7 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		controlChan:    controlChan,
 		logger:         logger,
 		detectionCache: cache.New(5*time.Minute, 10*time.Minute),
+		SFS:            sfs, // Assign SecureFS instance
 	}
 
 	// Create v2 API group
@@ -70,7 +103,7 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	// Initialize routes
 	c.initRoutes()
 
-	return c
+	return c, nil // Return controller and nil error
 }
 
 // initRoutes registers all API endpoints
@@ -83,6 +116,7 @@ func (c *Controller) initRoutes() {
 		name string
 		fn   func()
 	}{
+		{"search routes", c.initSearchRoutes},
 		{"detection routes", c.initDetectionRoutes},
 		{"analytics routes", c.initAnalyticsRoutes},
 		{"weather routes", c.initWeatherRoutes},

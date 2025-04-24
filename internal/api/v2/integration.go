@@ -27,7 +27,11 @@ func InitializeAPI(
 ) *Controller {
 
 	// Create new API controller
-	apiController := New(e, ds, settings, birdImageCache, sunCalc, controlChan, logger)
+	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, logger)
+	if err != nil {
+		// Handle the error appropriately, perhaps log and panic as API init failure is critical
+		logger.Fatalf("Failed to initialize API controller: %v", err)
+	}
 
 	// Set the processor
 	apiController.Processor = proc
