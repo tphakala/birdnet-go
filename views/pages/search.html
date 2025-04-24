@@ -9,134 +9,7 @@
   - Maintain this architecture for any future enhancements to the search functionality
 */}}
 
-<div class="col-span-12 space-y-4" x-data="{
-    speciesSearchTerm: '',
-    dateRange: {
-        start: '',
-        end: ''
-    },
-    confidenceRange: {
-        min: 0,
-        max: 100
-    },
-    verifiedStatus: 'any',
-    lockedStatus: 'any',
-    deviceFilter: '',
-    formSubmitted: false,
-    advancedFilters: false,
-    isLoading: false,
-    currentPage: 1,
-    totalPages: 1,
-    results: [],
-    totalResults: 0,
-    sortBy: 'date_desc',
-    errorMessage: '',
-    expanded: {},
-    
-    // Form validation methods
-    validateForm() {
-        // Basic validation logic
-        return true;
-    },
-    
-    // Form submission
-    async submitSearch(page = 1) {
-        if (!this.validateForm()) return;
-        
-        this.isLoading = true;
-        this.errorMessage = '';
-        this.currentPage = page;
-        
-        try {
-            const response = await fetch('/api/v2/search', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': document.querySelector('meta[name=\'csrf-token\']').content
-                },
-                body: JSON.stringify({
-                    species: this.speciesSearchTerm,
-                    dateStart: this.dateRange.start,
-                    dateEnd: this.dateRange.end,
-                    confidenceMin: this.confidenceRange.min / 100,
-                    confidenceMax: this.confidenceRange.max / 100,
-                    verifiedStatus: this.verifiedStatus,
-                    lockedStatus: this.lockedStatus,
-                    page: this.currentPage,
-                    sortBy: this.sortBy
-                })
-            });
-            
-            if (!response.ok) {
-                throw new Error(`Server responded with ${response.status}`);
-            }
-            
-            const data = await response.json();
-            // Initialize expanded property for each result
-            this.results = (data.results || []).map(result => ({
-                ...result,
-                expanded: false
-            }));
-            this.totalResults = data.total || 0;
-            this.totalPages = data.pages || 1;
-            this.formSubmitted = true;
-        } catch (error) {
-            console.error('Search error:', error);
-            this.errorMessage = `Search failed: ${error.message}`;
-            this.results = [];
-        } finally {
-            this.isLoading = false;
-        }
-    },
-    
-    // Reset form
-    resetForm() {
-        this.speciesSearchTerm = '';
-        this.dateRange.start = '';
-        this.dateRange.end = '';
-        this.confidenceRange.min = 0;
-        this.confidenceRange.max = 100;
-        this.verifiedStatus = 'any';
-        this.lockedStatus = 'any';
-        this.deviceFilter = '';
-        this.formSubmitted = false;
-        this.results = [];
-        this.errorMessage = '';
-    },
-    
-    // Format date for display
-    formatDate(dateString) {
-        if (!dateString) return '';
-        const date = new Date(dateString);
-        return date.toLocaleString();
-    },
-    
-    // Handle pagination
-    goToPage(page) {
-        if (page < 1 || page > this.totalPages) return;
-        this.submitSearch(page);
-    },
-    
-    // Handle sorting
-    changeSort(sortOption) {
-        this.sortBy = sortOption;
-        this.submitSearch(1);
-    },
-    
-    toggleExpand(recordId) {
-        if (this.expanded[recordId] === undefined) {
-            this.expanded[recordId] = true;
-        } else {
-            this.expanded[recordId] = !this.expanded[recordId];
-        }
-        console.log('Toggled expand for', recordId, 'is now', this.expanded[recordId]);
-    },
-    
-    isExpanded(recordId) {
-        return this.expanded[recordId] || false;
-    }
-
-}">
+<div class="col-span-12 space-y-4" x-data="searchUI">
     <!-- Search Form -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body">
@@ -645,33 +518,135 @@
     .status-badge.locked {
         @apply bg-warning/20 text-warning;
     }
-    
-    .details-row .collapse-content {
-        max-height: none;
-    }
-    
-    .collapse-toggle:checked ~ .collapse-content {
-        max-height: 100vh;
-        padding-bottom: 1rem;
-    }
 </style>
 
 <script>
     document.addEventListener('alpine:init', () => {
         Alpine.data('searchUI', () => ({
-            // ... existing code ...
+            speciesSearchTerm: '',
+            dateRange: {
+                start: '',
+                end: ''
+            },
+            confidenceRange: {
+                min: 0,
+                max: 100
+            },
+            verifiedStatus: 'any',
+            lockedStatus: 'any',
+            deviceFilter: '',
+            formSubmitted: false,
+            advancedFilters: false,
+            isLoading: false,
+            currentPage: 1,
+            totalPages: 1,
+            results: [],
+            totalResults: 0,
+            sortBy: 'date_desc',
+            errorMessage: '',
+            expanded: {},
+            
+            // Form validation methods
+            validateForm() {
+                // Basic validation logic
+                return true;
+            },
+            
+            // Form submission
+            async submitSearch(page = 1) {
+                if (!this.validateForm()) return;
+                
+                this.isLoading = true;
+                this.errorMessage = '';
+                this.currentPage = page;
+                
+                try {
+                    const response = await fetch('/api/v2/search', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-Token': document.querySelector('meta[name=\'csrf-token\']').content
+                        },
+                        body: JSON.stringify({
+                            species: this.speciesSearchTerm,
+                            dateStart: this.dateRange.start,
+                            dateEnd: this.dateRange.end,
+                            confidenceMin: this.confidenceRange.min / 100,
+                            confidenceMax: this.confidenceRange.max / 100,
+                            verifiedStatus: this.verifiedStatus,
+                            lockedStatus: this.lockedStatus,
+                            page: this.currentPage,
+                            sortBy: this.sortBy
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`Server responded with ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    this.results = data.results || [];
+                    this.totalResults = data.total || 0;
+                    this.totalPages = data.pages || 1;
+                    this.formSubmitted = true;
+                    this.expanded = {}; // Reset expanded state when loading new results
+                } catch (error) {
+                    console.error('Search error:', error);
+                    this.errorMessage = `Search failed: ${error.message}`;
+                    this.results = [];
+                } finally {
+                    this.isLoading = false;
+                }
+            },
+            
+            // Reset form
+            resetForm() {
+                this.speciesSearchTerm = '';
+                this.dateRange.start = '';
+                this.dateRange.end = '';
+                this.confidenceRange.min = 0;
+                this.confidenceRange.max = 100;
+                this.verifiedStatus = 'any';
+                this.lockedStatus = 'any';
+                this.deviceFilter = '';
+                this.formSubmitted = false;
+                this.results = [];
+                this.errorMessage = '';
+                this.expanded = {};
+            },
+            
+            // Format date for display
+            formatDate(dateString) {
+                if (!dateString) return '';
+                const date = new Date(dateString);
+                return date.toLocaleString();
+            },
+            
+            // Handle pagination
+            goToPage(page) {
+                if (page < 1 || page > this.totalPages) return;
+                this.submitSearch(page);
+            },
+            
+            // Handle sorting
+            changeSort(sortOption) {
+                this.sortBy = sortOption;
+                this.submitSearch(1);
+            },
             
             toggleExpand(recordId) {
-                if (this.expanded[recordId] === undefined) {
-                    this.expanded[recordId] = true;
-                } else {
-                    this.expanded[recordId] = !this.expanded[recordId];
-                }
+                // Use the spread operator pattern for better reactivity
+                // This creates a new object reference which ensures Alpine detects the change
+                this.expanded = {
+                    ...this.expanded, 
+                    [recordId]: !this.expanded[recordId]
+                };
+                
                 console.log('Toggled expand for', recordId, 'is now', this.expanded[recordId]);
             },
             
             isExpanded(recordId) {
-                return this.expanded[recordId] || false;
+                return Boolean(this.expanded[recordId]);
             }
         }));
     });
