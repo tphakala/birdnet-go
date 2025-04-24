@@ -72,7 +72,7 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Attempt to create the directory if it doesn't exist
-			if err := os.MkdirAll(mediaPath, 0755); err != nil {
+			if err := os.MkdirAll(mediaPath, 0o755); err != nil {
 				return nil, fmt.Errorf("failed to create media export directory %q: %w", mediaPath, err)
 			}
 			// Stat again after creation
