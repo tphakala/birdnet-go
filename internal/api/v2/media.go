@@ -2,16 +2,22 @@
 package api
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // safeFilenamePattern defines the acceptable characters for filenames
@@ -297,7 +303,7 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 
 	// Set appropriate headers
 	ctx.Response().Header().Set("Content-Type", contentType)
-	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
+	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%q\"", filename))
 
 	// Serve the file directly
 	return ctx.File(fullPath)
@@ -342,41 +348,8 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 		audioPath = filepath.Join(c.Settings.Realtime.Audio.Export.Path, clipPath)
 	}
 
-	// Verify the audio file exists
-	if _, err := os.Stat(audioPath); err != nil {
-		if os.IsNotExist(err) {
-			return c.HandleError(ctx, err, "Audio file not found", http.StatusNotFound)
-		}
-		return c.HandleError(ctx, err, "Error accessing audio file", http.StatusInternalServerError)
-	}
-
-	// Get the directory and base filename without extension
-	audioDir := filepath.Dir(audioPath)
-	baseFilename := strings.TrimSuffix(filepath.Base(audioPath), filepath.Ext(audioPath))
-
-	// Generate spectrogram filename with width
-	spectrogramFilename := fmt.Sprintf("%s_%d.png", baseFilename, width)
-	spectrogramPath := filepath.Join(audioDir, spectrogramFilename)
-
-	// Check if the spectrogram already exists
-	if _, err := os.Stat(spectrogramPath); err != nil {
-		if os.IsNotExist(err) {
-			// Spectrogram doesn't exist, generate it
-			spectrogramPath, err = c.generateSpectrogram(audioPath, width)
-			if err != nil {
-				return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
-			}
-		} else {
-			return c.HandleError(ctx, err, "Error accessing spectrogram file", http.StatusInternalServerError)
-		}
-	}
-
-	// Set appropriate headers for an image
-	ctx.Response().Header().Set("Content-Type", "image/png")
-	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", spectrogramFilename))
-
-	// Serve the spectrogram image
-	return ctx.File(spectrogramPath)
+	// Use the internal helper to serve the spectrogram
+	return c.serveSpectrogramInternal(ctx, audioPath, width)
 }
 
 // ServeAudioByQueryID serves an audio clip using query parameter for ID
@@ -393,29 +366,7 @@ func (c *Controller) ServeAudioByQueryID(ctx echo.Context) error {
 	return c.ServeAudioByID(ctx)
 }
 
-// generateSpectrogram creates a spectrogram image for the given audio file
-func (c *Controller) generateSpectrogram(audioPath string, width int) (string, error) {
-	// Extract base filename without extension
-	baseFilename := strings.TrimSuffix(filepath.Base(audioPath), filepath.Ext(audioPath))
-
-	// Generate spectrogram filename with width
-	exportPath := c.Settings.Realtime.Audio.Export.Path
-	spectrogramFilename := fmt.Sprintf("%s_%d.png", baseFilename, width)
-
-	// Validate the spectrogram path
-	spectrogramPath, err := c.validateMediaPath(exportPath, spectrogramFilename)
-	if err != nil {
-		return "", fmt.Errorf("invalid spectrogram path: %w", err)
-	}
-
-	// TODO: Implement the spectrogram generation logic
-	// This will depend on the specific libraries you're using for spectrogram generation
-
-	// For now, we'll just return an error indicating this isn't implemented yet
-	return spectrogramPath, fmt.Errorf("spectrogram generation not implemented yet")
-}
-
-// ServeSpectrogram serves a spectrogram image for an audio clip
+// ServeSpectrogram serves a spectrogram image for an audio clip based on filename
 func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	filename := ctx.Param("filename")
 	exportPath := c.Settings.Realtime.Audio.Export.Path
@@ -436,7 +387,13 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid file request", http.StatusBadRequest)
 	}
 
-	// Check if the audio file exists
+	// Use the internal helper to serve the spectrogram
+	return c.serveSpectrogramInternal(ctx, audioPath, width)
+}
+
+// serveSpectrogramInternal is a helper function to handle common spectrogram serving logic
+func (c *Controller) serveSpectrogramInternal(ctx echo.Context, audioPath string, width int) error {
+	// Verify the audio file exists
 	if _, err := os.Stat(audioPath); err != nil {
 		if os.IsNotExist(err) {
 			return c.HandleError(ctx, err, "Audio file not found", http.StatusNotFound)
@@ -444,31 +401,262 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Error accessing audio file", http.StatusInternalServerError)
 	}
 
-	// Get the base filename without extension
-	baseFilename := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
+	// Generate the spectrogram or get path to existing one
+	spectrogramPath, err := c.generateSpectrogram(audioPath, width)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
+	}
 
-	// Generate spectrogram filename with width
+	// Get the base filename without extension for the response header
+	// Use the original audioPath to derive the filename for the header
+	baseFilename := strings.TrimSuffix(filepath.Base(audioPath), filepath.Ext(audioPath))
 	spectrogramFilename := fmt.Sprintf("%s_%d.png", baseFilename, width)
 
-	// Validate the spectrogram path
-	spectrogramPath, err := c.validateMediaPath(exportPath, spectrogramFilename)
-	if err != nil {
-		return c.HandleError(ctx, err, "Invalid spectrogram path", http.StatusBadRequest)
-	}
-
-	// Check if the spectrogram already exists
-	if _, err := os.Stat(spectrogramPath); err != nil {
-		if os.IsNotExist(err) {
-			// Spectrogram doesn't exist, generate it
-			spectrogramPath, err = c.generateSpectrogram(audioPath, width)
-			if err != nil {
-				return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
-			}
-		} else {
-			return c.HandleError(ctx, err, "Error accessing spectrogram file", http.StatusInternalServerError)
-		}
-	}
+	// Set appropriate headers for an image
+	ctx.Response().Header().Set("Content-Type", "image/png")
+	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%q\"", spectrogramFilename))
 
 	// Serve the spectrogram image
 	return ctx.File(spectrogramPath)
+}
+
+// generateSpectrogram creates a spectrogram image for the given audio file
+func (c *Controller) generateSpectrogram(audioPath string, width int) (string, error) {
+	// Extract base filename without extension
+	baseFilename := strings.TrimSuffix(filepath.Base(audioPath), filepath.Ext(audioPath))
+
+	// Get the directory of the audio file
+	audioDir := filepath.Dir(audioPath)
+
+	// Generate spectrogram filename with width
+	spectrogramFilename := fmt.Sprintf("%s_%d.png", baseFilename, width)
+	spectrogramPath := filepath.Join(audioDir, spectrogramFilename)
+
+	// Check if the spectrogram already exists
+	if _, err := os.Stat(spectrogramPath); err == nil {
+		return spectrogramPath, nil
+	}
+
+	// Check if the audio file exists
+	if _, err := os.Stat(audioPath); err != nil {
+		return "", fmt.Errorf("audio file does not exist: %w", err)
+	}
+
+	// Create the spectrogram using SoX or FFmpeg
+	if err := createSpectrogramWithSoX(audioPath, spectrogramPath, width, c.Settings); err != nil {
+		// Fallback to FFmpeg if SoX fails
+		if err2 := createSpectrogramWithFFmpeg(audioPath, spectrogramPath, width, c.Settings); err2 != nil {
+			return "", fmt.Errorf("failed to generate spectrogram with SoX: %w, and with FFmpeg: %w", err, err2)
+		}
+	}
+
+	return spectrogramPath, nil
+}
+
+// Limit concurrent spectrogram generations to avoid overloading the system
+const maxConcurrentSpectrograms = 4
+
+var spectrogramSemaphore = make(chan struct{}, maxConcurrentSpectrograms)
+
+// createSpectrogramWithSoX generates a spectrogram for an audio file using ffmpeg and SoX.
+// It supports various audio formats by using ffmpeg to pipe the audio to SoX when necessary.
+func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int, settings *conf.Settings) error {
+	// Get ffmpeg and sox paths from settings
+	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
+	soxBinary := settings.Realtime.Audio.SoxPath
+
+	// Verify ffmpeg and SoX paths
+	if ffmpegBinary == "" {
+		return fmt.Errorf("ffmpeg path not set in settings")
+	}
+	if soxBinary == "" {
+		return fmt.Errorf("SoX path not set in settings")
+	}
+
+	// Acquire semaphore to limit concurrent spectrogram generations
+	spectrogramSemaphore <- struct{}{}
+	defer func() { <-spectrogramSemaphore }()
+
+	// Set height based on width
+	heightStr := strconv.Itoa(width / 2)
+	widthStr := strconv.Itoa(width)
+
+	// Determine if we need to use ffmpeg based on file extension
+	ext := strings.ToLower(filepath.Ext(audioClipPath))
+	// remove prefix dot
+	ext = strings.TrimPrefix(ext, ".")
+	useFFmpeg := true
+	for _, soxType := range settings.Realtime.Audio.SoxAudioTypes {
+		if strings.EqualFold(ext, soxType) {
+			useFFmpeg = false
+			break
+		}
+	}
+
+	var cmd *exec.Cmd
+	var soxCmd *exec.Cmd
+
+	// Decode audio using ffmpeg and pipe to sox for spectrogram creation
+	if useFFmpeg {
+		// Build ffmpeg command arguments
+		ffmpegArgs := []string{"-hide_banner", "-i", audioClipPath, "-f", "sox", "-"}
+
+		// Build SoX command arguments
+		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath)...)
+
+		// Set up commands
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command(ffmpegBinary, ffmpegArgs...)
+			soxCmd = exec.Command(soxBinary, soxArgs...)
+		} else {
+			cmd = exec.Command("nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
+			soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
+		}
+
+		// Set up pipe between ffmpeg and sox
+		var err error
+		soxCmd.Stdin, err = cmd.StdoutPipe()
+		if err != nil {
+			return fmt.Errorf("error creating pipe: %w", err)
+		}
+
+		// Capture combined output
+		var ffmpegOutput, soxOutput bytes.Buffer
+		cmd.Stderr = &ffmpegOutput
+		soxCmd.Stderr = &soxOutput
+
+		// Allow other goroutines to run before starting SoX
+		runtime.Gosched()
+
+		// Start sox command
+		if err := soxCmd.Start(); err != nil {
+			return fmt.Errorf("error starting SoX command: %w", err)
+		}
+
+		// Run ffmpeg command
+		if err := cmd.Run(); err != nil {
+			// Stop the SoX command to clean up resources
+			if killErr := soxCmd.Process.Kill(); killErr != nil {
+				log.Printf("Failed to kill SoX process: %v", killErr)
+			}
+
+			// Wait for SoX to finish and collect its error, if any
+			waitErr := soxCmd.Wait()
+
+			// Prepare additional error information
+			var additionalInfo string
+			if waitErr != nil && !errors.Is(waitErr, os.ErrProcessDone) {
+				additionalInfo = fmt.Sprintf("sox wait error: %v", waitErr)
+			}
+
+			return fmt.Errorf("ffmpeg command failed: %w\nffmpeg output: %s\nsox output: %s\n%s",
+				err, ffmpegOutput.String(), soxOutput.String(), additionalInfo)
+		}
+
+		// Allow other goroutines to run before waiting for SoX to finish
+		runtime.Gosched()
+
+		// Wait for sox command to finish
+		if err := soxCmd.Wait(); err != nil {
+			return fmt.Errorf("SoX command failed: %w\nffmpeg output: %s\nsox output: %s",
+				err, ffmpegOutput.String(), soxOutput.String())
+		}
+
+		// Allow other goroutines to run after SoX finishes
+		runtime.Gosched()
+	} else {
+		// Use SoX directly for supported formats
+		soxArgs := append([]string{audioClipPath}, getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath)...)
+
+		if runtime.GOOS == "windows" {
+			soxCmd = exec.Command(soxBinary, soxArgs...)
+		} else {
+			soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
+		}
+
+		// Capture output
+		var soxOutput bytes.Buffer
+		soxCmd.Stderr = &soxOutput
+		soxCmd.Stdout = &soxOutput
+
+		// Allow other goroutines to run before running SoX
+		runtime.Gosched()
+
+		// Run SoX command
+		if err := soxCmd.Run(); err != nil {
+			return fmt.Errorf("SoX command failed: %w\nOutput: %s", err, soxOutput.String())
+		}
+
+		// Allow other goroutines to run after SoX finishes
+		runtime.Gosched()
+	}
+
+	return nil
+}
+
+// getSoxSpectrogramArgs returns the common SoX arguments for generating a spectrogram
+func getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath string) []string {
+	// Default settings for spectrogram generation
+	const audioLength = "15"
+	const dynamicRange = "100"
+
+	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-d", audioLength, "-z", dynamicRange, "-o", spectrogramPath}
+	width, _ := strconv.Atoi(widthStr)
+	if width < 800 {
+		args = append(args, "-r")
+	}
+	return args
+}
+
+// createSpectrogramWithFFmpeg generates a spectrogram for an audio file using only ffmpeg.
+// It supports various audio formats and is used as a fallback if SoX fails.
+func createSpectrogramWithFFmpeg(audioClipPath, spectrogramPath string, width int, settings *conf.Settings) error {
+	// Get ffmpeg path from settings
+	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
+
+	// Verify ffmpeg path
+	if ffmpegBinary == "" {
+		return fmt.Errorf("ffmpeg path not set in settings")
+	}
+
+	// Acquire semaphore to limit concurrent spectrogram generations
+	spectrogramSemaphore <- struct{}{}
+	defer func() { <-spectrogramSemaphore }()
+
+	// Set height based on width
+	height := width / 2
+	heightStr := strconv.Itoa(height)
+	widthStr := strconv.Itoa(width)
+
+	// Build ffmpeg command arguments
+	ffmpegArgs := []string{
+		"-hide_banner",
+		"-y", // answer yes to overwriting the output file if it already exists
+		"-i", audioClipPath,
+		"-lavfi", fmt.Sprintf("showspectrumpic=s=%sx%s:legend=0:gain=3:drange=100", widthStr, heightStr),
+		"-frames:v", "1", // Generate only one frame instead of animation
+		spectrogramPath,
+	}
+
+	// Determine the command based on the OS
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		// Directly use ffmpeg command on Windows
+		cmd = exec.Command(ffmpegBinary, ffmpegArgs...)
+	} else {
+		// Prepend 'nice' to the command on Unix-like systems
+		cmd = exec.Command("nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
+	}
+
+	// Capture combined output
+	var output bytes.Buffer
+	cmd.Stderr = &output
+	cmd.Stdout = &output
+
+	// Run ffmpeg command
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ffmpeg command failed: %w\nOutput: %s", err, output.String())
+	}
+
+	return nil
 }
