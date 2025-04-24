@@ -1072,16 +1072,17 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters, ds *DataStore) *
 	// --- Dynamic TimeOfDay Filter ---
 	if (filters.TimeOfDay == "day" || filters.TimeOfDay == "night" || filters.TimeOfDay == "sunrise" || filters.TimeOfDay == "sunset") && ds.SunCalc != nil && ds.DB != nil { // Include sunrise/sunset
 		dateConditions, err := buildTimeOfDayConditions(filters, ds.SunCalc, ds.DB)
-		if err != nil {
+		switch {
+		case err != nil:
 			log.Printf("WARN: Failed to build TimeOfDay conditions: %v. Skipping filter.", err)
-		} else if len(dateConditions) > 0 {
+		case len(dateConditions) > 0:
 			log.Printf("DEBUG: Successfully built %d TimeOfDay conditions for filter: '%s'", len(dateConditions), filters.TimeOfDay)
 			combinedCondition := ds.DB.Where(dateConditions[0])
 			for i := 1; i < len(dateConditions); i++ {
 				combinedCondition = combinedCondition.Or(dateConditions[i])
 			}
 			query = query.Where(combinedCondition)
-		} else {
+		default:
 			log.Printf("DEBUG: No TimeOfDay conditions were generated for filter: '%s'", filters.TimeOfDay)
 		}
 	} else {
@@ -1101,16 +1102,36 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 	startDateStr := filters.DateStart
 	endDateStr := filters.DateEnd
 
-	// Default to today if no dates are provided, but log a warning as this might be slow
-	if startDateStr == "" && endDateStr == "" {
-		today := time.Now().Format("2006-01-02")
-		startDateStr = today
-		endDateStr = today
-		log.Printf("WARN: TimeOfDay filter applied without date range, defaulting to today (%s). This might be inefficient.", today)
-	} else if startDateStr == "" {
-		startDateStr = endDateStr // Use end date if start date is missing
-	} else if endDateStr == "" {
-		endDateStr = startDateStr // Use start date if end date is missing
+	// Default to a reasonable date range if no dates are provided
+	switch {
+	case startDateStr == "" && endDateStr == "":
+		// Use past year instead of 90 days
+		today := time.Now()
+		endDateStr = today.Format("2006-01-02")
+		startDateStr = today.AddDate(-1, 0, 0).Format("2006-01-02") // 1 year ago
+		log.Printf("INFO: TimeOfDay filter applied without date range, defaulting to last year (%s to %s)",
+			startDateStr, endDateStr)
+	case startDateStr == "":
+		// If only end date is provided, use 1 year before that date as start
+		endDate, err := time.Parse("2006-01-02", endDateStr)
+		if err == nil {
+			startDateStr = endDate.AddDate(-1, 0, 0).Format("2006-01-02")
+		} else {
+			startDateStr = endDateStr // Fallback if parsing fails
+		}
+	case endDateStr == "":
+		// If only start date is provided, use that date +1 year or today (whichever is earlier)
+		startDate, err := time.Parse("2006-01-02", startDateStr)
+		if err == nil {
+			endDate := startDate.AddDate(1, 0, 0)
+			today := time.Now()
+			if endDate.After(today) {
+				endDate = today
+			}
+			endDateStr = endDate.Format("2006-01-02")
+		} else {
+			endDateStr = startDateStr // Fallback if parsing fails
+		}
 	}
 
 	startDate, err := time.Parse("2006-01-02", startDateStr)
@@ -1126,22 +1147,72 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 		return nil, errors.New("end date cannot be before start date")
 	}
 
-	// Limit date range to avoid excessively long queries (e.g., 31 days)
-	if endDate.Sub(startDate).Hours() > 31*24 {
-		return nil, errors.New("date range for TimeOfDay filter cannot exceed 31 days")
+	// Limit date range to avoid excessively long queries (increased to 365 days)
+	if endDate.Sub(startDate).Hours() > 365*24 {
+		return nil, errors.New("date range for TimeOfDay filter cannot exceed 365 days")
 	}
 
 	var conditions []*gorm.DB
 	window := 30 * time.Minute // Define window for sunrise/sunset
 
+	// Optimization: Group dates by week and calculate sun times once per week
+	// Store weekly sun calculations
+	type WeeklySunTimes struct {
+		year      int
+		week      int
+		sunTimes  suncalc.SunEventTimes
+		dateRange []time.Time
+	}
+
+	// Map to store our weekly calculations
+	weeklySunCache := make(map[string]*WeeklySunTimes)
+
+	// First pass: group dates by week
+	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+		year, week := d.ISOWeek()
+		key := fmt.Sprintf("%d-%d", year, week)
+
+		if _, exists := weeklySunCache[key]; !exists {
+			// Create a new entry for this week
+			weeklySunCache[key] = &WeeklySunTimes{
+				year:      year,
+				week:      week,
+				dateRange: []time.Time{},
+			}
+		}
+
+		// Add this date to the week's date range
+		weeklySunCache[key].dateRange = append(weeklySunCache[key].dateRange, d)
+	}
+
+	// Second pass: calculate sun times for one representative day per week
+	for _, weekData := range weeklySunCache {
+		// Find the middle day of the week as representative
+		representativeDay := weekData.dateRange[len(weekData.dateRange)/2]
+		sunTimes, err := sc.GetSunEventTimes(representativeDay)
+		if err != nil {
+			log.Printf("WARN: Could not get sun times for week %d-%d: %v. Skipping week for TimeOfDay filter.",
+				weekData.year, weekData.week, err)
+			continue
+		}
+		weekData.sunTimes = sunTimes
+	}
+
+	// Third pass: build conditions for each date using the weekly sun times
 	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
 		dateStr := d.Format("2006-01-02")
-		sunTimes, err := sc.GetSunEventTimes(d)
-		if err != nil {
-			log.Printf("WARN: Could not get sun times for %s: %v. Skipping date for TimeOfDay filter.", dateStr, err)
+		year, week := d.ISOWeek()
+		key := fmt.Sprintf("%d-%d", year, week)
+
+		// Get the sun times for this week
+		weekData, exists := weeklySunCache[key]
+		if !exists || weekData == nil {
+			log.Printf("WARN: No sun times found for week %d-%d. Skipping date %s for TimeOfDay filter.",
+				year, week, dateStr)
 			continue
 		}
 
+		sunTimes := weekData.sunTimes
 		sunriseStr := sunTimes.Sunrise.Format("15:04:05")
 		sunsetStr := sunTimes.Sunset.Format("15:04:05")
 
@@ -1169,6 +1240,10 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 		}
 		conditions = append(conditions, condition)
 	}
+
+	// Log summary of how many conditions were created
+	log.Printf("INFO: Created %d date-specific conditions for TimeOfDay filter over a %d day range",
+		len(conditions), int(endDate.Sub(startDate).Hours()/24)+1)
 
 	return conditions, nil
 }
