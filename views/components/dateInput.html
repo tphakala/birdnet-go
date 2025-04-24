@@ -1,7 +1,11 @@
 {{define "dateInput"}}
 <!-- Date input field -->
 <div class="form-control relative mt-1" x-data="{
-    showTooltip: null
+    showTooltip: null,
+    touched: false,
+    validInput() {
+        return this.$refs && this.$refs.{{.id}} ? this.$refs.{{.id}}.validity.valid : true;
+    }
 }">
     {{/* No main label needed as it's part of the Date Range label */}}
     <input 
@@ -12,6 +16,7 @@
         class="input input-bordered input-sm w-full" {{/* Match styling with textField */}}
         {{if .placeholder}}placeholder="{{.placeholder}}"{{end}}
         aria-describedby="{{.id}}Tooltip"
+        x-ref="{{.id}}"
     />
     {{if .altLabel}}
     <label class="label pt-1 pb-0">
