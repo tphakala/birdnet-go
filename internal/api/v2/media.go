@@ -283,8 +283,12 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 		// It's already an absolute path
 		fullPath = clipPath
 	} else {
-		// It's just a filename, so join with the export directory
-		fullPath = filepath.Join(c.Settings.Realtime.Audio.Export.Path, clipPath)
+		// It's just a filename, so join with the export directory and validate
+		var err error
+		fullPath, err = c.validateMediaPath(c.Settings.Realtime.Audio.Export.Path, clipPath)
+		if err != nil {
+			return c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
+		}
 	}
 
 	// Verify the file exists
@@ -303,7 +307,7 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 
 	// Set appropriate headers
 	ctx.Response().Header().Set("Content-Type", contentType)
-	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%q\"", filename))
+	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
 
 	// Serve the file directly
 	return ctx.File(fullPath)
@@ -344,8 +348,12 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 		// It's already an absolute path
 		audioPath = clipPath
 	} else {
-		// It's just a filename, so join with the export directory
-		audioPath = filepath.Join(c.Settings.Realtime.Audio.Export.Path, clipPath)
+		// It's just a filename, so join with the export directory and validate
+		var err error
+		audioPath, err = c.validateMediaPath(c.Settings.Realtime.Audio.Export.Path, clipPath)
+		if err != nil {
+			return c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
+		}
 	}
 
 	// Use the internal helper to serve the spectrogram
@@ -414,7 +422,7 @@ func (c *Controller) serveSpectrogramInternal(ctx echo.Context, audioPath string
 
 	// Set appropriate headers for an image
 	ctx.Response().Header().Set("Content-Type", "image/png")
-	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%q\"", spectrogramFilename))
+	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", spectrogramFilename))
 
 	// Serve the spectrogram image
 	return ctx.File(spectrogramPath)
