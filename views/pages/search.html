@@ -12,67 +12,51 @@
 <div class="col-span-12 space-y-4" x-data="searchUI">
     <!-- Search Form -->
     <div class="card bg-base-100 shadow-sm">
-        <div class="card-body">
-            <h2 class="card-title">Search Filters</h2>
+        <div class="card-body p-4">
+            <h2 class="card-title mb-2">Search Filters</h2>
             
-            <form class="mt-4 space-y-6" @submit.prevent="submitSearch()">
+            <form class="mt-2 space-y-4" @submit.prevent="submitSearch()">
                 <!-- Basic Filters -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <!-- Species Search -->
-                    <div class="form-control">
-                        <label class="label">
-                            <span class="label-text">Species</span>
-                        </label>
-                        <div class="flex w-full">
-                            <input 
-                                type="text" 
-                                x-model="speciesSearchTerm" 
-                                placeholder="Search by species name" 
-                                class="input input-bordered w-full"
-                            />
-                        </div>
-                        <label class="label">
-                            <span class="label-text-alt">Enter common or scientific name</span>
-                        </label>
-                    </div>
+                    {{template "textField" dict 
+                        "id" "speciesSearch" 
+                        "label" "Species" 
+                        "model" "speciesSearchTerm" 
+                        "placeholder" "Search by species name" 
+                        "tooltip" "Enter common or scientific name to filter detections."
+                        "altLabel" "Enter common or scientific name"
+                    }}
                     
                     <!-- Date Range -->
                     <div class="form-control">
-                        <label class="label">
+                        <label class="label py-0">
                             <span class="label-text">Date Range</span>
                         </label>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            <div>
-                                <input 
-                                    type="date" 
-                                    x-model="dateRange.start" 
-                                    class="input input-bordered w-full" 
-                                    placeholder="Start date"
-                                />
-                                <label class="label">
-                                    <span class="label-text-alt">Start date</span>
-                                </label>
-                            </div>
-                            <div>
-                                <input 
-                                    type="date" 
-                                    x-model="dateRange.end" 
-                                    class="input input-bordered w-full" 
-                                    placeholder="End date"
-                                />
-                                <label class="label">
-                                    <span class="label-text-alt">End date</span>
-                                </label>
-                            </div>
+                            {{template "dateInput" dict 
+                                "id" "dateStart" 
+                                "model" "dateRange.start" 
+                                "placeholder" "Start date" 
+                                "altLabel" "Start date"
+                                "tooltip" "Select the start date for the search range."
+                            }}
+                            {{template "dateInput" dict 
+                                "id" "dateEnd" 
+                                "model" "dateRange.end" 
+                                "placeholder" "End date" 
+                                "altLabel" "End date"
+                                "tooltip" "Select the end date for the search range."
+                            }}
                         </div>
                     </div>
                 </div>
                 
                 <!-- Advanced Filters Toggle -->
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between mt-1 mb-1">
                     <button 
                         type="button"
-                        class="btn btn-sm btn-ghost" 
+                        class="btn btn-sm btn-ghost py-1"
                         @click="advancedFilters = !advancedFilters"
                     >
                         <span x-text="advancedFilters ? 'Hide Advanced Filters' : 'Show Advanced Filters'"></span>
@@ -90,14 +74,14 @@
                 </div>
                 
                 <!-- Advanced Filters Section -->
-                <div x-show="advancedFilters" x-transition class="space-y-6">
+                <div x-show="advancedFilters" x-transition class="space-y-3">
                     <!-- Confidence Range -->
                     <div class="form-control">
-                        <label class="label">
+                        <label class="label py-0">
                             <span class="label-text">Confidence Range (%)</span>
                             <span class="label-text-alt" x-bind:text="confidenceRange.min + '% - ' + confidenceRange.max + '%'"></span>
                         </label>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                             <div>
                                 <input 
                                     type="range" 
@@ -131,53 +115,56 @@
                         <div x-show="confidenceError" class="text-error text-sm mt-1" x-text="confidenceError"></div>
                     </div>
                     
-                    <!-- Status Filters -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Status & Time of Day Filters -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <!-- Verified Status -->
-                        <div class="form-control">
-                            <label class="label">
-                                <span class="label-text">Verified Status</span>
-                            </label>
-                            <select x-model="verifiedStatus" class="select select-bordered w-full">
-                                <option value="any">Any Status</option>
-                                <option value="verified">Verified Only</option>
-                                <option value="unverified">Unverified Only</option>
-                            </select>
-                        </div>
-                        
-                        <!-- Locked Status -->
-                        <div class="form-control">
-                            <label class="label">
-                                <span class="label-text">Locked Status</span>
-                            </label>
-                            <select x-model="lockedStatus" class="select select-bordered w-full">
-                                <option value="any">Any Status</option>
-                                <option value="locked">Locked Only</option>
-                                <option value="unlocked">Unlocked Only</option>
-                            </select>
-                        </div>
+                        {{template "selectField" dict 
+                            "id" "verifiedStatusFilter" 
+                            "label" "Verified Status" 
+                            "model" "verifiedStatus" 
+                            "options" (dict "any" "Any Status" "verified" "Verified Only" "unverified" "Unverified Only") 
+                            "tooltip" "Filter detections based on their verification status."
+                        }}
+
+                        <!-- Locked Status (Restored) -->
+                        {{template "selectField" dict 
+                            "id" "lockedStatusFilter" 
+                            "label" "Locked Status" 
+                            "model" "lockedStatus" 
+                            "options" (dict "any" "Any Status" "locked" "Locked Only" "unlocked" "Unlocked Only") 
+                            "tooltip" "Filter detections based on whether they are locked (preventing changes)."
+                        }}
+
+                        <!-- Time of Day -->
+                        {{template "selectField" dict 
+                            "id" "timeOfDayFilter" 
+                            "label" "Time of Day" 
+                            "model" "timeOfDayFilter" 
+                            "options" (dict "any" "Any Time" "day" "Day Only" "night" "Night Only" "sunrise" "Sunrise +/- 30min" "sunset" "Sunset +/- 30min") 
+                            "tooltip" "Filter detections based on the calculated time of day (Day, Night, Sunrise, Sunset)."
+                        }}
                     </div>
                 </div>
                 
                 <!-- Form Action Buttons -->
-                <div class="flex flex-col sm:flex-row gap-4 justify-end">
+                <div class="flex flex-col sm:flex-row gap-2 justify-end mt-2">
                     <button 
                         type="button" 
-                        class="btn btn-ghost" 
+                        class="btn btn-ghost btn-sm"
                         @click="resetForm()"
                     >
                         Reset
                     </button>
                     <button 
                         type="submit" 
-                        class="btn btn-primary"
+                        class="btn btn-primary btn-sm"
                         :disabled="isLoading"
                     >
                         <template x-if="isLoading">
-                            <span class="loading loading-spinner loading-sm mr-2"></span>
+                            <span class="loading loading-spinner loading-xs mr-1"></span>
                         </template>
                         <template x-if="!isLoading">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
                                 <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"></path>
                             </svg>
                         </template>
@@ -378,7 +365,7 @@
                                                             </svg>
                                                             <div>
                                                                 <div class="text-base-content/70">Temperature</div>
-                                                                <div class="font-medium" x-text="weather?.temperature ? `${weather.temperature}°C` : 'N/A'"></div>
+                                                                <div class="font-medium" x-text="weather?.hourly?.temperature !== undefined ? `${weather.hourly.temperature}°C` : 'N/A'"></div>
                                                             </div>
                                                         </div>
                                                         <div class="flex items-center">
@@ -387,7 +374,7 @@
                                                             </svg>
                                                             <div>
                                                                 <div class="text-base-content/70">Weather</div>
-                                                                <div class="font-medium" x-text="weather?.condition || 'N/A'"></div>
+                                                                <div class="font-medium" x-text="weather?.hourly?.weatherMain ? weather.hourly.weatherMain : 'N/A'"></div>
                                                             </div>
                                                         </div>
                                                         <div class="flex items-center">
@@ -396,7 +383,7 @@
                                                             </svg>
                                                             <div>
                                                                 <div class="text-base-content/70">Wind</div>
-                                                                <div class="font-medium" x-text="weather?.windSpeed ? `${weather.windSpeed} km/h` : 'N/A'"></div>
+                                                                <div class="font-medium" x-text="weather?.hourly?.windSpeed != null ? `${weather.hourly.windSpeed} km/h` : 'N/A'"></div>
                                                             </div>
                                                         </div>
                                                         <div class="flex items-center">
@@ -405,7 +392,24 @@
                                                             </svg>
                                                             <div>
                                                                 <div class="text-base-content/70">Humidity</div>
-                                                                <div class="font-medium" x-text="weather?.humidity ? `${weather.humidity}%` : 'N/A'"></div>
+                                                                <div class="font-medium" x-text="weather?.hourly?.humidity !== undefined ? `${weather.hourly.humidity}%` : 'N/A'"></div>
+                                                            </div>
+                                                        </div>
+                                                        <!-- Time of Day Display -->
+                                                        <div class="flex items-center">
+                                                            <template x-if="weather?.timeOfDay === 'Day'">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                                                                </svg>
+                                                            </template>
+                                                            <template x-if="weather?.timeOfDay === 'Night'">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                                                                </svg>
+                                                            </template>
+                                                            <div>
+                                                                <div class="text-base-content/70">Time of Day</div>
+                                                                <div class="font-medium" x-text="weather?.timeOfDay || 'N/A'"></div>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -523,6 +527,7 @@
             },
             verifiedStatus: 'any',
             lockedStatus: 'any',
+            timeOfDayFilter: 'any',
             formSubmitted: false,
             advancedFilters: false,
             isLoading: false,
@@ -571,6 +576,7 @@
                             confidenceMax: this.confidenceRange.max / 100,
                             verifiedStatus: this.verifiedStatus,
                             lockedStatus: this.lockedStatus,
+                            timeOfDay: this.timeOfDayFilter,
                             page: this.currentPage,
                             sortBy: this.sortBy
                         })
@@ -603,6 +609,7 @@
                 this.confidenceRange.max = 100;
                 this.verifiedStatus = 'any';
                 this.lockedStatus = 'any';
+                this.timeOfDayFilter = 'any';
                 this.formSubmitted = false;
                 this.results = [];
                 this.errorMessage = '';
