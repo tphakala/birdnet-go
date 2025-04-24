@@ -15,39 +15,45 @@
         <div class="card-body p-4 m-2">
             <h2 class="card-title">Search Filters</h2>
             
-            <form class="space-y-4" @submit.prevent="submitSearch()">
-                <!-- Basic Filters -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- Species Search -->
-                    {{template "textField" dict 
-                        "id" "speciesSearch" 
-                        "label" "Species" 
-                        "model" "speciesSearchTerm" 
-                        "placeholder" "Search by species name" 
-                        "tooltip" "Enter common or scientific name to filter detections."
-                        "altLabel" "Enter common or scientific name"
-                    }}
+            <form id="searchForm" class="space-y-4" @submit.prevent="submitSearch(1)" x-ref="searchForm">
+                <!-- Basic Search Fields -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Species -->
+                    <div class="form-control">
+                        {{template "textField" dict 
+                          "id" "species" 
+                          "label" "Species" 
+                          "model" "speciesSearchTerm" 
+                          "placeholder" "Enter species name"
+                          "tooltip" "Enter full or partial species name (not case sensitive)"
+                        }}
+                    </div>
                     
                     <!-- Date Range -->
                     <div class="form-control">
                         <label class="label">
                             <span class="label-text">Date Range</span>
+                            <span class="help-icon" @mouseenter="showTooltip = 'dateRange'"
+                                @mouseleave="showTooltip = null">ⓘ</span>
                         </label>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                             {{template "dateInput" dict 
-                                "id" "dateStart" 
-                                "model" "dateRange.start" 
-                                "placeholder" "Start date" 
-                                "altLabel" "Start date"
-                                "tooltip" "Select the start date for the search range."
+                              "id" "startDate" 
+                              "model" "dateRange.start" 
+                              "placeholder" "Start Date"
+                              "altLabel" "From"
+                              "tooltip" "Start date for search range (inclusive)"
                             }}
                             {{template "dateInput" dict 
-                                "id" "dateEnd" 
-                                "model" "dateRange.end" 
-                                "placeholder" "End date" 
-                                "altLabel" "End date"
-                                "tooltip" "Select the end date for the search range."
+                              "id" "endDate" 
+                              "model" "dateRange.end" 
+                              "placeholder" "End Date"
+                              "altLabel" "To"
+                              "tooltip" "End date for search range (inclusive)"
                             }}
+                        </div>
+                        <div x-show="showTooltip === 'dateRange'" x-cloak class="tooltip">
+                            Filter detections by date range (leave empty for all dates)
                         </div>
                     </div>
                 </div>
