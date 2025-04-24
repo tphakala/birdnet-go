@@ -1,71 +1,352 @@
 {{define "search"}}
 
-<div class="col-span-12 space-y-4">
-    <!-- Header with Search Icon -->
-    <div class="card bg-base-100 shadow-sm">
-        <div class="card-body items-center text-center">
-            <div class="w-36 h-36 rounded-full bg-gradient-to-b from-base-200 to-base-100 flex items-center justify-center p-1 ring-1 ring-base-content/10">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-24 h-24 text-base-content/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                </svg>
-            </div>
-            <div class="mt-4">
-                <h1 class="text-4xl font-bold">Search</h1>
-                <p class="text-base-content/70 text-lg mt-2">Find bird detections in your database</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Search Form Placeholder -->
-    <div class="collapse bg-base-100 shadow-sm">
-        <input type="checkbox" checked /> 
-        <div class="collapse-title text-xl font-medium">
-            Search Options
-        </div>
-        <div class="collapse-content prose max-w-none">
-            <p>This is where the search form will be implemented, allowing you to search for bird detections by:</p>
-            <ul class="mt-2 list-none pl-0 space-y-2">
-                <li class="flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                    </svg>
-                    Species name
-                </li>
-                <li class="flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                    </svg>
-                    Date and time range
-                </li>
-                <li class="flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                    </svg>
-                    Confidence level
-                </li>
-                <li class="flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                    </svg>
-                    Recording device
-                </li>
-            </ul>
-        </div>
-    </div>
-
-    <!-- Results Placeholder -->
+<div class="col-span-12 space-y-4" x-data="{
+    speciesSearchTerm: '',
+    dateRange: {
+        start: '',
+        end: ''
+    },
+    confidenceRange: {
+        min: 0,
+        max: 100
+    },
+    verifiedStatus: 'any',
+    lockedStatus: 'any',
+    deviceFilter: '',
+    formSubmitted: false,
+    advancedFilters: false,
+    
+    // Form validation methods
+    validateForm() {
+        // Basic validation logic
+        return true;
+    },
+    
+    // Form submission
+    submitSearch() {
+        if (this.validateForm()) {
+            this.formSubmitted = true;
+            // In a future implementation, this would trigger an HTMX request
+        }
+    },
+    
+    // Reset form
+    resetForm() {
+        this.speciesSearchTerm = '';
+        this.dateRange.start = '';
+        this.dateRange.end = '';
+        this.confidenceRange.min = 0;
+        this.confidenceRange.max = 100;
+        this.verifiedStatus = 'any';
+        this.lockedStatus = 'any';
+        this.deviceFilter = '';
+        this.formSubmitted = false;
+    }
+}">
+    <!-- Search Form -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body">
-            <h2 class="card-title">Search Results</h2>
-            <p class="text-base-content/70">Search results will appear here after you submit a search query.</p>
+            <h2 class="card-title">Search Filters</h2>
             
-            <!-- Placeholder for search results -->
-            <div class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]">
+            <form class="mt-4 space-y-6" @submit.prevent="submitSearch()">
+                <!-- Basic Filters -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Species Search -->
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Species</span>
+                        </label>
+                        <div class="flex w-full">
+                            <input 
+                                type="text" 
+                                x-model="speciesSearchTerm" 
+                                placeholder="Search by species name" 
+                                class="input input-bordered w-full"
+                            />
+                        </div>
+                        <label class="label">
+                            <span class="label-text-alt">Enter common or scientific name</span>
+                        </label>
+                    </div>
+                    
+                    <!-- Date Range -->
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Date Range</span>
+                        </label>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <div>
+                                <input 
+                                    type="date" 
+                                    x-model="dateRange.start" 
+                                    class="input input-bordered w-full" 
+                                    placeholder="Start date"
+                                />
+                                <label class="label">
+                                    <span class="label-text-alt">Start date</span>
+                                </label>
+                            </div>
+                            <div>
+                                <input 
+                                    type="date" 
+                                    x-model="dateRange.end" 
+                                    class="input input-bordered w-full" 
+                                    placeholder="End date"
+                                />
+                                <label class="label">
+                                    <span class="label-text-alt">End date</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Advanced Filters Toggle -->
+                <div class="flex items-center justify-between">
+                    <button 
+                        type="button"
+                        class="btn btn-sm btn-ghost" 
+                        @click="advancedFilters = !advancedFilters"
+                    >
+                        <span x-text="advancedFilters ? 'Hide Advanced Filters' : 'Show Advanced Filters'"></span>
+                        <svg 
+                            xmlns="http://www.w3.org/2000/svg" 
+                            class="h-4 w-4 transition-transform" 
+                            :class="{'rotate-180': advancedFilters}"
+                            fill="none" 
+                            viewBox="0 0 24 24" 
+                            stroke="currentColor"
+                        >
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                </div>
+                
+                <!-- Advanced Filters Section -->
+                <div x-show="advancedFilters" x-transition class="space-y-6">
+                    <!-- Confidence Range -->
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Confidence Range (%)</span>
+                            <span class="label-text-alt" x-text="`${confidenceRange.min}% - ${confidenceRange.max}%`"></span>
+                        </label>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <input 
+                                    type="range" 
+                                    min="0" 
+                                    max="100" 
+                                    x-model.number="confidenceRange.min" 
+                                    class="range range-xs" 
+                                />
+                                <div class="flex justify-between text-xs px-2">
+                                    <span>0%</span>
+                                    <span>100%</span>
+                                </div>
+                            </div>
+                            <div>
+                                <input 
+                                    type="range" 
+                                    min="0" 
+                                    max="100" 
+                                    x-model.number="confidenceRange.max" 
+                                    class="range range-xs" 
+                                />
+                                <div class="flex justify-between text-xs px-2">
+                                    <span>0%</span>
+                                    <span>100%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Status Filters -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Verified Status -->
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Verified Status</span>
+                            </label>
+                            <select x-model="verifiedStatus" class="select select-bordered w-full">
+                                <option value="any">Any Status</option>
+                                <option value="verified">Verified Only</option>
+                                <option value="unverified">Unverified Only</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Locked Status -->
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Locked Status</span>
+                            </label>
+                            <select x-model="lockedStatus" class="select select-bordered w-full">
+                                <option value="any">Any Status</option>
+                                <option value="locked">Locked Only</option>
+                                <option value="unlocked">Unlocked Only</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Recording Device -->
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Recording Device</span>
+                        </label>
+                        <input 
+                            type="text" 
+                            x-model="deviceFilter" 
+                            placeholder="Filter by recording device" 
+                            class="input input-bordered w-full"
+                        />
+                    </div>
+                </div>
+                
+                <!-- Form Action Buttons -->
+                <div class="flex flex-col sm:flex-row gap-4 justify-end">
+                    <button 
+                        type="button" 
+                        class="btn btn-ghost" 
+                        @click="resetForm()"
+                    >
+                        Reset
+                    </button>
+                    <button 
+                        type="submit" 
+                        class="btn btn-primary"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+                        </svg>
+                        Search
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Results Area -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <div class="flex items-center justify-between">
+                <h2 class="card-title">Search Results</h2>
+                
+                <!-- Results Count & Sorting (visible when search performed) -->
+                <div x-show="formSubmitted" x-transition class="flex items-center gap-4">
+                    <span class="text-sm text-base-content/70">0 results</span>
+                    <div class="dropdown dropdown-end">
+                        <div tabindex="0" role="button" class="btn btn-sm btn-outline">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z" />
+                            </svg>
+                            Sort
+                        </div>
+                        <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
+                            <li><a>Date (Newest First)</a></li>
+                            <li><a>Date (Oldest First)</a></li>
+                            <li><a>Species (A-Z)</a></li>
+                            <li><a>Confidence (High-Low)</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- When no search performed yet -->
+            <div x-show="!formSubmitted" class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                 </svg>
                 <p class="text-base-content/50 text-center mt-4">No search performed yet</p>
-                <p class="text-base-content/50 text-center text-sm">Use the search options above to find bird detections</p>
+                <p class="text-base-content/50 text-center text-sm">Use the search filters above to find bird detections</p>
+            </div>
+            
+            <!-- Search results table - only visible when search performed -->
+            <div x-show="formSubmitted" x-transition class="overflow-x-auto mt-4">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>Species</th>
+                            <th>Confidence</th>
+                            <th>Status</th>
+                            <th>Device</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Empty state - when search returns no results -->
+                        <tr>
+                            <td colspan="6" class="text-center py-8">
+                                <div class="flex flex-col items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <p class="mt-2 text-base-content/70">No results found</p>
+                                    <p class="text-sm text-base-content/50">Try adjusting your search filters</p>
+                                </div>
+                            </td>
+                        </tr>
+                        
+                        <!-- This will be populated with actual search results -->
+                        <!-- Example row for visualization purposes -->
+                        <!-- 
+                        <tr>
+                            <td>2023-04-15 08:45:22</td>
+                            <td>
+                                <div class="flex items-center gap-2">
+                                    <div class="avatar placeholder">
+                                        <div class="bg-neutral-focus text-neutral-content rounded-full w-8">
+                                            <span class="text-xs">AM</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="font-bold">American Robin</div>
+                                        <div class="text-xs opacity-50">Turdus migratorius</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="flex items-center">
+                                    <div class="w-16 h-2 rounded-full overflow-hidden bg-base-200">
+                                        <div class="h-full bg-success" style="width: 85%"></div>
+                                    </div>
+                                    <span class="ml-2">85%</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="flex gap-1">
+                                    <div class="badge badge-outline badge-success">Verified</div>
+                                    <div class="badge badge-outline">Unlocked</div>
+                                </div>
+                            </td>
+                            <td>Device A</td>
+                            <td>
+                                <div class="flex gap-1">
+                                    <button class="btn btn-xs btn-square">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                                        </svg>
+                                    </button>
+                                    <button class="btn btn-xs btn-square">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination - visible when results are available -->
+            <div x-show="formSubmitted" x-transition class="flex justify-center mt-6">
+                <div class="join">
+                    <button class="join-item btn">«</button>
+                    <button class="join-item btn">Page 1</button>
+                    <button class="join-item btn">»</button>
+                </div>
             </div>
         </div>
     </div>
