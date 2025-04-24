@@ -124,7 +124,12 @@
     },
     
     toggleExpand(recordId) {
-        this.expanded[recordId] = !this.expanded[recordId];
+        if (this.expanded[recordId] === undefined) {
+            this.expanded[recordId] = true;
+        } else {
+            this.expanded[recordId] = !this.expanded[recordId];
+        }
+        console.log('Toggled expand for', recordId, 'is now', this.expanded[recordId]);
     },
     
     isExpanded(recordId) {
@@ -373,11 +378,6 @@
                                 <td x-text="formatDate(result.timestamp)"></td>
                                 <td>
                                     <div class="flex items-center gap-2">
-                                        <div class="avatar placeholder">
-                                            <div class="bg-neutral-focus text-neutral-content rounded-full w-8">
-                                                <span class="text-xs" x-text="result.commonName ? result.commonName.substring(0, 2).toUpperCase() : '--'"></span>
-                                            </div>
-                                        </div>
                                         <div>
                                             <div class="font-bold" x-text="result.commonName || 'Unknown'"></div>
                                             <div class="text-xs opacity-50" x-text="result.scientificName || ''"></div>
@@ -422,181 +422,178 @@
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                                             </svg>
                                         </button>
-                                        <label :for="'collapse-' + result.id" class="btn btn-xs btn-square">
+                                        <button class="btn btn-xs btn-square" @click="toggleExpand(result.id)">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" :class="{'rotate-180': isExpanded(result.id)}">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                                             </svg>
-                                        </label>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
-                            <tr class="details-row">
+                            <tr x-show="isExpanded(result.id)" x-cloak>
                                 <td colspan="5" class="p-0">
-                                    <div class="collapse" :id="'collapse-' + result.id">
-                                        <input type="checkbox" @change="toggleExpand(result.id)" :checked="isExpanded(result.id)" :id="'collapse-' + result.id" class="collapse-toggle" />
-                                        <div class="collapse-content bg-base-200">
-                                            <!-- Expanded Information -->
-                                            <div class="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                                <!-- Audio Player Container -->
-                                                <div class="bg-base-200 rounded-box p-4">
-                                                    <h3 class="text-lg font-semibold mb-2">Audio Player</h3>
+                                    <div class="p-4 bg-base-200">
+                                        <!-- Expanded Information -->
+                                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                            <!-- Audio Player Container -->
+                                            <div class="bg-base-200 rounded-box p-4">
+                                                <h3 class="text-lg font-semibold mb-2">Audio Player</h3>
+                                                
+                                                <div class="audio-player-container relative">
+                                                    <!-- Hidden audio element -->
+                                                    <audio :id="'audio-' + result.id" class="hidden" :src="'/api/v2/audio/' + result.id"></audio>
                                                     
-                                                    <div class="audio-player-container relative">
-                                                        <!-- Hidden audio element -->
-                                                        <audio :id="'audio-' + result.id" class="hidden" :src="'/api/v2/audio/' + result.id"></audio>
-                                                        
-                                                        <!-- Spectrogram Image -->
-                                                        <img :src="'/api/v2/spectrogram/' + result.id" alt="Spectrogram" 
-                                                            class="w-full h-32 rounded object-contain" />
-                                                        
-                                                        <!-- Play position indicator -->
-                                                        <div :id="'position-indicator-' + result.id" class="absolute top-0 bottom-0 w-0.5 bg-primary pointer-events-none"
-                                                            style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
-                                                        
-                                                        <!-- Audio controls overlay -->
-                                                        <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md">
-                                                            <div class="flex items-center justify-between">
-                                                                <button :id="'playPause-' + result.id" class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
-                                                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                                    </svg>
-                                                                </button>
-                                                                <div :id="'progress-' + result.id" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
-                                                                    <div class="bg-primary h-1.5 rounded-full" style="width: 0%"></div>
-                                                                </div>
-                                                                <span :id="'currentTime-' + result.id" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-                                                                <a :href="'/api/v2/media/audio?id=' + result.id" download class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
-                                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                                                                    </svg>
-                                                                </a>
+                                                    <!-- Spectrogram Image -->
+                                                    <img :src="'/api/v2/spectrogram/' + result.id" alt="Spectrogram" 
+                                                        class="w-full h-32 rounded object-contain" />
+                                                    
+                                                    <!-- Play position indicator -->
+                                                    <div :id="'position-indicator-' + result.id" class="absolute top-0 bottom-0 w-0.5 bg-primary pointer-events-none"
+                                                        style="left: 0; transition: left 0.1s linear; opacity: 0;"></div>
+                                                    
+                                                    <!-- Audio controls overlay -->
+                                                    <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md">
+                                                        <div class="flex items-center justify-between">
+                                                            <button :id="'playPause-' + result.id" class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0">
+                                                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                                </svg>
+                                                            </button>
+                                                            <div :id="'progress-' + result.id" class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer">
+                                                                <div class="bg-primary h-1.5 rounded-full" style="width: 0%"></div>
                                                             </div>
+                                                            <span :id="'currentTime-' + result.id" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
+                                                            <a :href="'/api/v2/media/audio?id=' + result.id" download class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
+                                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                                                </svg>
+                                                            </a>
                                                         </div>
                                                     </div>
                                                 </div>
+                                            </div>
+                                            
+                                            <!-- Weather Information Container -->
+                                            <div class="bg-base-200 rounded-box p-4" x-data="{
+                                                weather: null,
+                                                loading: true,
+                                                error: null,
                                                 
-                                                <!-- Weather Information Container -->
-                                                <div class="bg-base-200 rounded-box p-4" x-data="{
-                                                    weather: null,
-                                                    loading: true,
-                                                    error: null,
-                                                    
-                                                    init() {
-                                                        this.fetchWeatherInfo(this.$el.closest('[x-data]').__x.$data.result.id);
-                                                    },
-                                                    
-                                                    fetchWeatherInfo(resultId) {
-                                                        fetch(`/api/v2/weather/detection/${resultId}`)
-                                                            .then(response => {
-                                                                if (!response.ok) {
-                                                                    throw new Error('Weather data not available');
-                                                                }
-                                                                return response.json();
-                                                            })
-                                                            .then(data => {
-                                                                this.weather = data;
-                                                                this.loading = false;
-                                                            })
-                                                            .catch(err => {
-                                                                console.error('Error fetching weather data:', err);
-                                                                this.error = err.message;
-                                                                this.loading = false;
-                                                            });
-                                                    }
-                                                }">
-                                                    <h3 class="text-lg font-semibold text-gray-800 mb-3">Weather Information</h3>
-                                                    
-                                                    <!-- Loading state -->
-                                                    <div x-show="loading" class="py-4 flex justify-center">
-                                                        <svg class="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                                                        </svg>
-                                                    </div>
-                                                    
-                                                    <!-- Error state -->
-                                                    <div x-show="!loading && error" class="py-4 text-center text-red-500">
-                                                        <svg class="w-6 h-6 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                                        </svg>
-                                                        <p x-text="error"></p>
-                                                    </div>
-                                                    
-                                                    <!-- Weather data display -->
-                                                    <div x-show="!loading && !error && weather" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                        <!-- Weather conditions -->
-                                                        <div class="bg-blue-50 p-3 rounded-lg">
-                                                            <h4 class="font-medium text-gray-700 mb-2">Conditions</h4>
-                                                            <div class="flex items-center space-x-3">
-                                                                <div class="bg-white p-2 rounded-lg shadow-sm">
-                                                                    <svg class="w-10 h-10 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                                                              x-bind:d="weather.conditions && (weather.conditions.toLowerCase().includes('clear') || weather.conditions.toLowerCase().includes('sun')) 
-                                                                                        ? 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z' 
-                                                                                        : 'M3 15a4 4 0 004 4h9a5 5 0 10-4.9-6.001 5.002 5.002 0 00-9.1 2.001z'"/>
-                                                                    </svg>
-                                                                </div>
-                                                                <div>
-                                                                    <p class="text-2xl font-bold" x-text="Math.round(weather.temperature) + '°C'"></p>
-                                                                    <p class="text-sm text-gray-600" x-text="weather.conditions"></p>
-                                                                </div>
+                                                init() {
+                                                    this.fetchWeatherInfo(this.$el.closest('[x-data]').__x.$data.result.id);
+                                                },
+                                                
+                                                fetchWeatherInfo(resultId) {
+                                                    fetch(`/api/v2/weather/detection/${resultId}`)
+                                                        .then(response => {
+                                                            if (!response.ok) {
+                                                                throw new Error('Weather data not available');
+                                                            }
+                                                            return response.json();
+                                                        })
+                                                        .then(data => {
+                                                            this.weather = data;
+                                                            this.loading = false;
+                                                        })
+                                                        .catch(err => {
+                                                            console.error('Error fetching weather data:', err);
+                                                            this.error = err.message;
+                                                            this.loading = false;
+                                                        });
+                                                }
+                                            }">
+                                                <h3 class="text-lg font-semibold text-gray-800 mb-3">Weather Information</h3>
+                                                
+                                                <!-- Loading state -->
+                                                <div x-show="loading" class="py-4 flex justify-center">
+                                                    <svg class="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                                                    </svg>
+                                                </div>
+                                                
+                                                <!-- Error state -->
+                                                <div x-show="!loading && error" class="py-4 text-center text-red-500">
+                                                    <svg class="w-6 h-6 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                                    </svg>
+                                                    <p x-text="error"></p>
+                                                </div>
+                                                
+                                                <!-- Weather data display -->
+                                                <div x-show="!loading && !error && weather" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <!-- Weather conditions -->
+                                                    <div class="bg-blue-50 p-3 rounded-lg">
+                                                        <h4 class="font-medium text-gray-700 mb-2">Conditions</h4>
+                                                        <div class="flex items-center space-x-3">
+                                                            <div class="bg-white p-2 rounded-lg shadow-sm">
+                                                                <svg class="w-10 h-10 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                                                          x-bind:d="weather.conditions && (weather.conditions.toLowerCase().includes('clear') || weather.conditions.toLowerCase().includes('sun')) 
+                                                                                    ? 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z' 
+                                                                                    : 'M3 15a4 4 0 004 4h9a5 5 0 10-4.9-6.001 5.002 5.002 0 00-9.1 2.001z'"/>
+                                                                </svg>
+                                                            </div>
+                                                            <div>
+                                                                <p class="text-2xl font-bold" x-text="Math.round(weather.temperature) + '°C'"></p>
+                                                                <p class="text-sm text-gray-600" x-text="weather.conditions"></p>
                                                             </div>
                                                         </div>
-                                                        
-                                                        <!-- Time information -->
-                                                        <div class="bg-indigo-50 p-3 rounded-lg">
-                                                            <h4 class="font-medium text-gray-700 mb-2">Sun Times</h4>
-                                                            <div class="space-y-2">
-                                                                <div class="flex items-center">
-                                                                    <svg class="w-5 h-5 text-yellow-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
-                                                                    </svg>
-                                                                    <span class="text-sm">Sunrise:</span>
-                                                                    <span class="ml-auto text-sm font-medium" x-text="new Date(weather.sunrise * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})"></span>
-                                                                </div>
-                                                                <div class="flex items-center">
-                                                                    <svg class="w-5 h-5 text-orange-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2 M12 7a4 4 0 100 8 4 4 0 000-8z"/>
-                                                                    </svg>
-                                                                    <span class="text-sm">Sunset:</span>
-                                                                    <span class="ml-auto text-sm font-medium" x-text="new Date(weather.sunset * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})"></span>
-                                                                </div>
-                                                                <div class="flex items-center">
-                                                                    <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                                                    </svg>
-                                                                    <span class="text-sm">Local time:</span>
-                                                                    <span class="ml-auto text-sm font-medium" x-text="new Date(weather.dt * 1000).toLocaleString()"></span>
-                                                                </div>
+                                                    </div>
+                                                    
+                                                    <!-- Time information -->
+                                                    <div class="bg-indigo-50 p-3 rounded-lg">
+                                                        <h4 class="font-medium text-gray-700 mb-2">Sun Times</h4>
+                                                        <div class="space-y-2">
+                                                            <div class="flex items-center">
+                                                                <svg class="w-5 h-5 text-yellow-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                                                                </svg>
+                                                                <span class="text-sm">Sunrise:</span>
+                                                                <span class="ml-auto text-sm font-medium" x-text="new Date(weather.sunrise * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})"></span>
+                                                            </div>
+                                                            <div class="flex items-center">
+                                                                <svg class="w-5 h-5 text-orange-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2 M12 7a4 4 0 100 8 4 4 0 000-8z"/>
+                                                                </svg>
+                                                                <span class="text-sm">Sunset:</span>
+                                                                <span class="ml-auto text-sm font-medium" x-text="new Date(weather.sunset * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})"></span>
+                                                            </div>
+                                                            <div class="flex items-center">
+                                                                <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                                                </svg>
+                                                                <span class="text-sm">Local time:</span>
+                                                                <span class="ml-auto text-sm font-medium" x-text="new Date(weather.dt * 1000).toLocaleString()"></span>
                                                             </div>
                                                         </div>
-                                                        
-                                                        <!-- Wind and humidity -->
-                                                        <div class="bg-green-50 p-3 rounded-lg">
-                                                            <h4 class="font-medium text-gray-700 mb-2">Wind & Humidity</h4>
-                                                            <div class="space-y-2">
-                                                                <div class="flex items-center">
-                                                                    <svg class="w-5 h-5 text-blue-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/>
-                                                                    </svg>
-                                                                    <span class="text-sm">Wind:</span>
-                                                                    <span class="ml-auto text-sm font-medium" x-text="Math.round(weather.wind_speed) + ' m/s'"></span>
-                                                                </div>
-                                                                <div class="flex items-center">
-                                                                    <svg class="w-5 h-5 text-blue-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-                                                                    </svg>
-                                                                    <span class="text-sm">Humidity:</span>
-                                                                    <span class="ml-auto text-sm font-medium" x-text="weather.humidity + '%'"></span>
-                                                                </div>
-                                                                <div class="flex items-center">
-                                                                    <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                                                                    </svg>
-                                                                    <span class="text-sm">Pressure:</span>
-                                                                    <span class="ml-auto text-sm font-medium" x-text="weather.pressure + ' hPa'"></span>
-                                                                </div>
+                                                    </div>
+                                                    
+                                                    <!-- Wind and humidity -->
+                                                    <div class="bg-green-50 p-3 rounded-lg">
+                                                        <h4 class="font-medium text-gray-700 mb-2">Wind & Humidity</h4>
+                                                        <div class="space-y-2">
+                                                            <div class="flex items-center">
+                                                                <svg class="w-5 h-5 text-blue-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/>
+                                                                </svg>
+                                                                <span class="text-sm">Wind:</span>
+                                                                <span class="ml-auto text-sm font-medium" x-text="Math.round(weather.wind_speed) + ' m/s'"></span>
+                                                            </div>
+                                                            <div class="flex items-center">
+                                                                <svg class="w-5 h-5 text-blue-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                                                                </svg>
+                                                                <span class="text-sm">Humidity:</span>
+                                                                <span class="ml-auto text-sm font-medium" x-text="weather.humidity + '%'"></span>
+                                                            </div>
+                                                            <div class="flex items-center">
+                                                                <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                                                                </svg>
+                                                                <span class="text-sm">Pressure:</span>
+                                                                <span class="ml-auto text-sm font-medium" x-text="weather.pressure + ' hPa'"></span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -665,7 +662,12 @@
             // ... existing code ...
             
             toggleExpand(recordId) {
-                this.expanded[recordId] = !this.expanded[recordId];
+                if (this.expanded[recordId] === undefined) {
+                    this.expanded[recordId] = true;
+                } else {
+                    this.expanded[recordId] = !this.expanded[recordId];
+                }
+                console.log('Toggled expand for', recordId, 'is now', this.expanded[recordId]);
             },
             
             isExpanded(recordId) {
