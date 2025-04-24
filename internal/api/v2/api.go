@@ -56,15 +56,34 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	if mediaPath == "" {
 		return nil, fmt.Errorf("settings.realtime.audio.export.path must not be empty")
 	}
+	// Resolve relative path to absolute based on executable directory
 	if !filepath.IsAbs(mediaPath) {
-		return nil, fmt.Errorf("settings.realtime.audio.export.path must be absolute, got %q", mediaPath)
+		exePath, err := os.Executable()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get executable path to resolve relative media path: %w", err)
+		}
+		exeDir := filepath.Dir(exePath)
+		mediaPath = filepath.Join(exeDir, mediaPath)
+		logger.Printf("Resolved relative media export path \"%s\" to absolute path \"%s\"", settings.Realtime.Audio.Export.Path, mediaPath) // Log the resolution
 	}
+
+	// Now perform checks on the potentially resolved absolute path
 	fi, err := os.Stat(mediaPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("settings.realtime.audio.export.path directory does not exist: %q", mediaPath)
+			// Attempt to create the directory if it doesn't exist
+			if err := os.MkdirAll(mediaPath, 0o755); err != nil {
+				return nil, fmt.Errorf("failed to create media export directory %q: %w", mediaPath, err)
+			}
+			// Stat again after creation
+			fi, err = os.Stat(mediaPath)
+			if err != nil {
+				return nil, fmt.Errorf("error checking newly created media export path %q: %w", mediaPath, err)
+			}
+		} else {
+			// Other Stat error
+			return nil, fmt.Errorf("error checking settings.realtime.audio.export.path %q: %w", mediaPath, err)
 		}
-		return nil, fmt.Errorf("error checking settings.realtime.audio.export.path %q: %w", mediaPath, err)
 	}
 	if !fi.IsDir() {
 		return nil, fmt.Errorf("settings.realtime.audio.export.path is not a directory: %q", mediaPath)
