@@ -980,6 +980,15 @@ type SearchFilters struct {
 	SortBy         string
 }
 
+// ApplySpeciesFilter applies the species filter to a GORM query
+func applySpeciesFilter(query *gorm.DB, species string) *gorm.DB {
+	if species != "" {
+		likeParam := "%" + species + "%"
+		return query.Where("notes.scientific_name LIKE ? OR notes.common_name LIKE ?", likeParam, likeParam)
+	}
+	return query
+}
+
 // SearchDetections retrieves detections based on the given filters
 func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error) {
 	// Build the query with GORM query builder
@@ -996,10 +1005,7 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 	query = query.Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id")
 
 	// Apply filters
-	if filters.Species != "" {
-		likeParam := "%" + filters.Species + "%"
-		query = query.Where("notes.scientific_name LIKE ? OR notes.common_name LIKE ?", likeParam, likeParam)
-	}
+	query = applySpeciesFilter(query, filters.Species)
 
 	if filters.DateStart != "" {
 		query = query.Where("notes.date >= ?", filters.DateStart)
@@ -1035,10 +1041,7 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 		Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id")
 
 	// Apply the *same* filters to the count query
-	if filters.Species != "" {
-		likeParam := "%" + filters.Species + "%"
-		countQuery = countQuery.Where("notes.scientific_name LIKE ? OR notes.common_name LIKE ?", likeParam, likeParam)
-	}
+	countQuery = applySpeciesFilter(countQuery, filters.Species)
 	if filters.DateStart != "" {
 		countQuery = countQuery.Where("notes.date >= ?", filters.DateStart)
 	}
@@ -1114,41 +1117,42 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 	// Convert ScannedResult objects to DetectionRecord objects
 	results := make([]DetectionRecord, 0, len(scannedResults))
 	for i := range scannedResults {
+		scanned := &scannedResults[i] // Use pointer to avoid copy
 		// Determine verification status
 		verifiedStatus := "unverified" // Default
-		if scannedResults[i].ReviewVerified != nil {
-			verifiedStatus = *scannedResults[i].ReviewVerified
+		if scanned.ReviewVerified != nil {
+			verifiedStatus = *scanned.ReviewVerified
 		}
 
 		// Parse timestamp string to time.Time
-		timestamp, err := time.Parse("2006-01-02 15:04:05", scannedResults[i].Date+" "+scannedResults[i].Time)
+		timestamp, err := time.Parse("2006-01-02 15:04:05", scanned.Date+" "+scanned.Time)
 		if err != nil {
-			log.Printf("Warning: Failed to parse timestamp '%s %s' for note ID %d: %v. Using current time.", scannedResults[i].Date, scannedResults[i].Time, scannedResults[i].ID, err)
+			log.Printf("Warning: Failed to parse timestamp '%s %s' for note ID %d: %v. Using current time.", scanned.Date, scanned.Time, scanned.ID, err)
 			timestamp = time.Now() // Fallback
 		}
 
 		// Calculate week from date if needed
 		week := 0
-		if t, err := time.Parse("2006-01-02", scannedResults[i].Date); err == nil {
+		if t, err := time.Parse("2006-01-02", scanned.Date); err == nil {
 			_, week = t.ISOWeek()
 		}
 
 		// Create detection record
 		record := DetectionRecord{
-			ID:             fmt.Sprintf("%d", scannedResults[i].ID),
+			ID:             fmt.Sprintf("%d", scanned.ID),
 			Timestamp:      timestamp,
-			ScientificName: scannedResults[i].ScientificName,
-			CommonName:     scannedResults[i].CommonName,
-			Confidence:     scannedResults[i].Confidence,
-			Latitude:       scannedResults[i].Latitude,
-			Longitude:      scannedResults[i].Longitude,
+			ScientificName: scanned.ScientificName,
+			CommonName:     scanned.CommonName,
+			Confidence:     scanned.Confidence,
+			Latitude:       scanned.Latitude,
+			Longitude:      scanned.Longitude,
 			Week:           week,
-			AudioFilePath:  scannedResults[i].ClipName,
-			Verified:       verifiedStatus,             // Use derived status
-			Locked:         scannedResults[i].IsLocked, // Use derived status
-			HasAudio:       scannedResults[i].ClipName != "",
-			Device:         scannedResults[i].SourceNode,
-			Source:         scannedResults[i].Source,
+			AudioFilePath:  scanned.ClipName,
+			Verified:       verifiedStatus,   // Use derived status
+			Locked:         scanned.IsLocked, // Use derived status
+			HasAudio:       scanned.ClipName != "",
+			Device:         scanned.SourceNode,
+			Source:         scanned.Source,
 		}
 
 		results = append(results, record)
