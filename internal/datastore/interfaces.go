@@ -62,6 +62,8 @@ type Interface interface {
 	GetHourlyAnalyticsData(date string, species string) ([]HourlyAnalyticsData, error)
 	GetDailyAnalyticsData(startDate, endDate string, species string) ([]DailyAnalyticsData, error)
 	GetDetectionTrends(period string, limit int) ([]DailyAnalyticsData, error)
+	// Search functionality
+	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 }
 
 // DataStore implements StoreInterface using a GORM database.
@@ -959,4 +961,153 @@ func (ds *DataStore) CountHourlyDetections(date, hour string, duration int) (int
 	}
 
 	return count, nil
+}
+
+// SearchFilters defines parameters for filtering detection records
+type SearchFilters struct {
+	Species        string
+	DateStart      string
+	DateEnd        string
+	ConfidenceMin  float64
+	ConfidenceMax  float64
+	VerifiedOnly   bool
+	UnverifiedOnly bool
+	LockedOnly     bool
+	UnlockedOnly   bool
+	Device         string
+	Page           int
+	PerPage        int
+	SortBy         string
+}
+
+// SearchDetections retrieves detections based on the given filters
+func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error) {
+	// Build the query with GORM query builder
+	query := ds.DB.Table("notes")
+
+	// Apply filters
+	if filters.Species != "" {
+		likeParam := "%" + filters.Species + "%"
+		query = query.Where("scientific_name LIKE ? OR common_name LIKE ?", likeParam, likeParam)
+	}
+
+	if filters.DateStart != "" {
+		query = query.Where("date >= ?", filters.DateStart)
+	}
+
+	if filters.DateEnd != "" {
+		query = query.Where("date <= ?", filters.DateEnd)
+	}
+
+	query = query.Where("confidence >= ? AND confidence <= ?",
+		filters.ConfidenceMin, filters.ConfidenceMax)
+
+	if filters.VerifiedOnly {
+		query = query.Joins("JOIN note_reviews ON notes.id = note_reviews.note_id").
+			Where("note_reviews.verified = 'correct'")
+	} else if filters.UnverifiedOnly {
+		query = query.Where("NOT EXISTS (SELECT 1 FROM note_reviews WHERE notes.id = note_reviews.note_id)")
+	}
+
+	if filters.LockedOnly {
+		query = query.Joins("JOIN note_locks ON notes.id = note_locks.note_id")
+	} else if filters.UnlockedOnly {
+		query = query.Where("NOT EXISTS (SELECT 1 FROM note_locks WHERE notes.id = note_locks.note_id)")
+	}
+
+	if filters.Device != "" {
+		query = query.Where("source_node LIKE ?", "%"+filters.Device+"%")
+	}
+
+	// Get total count
+	var total int64
+	err := query.Count(&total).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("count query failed: %w", err)
+	}
+
+	// Apply sorting
+	switch filters.SortBy {
+	case "date_asc":
+		query = query.Order("date ASC, time ASC")
+	case "species_asc":
+		query = query.Order("common_name ASC")
+	case "confidence_desc":
+		query = query.Order("confidence DESC")
+	default:
+		query = query.Order("date DESC, time DESC") // Default sort by date, newest first
+	}
+
+	// Apply pagination
+	limit := filters.PerPage
+	if limit <= 0 {
+		limit = 20 // Default limit
+	}
+	offset := (filters.Page - 1) * limit
+	query = query.Limit(limit).Offset(offset)
+
+	// We need to select all the fields we want to map to DetectionRecord
+	query = query.Select("notes.id, notes.date, notes.time, notes.scientific_name, notes.common_name, notes.confidence, " +
+		"notes.latitude, notes.longitude, notes.clip_name, notes.source, notes.source_node")
+
+	// Execute the query
+	var notes []Note
+	if err := query.Find(&notes).Error; err != nil {
+		return nil, 0, fmt.Errorf("search query failed: %w", err)
+	}
+
+	// Convert Note objects to DetectionRecord objects
+	results := make([]DetectionRecord, 0, len(notes))
+	for i := range notes {
+		note := &notes[i] // Get pointer to avoid copying
+		// Get verification status and lock status
+		var verifiedStatus string = "unverified"
+		isLocked := false
+
+		// Load related entities if needed
+		var review NoteReview
+		if err := ds.DB.Where("note_id = ?", note.ID).First(&review).Error; err == nil {
+			verifiedStatus = review.Verified // Use the string directly
+		}
+
+		var lock NoteLock
+		if err := ds.DB.Where("note_id = ?", note.ID).First(&lock).Error; err == nil {
+			isLocked = true
+		}
+
+		// Parse timestamp string to time.Time
+		timestamp, err := time.Parse("2006-01-02 15:04:05", note.Date+" "+note.Time)
+		if err != nil {
+			// If parsing fails, use current time as fallback
+			timestamp = time.Now()
+		}
+
+		// Calculate week from date if needed (simple approximation)
+		week := 0
+		if t, err := time.Parse("2006-01-02", note.Date); err == nil {
+			_, week = t.ISOWeek()
+		}
+
+		// Create detection record
+		record := DetectionRecord{
+			ID:             fmt.Sprintf("%d", note.ID),
+			Timestamp:      timestamp,
+			ScientificName: note.ScientificName,
+			CommonName:     note.CommonName,
+			Confidence:     note.Confidence,
+			Latitude:       note.Latitude,
+			Longitude:      note.Longitude,
+			Week:           week,
+			AudioFilePath:  note.ClipName,
+			Verified:       verifiedStatus,
+			Locked:         isLocked,
+			HasAudio:       note.ClipName != "",
+			Device:         note.SourceNode,
+			Source:         note.Source,
+		}
+
+		results = append(results, record)
+	}
+
+	return results, int(total), nil
 }
