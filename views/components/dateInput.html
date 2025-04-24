@@ -1,0 +1,36 @@
+{{define "dateInput"}}
+<div class="form-control relative">
+    {{/* No main label needed as it's part of the Date Range label */}}
+    <input 
+        type="date" 
+        id="{{.id}}"
+        name="{{.id}}" {{/* Use id for name too, common practice */}}
+        x-model="{{.model}}" 
+        class="input input-bordered input-sm w-full" {{/* Match styling, maybe use select-sm size? */}}
+        {{if .placeholder}}placeholder="{{.placeholder}}"{{end}}
+        aria-describedby="{{.id}}Tooltip"
+    />
+    {{if .altLabel}}
+    <label class="label pt-1 pb-0">
+        <span class="label-text-alt">{{.altLabel}}</span>
+        {{if .tooltip}}
+        <span class="help-icon ml-auto" 
+              @mouseenter="showTooltip = '{{.id}}'" 
+              @mouseleave="showTooltip = null"
+              aria-label="Show help for {{.altLabel}}"
+              role="button"
+              tabindex="0">ⓘ</span>
+        {{end}}
+    </label>
+    {{end}}
+    {{if .tooltip}}
+    <div x-show="showTooltip === '{{.id}}'" 
+         x-cloak 
+         class="tooltip tooltip-bottom" {{/* Adjust position if needed */}}
+         id="{{.id}}Tooltip" 
+         role="tooltip">
+        {{.tooltip}}
+    </div>
+    {{end}}
+</div>
+{{end}} 
