@@ -982,6 +982,34 @@ type SearchFilters struct {
 	Ctx            context.Context // Add context for cancellation/timeout
 }
 
+// sanitise validates and normalises the search filters, returning an error for invalid combinations.
+func (f *SearchFilters) sanitise() error {
+	if f.Page <= 0 {
+		f.Page = 1
+	}
+	// Default and cap PerPage
+	if f.PerPage <= 0 || f.PerPage > 200 {
+		f.PerPage = 20 // Default/max page size
+	}
+	// Default ConfidenceMax if not set or zero
+	if f.ConfidenceMax == 0 {
+		f.ConfidenceMax = 1.0
+	}
+	// Validate confidence range
+	if f.ConfidenceMin > f.ConfidenceMax {
+		return errors.New("confidence_min must be <= confidence_max")
+	}
+	// Validate mutually exclusive Verified flags
+	if f.VerifiedOnly && f.UnverifiedOnly {
+		return errors.New("verified_only and unverified_only cannot both be true")
+	}
+	// Validate mutually exclusive Locked flags
+	if f.LockedOnly && f.UnlockedOnly {
+		return errors.New("locked_only and unlocked_only cannot both be true")
+	}
+	return nil
+}
+
 // applySpeciesFilter applies the species filter to a GORM query
 func applySpeciesFilter(query *gorm.DB, species string) *gorm.DB {
 	if species != "" {
@@ -1026,6 +1054,11 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters) *gorm.DB {
 
 // SearchDetections retrieves detections based on the given filters
 func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error) {
+	// Sanitise filters first
+	if err := filters.sanitise(); err != nil {
+		return nil, 0, fmt.Errorf("invalid search filters: %w", err)
+	}
+
 	// Build the query with GORM query builder
 	query := ds.DB.Table("notes")
 
@@ -1071,11 +1104,8 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 		query = query.Order("notes.date DESC, notes.time DESC") // Default sort by date, newest first
 	}
 
-	// Apply pagination
+	// Apply pagination (PerPage and Page are already sanitised)
 	limit := filters.PerPage
-	if limit <= 0 {
-		limit = 20 // Default limit
-	}
 	offset := (filters.Page - 1) * limit
 	query = query.Limit(limit).Offset(offset)
 

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -64,10 +65,16 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 
 	// Validate status enums
 	validVerifiedStatus := map[string]bool{"any": true, "verified": true, "unverified": true}
+	if req.VerifiedStatus == "" {
+		req.VerifiedStatus = "any"
+	}
 	if !validVerifiedStatus[req.VerifiedStatus] {
 		return c.HandleError(ctx, nil, "Invalid verified status. Use 'any', 'verified', or 'unverified'", http.StatusBadRequest)
 	}
 	validLockedStatus := map[string]bool{"any": true, "locked": true, "unlocked": true}
+	if req.LockedStatus == "" {
+		req.LockedStatus = "any"
+	}
 	if !validLockedStatus[req.LockedStatus] {
 		return c.HandleError(ctx, nil, "Invalid locked status. Use 'any', 'locked', or 'unlocked'", http.StatusBadRequest)
 	}
@@ -83,6 +90,19 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 	// Ensure min ≤ max
 	if req.ConfidenceMin > req.ConfidenceMax {
 		req.ConfidenceMin, req.ConfidenceMax = req.ConfidenceMax, req.ConfidenceMin
+	}
+
+	// Validate SortBy parameter
+	allowedSortBy := map[string]struct{}{
+		"date_desc":       {},
+		"date_asc":        {},
+		"species_asc":     {},
+		"confidence_desc": {},
+	}
+	if req.SortBy != "" { // Allow empty string for default sorting
+		if _, ok := allowedSortBy[req.SortBy]; !ok {
+			return c.HandleError(ctx, fmt.Errorf("unsupported sort option: %s", req.SortBy), "Invalid sortBy parameter", http.StatusBadRequest)
+		}
 	}
 
 	// Create context with timeout for the database query

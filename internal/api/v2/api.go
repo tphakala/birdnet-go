@@ -199,13 +199,6 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 // Shutdown performs cleanup of all resources used by the API controller
 // This should be called when the application is shutting down
 func (c *Controller) Shutdown() {
-	// Close SecureFS if initialized
-	if c.SFS != nil {
-		if err := c.SFS.Close(); err != nil {
-			c.logger.Printf("Error closing SecureFS: %v", err)
-		}
-	}
-
 	// Call shutdown methods of individual components
 	// Currently, only the system component needs cleanup
 	StopCPUMonitoring()
