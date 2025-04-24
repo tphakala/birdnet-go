@@ -2,6 +2,7 @@
 package datastore
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -978,6 +979,7 @@ type SearchFilters struct {
 	Page           int
 	PerPage        int
 	SortBy         string
+	Ctx            context.Context // Add context for cancellation/timeout
 }
 
 // ApplySpeciesFilter applies the species filter to a GORM query
@@ -1065,7 +1067,7 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 
 	// Get total count using the separate count query
 	var total int64
-	err := countQuery.Count(&total).Error
+	err := countQuery.WithContext(filters.Ctx).Count(&total).Error // Apply context
 	if err != nil {
 		return nil, 0, fmt.Errorf("count query failed: %w", err)
 	}
@@ -1110,7 +1112,7 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 
 	// Execute the query
 	var scannedResults []ScannedResult
-	if err := query.Scan(&scannedResults).Error; err != nil {
+	if err := query.WithContext(filters.Ctx).Scan(&scannedResults).Error; err != nil { // Apply context
 		return nil, 0, fmt.Errorf("search query failed: %w", err)
 	}
 
