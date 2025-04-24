@@ -235,7 +235,7 @@
             
             <!-- Search results table - only visible when search performed -->
             <div x-show="formSubmitted && !isLoading && results.length > 0" x-transition class="overflow-x-auto mt-4">
-                <table class="table table-zebra w-full">
+                <table class="table w-full">
                     <thead>
                         <tr>
                             <th>Date & Time</th>
@@ -250,7 +250,7 @@
                         <template x-for="(result, index) in results" :key="result.id">
                             <tbody class="contents"> <!-- Wrapper for main and expanded row -->
                                 <!-- Main row -->
-                                <tr>
+                                <tr :class="index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'">
                                     <td x-text="formatDate(result.timestamp)"></td>
                                     <td>
                                         <div class="flex items-center gap-2">
