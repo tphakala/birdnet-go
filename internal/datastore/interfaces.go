@@ -985,57 +985,99 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 	// Build the query with GORM query builder
 	query := ds.DB.Table("notes")
 
+	// Select necessary fields, including potentially null fields from joins
+	query = query.Select("notes.id, notes.date, notes.time, notes.scientific_name, notes.common_name, notes.confidence, " +
+		"notes.latitude, notes.longitude, notes.clip_name, notes.source, notes.source_node, " +
+		"note_reviews.verified AS review_verified, " + // Select review status
+		"note_locks.id IS NOT NULL AS is_locked") // Select lock status as boolean
+
+	// Use LEFT JOINs to fetch optional review and lock data
+	query = query.Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id")
+	query = query.Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id")
+
 	// Apply filters
 	if filters.Species != "" {
 		likeParam := "%" + filters.Species + "%"
-		query = query.Where("scientific_name LIKE ? OR common_name LIKE ?", likeParam, likeParam)
+		query = query.Where("notes.scientific_name LIKE ? OR notes.common_name LIKE ?", likeParam, likeParam)
 	}
 
 	if filters.DateStart != "" {
-		query = query.Where("date >= ?", filters.DateStart)
+		query = query.Where("notes.date >= ?", filters.DateStart)
 	}
 
 	if filters.DateEnd != "" {
-		query = query.Where("date <= ?", filters.DateEnd)
+		query = query.Where("notes.date <= ?", filters.DateEnd)
 	}
 
-	query = query.Where("confidence >= ? AND confidence <= ?",
+	query = query.Where("notes.confidence >= ? AND notes.confidence <= ?",
 		filters.ConfidenceMin, filters.ConfidenceMax)
 
 	if filters.VerifiedOnly {
-		query = query.Joins("JOIN note_reviews ON notes.id = note_reviews.note_id").
-			Where("note_reviews.verified = 'correct'")
+		query = query.Where("note_reviews.verified = ?", "correct")
 	} else if filters.UnverifiedOnly {
-		query = query.Where("NOT EXISTS (SELECT 1 FROM note_reviews WHERE notes.id = note_reviews.note_id)")
+		query = query.Where("note_reviews.verified IS NULL OR note_reviews.verified != ?", "correct")
 	}
 
 	if filters.LockedOnly {
-		query = query.Joins("JOIN note_locks ON notes.id = note_locks.note_id")
+		query = query.Where("note_locks.id IS NOT NULL")
 	} else if filters.UnlockedOnly {
-		query = query.Where("NOT EXISTS (SELECT 1 FROM note_locks WHERE notes.id = note_locks.note_id)")
+		query = query.Where("note_locks.id IS NULL")
 	}
 
 	if filters.Device != "" {
-		query = query.Where("source_node LIKE ?", "%"+filters.Device+"%")
+		query = query.Where("notes.source_node LIKE ?", "%"+filters.Device+"%")
 	}
 
-	// Get total count
+	// --- Count Query ---
+	// Create a separate query for counting to avoid issues with GROUP BY if added later
+	countQuery := ds.DB.Table("notes").
+		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
+		Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id")
+
+	// Apply the *same* filters to the count query
+	if filters.Species != "" {
+		likeParam := "%" + filters.Species + "%"
+		countQuery = countQuery.Where("notes.scientific_name LIKE ? OR notes.common_name LIKE ?", likeParam, likeParam)
+	}
+	if filters.DateStart != "" {
+		countQuery = countQuery.Where("notes.date >= ?", filters.DateStart)
+	}
+	if filters.DateEnd != "" {
+		countQuery = countQuery.Where("notes.date <= ?", filters.DateEnd)
+	}
+	countQuery = countQuery.Where("notes.confidence >= ? AND notes.confidence <= ?", filters.ConfidenceMin, filters.ConfidenceMax)
+	if filters.VerifiedOnly {
+		countQuery = countQuery.Where("note_reviews.verified = ?", "correct")
+	} else if filters.UnverifiedOnly {
+		countQuery = countQuery.Where("note_reviews.verified IS NULL OR note_reviews.verified != ?", "correct")
+	}
+	if filters.LockedOnly {
+		countQuery = countQuery.Where("note_locks.id IS NOT NULL")
+	} else if filters.UnlockedOnly {
+		countQuery = countQuery.Where("note_locks.id IS NULL")
+	}
+	if filters.Device != "" {
+		countQuery = countQuery.Where("notes.source_node LIKE ?", "%"+filters.Device+"%")
+	}
+
+	// Get total count using the separate count query
 	var total int64
-	err := query.Count(&total).Error
+	err := countQuery.Count(&total).Error
 	if err != nil {
 		return nil, 0, fmt.Errorf("count query failed: %w", err)
 	}
+	// --- End Count Query ---
 
-	// Apply sorting
+	// Apply sorting to the main query
 	switch filters.SortBy {
 	case "date_asc":
-		query = query.Order("date ASC, time ASC")
+		query = query.Order("notes.date ASC, notes.time ASC")
 	case "species_asc":
-		query = query.Order("common_name ASC")
+		query = query.Order("notes.common_name ASC")
 	case "confidence_desc":
-		query = query.Order("confidence DESC")
+		query = query.Order("notes.confidence DESC")
 	default:
-		query = query.Order("date DESC, time DESC") // Default sort by date, newest first
+		query = query.Order("notes.date DESC, notes.time DESC") // Default sort by date, newest first
 	}
 
 	// Apply pagination
@@ -1046,64 +1088,67 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 	offset := (filters.Page - 1) * limit
 	query = query.Limit(limit).Offset(offset)
 
-	// We need to select all the fields we want to map to DetectionRecord
-	query = query.Select("notes.id, notes.date, notes.time, notes.scientific_name, notes.common_name, notes.confidence, " +
-		"notes.latitude, notes.longitude, notes.clip_name, notes.source, notes.source_node")
+	// Define a struct to scan results into, including joined fields
+	type ScannedResult struct {
+		ID             uint
+		Date           string
+		Time           string
+		ScientificName string
+		CommonName     string
+		Confidence     float64
+		Latitude       float64
+		Longitude      float64
+		ClipName       string
+		Source         string
+		SourceNode     string
+		ReviewVerified *string // Use pointer to handle NULL for review status
+		IsLocked       bool    // Boolean result from IS NOT NULL
+	}
 
 	// Execute the query
-	var notes []Note
-	if err := query.Find(&notes).Error; err != nil {
+	var scannedResults []ScannedResult
+	if err := query.Scan(&scannedResults).Error; err != nil {
 		return nil, 0, fmt.Errorf("search query failed: %w", err)
 	}
 
-	// Convert Note objects to DetectionRecord objects
-	results := make([]DetectionRecord, 0, len(notes))
-	for i := range notes {
-		note := &notes[i] // Get pointer to avoid copying
-		// Get verification status and lock status
-		var verifiedStatus string = "unverified"
-		isLocked := false
-
-		// Load related entities if needed
-		var review NoteReview
-		if err := ds.DB.Where("note_id = ?", note.ID).First(&review).Error; err == nil {
-			verifiedStatus = review.Verified // Use the string directly
-		}
-
-		var lock NoteLock
-		if err := ds.DB.Where("note_id = ?", note.ID).First(&lock).Error; err == nil {
-			isLocked = true
+	// Convert ScannedResult objects to DetectionRecord objects
+	results := make([]DetectionRecord, 0, len(scannedResults))
+	for _, scanned := range scannedResults {
+		// Determine verification status
+		verifiedStatus := "unverified" // Default
+		if scanned.ReviewVerified != nil {
+			verifiedStatus = *scanned.ReviewVerified
 		}
 
 		// Parse timestamp string to time.Time
-		timestamp, err := time.Parse("2006-01-02 15:04:05", note.Date+" "+note.Time)
+		timestamp, err := time.Parse("2006-01-02 15:04:05", scanned.Date+" "+scanned.Time)
 		if err != nil {
-			// If parsing fails, use current time as fallback
-			timestamp = time.Now()
+			log.Printf("Warning: Failed to parse timestamp '%s %s' for note ID %d: %v. Using current time.", scanned.Date, scanned.Time, scanned.ID, err)
+			timestamp = time.Now() // Fallback
 		}
 
-		// Calculate week from date if needed (simple approximation)
+		// Calculate week from date if needed
 		week := 0
-		if t, err := time.Parse("2006-01-02", note.Date); err == nil {
+		if t, err := time.Parse("2006-01-02", scanned.Date); err == nil {
 			_, week = t.ISOWeek()
 		}
 
 		// Create detection record
 		record := DetectionRecord{
-			ID:             fmt.Sprintf("%d", note.ID),
+			ID:             fmt.Sprintf("%d", scanned.ID),
 			Timestamp:      timestamp,
-			ScientificName: note.ScientificName,
-			CommonName:     note.CommonName,
-			Confidence:     note.Confidence,
-			Latitude:       note.Latitude,
-			Longitude:      note.Longitude,
+			ScientificName: scanned.ScientificName,
+			CommonName:     scanned.CommonName,
+			Confidence:     scanned.Confidence,
+			Latitude:       scanned.Latitude,
+			Longitude:      scanned.Longitude,
 			Week:           week,
-			AudioFilePath:  note.ClipName,
-			Verified:       verifiedStatus,
-			Locked:         isLocked,
-			HasAudio:       note.ClipName != "",
-			Device:         note.SourceNode,
-			Source:         note.Source,
+			AudioFilePath:  scanned.ClipName,
+			Verified:       verifiedStatus,   // Use derived status
+			Locked:         scanned.IsLocked, // Use derived status
+			HasAudio:       scanned.ClipName != "",
+			Device:         scanned.SourceNode,
+			Source:         scanned.Source,
 		}
 
 		results = append(results, record)
