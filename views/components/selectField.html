@@ -1,5 +1,11 @@
 {{define "selectField"}}
-<div class="form-control relative mt-1">
+<div class="form-control relative mt-1" x-data="{
+    showTooltip: null,
+    touched: false,
+    validInput() {
+        return this.$refs && this.$refs.{{.id}} ? this.$refs.{{.id}}.validity.valid : true;
+    }
+}">
     <label class="label justify-start {{if .class}}{{.class}}{{end}}" for="{{.id}}">
         <span class="label-text">{{.label}}</span>
         <span class="help-icon" 
@@ -16,6 +22,7 @@
             {{if .placeholder}}placeholder="{{.placeholder}}"{{end}}
             {{if .pattern}}pattern="{{.pattern}}"{{end}}
             {{if .disabled}}:disabled="{{.disabled}}"{{end}}
+            x-ref="{{.id}}"
             aria-describedby="{{.id}}Tooltip">
         {{if .locales}}
             {{/* Handle locales slice */}}
