@@ -289,7 +289,7 @@
                                     </td>
                                     <td>
                                         <div class="flex gap-1">
-                                            <button class="btn btn-xs btn-square" @click="window.location.href = `/api/v2/media/audio?id=${result.id}`"
+                                            <button class="btn btn-xs btn-square" @click.prevent="playAudioFromRow(result.id)"
                                                     :disabled="!result.hasAudio">
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
@@ -413,7 +413,7 @@
                                                     
                                                     <div class="audio-player-container relative">
                                                         <!-- Hidden audio element -->
-                                                        <audio :id="'audio-' + result.id" class="hidden" :src="'/api/v2/media/audio?id=' + result.id"></audio>
+                                                        <audio :id="'audio-' + result.id" class="hidden" :src="'/api/v2/audio/' + result.id"></audio>
                                                         
                                                         <!-- Spectrogram Image -->
                                                         <img :src="'/api/v2/spectrogram/' + result.id + '?width=400'" alt="Spectrogram" 
@@ -436,7 +436,7 @@
                                                                     <div class="bg-primary h-1.5 rounded-full" style="width: 0%"></div>
                                                                 </div>
                                                                 <span :id="'currentTime-' + result.id" class="text-xs font-medium text-white flex-shrink-0">0:00</span>
-                                                                <a :href="'/api/v2/media/audio?id=' + result.id" download class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
+                                                                <a :href="'/api/v2/audio/' + result.id" download class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0">
                                                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                                                                     </svg>
@@ -771,6 +771,59 @@
                 // Mark as initialized
                 this.initializedPlayers[recordId] = true;
                 console.log('Audio player successfully initialized for ID:', recordId);
+            },
+
+            // Updated method to play/pause audio from the main row button
+            playAudioFromRow(recordId) {
+                console.log('Play/Pause audio from row requested for:', recordId);
+
+                if (this.isExpanded(recordId)) {
+                    // Row is already expanded, toggle play/pause
+                    console.log('Row already expanded, toggling play/pause for:', recordId);
+                    const audioElement = document.getElementById(`audio-${recordId}`);
+                    if (audioElement) {
+                        if (!audioElement.paused) {
+                            audioElement.pause();
+                            console.log('Paused audio via row button:', recordId);
+                        } else {
+                            // Ensure player is initialized before playing again
+                            this.initAudioPlayer(recordId);
+                            audioElement.play().catch(e => console.error('Error playing audio:', e));
+                            console.log('Played audio via row button:', recordId);
+                        }
+                    } else {
+                        // Should ideally not happen if expanded, but handle it
+                        console.warn('Audio element not found even though row is expanded:', recordId);
+                        // Attempt to initialize and play
+                        this.$nextTick(() => {
+                            this.initAudioPlayer(recordId);
+                            const newAudioElement = document.getElementById(`audio-${recordId}`);
+                            if (newAudioElement) {
+                                newAudioElement.play().catch(e => console.error('Error playing audio:', e));
+                            }
+                        });
+                    }
+                } else {
+                    // Row not expanded, expand first and then play
+                    console.log('Row not expanded, expanding and playing:', recordId);
+                    this.toggleExpand(recordId); // This will call initAudioPlayer internally
+
+                    // Use nextTick to ensure DOM update and player initialization before playing
+                    this.$nextTick(() => {
+                         const audioElement = document.getElementById(`audio-${recordId}`);
+                         if (audioElement) {
+                             // Small delay might be needed if initAudioPlayer is slow or async inside toggleExpand
+                             setTimeout(() => { 
+                                audioElement.play().catch(e => {
+                                    console.error('Error playing audio after expand:', e);
+                                });
+                                console.log('Attempted to play audio after expand for:', recordId);
+                             }, 50); // Adjust delay if necessary
+                         } else {
+                             console.error('Audio element not found after expand for:', recordId);
+                         }
+                    });
+                }
             }
         }));
     });
