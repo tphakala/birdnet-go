@@ -693,6 +693,7 @@
                 
                 // Update progress function
                 const updateProgress = () => {
+                    if (!audioElement.duration) { return; }        // wait until metadata ready
                     const percent = (audioElement.currentTime / audioElement.duration) * 100;
                     progressIndicator.style.width = `${percent}%`;
                     currentTimeDisplay.textContent = formatTime(audioElement.currentTime);
@@ -746,6 +747,11 @@
                 audioElement.addEventListener('ended', () => {
                     clearInterval(updateInterval);
                     positionIndicator.style.opacity = '0';
+                });
+                
+                // Add loadedmetadata event to update progress bar immediately when metadata is available
+                audioElement.addEventListener('loadedmetadata', () => {
+                    updateProgress();
                 });
                 
                 // Progress bar click for seeking

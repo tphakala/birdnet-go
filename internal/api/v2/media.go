@@ -314,25 +314,18 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	// Absolute path for the spectrogram on the host filesystem
 	absSpectrogramPath := filepath.Join(c.SFS.BaseDir(), relSpectrogramPath)
 
-	// Check if the spectrogram already exists using secure Stat with the relative path
-	// Use StatRel as relSpectrogramPath is constructed relative to baseDir
-	if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
-		// Spectrogram exists, return its relative path
-		return relSpectrogramPath, nil
-	} else if !os.IsNotExist(err) {
-		// An unexpected error occurred checking for the spectrogram
-		return "", fmt.Errorf("error checking for existing spectrogram '%s': %w", relSpectrogramPath, err)
-	}
-
 	// Generate a unique key for this spectrogram generation request
 	// Include both the path and width to ensure uniqueness
 	spectrogramKey := fmt.Sprintf("%s:%d", relSpectrogramPath, width)
 
 	// Use singleflight to prevent duplicate generations
 	_, err, _ = spectrogramGroup.Do(spectrogramKey, func() (interface{}, error) {
-		// Double-check if the file exists now (in case another goroutine just created it)
+		// Fast path inside the group – now race-free
 		if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
 			return nil, nil // File exists, no need to generate
+		} else if !os.IsNotExist(err) {
+			// An unexpected error occurred checking for the spectrogram
+			return nil, fmt.Errorf("error checking for existing spectrogram '%s': %w", relSpectrogramPath, err)
 		}
 
 		// --- Generate Spectrogram ---
