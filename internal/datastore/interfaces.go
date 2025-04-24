@@ -1429,7 +1429,7 @@ func (ds *DataStore) getSunEventsForDate(dateStr string, timestamp time.Time) (s
 	}
 
 	// Cache the calculated sun times
-	ds.cacheSunTimes(dateStr, sunTimes)
+	ds.cacheSunTimes(dateStr, &sunTimes)
 
 	return sunTimes, nil
 }
@@ -1444,6 +1444,6 @@ func (ds *DataStore) getCachedSunTimes(dateStr string) (suncalc.SunEventTimes, b
 }
 
 // cacheSunTimes caches sun times
-func (ds *DataStore) cacheSunTimes(dateStr string, sunTimes suncalc.SunEventTimes) {
-	ds.sunTimesCache.Store(dateStr, sunTimes)
+func (ds *DataStore) cacheSunTimes(dateStr string, sunTimes *suncalc.SunEventTimes) {
+	ds.sunTimesCache.Store(dateStr, *sunTimes)
 }
