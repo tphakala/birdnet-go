@@ -1,0 +1,74 @@
+{{define "search"}}
+
+<div class="col-span-12 space-y-4">
+    <!-- Header with Search Icon -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body items-center text-center">
+            <div class="w-36 h-36 rounded-full bg-gradient-to-b from-base-200 to-base-100 flex items-center justify-center p-1 ring-1 ring-base-content/10">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-24 h-24 text-base-content/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+            </div>
+            <div class="mt-4">
+                <h1 class="text-4xl font-bold">Search</h1>
+                <p class="text-base-content/70 text-lg mt-2">Find bird detections in your database</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Form Placeholder -->
+    <div class="collapse bg-base-100 shadow-sm">
+        <input type="checkbox" checked /> 
+        <div class="collapse-title text-xl font-medium">
+            Search Options
+        </div>
+        <div class="collapse-content prose max-w-none">
+            <p>This is where the search form will be implemented, allowing you to search for bird detections by:</p>
+            <ul class="mt-2 list-none pl-0 space-y-2">
+                <li class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                    Species name
+                </li>
+                <li class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                    Date and time range
+                </li>
+                <li class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                    Confidence level
+                </li>
+                <li class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                    Recording device
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Results Placeholder -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="card-title">Search Results</h2>
+            <p class="text-base-content/70">Search results will appear here after you submit a search query.</p>
+            
+            <!-- Placeholder for search results -->
+            <div class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+                <p class="text-base-content/50 text-center mt-4">No search performed yet</p>
+                <p class="text-base-content/50 text-center text-sm">Use the search options above to find bird detections</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{end}} 
