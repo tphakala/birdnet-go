@@ -982,7 +982,7 @@ type SearchFilters struct {
 	Ctx            context.Context // Add context for cancellation/timeout
 }
 
-// ApplySpeciesFilter applies the species filter to a GORM query
+// applySpeciesFilter applies the species filter to a GORM query
 func applySpeciesFilter(query *gorm.DB, species string) *gorm.DB {
 	if species != "" {
 		likeParam := "%" + species + "%"
@@ -991,28 +991,13 @@ func applySpeciesFilter(query *gorm.DB, species string) *gorm.DB {
 	return query
 }
 
-// SearchDetections retrieves detections based on the given filters
-func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error) {
-	// Build the query with GORM query builder
-	query := ds.DB.Table("notes")
-
-	// Select necessary fields, including potentially null fields from joins
-	query = query.Select("notes.id, notes.date, notes.time, notes.scientific_name, notes.common_name, notes.confidence, " +
-		"notes.latitude, notes.longitude, notes.clip_name, notes.source, notes.source_node, " +
-		"note_reviews.verified AS review_verified, " + // Select review status
-		"note_locks.id IS NOT NULL AS is_locked") // Select lock status as boolean
-
-	// Use LEFT JOINs to fetch optional review and lock data
-	query = query.Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id")
-	query = query.Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id")
-
-	// Apply filters
+// applyCommonFilters applies common search filters to a GORM query
+func applyCommonFilters(query *gorm.DB, filters *SearchFilters) *gorm.DB {
 	query = applySpeciesFilter(query, filters.Species)
 
 	if filters.DateStart != "" {
 		query = query.Where("notes.date >= ?", filters.DateStart)
 	}
-
 	if filters.DateEnd != "" {
 		query = query.Where("notes.date <= ?", filters.DateEnd)
 	}
@@ -1036,6 +1021,27 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 		query = query.Where("notes.source_node LIKE ?", "%"+filters.Device+"%")
 	}
 
+	return query
+}
+
+// SearchDetections retrieves detections based on the given filters
+func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error) {
+	// Build the query with GORM query builder
+	query := ds.DB.Table("notes")
+
+	// Select necessary fields, including potentially null fields from joins
+	query = query.Select("notes.id, notes.date, notes.time, notes.scientific_name, notes.common_name, notes.confidence, " +
+		"notes.latitude, notes.longitude, notes.clip_name, notes.source, notes.source_node, " +
+		"note_reviews.verified AS review_verified, " + // Select review status
+		"note_locks.id IS NOT NULL AS is_locked") // Select lock status as boolean
+
+	// Use LEFT JOINs to fetch optional review and lock data
+	query = query.Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id")
+	query = query.Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id")
+
+	// Apply filters
+	query = applyCommonFilters(query, filters)
+
 	// --- Count Query ---
 	// Create a separate query for counting to avoid issues with GROUP BY if added later
 	countQuery := ds.DB.Table("notes").
@@ -1043,27 +1049,7 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 		Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id")
 
 	// Apply the *same* filters to the count query
-	countQuery = applySpeciesFilter(countQuery, filters.Species)
-	if filters.DateStart != "" {
-		countQuery = countQuery.Where("notes.date >= ?", filters.DateStart)
-	}
-	if filters.DateEnd != "" {
-		countQuery = countQuery.Where("notes.date <= ?", filters.DateEnd)
-	}
-	countQuery = countQuery.Where("notes.confidence >= ? AND notes.confidence <= ?", filters.ConfidenceMin, filters.ConfidenceMax)
-	if filters.VerifiedOnly {
-		countQuery = countQuery.Where("note_reviews.verified = ?", "correct")
-	} else if filters.UnverifiedOnly {
-		countQuery = countQuery.Where("note_reviews.verified IS NULL OR note_reviews.verified != ?", "correct")
-	}
-	if filters.LockedOnly {
-		countQuery = countQuery.Where("note_locks.id IS NOT NULL")
-	} else if filters.UnlockedOnly {
-		countQuery = countQuery.Where("note_locks.id IS NULL")
-	}
-	if filters.Device != "" {
-		countQuery = countQuery.Where("notes.source_node LIKE ?", "%"+filters.Device+"%")
-	}
+	countQuery = applyCommonFilters(countQuery, filters)
 
 	// Get total count using the separate count query
 	var total int64

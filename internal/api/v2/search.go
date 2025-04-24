@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -48,6 +50,28 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 		req.Page = 1
 	}
 
+	// Validate date strings
+	if req.DateStart != "" {
+		if _, err := time.Parse("2006-01-02", req.DateStart); err != nil {
+			return c.HandleError(ctx, err, "Invalid start date format, use YYYY-MM-DD", http.StatusBadRequest)
+		}
+	}
+	if req.DateEnd != "" {
+		if _, err := time.Parse("2006-01-02", req.DateEnd); err != nil {
+			return c.HandleError(ctx, err, "Invalid end date format, use YYYY-MM-DD", http.StatusBadRequest)
+		}
+	}
+
+	// Validate status enums
+	validVerifiedStatus := map[string]bool{"any": true, "verified": true, "unverified": true}
+	if !validVerifiedStatus[req.VerifiedStatus] {
+		return c.HandleError(ctx, nil, "Invalid verified status. Use 'any', 'verified', or 'unverified'", http.StatusBadRequest)
+	}
+	validLockedStatus := map[string]bool{"any": true, "locked": true, "unlocked": true}
+	if !validLockedStatus[req.LockedStatus] {
+		return c.HandleError(ctx, nil, "Invalid locked status. Use 'any', 'locked', or 'unlocked'", http.StatusBadRequest)
+	}
+
 	// Set default values
 	if req.ConfidenceMin < 0 {
 		req.ConfidenceMin = 0
@@ -60,6 +84,10 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 	if req.ConfidenceMin > req.ConfidenceMax {
 		req.ConfidenceMin, req.ConfidenceMax = req.ConfidenceMax, req.ConfidenceMin
 	}
+
+	// Create context with timeout for the database query
+	ctxTimeout, cancel := context.WithTimeout(ctx.Request().Context(), 90*time.Second)
+	defer cancel() // Ensure the context is cancelled
 
 	// Default sort will be handled by the datastore layer
 	// The datastore defaults to "notes.date DESC, notes.time DESC" when no sort is specified
@@ -79,6 +107,7 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 		Page:           req.Page,
 		PerPage:        20, // Configure as needed
 		SortBy:         req.SortBy,
+		Ctx:            ctxTimeout, // Pass the context with timeout
 	}
 
 	// Execute the search
@@ -98,6 +127,6 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 		Results:     results,
 		Total:       total,
 		Pages:       totalPages,
-		CurrentPage: req.Page,
+		CurrentPage: min(req.Page, totalPages), // Clamp current page
 	})
 }
