@@ -126,16 +126,16 @@ type ImageCache struct {
 type DetectionRecord struct {
 	ID             string    `json:"id"`
 	Timestamp      time.Time `json:"timestamp"`
-	ScientificName string    `json:"scientificName"`
-	CommonName     string    `json:"commonName"`
-	Confidence     float64   `json:"confidence"`
-	Latitude       float64   `json:"latitude"`
-	Longitude      float64   `json:"longitude"`
-	Week           int       `json:"week"`
-	AudioFilePath  string    `json:"audioFilePath"`
-	Verified       string    `json:"verified"`
-	Locked         bool      `json:"locked"`
-	HasAudio       bool      `json:"hasAudio"`
-	Device         string    `json:"device"`
-	Source         string    `json:"source"`
+	ScientificName string    `json:"scientificName,omitempty"`
+	CommonName     string    `json:"commonName,omitempty"`
+	Confidence     float64   `json:"confidence,omitempty"`
+	Latitude       float64   `json:"latitude,omitempty"`
+	Longitude      float64   `json:"longitude,omitempty"`
+	Week           int       `json:"week,omitempty"`
+	AudioFilePath  string    `json:"audioFilePath,omitempty"`
+	Verified       string    `json:"verified,omitempty"`
+	Locked         bool      `json:"locked,omitempty"`
+	HasAudio       bool      `json:"hasAudio,omitempty"`
+	Device         string    `json:"device,omitempty"`
+	Source         string    `json:"source,omitempty"`
 }

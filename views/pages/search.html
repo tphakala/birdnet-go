@@ -125,6 +125,8 @@
                                 </div>
                             </div>
                         </div>
+                        <!-- Confidence error message -->
+                        <div x-show="confidenceError" class="text-error text-sm mt-1" x-text="confidenceError"></div>
                     </div>
                     
                     <!-- Status Filters -->
@@ -528,10 +530,16 @@
             sortBy: 'date_desc',
             errorMessage: '',
             expanded: {},
+            confidenceError: '',
             
             // Form validation methods
             validateForm() {
                 // Basic validation logic
+                this.confidenceError = ''; // Reset error
+                if (this.confidenceRange.min > this.confidenceRange.max) {
+                    this.confidenceError = 'Minimum confidence cannot be greater than maximum confidence.';
+                    return false;
+                }
                 return true;
             },
             

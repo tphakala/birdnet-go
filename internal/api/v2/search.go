@@ -56,10 +56,13 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 		req.ConfidenceMax = 1
 	}
 
-	// Default sort
-	if req.SortBy == "" {
-		req.SortBy = "date_desc"
+	// Ensure min ≤ max
+	if req.ConfidenceMin > req.ConfidenceMax {
+		req.ConfidenceMin, req.ConfidenceMax = req.ConfidenceMax, req.ConfidenceMin
 	}
+
+	// Default sort will be handled by the datastore layer
+	// The datastore defaults to "notes.date DESC, notes.time DESC" when no sort is specified
 
 	// Create search filters
 	filters := datastore.SearchFilters{
