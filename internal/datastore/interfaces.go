@@ -1113,42 +1113,42 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 
 	// Convert ScannedResult objects to DetectionRecord objects
 	results := make([]DetectionRecord, 0, len(scannedResults))
-	for _, scanned := range scannedResults {
+	for i := range scannedResults {
 		// Determine verification status
 		verifiedStatus := "unverified" // Default
-		if scanned.ReviewVerified != nil {
-			verifiedStatus = *scanned.ReviewVerified
+		if scannedResults[i].ReviewVerified != nil {
+			verifiedStatus = *scannedResults[i].ReviewVerified
 		}
 
 		// Parse timestamp string to time.Time
-		timestamp, err := time.Parse("2006-01-02 15:04:05", scanned.Date+" "+scanned.Time)
+		timestamp, err := time.Parse("2006-01-02 15:04:05", scannedResults[i].Date+" "+scannedResults[i].Time)
 		if err != nil {
-			log.Printf("Warning: Failed to parse timestamp '%s %s' for note ID %d: %v. Using current time.", scanned.Date, scanned.Time, scanned.ID, err)
+			log.Printf("Warning: Failed to parse timestamp '%s %s' for note ID %d: %v. Using current time.", scannedResults[i].Date, scannedResults[i].Time, scannedResults[i].ID, err)
 			timestamp = time.Now() // Fallback
 		}
 
 		// Calculate week from date if needed
 		week := 0
-		if t, err := time.Parse("2006-01-02", scanned.Date); err == nil {
+		if t, err := time.Parse("2006-01-02", scannedResults[i].Date); err == nil {
 			_, week = t.ISOWeek()
 		}
 
 		// Create detection record
 		record := DetectionRecord{
-			ID:             fmt.Sprintf("%d", scanned.ID),
+			ID:             fmt.Sprintf("%d", scannedResults[i].ID),
 			Timestamp:      timestamp,
-			ScientificName: scanned.ScientificName,
-			CommonName:     scanned.CommonName,
-			Confidence:     scanned.Confidence,
-			Latitude:       scanned.Latitude,
-			Longitude:      scanned.Longitude,
+			ScientificName: scannedResults[i].ScientificName,
+			CommonName:     scannedResults[i].CommonName,
+			Confidence:     scannedResults[i].Confidence,
+			Latitude:       scannedResults[i].Latitude,
+			Longitude:      scannedResults[i].Longitude,
 			Week:           week,
-			AudioFilePath:  scanned.ClipName,
-			Verified:       verifiedStatus,   // Use derived status
-			Locked:         scanned.IsLocked, // Use derived status
-			HasAudio:       scanned.ClipName != "",
-			Device:         scanned.SourceNode,
-			Source:         scanned.Source,
+			AudioFilePath:  scannedResults[i].ClipName,
+			Verified:       verifiedStatus,             // Use derived status
+			Locked:         scannedResults[i].IsLocked, // Use derived status
+			HasAudio:       scannedResults[i].ClipName != "",
+			Device:         scannedResults[i].SourceNode,
+			Source:         scannedResults[i].Source,
 		}
 
 		results = append(results, record)
