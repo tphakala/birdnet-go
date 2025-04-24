@@ -8,13 +8,18 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/suncalc" // Import suncalc
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+// sunriseSetWindowMinutes defines the time window (in minutes) around sunrise and sunset
+const sunriseSetWindowMinutes = 30
 
 // StoreInterface abstracts the underlying database implementation and defines the interface for database operations.
 type Interface interface {
@@ -69,19 +74,30 @@ type Interface interface {
 
 // DataStore implements StoreInterface using a GORM database.
 type DataStore struct {
-	DB *gorm.DB // GORM database instance
+	DB            *gorm.DB         // GORM database instance
+	SunCalc       *suncalc.SunCalc // Instance for calculating sun times (Assumed initialized)
+	sunTimesCache sync.Map         // Thread-safe map for caching sun times by date
 }
 
 // NewDataStore creates a new DataStore instance based on the provided configuration context.
 func New(settings *conf.Settings) Interface {
+	// Create a SunCalc instance to be shared by all datastore implementations
+	sunCalc := suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
+
 	switch {
 	case settings.Output.SQLite.Enabled:
 		return &SQLiteStore{
 			Settings: settings,
+			DataStore: DataStore{
+				SunCalc: sunCalc,
+			},
 		}
 	case settings.Output.MySQL.Enabled:
 		return &MySQLStore{
 			Settings: settings,
+			DataStore: DataStore{
+				SunCalc: sunCalc,
+			},
 		}
 	default:
 		// Consider handling the case where neither database is enabled
@@ -976,6 +992,7 @@ type SearchFilters struct {
 	LockedOnly     bool
 	UnlockedOnly   bool
 	Device         string
+	TimeOfDay      string // "any", "day", "night", "sunrise", "sunset"
 	Page           int
 	PerPage        int
 	SortBy         string
@@ -1007,6 +1024,13 @@ func (f *SearchFilters) sanitise() error {
 	if f.LockedOnly && f.UnlockedOnly {
 		return errors.New("locked_only and unlocked_only cannot both be true")
 	}
+	// Validate TimeOfDay
+	switch f.TimeOfDay {
+	case "", "any", "day", "night", "sunrise", "sunset": // Add sunrise/sunset
+		// Valid values
+	default:
+		return errors.New("invalid time_of_day value, must be 'any', 'day', 'night', 'sunrise', or 'sunset'")
+	}
 	return nil
 }
 
@@ -1020,7 +1044,7 @@ func applySpeciesFilter(query *gorm.DB, species string) *gorm.DB {
 }
 
 // applyCommonFilters applies common search filters to a GORM query
-func applyCommonFilters(query *gorm.DB, filters *SearchFilters) *gorm.DB {
+func applyCommonFilters(query *gorm.DB, filters *SearchFilters, ds *DataStore) *gorm.DB {
 	query = applySpeciesFilter(query, filters.Species)
 
 	if filters.DateStart != "" {
@@ -1036,7 +1060,8 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters) *gorm.DB {
 	if filters.VerifiedOnly {
 		query = query.Where("note_reviews.verified = ?", "correct")
 	} else if filters.UnverifiedOnly {
-		query = query.Where("note_reviews.verified IS NULL OR note_reviews.verified != ?", "correct")
+		// Handle NULL case explicitly for unverified
+		query = query.Where("(note_reviews.verified IS NULL OR (note_reviews.verified != ? AND note_reviews.verified != ?))", "correct", "false_positive")
 	}
 
 	if filters.LockedOnly {
@@ -1045,11 +1070,187 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters) *gorm.DB {
 		query = query.Where("note_locks.id IS NULL")
 	}
 
+	// Debug logging for TimeOfDay filter
+	log.Printf("DEBUG: TimeOfDay filter value: '%s', SunCalc is nil: %v, DB is nil: %v",
+		filters.TimeOfDay, ds.SunCalc == nil, ds.DB == nil)
+
+	// --- Dynamic TimeOfDay Filter ---
+	if (filters.TimeOfDay == "day" || filters.TimeOfDay == "night" || filters.TimeOfDay == "sunrise" || filters.TimeOfDay == "sunset") && ds.SunCalc != nil && ds.DB != nil { // Include sunrise/sunset
+		dateConditions, err := buildTimeOfDayConditions(filters, ds.SunCalc, ds.DB)
+		switch {
+		case err != nil:
+			log.Printf("WARN: Failed to build TimeOfDay conditions: %v. Skipping filter.", err)
+		case len(dateConditions) > 0:
+			log.Printf("DEBUG: Successfully built %d TimeOfDay conditions for filter: '%s'", len(dateConditions), filters.TimeOfDay)
+			combinedCondition := ds.DB.Where(dateConditions[0])
+			for i := 1; i < len(dateConditions); i++ {
+				combinedCondition = combinedCondition.Or(dateConditions[i])
+			}
+			query = query.Where(combinedCondition)
+		default:
+			log.Printf("DEBUG: No TimeOfDay conditions were generated for filter: '%s'", filters.TimeOfDay)
+		}
+	} else {
+		log.Printf("DEBUG: Skipping TimeOfDay filter: filters.TimeOfDay=%s, SunCalc==nil=%v, DB==nil=%v",
+			filters.TimeOfDay, ds.SunCalc == nil, ds.DB == nil)
+	} // --- End Dynamic TimeOfDay Filter ---
+
 	if filters.Device != "" {
 		query = query.Where("notes.source_node LIKE ?", "%"+filters.Device+"%")
 	}
 
 	return query
+}
+
+// buildTimeOfDayConditions generates the WHERE conditions for day/night/sunrise/sunset filtering
+func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *gorm.DB) ([]*gorm.DB, error) {
+	startDateStr := filters.DateStart
+	endDateStr := filters.DateEnd
+
+	// Default to a reasonable date range if no dates are provided
+	switch {
+	case startDateStr == "" && endDateStr == "":
+		// Use past year instead of 90 days
+		today := time.Now()
+		endDateStr = today.Format("2006-01-02")
+		startDateStr = today.AddDate(-1, 0, 0).Format("2006-01-02") // 1 year ago
+		log.Printf("INFO: TimeOfDay filter applied without date range, defaulting to last year (%s to %s)",
+			startDateStr, endDateStr)
+	case startDateStr == "":
+		// If only end date is provided, use 1 year before that date as start
+		endDate, err := time.Parse("2006-01-02", endDateStr)
+		if err == nil {
+			startDateStr = endDate.AddDate(-1, 0, 0).Format("2006-01-02")
+		} else {
+			startDateStr = endDateStr // Fallback if parsing fails
+		}
+	case endDateStr == "":
+		// If only start date is provided, use that date +1 year or today (whichever is earlier)
+		startDate, err := time.Parse("2006-01-02", startDateStr)
+		if err == nil {
+			endDate := startDate.AddDate(1, 0, 0)
+			today := time.Now()
+			if endDate.After(today) {
+				endDate = today
+			}
+			endDateStr = endDate.Format("2006-01-02")
+		} else {
+			endDateStr = startDateStr // Fallback if parsing fails
+		}
+	}
+
+	startDate, err := time.Parse("2006-01-02", startDateStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid start date format: %w", err)
+	}
+	endDate, err := time.Parse("2006-01-02", endDateStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid end date format: %w", err)
+	}
+
+	if endDate.Before(startDate) {
+		return nil, errors.New("end date cannot be before start date")
+	}
+
+	// Limit date range to avoid excessively long queries (increased to 365 days)
+	if endDate.Sub(startDate).Hours() > 365*24 {
+		return nil, errors.New("date range for TimeOfDay filter cannot exceed 365 days")
+	}
+
+	var conditions []*gorm.DB
+	window := time.Duration(sunriseSetWindowMinutes) * time.Minute // Define window for sunrise/sunset
+
+	// Optimization: Group dates by week and calculate sun times once per week
+	// Store weekly sun calculations
+	type WeeklySunTimes struct {
+		year      int
+		week      int
+		sunTimes  suncalc.SunEventTimes
+		dateRange []time.Time
+	}
+
+	// Map to store our weekly calculations
+	weeklySunCache := make(map[string]*WeeklySunTimes)
+
+	// First pass: group dates by week
+	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+		year, week := d.ISOWeek()
+		key := fmt.Sprintf("%d-%d", year, week)
+
+		if _, exists := weeklySunCache[key]; !exists {
+			// Create a new entry for this week
+			weeklySunCache[key] = &WeeklySunTimes{
+				year:      year,
+				week:      week,
+				dateRange: []time.Time{},
+			}
+		}
+
+		// Add this date to the week's date range
+		weeklySunCache[key].dateRange = append(weeklySunCache[key].dateRange, d)
+	}
+
+	// Second pass: calculate sun times for one representative day per week
+	for _, weekData := range weeklySunCache {
+		// Find the middle day of the week as representative
+		representativeDay := weekData.dateRange[len(weekData.dateRange)/2]
+		sunTimes, err := sc.GetSunEventTimes(representativeDay)
+		if err != nil {
+			log.Printf("WARN: Could not get sun times for week %d-%d: %v. Skipping week for TimeOfDay filter.",
+				weekData.year, weekData.week, err)
+			continue
+		}
+		weekData.sunTimes = sunTimes
+	}
+
+	// Third pass: build conditions for each date using the weekly sun times
+	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+		dateStr := d.Format("2006-01-02")
+		year, week := d.ISOWeek()
+		key := fmt.Sprintf("%d-%d", year, week)
+
+		// Get the sun times for this week
+		weekData, exists := weeklySunCache[key]
+		if !exists || weekData == nil {
+			log.Printf("WARN: No sun times found for week %d-%d. Skipping date %s for TimeOfDay filter.",
+				year, week, dateStr)
+			continue
+		}
+
+		sunTimes := weekData.sunTimes
+		sunriseStr := sunTimes.Sunrise.Format("15:04:05")
+		sunsetStr := sunTimes.Sunset.Format("15:04:05")
+
+		var condition *gorm.DB
+		switch filters.TimeOfDay {
+		case "day":
+			// Exclude the sunrise and sunset windows (30 minutes before and after)
+			sunriseEnd := sunTimes.Sunrise.Add(window).Format("15:04:05")
+			sunsetStart := sunTimes.Sunset.Add(-window).Format("15:04:05")
+			// Time should be after sunrise window but before sunset window
+			condition = db.Where("notes.date = ? AND notes.time > ? AND notes.time < ?", dateStr, sunriseEnd, sunsetStart)
+		case "night":
+			condition = db.Where("notes.date = ? AND (notes.time < ? OR notes.time > ?)", dateStr, sunriseStr, sunsetStr)
+		case "sunrise":
+			sunriseStart := sunTimes.Sunrise.Add(-window).Format("15:04:05")
+			sunriseEnd := sunTimes.Sunrise.Add(window).Format("15:04:05")
+			condition = db.Where("notes.date = ? AND notes.time >= ? AND notes.time <= ?", dateStr, sunriseStart, sunriseEnd)
+		case "sunset":
+			sunsetStart := sunTimes.Sunset.Add(-window).Format("15:04:05")
+			sunsetEnd := sunTimes.Sunset.Add(window).Format("15:04:05")
+			condition = db.Where("notes.date = ? AND notes.time >= ? AND notes.time <= ?", dateStr, sunsetStart, sunsetEnd)
+		default:
+			// Should not happen due to sanitise, but skip if it does
+			continue
+		}
+		conditions = append(conditions, condition)
+	}
+
+	// Log summary of how many conditions were created
+	log.Printf("INFO: Created %d date-specific conditions for TimeOfDay filter over a %d day range",
+		len(conditions), int(endDate.Sub(startDate).Hours()/24)+1)
+
+	return conditions, nil
 }
 
 // SearchDetections retrieves detections based on the given filters
@@ -1072,8 +1273,8 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 	query = query.Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id")
 	query = query.Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id")
 
-	// Apply filters
-	query = applyCommonFilters(query, filters)
+	// Apply filters - Pass ds to applyCommonFilters now
+	query = applyCommonFilters(query, filters, ds)
 
 	// --- Count Query ---
 	// Create a separate query for counting to avoid issues with GROUP BY if added later
@@ -1081,8 +1282,8 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
 		Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id")
 
-	// Apply the *same* filters to the count query
-	countQuery = applyCommonFilters(countQuery, filters)
+	// Apply the *same* filters to the count query - Pass ds here too
+	countQuery = applyCommonFilters(countQuery, filters, ds)
 
 	// Get total count using the separate count query
 	var total int64
@@ -1155,6 +1356,40 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 			_, week = t.ISOWeek()
 		}
 
+		// Calculate time of day
+		timeOfDay := "unknown"
+		if ds.SunCalc != nil {
+			// Get date string for cache key
+			dateStr := scanned.Date
+
+			// Get or calculate sun times for this date
+			sunEvents, err := ds.getSunEventsForDate(dateStr, timestamp)
+			if err == nil {
+				// Convert all times to the same format for comparison
+				detTime := timestamp.Format("15:04:05")
+				sunriseTime := sunEvents.Sunrise.Format("15:04:05")
+				sunsetTime := sunEvents.Sunset.Format("15:04:05")
+
+				// Define sunrise/sunset window (using constant)
+				window := time.Duration(sunriseSetWindowMinutes) * time.Minute
+				sunriseStart := sunEvents.Sunrise.Add(-window).Format("15:04:05")
+				sunriseEnd := sunEvents.Sunrise.Add(window).Format("15:04:05")
+				sunsetStart := sunEvents.Sunset.Add(-window).Format("15:04:05")
+				sunsetEnd := sunEvents.Sunset.Add(window).Format("15:04:05")
+
+				switch {
+				case detTime >= sunriseStart && detTime <= sunriseEnd:
+					timeOfDay = "sunrise"
+				case detTime >= sunsetStart && detTime <= sunsetEnd:
+					timeOfDay = "sunset"
+				case detTime >= sunriseTime && detTime < sunsetTime:
+					timeOfDay = "day"
+				default:
+					timeOfDay = "night"
+				}
+			}
+		}
+
 		// Create detection record
 		record := DetectionRecord{
 			ID:             fmt.Sprintf("%d", scanned.ID),
@@ -1171,10 +1406,44 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 			HasAudio:       scanned.ClipName != "",
 			Device:         scanned.SourceNode,
 			Source:         scanned.Source,
+			TimeOfDay:      timeOfDay, // Include calculated time of day
 		}
 
 		results = append(results, record)
 	}
 
 	return results, int(total), nil
+}
+
+// getSunEventsForDate retrieves sun times for a given date
+func (ds *DataStore) getSunEventsForDate(dateStr string, timestamp time.Time) (suncalc.SunEventTimes, error) {
+	// Check if the sun times are already cached
+	if cached, exists := ds.getCachedSunTimes(dateStr); exists {
+		return cached, nil
+	}
+
+	// Calculate sun times for the given date
+	sunTimes, err := ds.SunCalc.GetSunEventTimes(timestamp)
+	if err != nil {
+		return suncalc.SunEventTimes{}, fmt.Errorf("failed to get sun times for date %s: %w", dateStr, err)
+	}
+
+	// Cache the calculated sun times
+	ds.cacheSunTimes(dateStr, &sunTimes)
+
+	return sunTimes, nil
+}
+
+// getCachedSunTimes retrieves sun times from the cache
+func (ds *DataStore) getCachedSunTimes(dateStr string) (suncalc.SunEventTimes, bool) {
+	cached, exists := ds.sunTimesCache.Load(dateStr)
+	if exists {
+		return cached.(suncalc.SunEventTimes), true
+	}
+	return suncalc.SunEventTimes{}, false
+}
+
+// cacheSunTimes caches sun times
+func (ds *DataStore) cacheSunTimes(dateStr string, sunTimes *suncalc.SunEventTimes) {
+	ds.sunTimesCache.Store(dateStr, *sunTimes)
 }

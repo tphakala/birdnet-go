@@ -138,4 +138,5 @@ type DetectionRecord struct {
 	HasAudio       bool      `json:"hasAudio,omitempty"`
 	Device         string    `json:"device,omitempty"`
 	Source         string    `json:"source,omitempty"`
+	TimeOfDay      string    `json:"timeOfDay,omitempty"`
 }

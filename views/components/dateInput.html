@@ -1,0 +1,47 @@
+{{define "dateInput"}}
+<!-- Date input field -->
+<div class="form-control relative mt-1" x-data="{
+    showTooltip: null,
+    touched: false,
+    validInput() {
+        return this.$refs && this.$refs.{{.id}} ? this.$refs.{{.id}}.validity.valid : true;
+    }
+}">
+    {{/* No main label needed as it's part of the Date Range label */}}
+    <input 
+        type="date" 
+        id="{{.id}}"
+        name="{{.id}}" {{/* Use id for name too, common practice */}}
+        x-model="{{.model}}" 
+        class="input input-bordered input-sm w-full" {{/* Match styling with textField */}}
+        {{if .placeholder}}placeholder="{{.placeholder}}"{{end}}
+        aria-describedby="{{.id}}Tooltip"
+        x-ref="{{.id}}"
+    />
+    {{if .altLabel}}
+    <label class="label pt-1 pb-0">
+        <span class="label-text-alt">{{.altLabel}}</span>
+        {{if .tooltip}}
+        <span class="help-icon ml-auto" 
+              @mouseenter="showTooltip = '{{.id}}'" 
+              @mouseleave="showTooltip = null"
+              @focus="showTooltip = '{{.id}}'"
+              @blur="showTooltip = null"
+              aria-label="Show help for {{.altLabel}}"
+              role="button"
+              tabindex="0">ⓘ</span>
+        {{end}}
+    </label>
+    {{end}}
+    {{if .tooltip}}
+    <div x-show="showTooltip === '{{.id}}'"
+         x-cloak
+         :aria-hidden="showTooltip !== '{{.id}}'"
+         class="tooltip"
+         id="{{.id}}Tooltip"
+         role="tooltip">
+        {{.tooltip}}
+    </div>
+    {{end}}
+</div>
+{{end}} 

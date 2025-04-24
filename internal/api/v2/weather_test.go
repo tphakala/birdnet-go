@@ -620,9 +620,6 @@ func TestGetWeatherForDetection(t *testing.T) {
 		assert.Equal(t, 4.0, response.Hourly.FeelsLike)
 		assert.Equal(t, "Clouds", response.Hourly.WeatherMain)
 		assert.Equal(t, "scattered clouds", response.Hourly.WeatherDesc)
-
-		// Is daytime (12:30 is between sunrise and sunset)
-		assert.True(t, response.IsDaytime)
 	}
 
 	// Verify mock expectations

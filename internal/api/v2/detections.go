@@ -12,6 +12,7 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // initDetectionRoutes registers all detection-related API endpoints
@@ -27,6 +28,7 @@ func (c *Controller) initDetectionRoutes() {
 	c.Group.GET("/detections", c.GetDetections)
 	c.Group.GET("/detections/:id", c.GetDetection)
 	c.Group.GET("/detections/recent", c.GetRecentDetections)
+	c.Group.GET("/detections/:id/time-of-day", c.GetDetectionTimeOfDay)
 
 	// Protected detection management endpoints
 	detectionGroup := c.Group.Group("/detections", c.AuthMiddleware)
@@ -69,6 +71,11 @@ type PaginatedResponse struct {
 	Offset      int         `json:"offset"`
 	CurrentPage int         `json:"current_page"`
 	TotalPages  int         `json:"total_pages"`
+}
+
+// TimeOfDayResponse represents the time of day response for a detection
+type TimeOfDayResponse struct {
+	TimeOfDay string `json:"timeOfDay"`
 }
 
 // GetDetections handles GET requests for detections
@@ -691,5 +698,69 @@ func (c *Controller) AddLock(noteID uint, locked bool) error {
 		return c.DS.LockNote(noteIDStr)
 	} else {
 		return c.DS.UnlockNote(noteIDStr)
+	}
+}
+
+// GetDetectionTimeOfDay calculates and returns the time of day for a detection
+func (c *Controller) GetDetectionTimeOfDay(ctx echo.Context) error {
+	id := ctx.Param("id")
+
+	// Get the detection from the database
+	note, err := c.DS.Get(id)
+	if err != nil {
+		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+	}
+
+	// Parse the detection date and time
+	dateTimeStr := fmt.Sprintf("%s %s", note.Date, note.Time)
+	layout := "2006-01-02 15:04:05" // Adjust based on your actual date/time format
+
+	detectionTime, err := time.Parse(layout, dateTimeStr)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to parse detection time", http.StatusInternalServerError)
+	}
+
+	// Check if SunCalc is initialized
+	if c.SunCalc == nil {
+		return c.HandleError(ctx, fmt.Errorf("sun calculator not initialized"), "Sun calculator not available", http.StatusInternalServerError)
+	}
+
+	// Calculate sun times for the detection date
+	sunEvents, err := c.SunCalc.GetSunEventTimes(detectionTime)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to calculate sun times", http.StatusInternalServerError)
+	}
+
+	// Determine time of day based on the detection time and sun events
+	timeOfDay := calculateTimeOfDay(detectionTime, &sunEvents)
+
+	// Return the time of day
+	return ctx.JSON(http.StatusOK, TimeOfDayResponse{
+		TimeOfDay: timeOfDay,
+	})
+}
+
+// calculateTimeOfDay determines the time of day based on the detection time and sun events
+func calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTimes) string {
+	// Convert all times to the same format for comparison
+	detTime := detectionTime.Format("15:04:05")
+	sunriseTime := sunEvents.Sunrise.Format("15:04:05")
+	sunsetTime := sunEvents.Sunset.Format("15:04:05")
+
+	// Define sunrise/sunset window (30 minutes before and after)
+	sunriseStart := sunEvents.Sunrise.Add(-30 * time.Minute).Format("15:04:05")
+	sunriseEnd := sunEvents.Sunrise.Add(30 * time.Minute).Format("15:04:05")
+	sunsetStart := sunEvents.Sunset.Add(-30 * time.Minute).Format("15:04:05")
+	sunsetEnd := sunEvents.Sunset.Add(30 * time.Minute).Format("15:04:05")
+
+	switch {
+	case detTime >= sunriseStart && detTime <= sunriseEnd:
+		return "Sunrise"
+	case detTime >= sunsetStart && detTime <= sunsetEnd:
+		return "Sunset"
+	case detTime >= sunriseTime && detTime < sunsetTime:
+		return "Day"
+	default:
+		return "Night"
 	}
 }

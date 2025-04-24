@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // DailyWeatherResponse represents the API response for daily weather data
@@ -42,7 +43,7 @@ type HourlyWeatherResponse struct {
 type DetectionWeatherResponse struct {
 	Daily     DailyWeatherResponse  `json:"daily"`
 	Hourly    HourlyWeatherResponse `json:"hourly"`
-	IsDaytime bool                  `json:"is_daytime"`
+	TimeOfDay string                `json:"time_of_day"`
 }
 
 // initWeatherRoutes registers all weather-related API endpoints
@@ -280,106 +281,73 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 		hour = note.Time[:2]
 	}
 
-	// Get daily weather data
+	// Get daily weather data (best effort)
 	dailyEvents, err := c.DS.GetDailyEvents(date)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to get daily weather data", http.StatusInternalServerError)
+		c.logger.Printf("WARN: [Weather API] Failed to get daily weather data for detection %s, date %s: %v", id, date, err)
+		dailyEvents = datastore.DailyEvents{}
 	}
-
-	// Convert daily data to response format using the helper function
 	dailyResponse := c.buildDailyWeatherResponse(dailyEvents)
 
-	// Get hourly weather data
+	// Get hourly weather data (best effort)
 	hourlyWeather, err := c.DS.GetHourlyWeather(date)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to get hourly weather data", http.StatusInternalServerError)
+		c.logger.Printf("WARN: [Weather API] Failed to get hourly weather data for detection %s, date %s: %v", id, date, err)
+		hourlyWeather = []datastore.HourlyWeather{}
 	}
+
+	// --- Calculate TimeOfDay dynamically ---
+	timeOfDay := "Night" // Default
+
+	detectionTimeStr := date + " " + note.Time
+	loc := time.Local
+	detectionTime, err := time.ParseInLocation("2006-01-02 15:04:05", detectionTimeStr, loc)
+	switch {
+	case err != nil:
+		c.logger.Printf("WARN: [Weather API] Failed to parse detection time '%s' in location %s for detection %s: %v. Cannot determine TimeOfDay accurately.", detectionTimeStr, loc.String(), id, err)
+	case c.SunCalc == nil:
+		c.logger.Printf("WARN: [Weather API] SunCalc not initialized. Cannot determine TimeOfDay for detection %s.", id)
+	default:
+		sunTimes, sunErr := c.SunCalc.GetSunEventTimes(detectionTime)
+		if sunErr != nil {
+			c.logger.Printf("WARN: [Weather API] Failed to get sun times for date %s for detection %s: %v. Cannot determine TimeOfDay.", date, id, sunErr)
+		} else {
+			timeOfDay = c.calculateTimeOfDay(detectionTime, &sunTimes)
+		}
+	}
+	// --- End TimeOfDay Calculation ---
 
 	// Find the closest hourly weather to the detection time
 	var closestHourlyData HourlyWeatherResponse
-
-	// Default isDaytime value
-	isDaytime := false
-
-	// Parse detection time
-	detectionTimeStr := date + " " + note.Time
-	detectionTime, err := time.Parse("2006-01-02 15:04:05", detectionTimeStr)
-	if err != nil {
-		// Use the hour to find weather if exact time parsing fails
-		requestedHour, parseErr := strconv.Atoi(hour)
-		if parseErr == nil {
+	if len(hourlyWeather) > 0 {
+		if err == nil {
+			var closestDiff time.Duration = 24 * time.Hour
 			for i := range hourlyWeather {
 				hw := &hourlyWeather[i]
-				storedHourStr := hw.Time.Format("15")
-				storedHour, _ := strconv.Atoi(storedHourStr)
+				hwTime := hw.Time.In(loc)
+				diff := hwTime.Sub(detectionTime)
+				if diff < 0 {
+					diff = -diff
+				}
 
-				if storedHour == requestedHour {
-					closestHourlyData = HourlyWeatherResponse{
-						Time:        hw.Time.Format("15:04:05"),
-						Temperature: hw.Temperature,
-						FeelsLike:   hw.FeelsLike,
-						TempMin:     hw.TempMin,
-						TempMax:     hw.TempMax,
-						Pressure:    hw.Pressure,
-						Humidity:    hw.Humidity,
-						Visibility:  hw.Visibility,
-						WindSpeed:   hw.WindSpeed,
-						WindDeg:     hw.WindDeg,
-						WindGust:    hw.WindGust,
-						Clouds:      hw.Clouds,
-						WeatherMain: hw.WeatherMain,
-						WeatherDesc: hw.WeatherDesc,
-						WeatherIcon: hw.WeatherIcon,
+				if diff < closestDiff {
+					closestDiff = diff
+					closestHourlyData = c.buildHourlyWeatherResponse(hw)
+				}
+			}
+		} else {
+			requestedHour, parseErr := strconv.Atoi(hour)
+			if parseErr == nil {
+				for i := range hourlyWeather {
+					hw := &hourlyWeather[i]
+					if hw.Time.In(loc).Hour() == requestedHour {
+						closestHourlyData = c.buildHourlyWeatherResponse(hw)
+						break
 					}
-					break
 				}
+			} else {
+				c.logger.Printf("ERROR: [Weather API] Invalid hour '%s' derived from detection time '%s' for detection %s", hour, note.Time, id)
 			}
-		}
-	} else {
-		// Find closest weather report by time
-
-		// NOTE: Time zone handling consideration
-		// This logic searches for the closest hourly weather by absolute time difference,
-		// assuming local or UTC time. If your system stores times in different time zones
-		// or leaps, consider normalizing them. This helps avoid edge cases if detection
-		// times differ from weather data's time zone.
-		var closestDiff time.Duration = 24 * time.Hour // Initialize with maximum possible difference in a day
-
-		for i := range hourlyWeather {
-			hw := &hourlyWeather[i]
-			diff := hw.Time.Sub(detectionTime)
-			if diff < 0 {
-				diff = -diff // Get absolute value
-			}
-
-			if diff < closestDiff {
-				closestDiff = diff
-
-				closestHourlyData = HourlyWeatherResponse{
-					Time:        hw.Time.Format("15:04:05"),
-					Temperature: hw.Temperature,
-					FeelsLike:   hw.FeelsLike,
-					TempMin:     hw.TempMin,
-					TempMax:     hw.TempMax,
-					Pressure:    hw.Pressure,
-					Humidity:    hw.Humidity,
-					Visibility:  hw.Visibility,
-					WindSpeed:   hw.WindSpeed,
-					WindDeg:     hw.WindDeg,
-					WindGust:    hw.WindGust,
-					Clouds:      hw.Clouds,
-					WeatherMain: hw.WeatherMain,
-					WeatherDesc: hw.WeatherDesc,
-					WeatherIcon: hw.WeatherIcon,
-				}
-			}
-		}
-
-		// Determine if it's daytime based on sunrise/sunset
-		if dailyEvents.Sunrise > 0 && dailyEvents.Sunset > 0 {
-			// Convert detection time to Unix timestamp
-			detectionUnix := detectionTime.Unix()
-			isDaytime = detectionUnix >= dailyEvents.Sunrise && detectionUnix <= dailyEvents.Sunset
 		}
 	}
 
@@ -387,10 +355,31 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 	response := DetectionWeatherResponse{
 		Daily:     dailyResponse,
 		Hourly:    closestHourlyData,
-		IsDaytime: isDaytime,
+		TimeOfDay: timeOfDay,
 	}
 
 	return ctx.JSON(http.StatusOK, response)
+}
+
+// buildHourlyWeatherResponse creates an HourlyWeatherResponse from an HourlyWeather struct
+func (c *Controller) buildHourlyWeatherResponse(hw *datastore.HourlyWeather) HourlyWeatherResponse {
+	return HourlyWeatherResponse{
+		Time:        hw.Time.Format("15:04:05"), // Consider if Timezone matters here
+		Temperature: hw.Temperature,
+		FeelsLike:   hw.FeelsLike,
+		TempMin:     hw.TempMin,
+		TempMax:     hw.TempMax,
+		Pressure:    hw.Pressure,
+		Humidity:    hw.Humidity,
+		Visibility:  hw.Visibility,
+		WindSpeed:   hw.WindSpeed,
+		WindDeg:     hw.WindDeg,
+		WindGust:    hw.WindGust,
+		Clouds:      hw.Clouds,
+		WeatherMain: hw.WeatherMain,
+		WeatherDesc: hw.WeatherDesc,
+		WeatherIcon: hw.WeatherIcon,
+	}
 }
 
 // GetLatestWeather handles GET /api/v2/weather/latest
@@ -447,4 +436,29 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 	}
 
 	return ctx.JSON(http.StatusOK, response)
+}
+
+// calculateTimeOfDay determines the time of day based on the detection time and sun events
+func (c *Controller) calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTimes) string {
+	// Convert all times to the same format for comparison
+	detTime := detectionTime.Format("15:04:05")
+	sunriseTime := sunEvents.Sunrise.Format("15:04:05")
+	sunsetTime := sunEvents.Sunset.Format("15:04:05")
+
+	// Define sunrise/sunset window (30 minutes before and after)
+	sunriseStart := sunEvents.Sunrise.Add(-30 * time.Minute).Format("15:04:05")
+	sunriseEnd := sunEvents.Sunrise.Add(30 * time.Minute).Format("15:04:05")
+	sunsetStart := sunEvents.Sunset.Add(-30 * time.Minute).Format("15:04:05")
+	sunsetEnd := sunEvents.Sunset.Add(30 * time.Minute).Format("15:04:05")
+
+	switch {
+	case detTime >= sunriseStart && detTime <= sunriseEnd:
+		return "Sunrise"
+	case detTime >= sunsetStart && detTime <= sunsetEnd:
+		return "Sunset"
+	case detTime >= sunriseTime && detTime < sunsetTime:
+		return "Day"
+	default:
+		return "Night"
+	}
 }
