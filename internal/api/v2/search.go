@@ -63,6 +63,17 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 		}
 	}
 
+	// Ensure start ≤ end
+	if req.DateStart != "" && req.DateEnd != "" {
+		start, _ := time.Parse("2006-01-02", req.DateStart) // Errors already checked above
+		end, _ := time.Parse("2006-01-02", req.DateEnd)     // Errors already checked above
+		if start.After(end) {
+			return c.HandleError(ctx, nil,
+				"'dateStart' must be earlier than or equal to 'dateEnd'",
+				http.StatusBadRequest)
+		}
+	}
+
 	// Validate status enums
 	validVerifiedStatus := map[string]bool{"any": true, "verified": true, "unverified": true}
 	if req.VerifiedStatus == "" {
