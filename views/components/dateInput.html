@@ -1,12 +1,15 @@
 {{define "dateInput"}}
-<div class="form-control relative">
+<!-- Date input field -->
+<div class="form-control relative mt-1" x-data="{
+    showTooltip: null
+}">
     {{/* No main label needed as it's part of the Date Range label */}}
     <input 
         type="date" 
         id="{{.id}}"
         name="{{.id}}" {{/* Use id for name too, common practice */}}
         x-model="{{.model}}" 
-        class="input input-bordered input-sm w-full" {{/* Match styling, maybe use select-sm size? */}}
+        class="input input-bordered input-sm w-full" {{/* Match styling with textField */}}
         {{if .placeholder}}placeholder="{{.placeholder}}"{{end}}
         aria-describedby="{{.id}}Tooltip"
     />
@@ -26,7 +29,7 @@
     {{if .tooltip}}
     <div x-show="showTooltip === '{{.id}}'" 
          x-cloak 
-         class="tooltip tooltip-bottom" {{/* Adjust position if needed */}}
+         class="tooltip" {{/* Adjusted to match textField tooltip */}}
          id="{{.id}}Tooltip" 
          role="tooltip">
         {{.tooltip}}
