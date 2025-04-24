@@ -94,8 +94,13 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 	if req.ConfidenceMin < 0 {
 		req.ConfidenceMin = 0
 	}
-	if req.ConfidenceMax > 1 || req.ConfidenceMax == 0 {
-		req.ConfidenceMax = 1
+	switch {
+	case req.ConfidenceMax > 1:
+		req.ConfidenceMax = 1 // clamp to maximum
+	case req.ConfidenceMax < 0:
+		req.ConfidenceMax = 0 // handle negative values
+	case req.ConfidenceMax == 0:
+		// leave untouched – treat as "explicit 0"
 	}
 
 	// Ensure min ≤ max
@@ -117,7 +122,7 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 	}
 
 	// Create context with timeout for the database query
-	ctxTimeout, cancel := context.WithTimeout(ctx.Request().Context(), 90*time.Second)
+	ctxTimeout, cancel := context.WithTimeout(ctx.Request().Context(), 60*time.Second)
 	defer cancel() // Ensure the context is cancelled
 
 	// Default sort will be handled by the datastore layer
