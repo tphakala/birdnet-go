@@ -113,14 +113,20 @@ type HourlyWeather struct {
 // ImageCache represents cached image metadata for species
 type ImageCache struct {
 	ID             uint      `gorm:"primaryKey"`
-	ProviderName   string    `gorm:"index:idx_imagecache_provider_species,unique;not null"` // Name of the provider (e.g., "wikimedia", "flickr")
-	ScientificName string    `gorm:"index:idx_imagecache_provider_species,unique;not null"` // Scientific name of the species
+	ProviderName   string    `gorm:"index:idx_imagecache_provider_species,unique;not null;default:wikimedia"` // Name of the provider (e.g., "wikimedia", "flickr")
+	ScientificName string    `gorm:"index:idx_imagecache_provider_species,unique;not null"`                   // Scientific name of the species
 	URL            string    // The URL of the image
 	LicenseName    string    // The name of the license for the image
 	LicenseURL     string    // The URL of the license details
 	AuthorName     string    // The name of the image author
 	AuthorURL      string    // The URL of the author's page or profile
 	CachedAt       time.Time `gorm:"index"` // When the image was cached
+}
+
+// ImageCacheQuery encapsulates parameters for querying the image cache.
+type ImageCacheQuery struct {
+	ScientificName string
+	ProviderName   string
 }
 
 // DetectionRecord represents a bird detection record for search results

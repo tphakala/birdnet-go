@@ -513,7 +513,9 @@
     dashboard: {
         thumbnails: {
             summary: {{.Settings.Realtime.Dashboard.Thumbnails.Summary}},
-            recent: {{.Settings.Realtime.Dashboard.Thumbnails.Recent}}
+            recent: {{.Settings.Realtime.Dashboard.Thumbnails.Recent}},
+            imageprovider: '{{.Settings.Realtime.Dashboard.Thumbnails.ImageProvider}}',
+            fallbackpolicy: '{{.Settings.Realtime.Dashboard.Thumbnails.FallbackPolicy}}'
         },
         summarylimit: {{.Settings.Realtime.Dashboard.SummaryLimit}}
     },
@@ -576,6 +578,31 @@
             "name" "realtime.dashboard.thumbnails.recent"
             "label" "Show Thumbnails on Recent Detections list"
             "tooltip" "Enable to show thumbnails of detected species on the recent detections list"}}
+
+        <!-- Image Provider Selection -->
+        {{template "selectField" dict
+            "id" "imageProvider"
+            "model" "dashboard.thumbnails.imageprovider"
+            "name" "realtime.dashboard.thumbnails.imageprovider"
+            "label" "Image Provider"
+            "tooltip" "Select the preferred image provider for bird thumbnails"
+            "options" (dict
+                "auto" "Auto (Default to WikiMedia)"
+                "wikimedia" "WikiMedia"
+                "avicommons" "AviCommons"
+            )}}
+
+        <!-- Fallback Policy -->
+        {{template "selectField" dict
+            "id" "fallbackPolicy"
+            "model" "dashboard.thumbnails.fallbackpolicy"
+            "name" "realtime.dashboard.thumbnails.fallbackpolicy" 
+            "label" "Fallback Policy"
+            "tooltip" "Select what happens when preferred provider fails to find an image"
+            "options" (dict
+                "all" "Try all providers in sequence" 
+                "none" "Use only selected provider"
+            )}}
 
     </div>
 </div>

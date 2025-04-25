@@ -60,8 +60,11 @@ realtime:
 
   dashboard:
     thumbnails:
-      summary: false
-      recent: true
+      debug: false        # true to enable debug mode for image provider
+      summary: false      # show thumbnails on summary table
+      recent: true        # show thumbnails on recent table
+      imageprovider: auto # preferred image provider: auto, wikimedia, avicommons
+      fallbackpolicy: all # fallback policy: none (no fallback), all (try all available providers)
  
   dynamicthreshold:
     enabled: true         # true to enable dynamic confidence threshold
