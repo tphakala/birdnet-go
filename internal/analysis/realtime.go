@@ -387,7 +387,7 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *telemetry.Metri
 			log.Println(errMsg)
 			errs = append(errs, errors.New(errMsg))
 			// Check if we can read the data file for debugging
-			if _, errRead := fs.ReadFile(httpcontroller.ImageDataFs, "data/latest.json"); errRead != nil {
+			if _, errRead := fs.ReadFile(httpcontroller.ImageDataFs, "internal/imageprovider/data/latest.json"); errRead != nil {
 				log.Printf("Error reading AviCommons data file: %v", errRead)
 			} else {
 				log.Println("AviCommons data file exists but provider registration failed.")
@@ -526,8 +526,13 @@ func warmUpImageCacheInBackground(ds datastore.Interface, registry *imageprovide
 // selecting a default, and starting a background warm-up process.
 func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *imageprovider.BirdImageCache {
 	// 1. Set up the registry and register known providers
-	registry, _ := setupImageProviderRegistry(ds, metrics)
-	// Error handling for registry setup is logged within the helper
+	registry, regErr := setupImageProviderRegistry(ds, metrics)
+	if regErr != nil {
+		// Log errors encountered during provider registration
+		log.Printf("Warning: Image provider registry initialization encountered errors: %v", regErr)
+		// Note: We continue even if some providers fail, as others might succeed.
+		// The selectDefaultImageProvider logic will handle finding an available provider.
+	}
 
 	// 2. Select the default cache based on settings and availability
 	defaultCache := selectDefaultImageProvider(registry)

@@ -178,7 +178,7 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 				providerCount++
 				return true // Continue ranging
 			})
-			multipleProvidersAvailable = providerCount > 0 // Considered multiple if at least one besides 'auto' exists
+			multipleProvidersAvailable = providerCount > 1 // Considered multiple only if more than one actual provider exists
 
 			// Sort the providers alphabetically by display name (excluding the first 'auto' entry)
 			if len(providerOptionList) > 2 { // Need at least 3 elements to sort the part after 'auto'
