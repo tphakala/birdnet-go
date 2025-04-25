@@ -287,14 +287,13 @@
                                     <td>
                                         <div class="flex items-center gap-2">
                                             <!-- Add bird image thumbnail -->
-                                            <div class="w-12 h-12 rounded-md overflow-hidden bg-gray-100 flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                                            <div class="w-12 h-12 rounded-md overflow-hidden bg-gray-100 flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all focus:outline-none focus:ring-2 focus:ring-primary"
                                                  @click.stop="toggleExpand(result.id)"
                                                  @keydown.enter.space.prevent="toggleExpand(result.id)"
                                                  :aria-label="(isExpanded(result.id) ? 'Collapse' : 'Expand') + ' details for ' + (result.commonName || 'Unknown species')"
                                                  :aria-expanded="isExpanded(result.id)"
                                                  role="button"
-                                                 tabindex="0"
-                                                 class="focus:outline-none focus:ring-2 focus:ring-primary">
+                                                 tabindex="0">
                                                 <img 
                                                     :src="'/api/v2/media/species-image?name=' + encodeURIComponent(result.scientificName)" 
                                                     :alt="result.commonName || 'Unknown species'"
@@ -380,10 +379,6 @@
                                                     loading: true,
                                                     error: null,
                                                     
-                                                    init() {
-                                                        this.fetchWeatherInfo(result.id);
-                                                    },
-                                                    
                                                     fetchWeatherInfo(resultId) {
                                                         fetch(`/api/v2/weather/detection/${resultId}`)
                                                             .then(response => {
@@ -402,7 +397,7 @@
                                                                 this.loading = false;
                                                             });
                                                     }
-                                                }">
+                                                }" x-init="fetchWeatherInfo(result.id)">
                                                     <h3 class="text-lg font-semibold text-base-content mb-3" id="weather-info-heading">Weather Information</h3>
                                                     
                                                     <!-- Loading state -->
@@ -483,6 +478,8 @@
                                                          role="button"
                                                          tabindex="0"
                                                          :aria-label="'Collapse details for ' + (result.commonName || 'Unknown species')"
+                                                         :aria-expanded="isExpanded(result.id)"
+                                                         :aria-controls="'expanded-row-' + result.id"
                                                          title="Click to collapse">
                                                         <img 
                                                             :src="'/api/v2/media/species-image?name=' + encodeURIComponent(result.scientificName)" 
