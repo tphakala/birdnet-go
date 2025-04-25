@@ -788,18 +788,21 @@ func (c *BirdImageCache) GetRegistry() *ImageProviderRegistry {
 }
 
 // RangeProviders iterates over all registered caches, applying the callback function.
-// It releases the lock before executing the callback for each provider.
-func (r *ImageProviderRegistry) RangeProviders(callback func(name string, cache *BirdImageCache) bool) {
-	// Iterate over the caches, releasing the lock before each callback
+// It creates a snapshot of the cache map to avoid concurrent modification issues
+// during iteration.
+func (r *ImageProviderRegistry) RangeProviders(cb func(name string, cache *BirdImageCache) bool) {
 	r.mu.RLock()
-	for name, cache := range r.caches {
-		r.mu.RUnlock() // release before potentially slow callback
-		if !callback(name, cache) {
+	snapshot := make(map[string]*BirdImageCache, len(r.caches))
+	for k, v := range r.caches {
+		snapshot[k] = v
+	}
+	r.mu.RUnlock()
+
+	for name, cache := range snapshot {
+		if !cb(name, cache) {
 			return // Callback requested stop
 		}
-		r.mu.RLock() // re-acquire for next iteration/check
 	}
-	r.mu.RUnlock() // Ensure lock is released if loop finishes
 }
 
 // GetCaches returns a copy of the internal cache map.

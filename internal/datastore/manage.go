@@ -381,8 +381,8 @@ func redactSensitiveInfo(dsn string) string {
 	u, err := url.Parse(parseInput)
 	if err != nil {
 		// If parsing fails even with added scheme, return a generic redacted string
-		// as we cannot reliably locate the password.
-		log.Printf("DEBUG: Failed to parse DSN for redaction '%s': %v. Returning generic redaction.", dsn, err)
+		// as we cannot reliably locate the password. Avoid logging the raw DSN.
+		log.Printf("DEBUG: Failed to parse DSN for redaction: %v. Returning generic redaction.", err)
 		return "[REDACTED DSN]"
 	}
 

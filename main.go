@@ -28,7 +28,7 @@ var assetsFs embed.FS
 //go:embed views/*
 var viewsFs embed.FS
 
-//go:embed data/* internal/imageprovider/data/*
+//go:embed internal/imageprovider/data/latest.json
 var imageDataFs embed.FS // Embed image provider data
 
 // ImageProviderRegistry is a global registry for image providers

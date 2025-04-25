@@ -525,10 +525,10 @@
     multipleProviders: {{ .MultipleProvidersAvailable }}
 }" x-init="
     $watch('dashboard', () => hasChanges = true, { deep: true });
-    <!-- Note: Deep watch on 'dashboard' currently covers all nested properties like -->
-    <!-- 'thumbnails.imageprovider' and 'thumbnails.fallbackpolicy'. If this -->
-    <!-- changes (e.g., watching 'dashboard.thumbnails' directly), ensure these -->
-    <!-- fields are still monitored for the 'hasChanges' flag to work correctly. -->
+    // Note: Deep watch on 'dashboard' currently covers all nested properties like
+    // 'thumbnails.imageprovider' and 'thumbnails.fallbackpolicy'. If this
+    // changes (e.g., watching 'dashboard.thumbnails' directly), ensure these
+    // fields are still monitored for the 'hasChanges' flag to work correctly.
 ">
 
     <!-- control collapse element open state and label visibility -->
@@ -589,6 +589,7 @@
              :class="{ 'opacity-50': !multipleProviders }"
              title="{{if not .MultipleProvidersAvailable}}Only one image provider available{{end}}">
 
+            {{ $disabled := not .MultipleProvidersAvailable }}
             {{template "selectField" dict
                 "id" "imageProvider"
                 "model" "dashboard.thumbnails.imageprovider"
@@ -596,7 +597,7 @@
                 "label" "Image Provider"
                 "tooltip" "Select the preferred image provider for bird thumbnails"
                 "providerOptionList" .ProviderOptionList
-                {{ if not .MultipleProvidersAvailable }} "disabled" true {{ end }}
+                "disabled" $disabled
             }}
         </div>
 
