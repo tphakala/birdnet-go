@@ -501,7 +501,7 @@
                                                         
                                                         <!-- Spectrogram Image -->
                                                         <img :src="'/api/v2/spectrogram/' + result.id + '?width=400'" alt="Spectrogram" 
-                                                            class="w-full rounded object-cover" loading="lazy" />
+                                                        class="w-full rounded object-cover" loading="lazy" onerror="this.onerror=null; this.src='/assets/images/spectrogram-placeholder.svg'"/>
                                                         
                                                         <!-- Play position indicator -->
                                                         <div :id="'position-indicator-' + result.id" class="absolute top-0 bottom-0 w-0.5 bg-primary pointer-events-none"
