@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -338,15 +339,21 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *telemetry.Metri
 		log.Println("Created new image provider registry")
 	}
 
+	var errs []error // Slice to collect errors
+
 	// Attempt to register Wikimedia
 	if _, ok := registry.GetCache("wikimedia"); !ok {
 		wikiCache, err := imageprovider.CreateDefaultCache(metrics, ds)
 		if err != nil {
-			log.Printf("Failed to create WikiMedia image cache: %v", err)
+			errMsg := fmt.Sprintf("Failed to create WikiMedia image cache: %v", err)
+			log.Println(errMsg)
+			errs = append(errs, errors.New(errMsg))
 			// Continue even if one provider fails
 		} else {
 			if err := registry.Register("wikimedia", wikiCache); err != nil {
-				log.Printf("Failed to register WikiMedia image provider: %v", err)
+				errMsg := fmt.Sprintf("Failed to register WikiMedia image provider: %v", err)
+				log.Println(errMsg)
+				errs = append(errs, errors.New(errMsg))
 			} else {
 				log.Println("Registered WikiMedia image provider")
 			}
@@ -375,7 +382,9 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *telemetry.Metri
 		}
 
 		if err := imageprovider.RegisterAviCommonsProvider(registry, httpcontroller.ImageDataFs, metrics, ds); err != nil {
-			log.Printf("Failed to register AviCommons provider: %v", err)
+			errMsg := fmt.Sprintf("Failed to register AviCommons provider: %v", err)
+			log.Println(errMsg)
+			errs = append(errs, errors.New(errMsg))
 			// Check if we can read the data file for debugging
 			if _, errRead := fs.ReadFile(httpcontroller.ImageDataFs, "data/latest.json"); errRead != nil {
 				log.Printf("Error reading AviCommons data file: %v", errRead)
@@ -395,7 +404,12 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *telemetry.Metri
 		return true // Continue ranging
 	})
 
-	return registry, nil // Assuming setup always proceeds, errors are logged
+	// Return joined errors if any occurred
+	if len(errs) > 0 {
+		return registry, errors.Join(errs...)
+	}
+
+	return registry, nil // No errors during setup
 }
 
 // selectDefaultImageProvider chooses the default image cache based on settings and availability.
@@ -464,12 +478,13 @@ func warmUpImageCacheInBackground(ds datastore.Interface, registry *imageprovide
 		needsImage := 0
 
 		for i := range speciesList {
-			species := &speciesList[i] // Use pointer
+			// Use direct access to name to avoid pointer allocation
+			sciName := speciesList[i].ScientificName
 
 			// Check if already cached by *any* provider
 			alreadyCached := false
 			for providerName := range allCachedImages {
-				if _, exists := allCachedImages[providerName][species.ScientificName]; exists {
+				if _, exists := allCachedImages[providerName][sciName]; exists {
 					alreadyCached = true
 					break
 				}
@@ -482,7 +497,7 @@ func warmUpImageCacheInBackground(ds datastore.Interface, registry *imageprovide
 			needsImage++
 			wg.Add(1)
 			// Mark as initializing *in the default cache* which will handle the fetch
-			defaultCache.Initializing.Store(species.ScientificName, struct{}{})
+			defaultCache.Initializing.Store(sciName, struct{}{})
 
 			go func(name string) {
 				defer wg.Done()
@@ -493,7 +508,7 @@ func warmUpImageCacheInBackground(ds datastore.Interface, registry *imageprovide
 				if _, err := defaultCache.Get(name); err != nil {
 					log.Printf("Failed to fetch image for %s during warm-up: %v", name, err)
 				}
-			}(species.ScientificName)
+			}(sciName) // Pass the captured name
 		}
 
 		if needsImage > 0 {

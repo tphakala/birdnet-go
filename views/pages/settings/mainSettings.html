@@ -521,7 +521,8 @@
     },
     uiSettingsOpen: false,
     showTooltip: null,
-    hasChanges: false
+    hasChanges: false,
+    multipleProviders: {{ .MultipleProvidersAvailable }}
 }" x-init="
     $watch('dashboard', () => hasChanges = true, { deep: true });
     <!-- Note: Deep watch on 'dashboard' currently covers all nested properties like -->
@@ -585,7 +586,7 @@
 
         <!-- Image Provider Selection Container -->
         <div class="form-control"
-             :class="{ 'opacity-50': !{{ .MultipleProvidersAvailable }} }"
+             :class="{ 'opacity-50': !multipleProviders }"
              title="{{if not .MultipleProvidersAvailable}}Only one image provider available{{end}}">
 
             {{template "selectField" dict
@@ -594,12 +595,13 @@
                 "name" "realtime.dashboard.thumbnails.imageprovider"
                 "label" "Image Provider"
                 "tooltip" "Select the preferred image provider for bird thumbnails"
-                "options" .ImageProviderOptions
-                "disabled" (not .MultipleProvidersAvailable)}}
+                "providerOptionList" .ProviderOptionList
+                {{ if not .MultipleProvidersAvailable }} "disabled" true {{ end }}
+            }}
         </div>
 
         <!-- Fallback Policy Container -->
-        <div x-show="{{ .MultipleProvidersAvailable }}">
+        <div x-show="multipleProviders">
             {{template "selectField" dict
                 "id" "fallbackPolicy"
                 "model" "dashboard.thumbnails.fallbackpolicy"

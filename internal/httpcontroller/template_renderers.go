@@ -6,7 +6,9 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -17,6 +19,12 @@ import (
 type LocaleData struct {
 	Code string
 	Name string
+}
+
+// ProviderOption represents an option for the image provider select field.
+type ProviderOption struct {
+	Value   string
+	Display string
 }
 
 // PageData represents data for rendering a page.
@@ -149,26 +157,37 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 	}
 
 	// Prepare image provider options for the template
-	providerOptions := map[string]string{
-		"auto": "Auto (Default)", // Always add auto
+	providerOptionList := []ProviderOption{
+		{Value: "auto", Display: "Auto (Default)"}, // Always add auto first
 	}
+	providerNames := []string{}
+
 	multipleProvidersAvailable := false
 	providerCount := 0
 	if s.Handlers.BirdImageCache != nil {
 		if registry := s.Handlers.BirdImageCache.GetRegistry(); registry != nil {
 			registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
-				// Simple capitalization for display name
+				// Simple capitalization for display name (Rune-aware)
 				var displayName string
 				if name != "" {
-					displayName = strings.ToUpper(name[:1]) + name[1:]
+					r, size := utf8.DecodeRuneInString(name)
+					displayName = strings.ToUpper(string(r)) + name[size:]
 				} else {
 					displayName = "(unknown)"
 				}
-				providerOptions[name] = displayName
+				providerNames = append(providerNames, name)
+				providerOptionList = append(providerOptionList, ProviderOption{Value: name, Display: displayName})
 				providerCount++
 				return true // Continue ranging
 			})
-			multipleProvidersAvailable = providerCount > 1
+			multipleProvidersAvailable = providerCount > 0 // Considered multiple if at least one besides 'auto' exists
+
+			// Sort the providers alphabetically by display name (excluding the first 'auto' entry)
+			if len(providerOptionList) > 2 { // Need at least 3 elements to sort the part after 'auto'
+				sort.Slice(providerOptionList[1:], func(i, j int) bool {
+					return providerOptionList[1+i].Display < providerOptionList[1+j].Display
+				})
+			}
 		}
 	} else {
 		log.Println("Warning: ImageProviderRegistry is nil, cannot get provider names.")
@@ -181,7 +200,7 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 		"EqFilterConfig":             conf.EqFilterConfig,    // Equalizer filter configuration for the UI
 		"TemplateName":               templateName,
 		"CSRFToken":                  csrfToken,
-		"ImageProviderOptions":       providerOptions,            // Add provider options map
+		"ProviderOptionList":         providerOptionList,         // Use the sorted list of structs
 		"MultipleProvidersAvailable": multipleProvidersAvailable, // Add flag
 	}
 
