@@ -23,13 +23,32 @@ func createGormLogger() logger.Interface {
 	)
 }
 
+// getSQLiteIndexInfo executes PRAGMA index_info for a given SQLite index name,
+// handling necessary string formatting and escaping.
+func getSQLiteIndexInfo(db *gorm.DB, indexName string, debug bool) ([]struct {
+	Name string `gorm:"column:name"`
+}, error) {
+	var info []struct {
+		Name string `gorm:"column:name"`
+	}
+	// Escape single quotes in the index name to prevent SQL injection,
+	// although index names from PRAGMA index_list are generally safe.
+	escapedIndexName := strings.ReplaceAll(indexName, "'", "''")
+	query := fmt.Sprintf("PRAGMA index_info('%s')", escapedIndexName)
+	if err := db.Raw(query).Scan(&info).Error; err != nil {
+		// Log the warning here as the caller might just continue
+		log.Printf("WARN: Failed to get info for index '%s' using query [%s]: %v", indexName, query, err)
+		return nil, err // Return the error to indicate failure
+	}
+	return info, nil
+}
+
 // hasCorrectImageCacheIndexSQLite checks if the SQLite database has the correct
 // composite unique index on the image_caches table.
-func hasCorrectImageCacheIndexSQLite(db *gorm.DB) (bool, error) {
+func hasCorrectImageCacheIndexSQLite(db *gorm.DB, debug bool) (bool, error) {
 	var indexes []struct {
 		Name   string `gorm:"column:name"`
-		SQL    string `gorm:"column:sql"`
-		Unique int    `gorm:"column:origin"` // For PRAGMA index_list, 'u' means unique index created by UNIQUE constraint
+		Unique int    `gorm:"column:unique"` // 1 == unique
 	}
 
 	// Check if the table exists first
@@ -47,15 +66,16 @@ func hasCorrectImageCacheIndexSQLite(db *gorm.DB) (bool, error) {
 	targetIndexName := "idx_imagecache_provider_species" // Expected index name from GORM tags
 
 	for _, idx := range indexes {
-		log.Printf("DEBUG: SQLite Found index: Name=%s, SQL=%s, Unique=%d", idx.Name, idx.SQL, idx.Unique)
+		if debug {
+			log.Printf("DEBUG: SQLite Found index: Name=%s, Unique=%d", idx.Name, idx.Unique)
+		}
 
 		// Check if the current index is the target index and if it's correct
 		if idx.Name == targetIndexName {
-			var info []struct {
-				Name string `gorm:"column:name"`
-			}
-			if err := db.Raw("PRAGMA index_info(?)", idx.Name).Scan(&info).Error; err != nil {
-				log.Printf("WARN: Failed to get info for index %s: %v", idx.Name, err)
+			// Use helper function to get index info
+			info, err := getSQLiteIndexInfo(db, idx.Name, debug)
+			if err != nil {
+				// Error already logged by helper, just continue to next index
 				continue
 			}
 
@@ -70,23 +90,29 @@ func hasCorrectImageCacheIndexSQLite(db *gorm.DB) (bool, error) {
 						hasScientific = true
 					}
 				}
-				if hasProvider && hasScientific && strings.Contains(strings.ToUpper(idx.SQL), "UNIQUE INDEX") {
+				if hasProvider && hasScientific && idx.Unique == 1 {
 					correctIndexFound = true
-					log.Printf("DEBUG: SQLite Found correct composite unique index: %s", idx.Name)
+					if debug {
+						log.Printf("DEBUG: SQLite Found correct composite unique index: %s", idx.Name)
+					}
 					// Do not break here yet, we need to check for incorrect indexes too.
 				}
 			}
 		}
 
 		// Separately, check if the current index is the known incorrect single-column unique index
-		if strings.Contains(strings.ToUpper(idx.SQL), "UNIQUE") {
-			var info []struct {
-				Name string `gorm:"column:name"`
-			}
-			if err := db.Raw("PRAGMA index_info(?)", idx.Name).Scan(&info).Error; err == nil {
+		// Check using the Unique flag from index_list and index_info results
+		if idx.Unique == 1 { // Check if the index itself is marked unique
+			// Use helper function to get index info again
+			info, err := getSQLiteIndexInfo(db, idx.Name, debug)
+			// If error getting info, we can't determine if it's the incorrect index, so skip
+			if err == nil {
+				// Now check if this unique index is ONLY on scientific_name
 				if len(info) == 1 && info[0].Name == "scientific_name" {
 					incorrectIndexFound = true
-					log.Printf("DEBUG: SQLite Found incorrect single-column unique index on scientific_name: %s", idx.Name)
+					if debug {
+						log.Printf("DEBUG: SQLite Found incorrect single-column unique index on scientific_name: %s", idx.Name)
+					}
 				}
 			}
 		}
@@ -104,7 +130,7 @@ func hasCorrectImageCacheIndexSQLite(db *gorm.DB) (bool, error) {
 
 // hasCorrectImageCacheIndexMySQL checks if the MySQL database has the correct
 // composite unique index on the image_caches table.
-func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string) (bool, error) {
+func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (bool, error) {
 	type IndexInfo struct {
 		IndexName  string `gorm:"column:INDEX_NAME"`
 		ColumnName string `gorm:"column:COLUMN_NAME"`
@@ -134,51 +160,71 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string) (bool, error) {
 		return false, fmt.Errorf("failed to query index info from information_schema for %s.%s: %w", dbName, targetTableName, err)
 	}
 
-	// Analyze the results
-	correctIndexColumns := make(map[string]bool)
+	// Analyze the results by first mapping index names to their columns and uniqueness
+	indexDetails := make(map[string]struct {
+		Columns   []string
+		IsUnique  bool
+		SeqInCols map[string]int // Map column name to its sequence position
+	})
+
+	for _, stat := range stats {
+		if debug {
+			log.Printf("DEBUG: MySQL Processing index stat: Index=%s, Column=%s, Seq=%d, NonUnique=%d",
+				stat.IndexName, stat.ColumnName, stat.SeqInIndex, stat.NonUnique)
+		}
+		detail, exists := indexDetails[stat.IndexName]
+		if !exists {
+			detail.Columns = []string{}
+			detail.IsUnique = stat.NonUnique == 0
+			detail.SeqInCols = make(map[string]int)
+		}
+		// Only add column if sequence is valid (greater than 0)
+		if stat.SeqInIndex > 0 {
+			detail.Columns = append(detail.Columns, stat.ColumnName)
+			detail.SeqInCols[stat.ColumnName] = stat.SeqInIndex
+		}
+		// Update uniqueness; if any part is non-unique, the whole index is considered non-unique for our check
+		if stat.NonUnique != 0 {
+			detail.IsUnique = false
+		}
+		indexDetails[stat.IndexName] = detail
+	}
+
 	foundCorrectIndex := false
 	foundIncorrectIndex := false
 
-	for _, stat := range stats {
-		log.Printf("DEBUG: MySQL Found index stat: Index=%s, Column=%s, Seq=%d, NonUnique=%d",
-			stat.IndexName, stat.ColumnName, stat.SeqInIndex, stat.NonUnique)
-
-		// Check if this row belongs to our target composite index
-		if stat.IndexName == targetIndexName {
-			if stat.NonUnique == 0 { // Check if it's unique
-				if stat.ColumnName == "provider_name" && stat.SeqInIndex == 1 {
-					correctIndexColumns["provider_name"] = true
-				}
-				if stat.ColumnName == "scientific_name" && stat.SeqInIndex == 2 {
-					correctIndexColumns["scientific_name"] = true
-				}
-			}
-		} else if stat.NonUnique == 0 { // Check other unique indexes for the incorrect one
-			// See if this unique index is ONLY on scientific_name
-			if stat.ColumnName == "scientific_name" && stat.SeqInIndex == 1 {
-				// To confirm it's ONLY on scientific_name, check if other rows exist for this index
-				isSingleColumn := true
-				for _, otherStat := range stats {
-					if otherStat.IndexName == stat.IndexName && otherStat.SeqInIndex > 1 {
-						isSingleColumn = false
-						break
+	// Now iterate through the processed index details
+	for indexName, detail := range indexDetails {
+		// Check for the target composite unique index
+		if indexName == targetIndexName {
+			if detail.IsUnique && len(detail.Columns) == 2 {
+				providerSeq, providerOk := detail.SeqInCols["provider_name"]
+				scientificSeq, scientificOk := detail.SeqInCols["scientific_name"]
+				// Check if both columns exist and are in the correct order (provider=1, scientific=2)
+				if providerOk && scientificOk && providerSeq == 1 && scientificSeq == 2 {
+					foundCorrectIndex = true
+					if debug {
+						log.Printf("DEBUG: MySQL Found correct composite unique index: %s", indexName)
 					}
 				}
-				if isSingleColumn {
-					foundIncorrectIndex = true
-					log.Printf("DEBUG: MySQL Found incorrect single-column unique index on scientific_name: %s", stat.IndexName)
-				}
 			}
+		} else if detail.IsUnique && len(detail.Columns) == 1 && detail.Columns[0] == "scientific_name" {
+			// Check for the incorrect single-column unique index on scientific_name
+			foundIncorrectIndex = true
+			if debug {
+				log.Printf("DEBUG: MySQL Found incorrect single-column unique index on scientific_name: %s", indexName)
+			}
+		}
+
+		// Optimization: Early exit if both conditions are met
+		if foundCorrectIndex && foundIncorrectIndex {
+			break
 		}
 	}
 
-	// Check if we found both required columns in the target index
-	if correctIndexColumns["provider_name"] && correctIndexColumns["scientific_name"] {
-		foundCorrectIndex = true
-		log.Printf("DEBUG: MySQL Found correct composite unique index: %s", targetIndexName)
+	if debug {
+		log.Printf("DEBUG: MySQL Schema Check Result: foundCorrectIndex=%v, foundIncorrectIndex=%v", foundCorrectIndex, foundIncorrectIndex)
 	}
-
-	log.Printf("DEBUG: MySQL Schema Check Result: foundCorrectIndex=%v, foundIncorrectIndex=%v", foundCorrectIndex, foundIncorrectIndex)
 
 	// Schema is correct if the target composite index exists and the incorrect single-column one doesn't
 	return foundCorrectIndex && !foundIncorrectIndex, nil
@@ -193,7 +239,7 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 
 	switch dbType {
 	case "sqlite":
-		schemaCorrect, err = hasCorrectImageCacheIndexSQLite(db)
+		schemaCorrect, err = hasCorrectImageCacheIndexSQLite(db, debug)
 		if err != nil {
 			return fmt.Errorf("failed to check SQLite schema for image_caches: %w", err)
 		}
@@ -204,7 +250,7 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 			log.Printf("WARN: Could not determine database name from connection info for MySQL schema check. Assuming schema is correct.")
 			schemaCorrect = true // Avoid dropping if we can't check
 		} else {
-			schemaCorrect, err = hasCorrectImageCacheIndexMySQL(db, dbName)
+			schemaCorrect, err = hasCorrectImageCacheIndexMySQL(db, dbName, debug)
 			if err != nil {
 				return fmt.Errorf("failed to check MySQL schema for image_caches: %w", err)
 			}

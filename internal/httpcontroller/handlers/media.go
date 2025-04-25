@@ -220,6 +220,11 @@ func (h *Handlers) Thumbnail(scientificName string) string {
 			}
 		} else {
 			h.Debug("Preferred provider '%s' not found in registry", preferredProvider)
+			// If preferred provider doesn't exist and fallback is disabled, return empty
+			if fallbackPolicy != "all" {
+				h.Debug("No fallback allowed (policy: %s) and provider not found, returning empty", fallbackPolicy)
+				return ""
+			}
 		}
 	} else {
 		h.Debug("Using default provider - Provider set to auto: %v, Registry available: %v",
@@ -285,10 +290,18 @@ func (h *Handlers) ThumbnailAttribution(scientificName string) template.HTML {
 				h.Debug("ThumbnailAttribution no fallback for %s", scientificName)
 				return template.HTML("")
 			}
+		} else {
+			h.Debug("Preferred provider '%s' not found in registry for attribution", preferredProvider)
+			// If preferred provider doesn't exist and fallback is disabled, return empty
+			if settings.Realtime.Dashboard.Thumbnails.FallbackPolicy != "all" {
+				h.Debug("ThumbnailAttribution no fallback allowed (policy: %s) and provider not found, returning empty",
+					settings.Realtime.Dashboard.Thumbnails.FallbackPolicy)
+				return template.HTML("")
+			}
 		}
 	}
 
-	// Try default provider as fallback
+	// Try default provider as fallback (or if preferredProvider was auto)
 	birdImage, err := h.BirdImageCache.Get(scientificName)
 	if err != nil {
 		h.Debug("ThumbnailAttribution error from default provider for %s: %v", scientificName, err)

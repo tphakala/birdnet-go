@@ -362,16 +362,18 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 		log.Println("Attempting to register AviCommons provider...")
 
 		// Debug - dump contents of embedded filesystem
-		log.Println("Embedded filesystem contents:")
-		if err := fs.WalkDir(httpcontroller.ImageDataFs, ".", func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				log.Printf("  Error walking path %s: %v", path, err)
+		if settings.Realtime.Dashboard.Thumbnails.Debug {
+			log.Println("Embedded filesystem contents:")
+			if err := fs.WalkDir(httpcontroller.ImageDataFs, ".", func(path string, d fs.DirEntry, err error) error {
+				if err != nil {
+					log.Printf("  Error walking path %s: %v", path, err)
+					return nil
+				}
+				log.Printf("  %s (%v)", path, d.IsDir())
 				return nil
+			}); err != nil {
+				log.Printf("Error walking embedded filesystem: %v", err)
 			}
-			log.Printf("  %s (%v)", path, d.IsDir())
-			return nil
-		}); err != nil {
-			log.Printf("Error walking embedded filesystem: %v", err)
 		}
 
 		if err := imageprovider.RegisterAviCommonsProvider(registry, httpcontroller.ImageDataFs, metrics, ds); err != nil {
@@ -440,7 +442,30 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 		return defaultCache // Return the cache even if we can't get species list
 	}
 
-	// Start background fetching of images
+	// --- Start Cache Warm-up Refactoring ---
+	log.Println("Starting background image cache warm-up...")
+
+	// Pre-fetch all cached image records from the database per provider
+	allCachedImages := make(map[string]map[string]bool) // providerName -> scientificName -> exists
+	if ds != nil {
+		registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
+			providerCache, err := ds.GetAllImageCaches(name)
+			if err != nil {
+				log.Printf("Warning: Failed to get cached images for provider '%s': %v", name, err)
+				return true // Continue to next provider
+			}
+			allCachedImages[name] = make(map[string]bool)
+			for _, entry := range providerCache {
+				allCachedImages[name][entry.ScientificName] = true
+			}
+			log.Printf("Pre-fetched %d cached image records for provider '%s'", len(providerCache), name)
+			return true // Continue ranging
+		})
+	} else {
+		log.Println("Warning: Datastore is nil, cannot pre-fetch cached images.")
+	}
+
+	// Start background fetching of images for species not found in any cache
 	go func() {
 		// Use a WaitGroup to wait for all goroutines to complete
 		var wg sync.WaitGroup
@@ -453,27 +478,23 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 		for i := range speciesList {
 			species := &speciesList[i] // Use pointer to avoid copying
 
-			// Check if we already have this image cached for any provider
+			// Check if already cached by *any* provider using the pre-fetched map
 			alreadyCached := false
-			registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
-				query := datastore.ImageCacheQuery{
-					ScientificName: species.ScientificName,
-					ProviderName:   name,
-				}
-				if cached, err := ds.GetImageCache(query); err == nil && cached != nil {
+			for providerName := range allCachedImages {
+				if _, exists := allCachedImages[providerName][species.ScientificName]; exists {
 					alreadyCached = true
-					return false // Stop ranging if found
+					break // Found in at least one provider cache
 				}
-				return true
-			})
+			}
 
 			if alreadyCached {
-				continue // Skip if already cached by any provider
+				continue // Skip if already cached
 			}
 
 			needsImage++
 			wg.Add(1)
-			// Mark this species as being initialized
+			// Mark this species as being initialized in the default cache
+			// Note: We still use the defaultCache for the actual *fetch* operation
 			defaultCache.Initializing.Store(species.ScientificName, struct{}{})
 			go func(name string) {
 				defer func() {
@@ -483,21 +504,26 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 				sem <- struct{}{}                            // Acquire semaphore
 				defer func() { <-sem }()                     // Release semaphore
 
-				// Attempt to fetch the image for the given species
+				// Attempt to fetch the image for the given species using the default cache
 				if _, err := defaultCache.Get(name); err != nil {
-					log.Printf("Failed to fetch image for %s: %v", name, err)
+					// Reduce log noise: Only log if debug enabled or if error is significant?
+					// For now, keep logging as before.
+					log.Printf("Failed to fetch image for %s during warm-up: %v", name, err)
 				}
 			}(species.ScientificName)
 		}
 
 		if needsImage > 0 {
+			log.Printf("Cache warm-up: %d species require image fetching.", needsImage)
 			// Wait for all goroutines to complete
 			wg.Wait()
-			log.Printf("Finished initializing BirdImageCache (%d species needed images)", needsImage)
+			log.Printf("Finished initializing BirdImageCache (%d species fetched/attempted)", needsImage)
 		} else {
-			log.Println("BirdImageCache initialized (all species images already cached)")
+			log.Println("BirdImageCache initialized (all species images already present in DB cache)")
 		}
 	}()
+
+	// --- End Cache Warm-up Refactoring ---
 
 	return defaultCache
 }

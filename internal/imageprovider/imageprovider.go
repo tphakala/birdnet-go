@@ -486,8 +486,9 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 				// Save to memory cache
 				c.dataMap.Store(scientificName, &preferredImage)
 
-				// Save to database cache with provider name from preferred cache
-				c.saveToDB(&preferredImage)
+				// Save to database cache using the *preferred* provider's cache
+				// This maintains correct attribution of the image source
+				preferredCache.saveToDB(&preferredImage)
 
 				return preferredImage, nil
 			}
@@ -582,9 +583,11 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 			c.dataMap.Store(scientificName, &fallbackImage)
 
 			// Save to database cache under the *fallback* provider's name
-			// Note: This might be slightly unexpected, but aligns with fetchDirect's behavior.
-			// Consider if saving should happen in the original cache instead.
-			cache.saveToDB(&fallbackImage) // Saves with fallback provider name
+			cache.saveToDB(&fallbackImage)
+
+			// ADDED: Also save to the *original* (calling) provider's database cache
+			// The saveToDB method automatically uses the correct provider name from the cache instance (c.providerName)
+			c.saveToDB(&fallbackImage)
 
 			birdImage = fallbackImage
 			fallbackSuccessful = true
@@ -754,15 +757,33 @@ func (c *BirdImageCache) GetRegistry() *ImageProviderRegistry {
 	return c.registry
 }
 
-// RangeProviders iterates over all registered providers.
-// The callback function should return false to stop iteration.
+// RangeProviders iterates over all registered caches, applying the callback function.
+// It releases the lock before executing the callback for each provider.
 func (r *ImageProviderRegistry) RangeProviders(callback func(name string, cache *BirdImageCache) bool) {
+	// Create a copy of the caches map to safely iterate after releasing the lock
 	r.mu.RLock()
-	defer r.mu.RUnlock()
-
+	cachesCopy := make(map[string]*BirdImageCache, len(r.caches))
 	for name, cache := range r.caches {
+		cachesCopy[name] = cache
+	}
+	r.mu.RUnlock()
+
+	// Iterate over the copy without holding the lock
+	for name, cache := range cachesCopy {
 		if !callback(name, cache) {
 			break
 		}
 	}
+}
+
+// GetCaches returns a copy of the internal cache map.
+// This is primarily for testing or diagnostic purposes where a snapshot is needed.
+func (r *ImageProviderRegistry) GetCaches() map[string]*BirdImageCache {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	cachesCopy := make(map[string]*BirdImageCache, len(r.caches))
+	for name, cache := range r.caches {
+		cachesCopy[name] = cache
+	}
+	return cachesCopy
 }
