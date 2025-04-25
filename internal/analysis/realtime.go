@@ -326,6 +326,10 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 	}
 }
 
+// NOTE: Potential Race Condition: If multiple goroutines call this function concurrently,
+// especially during initial startup, there's a risk of race conditions during provider
+// registration (checking GetCache then Register is not atomic). Consider using sync.Once
+// or ensuring this is called only once during a deterministic startup phase (e.g., in main).
 // setupImageProviderRegistry initializes or retrieves the global image provider registry
 // and registers the default providers (Wikimedia, AviCommons).
 func setupImageProviderRegistry(ds datastore.Interface, metrics *telemetry.Metrics) (*imageprovider.ImageProviderRegistry, error) {
@@ -413,7 +417,7 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *telemetry.Metri
 	return registry, nil // No errors during setup
 }
 
-// selectDefaultImageProvider chooses the default image cache based on settings and availability.
+// selectDefaultImageProvider determines the default image provider based on configuration
 func selectDefaultImageProvider(registry *imageprovider.ImageProviderRegistry) *imageprovider.BirdImageCache {
 	preferredProvider := conf.Setting().Realtime.Dashboard.Thumbnails.ImageProvider
 	var defaultCache *imageprovider.BirdImageCache
@@ -532,6 +536,12 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 		log.Printf("Warning: Image provider registry initialization encountered errors: %v", regErr)
 		// Note: We continue even if some providers fail, as others might succeed.
 		// The selectDefaultImageProvider logic will handle finding an available provider.
+	}
+
+	// Defensive check: Ensure registry is not nil before proceeding.
+	if registry == nil {
+		log.Println("Error: Image provider registry could not be initialized.")
+		return nil
 	}
 
 	// 2. Select the default cache based on settings and availability
