@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"os/signal"
@@ -358,8 +359,29 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 
 	// Initialize and register the AviCommons provider if not already registered
 	if _, ok := registry.GetCache("avicommons"); !ok {
+		log.Println("Attempting to register AviCommons provider...")
+
+		// Debug - dump contents of embedded filesystem
+		log.Println("Embedded filesystem contents:")
+		if err := fs.WalkDir(httpcontroller.ImageDataFs, ".", func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				log.Printf("  Error walking path %s: %v", path, err)
+				return nil
+			}
+			log.Printf("  %s (%v)", path, d.IsDir())
+			return nil
+		}); err != nil {
+			log.Printf("Error walking embedded filesystem: %v", err)
+		}
+
 		if err := imageprovider.RegisterAviCommonsProvider(registry, httpcontroller.ImageDataFs, metrics, ds); err != nil {
 			log.Printf("Failed to register AviCommons provider: %v", err)
+			// Check if we can read the data file
+			if _, err := fs.ReadFile(httpcontroller.ImageDataFs, "data/latest.json"); err != nil {
+				log.Printf("Error reading AviCommons data file: %v", err)
+			} else {
+				log.Println("AviCommons data file exists but provider registration failed.")
+			}
 		} else {
 			log.Println("Successfully registered AviCommons image provider")
 		}

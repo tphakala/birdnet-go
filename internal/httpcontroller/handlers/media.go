@@ -19,6 +19,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
 
 // MaxClipNameLength is the maximum allowed length for a clip name
@@ -176,15 +177,64 @@ func getWebPath(path string) string {
 func (h *Handlers) Thumbnail(scientificName string) string {
 	if h.BirdImageCache == nil {
 		// Return empty string if the cache is not initialized
+		h.Debug("Thumbnail for %s failed: BirdImageCache is nil", scientificName)
 		return ""
 	}
 
+	// Get user's preferred image provider from settings
+	settings := conf.Setting()
+	preferredProvider := settings.Realtime.Dashboard.Thumbnails.ImageProvider
+	fallbackPolicy := settings.Realtime.Dashboard.Thumbnails.FallbackPolicy
+
+	h.Debug("Thumbnail request for %s - Preferred provider: %s, Fallback policy: %s",
+		scientificName, preferredProvider, fallbackPolicy)
+
+	// If we have access to a registry and a specific provider is requested
+	if preferredProvider != "auto" && h.BirdImageCache.GetRegistry() != nil {
+		registry := h.BirdImageCache.GetRegistry()
+
+		// Log available providers
+		var providers []string
+		registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
+			providers = append(providers, name)
+			return true
+		})
+		h.Debug("Available providers: %v", providers)
+
+		if cache, ok := registry.GetCache(preferredProvider); ok {
+			h.Debug("Found preferred provider cache: %s", preferredProvider)
+
+			// Try to get the image from the preferred provider
+			if birdImage, err := cache.Get(scientificName); err == nil {
+				h.Debug("Successfully got image from %s for %s: %s",
+					preferredProvider, scientificName, birdImage.URL)
+				return birdImage.URL
+			} else {
+				h.Debug("Failed to get image from %s: %v", preferredProvider, err)
+			}
+
+			// If preferred provider fails and fallback is disabled, return empty
+			if fallbackPolicy != "all" {
+				h.Debug("No fallback allowed (policy: %s), returning empty", fallbackPolicy)
+				return "" // No fallback
+			}
+		} else {
+			h.Debug("Preferred provider '%s' not found in registry", preferredProvider)
+		}
+	} else {
+		h.Debug("Using default provider - Provider set to auto: %v, Registry available: %v",
+			preferredProvider == "auto", h.BirdImageCache.GetRegistry() != nil)
+	}
+
+	// Use the default cache (which includes fallback logic)
 	birdImage, err := h.BirdImageCache.Get(scientificName)
 	if err != nil {
 		// Return empty string if an error occurs
+		h.Debug("Default provider failed for %s: %v", scientificName, err)
 		return ""
 	}
 
+	h.Debug("Returning image from default provider for %s: %s", scientificName, birdImage.URL)
 	return birdImage.URL
 }
 
@@ -194,14 +244,58 @@ func (h *Handlers) Thumbnail(scientificName string) string {
 func (h *Handlers) ThumbnailAttribution(scientificName string) template.HTML {
 	if h.BirdImageCache == nil {
 		// Return empty string if the cache is not initialized
+		h.Debug("ThumbnailAttribution for %s failed: BirdImageCache is nil", scientificName)
 		return template.HTML("")
 	}
 
+	// Get preferred provider from settings
+	settings := conf.Setting()
+	preferredProvider := settings.Realtime.Dashboard.Thumbnails.ImageProvider
+	h.Debug("ThumbnailAttribution for %s - Preferred provider: %s", scientificName, preferredProvider)
+
+	// First try preferred provider if specified
+	if preferredProvider != "auto" && h.BirdImageCache.GetRegistry() != nil {
+		registry := h.BirdImageCache.GetRegistry()
+		if cache, ok := registry.GetCache(preferredProvider); ok {
+			if birdImage, err := cache.Get(scientificName); err == nil {
+				h.Debug("ThumbnailAttribution using %s provider for %s", preferredProvider, scientificName)
+
+				if birdImage.AuthorName == "" || birdImage.LicenseName == "" {
+					return template.HTML("")
+				}
+
+				var attribution string
+				if birdImage.AuthorURL == "" {
+					attribution = fmt.Sprintf("© %s / <a href=\"%q\">%s</a>",
+						html.EscapeString(birdImage.AuthorName),
+						html.EscapeString(birdImage.LicenseURL),
+						html.EscapeString(birdImage.LicenseName))
+				} else {
+					attribution = fmt.Sprintf("© <a href=\"%q\">%s</a> / <a href=\"%q\">%s</a>",
+						html.EscapeString(birdImage.AuthorURL),
+						html.EscapeString(birdImage.AuthorName),
+						html.EscapeString(birdImage.LicenseURL),
+						html.EscapeString(birdImage.LicenseName))
+				}
+
+				return template.HTML(attribution)
+			}
+			// If fallback is disabled, return empty
+			if settings.Realtime.Dashboard.Thumbnails.FallbackPolicy != "all" {
+				h.Debug("ThumbnailAttribution no fallback for %s", scientificName)
+				return template.HTML("")
+			}
+		}
+	}
+
+	// Try default provider as fallback
 	birdImage, err := h.BirdImageCache.Get(scientificName)
 	if err != nil {
-		log.Printf("Error getting thumbnail info for %s: %v", scientificName, err)
+		h.Debug("ThumbnailAttribution error from default provider for %s: %v", scientificName, err)
 		return template.HTML("")
 	}
+
+	h.Debug("ThumbnailAttribution using default provider for %s", scientificName)
 
 	if birdImage.AuthorName == "" || birdImage.LicenseName == "" {
 		return template.HTML("")
