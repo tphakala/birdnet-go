@@ -317,17 +317,8 @@ func extractDBNameFromMySQLInfo(connectionInfo string) string {
 	// Also handle cases like "user:pass@/dbname"
 	parseInput := connectionInfo
 	if !strings.Contains(parseInput, "://") && !strings.HasPrefix(parseInput, "/") {
-		// Check if it contains '@' which often separates userinfo from host/path
-		if atIndex := strings.Index(parseInput, "@"); atIndex != -1 {
-			// If '@' is present, always prepend the dummy scheme.
-			// The specific format after '@' (like tcp(...), unix(...), or just /dbname)
-			// doesn't change the need for a scheme for url.Parse.
-			parseInput = "dummy://" + parseInput
-		} else {
-			// No scheme, no '@', might be just "dbname" or "protocol(address)/dbname"
-			// Add dummy scheme
-			parseInput = "dummy://" + parseInput
-		}
+		// If no scheme and not starting with '/', add dummy scheme for parsing.
+		parseInput = "dummy://" + parseInput
 	} else if strings.HasPrefix(parseInput, "/") {
 		// Case like "/dbname?params=value"
 		parseInput = "dummy://dummyhost" + parseInput // Add dummy scheme and host
