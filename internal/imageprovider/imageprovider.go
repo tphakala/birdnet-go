@@ -526,47 +526,8 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 			}
 
 			// Try all other available providers
-			fallbackSuccessful := false
-			c.registry.RangeProviders(func(name string, cache *BirdImageCache) bool {
-				// Skip providers we've already tried
-				if triedProviders[name] {
-					return true // continue ranging
-				}
-
-				if c.debug {
-					log.Printf("Debug: Trying fallback to '%s' provider for %s", name, scientificName)
-				}
-
-				fallbackStartTime := time.Now()
-				// Use fetchDirect for fallback to avoid recursion
-				fallbackImage, fallbackErr := cache.fetchDirect(scientificName)
-				fallbackDuration := time.Since(fallbackStartTime).Seconds()
-
-				if fallbackErr == nil {
-					// Successfully retrieved from fallback
-					if c.metrics != nil {
-						c.metrics.ObserveDownloadDuration(fallbackDuration)
-						c.metrics.IncrementImageDownloads()
-					}
-
-					// Save to memory cache
-					c.dataMap.Store(scientificName, &fallbackImage)
-
-					// Save to database cache with provider name
-					c.saveToDB(&fallbackImage)
-
-					birdImage = fallbackImage
-					err = nil
-					fallbackSuccessful = true
-					return false // stop ranging
-				}
-
-				if c.debug {
-					log.Printf("Debug: Fallback to '%s' failed for %s: %v", name, scientificName, fallbackErr)
-				}
-
-				return true // continue ranging
-			})
+			var fallbackSuccessful bool // Declare without initial assignment
+			birdImage, fallbackSuccessful = c.tryFallbackProviders(scientificName, triedProviders)
 
 			if fallbackSuccessful {
 				return birdImage, nil
@@ -588,6 +549,56 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 	c.saveToDB(&birdImage)
 
 	return birdImage, nil
+}
+
+// tryFallbackProviders attempts to fetch an image from other providers in the registry.
+func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProviders map[string]bool) (BirdImage, bool) {
+	var birdImage BirdImage
+	fallbackSuccessful := false
+
+	c.registry.RangeProviders(func(name string, cache *BirdImageCache) bool {
+		// Skip providers we've already tried
+		if triedProviders[name] {
+			return true // continue ranging
+		}
+
+		if c.debug {
+			log.Printf("Debug: Trying fallback to '%s' provider for %s", name, scientificName)
+		}
+
+		fallbackStartTime := time.Now()
+		// Use fetchDirect for fallback to avoid recursion
+		fallbackImage, fallbackErr := cache.fetchDirect(scientificName)
+		fallbackDuration := time.Since(fallbackStartTime).Seconds()
+
+		if fallbackErr == nil {
+			// Successfully retrieved from fallback
+			if c.metrics != nil {
+				c.metrics.ObserveDownloadDuration(fallbackDuration)
+				c.metrics.IncrementImageDownloads()
+			}
+
+			// Save to the *original* caller's memory cache
+			c.dataMap.Store(scientificName, &fallbackImage)
+
+			// Save to database cache under the *fallback* provider's name
+			// Note: This might be slightly unexpected, but aligns with fetchDirect's behavior.
+			// Consider if saving should happen in the original cache instead.
+			cache.saveToDB(&fallbackImage) // Saves with fallback provider name
+
+			birdImage = fallbackImage
+			fallbackSuccessful = true
+			return false // stop ranging
+		}
+
+		if c.debug {
+			log.Printf("Debug: Fallback to '%s' failed for %s: %v", name, scientificName, fallbackErr)
+		}
+
+		return true // continue ranging
+	})
+
+	return birdImage, fallbackSuccessful
 }
 
 // fetchDirect attempts to fetch an image directly using this cache's provider,
