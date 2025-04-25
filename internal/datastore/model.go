@@ -115,6 +115,7 @@ type ImageCache struct {
 	ID             uint      `gorm:"primaryKey"`
 	ProviderName   string    `gorm:"index:idx_imagecache_provider_species,unique;not null;default:wikimedia"` // Name of the provider (e.g., "wikimedia", "flickr")
 	ScientificName string    `gorm:"index:idx_imagecache_provider_species,unique;not null"`                   // Scientific name of the species
+	SourceProvider string    `gorm:"not null;default:wikimedia"`                                              // The actual provider that supplied the image
 	URL            string    // The URL of the image
 	LicenseName    string    // The name of the license for the image
 	LicenseURL     string    // The URL of the license details
