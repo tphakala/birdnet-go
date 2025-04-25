@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -43,88 +44,98 @@ func getSQLiteIndexInfo(db *gorm.DB, indexName string, debug bool) ([]struct {
 	return info, nil
 }
 
+// getSQLiteIndexColumns retrieves the column names for a given SQLite index.
+// It reuses getSQLiteIndexInfo and simplifies the result.
+func getSQLiteIndexColumns(db *gorm.DB, indexName string, debug bool) ([]string, error) {
+	info, err := getSQLiteIndexInfo(db, indexName, debug) // Existing helper logs errors
+	if err != nil {
+		return nil, err // Propagate error
+	}
+	cols := make([]string, len(info))
+	for i, colInfo := range info {
+		cols[i] = colInfo.Name
+	}
+	return cols, nil
+}
+
 // hasCorrectImageCacheIndexSQLite checks if the SQLite database has the correct
-// composite unique index on the image_caches table.
+// composite unique index on the image_caches table, and specifically checks
+// against a known incorrect single-column unique index.
 func hasCorrectImageCacheIndexSQLite(db *gorm.DB, debug bool) (bool, error) {
 	var indexes []struct {
 		Name   string `gorm:"column:name"`
 		Unique int    `gorm:"column:unique"` // 1 == unique
 	}
 
-	// Check if the table exists first
+	// 1. Check if the table exists
 	if !db.Migrator().HasTable(&ImageCache{}) {
-		return false, nil // Table doesn't exist, so index can't be correct (will be created by AutoMigrate)
+		if debug {
+			log.Println("DEBUG: SQLite 'image_caches' table does not exist.")
+		}
+		return false, nil // Table doesn't exist, schema is implicitly incorrect for this check
 	}
 
-	// Check index list for the table
+	// 2. Query index list for the table
 	if err := db.Raw("PRAGMA index_list('image_caches')").Scan(&indexes).Error; err != nil {
 		return false, fmt.Errorf("failed to query index list for image_caches: %w", err)
 	}
 
 	correctIndexFound := false
 	incorrectIndexFound := false
-	targetIndexName := "idx_imagecache_provider_species" // Expected index name from GORM tags
+	targetIndexName := "idx_imagecache_provider_species"
 
+	// 3. Analyze each index
 	for _, idx := range indexes {
 		if debug {
-			log.Printf("DEBUG: SQLite Found index: Name=%s, Unique=%d", idx.Name, idx.Unique)
+			log.Printf("DEBUG: SQLite Analyzing index: Name=%s, Unique=%d", idx.Name, idx.Unique)
 		}
 
-		// Check if the current index is the target index and if it's correct
+		// Both the correct and the known incorrect index must be unique
+		if idx.Unique != 1 {
+			continue
+		}
+
+		// Get the columns for this unique index
+		columns, err := getSQLiteIndexColumns(db, idx.Name, debug)
+		if err != nil {
+			// Error fetching columns, cannot determine state, log is in getSQLiteIndexInfo
+			continue // Skip this index
+		}
+
+		// Check if it's the target correct index
 		if idx.Name == targetIndexName {
-			// Use helper function to get index info
-			info, err := getSQLiteIndexInfo(db, idx.Name, debug)
-			if err != nil {
-				// Error already logged by helper, just continue to next index
-				continue
-			}
-
-			if len(info) == 2 {
-				hasProvider := false
-				hasScientific := false
-				for _, col := range info {
-					if col.Name == "provider_name" {
-						hasProvider = true
-					}
-					if col.Name == "scientific_name" {
-						hasScientific = true
-					}
+			// Expected: unique, 2 columns: provider_name, scientific_name (order doesn't matter for existence check)
+			if len(columns) == 2 && slices.Contains(columns, "provider_name") && slices.Contains(columns, "scientific_name") {
+				correctIndexFound = true
+				if debug {
+					log.Printf("DEBUG: SQLite Found correct composite unique index: %s", idx.Name)
 				}
-				if hasProvider && hasScientific && idx.Unique == 1 {
-					correctIndexFound = true
-					if debug {
-						log.Printf("DEBUG: SQLite Found correct composite unique index: %s", idx.Name)
-					}
-					// Do not break here yet, we need to check for incorrect indexes too.
+			} else if debug {
+				// Log if the named index doesn't have the expected structure
+				log.Printf("DEBUG: SQLite Index '%s' found, but columns %v or uniqueness mismatch.", idx.Name, columns)
+			}
+		} else {
+			// Check if it's the known incorrect index (unique, 1 column: scientific_name)
+			// This check is only performed if the index name is NOT the target name.
+			if len(columns) == 1 && columns[0] == "scientific_name" {
+				incorrectIndexFound = true
+				if debug {
+					log.Printf("DEBUG: SQLite Found incorrect single-column unique index on scientific_name: %s", idx.Name)
 				}
 			}
 		}
 
-		// Separately, check if the current index is the known incorrect single-column unique index
-		// Check using the Unique flag from index_list and index_info results
-		if idx.Unique == 1 { // Check if the index itself is marked unique
-			// Use helper function to get index info again
-			info, err := getSQLiteIndexInfo(db, idx.Name, debug)
-			// If error getting info, we can't determine if it's the incorrect index, so skip
-			if err == nil {
-				// Now check if this unique index is ONLY on scientific_name
-				if len(info) == 1 && info[0].Name == "scientific_name" {
-					incorrectIndexFound = true
-					if debug {
-						log.Printf("DEBUG: SQLite Found incorrect single-column unique index on scientific_name: %s", idx.Name)
-					}
-				}
-			}
-		}
-
-		// Optimization: If we've found both the correct index and an incorrect one,
-		// we know the state and can stop searching early.
+		// Optimization: If we've found both states, we can stop.
 		if correctIndexFound && incorrectIndexFound {
 			break
 		}
 	}
 
-	// If we found the correct index AND did not find the specific incorrect one, the schema is okay.
+	if debug {
+		log.Printf("DEBUG: SQLite Schema Check Result: correctIndexFound=%v, incorrectIndexFound=%v", correctIndexFound, incorrectIndexFound)
+	}
+
+	// Schema is considered correct only if the specific target index exists AND the specific incorrect index does NOT exist.
 	return correctIndexFound && !incorrectIndexFound, nil
 }
 
@@ -278,6 +289,8 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 	}
 
 	// Perform the auto-migration for all necessary tables.
+	// GORM's AutoMigrate will handle creating tables if they don't exist,
+	// and adding missing columns (like 'source_provider' to 'image_caches') to existing tables.
 	if err := db.AutoMigrate(&Note{}, &Results{}, &NoteReview{}, &NoteComment{}, &DailyEvents{}, &HourlyWeather{}, &NoteLock{}, &ImageCache{}); err != nil {
 		return fmt.Errorf("failed to auto-migrate %s database: %w", dbType, err)
 	}

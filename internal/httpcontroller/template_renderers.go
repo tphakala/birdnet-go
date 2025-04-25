@@ -154,15 +154,22 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 	}
 	multipleProvidersAvailable := false
 	providerCount := 0
-	if registry := s.Handlers.BirdImageCache.GetRegistry(); registry != nil {
-		registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
-			// Simple capitalization for display name
-			displayName := strings.ToUpper(name[:1]) + name[1:]
-			providerOptions[name] = displayName
-			providerCount++
-			return true // Continue ranging
-		})
-		multipleProvidersAvailable = providerCount > 1
+	if s.Handlers.BirdImageCache != nil {
+		if registry := s.Handlers.BirdImageCache.GetRegistry(); registry != nil {
+			registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
+				// Simple capitalization for display name
+				var displayName string
+				if name != "" {
+					displayName = strings.ToUpper(name[:1]) + name[1:]
+				} else {
+					displayName = "(unknown)"
+				}
+				providerOptions[name] = displayName
+				providerCount++
+				return true // Continue ranging
+			})
+			multipleProvidersAvailable = providerCount > 1
+		}
 	} else {
 		log.Println("Warning: ImageProviderRegistry is nil, cannot get provider names.")
 	}

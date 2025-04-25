@@ -585,7 +585,7 @@
 
         <!-- Image Provider Selection Container -->
         <div class="form-control"
-             :class="{ 'opacity-50': !{{.MultipleProvidersAvailable}} }"
+             :class="{ 'opacity-50': !{{ .MultipleProvidersAvailable }} }"
              title="{{if not .MultipleProvidersAvailable}}Only one image provider available{{end}}">
 
             {{template "selectField" dict
@@ -599,7 +599,7 @@
         </div>
 
         <!-- Fallback Policy Container -->
-        <div x-show=".MultipleProvidersAvailable">
+        <div x-show="{{ .MultipleProvidersAvailable }}">
             {{template "selectField" dict
                 "id" "fallbackPolicy"
                 "model" "dashboard.thumbnails.fallbackpolicy"
