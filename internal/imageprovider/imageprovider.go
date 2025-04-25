@@ -538,7 +538,8 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 				}
 
 				fallbackStartTime := time.Now()
-				fallbackImage, fallbackErr := cache.Get(scientificName)
+				// Use fetchDirect for fallback to avoid recursion
+				fallbackImage, fallbackErr := cache.fetchDirect(scientificName)
 				fallbackDuration := time.Since(fallbackStartTime).Seconds()
 
 				if fallbackErr == nil {
@@ -586,6 +587,46 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 	// Save to database cache
 	c.saveToDB(&birdImage)
 
+	return birdImage, nil
+}
+
+// fetchDirect attempts to fetch an image directly using this cache's provider,
+// bypassing complex locking and fallback logic found in Get.
+// It updates the current cache instance if successful.
+func (c *BirdImageCache) fetchDirect(scientificName string) (BirdImage, error) {
+	if c.provider == nil {
+		return BirdImage{}, fmt.Errorf("provider not set for %s cache", c.providerName)
+	}
+	if c.debug {
+		log.Printf("Debug [%s]: Direct fetching image for species: %s", c.providerName, scientificName)
+	}
+
+	startTime := time.Now()
+	birdImage, err := c.provider.Fetch(scientificName)
+	duration := time.Since(startTime).Seconds()
+
+	if err != nil {
+		if c.metrics != nil {
+			c.metrics.IncrementDownloadErrors()
+		}
+		if c.debug {
+			log.Printf("Debug [%s]: Direct fetch failed for %s: %v", c.providerName, scientificName, err)
+		}
+		return BirdImage{}, err
+	}
+
+	if c.metrics != nil {
+		c.metrics.ObserveDownloadDuration(duration)
+		c.metrics.IncrementImageDownloads()
+	}
+
+	// Save to this cache's memory and DB
+	c.dataMap.Store(scientificName, &birdImage)
+	c.saveToDB(&birdImage)
+
+	if c.debug {
+		log.Printf("Debug [%s]: Direct fetch successful for %s, updated cache.", c.providerName, scientificName)
+	}
 	return birdImage, nil
 }
 
