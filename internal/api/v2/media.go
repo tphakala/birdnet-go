@@ -36,6 +36,9 @@ func (c *Controller) initMediaRoutes() {
 
 	// Convenient combined endpoint (redirects to ID-based internally)
 	c.Group.GET("/media/audio", c.ServeAudioByQueryID)
+
+	// Bird image endpoint
+	c.Group.GET("/media/species-image", c.GetSpeciesImage)
 }
 
 // getContentType determines the content type based on file extension (can remain as helper)
@@ -527,6 +530,39 @@ func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpect
 		return fmt.Errorf("ffmpeg command failed: %w\nOutput: %s", err, output.String())
 	}
 	return nil
+}
+
+// GetSpeciesImage serves an image for a bird species by scientific name
+func (c *Controller) GetSpeciesImage(ctx echo.Context) error {
+	scientificName := ctx.QueryParam("name")
+	if scientificName == "" {
+		return c.HandleError(ctx, fmt.Errorf("missing scientific name"), "Scientific name is required", http.StatusBadRequest)
+	}
+
+	// Trim whitespace to prevent empty strings with spaces
+	scientificName = strings.TrimSpace(scientificName)
+	if scientificName == "" {
+		return c.HandleError(ctx, fmt.Errorf("scientific name contains only whitespace"), "Valid scientific name is required", http.StatusBadRequest)
+	}
+
+	// Check if BirdImageCache is available
+	if c.BirdImageCache == nil {
+		return c.HandleError(ctx, fmt.Errorf("image provider not available"), "Image service unavailable", http.StatusServiceUnavailable)
+	}
+
+	// Fetch the image from cache (which will use AviCommons if available)
+	birdImage, err := c.BirdImageCache.Get(scientificName)
+	if err != nil {
+		// If no image is found, return a 404
+		if strings.Contains(err.Error(), "not found") {
+			return c.HandleError(ctx, err, "Image not found for species", http.StatusNotFound)
+		}
+		// For other errors, return 500
+		return c.HandleError(ctx, err, "Failed to fetch species image", http.StatusInternalServerError)
+	}
+
+	// Redirect to the image URL
+	return ctx.Redirect(http.StatusFound, birdImage.URL)
 }
 
 // HandleError method should exist on Controller, typically defined in controller.go or api.go
