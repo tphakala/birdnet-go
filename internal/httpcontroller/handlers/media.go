@@ -173,6 +173,11 @@ func getWebPath(path string) string {
 
 // selectBirdImage handles the logic for selecting a bird image based on user preferences and fallback policies
 func (h *Handlers) selectBirdImage(scientificName string) (*imageprovider.BirdImage, error) {
+	// Guard against empty input
+	if scientificName == "" {
+		return nil, fmt.Errorf("scientific name cannot be empty")
+	}
+
 	// Get user's preferred image provider from settings
 	settings := conf.Setting()
 	preferredProvider := settings.Realtime.Dashboard.Thumbnails.ImageProvider
@@ -245,7 +250,9 @@ func (h *Handlers) selectBirdImage(scientificName string) (*imageprovider.BirdIm
 				h.Debug("Successfully got image from fallback provider %s for %s: %s",
 					name, scientificName, birdImage.URL)
 				// Found a valid image, store and stop iteration
-				foundImage = &birdImage
+				// Copy the value to avoid capturing loop variable address
+				imgCopy := birdImage
+				foundImage = &imgCopy
 				lastError = nil
 				return false // Stop iteration
 			}

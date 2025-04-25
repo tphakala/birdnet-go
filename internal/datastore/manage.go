@@ -3,6 +3,7 @@ package datastore
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -303,23 +304,65 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 }
 
 // extractDBNameFromMySQLInfo parses the database name from a MySQL DSN string.
-// Example DSN: user:pass@tcp(127.0.0.1:3306)/dbname?charset=utf8mb4&parseTime=True&loc=Local
+// Example DSNs:
+//
+//	user:pass@tcp(127.0.0.1:3306)/dbname?charset=utf8mb4
+//	user:pass@unix(/path/to/socket)/dbname
+//	user:pass@/dbname?charset=utf8mb4 (no host/protocol)
+//	/dbname (only path)
 func extractDBNameFromMySQLInfo(connectionInfo string) string {
-	// Find the last '/' which usually precedes the database name
-	lastSlash := strings.LastIndex(connectionInfo, "/")
-	if lastSlash == -1 {
-		return "" // '/' not found
+	// The go-sql-driver/mysql doesn't strictly require a scheme,
+	// but net/url.Parse needs one for correct parsing. Add a dummy scheme if missing.
+	// We need to handle cases where the DSN might *only* be the path, e.g., "/dbname".
+	// Also handle cases like "user:pass@/dbname"
+	parseInput := connectionInfo
+	if !strings.Contains(parseInput, "://") && !strings.HasPrefix(parseInput, "/") {
+		// Check if it contains '@' which often separates userinfo from host/path
+		if atIndex := strings.Index(parseInput, "@"); atIndex != -1 {
+			// Might be user:pass@tcp(host:port)/dbname or user:pass@unix(socket)/dbname
+			// or user:pass@/dbname
+			// Add dummy scheme before the part after '@'
+			if len(parseInput) > atIndex+1 && parseInput[atIndex+1] == '/' {
+				// Case: user:pass@/dbname
+				parseInput = "dummy://" + parseInput
+			} else {
+				// Assume format like user:pass@protocol(address)/dbname
+				// This is harder to parse reliably without a scheme, try adding dummy scheme
+				parseInput = "dummy://" + parseInput
+			}
+		} else {
+			// No scheme, no '@', might be just "dbname" or "protocol(address)/dbname"
+			// Add dummy scheme
+			parseInput = "dummy://" + parseInput
+		}
+	} else if strings.HasPrefix(parseInput, "/") {
+		// Case like "/dbname?params=value"
+		parseInput = "dummy://dummyhost" + parseInput // Add dummy scheme and host
 	}
 
-	// Extract the part after '/'
-	dbAndParams := connectionInfo[lastSlash+1:]
-
-	// Find the '?' which separates dbname from parameters
-	qMark := strings.Index(dbAndParams, "?")
-	if qMark == -1 {
-		return dbAndParams // No parameters, the whole part is the dbname
+	u, err := url.Parse(parseInput)
+	if err != nil {
+		log.Printf("WARN: Failed to parse MySQL connection info '%s' as URL: %v. Cannot extract DB name.", connectionInfo, err)
+		return "" // Return empty on parse error
 	}
 
-	// Return the part before '?'
-	return dbAndParams[:qMark]
+	// The database name is the path component, stripping the leading '/' if present.
+	dbName := u.Path
+	if strings.HasPrefix(dbName, "/") {
+		dbName = dbName[1:]
+	}
+
+	// The go-sql-driver/mysql can handle DSNs without a path/dbname
+	// (e.g., connecting to the default database). Return empty string in that case.
+	if dbName == "" {
+		return ""
+	}
+
+	// The Path might still contain parameters if the original DSN was just `/dbname?param=val`
+	// and we added a dummy host. Check for '?' again.
+	if qMark := strings.Index(dbName, "?"); qMark != -1 {
+		dbName = dbName[:qMark]
+	}
+
+	return dbName
 }

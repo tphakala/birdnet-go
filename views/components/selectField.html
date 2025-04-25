@@ -29,7 +29,12 @@
             {{range .locales}}
                 <option value="{{.Code}}">{{.Name}} ({{.Code}})</option>
             {{end}}
-        {{else}}
+        {{else if .providerOptionList}}
+            {{/* Handle ProviderOptionList slice */}}
+            {{range .providerOptionList}}
+                <option value="{{.Value}}">{{.Display}}</option>
+            {{end}}
+        {{else if .options}}
             {{/* Handle standard map options */}}
             {{range $value, $label := .options}}
                 <option value="{{$value}}">{{$label}}</option>

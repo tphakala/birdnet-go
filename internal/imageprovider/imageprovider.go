@@ -287,6 +287,12 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 		return // Datastore is not configured
 	}
 
+	// Determine the CachedAt time
+	cachedAt := image.CachedAt
+	if cachedAt.IsZero() {
+		cachedAt = time.Now()
+	}
+
 	// Convert BirdImage to datastore model
 	cacheEntry := &datastore.ImageCache{ // Use pointer type for SaveImageCache
 		ProviderName:   c.providerName, // Save under *this* cache's provider name
@@ -297,7 +303,7 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 		LicenseURL:     image.LicenseURL,
 		AuthorName:     image.AuthorName,
 		AuthorURL:      image.AuthorURL,
-		CachedAt:       time.Now(), // Update timestamp on save
+		CachedAt:       cachedAt, // Use determined timestamp
 	}
 
 	if err := c.store.SaveImageCache(cacheEntry); err != nil { // Use SaveImageCache
@@ -784,20 +790,16 @@ func (c *BirdImageCache) GetRegistry() *ImageProviderRegistry {
 // RangeProviders iterates over all registered caches, applying the callback function.
 // It releases the lock before executing the callback for each provider.
 func (r *ImageProviderRegistry) RangeProviders(callback func(name string, cache *BirdImageCache) bool) {
-	// Create a copy of the caches map to safely iterate after releasing the lock
+	// Iterate over the caches, releasing the lock before each callback
 	r.mu.RLock()
-	cachesCopy := make(map[string]*BirdImageCache, len(r.caches))
 	for name, cache := range r.caches {
-		cachesCopy[name] = cache
-	}
-	r.mu.RUnlock()
-
-	// Iterate over the copy without holding the lock
-	for name, cache := range cachesCopy {
+		r.mu.RUnlock() // release before potentially slow callback
 		if !callback(name, cache) {
-			break
+			return // Callback requested stop
 		}
+		r.mu.RLock() // re-acquire for next iteration/check
 	}
+	r.mu.RUnlock() // Ensure lock is released if loop finishes
 }
 
 // GetCaches returns a copy of the internal cache map.
