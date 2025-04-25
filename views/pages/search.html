@@ -389,7 +389,7 @@
                                 <!-- Expanded row - associated with the result above -->
                                 <tr x-show="isExpanded(result.id)" class="expanded-row" :id="'expanded-row-' + result.id">
                                     <td colspan="6" class="p-0 border-t-0">
-                                        <div class="p-4 bg-base-200">
+                                        <div class="p-4" :class="index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'">
                                             <!-- Expanded content -->
                                             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                                 <!-- Weather Information Container -->
@@ -602,31 +602,10 @@
     </div>
 </div>
 
-<style>
-    .status-badge {
-        @apply px-2 py-0.5 rounded-full text-xs font-medium;
-    }
-    .status-badge.correct {
-        @apply bg-success/20 text-success;
-    }
-    .status-badge.false {
-        @apply bg-error/20 text-error;
-    }
-    .status-badge.unverified {
-        @apply bg-base-content/10 text-base-content/70;
-    }
-    .status-badge.locked {
-        @apply bg-warning/20 text-warning;
-    }
-    
+<style>   
     /* IMPORTANT: Change to a more specific selector to avoid conflict */
     .initial-cloak[x-cloak] {
         display: none !important;
-    }
-    
-    /* Highlight expanded rows for better visibility */
-    .expanded-row {
-        border-left: 4px solid #3b82f6;
     }
 </style>
 
