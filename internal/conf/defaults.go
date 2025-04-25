@@ -74,6 +74,8 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dashboard.thumbnails.debug", false)
 	viper.SetDefault("realtime.dashboard.thumbnails.summary", false)
 	viper.SetDefault("realtime.dashboard.thumbnails.recent", true)
+	viper.SetDefault("realtime.dashboard.thumbnails.imageprovider", "auto")
+	viper.SetDefault("realtime.dashboard.thumbnails.fallbackpolicy", "all")
 	viper.SetDefault("realtime.dashboard.summarylimit", 30)
 
 	// Retention policy configuration

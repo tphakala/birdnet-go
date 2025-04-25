@@ -1,7 +1,9 @@
 package analysis
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"os/signal"
@@ -324,68 +326,245 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 	}
 }
 
-// initBirdImageCache initializes the bird image cache by fetching all detected species from the database.
-func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *imageprovider.BirdImageCache {
-	// Create the cache first
-	birdImageCache, err := imageprovider.CreateDefaultCache(metrics, ds)
-	if err != nil {
-		log.Printf("Failed to create image cache: %v", err)
-		return nil
+// NOTE: Potential Race Condition: If multiple goroutines call this function concurrently,
+// especially during initial startup, there's a risk of race conditions during provider
+// registration (checking GetCache then Register is not atomic). Consider using sync.Once
+// or ensuring this is called only once during a deterministic startup phase (e.g., in main).
+// setupImageProviderRegistry initializes or retrieves the global image provider registry
+// and registers the default providers (Wikimedia, AviCommons).
+func setupImageProviderRegistry(ds datastore.Interface, metrics *telemetry.Metrics) (*imageprovider.ImageProviderRegistry, error) {
+	// Use the global registry if available, otherwise create a new one
+	var registry *imageprovider.ImageProviderRegistry
+	if httpcontroller.ImageProviderRegistry != nil {
+		registry = httpcontroller.ImageProviderRegistry
+		log.Println("Using global image provider registry")
+	} else {
+		registry = imageprovider.NewImageProviderRegistry()
+		httpcontroller.ImageProviderRegistry = registry // Assign back to global
+		log.Println("Created new image provider registry")
 	}
 
-	// Get the list of all detected species
-	speciesList, err := ds.GetAllDetectedSpecies()
-	if err != nil {
-		log.Printf("Failed to get detected species: %v", err)
-		return birdImageCache // Return the cache even if we can't get species list
+	var errs []error // Slice to collect errors
+
+	// Attempt to register Wikimedia
+	if _, ok := registry.GetCache("wikimedia"); !ok {
+		wikiCache, err := imageprovider.CreateDefaultCache(metrics, ds)
+		if err != nil {
+			errMsg := fmt.Sprintf("Failed to create WikiMedia image cache: %v", err)
+			log.Println(errMsg)
+			errs = append(errs, errors.New(errMsg))
+			// Continue even if one provider fails
+		} else {
+			if err := registry.Register("wikimedia", wikiCache); err != nil {
+				errMsg := fmt.Sprintf("Failed to register WikiMedia image provider: %v", err)
+				log.Println(errMsg)
+				errs = append(errs, errors.New(errMsg))
+			} else {
+				log.Println("Registered WikiMedia image provider")
+			}
+		}
+	} else {
+		log.Println("Using existing WikiMedia image provider")
 	}
 
-	// Start background fetching of images
+	// Attempt to register AviCommons
+	if _, ok := registry.GetCache("avicommons"); !ok {
+		log.Println("Attempting to register AviCommons provider...")
+
+		// Debug logging for embedded filesystem if enabled
+		if conf.Setting().Realtime.Dashboard.Thumbnails.Debug {
+			log.Println("Embedded filesystem contents:")
+			if err := fs.WalkDir(httpcontroller.ImageDataFs, ".", func(path string, d fs.DirEntry, err error) error {
+				if err != nil {
+					log.Printf("  Error walking path %s: %v", path, err)
+					return nil
+				}
+				log.Printf("  %s (%v)", path, d.IsDir())
+				return nil
+			}); err != nil {
+				log.Printf("Error walking embedded filesystem: %v", err)
+			}
+		}
+
+		if err := imageprovider.RegisterAviCommonsProvider(registry, httpcontroller.ImageDataFs, metrics, ds); err != nil {
+			errMsg := fmt.Sprintf("Failed to register AviCommons provider: %v", err)
+			log.Println(errMsg)
+			errs = append(errs, errors.New(errMsg))
+			// Check if we can read the data file for debugging
+			if _, errRead := fs.ReadFile(httpcontroller.ImageDataFs, "internal/imageprovider/data/latest.json"); errRead != nil {
+				log.Printf("Error reading AviCommons data file: %v", errRead)
+			} else {
+				log.Println("AviCommons data file exists but provider registration failed.")
+			}
+		} else {
+			log.Println("Successfully registered AviCommons image provider")
+		}
+	} else {
+		log.Println("Using existing AviCommons image provider")
+	}
+
+	// Set the registry in each provider for fallback support
+	registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
+		cache.SetRegistry(registry)
+		return true // Continue ranging
+	})
+
+	// Return joined errors if any occurred
+	if len(errs) > 0 {
+		return registry, errors.Join(errs...)
+	}
+
+	return registry, nil // No errors during setup
+}
+
+// selectDefaultImageProvider determines the default image provider based on configuration
+func selectDefaultImageProvider(registry *imageprovider.ImageProviderRegistry) *imageprovider.BirdImageCache {
+	preferredProvider := conf.Setting().Realtime.Dashboard.Thumbnails.ImageProvider
+	var defaultCache *imageprovider.BirdImageCache
+
+	if preferredProvider == "auto" {
+		// Use wikimedia as the default provider in auto mode, if available
+		defaultCache, _ = registry.GetCache("wikimedia")
+		log.Println("Using WikiMedia as the default image provider (auto mode)")
+	} else {
+		// User has specified a specific provider
+		if cache, ok := registry.GetCache(preferredProvider); ok {
+			defaultCache = cache
+			log.Printf("Using %s as the preferred image provider", preferredProvider)
+		} else {
+			// Fallback to wikimedia if preferred provider doesn't exist or isn't registered
+			defaultCache, _ = registry.GetCache("wikimedia")
+			log.Printf("Preferred provider '%s' not available, falling back to WikiMedia (if available)", preferredProvider)
+		}
+	}
+
+	// If we still don't have a default cache (e.g., wikimedia failed registration), try any available provider.
+	if defaultCache == nil {
+		log.Println("No default image provider assigned yet, checking for any registered provider")
+		registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
+			defaultCache = cache
+			log.Printf("Using %s as the fallback default image provider", name)
+			return false // Stop at the first provider found
+		})
+	}
+
+	return defaultCache
+}
+
+// warmUpImageCacheInBackground fetches existing cache data and starts background tasks
+// to fetch images for species not yet cached by any provider.
+func warmUpImageCacheInBackground(ds datastore.Interface, registry *imageprovider.ImageProviderRegistry, defaultCache *imageprovider.BirdImageCache, speciesList []datastore.Note) {
+	log.Println("Starting background image cache warm-up...")
+
+	// Pre-fetch all cached image records from the database per provider
+	allCachedImages := make(map[string]map[string]bool) // providerName -> scientificName -> exists
+	if ds != nil {
+		registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
+			providerCache, err := ds.GetAllImageCaches(name)
+			if err != nil {
+				log.Printf("Warning: Failed to get cached images for provider '%s': %v", name, err)
+				return true // Continue to next provider
+			}
+			allCachedImages[name] = make(map[string]bool)
+			for i := range providerCache {
+				allCachedImages[name][providerCache[i].ScientificName] = true
+			}
+			log.Printf("Pre-fetched %d cached image records for provider '%s'", len(providerCache), name)
+			return true // Continue ranging
+		})
+	} else {
+		log.Println("Warning: Datastore is nil, cannot pre-fetch cached images.")
+	}
+
+	// Start background fetching of images for species not found in any cache
 	go func() {
-		// Use a WaitGroup to wait for all goroutines to complete
 		var wg sync.WaitGroup
-		// Use a semaphore to limit concurrent fetches
 		sem := make(chan struct{}, 5) // Limit to 5 concurrent fetches
-
-		// Track how many species need images
 		needsImage := 0
 
 		for i := range speciesList {
-			species := &speciesList[i] // Use pointer to avoid copying
-			// Check if we already have this image cached
-			if cached, err := ds.GetImageCache(species.ScientificName); err == nil && cached != nil {
-				continue // Skip if already cached
+			// Use direct access to name to avoid pointer allocation
+			sciName := speciesList[i].ScientificName
+
+			// Check if already cached by *any* provider
+			alreadyCached := false
+			for providerName := range allCachedImages {
+				if _, exists := allCachedImages[providerName][sciName]; exists {
+					alreadyCached = true
+					break
+				}
+			}
+
+			if alreadyCached {
+				continue
 			}
 
 			needsImage++
 			wg.Add(1)
-			// Mark this species as being initialized
-			birdImageCache.Initializing.Store(species.ScientificName, struct{}{})
-			go func(name string) {
-				defer func() {
-					wg.Done()
-				}()
-				defer birdImageCache.Initializing.Delete(name) // Remove initialization mark when done
-				sem <- struct{}{}                              // Acquire semaphore
-				defer func() { <-sem }()                       // Release semaphore
+			// Mark as initializing *in the default cache* which will handle the fetch
+			defaultCache.Initializing.Store(sciName, struct{}{})
 
-				// Attempt to fetch the image for the given species
-				if _, err := birdImageCache.Get(name); err != nil {
-					log.Printf("Failed to fetch image for %s: %v", name, err)
+			go func(name string) {
+				defer wg.Done()
+				defer defaultCache.Initializing.Delete(name)
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				if _, err := defaultCache.Get(name); err != nil {
+					log.Printf("Failed to fetch image for %s during warm-up: %v", name, err)
 				}
-			}(species.ScientificName)
+			}(sciName) // Pass the captured name
 		}
 
 		if needsImage > 0 {
-			// Wait for all goroutines to complete
+			log.Printf("Cache warm-up: %d species require image fetching.", needsImage)
 			wg.Wait()
-			log.Printf("Finished initializing BirdImageCache (%d species needed images)", needsImage)
+			log.Printf("Finished initializing BirdImageCache (%d species fetched/attempted)", needsImage)
 		} else {
-			log.Println("BirdImageCache initialized (all species images already cached)")
+			log.Println("BirdImageCache initialized (all species images already present in DB cache)")
 		}
 	}()
+}
 
-	return birdImageCache
+// initBirdImageCache initializes the bird image cache by setting up providers,
+// selecting a default, and starting a background warm-up process.
+func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *imageprovider.BirdImageCache {
+	// 1. Set up the registry and register known providers
+	registry, regErr := setupImageProviderRegistry(ds, metrics)
+	if regErr != nil {
+		// Log errors encountered during provider registration
+		log.Printf("Warning: Image provider registry initialization encountered errors: %v", regErr)
+		// Note: We continue even if some providers fail, as others might succeed.
+		// The selectDefaultImageProvider logic will handle finding an available provider.
+	}
+
+	// Defensive check: Ensure registry is not nil before proceeding.
+	if registry == nil {
+		log.Println("Error: Image provider registry could not be initialized.")
+		return nil
+	}
+
+	// 2. Select the default cache based on settings and availability
+	defaultCache := selectDefaultImageProvider(registry)
+
+	// If no provider could be initialized or selected, return nil
+	if defaultCache == nil {
+		log.Println("Error: No image providers available or could be initialized.")
+		return nil
+	}
+
+	// 3. Get the list of all detected species
+	speciesList, err := ds.GetAllDetectedSpecies()
+	if err != nil {
+		log.Printf("Failed to get detected species list: %v. Cache warm-up may be incomplete.", err)
+		// Continue with an empty list if DB fails, warm-up won't happen
+		speciesList = []datastore.Note{}
+	}
+
+	// 4. Start the background cache warm-up process
+	warmUpImageCacheInBackground(ds, registry, defaultCache, speciesList)
+
+	return defaultCache
 }
 
 // startControlMonitor handles various control signals for realtime analysis mode

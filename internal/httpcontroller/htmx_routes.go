@@ -12,11 +12,14 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
 
 // Embed the assets and views directories.
 var AssetsFs embed.FS
 var ViewsFs embed.FS
+var ImageDataFs embed.FS // Embedded filesystem for image provider data
+var ImageProviderRegistry *imageprovider.ImageProviderRegistry
 
 // PageRouteConfig defines the structure for each full page route.
 type PageRouteConfig struct {

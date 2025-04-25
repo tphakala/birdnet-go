@@ -19,6 +19,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
 
 // MaxClipNameLength is the maximum allowed length for a clip name
@@ -170,39 +171,143 @@ func getWebPath(path string) string {
 	return filepath.ToSlash(path)
 }
 
-// Thumbnail returns the URL of a given bird's thumbnail image.
-// It takes the bird's scientific name as input and returns the image URL as a string.
-// If the image is not found or an error occurs, it returns an empty string.
+// selectBirdImage handles the logic for selecting a bird image based on user preferences and fallback policies
+func (h *Handlers) selectBirdImage(scientificName string) (*imageprovider.BirdImage, error) {
+	// Guard against empty input
+	if scientificName == "" {
+		return nil, fmt.Errorf("scientific name cannot be empty")
+	}
+
+	// Get user's preferred image provider from settings
+	settings := conf.Setting()
+	preferredProvider := settings.Realtime.Dashboard.Thumbnails.ImageProvider
+	fallbackPolicy := settings.Realtime.Dashboard.Thumbnails.FallbackPolicy
+
+	h.Debug("Image request for %s - Preferred provider: %s, Fallback policy: %s",
+		scientificName, preferredProvider, fallbackPolicy)
+
+	// If the BirdImageCache is nil, return early
+	if h.BirdImageCache == nil {
+		return nil, fmt.Errorf("bird image cache not available")
+	}
+
+	// If we have access to a registry and a specific provider is requested
+	if preferredProvider != "auto" && h.BirdImageCache.GetRegistry() != nil {
+		registry := h.BirdImageCache.GetRegistry()
+
+		// Log available providers
+		var providers []string
+		registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
+			providers = append(providers, name)
+			return true
+		})
+		h.Debug("Available providers: %v", providers)
+
+		if cache, ok := registry.GetCache(preferredProvider); ok {
+			h.Debug("Found preferred provider cache: %s", preferredProvider)
+
+			// Try to get the image from the preferred provider
+			if birdImage, err := cache.Get(scientificName); err == nil {
+				h.Debug("Successfully got image from %s for %s: %s",
+					preferredProvider, scientificName, birdImage.URL)
+				return &birdImage, nil
+			} else {
+				h.Debug("Failed to get image from %s: %v", preferredProvider, err)
+			}
+
+			// If preferred provider fails and fallback is disabled, return empty
+			if fallbackPolicy != "all" {
+				h.Debug("No fallback allowed (policy: %s), returning empty", fallbackPolicy)
+				return nil, fmt.Errorf("preferred provider failed and fallback is disabled")
+			}
+		} else {
+			h.Debug("Preferred provider '%s' not found in registry", preferredProvider)
+			// If preferred provider doesn't exist and fallback is disabled, return empty
+			if fallbackPolicy != "all" {
+				h.Debug("No fallback allowed (policy: %s) and provider not found, returning empty", fallbackPolicy)
+				return nil, fmt.Errorf("preferred provider not found and fallback is disabled")
+			}
+		}
+	} else {
+		h.Debug("Using default provider - Provider set to auto: %v, Registry available: %v",
+			preferredProvider == "auto", h.BirdImageCache.GetRegistry() != nil)
+	}
+
+	// At this point, either we're using "auto" mode or fallback is allowed
+	// Try all available providers
+	if registry := h.BirdImageCache.GetRegistry(); registry != nil {
+		var lastError error
+		var foundImage *imageprovider.BirdImage
+
+		registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
+			// Skip if this is the preferred provider that already failed
+			if name == preferredProvider && preferredProvider != "auto" {
+				return true // Continue to next provider
+			}
+
+			birdImage, err := cache.Get(scientificName)
+			if err == nil {
+				h.Debug("Successfully got image from fallback provider %s for %s: %s",
+					name, scientificName, birdImage.URL)
+				// Found a valid image, store and stop iteration
+				// Copy the value to avoid capturing loop variable address
+				imgCopy := birdImage
+				foundImage = &imgCopy
+				lastError = nil
+				return false // Stop iteration
+			}
+
+			h.Debug("Fallback provider %s failed for %s: %v", name, scientificName, err)
+			lastError = err
+			return true // Continue to next provider
+		})
+
+		if foundImage != nil {
+			return foundImage, nil
+		}
+
+		if lastError != nil {
+			h.Debug("All providers failed for %s", scientificName)
+			return nil, lastError
+		}
+	} else {
+		h.Debug("No image provider registry available")
+		return nil, fmt.Errorf("no image provider registry available")
+	}
+
+	return nil, fmt.Errorf("no image found for %s", scientificName)
+}
+
+// Thumbnail returns the URL for a thumbnail image of the specified bird
 func (h *Handlers) Thumbnail(scientificName string) string {
 	if h.BirdImageCache == nil {
-		// Return empty string if the cache is not initialized
+		h.Debug("BirdImageCache is nil, cannot get thumbnail")
 		return ""
 	}
 
-	birdImage, err := h.BirdImageCache.Get(scientificName)
-	if err != nil {
-		// Return empty string if an error occurs
+	birdImage, err := h.selectBirdImage(scientificName)
+	if err != nil || birdImage == nil {
+		h.Debug("Failed to select image for %s: %v", scientificName, err)
 		return ""
 	}
 
 	return birdImage.URL
 }
 
-// ThumbnailAttribution returns the HTML-formatted attribution for a bird's thumbnail image.
-// It takes the bird's scientific name as input and returns a template.HTML string.
-// If the attribution information is incomplete or an error occurs, it returns an empty template.HTML.
+// ThumbnailAttribution returns the attribution for a thumbnail image of the specified bird
 func (h *Handlers) ThumbnailAttribution(scientificName string) template.HTML {
 	if h.BirdImageCache == nil {
-		// Return empty string if the cache is not initialized
+		h.Debug("BirdImageCache is nil, cannot get thumbnail attribution")
 		return template.HTML("")
 	}
 
-	birdImage, err := h.BirdImageCache.Get(scientificName)
-	if err != nil {
-		log.Printf("Error getting thumbnail info for %s: %v", scientificName, err)
+	birdImage, err := h.selectBirdImage(scientificName)
+	if err != nil || birdImage == nil {
+		h.Debug("Failed to select image for attribution %s: %v", scientificName, err)
 		return template.HTML("")
 	}
 
+	// Format the attribution string
 	if birdImage.AuthorName == "" || birdImage.LicenseName == "" {
 		return template.HTML("")
 	}

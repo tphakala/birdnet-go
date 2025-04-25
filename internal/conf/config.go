@@ -61,9 +61,11 @@ type AudioSettings struct {
 	Equalizer EqualizerSettings // equalizer settings
 }
 type Thumbnails struct {
-	Debug   bool // true to enable debug mode
-	Summary bool // show thumbnails on summary table
-	Recent  bool // show thumbnails on recent table
+	Debug          bool   // true to enable debug mode
+	Summary        bool   // show thumbnails on summary table
+	Recent         bool   // show thumbnails on recent table
+	ImageProvider  string // preferred image provider: "auto", "wikimedia", "avicommons"
+	FallbackPolicy string // fallback policy: "none", "all" - try all available providers if preferred fails
 }
 
 // Dashboard contains settings for the web dashboard.

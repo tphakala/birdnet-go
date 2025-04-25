@@ -7,6 +7,9 @@ vars:
   TAILWIND_INPUT: tailwind.input.css
   TAILWIND_OUTPUT: assets/tailwind.css
   LABELS_DIR: internal/birdnet/data/labels
+  AVICOMMONS_DATA_DIR: internal/imageprovider/data
+  AVICOMMONS_JSON_FILE: latest.json
+  AVICOMMONS_JSON_URL: https://avicommons.org/latest.json
   BUILD_DATE:
     sh: date -u +%Y-%m-%dT%H:%M:%SZ
   VERSION:
@@ -55,6 +58,23 @@ tasks:
       - go tool cover -html=coverage/coverage.out -o coverage/coverage.html
     vars:
       TEST_FLAGS: '{{default "" .CLI_ARGS}}'
+
+  # New Task: Download Avicommons Data
+  download-avicommons-data:
+    desc: Download the Avicommons latest.json data file if it doesn't exist
+    dir: '{{.AVICOMMONS_DATA_DIR}}'
+    cmds:
+      - mkdir -p {{.AVICOMMONS_DATA_DIR}}
+      - |
+        if [ ! -f "{{.AVICOMMONS_JSON_FILE}}" ]; then
+          echo "Downloading Avicommons data file ({{.AVICOMMONS_JSON_FILE}})..."
+          # Use curl with -fL to fail on error and follow redirects
+          curl -fL -o "{{.AVICOMMONS_JSON_FILE}}" "{{.AVICOMMONS_JSON_URL}}"
+        else
+          echo "Avicommons data file ({{.AVICOMMONS_JSON_FILE}}) already exists."
+        fi
+    status:
+      - '[ -f "{{.AVICOMMONS_JSON_FILE}}" ]'
 
   native-target:
     cmds:
@@ -124,9 +144,10 @@ tasks:
     cmds:
       - go clean
       - rm -rf {{.BINARY_DIR}}/* tflite_c *.tar.gz *.zip
+      - rm -f {{.AVICOMMONS_DATA_DIR}}/{{.AVICOMMONS_JSON_FILE}}
 
   linux_amd64:
-    deps: [check-tools, check-tensorflow]
+    deps: [check-tools, check-tensorflow, download-avicommons-data]
     vars:
       TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR_AMD64}}'
       TFLITE_LIB_ARCH: linux_amd64.tar.gz
@@ -141,7 +162,7 @@ tasks:
         go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   linux_arm64:
-    deps: [check-tools, check-tensorflow]
+    deps: [check-tools, check-tensorflow, download-avicommons-data]
     vars:
       TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR_ARM64}}'
       TFLITE_LIB_ARCH: linux_arm64.tar.gz
@@ -159,7 +180,7 @@ tasks:
         go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   windows_amd64:
-    deps: [check-tools, check-tensorflow]
+    deps: [check-tools, check-tensorflow, download-avicommons-data]
     vars:
       TFLITE_LIB_DIR: /usr/x86_64-w64-mingw32/lib
       TFLITE_LIB_ARCH: windows_amd64.zip
@@ -174,7 +195,7 @@ tasks:
         go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}.exe
 
   darwin_amd64:
-    deps: [check-tools, check-tensorflow]
+    deps: [check-tools, check-tensorflow, download-avicommons-data]
     vars:
       TFLITE_LIB_DIR: /opt/homebrew/lib
       TFLITE_LIB_ARCH: darwin_amd64.tar.gz
@@ -188,7 +209,7 @@ tasks:
         go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   darwin_arm64:
-    deps: [check-tools, check-tensorflow]
+    deps: [check-tools, check-tensorflow, download-avicommons-data]
     vars:
       TFLITE_LIB_DIR: /opt/homebrew/lib
       TFLITE_LIB_ARCH: darwin_arm64.tar.gz
