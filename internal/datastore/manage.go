@@ -319,17 +319,10 @@ func extractDBNameFromMySQLInfo(connectionInfo string) string {
 	if !strings.Contains(parseInput, "://") && !strings.HasPrefix(parseInput, "/") {
 		// Check if it contains '@' which often separates userinfo from host/path
 		if atIndex := strings.Index(parseInput, "@"); atIndex != -1 {
-			// Might be user:pass@tcp(host:port)/dbname or user:pass@unix(socket)/dbname
-			// or user:pass@/dbname
-			// Add dummy scheme before the part after '@'
-			if len(parseInput) > atIndex+1 && parseInput[atIndex+1] == '/' {
-				// Case: user:pass@/dbname
-				parseInput = "dummy://" + parseInput
-			} else {
-				// Assume format like user:pass@protocol(address)/dbname
-				// This is harder to parse reliably without a scheme, try adding dummy scheme
-				parseInput = "dummy://" + parseInput
-			}
+			// If '@' is present, always prepend the dummy scheme.
+			// The specific format after '@' (like tcp(...), unix(...), or just /dbname)
+			// doesn't change the need for a scheme for url.Parse.
+			parseInput = "dummy://" + parseInput
 		} else {
 			// No scheme, no '@', might be just "dbname" or "protocol(address)/dbname"
 			// Add dummy scheme
@@ -348,9 +341,7 @@ func extractDBNameFromMySQLInfo(connectionInfo string) string {
 
 	// The database name is the path component, stripping the leading '/' if present.
 	dbName := u.Path
-	if strings.HasPrefix(dbName, "/") {
-		dbName = dbName[1:]
-	}
+	dbName = strings.TrimPrefix(dbName, "/") // Use TrimPrefix directly
 
 	// The go-sql-driver/mysql can handle DSNs without a path/dbname
 	// (e.g., connecting to the default database). Return empty string in that case.
