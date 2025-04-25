@@ -3,6 +3,7 @@ package imageprovider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -34,6 +35,7 @@ type BirdImage struct {
 // BirdImageCache represents a cache for storing and retrieving bird images.
 type BirdImageCache struct {
 	provider     ImageProvider
+	providerName string // Added: Name of the provider (e.g., "wikimedia")
 	dataMap      sync.Map
 	metrics      *metrics.ImageProviderMetrics
 	debug        bool
@@ -100,17 +102,17 @@ func (c *BirdImageCache) refreshStaleEntries() {
 		return
 	}
 
-	// Get all cached entries
-	entries, err := c.store.GetAllImageCaches()
+	// Get all cached entries for this provider
+	entries, err := c.store.GetAllImageCaches(c.providerName) // Use provider name
 	if err != nil {
 		if c.debug {
-			log.Printf("Debug: Failed to get cached entries for refresh: %v", err)
+			log.Printf("Debug: [%s] Failed to get cached entries for refresh: %v", c.providerName, err)
 		}
 		return
 	}
 
 	if c.debug {
-		log.Printf("Debug: Checking %d entries for staleness", len(entries))
+		log.Printf("Debug: [%s] Checking %d entries for staleness", c.providerName, len(entries))
 	}
 
 	// Find stale entries
@@ -119,7 +121,7 @@ func (c *BirdImageCache) refreshStaleEntries() {
 	for i := range entries {
 		if entries[i].CachedAt.Before(cutoff) {
 			if c.debug {
-				log.Printf("Debug: Found stale entry: %s (CachedAt: %v)", entries[i].ScientificName, entries[i].CachedAt)
+				log.Printf("Debug: [%s] Found stale entry: %s (CachedAt: %v)", c.providerName, entries[i].ScientificName, entries[i].CachedAt)
 			}
 			staleEntries = append(staleEntries, entries[i].ScientificName)
 		}
@@ -127,13 +129,13 @@ func (c *BirdImageCache) refreshStaleEntries() {
 
 	if len(staleEntries) == 0 {
 		if c.debug {
-			log.Printf("Debug: No stale entries found")
+			log.Printf("Debug: [%s] No stale entries found", c.providerName)
 		}
 		return
 	}
 
 	if c.debug {
-		log.Printf("Debug: Found %d stale cache entries to refresh", len(staleEntries))
+		log.Printf("Debug: [%s] Found %d stale cache entries to refresh", c.providerName, len(staleEntries))
 	}
 
 	// Process stale entries in batches with rate limiting
@@ -198,17 +200,18 @@ func (c *BirdImageCache) Close() error {
 }
 
 // initCache initializes a new BirdImageCache with the given ImageProvider.
-func InitCache(e ImageProvider, t *telemetry.Metrics, store datastore.Interface) *BirdImageCache {
+func InitCache(providerName string, e ImageProvider, t *telemetry.Metrics, store datastore.Interface) *BirdImageCache {
 	settings := conf.Setting()
 
 	quit := make(chan struct{})
 	cache := &BirdImageCache{
-		provider: e,
-		metrics:  t.ImageProvider,
-		debug:    settings.Realtime.Dashboard.Thumbnails.Debug,
-		store:    store,
-		logger:   log.Default(),
-		quit:     quit,
+		provider:     e,
+		providerName: providerName, // Set provider name
+		metrics:      t.ImageProvider,
+		debug:        settings.Realtime.Dashboard.Thumbnails.Debug,
+		store:        store,
+		logger:       log.Default(),
+		quit:         quit,
 	}
 
 	// Load cached images into memory only if store is available
@@ -228,15 +231,15 @@ func InitCache(e ImageProvider, t *telemetry.Metrics, store datastore.Interface)
 func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, error) {
 	if c.store == nil {
 		if c.debug {
-			log.Printf("Debug: Database store not available, skipping cache load for %s", scientificName)
+			log.Printf("Debug: [%s] Database store not available, skipping cache load for %s", c.providerName, scientificName)
 		}
 		return nil, nil
 	}
 
-	cached, err := c.store.GetImageCache(scientificName)
+	cached, err := c.store.GetImageCache(scientificName, c.providerName) // Use provider name
 	if err != nil {
 		if c.debug {
-			log.Printf("Debug: Failed to get image from cache for %s: %v", scientificName, err)
+			log.Printf("Debug: [%s] Failed to get image from cache for %s: %v", c.providerName, scientificName, err)
 		}
 		return nil, nil
 	}
@@ -260,12 +263,13 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 func (c *BirdImageCache) saveToDB(image *BirdImage) {
 	if c.store == nil {
 		if c.debug {
-			log.Printf("Debug: Database store not available, skipping cache save for %s", image.ScientificName)
+			log.Printf("Debug: [%s] Database store not available, skipping cache save for %s", c.providerName, image.ScientificName)
 		}
 		return
 	}
 
 	cached := &datastore.ImageCache{
+		ProviderName:   c.providerName, // Set provider name
 		URL:            image.URL,
 		ScientificName: image.ScientificName,
 		LicenseName:    image.LicenseName,
@@ -287,15 +291,15 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 func (c *BirdImageCache) loadCachedImages() error {
 	if c.store == nil {
 		if c.debug {
-			log.Printf("Debug: Database store not available, starting with empty cache")
+			log.Printf("Debug: [%s] Database store not available, starting with empty cache", c.providerName)
 		}
 		return nil
 	}
 
-	cached, err := c.store.GetAllImageCaches()
+	cached, err := c.store.GetAllImageCaches(c.providerName) // Use provider name
 	if err != nil {
 		if c.debug {
-			log.Printf("Debug: Failed to load cached images: %v", err)
+			log.Printf("Debug: [%s] Failed to load cached images: %v", c.providerName, err)
 		}
 		return nil // Continue with empty cache
 	}
@@ -503,6 +507,7 @@ func (c *BirdImageCache) updateMetrics() {
 }
 
 // CreateDefaultCache creates a new BirdImageCache with the default WikiMedia image provider.
+// The provider name is fixed to "wikimedia".
 func CreateDefaultCache(metrics *telemetry.Metrics, store datastore.Interface) (*BirdImageCache, error) {
 	// Create the default WikiMedia provider
 	provider, err := NewWikiMediaProvider()
@@ -510,26 +515,66 @@ func CreateDefaultCache(metrics *telemetry.Metrics, store datastore.Interface) (
 		return nil, fmt.Errorf("failed to create WikiMedia provider: %w", err)
 	}
 
-	settings := conf.Setting()
-	quit := make(chan struct{})
-	cache := &BirdImageCache{
-		provider: provider,
-		metrics:  metrics.ImageProvider,
-		debug:    settings.Realtime.Dashboard.Thumbnails.Debug,
-		store:    store,
-		logger:   log.Default(),
-		quit:     quit,
-	}
+	// Use a fixed provider name for the default cache
+	const defaultProviderName = "wikimedia"
 
-	// Load cached images into memory only if store is available
-	if store != nil {
-		if err := cache.loadCachedImages(); err != nil && cache.debug {
-			log.Printf("Debug: Error loading cached images: %v", err)
+	return InitCache(defaultProviderName, provider, metrics, store), nil
+}
+
+// --- Image Provider Registry ---
+
+// ImageProviderRegistry holds multiple named BirdImageCache instances.
+type ImageProviderRegistry struct {
+	caches map[string]*BirdImageCache
+	mu     sync.RWMutex
+}
+
+// NewImageProviderRegistry creates a new registry.
+func NewImageProviderRegistry() *ImageProviderRegistry {
+	return &ImageProviderRegistry{
+		caches: make(map[string]*BirdImageCache),
+	}
+}
+
+// Register adds a new cache instance to the registry.
+// It returns an error if a cache with the same name already exists.
+func (r *ImageProviderRegistry) Register(name string, cache *BirdImageCache) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.caches[name]; exists {
+		return fmt.Errorf("image provider cache named '%s' already registered", name)
+	}
+	r.caches[name] = cache
+	return nil
+}
+
+// GetCache retrieves a cache instance by name.
+func (r *ImageProviderRegistry) GetCache(name string) (*BirdImageCache, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	cache, ok := r.caches[name]
+	return cache, ok
+}
+
+// GetImage retrieves an image using the specified provider cache.
+// It returns an error if the provider name is not registered.
+func (r *ImageProviderRegistry) GetImage(providerName, scientificName string) (BirdImage, error) {
+	cache, ok := r.GetCache(providerName)
+	if !ok {
+		return BirdImage{}, fmt.Errorf("no image provider cache registered for name '%s'", providerName)
+	}
+	return cache.Get(scientificName)
+}
+
+// CloseAll gracefully shuts down all registered caches.
+func (r *ImageProviderRegistry) CloseAll() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var errs []error
+	for name, cache := range r.caches {
+		if err := cache.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to close cache '%s': %w", name, err))
 		}
 	}
-
-	// Start cache refresh routine
-	cache.startCacheRefresh(quit)
-
-	return cache, nil
+	return errors.Join(errs...)
 }
