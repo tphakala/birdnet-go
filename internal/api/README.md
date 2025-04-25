@@ -81,8 +81,9 @@ Protected endpoints require authentication, while some endpoints like health che
 
 ### Media Access
 
-- Retrieve bird images
+- Retrieve bird images by scientific name
 - Access detection audio samples
+- Generate and view spectrograms for detections
 
 ### Weather Integration
 
@@ -119,6 +120,27 @@ The API follows a consistent pattern for organizing routes:
    // Protected routes
    detectionGroup := c.Group.Group("/detections", c.AuthMiddleware)
    ```
+
+### Media Access API Endpoints
+
+The API provides several endpoints for accessing media related to bird detections:
+
+1. **Species Images**:
+   - `GET /api/v2/media/species-image?name={scientificName}` - Retrieves an image for a bird species using its scientific name
+   - Redirects to the appropriate image from configured providers (e.g., AviCommons)
+   - Falls back to a placeholder if no image is available
+
+2. **Audio Clips**:
+   - `GET /api/v2/audio/{id}` - Retrieves the audio clip for a detection by ID
+   - `GET /api/v2/media/audio/{filename}` - Retrieves an audio clip by filename (legacy endpoint)
+   - `GET /api/v2/media/audio?id={id}` - Convenience endpoint that redirects to ID-based endpoint
+
+3. **Spectrograms**:
+   - `GET /api/v2/spectrogram/{id}?width={width}` - Generates a spectrogram for a detection by ID
+   - `GET /api/v2/media/spectrogram/{filename}?width={width}` - Generates a spectrogram by filename (legacy endpoint)
+   - The width parameter is optional and defaults to 800px
+
+All media endpoints use secure file access through the SecureFS implementation which prevents path traversal attacks.
 
 ### Middleware Implementation
 

@@ -299,7 +299,7 @@
                                                     <polyline points="8 6 12 2 16 6"></polyline>
                                                 </svg>
                                             </template>
-                                            <template x-if="result.timeOfDay === 'sunset'">
+                                                    <template x-if="result.timeOfDay === 'sunset'">
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                                     <path d="M17 18a5 5 0 0 0-10 0"></path>
                                                     <line x1="12" y1="9" x2="12" y2="2"></line>
@@ -321,6 +321,19 @@
                                     </td>
                                     <td>
                                         <div class="flex items-center gap-2">
+                                            <!-- Add bird image thumbnail -->
+                                            <div class="w-12 h-12 rounded-md overflow-hidden bg-gray-100 flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                                                 @click.stop="toggleExpand(result.id)"
+                                                 :aria-label="(isExpanded(result.id) ? 'Collapse' : 'Expand') + ' details for ' + (result.commonName || 'Unknown species')"
+                                                 :aria-expanded="isExpanded(result.id)">
+                                                <img 
+                                                    :src="'/api/v2/media/species-image?name=' + encodeURIComponent(result.scientificName)" 
+                                                    :alt="result.commonName || 'Unknown species'"
+                                                    class="w-full h-full object-cover"
+                                                    @error="$event.target.src = '/assets/images/bird-placeholder.svg'; $event.target.classList.add('p-2');"
+                                                    loading="lazy"
+                                                />
+                                            </div>
                                             <div>
                                                 <div class="font-bold" x-text="result.commonName || 'Unknown'"></div>
                                                 <div class="text-xs opacity-50" x-text="result.scientificName || ''"></div>
@@ -391,7 +404,7 @@
                                     <td colspan="6" class="p-0 border-t-0">
                                         <div class="p-4" :class="index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'">
                                             <!-- Expanded content -->
-                                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                                                 <!-- Weather Information Container -->
                                                 <div class="bg-base-200 rounded-box p-4" x-data="{
                                                     weather: null,
@@ -525,6 +538,20 @@
                                                                 <div class="font-medium" x-text="result.timeOfDay || 'Unknown'"></div>
                                                             </div>
                                                         </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <!-- Bird Image Container (Middle Column) -->
+                                                <div class="bg-base-200 rounded-box p-4 flex flex-col justify-center items-center">
+                                                    <div class="w-full aspect-square rounded-md overflow-hidden bg-gray-100 cursor-pointer hover:brightness-90 transition-all" 
+                                                         @click.stop="toggleExpand(result.id)"
+                                                         title="Click to collapse">
+                                                        <img 
+                                                            :src="'/api/v2/media/species-image?name=' + encodeURIComponent(result.scientificName)" 
+                                                            :alt="result.commonName || 'Unknown species'"
+                                                            class="w-full h-full object-cover"
+                                                            @error="$event.target.src = '/assets/images/bird-placeholder.svg'; $event.target.classList.add('p-2');"
+                                                        />
                                                     </div>
                                                 </div>
 

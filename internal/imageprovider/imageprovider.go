@@ -287,6 +287,14 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 		return // Datastore is not configured
 	}
 
+	// Validate the image has a scientific name
+	if image == nil || image.ScientificName == "" {
+		if c.debug {
+			log.Printf("Debug [%s]: Attempted to save image with empty scientific name, skipping", c.providerName)
+		}
+		return // Skip saving images with empty scientific names
+	}
+
 	// Determine the CachedAt time
 	cachedAt := image.CachedAt
 	if cachedAt.IsZero() {
@@ -383,6 +391,11 @@ func (c *BirdImageCache) tryInitialize(scientificName string) (BirdImage, bool, 
 
 // Get retrieves a bird image from the cache or fetches it if not found
 func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
+	// Validate scientific name is not empty
+	if scientificName == "" {
+		return BirdImage{}, fmt.Errorf("scientific name cannot be empty")
+	}
+
 	// Check memory cache first for quick return
 	if value, ok := c.dataMap.Load(scientificName); ok {
 		if image, ok := value.(*BirdImage); ok {
@@ -477,6 +490,11 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error) {
 	if c.debug {
 		log.Printf("Debug: Fetching image for species: %s", scientificName)
+	}
+
+	// Validate scientific name is not empty
+	if scientificName == "" {
+		return BirdImage{}, fmt.Errorf("scientific name cannot be empty")
 	}
 
 	settings := conf.Setting()
@@ -638,6 +656,12 @@ func (c *BirdImageCache) fetchDirect(scientificName string) (BirdImage, error) {
 	if c.provider == nil {
 		return BirdImage{}, fmt.Errorf("provider not set for %s cache", c.providerName)
 	}
+
+	// Validate scientific name is not empty
+	if scientificName == "" {
+		return BirdImage{}, fmt.Errorf("scientific name cannot be empty")
+	}
+
 	if c.debug {
 		log.Printf("Debug [%s]: Direct fetching image for species: %s", c.providerName, scientificName)
 	}
@@ -737,6 +761,14 @@ func NewImageProviderRegistry() *ImageProviderRegistry {
 // Register adds a new cache instance to the registry.
 // It returns an error if a cache with the same name already exists.
 func (r *ImageProviderRegistry) Register(name string, cache *BirdImageCache) error {
+	// Validate inputs
+	if name == "" {
+		return fmt.Errorf("provider name cannot be empty")
+	}
+	if cache == nil {
+		return fmt.Errorf("cannot register nil cache for provider '%s'", name)
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.caches[name]; exists {
@@ -757,6 +789,14 @@ func (r *ImageProviderRegistry) GetCache(name string) (*BirdImageCache, bool) {
 // GetImage retrieves an image using the specified provider cache.
 // It returns an error if the provider name is not registered.
 func (r *ImageProviderRegistry) GetImage(providerName, scientificName string) (BirdImage, error) {
+	// Validate inputs
+	if providerName == "" {
+		return BirdImage{}, fmt.Errorf("provider name cannot be empty")
+	}
+	if scientificName == "" {
+		return BirdImage{}, fmt.Errorf("scientific name cannot be empty")
+	}
+
 	cache, ok := r.GetCache(providerName)
 	if !ok {
 		return BirdImage{}, fmt.Errorf("no image provider cache registered for name '%s'", providerName)

@@ -486,6 +486,12 @@ func warmUpImageCacheInBackground(ds datastore.Interface, registry *imageprovide
 			// Use direct access to name to avoid pointer allocation
 			sciName := speciesList[i].ScientificName
 
+			// Skip empty scientific names
+			if sciName == "" {
+				log.Printf("Warning: Skipping empty scientific name during image cache warm-up")
+				continue
+			}
+
 			// Check if already cached by *any* provider
 			alreadyCached := false
 			for providerName := range allCachedImages {
@@ -509,6 +515,12 @@ func warmUpImageCacheInBackground(ds datastore.Interface, registry *imageprovide
 				defer defaultCache.Initializing.Delete(name)
 				sem <- struct{}{}
 				defer func() { <-sem }()
+
+				// Skip empty scientific names (double check)
+				if name == "" {
+					log.Printf("Warning: Caught empty scientific name in fetch goroutine")
+					return
+				}
 
 				if _, err := defaultCache.Get(name); err != nil {
 					log.Printf("Failed to fetch image for %s during warm-up: %v", name, err)
@@ -561,8 +573,22 @@ func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *ima
 		speciesList = []datastore.Note{}
 	}
 
-	// 4. Start the background cache warm-up process
-	warmUpImageCacheInBackground(ds, registry, defaultCache, speciesList)
+	// Filter out any species with empty scientific names
+	validSpeciesList := make([]datastore.Note, 0, len(speciesList))
+	for i := range speciesList {
+		if speciesList[i].ScientificName != "" {
+			validSpeciesList = append(validSpeciesList, speciesList[i])
+		} else {
+			log.Printf("Warning: Found species entry with empty scientific name in database, skipping for image cache")
+		}
+	}
+
+	if len(validSpeciesList) < len(speciesList) {
+		log.Printf("Filtered %d species entries with empty scientific names from warm-up list", len(speciesList)-len(validSpeciesList))
+	}
+
+	// 4. Start the background cache warm-up process with validated species list
+	warmUpImageCacheInBackground(ds, registry, defaultCache, validSpeciesList)
 
 	return defaultCache
 }
