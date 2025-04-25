@@ -335,7 +335,8 @@ func extractDBNameFromMySQLInfo(connectionInfo string) string {
 
 	u, err := url.Parse(parseInput)
 	if err != nil {
-		log.Printf("WARN: Failed to parse MySQL connection info '%s' as URL: %v. Cannot extract DB name.", connectionInfo, err)
+		sanitizedConnectionInfo := redactSensitiveInfo(connectionInfo)
+		log.Printf("WARN: Failed to parse MySQL connection info '%s' as URL: %v. Cannot extract DB name.", sanitizedConnectionInfo, err)
 		return "" // Return empty on parse error
 	}
 
@@ -356,4 +357,52 @@ func extractDBNameFromMySQLInfo(connectionInfo string) string {
 	}
 
 	return dbName
+}
+
+// redactSensitiveInfo redacts sensitive information (e.g., password) from a MySQL DSN string.
+func redactSensitiveInfo(dsn string) string {
+	// Parse the DSN to extract components. Add a dummy scheme if needed for parsing,
+	// similar to how extractDBNameFromMySQLInfo does, but focus just on enabling parsing.
+	parseInput := dsn
+	needsDummyScheme := false
+	if !strings.Contains(parseInput, "://") {
+		// Add dummy scheme if it's likely a DSN needing one (contains '@' or starts without '/')
+		if strings.Contains(parseInput, "@") || (!strings.HasPrefix(parseInput, "/") && strings.Contains(parseInput, "(")) {
+			parseInput = "dummy://" + parseInput
+			needsDummyScheme = true
+		} else if strings.HasPrefix(parseInput, "/") {
+			// Handle path-only or path-with-params DSNs like "/dbname?..."
+			parseInput = "dummy://dummyhost" + parseInput
+			needsDummyScheme = true
+		}
+		// Note: Plain "dbname" without scheme/user/host/params might fail parsing, which is acceptable.
+	}
+
+	u, err := url.Parse(parseInput)
+	if err != nil {
+		// If parsing fails even with added scheme, return a generic redacted string
+		// as we cannot reliably locate the password.
+		log.Printf("DEBUG: Failed to parse DSN for redaction '%s': %v. Returning generic redaction.", dsn, err)
+		return "[REDACTED DSN]"
+	}
+
+	// Redact the password if present in the UserInfo
+	if u.User != nil {
+		_, hasPassword := u.User.Password()
+		if hasPassword {
+			u.User = url.UserPassword(u.User.Username(), "[REDACTED]")
+		}
+	}
+
+	// Reconstruct the string. If we added a dummy scheme/host, remove it.
+	sanitized := u.String()
+	if needsDummyScheme {
+		if strings.HasPrefix(sanitized, "dummy://dummyhost") {
+			sanitized = strings.TrimPrefix(sanitized, "dummy://dummyhost")
+		} else if strings.HasPrefix(sanitized, "dummy://") {
+			sanitized = strings.TrimPrefix(sanitized, "dummy://")
+		}
+	}
+
+	return sanitized
 }
