@@ -336,6 +336,7 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *telemetry.Metri
 		log.Println("Using global image provider registry")
 	} else {
 		registry = imageprovider.NewImageProviderRegistry()
+		httpcontroller.ImageProviderRegistry = registry // Assign back to global
 		log.Println("Created new image provider registry")
 	}
 

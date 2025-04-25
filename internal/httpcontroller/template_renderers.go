@@ -160,7 +160,6 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 	providerOptionList := []ProviderOption{
 		{Value: "auto", Display: "Auto (Default)"}, // Always add auto first
 	}
-	providerNames := []string{}
 
 	multipleProvidersAvailable := false
 	providerCount := 0
@@ -175,7 +174,6 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 				} else {
 					displayName = "(unknown)"
 				}
-				providerNames = append(providerNames, name)
 				providerOptionList = append(providerOptionList, ProviderOption{Value: name, Display: displayName})
 				providerCount++
 				return true // Continue ranging
@@ -184,8 +182,9 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 
 			// Sort the providers alphabetically by display name (excluding the first 'auto' entry)
 			if len(providerOptionList) > 2 { // Need at least 3 elements to sort the part after 'auto'
-				sort.Slice(providerOptionList[1:], func(i, j int) bool {
-					return providerOptionList[1+i].Display < providerOptionList[1+j].Display
+				sub := providerOptionList[1:] // Create a sub-slice for sorting
+				sort.Slice(sub, func(i, j int) bool {
+					return sub[i].Display < sub[j].Display // Compare elements within the sub-slice
 				})
 			}
 		}
