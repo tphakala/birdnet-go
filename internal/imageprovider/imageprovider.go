@@ -43,6 +43,7 @@ type BirdImageCache struct {
 	logger       *log.Logger
 	quit         chan struct{} // Channel to signal shutdown
 	Initializing sync.Map      // Track which species are being initialized
+	registry     *ImageProviderRegistry
 }
 
 // emptyImageProvider is an ImageProvider that always returns an empty BirdImage.
@@ -236,7 +237,11 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 		return nil, nil
 	}
 
-	cached, err := c.store.GetImageCache(scientificName, c.providerName) // Use provider name
+	query := datastore.ImageCacheQuery{
+		ScientificName: scientificName,
+		ProviderName:   c.providerName,
+	}
+	cached, err := c.store.GetImageCache(query) // Use query struct
 	if err != nil {
 		if c.debug {
 			log.Printf("Debug: [%s] Failed to get image from cache for %s: %v", c.providerName, scientificName, err)
@@ -451,14 +456,122 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 		log.Printf("Debug: Fetching image for species: %s", scientificName)
 	}
 
+	settings := conf.Setting()
+	preferredProvider := settings.Realtime.Dashboard.Thumbnails.ImageProvider
+	fallbackPolicy := settings.Realtime.Dashboard.Thumbnails.FallbackPolicy
+
+	// Try to fetch using the configured provider preference
+	var birdImage BirdImage
+	var err error
+
+	// Check if we should directly use a specific provider first
+	if c.registry != nil && preferredProvider != "auto" && preferredProvider != c.providerName {
+		// Try the user's preferred provider first (if it exists and it's not the current provider)
+		if preferredCache, ok := c.registry.GetCache(preferredProvider); ok {
+			if c.debug {
+				log.Printf("Debug: Using preferred provider '%s' for %s", preferredProvider, scientificName)
+			}
+
+			startTime := time.Now()
+			preferredImage, preferredErr := preferredCache.Get(scientificName)
+			duration := time.Since(startTime).Seconds()
+
+			if preferredErr == nil {
+				// Successfully retrieved from preferred provider
+				if c.metrics != nil {
+					c.metrics.ObserveDownloadDuration(duration)
+					c.metrics.IncrementImageDownloads()
+				}
+
+				// Save to memory cache
+				c.dataMap.Store(scientificName, &preferredImage)
+
+				// Save to database cache with provider name from preferred cache
+				c.saveToDB(&preferredImage)
+
+				return preferredImage, nil
+			}
+
+			if c.debug {
+				log.Printf("Debug: Preferred provider '%s' failed for %s: %v", preferredProvider, scientificName, preferredErr)
+			}
+
+			// If fallback is disabled, return the error from preferred provider
+			if fallbackPolicy == "none" {
+				if c.metrics != nil {
+					c.metrics.IncrementDownloadErrors()
+				}
+				return BirdImage{}, preferredErr
+			}
+		}
+	}
+
+	// Use this provider (either it's the preferred one or we're falling back)
 	startTime := time.Now()
-	birdImage, err := c.provider.Fetch(scientificName)
+	birdImage, err = c.provider.Fetch(scientificName)
 	duration := time.Since(startTime).Seconds()
 
 	if err != nil {
 		if c.metrics != nil {
 			c.metrics.IncrementDownloadErrors()
 		}
+
+		// If registry is available and fallback is enabled, try other providers
+		if c.registry != nil && fallbackPolicy == "all" {
+			// Create a map of providers already tried to avoid duplicates
+			triedProviders := make(map[string]bool)
+			triedProviders[c.providerName] = true
+			if preferredProvider != "auto" {
+				triedProviders[preferredProvider] = true
+			}
+
+			// Try all other available providers
+			fallbackSuccessful := false
+			c.registry.RangeProviders(func(name string, cache *BirdImageCache) bool {
+				// Skip providers we've already tried
+				if triedProviders[name] {
+					return true // continue ranging
+				}
+
+				if c.debug {
+					log.Printf("Debug: Trying fallback to '%s' provider for %s", name, scientificName)
+				}
+
+				fallbackStartTime := time.Now()
+				fallbackImage, fallbackErr := cache.Get(scientificName)
+				fallbackDuration := time.Since(fallbackStartTime).Seconds()
+
+				if fallbackErr == nil {
+					// Successfully retrieved from fallback
+					if c.metrics != nil {
+						c.metrics.ObserveDownloadDuration(fallbackDuration)
+						c.metrics.IncrementImageDownloads()
+					}
+
+					// Save to memory cache
+					c.dataMap.Store(scientificName, &fallbackImage)
+
+					// Save to database cache with provider name
+					c.saveToDB(&fallbackImage)
+
+					birdImage = fallbackImage
+					err = nil
+					fallbackSuccessful = true
+					return false // stop ranging
+				}
+
+				if c.debug {
+					log.Printf("Debug: Fallback to '%s' failed for %s: %v", name, scientificName, fallbackErr)
+				}
+
+				return true // continue ranging
+			})
+
+			if fallbackSuccessful {
+				return birdImage, nil
+			}
+		}
+
 		return BirdImage{}, err
 	}
 
@@ -577,4 +690,22 @@ func (r *ImageProviderRegistry) CloseAll() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// SetRegistry allows setting the provider registry for fallback providers
+func (c *BirdImageCache) SetRegistry(registry *ImageProviderRegistry) {
+	c.registry = registry
+}
+
+// RangeProviders iterates over all registered providers.
+// The callback function should return false to stop iteration.
+func (r *ImageProviderRegistry) RangeProviders(callback func(name string, cache *BirdImageCache) bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for name, cache := range r.caches {
+		if !callback(name, cache) {
+			break
+		}
+	}
 }

@@ -703,7 +703,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	}
 
 	// Create a bird image cache with our mock provider
-	imageCache := imageprovider.InitCache(mockImageProvider, NewTestMetrics(t), mockDS)
+	imageCache := imageprovider.InitCache("test", mockImageProvider, NewTestMetrics(t), mockDS)
 
 	// Create a controller with our mocks
 	controller := &Controller{
@@ -830,7 +830,7 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	}
 
 	// Create a bird image cache with our mock provider
-	imageCache := imageprovider.InitCache(mockImageProvider, NewTestMetrics(t), mockDS)
+	imageCache := imageprovider.InitCache("test", mockImageProvider, NewTestMetrics(t), mockDS)
 
 	// Create a controller with our mocks
 	controller := &Controller{

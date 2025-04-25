@@ -191,8 +191,11 @@ func (m *MockDataStore) IsNoteLocked(noteID string) (bool, error) {
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockDataStore) GetImageCache(scientificName string) (*datastore.ImageCache, error) {
-	args := m.Called(scientificName)
+func (m *MockDataStore) GetImageCache(query datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
+	args := m.Called(query)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).(*datastore.ImageCache), args.Error(1)
 }
 
@@ -201,8 +204,8 @@ func (m *MockDataStore) SaveImageCache(cache *datastore.ImageCache) error {
 	return args.Error(0)
 }
 
-func (m *MockDataStore) GetAllImageCaches() ([]datastore.ImageCache, error) {
-	args := m.Called()
+func (m *MockDataStore) GetAllImageCaches(providerName string) ([]datastore.ImageCache, error) {
+	args := m.Called(providerName)
 	return args.Get(0).([]datastore.ImageCache), args.Error(1)
 }
 
@@ -363,12 +366,14 @@ func (m *MockDataStoreV2) LockNote(noteID string) error                         
 func (m *MockDataStoreV2) UnlockNote(noteID string) error                         { return nil }
 func (m *MockDataStoreV2) GetNoteLock(noteID string) (*datastore.NoteLock, error) { return nil, nil }
 func (m *MockDataStoreV2) IsNoteLocked(noteID string) (bool, error)               { return false, nil }
-func (m *MockDataStoreV2) GetImageCache(scientificName string) (*datastore.ImageCache, error) {
+func (m *MockDataStoreV2) GetImageCache(query datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
 	return nil, nil
 }
-func (m *MockDataStoreV2) SaveImageCache(cache *datastore.ImageCache) error   { return nil }
-func (m *MockDataStoreV2) GetAllImageCaches() ([]datastore.ImageCache, error) { return nil, nil }
-func (m *MockDataStoreV2) GetLockedNotesClipPaths() ([]string, error)         { return nil, nil }
+func (m *MockDataStoreV2) SaveImageCache(cache *datastore.ImageCache) error { return nil }
+func (m *MockDataStoreV2) GetAllImageCaches(providerName string) ([]datastore.ImageCache, error) {
+	return nil, nil
+}
+func (m *MockDataStoreV2) GetLockedNotesClipPaths() ([]string, error) { return nil, nil }
 func (m *MockDataStoreV2) CountHourlyDetections(date, hour string, duration int) (int64, error) {
 	return 0, nil
 }

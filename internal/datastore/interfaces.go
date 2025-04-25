@@ -59,7 +59,7 @@ type Interface interface {
 	GetNoteLock(noteID string) (*NoteLock, error)
 	IsNoteLocked(noteID string) (bool, error)
 	// Image cache methods
-	GetImageCache(scientificName string, providerName string) (*ImageCache, error)
+	GetImageCache(query ImageCacheQuery) (*ImageCache, error)
 	SaveImageCache(cache *ImageCache) error
 	GetAllImageCaches(providerName string) ([]ImageCache, error)
 	GetLockedNotesClipPaths() ([]string, error)
@@ -907,15 +907,18 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 }
 
 // GetImageCache retrieves an image cache entry by scientific name and provider
-func (ds *DataStore) GetImageCache(scientificName string, providerName string) (*ImageCache, error) {
+func (ds *DataStore) GetImageCache(query ImageCacheQuery) (*ImageCache, error) {
 	var cache ImageCache
+	if query.ScientificName == "" || query.ProviderName == "" {
+		return nil, fmt.Errorf("scientific name and provider name must be provided in query")
+	}
 	// Use Session to disable logging for this query
 	if err := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
-		Where("scientific_name = ? AND provider_name = ?", scientificName, providerName).First(&cache).Error; err != nil {
+		Where("scientific_name = ? AND provider_name = ?", query.ScientificName, query.ProviderName).First(&cache).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil // Return nil, nil when record is not found
 		}
-		return nil, fmt.Errorf("getting image cache for %s from %s: %w", scientificName, providerName, err)
+		return nil, fmt.Errorf("getting image cache for %s from %s: %w", query.ScientificName, query.ProviderName, err)
 	}
 	return &cache, nil
 }

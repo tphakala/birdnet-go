@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
 
 // buildTime is the time when the binary was built.
@@ -26,6 +27,12 @@ var assetsFs embed.FS
 
 //go:embed views/*
 var viewsFs embed.FS
+
+//go:embed internal/imageprovider/data/*
+var imageDataFs embed.FS // Embed image provider data
+
+// ImageProviderRegistry is a global registry for image providers
+var imageProviderRegistry *imageprovider.ImageProviderRegistry
 
 func main() {
 	exitCode := mainWithExitCode()
@@ -57,6 +64,13 @@ func mainWithExitCode() int {
 	// publish the embedded assets and views directories to controller package
 	httpcontroller.AssetsFs = assetsFs
 	httpcontroller.ViewsFs = viewsFs
+	httpcontroller.ImageDataFs = imageDataFs
+
+	// Initialize the image provider registry
+	imageProviderRegistry = imageprovider.NewImageProviderRegistry()
+
+	// Make registry available to the httpcontroller package
+	httpcontroller.ImageProviderRegistry = imageProviderRegistry
 
 	// Load the configuration
 	settings := conf.Setting()
