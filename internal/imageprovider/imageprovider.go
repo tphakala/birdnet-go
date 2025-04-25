@@ -3,9 +3,11 @@ package imageprovider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -29,18 +31,21 @@ type BirdImage struct {
 	AuthorName     string
 	AuthorURL      string
 	CachedAt       time.Time
+	SourceProvider string // The actual provider that supplied the image
 }
 
 // BirdImageCache represents a cache for storing and retrieving bird images.
 type BirdImageCache struct {
 	provider     ImageProvider
+	providerName string // Added: Name of the provider (e.g., "wikimedia")
 	dataMap      sync.Map
 	metrics      *metrics.ImageProviderMetrics
 	debug        bool
 	store        datastore.Interface
 	logger       *log.Logger
-	quit         chan struct{} // Channel to signal shutdown
-	Initializing sync.Map      // Track which species are being initialized
+	quit         chan struct{}                         // Channel to signal shutdown
+	Initializing sync.Map                              // Track which species are being initialized
+	registry     atomic.Pointer[ImageProviderRegistry] // Use atomic pointer
 }
 
 // emptyImageProvider is an ImageProvider that always returns an empty BirdImage.
@@ -100,17 +105,17 @@ func (c *BirdImageCache) refreshStaleEntries() {
 		return
 	}
 
-	// Get all cached entries
-	entries, err := c.store.GetAllImageCaches()
+	// Get all cached entries for this provider
+	entries, err := c.store.GetAllImageCaches(c.providerName) // Use provider name
 	if err != nil {
 		if c.debug {
-			log.Printf("Debug: Failed to get cached entries for refresh: %v", err)
+			log.Printf("Debug: [%s] Failed to get cached entries for refresh: %v", c.providerName, err)
 		}
 		return
 	}
 
 	if c.debug {
-		log.Printf("Debug: Checking %d entries for staleness", len(entries))
+		log.Printf("Debug: [%s] Checking %d entries for staleness", c.providerName, len(entries))
 	}
 
 	// Find stale entries
@@ -119,7 +124,7 @@ func (c *BirdImageCache) refreshStaleEntries() {
 	for i := range entries {
 		if entries[i].CachedAt.Before(cutoff) {
 			if c.debug {
-				log.Printf("Debug: Found stale entry: %s (CachedAt: %v)", entries[i].ScientificName, entries[i].CachedAt)
+				log.Printf("Debug: [%s] Found stale entry: %s (CachedAt: %v)", c.providerName, entries[i].ScientificName, entries[i].CachedAt)
 			}
 			staleEntries = append(staleEntries, entries[i].ScientificName)
 		}
@@ -127,13 +132,13 @@ func (c *BirdImageCache) refreshStaleEntries() {
 
 	if len(staleEntries) == 0 {
 		if c.debug {
-			log.Printf("Debug: No stale entries found")
+			log.Printf("Debug: [%s] No stale entries found", c.providerName)
 		}
 		return
 	}
 
 	if c.debug {
-		log.Printf("Debug: Found %d stale cache entries to refresh", len(staleEntries))
+		log.Printf("Debug: [%s] Found %d stale cache entries to refresh", c.providerName, len(staleEntries))
 	}
 
 	// Process stale entries in batches with rate limiting
@@ -198,17 +203,18 @@ func (c *BirdImageCache) Close() error {
 }
 
 // initCache initializes a new BirdImageCache with the given ImageProvider.
-func InitCache(e ImageProvider, t *telemetry.Metrics, store datastore.Interface) *BirdImageCache {
+func InitCache(providerName string, e ImageProvider, t *telemetry.Metrics, store datastore.Interface) *BirdImageCache {
 	settings := conf.Setting()
 
 	quit := make(chan struct{})
 	cache := &BirdImageCache{
-		provider: e,
-		metrics:  t.ImageProvider,
-		debug:    settings.Realtime.Dashboard.Thumbnails.Debug,
-		store:    store,
-		logger:   log.Default(),
-		quit:     quit,
+		provider:     e,
+		providerName: providerName, // Set provider name
+		metrics:      t.ImageProvider,
+		debug:        settings.Realtime.Dashboard.Thumbnails.Debug,
+		store:        store,
+		logger:       log.Default(),
+		quit:         quit,
 	}
 
 	// Load cached images into memory only if store is available
@@ -226,60 +232,85 @@ func InitCache(e ImageProvider, t *telemetry.Metrics, store datastore.Interface)
 
 // loadFromDBCache loads a BirdImage from the database cache
 func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, error) {
-	if c.store == nil {
-		if c.debug {
-			log.Printf("Debug: Database store not available, skipping cache load for %s", scientificName)
-		}
-		return nil, nil
+	var cachedImage *datastore.ImageCache // Correct type based on GetImageCache return
+	var err error
+	query := datastore.ImageCacheQuery{ // Pass query by value
+		ScientificName: scientificName,
+		ProviderName:   c.providerName, // Query based on *this* cache's provider name
 	}
-
-	cached, err := c.store.GetImageCache(scientificName)
+	cachedImage, err = c.store.GetImageCache(query) // Use GetImageCache and handle two return values
 	if err != nil {
 		if c.debug {
-			log.Printf("Debug: Failed to get image from cache for %s: %v", scientificName, err)
+			log.Printf("Debug [%s]: DB cache miss or error for %s: %v", c.providerName, scientificName, err)
 		}
+		// Propagate actual DB errors
+		return nil, err
+	}
+	// Handle case where GetImageCache returns nil, nil (not found but no error)
+	if cachedImage == nil {
+		if c.debug {
+			log.Printf("Debug [%s]: DB cache miss (nil result) for %s", c.providerName, scientificName)
+		}
+		// Return nil, nil to indicate not found without an error, matching previous behavior
 		return nil, nil
 	}
 
-	if cached == nil {
-		return nil, nil
+	if c.debug {
+		log.Printf("Debug [%s]: DB cache hit for %s", c.providerName, scientificName)
 	}
 
-	return &BirdImage{
-		URL:            cached.URL,
-		ScientificName: cached.ScientificName,
-		LicenseName:    cached.LicenseName,
-		LicenseURL:     cached.LicenseURL,
-		AuthorName:     cached.AuthorName,
-		AuthorURL:      cached.AuthorURL,
-		CachedAt:       cached.CachedAt,
-	}, nil
+	// Convert datastore model to BirdImage
+	birdImage := BirdImage{
+		URL:            cachedImage.URL,
+		ScientificName: cachedImage.ScientificName,
+		LicenseName:    cachedImage.LicenseName,
+		LicenseURL:     cachedImage.LicenseURL,
+		AuthorName:     cachedImage.AuthorName,
+		AuthorURL:      cachedImage.AuthorURL,
+		CachedAt:       cachedImage.CachedAt,
+		SourceProvider: cachedImage.SourceProvider, // Load the source provider
+	}
+
+	// Update memory cache
+	c.dataMap.Store(scientificName, &birdImage)
+
+	if c.metrics != nil {
+		c.metrics.IncrementCacheHits()
+	}
+
+	return &birdImage, nil
 }
 
-// saveToDB saves a BirdImage to the database cache with retries
+// saveToDB saves a BirdImage to the database cache
 func (c *BirdImageCache) saveToDB(image *BirdImage) {
 	if c.store == nil {
-		if c.debug {
-			log.Printf("Debug: Database store not available, skipping cache save for %s", image.ScientificName)
-		}
-		return
+		return // Datastore is not configured
 	}
 
-	cached := &datastore.ImageCache{
-		URL:            image.URL,
+	// Determine the CachedAt time
+	cachedAt := image.CachedAt
+	if cachedAt.IsZero() {
+		cachedAt = time.Now()
+	}
+
+	// Convert BirdImage to datastore model
+	cacheEntry := &datastore.ImageCache{ // Use pointer type for SaveImageCache
+		ProviderName:   c.providerName, // Save under *this* cache's provider name
 		ScientificName: image.ScientificName,
+		SourceProvider: image.SourceProvider, // Save the actual source provider
+		URL:            image.URL,
 		LicenseName:    image.LicenseName,
 		LicenseURL:     image.LicenseURL,
 		AuthorName:     image.AuthorName,
 		AuthorURL:      image.AuthorURL,
-		CachedAt:       time.Now(),
+		CachedAt:       cachedAt, // Use determined timestamp
 	}
 
-	if err := c.store.SaveImageCache(cached); err != nil {
+	if err := c.store.SaveImageCache(cacheEntry); err != nil { // Use SaveImageCache
 		if c.debug {
-			log.Printf("Debug: Failed to save image to cache for %s: %v", image.ScientificName, err)
+			log.Printf("Error saving image %s for provider %s to DB cache: %v", image.ScientificName, c.providerName, err)
 		}
-		// Continue without caching
+		c.logger.Printf("Error saving image %s for provider %s to DB cache: %v", image.ScientificName, c.providerName, err)
 	}
 }
 
@@ -287,15 +318,15 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 func (c *BirdImageCache) loadCachedImages() error {
 	if c.store == nil {
 		if c.debug {
-			log.Printf("Debug: Database store not available, starting with empty cache")
+			log.Printf("Debug: [%s] Database store not available, starting with empty cache", c.providerName)
 		}
 		return nil
 	}
 
-	cached, err := c.store.GetAllImageCaches()
+	cached, err := c.store.GetAllImageCaches(c.providerName) // Use provider name
 	if err != nil {
 		if c.debug {
-			log.Printf("Debug: Failed to load cached images: %v", err)
+			log.Printf("Debug: [%s] Failed to load cached images: %v", c.providerName, err)
 		}
 		return nil // Continue with empty cache
 	}
@@ -310,6 +341,7 @@ func (c *BirdImageCache) loadCachedImages() error {
 			AuthorName:     entry.AuthorName,
 			AuthorURL:      entry.AuthorURL,
 			CachedAt:       entry.CachedAt,
+			SourceProvider: entry.SourceProvider,
 		})
 	}
 
@@ -447,6 +479,169 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 		log.Printf("Debug: Fetching image for species: %s", scientificName)
 	}
 
+	settings := conf.Setting()
+	preferredProvider := settings.Realtime.Dashboard.Thumbnails.ImageProvider
+	fallbackPolicy := settings.Realtime.Dashboard.Thumbnails.FallbackPolicy
+
+	// Try to fetch using the configured provider preference
+	var birdImage BirdImage
+	var err error
+
+	// Check if we should directly use a specific provider first
+	if c.GetRegistry() != nil && preferredProvider != "auto" && preferredProvider != c.providerName {
+		// Try the user's preferred provider first (if it exists and it's not the current provider)
+		if preferredCache, ok := c.GetRegistry().GetCache(preferredProvider); ok {
+			if c.debug {
+				log.Printf("Debug: Using preferred provider '%s' for %s", preferredProvider, scientificName)
+			}
+
+			startTime := time.Now()
+			preferredImage, preferredErr := preferredCache.Get(scientificName)
+			duration := time.Since(startTime).Seconds()
+
+			if preferredErr == nil {
+				// Successfully retrieved from preferred provider
+				if c.metrics != nil {
+					c.metrics.ObserveDownloadDuration(duration)
+					c.metrics.IncrementImageDownloads()
+				}
+
+				// Save to memory cache
+				c.dataMap.Store(scientificName, &preferredImage)
+
+				// Save to database cache using the *preferred* provider's cache
+				// This maintains correct attribution of the image source
+				preferredCache.saveToDB(&preferredImage)
+
+				return preferredImage, nil
+			}
+
+			if c.debug {
+				log.Printf("Debug: Preferred provider '%s' failed for %s: %v", preferredProvider, scientificName, preferredErr)
+			}
+
+			// If fallback is disabled, return the error from preferred provider
+			if fallbackPolicy == "none" {
+				if c.metrics != nil {
+					c.metrics.IncrementDownloadErrors()
+				}
+				return BirdImage{}, preferredErr
+			}
+		}
+	}
+
+	// Use this provider (either it's the preferred one or we're falling back)
+	startTime := time.Now()
+	birdImage, err = c.provider.Fetch(scientificName)
+	duration := time.Since(startTime).Seconds()
+
+	if err != nil {
+		if c.metrics != nil {
+			c.metrics.IncrementDownloadErrors()
+		}
+
+		// If registry is available and fallback is enabled, try other providers
+		registry := c.GetRegistry() // Load registry pointer
+		if registry != nil && fallbackPolicy == "all" {
+			// Create a map of providers already tried to avoid duplicates
+			triedProviders := make(map[string]bool)
+			triedProviders[c.providerName] = true
+			if preferredProvider != "auto" {
+				triedProviders[preferredProvider] = true
+			}
+
+			// Try all other available providers
+			var fallbackSuccessful bool // Declare without initial assignment
+			birdImage, fallbackSuccessful = c.tryFallbackProviders(scientificName, triedProviders)
+
+			if fallbackSuccessful {
+				return birdImage, nil
+			}
+		}
+
+		return BirdImage{}, err
+	}
+
+	if c.metrics != nil {
+		c.metrics.ObserveDownloadDuration(duration)
+		c.metrics.IncrementImageDownloads()
+	}
+
+	// Set the source provider before saving
+	birdImage.SourceProvider = c.providerName
+
+	// Save to memory cache
+	c.dataMap.Store(scientificName, &birdImage)
+
+	// Save to database cache
+	c.saveToDB(&birdImage)
+
+	return birdImage, nil
+}
+
+// tryFallbackProviders attempts to fetch an image from other providers in the registry.
+func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProviders map[string]bool) (BirdImage, bool) {
+	var birdImage BirdImage
+	fallbackSuccessful := false
+
+	registry := c.GetRegistry() // Load registry pointer
+	if registry == nil {
+		return birdImage, false // No registry for fallback
+	}
+
+	registry.RangeProviders(func(name string, cache *BirdImageCache) bool {
+		if name == c.providerName || triedProviders[name] {
+			return true // Skip self or already tried providers
+		}
+
+		if c.debug {
+			log.Printf("Debug [%s]: Trying fallback provider '%s' for %s", c.providerName, name, scientificName)
+		}
+
+		triedProviders[name] = true // Mark as tried
+		// Use fetchDirect for fallback to avoid recursion
+		fallbackImage, fallbackErr := cache.fetchDirect(scientificName)
+
+		if fallbackErr == nil {
+			// Successfully retrieved from fallback
+			// metrics are already updated inside cache.fetchDirect
+
+			// Set the source provider to the fallback provider's name
+			fallbackImage.SourceProvider = cache.providerName
+
+			// Save to the *original* caller's memory cache
+			c.dataMap.Store(scientificName, &fallbackImage)
+
+			// Save ONLY to the *original* (calling) provider's database cache
+			// The source_provider field indicates where it actually came from.
+			c.saveToDB(&fallbackImage)
+
+			birdImage = fallbackImage
+			fallbackSuccessful = true
+			return false // stop ranging
+		}
+
+		if c.debug {
+			log.Printf("Debug: Fallback to '%s' failed for %s: %v", name, scientificName, fallbackErr)
+		}
+
+		return true // continue ranging
+	})
+
+	return birdImage, fallbackSuccessful
+}
+
+// fetchDirect attempts to fetch an image directly using this cache's provider,
+// bypassing complex locking and fallback logic found in Get.
+// It updates the current cache instance if successful.
+func (c *BirdImageCache) fetchDirect(scientificName string) (BirdImage, error) {
+	if c.provider == nil {
+		return BirdImage{}, fmt.Errorf("provider not set for %s cache", c.providerName)
+	}
+	if c.debug {
+		log.Printf("Debug [%s]: Direct fetching image for species: %s", c.providerName, scientificName)
+	}
+
 	startTime := time.Now()
 	birdImage, err := c.provider.Fetch(scientificName)
 	duration := time.Since(startTime).Seconds()
@@ -454,6 +649,9 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 	if err != nil {
 		if c.metrics != nil {
 			c.metrics.IncrementDownloadErrors()
+		}
+		if c.debug {
+			log.Printf("Debug [%s]: Direct fetch failed for %s: %v", c.providerName, scientificName, err)
 		}
 		return BirdImage{}, err
 	}
@@ -463,12 +661,16 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 		c.metrics.IncrementImageDownloads()
 	}
 
-	// Save to memory cache
-	c.dataMap.Store(scientificName, &birdImage)
+	// Set the source provider before saving
+	birdImage.SourceProvider = c.providerName
 
-	// Save to database cache
+	// Save to this cache's memory and DB
+	c.dataMap.Store(scientificName, &birdImage)
 	c.saveToDB(&birdImage)
 
+	if c.debug {
+		log.Printf("Debug [%s]: Direct fetch successful for %s, updated cache.", c.providerName, scientificName)
+	}
 	return birdImage, nil
 }
 
@@ -503,6 +705,7 @@ func (c *BirdImageCache) updateMetrics() {
 }
 
 // CreateDefaultCache creates a new BirdImageCache with the default WikiMedia image provider.
+// The provider name is fixed to "wikimedia".
 func CreateDefaultCache(metrics *telemetry.Metrics, store datastore.Interface) (*BirdImageCache, error) {
 	// Create the default WikiMedia provider
 	provider, err := NewWikiMediaProvider()
@@ -510,26 +713,106 @@ func CreateDefaultCache(metrics *telemetry.Metrics, store datastore.Interface) (
 		return nil, fmt.Errorf("failed to create WikiMedia provider: %w", err)
 	}
 
-	settings := conf.Setting()
-	quit := make(chan struct{})
-	cache := &BirdImageCache{
-		provider: provider,
-		metrics:  metrics.ImageProvider,
-		debug:    settings.Realtime.Dashboard.Thumbnails.Debug,
-		store:    store,
-		logger:   log.Default(),
-		quit:     quit,
-	}
+	// Use a fixed provider name for the default cache
+	const defaultProviderName = "wikimedia"
 
-	// Load cached images into memory only if store is available
-	if store != nil {
-		if err := cache.loadCachedImages(); err != nil && cache.debug {
-			log.Printf("Debug: Error loading cached images: %v", err)
+	return InitCache(defaultProviderName, provider, metrics, store), nil
+}
+
+// --- Image Provider Registry ---
+
+// ImageProviderRegistry holds multiple named BirdImageCache instances.
+type ImageProviderRegistry struct {
+	caches map[string]*BirdImageCache
+	mu     sync.RWMutex
+}
+
+// NewImageProviderRegistry creates a new registry.
+func NewImageProviderRegistry() *ImageProviderRegistry {
+	return &ImageProviderRegistry{
+		caches: make(map[string]*BirdImageCache),
+	}
+}
+
+// Register adds a new cache instance to the registry.
+// It returns an error if a cache with the same name already exists.
+func (r *ImageProviderRegistry) Register(name string, cache *BirdImageCache) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.caches[name]; exists {
+		return fmt.Errorf("image provider cache named '%s' already registered", name)
+	}
+	r.caches[name] = cache
+	return nil
+}
+
+// GetCache retrieves a cache instance by name.
+func (r *ImageProviderRegistry) GetCache(name string) (*BirdImageCache, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	cache, ok := r.caches[name]
+	return cache, ok
+}
+
+// GetImage retrieves an image using the specified provider cache.
+// It returns an error if the provider name is not registered.
+func (r *ImageProviderRegistry) GetImage(providerName, scientificName string) (BirdImage, error) {
+	cache, ok := r.GetCache(providerName)
+	if !ok {
+		return BirdImage{}, fmt.Errorf("no image provider cache registered for name '%s'", providerName)
+	}
+	return cache.Get(scientificName)
+}
+
+// CloseAll gracefully shuts down all registered caches.
+func (r *ImageProviderRegistry) CloseAll() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var errs []error
+	for name, cache := range r.caches {
+		if err := cache.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to close cache '%s': %w", name, err))
 		}
 	}
+	return errors.Join(errs...)
+}
 
-	// Start cache refresh routine
-	cache.startCacheRefresh(quit)
+// SetRegistry allows setting the provider registry for fallback providers
+func (c *BirdImageCache) SetRegistry(registry *ImageProviderRegistry) {
+	c.registry.Store(registry) // Use atomic Store
+}
 
-	return cache, nil
+// GetRegistry returns the associated provider registry
+func (c *BirdImageCache) GetRegistry() *ImageProviderRegistry {
+	return c.registry.Load() // Use atomic Load
+}
+
+// RangeProviders iterates over all registered caches, applying the callback function.
+// It creates a snapshot of the cache map to avoid concurrent modification issues
+// during iteration.
+func (r *ImageProviderRegistry) RangeProviders(cb func(name string, cache *BirdImageCache) bool) {
+	r.mu.RLock()
+	snapshot := make(map[string]*BirdImageCache, len(r.caches))
+	for k, v := range r.caches {
+		snapshot[k] = v
+	}
+	r.mu.RUnlock()
+
+	for name, cache := range snapshot {
+		if !cb(name, cache) {
+			return // Callback requested stop
+		}
+	}
+}
+
+// GetCaches returns a copy of the internal cache map.
+// This is primarily for testing or diagnostic purposes where a snapshot is needed.
+func (r *ImageProviderRegistry) GetCaches() map[string]*BirdImageCache {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	cachesCopy := make(map[string]*BirdImageCache, len(r.caches))
+	for name, cache := range r.caches {
+		cachesCopy[name] = cache
+	}
+	return cachesCopy
 }

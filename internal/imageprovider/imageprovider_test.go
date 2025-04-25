@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -69,21 +70,21 @@ func newMockStore() *mockStore {
 }
 
 // Implement only the methods we need for testing
-func (m *mockStore) GetImageCache(scientificName string) (*datastore.ImageCache, error) {
-	if img, ok := m.images[scientificName]; ok {
-		// Keep this debug print as it's useful for cache hit/miss tracking
-		//log.Printf("Debug: GetImageCache found entry for %s", scientificName)
+func (m *mockStore) GetImageCache(query datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
+	if img, ok := m.images[query.ScientificName+"_"+query.ProviderName]; ok {
+		//log.Printf("Debug: GetImageCache found entry for %s provider %s", query.ScientificName, query.ProviderName)
 		return img, nil
 	}
+	//log.Printf("Debug: GetImageCache MISS for %s provider %s", query.ScientificName, query.ProviderName)
 	return nil, nil
 }
 
 func (m *mockStore) SaveImageCache(cache *datastore.ImageCache) error {
-	if cache.ScientificName == "" {
-		return fmt.Errorf("scientific name cannot be empty")
+	if cache.ScientificName == "" || cache.ProviderName == "" {
+		return fmt.Errorf("scientific name and provider name cannot be empty")
 	}
-
-	oldCache, exists := m.images[cache.ScientificName]
+	key := cache.ScientificName + "_" + cache.ProviderName
+	oldCache, exists := m.images[key]
 	if exists {
 		// Keep this debug print as it's useful for tracking cache updates
 		log.Printf("Debug: SaveImageCache updating entry for %s: Old(CachedAt=%v) -> New(CachedAt=%v)",
@@ -101,17 +102,19 @@ func (m *mockStore) SaveImageCache(cache *datastore.ImageCache) error {
 		CachedAt:       cache.CachedAt,
 	}
 
-	m.images[cache.ScientificName] = newCache
+	m.images[key] = newCache
 	return nil
 }
 
-func (m *mockStore) GetAllImageCaches() ([]datastore.ImageCache, error) {
+func (m *mockStore) GetAllImageCaches(providerName string) ([]datastore.ImageCache, error) {
 	var result []datastore.ImageCache
-	// Keep this debug print as it's useful for tracking cache size
-	//log.Printf("Debug: GetAllImageCaches found %d entries", len(m.images))
-	for _, img := range m.images {
-		result = append(result, *img)
+	//log.Printf("Debug: GetAllImageCaches called for provider %s. Total items: %d", providerName, len(m.images))
+	for key, img := range m.images {
+		if strings.HasSuffix(key, "_"+providerName) {
+			result = append(result, *img)
+		}
 	}
+	//log.Printf("Debug: GetAllImageCaches returning %d entries for provider %s", len(result), providerName)
 	return result, nil
 }
 
@@ -202,11 +205,11 @@ func newMockFailingStore() *mockFailingStore {
 	}
 }
 
-func (m *mockFailingStore) GetImageCache(scientificName string) (*datastore.ImageCache, error) {
+func (m *mockFailingStore) GetImageCache(query datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
 	if m.failGetCache {
 		return nil, fmt.Errorf("simulated database error")
 	}
-	return m.mockStore.GetImageCache(scientificName)
+	return m.mockStore.GetImageCache(query)
 }
 
 func (m *mockFailingStore) SaveImageCache(cache *datastore.ImageCache) error {
@@ -216,11 +219,11 @@ func (m *mockFailingStore) SaveImageCache(cache *datastore.ImageCache) error {
 	return m.mockStore.SaveImageCache(cache)
 }
 
-func (m *mockFailingStore) GetAllImageCaches() ([]datastore.ImageCache, error) {
+func (m *mockFailingStore) GetAllImageCaches(providerName string) ([]datastore.ImageCache, error) {
 	if m.failGetAllCache {
 		return nil, fmt.Errorf("simulated database error")
 	}
-	return m.mockStore.GetAllImageCaches()
+	return m.mockStore.GetAllImageCaches(providerName)
 }
 
 func (m *mockFailingStore) GetDailyAnalyticsData(startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
@@ -293,7 +296,7 @@ func TestBirdImageCache(t *testing.T) {
 			}
 
 			// Verify that the image was cached in the store
-			cached, err := mockStore.GetImageCache(tt.scientificName)
+			cached, err := mockStore.GetImageCache(datastore.ImageCacheQuery{ScientificName: tt.scientificName, ProviderName: "mock"})
 			if err != nil {
 				t.Errorf("Failed to get cached image: %v", err)
 			}
@@ -519,7 +522,7 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	// Check if the entry was refreshed
-	refreshed, err := mockStore.GetImageCache("Turdus merula")
+	refreshed, err := mockStore.GetImageCache(datastore.ImageCacheQuery{ScientificName: "Turdus merula", ProviderName: "mock"})
 	if err != nil {
 		t.Fatalf("Failed to get refreshed cache entry: %v", err)
 	}

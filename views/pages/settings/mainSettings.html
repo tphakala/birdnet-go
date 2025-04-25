@@ -513,15 +513,22 @@
     dashboard: {
         thumbnails: {
             summary: {{.Settings.Realtime.Dashboard.Thumbnails.Summary}},
-            recent: {{.Settings.Realtime.Dashboard.Thumbnails.Recent}}
+            recent: {{.Settings.Realtime.Dashboard.Thumbnails.Recent}},
+            imageprovider: '{{.Settings.Realtime.Dashboard.Thumbnails.ImageProvider}}',
+            fallbackpolicy: '{{.Settings.Realtime.Dashboard.Thumbnails.FallbackPolicy}}'
         },
         summarylimit: {{.Settings.Realtime.Dashboard.SummaryLimit}}
     },
     uiSettingsOpen: false,
     showTooltip: null,
-    hasChanges: false
+    hasChanges: false,
+    multipleProviders: {{ .MultipleProvidersAvailable }}
 }" x-init="
     $watch('dashboard', () => hasChanges = true, { deep: true });
+    // Note: Deep watch on 'dashboard' currently covers all nested properties like
+    // 'thumbnails.imageprovider' and 'thumbnails.fallbackpolicy'. If this
+    // changes (e.g., watching 'dashboard.thumbnails' directly), ensure these
+    // fields are still monitored for the 'hasChanges' flag to work correctly.
 ">
 
     <!-- control collapse element open state and label visibility -->
@@ -576,6 +583,37 @@
             "name" "realtime.dashboard.thumbnails.recent"
             "label" "Show Thumbnails on Recent Detections list"
             "tooltip" "Enable to show thumbnails of detected species on the recent detections list"}}
+
+        <!-- Image Provider Selection Container -->
+        <div class="form-control"
+             :class="{ 'opacity-50': !multipleProviders }"
+             title="{{if not .MultipleProvidersAvailable}}Only one image provider available{{end}}">
+
+            {{ $disabled := not .MultipleProvidersAvailable }}
+            {{template "selectField" dict
+                "id" "imageProvider"
+                "model" "dashboard.thumbnails.imageprovider"
+                "name" "realtime.dashboard.thumbnails.imageprovider"
+                "label" "Image Provider"
+                "tooltip" "Select the preferred image provider for bird thumbnails"
+                "providerOptionList" .ProviderOptionList
+                "disabled" $disabled
+            }}
+        </div>
+
+        <!-- Fallback Policy Container -->
+        <div x-show="multipleProviders">
+            {{template "selectField" dict
+                "id" "fallbackPolicy"
+                "model" "dashboard.thumbnails.fallbackpolicy"
+                "name" "realtime.dashboard.thumbnails.fallbackpolicy" 
+                "label" "Fallback Policy"
+                "tooltip" "Select what happens when preferred provider fails to find an image"
+                "options" (dict
+                    "all" "Try all providers in sequence" 
+                    "none" "Use only selected provider"
+                )}}
+        </div>
 
     </div>
 </div>

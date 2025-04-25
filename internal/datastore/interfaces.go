@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/suncalc" // Import suncalc
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 )
 
@@ -58,9 +59,9 @@ type Interface interface {
 	GetNoteLock(noteID string) (*NoteLock, error)
 	IsNoteLocked(noteID string) (bool, error)
 	// Image cache methods
-	GetImageCache(scientificName string) (*ImageCache, error)
+	GetImageCache(query ImageCacheQuery) (*ImageCache, error)
 	SaveImageCache(cache *ImageCache) error
-	GetAllImageCaches() ([]ImageCache, error)
+	GetAllImageCaches(providerName string) ([]ImageCache, error)
 	GetLockedNotesClipPaths() ([]string, error)
 	CountHourlyDetections(date, hour string, duration int) (int64, error)
 	// Analytics methods
@@ -905,44 +906,49 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 	return fmt.Errorf("[%s] failed after %d attempts: %w", txID, maxRetries, lastErr)
 }
 
-// GetImageCache retrieves an image cache entry by scientific name
-func (ds *DataStore) GetImageCache(scientificName string) (*ImageCache, error) {
+// GetImageCache retrieves an image cache entry by scientific name and provider
+func (ds *DataStore) GetImageCache(query ImageCacheQuery) (*ImageCache, error) {
 	var cache ImageCache
+	if query.ScientificName == "" || query.ProviderName == "" {
+		return nil, fmt.Errorf("scientific name and provider name must be provided in query")
+	}
 	// Use Session to disable logging for this query
-	err := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
-		Where("scientific_name = ?", scientificName).First(&cache).Error
-	if err != nil {
+	if err := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
+		Where("scientific_name = ? AND provider_name = ?", query.ScientificName, query.ProviderName).First(&cache).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, nil // Return nil, nil when record is not found
 		}
-		return nil, fmt.Errorf("error getting image cache: %w", err)
+		return nil, fmt.Errorf("getting image cache for %s from %s: %w", query.ScientificName, query.ProviderName, err)
 	}
 	return &cache, nil
 }
 
-// SaveImageCache saves or updates an image cache entry
+// SaveImageCache saves an image cache entry to the database
 func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
-	if cache == nil {
-		return fmt.Errorf("cache cannot be nil")
+	if cache.ProviderName == "" {
+		return fmt.Errorf("provider name cannot be empty when saving image cache")
+	}
+	if cache.ScientificName == "" {
+		return fmt.Errorf("scientific name cannot be empty when saving image cache")
 	}
 
-	result := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
-		Where("scientific_name = ?", cache.ScientificName).
-		Assign(*cache).
-		FirstOrCreate(cache)
-
-	if result.Error != nil {
-		return fmt.Errorf("failed to save image cache: %w", result.Error)
+	// Use Clauses(clause.OnConflict...) to perform an UPSERT operation
+	// Update all columns except primary key on conflict
+	if err := ds.DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "provider_name"}, {Name: "scientific_name"}},
+		DoUpdates: clause.AssignmentColumns([]string{"url", "license_name", "license_url", "author_name", "author_url", "cached_at"}),
+	}).Create(cache).Error; err != nil {
+		return fmt.Errorf("saving image cache for %s from %s: %w", cache.ScientificName, cache.ProviderName, err)
 	}
 	return nil
 }
 
-// GetAllImageCaches retrieves all image cache entries
-func (ds *DataStore) GetAllImageCaches() ([]ImageCache, error) {
+// GetAllImageCaches retrieves all image cache entries for a specific provider
+func (ds *DataStore) GetAllImageCaches(providerName string) ([]ImageCache, error) {
 	var caches []ImageCache
 	if err := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
-		Find(&caches).Error; err != nil {
-		return nil, fmt.Errorf("error getting all image caches: %w", err)
+		Where("provider_name = ?", providerName).Find(&caches).Error; err != nil {
+		return nil, fmt.Errorf("getting all image caches for provider %s: %w", providerName, err)
 	}
 	return caches, nil
 }

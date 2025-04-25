@@ -6,16 +6,25 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
 
 // LocaleData represents a locale with its code and full name.
 type LocaleData struct {
 	Code string
 	Name string
+}
+
+// ProviderOption represents an option for the image provider select field.
+type ProviderOption struct {
+	Value   string
+	Display string
 }
 
 // PageData represents data for rendering a page.
@@ -147,13 +156,51 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 		log.Printf("Debug: ✅ CSRF token found in context for settings page: %s", path)
 	}
 
+	// Prepare image provider options for the template
+	providerOptionList := []ProviderOption{
+		{Value: "auto", Display: "Auto (Default)"}, // Always add auto first
+	}
+
+	multipleProvidersAvailable := false
+	providerCount := 0
+	if s.Handlers.BirdImageCache != nil {
+		if registry := s.Handlers.BirdImageCache.GetRegistry(); registry != nil {
+			registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
+				// Simple capitalization for display name (Rune-aware)
+				var displayName string
+				if name != "" {
+					r, size := utf8.DecodeRuneInString(name)
+					displayName = strings.ToUpper(string(r)) + name[size:]
+				} else {
+					displayName = "(unknown)"
+				}
+				providerOptionList = append(providerOptionList, ProviderOption{Value: name, Display: displayName})
+				providerCount++
+				return true // Continue ranging
+			})
+			multipleProvidersAvailable = providerCount > 1 // Considered multiple only if more than one actual provider exists
+
+			// Sort the providers alphabetically by display name (excluding the first 'auto' entry)
+			if len(providerOptionList) > 2 { // Need at least 3 elements to sort the part after 'auto'
+				sub := providerOptionList[1:] // Create a sub-slice for sorting
+				sort.Slice(sub, func(i, j int) bool {
+					return sub[i].Display < sub[j].Display // Compare elements within the sub-slice
+				})
+			}
+		}
+	} else {
+		log.Println("Warning: ImageProviderRegistry is nil, cannot get provider names.")
+	}
+
 	// Prepare the data for the template
 	data := map[string]interface{}{
-		"Settings":       s.Settings,             // Application settings
-		"Locales":        s.prepareLocalesData(), // Prepare locales data for the UI
-		"EqFilterConfig": conf.EqFilterConfig,    // Equalizer filter configuration for the UI
-		"TemplateName":   templateName,
-		"CSRFToken":      csrfToken,
+		"Settings":                   s.Settings,             // Application settings
+		"Locales":                    s.prepareLocalesData(), // Prepare locales data for the UI
+		"EqFilterConfig":             conf.EqFilterConfig,    // Equalizer filter configuration for the UI
+		"TemplateName":               templateName,
+		"CSRFToken":                  csrfToken,
+		"ProviderOptionList":         providerOptionList,         // Use the sorted list of structs
+		"MultipleProvidersAvailable": multipleProvidersAvailable, // Add flag
 	}
 
 	// DEBUG Log the species settings
