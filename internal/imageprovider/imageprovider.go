@@ -697,6 +697,11 @@ func (c *BirdImageCache) SetRegistry(registry *ImageProviderRegistry) {
 	c.registry = registry
 }
 
+// GetRegistry returns the associated provider registry
+func (c *BirdImageCache) GetRegistry() *ImageProviderRegistry {
+	return c.registry
+}
+
 // RangeProviders iterates over all registered providers.
 // The callback function should return false to stop iteration.
 func (r *ImageProviderRegistry) RangeProviders(callback func(name string, cache *BirdImageCache) bool) {

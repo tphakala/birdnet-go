@@ -42,13 +42,18 @@ type AviCommonsProvider struct {
 // NewAviCommonsProvider creates a new provider instance using data from the provided filesystem.
 // It expects the filesystem to contain 'data/latest.json'.
 func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error) {
-	jsonData, err := fs.ReadFile(dataFs, "data/latest.json") // Read from FS
+	// First try the direct path
+	jsonData, err := fs.ReadFile(dataFs, "data/latest.json")
 	if err != nil {
-		return nil, fmt.Errorf("failed to read embedded avicommons data/latest.json: %w", err)
+		// If that fails, try with the internal/imageprovider prefix
+		jsonData, err = fs.ReadFile(dataFs, "internal/imageprovider/data/latest.json")
+		if err != nil {
+			return nil, fmt.Errorf("failed to read avicommons data file: %w", err)
+		}
 	}
 
 	if len(jsonData) == 0 {
-		return nil, fmt.Errorf("embedded avicommons JSON data is empty")
+		return nil, fmt.Errorf("avicommons JSON data is empty")
 	}
 
 	var data []aviCommonsEntry
