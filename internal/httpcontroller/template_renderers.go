@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
 
 // LocaleData represents a locale with its code and full name.
@@ -147,13 +148,34 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 		log.Printf("Debug: ✅ CSRF token found in context for settings page: %s", path)
 	}
 
+	// Prepare image provider options for the template
+	providerOptions := map[string]string{
+		"auto": "Auto (Default)", // Always add auto
+	}
+	multipleProvidersAvailable := false
+	providerCount := 0
+	if registry := s.Handlers.BirdImageCache.GetRegistry(); registry != nil {
+		registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
+			// Simple capitalization for display name
+			displayName := strings.ToUpper(name[:1]) + name[1:]
+			providerOptions[name] = displayName
+			providerCount++
+			return true // Continue ranging
+		})
+		multipleProvidersAvailable = providerCount > 1
+	} else {
+		log.Println("Warning: ImageProviderRegistry is nil, cannot get provider names.")
+	}
+
 	// Prepare the data for the template
 	data := map[string]interface{}{
-		"Settings":       s.Settings,             // Application settings
-		"Locales":        s.prepareLocalesData(), // Prepare locales data for the UI
-		"EqFilterConfig": conf.EqFilterConfig,    // Equalizer filter configuration for the UI
-		"TemplateName":   templateName,
-		"CSRFToken":      csrfToken,
+		"Settings":                   s.Settings,             // Application settings
+		"Locales":                    s.prepareLocalesData(), // Prepare locales data for the UI
+		"EqFilterConfig":             conf.EqFilterConfig,    // Equalizer filter configuration for the UI
+		"TemplateName":               templateName,
+		"CSRFToken":                  csrfToken,
+		"ImageProviderOptions":       providerOptions,            // Add provider options map
+		"MultipleProvidersAvailable": multipleProvidersAvailable, // Add flag
 	}
 
 	// DEBUG Log the species settings
