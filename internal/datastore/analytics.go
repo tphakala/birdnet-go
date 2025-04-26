@@ -30,6 +30,13 @@ type DailyAnalyticsData struct {
 	Count int
 }
 
+// HourlyDistributionData represents aggregated detection counts by hour of day
+type HourlyDistributionData struct {
+	Hour  int    `json:"hour"`
+	Count int    `json:"count"`
+	Date  string `json:"date,omitempty"` // Optional field, only set when filtering by specific date
+}
+
 // GetSpeciesSummaryData retrieves overall statistics for all bird species
 // Optional date range filtering with startDate and endDate parameters in YYYY-MM-DD format
 func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]SpeciesSummaryData, error) {
@@ -53,13 +60,14 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	var whereClause string
 	var args []interface{}
 
-	if startDate != "" && endDate != "" {
+	switch {
+	case startDate != "" && endDate != "":
 		whereClause = "WHERE date >= ? AND date <= ?"
 		args = append(args, startDate, endDate)
-	} else if startDate != "" {
+	case startDate != "":
 		whereClause = "WHERE date >= ?"
 		args = append(args, startDate)
-	} else if endDate != "" {
+	case endDate != "":
 		whereClause = "WHERE date <= ?"
 		args = append(args, endDate)
 	}
@@ -228,4 +236,56 @@ func (ds *DataStore) GetDetectionTrends(period string, limit int) ([]DailyAnalyt
 	}
 
 	return trends, nil
+}
+
+// GetHourlyDistribution retrieves hourly detection distribution across a date range
+// Groups detections by hour of day (0-23) regardless of the specific date
+func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) ([]HourlyDistributionData, error) {
+	// Parse dates to ensure they're valid
+	parsedStartDate, err := time.Parse("2006-01-02", startDate)
+	if err != nil {
+		return nil, fmt.Errorf("invalid start date format: %w", err)
+	}
+
+	parsedEndDate, err := time.Parse("2006-01-02", endDate)
+	if err != nil {
+		return nil, fmt.Errorf("invalid end date format: %w", err)
+	}
+
+	// Ensure start date is before or equal to end date
+	if parsedStartDate.After(parsedEndDate) {
+		return nil, fmt.Errorf("start date cannot be after end date")
+	}
+
+	// Prepare the SQL query
+	query := ds.DB.Table("notes")
+
+	// Extract hour from the time field
+	// Use SQLite's built-in functions to parse the time string
+	// This assumes time is stored in format like "15:04:05"
+	query = query.Select("CAST(substr(time, 1, 2) AS INTEGER) AS hour, COUNT(*) AS count")
+
+	// Apply date range filter
+	query = query.Where("date BETWEEN ? AND ?", startDate, endDate)
+
+	// Apply species filter if provided
+	if species != "" {
+		// Try to match on either common_name or scientific_name
+		query = query.Where("common_name LIKE ? OR scientific_name LIKE ?",
+			"%"+species+"%", "%"+species+"%")
+	}
+
+	// Group by hour
+	query = query.Group("hour")
+
+	// Order by hour
+	query = query.Order("hour ASC")
+
+	// Execute the query
+	var results []HourlyDistributionData
+	if err := query.Find(&results).Error; err != nil {
+		return nil, fmt.Errorf("failed to retrieve hourly distribution: %w", err)
+	}
+
+	return results, nil
 }

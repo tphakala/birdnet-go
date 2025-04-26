@@ -36,6 +36,13 @@ type SpeciesSummary struct {
 	ThumbnailURL   string  `json:"thumbnail_url,omitempty"`
 }
 
+// HourlyDistribution represents detections aggregated by hour
+type HourlyDistribution struct {
+	Hour  int    `json:"hour"`
+	Count int    `json:"count"`
+	Date  string `json:"date,omitempty"` // Optional, can be used when filtering by a specific date
+}
+
 // initAnalyticsRoutes registers all analytics-related API endpoints
 func (c *Controller) initAnalyticsRoutes() {
 	// Create analytics API group - publicly accessible
@@ -50,6 +57,7 @@ func (c *Controller) initAnalyticsRoutes() {
 	timeGroup := analyticsGroup.Group("/time")
 	timeGroup.GET("/hourly", c.GetHourlyAnalytics)
 	timeGroup.GET("/daily", c.GetDailyAnalytics)
+	timeGroup.GET("/distribution", c.GetTimeOfDayDistribution) // New endpoint for time-of-day distribution
 }
 
 // GetDailySpeciesSummary handles GET /api/v2/analytics/species/daily
@@ -405,6 +413,66 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	response.Total = totalCount
 
 	return ctx.JSON(http.StatusOK, response)
+}
+
+// GetTimeOfDayDistribution handles GET /api/v2/analytics/time/distribution
+// Returns an aggregated count of detections by hour of day across the given date range
+func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
+	// Get query parameters
+	startDate := ctx.QueryParam("start_date")
+	endDate := ctx.QueryParam("end_date")
+	species := ctx.QueryParam("species") // Optional species filter
+
+	// Set default date range if not provided
+	if startDate == "" {
+		// Default to 30 days ago
+		startDate = time.Now().AddDate(0, 0, -30).Format("2006-01-02")
+	}
+
+	if endDate == "" {
+		// Default to today
+		endDate = time.Now().Format("2006-01-02")
+	}
+
+	// Validate date formats
+	if _, err := time.Parse("2006-01-02", startDate); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid start_date format. Use YYYY-MM-DD")
+	}
+
+	if _, err := time.Parse("2006-01-02", endDate); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
+	}
+
+	// Get hourly distribution data from the datastore
+	// We'll need to add this method to the datastore interface
+	hourlyData, err := c.DS.GetHourlyDistribution(startDate, endDate, species)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to get hourly distribution data", http.StatusInternalServerError)
+	}
+
+	// If no data is available yet, return an array with 24 empty hours
+	if len(hourlyData) == 0 {
+		emptyData := make([]HourlyDistribution, 24)
+		for hour := 0; hour < 24; hour++ {
+			emptyData[hour] = HourlyDistribution{Hour: hour, Count: 0}
+		}
+		return ctx.JSON(http.StatusOK, emptyData)
+	}
+
+	// Ensure we have data for all 24 hours (fill in zeros for missing hours)
+	completeHourlyData := make([]HourlyDistribution, 24)
+	for hour := 0; hour < 24; hour++ {
+		completeHourlyData[hour] = HourlyDistribution{Hour: hour, Count: 0}
+	}
+
+	// Fill in actual counts
+	for _, data := range hourlyData {
+		if data.Hour >= 0 && data.Hour < 24 {
+			completeHourlyData[data.Hour].Count = data.Count
+		}
+	}
+
+	return ctx.JSON(http.StatusOK, completeHourlyData)
 }
 
 // Helper function to sum array values
