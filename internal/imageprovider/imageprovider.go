@@ -856,3 +856,51 @@ func (r *ImageProviderRegistry) GetCaches() map[string]*BirdImageCache {
 	}
 	return cachesCopy
 }
+
+// GetBatch fetches multiple bird images at once and returns them as a map
+// This is more efficient than multiple individual Get calls when many images are needed
+func (c *BirdImageCache) GetBatch(scientificNames []string) map[string]BirdImage {
+	result := make(map[string]BirdImage, len(scientificNames))
+
+	// First check memory cache for all items (fast path)
+	missingNames := make([]string, 0, len(scientificNames))
+
+	for _, name := range scientificNames {
+		if name == "" {
+			continue
+		}
+
+		// Check memory cache first
+		if value, ok := c.dataMap.Load(name); ok {
+			if image, ok := value.(*BirdImage); ok {
+				if c.debug {
+					log.Printf("Debug: Found image in batch memory cache for: %s", name)
+				}
+				if c.metrics != nil {
+					c.metrics.IncrementCacheHits()
+				}
+				result[name] = *image
+				continue
+			}
+		}
+
+		// If not in memory cache, add to list for fetching
+		missingNames = append(missingNames, name)
+	}
+
+	// If all were in memory cache, return early
+	if len(missingNames) == 0 {
+		return result
+	}
+
+	// For each missing name, fetch individually
+	// We could potentially parallelize this in the future
+	for _, name := range missingNames {
+		image, err := c.Get(name)
+		if err == nil {
+			result[name] = image
+		}
+	}
+
+	return result
+}

@@ -12,7 +12,7 @@
 <div class="col-span-12 space-y-4" x-data="searchUI" role="region" aria-label="Bird Detection Search">
     <!-- Search Form -->
     <div class="card bg-base-100 shadow-sm">
-        <div class="card-body p-4 m-2">
+        <div class="card-body card-padding">
             <h2 class="card-title" id="search-filters-heading">Search Filters</h2>
             
             <form id="searchForm" class="space-y-4" @submit.prevent="submitSearch(1)" x-ref="searchForm" aria-labelledby="search-filters-heading">
@@ -208,7 +208,7 @@
 
     <!-- Results Area -->
     <div class="card bg-base-100 shadow-sm">
-        <div class="card-body p-4 m-2">
+        <div class="card-body card-padding">
             <div class="flex items-center justify-between">
                 <h2 class="card-title" id="search-results-heading">Search Results</h2>
                 

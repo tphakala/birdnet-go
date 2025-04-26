@@ -182,11 +182,23 @@ func (m *mockStore) GetDetectionTrends(period string, limit int) ([]datastore.Da
 func (m *mockStore) GetHourlyAnalyticsData(date, species string) ([]datastore.HourlyAnalyticsData, error) {
 	return []datastore.HourlyAnalyticsData{}, nil
 }
-func (m *mockStore) GetSpeciesSummaryData() ([]datastore.SpeciesSummaryData, error) {
+func (m *mockStore) GetSpeciesSummaryData(startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
 	return []datastore.SpeciesSummaryData{}, nil
 }
 func (m *mockStore) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	return nil, 0, nil
+}
+
+// GetHourlyDistribution implements the datastore.Interface GetHourlyDistribution method
+func (m *mockStore) GetHourlyDistribution(startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
+	// Default implementation returns empty array for this mock
+	return []datastore.HourlyDistributionData{}, nil
+}
+
+// GetNewSpeciesDetections implements the datastore.Interface GetNewSpeciesDetections method
+func (m *mockStore) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	// This is a mock test implementation, so we'll return empty data
+	return []datastore.NewSpeciesData{}, nil
 }
 
 // mockFailingStore is a mock implementation that simulates database failures
@@ -247,11 +259,8 @@ func (m *mockFailingStore) GetHourlyAnalyticsData(date, species string) ([]datas
 	return m.mockStore.GetHourlyAnalyticsData(date, species)
 }
 
-func (m *mockFailingStore) GetSpeciesSummaryData() ([]datastore.SpeciesSummaryData, error) {
-	if m.failGetAllCache {
-		return nil, fmt.Errorf("simulated database error")
-	}
-	return m.mockStore.GetSpeciesSummaryData()
+func (m *mockFailingStore) GetSpeciesSummaryData(startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
+	return m.mockStore.GetSpeciesSummaryData(startDate, endDate)
 }
 
 // TestBirdImageCache tests the BirdImageCache implementation

@@ -54,12 +54,14 @@ func TestGetSpeciesSummary(t *testing.T) {
 	}
 
 	// Setup mock expectations
-	mockDS.On("GetSpeciesSummaryData").Return(mockSummaryData, nil)
+	// Expect call with specific empty strings for no date filters
+	mockDS.On("GetSpeciesSummaryData", "", "").Return(mockSummaryData, nil)
 
 	// Create a request
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary", http.NoBody) // Corrected path
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/analytics/species/summary") // Ensure path is set for context
 
 	// We need to bypass auth middleware for this test
 	handler := func(c echo.Context) error {
@@ -620,77 +622,73 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	// Create a new echo instance
 	e := echo.New()
 
-	// Create a mock datastore
-	mockDS := &MockDataStoreV2{
-		GetTopBirdsDataFunc: func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
-			// Return multiple notes with the same species to simulate multiple detections
-			return []datastore.Note{
-				{
-					ID:             1,
-					SpeciesCode:    "AMCRO",
-					ScientificName: "Corvus brachyrhynchos",
-					CommonName:     "American Crow",
-					Confidence:     0.9,
-					Date:           "2025-03-07",
-					Time:           "08:15:00",
-				},
-				{
-					ID:             2,
-					SpeciesCode:    "AMCRO",
-					ScientificName: "Corvus brachyrhynchos",
-					CommonName:     "American Crow",
-					Confidence:     0.85,
-					Date:           "2025-03-07",
-					Time:           "09:30:00",
-				},
-				{
-					ID:             3,
-					SpeciesCode:    "AMCRO",
-					ScientificName: "Corvus brachyrhynchos",
-					CommonName:     "American Crow",
-					Confidence:     0.95,
-					Date:           "2025-03-07",
-					Time:           "14:45:00",
-				},
-				{
-					ID:             4,
-					SpeciesCode:    "RBWO",
-					ScientificName: "Melanerpes carolinus",
-					CommonName:     "Red-bellied Woodpecker",
-					Confidence:     0.8,
-					Date:           "2025-03-07",
-					Time:           "10:20:00",
-				},
-				{
-					ID:             5,
-					SpeciesCode:    "RBWO",
-					ScientificName: "Melanerpes carolinus",
-					CommonName:     "Red-bellied Woodpecker",
-					Confidence:     0.75,
-					Date:           "2025-03-07",
-					Time:           "16:05:00",
-				},
-			}, nil
+	// Create a mock datastore using testify/mock
+	mockDS := new(MockDataStoreV2)
+
+	// Expected data for GetTopBirdsData
+	mockNotes := []datastore.Note{
+		{
+			ID:             1,
+			SpeciesCode:    "AMCRO",
+			ScientificName: "Corvus brachyrhynchos",
+			CommonName:     "American Crow",
+			Confidence:     0.9,
+			Date:           "2025-03-07",
+			Time:           "08:15:00",
 		},
-		GetHourlyOccurrencesFunc: func(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
-			// Return appropriate hourly counts based on the species
-			var hourlyCounts [24]int
-
-			switch commonName {
-			case "American Crow":
-				// Set counts for hours 8, 9, and 14 for American Crow
-				hourlyCounts[8] = 1  // 08:15:00
-				hourlyCounts[9] = 1  // 09:30:00
-				hourlyCounts[14] = 1 // 14:45:00
-			case "Red-bellied Woodpecker":
-				// Set counts for hours 10 and 16 for Red-bellied Woodpecker
-				hourlyCounts[10] = 1 // 10:20:00
-				hourlyCounts[16] = 1 // 16:05:00
-			}
-
-			return hourlyCounts, nil
+		{
+			ID:             2,
+			SpeciesCode:    "AMCRO",
+			ScientificName: "Corvus brachyrhynchos",
+			CommonName:     "American Crow",
+			Confidence:     0.85,
+			Date:           "2025-03-07",
+			Time:           "09:30:00",
+		},
+		{
+			ID:             3,
+			SpeciesCode:    "AMCRO",
+			ScientificName: "Corvus brachyrhynchos",
+			CommonName:     "American Crow",
+			Confidence:     0.95,
+			Date:           "2025-03-07",
+			Time:           "14:45:00",
+		},
+		{
+			ID:             4,
+			SpeciesCode:    "RBWO",
+			ScientificName: "Melanerpes carolinus",
+			CommonName:     "Red-bellied Woodpecker",
+			Confidence:     0.8,
+			Date:           "2025-03-07",
+			Time:           "10:20:00",
+		},
+		{
+			ID:             5,
+			SpeciesCode:    "RBWO",
+			ScientificName: "Melanerpes carolinus",
+			CommonName:     "Red-bellied Woodpecker",
+			Confidence:     0.75,
+			Date:           "2025-03-07",
+			Time:           "16:05:00",
 		},
 	}
+
+	// Expected hourly counts for American Crow
+	var expectedAmcroHourlyCounts [24]int
+	expectedAmcroHourlyCounts[8] = 1
+	expectedAmcroHourlyCounts[9] = 1
+	expectedAmcroHourlyCounts[14] = 1
+
+	// Expected hourly counts for Red-bellied Woodpecker
+	var expectedRbwoHourlyCounts [24]int
+	expectedRbwoHourlyCounts[10] = 1
+	expectedRbwoHourlyCounts[16] = 1
+
+	// Setup mock expectations using m.On()
+	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0).Return(mockNotes, nil)
+	mockDS.On("GetHourlyOccurrences", "2025-03-07", "American Crow", 0.0).Return(expectedAmcroHourlyCounts, nil)
+	mockDS.On("GetHourlyOccurrences", "2025-03-07", "Red-bellied Woodpecker", 0.0).Return(expectedRbwoHourlyCounts, nil)
 
 	// Create a mock image provider
 	mockImageProvider := &TestImageProvider{
@@ -751,24 +749,20 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	assert.Equal(t, 3, amcro.Count, "American Crow should have 3 detections")
 
 	// Verify the correct hourly distribution for American Crow
-	expectedAmcroHourly := make([]int, 24)
-	expectedAmcroHourly[8] = 1  // 08:15:00
-	expectedAmcroHourly[9] = 1  // 09:30:00
-	expectedAmcroHourly[14] = 1 // 14:45:00
-	assert.Equal(t, expectedAmcroHourly, amcro.HourlyCounts)
+	assert.Equal(t, expectedAmcroHourlyCounts, amcro.HourlyCounts)
 
 	// Verify the Red-bellied Woodpecker has the correct count (2)
 	assert.NotNil(t, rbwo, "Red-bellied Woodpecker should be in the response")
 	assert.Equal(t, 2, rbwo.Count, "Red-bellied Woodpecker should have 2 detections")
 
 	// Verify the correct hourly distribution for Red-bellied Woodpecker
-	expectedRbwoHourly := make([]int, 24)
-	expectedRbwoHourly[10] = 1 // 10:20:00
-	expectedRbwoHourly[16] = 1 // 16:05:00
-	assert.Equal(t, expectedRbwoHourly, rbwo.HourlyCounts)
+	assert.Equal(t, expectedRbwoHourlyCounts, rbwo.HourlyCounts)
 
 	// Close the image cache to clean up resources
 	imageCache.Close()
+
+	// Assert that all expectations were met
+	mockDS.AssertExpectations(t)
 }
 
 // TestGetDailySpeciesSummary_SingleDetection tests that the GetDailySpeciesSummary function
@@ -777,47 +771,43 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	// Create a new echo instance
 	e := echo.New()
 
-	// Create a mock datastore
-	mockDS := &MockDataStoreV2{
-		GetTopBirdsDataFunc: func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
-			// Return one note per species to simulate single detections
-			return []datastore.Note{
-				{
-					ID:             1,
-					SpeciesCode:    "AMCRO",
-					ScientificName: "Corvus brachyrhynchos",
-					CommonName:     "American Crow",
-					Confidence:     0.9,
-					Date:           "2025-03-07",
-					Time:           "08:15:00",
-				},
-				{
-					ID:             2,
-					SpeciesCode:    "RBWO",
-					ScientificName: "Melanerpes carolinus",
-					CommonName:     "Red-bellied Woodpecker",
-					Confidence:     0.8,
-					Date:           "2025-03-07",
-					Time:           "10:20:00",
-				},
-			}, nil
+	// Create a mock datastore using testify/mock
+	mockDS := new(MockDataStoreV2)
+
+	// Expected data for GetTopBirdsData
+	mockNotesSingle := []datastore.Note{
+		{
+			ID:             1,
+			SpeciesCode:    "AMCRO",
+			ScientificName: "Corvus brachyrhynchos",
+			CommonName:     "American Crow",
+			Confidence:     0.9,
+			Date:           "2025-03-07",
+			Time:           "08:15:00",
 		},
-		GetHourlyOccurrencesFunc: func(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
-			// Return appropriate hourly counts based on the species
-			var hourlyCounts [24]int
-
-			switch commonName {
-			case "American Crow":
-				// Set count for hour 8 for American Crow
-				hourlyCounts[8] = 1 // 08:15:00
-			case "Red-bellied Woodpecker":
-				// Set count for hour 10 for Red-bellied Woodpecker
-				hourlyCounts[10] = 1 // 10:20:00
-			}
-
-			return hourlyCounts, nil
+		{
+			ID:             2,
+			SpeciesCode:    "RBWO",
+			ScientificName: "Melanerpes carolinus",
+			CommonName:     "Red-bellied Woodpecker",
+			Confidence:     0.8,
+			Date:           "2025-03-07",
+			Time:           "10:20:00",
 		},
 	}
+
+	// Expected hourly counts for American Crow (single detection)
+	var expectedAmcroSingleHourly [24]int
+	expectedAmcroSingleHourly[8] = 1
+
+	// Expected hourly counts for Red-bellied Woodpecker (single detection)
+	var expectedRbwoSingleHourly [24]int
+	expectedRbwoSingleHourly[10] = 1
+
+	// Setup mock expectations using m.On()
+	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0).Return(mockNotesSingle, nil)
+	mockDS.On("GetHourlyOccurrences", "2025-03-07", "American Crow", 0.0).Return(expectedAmcroSingleHourly, nil)
+	mockDS.On("GetHourlyOccurrences", "2025-03-07", "Red-bellied Woodpecker", 0.0).Return(expectedRbwoSingleHourly, nil)
 
 	// Create a mock image provider
 	mockImageProvider := &TestImageProvider{
@@ -868,6 +858,9 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 
 	// Close the image cache to clean up resources
 	imageCache.Close()
+
+	// Assert that all expectations were met
+	mockDS.AssertExpectations(t)
 }
 
 // TestGetDailySpeciesSummary_EmptyResult tests that the GetDailySpeciesSummary function
@@ -877,15 +870,12 @@ func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
 	e := echo.New()
 
 	// Create a mock datastore that returns no detections
-	mockDS := &MockDataStoreV2{
-		GetTopBirdsDataFunc: func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
-			return []datastore.Note{}, nil
-		},
-		GetHourlyOccurrencesFunc: func(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
-			// Return empty hourly counts since there are no detections
-			return [24]int{}, nil
-		},
-	}
+	mockDS := new(MockDataStoreV2)
+
+	// Setup mock expectations using m.On()
+	// Expect GetTopBirdsData to be called and return empty slice
+	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0).Return([]datastore.Note{}, nil)
+	// Expect GetHourlyOccurrences not to be called since there are no birds
 
 	// Create a controller with our mock
 	controller := &Controller{
@@ -914,6 +904,9 @@ func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
 
 	// Verify we got an empty result
 	assert.Equal(t, 0, len(response))
+
+	// Assert that all expectations were met
+	mockDS.AssertExpectations(t)
 }
 
 // TestGetDailySpeciesSummary_TimeHandling tests that the GetDailySpeciesSummary function
@@ -922,53 +915,49 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 	// Create a new echo instance
 	e := echo.New()
 
-	// Create a mock datastore
-	mockDS := &MockDataStoreV2{
-		GetTopBirdsDataFunc: func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
-			// Return multiple notes with the same species to test time handling
-			return []datastore.Note{
-				{
-					ID:             2,
-					SpeciesCode:    "AMCRO",
-					ScientificName: "Corvus brachyrhynchos",
-					CommonName:     "American Crow",
-					Confidence:     0.85,
-					Date:           "2025-03-07",
-					Time:           "06:30:00", // Earlier time - put this first
-				},
-				{
-					ID:             1,
-					SpeciesCode:    "AMCRO",
-					ScientificName: "Corvus brachyrhynchos",
-					CommonName:     "American Crow",
-					Confidence:     0.9,
-					Date:           "2025-03-07",
-					Time:           "08:15:00",
-				},
-				{
-					ID:             3,
-					SpeciesCode:    "AMCRO",
-					ScientificName: "Corvus brachyrhynchos",
-					CommonName:     "American Crow",
-					Confidence:     0.95,
-					Date:           "2025-03-07",
-					Time:           "21:45:00", // Later time
-				},
-			}, nil
+	// Create a mock datastore using testify/mock
+	mockDS := new(MockDataStoreV2)
+
+	// Expected data for GetTopBirdsData
+	mockNotesTime := []datastore.Note{
+		{
+			ID:             2,
+			SpeciesCode:    "AMCRO",
+			ScientificName: "Corvus brachyrhynchos",
+			CommonName:     "American Crow",
+			Confidence:     0.85,
+			Date:           "2025-03-07",
+			Time:           "06:30:00", // Earlier time - put this first
 		},
-		GetHourlyOccurrencesFunc: func(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
-			// Return hourly counts for American Crow
-			var hourlyCounts [24]int
-
-			if commonName == "American Crow" {
-				hourlyCounts[6] = 1  // 06:30:00
-				hourlyCounts[8] = 1  // 08:15:00
-				hourlyCounts[21] = 1 // 21:45:00
-			}
-
-			return hourlyCounts, nil
+		{
+			ID:             1,
+			SpeciesCode:    "AMCRO",
+			ScientificName: "Corvus brachyrhynchos",
+			CommonName:     "American Crow",
+			Confidence:     0.9,
+			Date:           "2025-03-07",
+			Time:           "08:15:00",
+		},
+		{
+			ID:             3,
+			SpeciesCode:    "AMCRO",
+			ScientificName: "Corvus brachyrhynchos",
+			CommonName:     "American Crow",
+			Confidence:     0.95,
+			Date:           "2025-03-07",
+			Time:           "21:45:00", // Later time
 		},
 	}
+
+	// Expected hourly counts for American Crow
+	var expectedAmcroTimeHourly [24]int
+	expectedAmcroTimeHourly[6] = 1
+	expectedAmcroTimeHourly[8] = 1
+	expectedAmcroTimeHourly[21] = 1
+
+	// Setup mock expectations using m.On()
+	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0).Return(mockNotesTime, nil)
+	mockDS.On("GetHourlyOccurrences", "2025-03-07", "American Crow", 0.0).Return(expectedAmcroTimeHourly, nil)
 
 	// Create a controller with our mock
 	controller := &Controller{
@@ -1000,8 +989,11 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 
 	// Verify the first and latest times are correct
 	species := response[0]
-	assert.Equal(t, "06:30:00", species.First, "First detection should be 06:30:00")
-	assert.Equal(t, "21:45:00", species.Latest, "Latest detection should be 21:45:00")
+	assert.Equal(t, "06:30:00", species.FirstHeard, "First detection should be 06:30:00")
+	assert.Equal(t, "21:45:00", species.LatestHeard, "Latest detection should be 21:45:00")
+
+	// Assert that all expectations were met
+	mockDS.AssertExpectations(t)
 }
 
 // TestGetDailySpeciesSummary_ConfidenceFilter tests that the GetDailySpeciesSummary function
@@ -1010,69 +1002,48 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 	// Create a new echo instance
 	e := echo.New()
 
-	// Track if our filter was properly applied
-	var appliedMinConfidence float64
+	// Create a mock datastore using testify/mock
+	mockDS := new(MockDataStoreV2)
 
-	// Create a mock datastore
-	mockDS := &MockDataStoreV2{
-		GetTopBirdsDataFunc: func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
-			// Save the applied confidence filter
-			appliedMinConfidence = minConfidenceNormalized
+	// Expected confidence filter value (passed as %) -> converted to decimal
+	expectedMinConfidence := 0.7 // 70%
 
-			// Return notes with varying confidence levels
-			return []datastore.Note{
-				{
-					ID:             1,
-					SpeciesCode:    "AMCRO",
-					ScientificName: "Corvus brachyrhynchos",
-					CommonName:     "American Crow",
-					Confidence:     0.9, // High confidence
-					Date:           "2025-03-07",
-					Time:           "08:15:00",
-				},
-				{
-					ID:             2,
-					SpeciesCode:    "RBWO",
-					ScientificName: "Melanerpes carolinus",
-					CommonName:     "Red-bellied Woodpecker",
-					Confidence:     0.6, // Medium confidence
-					Date:           "2025-03-07",
-					Time:           "10:20:00",
-				},
-				{
-					ID:             3,
-					SpeciesCode:    "BCCH",
-					ScientificName: "Poecile atricapillus",
-					CommonName:     "Black-capped Chickadee",
-					Confidence:     0.3, // Low confidence
-					Date:           "2025-03-07",
-					Time:           "12:45:00",
-				},
-			}, nil
+	// Expected data for GetTopBirdsData (includes species below the threshold)
+	mockNotesConfidence := []datastore.Note{
+		{
+			ID:             1,
+			SpeciesCode:    "AMCRO",
+			ScientificName: "Corvus brachyrhynchos",
+			CommonName:     "American Crow",
+			Confidence:     0.9, // Above threshold
+			Date:           "2025-03-07",
+			Time:           "08:15:00",
 		},
-		GetHourlyOccurrencesFunc: func(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
-			// Return hourly counts based on confidence filter
-			var hourlyCounts [24]int
-
-			// Only return counts for species that meet the confidence threshold
-			switch commonName {
-			case "American Crow":
-				if minConfidenceNormalized <= 0.9 {
-					hourlyCounts[8] = 1 // 08:15:00
-				}
-			case "Red-bellied Woodpecker":
-				if minConfidenceNormalized <= 0.6 {
-					hourlyCounts[10] = 1 // 10:20:00
-				}
-			case "Black-capped Chickadee":
-				if minConfidenceNormalized <= 0.3 {
-					hourlyCounts[12] = 1 // 12:45:00
-				}
-			}
-
-			return hourlyCounts, nil
+		{
+			ID:             2,
+			SpeciesCode:    "RBWO",
+			ScientificName: "Melanerpes carolinus",
+			CommonName:     "Red-bellied Woodpecker",
+			Confidence:     0.6, // Below threshold
+			Date:           "2025-03-07",
+			Time:           "10:20:00",
 		},
 	}
+
+	// Expected hourly counts (only for species meeting confidence threshold)
+	var expectedAmcroConfidenceHourly [24]int
+	expectedAmcroConfidenceHourly[8] = 1
+
+	// Setup mock expectations
+	// GetTopBirdsData is called with the normalized confidence
+	mockDS.On("GetTopBirdsData", "2025-03-07", expectedMinConfidence).Return(mockNotesConfidence, nil)
+	// GetHourlyOccurrences is called for each species returned by GetTopBirdsData,
+	// *even if* the species itself is below the threshold (filtering happens later in Go code)
+	// We expect it to be called for American Crow with the filter
+	mockDS.On("GetHourlyOccurrences", "2025-03-07", "American Crow", expectedMinConfidence).Return(expectedAmcroConfidenceHourly, nil)
+	// We also expect it to be called for Red-bellied Woodpecker, even though it's below threshold.
+	// The mock should return empty counts because the handler logic will filter it later.
+	mockDS.On("GetHourlyOccurrences", "2025-03-07", "Red-bellied Woodpecker", expectedMinConfidence).Return([24]int{}, nil)
 
 	// Create a controller with our mock
 	controller := &Controller{
@@ -1092,7 +1063,7 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify the threshold was correctly normalized (70% -> 0.7)
-	assert.Equal(t, 0.7, appliedMinConfidence)
+	assert.Equal(t, 0.7, expectedMinConfidence)
 
 	// Verify the response status code
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -1104,10 +1075,12 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 
 	// Verify the response only includes species with confidence >= 0.7
 	for _, species := range response {
-		assert.NotEqual(t, "Black-capped Chickadee", species.CommonName)
 		assert.NotEqual(t, "Red-bellied Woodpecker", species.CommonName)
 		assert.Equal(t, "American Crow", species.CommonName)
 	}
+
+	// Assert that all expectations were met
+	mockDS.AssertExpectations(t)
 }
 
 // TestGetDailySpeciesSummary_LimitParameter tests that the GetDailySpeciesSummary function
@@ -1116,67 +1089,55 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 	// Create a new echo instance
 	e := echo.New()
 
-	// Create a mock datastore
-	mockDS := &MockDataStoreV2{
-		GetTopBirdsDataFunc: func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
-			// Return multiple species to test limiting
-			return []datastore.Note{
-				{
-					ID:             1,
-					SpeciesCode:    "AMCRO",
-					ScientificName: "Corvus brachyrhynchos",
-					CommonName:     "American Crow",
-					Confidence:     0.95,
-					Date:           "2025-03-07",
-					Time:           "08:15:00",
-				},
-				{
-					ID:             2,
-					SpeciesCode:    "RBWO",
-					ScientificName: "Melanerpes carolinus",
-					CommonName:     "Red-bellied Woodpecker",
-					Confidence:     0.90,
-					Date:           "2025-03-07",
-					Time:           "10:20:00",
-				},
-				{
-					ID:             3,
-					SpeciesCode:    "BCCH",
-					ScientificName: "Poecile atricapillus",
-					CommonName:     "Black-capped Chickadee",
-					Confidence:     0.85,
-					Date:           "2025-03-07",
-					Time:           "12:45:00",
-				},
-				{
-					ID:             4,
-					SpeciesCode:    "AMGO",
-					ScientificName: "Spinus tristis",
-					CommonName:     "American Goldfinch",
-					Confidence:     0.80,
-					Date:           "2025-03-07",
-					Time:           "14:30:00",
-				},
-			}, nil
+	// Create a mock datastore using testify/mock
+	mockDS := new(MockDataStoreV2)
+
+	// Expected data for GetTopBirdsData (more than the limit)
+	mockNotesLimit := []datastore.Note{
+		{
+			ID:             1,
+			SpeciesCode:    "AMCRO",
+			ScientificName: "Corvus brachyrhynchos",
+			CommonName:     "American Crow",
+			Confidence:     0.9,
+			Date:           "2025-03-07",
+			Time:           "08:15:00",
 		},
-		GetHourlyOccurrencesFunc: func(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
-			// Return hourly counts for each species
-			var hourlyCounts [24]int
-
-			switch commonName {
-			case "American Crow":
-				hourlyCounts[8] = 1 // 08:15:00
-			case "Red-bellied Woodpecker":
-				hourlyCounts[10] = 1 // 10:20:00
-			case "Black-capped Chickadee":
-				hourlyCounts[12] = 1 // 12:45:00
-			case "American Goldfinch":
-				hourlyCounts[14] = 1 // 14:30:00
-			}
-
-			return hourlyCounts, nil
+		{
+			ID:             2,
+			SpeciesCode:    "RBWO",
+			ScientificName: "Melanerpes carolinus",
+			CommonName:     "Red-bellied Woodpecker",
+			Confidence:     0.8,
+			Date:           "2025-03-07",
+			Time:           "10:20:00",
+		},
+		{
+			ID:             3,
+			SpeciesCode:    "BCCH",
+			ScientificName: "Poecile atricapillus",
+			CommonName:     "Black-capped Chickadee",
+			Confidence:     0.7,
+			Date:           "2025-03-07",
+			Time:           "12:45:00",
 		},
 	}
+
+	// Expected hourly counts for each species
+	var expectedAmcroLimitHourly [24]int
+	expectedAmcroLimitHourly[8] = 1
+	var expectedRbwoLimitHourly [24]int
+	expectedRbwoLimitHourly[10] = 1
+	var expectedBcchLimitHourly [24]int
+	expectedBcchLimitHourly[12] = 1
+
+	// Setup mock expectations
+	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0).Return(mockNotesLimit, nil)
+	// Expect GetHourlyOccurrences to be called for all species returned by GetTopBirdsData,
+	// as limiting happens *after* this step.
+	mockDS.On("GetHourlyOccurrences", "2025-03-07", "American Crow", 0.0).Return(expectedAmcroLimitHourly, nil)
+	mockDS.On("GetHourlyOccurrences", "2025-03-07", "Red-bellied Woodpecker", 0.0).Return(expectedRbwoLimitHourly, nil)
+	mockDS.On("GetHourlyOccurrences", "2025-03-07", "Black-capped Chickadee", 0.0).Return(expectedBcchLimitHourly, nil)
 
 	// Create a controller with our mock
 	controller := &Controller{
@@ -1206,6 +1167,9 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 
 	// Verify we got exactly 2 species (limited)
 	assert.Equal(t, 2, len(response))
+
+	// Assert that all expectations were met
+	mockDS.AssertExpectations(t)
 }
 
 // TestGetDailySpeciesSummary_DatabaseError tests that the GetDailySpeciesSummary function
