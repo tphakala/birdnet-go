@@ -3,6 +3,7 @@ package datastore
 
 import (
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -300,31 +301,37 @@ func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) (
 
 // GetNewSpeciesDetections finds species whose absolute first detection falls within the specified date range.
 func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string) ([]NewSpeciesData, error) {
-	var results []NewSpeciesData
+	// Temporary struct to scan raw results, ensuring date can be checked for null/empty
+	type RawNewSpeciesResult struct {
+		ScientificName     string
+		CommonName         string
+		FirstDetectionDate string // Scan directly into string
+		CountInPeriod      int
+	}
+	var rawResults []RawNewSpeciesResult
 
-	// This query finds the absolute first detection date for each species
-	// and then filters to keep only those whose first detection date is within the specified range.
-	// It also counts how many detections occurred within the specified period for those newly found species.
+	// Revised query (keeping the SQL improvements)
 	query := `
 	WITH SpeciesFirstSeen AS (
 	    SELECT 
 	        scientific_name, 
-	        MIN(date) as first_detection_date
+	        MIN(CASE WHEN date != '' AND date IS NOT NULL THEN date ELSE NULL END) as first_detection_date
 	    FROM notes
 	    GROUP BY scientific_name
+	    HAVING first_detection_date IS NOT NULL AND first_detection_date != '' 
 	), 
 	SpeciesInPeriod AS (
 	    SELECT 
 	        scientific_name, 
 	        COUNT(*) as count_in_period,
-			MAX(common_name) as common_name -- Get common name from within the period
+			MAX(common_name) as common_name
 	    FROM notes
 	    WHERE date BETWEEN ? AND ?
 	    GROUP BY scientific_name
 	)
 	SELECT 
 	    sfs.scientific_name, 
-	    sip.common_name, 
+	    COALESCE(sip.common_name, sfs.scientific_name) as common_name, 
 	    sfs.first_detection_date, 
 	    sip.count_in_period
 	FROM SpeciesFirstSeen sfs
@@ -333,10 +340,27 @@ func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string) ([]NewSp
 	ORDER BY sfs.first_detection_date DESC;
 	`
 
-	// Execute the raw SQL query
-	if err := ds.DB.Raw(query, startDate, endDate, startDate, endDate).Scan(&results).Error; err != nil {
-		return nil, fmt.Errorf("failed to get new species detections: %w", err)
+	// Execute the raw SQL query into the temporary struct
+	if err := ds.DB.Raw(query, startDate, endDate, startDate, endDate).Scan(&rawResults).Error; err != nil {
+		return nil, fmt.Errorf("failed to get new species detections raw results: %w", err)
 	}
 
-	return results, nil
+	// Filter results in Go to ensure FirstDetectionDate is valid before final assignment
+	var finalResults []NewSpeciesData
+	for _, raw := range rawResults {
+		// Explicitly check if the scanned date is non-empty
+		if raw.FirstDetectionDate != "" {
+			finalResults = append(finalResults, NewSpeciesData{
+				ScientificName: raw.ScientificName,
+				CommonName:     raw.CommonName,
+				FirstSeenDate:  raw.FirstDetectionDate, // Assign only if valid
+				CountInPeriod:  raw.CountInPeriod,
+			})
+		} else {
+			// Log if a record surprisingly had an empty date after SQL filtering
+			log.Printf("WARN: GetNewSpeciesDetections - Skipped record for %s due to empty first_detection_date after SQL query.", raw.ScientificName)
+		}
+	}
+
+	return finalResults, nil
 }
