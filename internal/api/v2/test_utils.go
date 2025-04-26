@@ -251,9 +251,22 @@ func (m *MockDataStore) SearchDetections(filters *datastore.SearchFilters) ([]da
 }
 
 // GetNewSpeciesDetections implements the datastore.Interface GetNewSpeciesDetections method
-func (m *MockDataStore) GetNewSpeciesDetections(startDate, endDate string) ([]datastore.NewSpeciesData, error) {
-	args := m.Called(startDate, endDate)
-	return args.Get(0).([]datastore.NewSpeciesData), args.Error(1)
+func (m *MockDataStore) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	// Return some sample data
+	return []datastore.NewSpeciesData{
+		{
+			ScientificName: "Turdus merula",
+			CommonName:     "Common Blackbird",
+			FirstSeenDate:  startDate,
+			CountInPeriod:  5,
+		},
+		{
+			ScientificName: "Passer domesticus",
+			CommonName:     "House Sparrow",
+			FirstSeenDate:  startDate,
+			CountInPeriod:  3,
+		},
+	}, nil
 }
 
 // TestImageProvider implements the imageprovider.Provider interface for testing
@@ -416,9 +429,22 @@ func (m *MockDataStoreV2) SearchDetections(filters *datastore.SearchFilters) ([]
 }
 
 // GetNewSpeciesDetections implements the datastore.Interface GetNewSpeciesDetections method
-func (m *MockDataStoreV2) GetNewSpeciesDetections(startDate, endDate string) ([]datastore.NewSpeciesData, error) {
-	// For this specialized mock, return empty data by default
-	return []datastore.NewSpeciesData{}, nil
+func (m *MockDataStoreV2) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	// Return some sample data
+	return []datastore.NewSpeciesData{
+		{
+			ScientificName: "Turdus merula",
+			CommonName:     "Common Blackbird",
+			FirstSeenDate:  startDate,
+			CountInPeriod:  5,
+		},
+		{
+			ScientificName: "Passer domesticus",
+			CommonName:     "House Sparrow",
+			FirstSeenDate:  startDate,
+			CountInPeriod:  3,
+		},
+	}, nil
 }
 
 // MockImageProvider is a mock implementation of imageprovider.ImageProvider interface

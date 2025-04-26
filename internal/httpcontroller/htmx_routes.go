@@ -90,11 +90,6 @@ func (s *Server) initRoutes() {
 		}
 	}
 
-	// Add redirect for old stats path to new analytics path
-	s.Echo.GET("/stats", func(c echo.Context) error {
-		return c.Redirect(http.StatusMovedPermanently, "/analytics")
-	})
-
 	// Partial routes (HTMX responses)
 	s.partialRoutes = map[string]PartialRouteConfig{
 		"/api/v1/detections":         {Path: "/api/v1/detections", TemplateName: "", Title: "", Handler: h.WithErrorHandling(h.Detections)},

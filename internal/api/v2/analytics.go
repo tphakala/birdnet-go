@@ -508,8 +508,36 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
 	}
 
-	// Fetch data from datastore
-	newSpeciesData, err := c.DS.GetNewSpeciesDetections(startDate, endDate)
+	// Parse pagination parameters
+	limit := 100 // Default limit
+	offset := 0  // Default offset
+
+	// Parse limit parameter if provided
+	limitStr := ctx.QueryParam("limit")
+	if limitStr != "" {
+		parsedLimit, err := strconv.Atoi(limitStr)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid limit parameter. Must be a positive integer.")
+		}
+		if parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+
+	// Parse offset parameter if provided
+	offsetStr := ctx.QueryParam("offset")
+	if offsetStr != "" {
+		parsedOffset, err := strconv.Atoi(offsetStr)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid offset parameter. Must be a non-negative integer.")
+		}
+		if parsedOffset >= 0 {
+			offset = parsedOffset
+		}
+	}
+
+	// Fetch data from datastore with pagination
+	newSpeciesData, err := c.DS.GetNewSpeciesDetections(startDate, endDate, limit, offset)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get new species detections", http.StatusInternalServerError)
 	}
@@ -532,17 +560,6 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 			ThumbnailURL:   thumbnailURL,
 			CountInPeriod:  data.CountInPeriod,
 		})
-	}
-
-	c.logger.Printf("DEBUG: New species data being sent to frontend: %+v", response) // Log the response data
-
-	// Optional limit if needed in the future
-	limitStr := ctx.QueryParam("limit")
-	if limitStr != "" {
-		limit, err := strconv.Atoi(limitStr)
-		if err == nil && limit > 0 && limit < len(response) {
-			response = response[:limit]
-		}
 	}
 
 	return ctx.JSON(http.StatusOK, response)
