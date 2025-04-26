@@ -54,7 +54,7 @@ func TestGetSpeciesSummary(t *testing.T) {
 	}
 
 	// Setup mock expectations
-	mockDS.On("GetSpeciesSummaryData").Return(mockSummaryData, nil)
+	mockDS.On("GetSpeciesSummaryData", mock.Anything, mock.Anything).Return(mockSummaryData, nil)
 
 	// Create a request
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species", http.NoBody)

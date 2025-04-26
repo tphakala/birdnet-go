@@ -211,8 +211,25 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 // GetSpeciesSummary handles GET /api/v2/analytics/species/summary
 // This provides an overall summary of species detections
 func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
-	// Retrieve species summary data from the datastore
-	summaryData, err := c.DS.GetSpeciesSummaryData()
+	// Get query parameters
+	startDate := ctx.QueryParam("start_date")
+	endDate := ctx.QueryParam("end_date")
+
+	// Validate date formats if provided
+	if startDate != "" {
+		if _, err := time.Parse("2006-01-02", startDate); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid start_date format. Use YYYY-MM-DD")
+		}
+	}
+
+	if endDate != "" {
+		if _, err := time.Parse("2006-01-02", endDate); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
+		}
+	}
+
+	// Retrieve species summary data from the datastore with date filtering
+	summaryData, err := c.DS.GetSpeciesSummaryData(startDate, endDate)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get species summary data", http.StatusInternalServerError)
 	}
