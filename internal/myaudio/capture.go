@@ -638,25 +638,6 @@ func processAudioFrame(
 	// Broadcast audio data (use the safe bufferToUse)
 	broadcastAudioData("malgo", bufferToUse)
 
-	// Calculate audio level (use the safe bufferToUse)
-	audioLevelData := calculateAudioLevel(bufferToUse, "malgo", source.Name)
-
-	// Send level to channel (non-blocking)
-	select {
-	case audioLevelChan <- audioLevelData:
-		// Data sent successfully
-	default:
-		// Channel is full, clear the channel and try again
-		for len(audioLevelChan) > 0 {
-			<-audioLevelChan
-		}
-		select {
-		case audioLevelChan <- audioLevelData:
-		default:
-			log.Printf("⚠️ Audio level channel full even after clearing for source %s", source.Name)
-		}
-	}
-
 	// Process audio level data
 	ProcessAudioLevel(pSamples, "malgo", source.Name, audioLevelChan)
 
@@ -762,10 +743,6 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 		if fromPool && finalBufferPtr != nil {
 			ReturnBufferToPool(finalBufferPtr, fromPool)
 		}
-		// NOTE: We are NOT updating scratchBuffer here. It remains independent.
-		// If ConvertToS16 consistently needs a larger buffer than scratchBuffer provides,
-		// it will keep allocating, which is less optimal but safe.
-		// A more advanced optimization could resize scratchBuffer based on ConvertToS16 feedback.
 
 		// Process audio level data
 		ProcessAudioLevel(pSamples, "malgo", source.Name, audioLevelChan)
@@ -843,28 +820,6 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 	}
 }
 
-// printDeviceInfo prints detailed information about the initialized capture device.
-func printDeviceInfo(dev *malgo.Device, format malgo.FormatType) {
-	var bitDepth int
-	switch format {
-	case malgo.FormatU8:
-		bitDepth = 8
-	case malgo.FormatS16:
-		bitDepth = 16
-	case malgo.FormatS24:
-		bitDepth = 24
-	case malgo.FormatS32, malgo.FormatF32:
-		bitDepth = 32
-	default:
-		bitDepth = 0 // Unknown
-	}
-	fmt.Printf("🎤 Initialized capture device:\n")
-	fmt.Printf("   Format: %v (%d-bit)\n", format, bitDepth)
-	fmt.Printf("   Channels: %d\n", dev.CaptureChannels())
-	fmt.Printf("   Sample Rate: %d Hz\n", dev.SampleRate())
-	// Add more device info if needed using dev methods
-}
-
 // calculateAudioLevel calculates the RMS (Root Mean Square) of the audio samples
 // and returns an AudioLevelData struct with the level and clipping status
 func calculateAudioLevel(samples []byte, source, name string) AudioLevelData {
@@ -940,144 +895,5 @@ func calculateAudioLevel(samples []byte, source, name string) AudioLevelData {
 		Clipping: isClipping,
 		Source:   source,
 		Name:     name,
-	}
-}
-
-// Pool of fixed-size byte slices to avoid frequent allocations
-var s16BufferPool = sync.Pool{
-	New: func() interface{} {
-		// Pre-allocate buffers for typical frame size (2048 bytes for malgo / 1024 16-bit samples)
-		buffer := make([]byte, 2048)
-		return &buffer // Return a pointer to avoid allocations
-	},
-}
-
-// ConvertToS16WithBuffer converts audio samples from higher bit depths to 16-bit format
-// using a caller-provided or pooled buffer to minimize allocations.
-// This version is optimized for real-time processing with fixed-size frames.
-//
-// Parameters:
-//   - samples: Input audio samples
-//   - sourceFormat: Source format (malgo.FormatS24, malgo.FormatS32, malgo.FormatF32)
-//   - outputBuffer: Optional pre-allocated output buffer (pass nil to use pool)
-//
-// Returns:
-//   - outputBufferPtr: A pointer to the slice of the output buffer containing the converted data
-//   - fromPool: Boolean indicating if the output buffer is from the pool
-//   - err: Error if conversion fails
-func ConvertToS16(samples []byte, sourceFormat malgo.FormatType, outputBuffer []byte) (outputBufferPtr *[]byte, fromPool bool, err error) {
-	if len(samples) == 0 {
-		empty := []byte{}
-		return &empty, false, nil
-	}
-
-	var bytesPerSample int
-	switch sourceFormat {
-	case malgo.FormatS24:
-		bytesPerSample = 3
-	case malgo.FormatS32, malgo.FormatF32:
-		bytesPerSample = 4
-	default:
-		return nil, false, fmt.Errorf("unsupported source format: %v", sourceFormat)
-	}
-
-	// Ensure we have complete samples
-	validSampleCount := len(samples) / bytesPerSample
-	if validSampleCount == 0 {
-		empty := []byte{}
-		return &empty, false, nil
-	}
-
-	// Calculate required output size
-	requiredSize := validSampleCount * 2 // 2 bytes per sample for 16-bit
-
-	// Use provided buffer, pool buffer, or allocate new one based on outputBuffer status
-	switch {
-	case outputBuffer == nil:
-		// No buffer provided, get from pool or allocate new
-		if requiredSize <= 2048 {
-			outputBufferPtr = s16BufferPool.Get().(*[]byte)
-			outputBuffer = *outputBufferPtr // Dereference for internal use
-			fromPool = true
-		} else {
-			newBuffer := make([]byte, requiredSize)
-			outputBuffer = newBuffer
-			outputBufferPtr = &newBuffer
-		}
-	case len(outputBuffer) < requiredSize:
-		// Provided buffer is too small
-		err = fmt.Errorf("output buffer too small: need %d bytes, got %d",
-			requiredSize, len(outputBuffer))
-		return // Return named values
-	default:
-		// Use the provided buffer
-		outputBufferPtr = &outputBuffer
-	}
-
-	// Convert samples into the dereferenced buffer
-	actualOutputBuffer := *outputBufferPtr
-	for i := 0; i < validSampleCount; i++ {
-		srcIdx := i * bytesPerSample
-		dstIdx := i * 2
-
-		switch sourceFormat {
-		case malgo.FormatS24:
-			// Convert 24-bit (3 bytes) to 16-bit
-			val := int32(samples[srcIdx]) | int32(samples[srcIdx+1])<<8 | int32(samples[srcIdx+2])<<16
-			// Sign extend if the most significant bit is set
-			if (val & 0x800000) != 0 {
-				val |= int32(-0x1000000)
-			}
-			// Shift right by 8 bits to get a 16-bit value
-			val >>= 8
-			// Clamp to 16-bit range
-			if val > 32767 {
-				val = 32767
-			} else if val < -32768 {
-				val = -32768
-			}
-			binary.LittleEndian.PutUint16(actualOutputBuffer[dstIdx:dstIdx+2], uint16(val))
-
-		case malgo.FormatS32:
-			// Convert 32-bit integer to 16-bit
-			val := int32(binary.LittleEndian.Uint32(samples[srcIdx : srcIdx+4]))
-			val >>= 16
-			// Clamp to 16-bit range
-			if val > 32767 {
-				val = 32767
-			} else if val < -32768 {
-				val = -32768
-			}
-			binary.LittleEndian.PutUint16(actualOutputBuffer[dstIdx:dstIdx+2], uint16(val))
-
-		case malgo.FormatF32:
-			// Convert 32-bit float to 16-bit integer
-			bits := binary.LittleEndian.Uint32(samples[srcIdx : srcIdx+4])
-			val := math.Float32frombits(bits)
-			// Scale float [-1.0, 1.0] to 16-bit integer range
-			val *= 32767.0
-			// Clamp to 16-bit range
-			if val > 32767.0 {
-				val = 32767.0
-			} else if val < -32768.0 {
-				val = -32768.0
-			}
-			binary.LittleEndian.PutUint16(actualOutputBuffer[dstIdx:dstIdx+2], uint16(int16(val)))
-		}
-	}
-
-	// Adjust the slice length of the buffer pointed to
-	*outputBufferPtr = (*outputBufferPtr)[:requiredSize]
-
-	// Return the pointer to the buffer (err is nil by default)
-	return
-}
-
-// ReturnBufferToPool returns a buffer pointer to the pool if it came from the pool
-func ReturnBufferToPool(bufferPtr *[]byte, fromPool bool) {
-	if fromPool && bufferPtr != nil && *bufferPtr != nil {
-		// Reset slice length to its capacity before returning to pool
-		full := (*bufferPtr)[:cap(*bufferPtr)]
-		s16BufferPool.Put(&full)
 	}
 }
