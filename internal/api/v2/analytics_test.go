@@ -989,8 +989,8 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 
 	// Verify the first and latest times are correct
 	species := response[0]
-	assert.Equal(t, "06:30:00", species.First, "First detection should be 06:30:00")
-	assert.Equal(t, "21:45:00", species.Latest, "Latest detection should be 21:45:00")
+	assert.Equal(t, "06:30:00", species.FirstHeard, "First detection should be 06:30:00")
+	assert.Equal(t, "21:45:00", species.LatestHeard, "Latest detection should be 21:45:00")
 
 	// Assert that all expectations were met
 	mockDS.AssertExpectations(t)

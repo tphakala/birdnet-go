@@ -3,6 +3,7 @@
 package api
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -33,10 +34,22 @@ func safeSlice[T any](args mock.Arguments, index int) []T {
 		if slice, ok := arg.([]T); ok {
 			return slice
 		}
-		// Log or handle the type mismatch case if necessary, here we assume it should match
-		// or let it panic if the mock setup is incorrect (which might be desired)
-		// Alternatively, return nil or an empty slice:
-		// return nil
+		// Fail fast – most likely the test registered a value of the wrong type.
+		panic(fmt.Sprintf("safeSlice: expected []%T at index %d, got %T", *new(T), index, arg))
+	}
+	return nil // Return nil if the argument itself is nil
+}
+
+// safePointer is a helper for mock methods returning pointers.
+// It safely handles nil arguments and performs type assertion.
+func safePointer[T any](args mock.Arguments, index int) *T {
+	if arg := args.Get(index); arg != nil {
+		// Check if the argument is already of the target pointer type
+		if ptr, ok := arg.(T); ok {
+			return &ptr
+		}
+		// Fail fast – most likely the test registered a value of the wrong type.
+		panic(fmt.Sprintf("safePointer: expected *%T at index %d, got %T", *new(T), index, arg))
 	}
 	return nil // Return nil if the argument itself is nil
 }
@@ -64,6 +77,9 @@ func (m *MockDataStore) Delete(id string) error {
 
 func (m *MockDataStore) Get(id string) (datastore.Note, error) {
 	args := m.Called(id)
+	if args.Get(0) == nil {
+		return datastore.Note{}, args.Error(1)
+	}
 	return args.Get(0).(datastore.Note), args.Error(1)
 }
 
@@ -608,4 +624,12 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 	}
 
 	return e, mockDS, controller
+}
+
+func (m *MockDataStore) GetNote(id int) (datastore.Note, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return datastore.Note{}, args.Error(1)
+	}
+	return args.Get(0).(datastore.Note), args.Error(1)
 }
