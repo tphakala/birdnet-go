@@ -477,12 +477,27 @@ check_preserved_data() {
 # Function to convert only relative paths to absolute paths
 convert_relative_to_absolute_path() {
     local config_file=$1
-    local path_key=$2
-    local abs_path=$3
+    local abs_path=$2
     
-    # Check if the path is already absolute
-    local current_path
-    current_path=$(grep -E "^[[:space:]]*${path_key}:" "$config_file" | sed -E "s/^[[:space:]]*${path_key}:[[:space:]]*//;s/[[:space:]]*#.*//")
+    # Look specifically for the audio export path in the export section
+    local export_section_line=$(grep -n "export:" "$config_file" | cut -d: -f1)
+    if [ -z "$export_section_line" ]; then
+        print_message "⚠️ Export section not found in config file" "$YELLOW"
+        return 1
+    fi
+    
+    # Find the path line within the export section (looking only at the next few lines after export:)
+    local clip_path_line=$(tail -n +$export_section_line "$config_file" | grep -n "path:" | head -1 | cut -d: -f1)
+    if [ -z "$clip_path_line" ]; then
+        print_message "⚠️ Clip path setting not found in export section" "$YELLOW"
+        return 1
+    fi
+    
+    # Calculate the actual line number in the file
+    clip_path_line=$((export_section_line + clip_path_line - 1))
+    
+    # Extract the current path value
+    local current_path=$(sed -n "${clip_path_line}p" "$config_file" | sed -E 's/^[[:space:]]*path:[[:space:]]*([^#]*).*/\1/' | xargs)
     
     # Remove quotes if present
     current_path=${current_path#\"}
@@ -491,11 +506,20 @@ convert_relative_to_absolute_path() {
     # Only convert if path is relative (doesn't start with /)
     if [[ ! "$current_path" =~ ^/ ]]; then
         print_message "Converting relative path '${current_path}' to absolute path '${abs_path}'" "$YELLOW"
-        sed -i "s|${path_key}: [\"]*${current_path}[\"]*|${path_key}: ${abs_path}|" "$config_file"
+        # Use line-specific sed to replace just the clips path line
+        sed -i "${clip_path_line}s|path: .*|path: ${abs_path}        # path to audio clip export directory|" "$config_file"
         return 0
     else
         print_message "Path '${current_path}' is already absolute, skipping conversion" "$GREEN"
         return 1
+    fi
+}
+
+# Function to handle all path migrations
+update_paths_in_config() {
+    if [ -f "$CONFIG_FILE" ]; then
+        print_message "🔧 Updating paths in configuration file..." "$YELLOW"
+        convert_relative_to_absolute_path "$CONFIG_FILE" "/data/clips/"
     fi
 }
 
@@ -505,10 +529,6 @@ download_base_config() {
     if [ -f "$CONFIG_FILE" ] && [ "$FRESH_INSTALL" != "true" ]; then
         print_message "✅ Using existing configuration file: " "$GREEN" "nonewline"
         print_message "$CONFIG_FILE" "$NC"
-        
-        # Convert relative paths to absolute paths in existing config
-        convert_relative_to_absolute_path "$CONFIG_FILE" "path" "/data/clips/"
-        
         return 0
     fi
     
@@ -528,44 +548,41 @@ download_base_config() {
         exit 1
     fi
 
+    local config_updated=false
     if [ -f "$CONFIG_FILE" ]; then
         if cmp -s "$CONFIG_FILE" "$temp_config"; then
             print_message "✅ Base configuration already exists" "$GREEN"
             rm -f "$temp_config"
-            return 0
-        fi
-
-        print_message "⚠️ Existing configuration file found." "$YELLOW"
-        print_message "❓ Do you want to overwrite it? Backup of current configuration will be created (y/n): " "$YELLOW" "nonewline"
-        read -r response
-        
-        if [[ "$response" =~ ^[Yy]$ ]]; then
-            # Create backup with timestamp
-            local backup_file
-            backup_file="${CONFIG_FILE}.$(date '+%Y%m%d_%H%M%S').backup"
-            cp "$CONFIG_FILE" "$backup_file"
-            print_message "✅ Backup created: " "$GREEN" "nonewline"
-            print_message "$backup_file" "$NC"
-            
-            mv "$temp_config" "$CONFIG_FILE"
-            print_message "✅ Configuration updated successfully" "$GREEN"
-            
-            # Convert relative paths to absolute paths
-            convert_relative_to_absolute_path "$CONFIG_FILE" "path" "/data/clips/"
         else
-            print_message "✅ Keeping existing configuration file" "$YELLOW"
-            rm -f "$temp_config"
+            print_message "⚠️ Existing configuration file found." "$YELLOW"
+            print_message "❓ Do you want to overwrite it? Backup of current configuration will be created (y/n): " "$YELLOW" "nonewline"
+            read -r response
             
-            # Convert relative paths to absolute paths
-            convert_relative_to_absolute_path "$CONFIG_FILE" "path" "/data/clips/"
+            if [[ "$response" =~ ^[Yy]$ ]]; then
+                # Create backup with timestamp
+                local backup_file
+                backup_file="${CONFIG_FILE}.$(date '+%Y%m%d_%H%M%S').backup"
+                cp "$CONFIG_FILE" "$backup_file"
+                print_message "✅ Backup created: " "$GREEN" "nonewline"
+                print_message "$backup_file" "$NC"
+                
+                mv "$temp_config" "$CONFIG_FILE"
+                print_message "✅ Configuration updated successfully" "$GREEN"
+                config_updated=true
+            else
+                print_message "✅ Keeping existing configuration file" "$YELLOW"
+                rm -f "$temp_config"
+            fi
         fi
     else
         mv "$temp_config" "$CONFIG_FILE"
         print_message "✅ Base configuration downloaded successfully" "$GREEN"
-        
-        # Convert relative paths to absolute paths
-        convert_relative_to_absolute_path "$CONFIG_FILE" "path" "/data/clips/"
+        config_updated=true
     fi
+    
+    # Always ensure clips path is absolute, regardless of whether config was updated or existing
+    print_message "\n🔧 Checking audio export path configuration..." "$YELLOW"
+    convert_relative_to_absolute_path "$CONFIG_FILE" "/data/clips/"
 }
 
 # Function to test RTSP URL
@@ -1168,9 +1185,10 @@ Requires=docker.service
 
 [Service]
 Restart=always
-# Create tmpfs mount for HLS segments (only if not already mounted)
+# Create tmpfs mount for HLS segments
 ExecStartPre=/bin/mkdir -p ${CONFIG_DIR}/hls
-ExecStartPre=/usr/bin/sh -c '[ -n "$(findmnt -n ${CONFIG_DIR}/hls)" ] || /bin/mount -t tmpfs -o size=50M,mode=0755,uid=${HOST_UID},gid=${HOST_GID},noexec,nosuid,nodev tmpfs ${CONFIG_DIR}/hls'
+# Mount tmpfs, the '|| true' ensures it doesn't fail if already mounted
+ExecStartPre=/bin/sh -c 'mount -t tmpfs -o size=50M,mode=0755,uid=${HOST_UID},gid=${HOST_GID},noexec,nosuid,nodev tmpfs ${CONFIG_DIR}/hls || true'
 ExecStart=/usr/bin/docker run --rm \\
     --name birdnet-go \\
     -p ${WEB_PORT}:8080 \\
@@ -1182,8 +1200,8 @@ ExecStart=/usr/bin/docker run --rm \\
     -v ${CONFIG_DIR}:/config \\
     -v ${DATA_DIR}:/data \\
     ${BIRDNET_GO_IMAGE}
-# Ensure tmpfs is unmounted on service stop
-ExecStopPost=/bin/sh -c '[ -n "$(findmnt -n ${CONFIG_DIR}/hls)" ] && /bin/umount -f ${CONFIG_DIR}/hls || true'
+# Simple unmount command with fallback
+ExecStopPost=/bin/sh -c 'umount -f ${CONFIG_DIR}/hls || true'
 
 [Install]
 WantedBy=multi-user.target
@@ -1275,6 +1293,13 @@ handle_container_update() {
     
     # Stop the service and container
     stop_birdnet_service
+    
+    # Clean up existing tmpfs mounts
+    print_message "🧹 Cleaning up tmpfs mounts..." "$YELLOW"
+    sudo umount -f "${CONFIG_DIR}/hls" 2>/dev/null || true
+    
+    # Update configuration paths
+    update_paths_in_config
     
     # Pull new image
     print_message "📥 Pulling latest nightly image..." "$YELLOW"
