@@ -131,6 +131,7 @@ tasks:
       - curl -sL https://unpkg.com/alpinejs -o assets/alpinejs.min.js
       - curl -sL https://cdn.jsdelivr.net/npm/hls.js@latest -o assets/hls.min.js
       - curl -sL https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js -o assets/chart.min.js
+      - curl -sL https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js -o assets/chartjs-adapter-date-fns.bundle.min.js
 
   generate-tailwindcss:
     cmds:
