@@ -1,5 +1,6 @@
 bin/birdnet-go
 bin/birdnet-go.exe
+assets/tailwind.css
 log/
 clips/
 spectrograms/
