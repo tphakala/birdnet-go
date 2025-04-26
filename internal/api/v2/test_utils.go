@@ -219,8 +219,8 @@ func (m *MockDataStore) CountHourlyDetections(date, hour string, duration int) (
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *MockDataStore) GetSpeciesSummaryData() ([]datastore.SpeciesSummaryData, error) {
-	args := m.Called()
+func (m *MockDataStore) GetSpeciesSummaryData(startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
+	args := m.Called(startDate, endDate)
 	return args.Get(0).([]datastore.SpeciesSummaryData), args.Error(1)
 }
 
@@ -377,7 +377,7 @@ func (m *MockDataStoreV2) GetLockedNotesClipPaths() ([]string, error) { return n
 func (m *MockDataStoreV2) CountHourlyDetections(date, hour string, duration int) (int64, error) {
 	return 0, nil
 }
-func (m *MockDataStoreV2) GetSpeciesSummaryData() ([]datastore.SpeciesSummaryData, error) {
+func (m *MockDataStoreV2) GetSpeciesSummaryData(startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
 	return nil, nil
 }
 func (m *MockDataStoreV2) GetHourlyAnalyticsData(date, species string) ([]datastore.HourlyAnalyticsData, error) {

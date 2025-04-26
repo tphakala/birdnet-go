@@ -31,12 +31,12 @@ type DailyAnalyticsData struct {
 }
 
 // GetSpeciesSummaryData retrieves overall statistics for all bird species
-func (ds *DataStore) GetSpeciesSummaryData() ([]SpeciesSummaryData, error) {
+// Optional date range filtering with startDate and endDate parameters in YYYY-MM-DD format
+func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]SpeciesSummaryData, error) {
 	var summaries []SpeciesSummaryData
 
-	// SQL query to get species summary data
-	// This includes: count, first/last detection, and confidence stats
-	query := `
+	// Start building query
+	queryStr := `
 		SELECT 
 			scientific_name,
 			MAX(common_name) as common_name,
@@ -47,11 +47,31 @@ func (ds *DataStore) GetSpeciesSummaryData() ([]SpeciesSummaryData, error) {
 			AVG(confidence) as avg_confidence,
 			MAX(confidence) as max_confidence
 		FROM notes
+	`
+
+	// Add WHERE clause if date filters are provided
+	var whereClause string
+	var args []interface{}
+
+	if startDate != "" && endDate != "" {
+		whereClause = "WHERE date >= ? AND date <= ?"
+		args = append(args, startDate, endDate)
+	} else if startDate != "" {
+		whereClause = "WHERE date >= ?"
+		args = append(args, startDate)
+	} else if endDate != "" {
+		whereClause = "WHERE date <= ?"
+		args = append(args, endDate)
+	}
+
+	// Complete the query
+	queryStr += whereClause + `
 		GROUP BY scientific_name
 		ORDER BY count DESC
 	`
 
-	rows, err := ds.DB.Raw(query).Rows()
+	// Execute the query
+	rows, err := ds.DB.Raw(queryStr, args...).Rows()
 	if err != nil {
 		return nil, fmt.Errorf("error getting species summary data: %w", err)
 	}
