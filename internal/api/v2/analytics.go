@@ -175,6 +175,20 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 
 	// Convert map to slice for response
 	var result []SpeciesDailySummary
+	scientificNames := make([]string, 0, len(birdData))
+	for key := range birdData {
+		scientificNames = append(scientificNames, key)
+	}
+
+	// Batch fetch thumbnail URLs if cache is available
+	thumbnailURLs := make(map[string]string)
+	if c.BirdImageCache != nil {
+		batchResults := c.BirdImageCache.GetBatch(scientificNames)
+		for name, img := range batchResults {
+			thumbnailURLs[name] = img.URL
+		}
+	}
+
 	for key := range birdData {
 		data := birdData[key]
 		// Skip birds with no detections
@@ -186,14 +200,8 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 		hourlyCounts := make([]int, 24)
 		copy(hourlyCounts, data.HourlyCounts[:])
 
-		// Get bird thumbnail URL if available
-		var thumbnailURL string
-		if c.BirdImageCache != nil {
-			birdImage, err := c.BirdImageCache.Get(data.ScientificName)
-			if err == nil {
-				thumbnailURL = birdImage.URL
-			}
-		}
+		// Get bird thumbnail URL from batch results
+		thumbnailURL := thumbnailURLs[data.ScientificName] // Retrieve from map
 
 		// Add to result
 		result = append(result, SpeciesDailySummary{
@@ -243,6 +251,15 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	if endDate != "" {
 		if _, err := time.Parse("2006-01-02", endDate); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
+		}
+	}
+
+	// Ensure chronological order
+	if startDate != "" && endDate != "" {
+		start, _ := time.Parse("2006-01-02", startDate)
+		end, _ := time.Parse("2006-01-02", endDate)
+		if start.After(end) {
+			return echo.NewHTTPError(http.StatusBadRequest, "`start_date` cannot be after `end_date`")
 		}
 	}
 
@@ -385,6 +402,13 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 		}
 	}
 
+	// Ensure chronological order
+	start, _ := time.Parse("2006-01-02", startDate)
+	end, _ := time.Parse("2006-01-02", endDate)
+	if start.After(end) {
+		return echo.NewHTTPError(http.StatusBadRequest, "`start_date` cannot be after `end_date`")
+	}
+
 	// Get daily analytics data from the datastore
 	dailyData, err := c.DS.GetDailyAnalyticsData(startDate, endDate, species)
 	if err != nil {
@@ -453,6 +477,15 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
 	}
 
+	// Ensure chronological order
+	if startDate != "" && endDate != "" {
+		start, _ := time.Parse("2006-01-02", startDate)
+		end, _ := time.Parse("2006-01-02", endDate)
+		if start.After(end) {
+			return echo.NewHTTPError(http.StatusBadRequest, "`start_date` cannot be after `end_date`")
+		}
+	}
+
 	// Get hourly distribution data from the datastore
 	// We'll need to add this method to the datastore interface
 	hourlyData, err := c.DS.GetHourlyDistribution(startDate, endDate, species)
@@ -506,6 +539,13 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 	}
 	if _, err := time.Parse("2006-01-02", endDate); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
+	}
+
+	// Ensure chronological order
+	start, _ := time.Parse("2006-01-02", startDate)
+	end, _ := time.Parse("2006-01-02", endDate)
+	if start.After(end) {
+		return echo.NewHTTPError(http.StatusBadRequest, "`start_date` cannot be after `end_date`")
 	}
 
 	// Parse pagination parameters
