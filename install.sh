@@ -1185,6 +1185,8 @@ Requires=docker.service
 
 [Service]
 Restart=always
+# Remove any existing birdnet-go container to prevent name conflicts
+ExecStartPre=-/usr/bin/docker rm -f birdnet-go
 # Create tmpfs mount for HLS segments
 ExecStartPre=/bin/mkdir -p ${CONFIG_DIR}/hls
 # Mount tmpfs, the '|| true' ensures it doesn't fail if already mounted
@@ -1202,6 +1204,8 @@ ExecStart=/usr/bin/docker run --rm \\
     ${BIRDNET_GO_IMAGE}
 # Simple unmount command with fallback
 ExecStopPost=/bin/sh -c 'umount -f ${CONFIG_DIR}/hls || true'
+# Ensure container is removed on stop to prevent conflicts on restart
+ExecStopPost=-/usr/bin/docker rm -f birdnet-go
 
 [Install]
 WantedBy=multi-user.target
