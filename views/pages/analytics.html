@@ -372,17 +372,32 @@
                             break;
                     }
                     
-                    // Parallel fetch of all needed data
-                    await Promise.all([
-                        this.fetchSummaryData(startDate, endDate),
-                        this.fetchSpeciesSummary(),
-                        this.fetchRecentDetections(),
-                        this.fetchTimeOfDayData(startDate, endDate)
-                    ]);
+                    // Run API calls in sequence to avoid race conditions
+                    const fetchOperations = [
+                        this.fetchSummaryData(startDate, endDate).catch(err => {
+                            console.error('Error in summary data:', err);
+                            // Already set default values in the method
+                        }),
+                        this.fetchSpeciesSummary().catch(err => {
+                            console.error('Error in species summary:', err);
+                            // Already handled in the method
+                        }),
+                        this.fetchRecentDetections().catch(err => {
+                            console.error('Error in recent detections:', err);
+                            this.recentDetections = [];
+                        }),
+                        this.fetchTimeOfDayData(startDate, endDate).catch(err => {
+                            console.error('Error in time of day data:', err);
+                            // Already handled in the method
+                        })
+                    ];
+                    
+                    // Wait for all fetch operations to complete (even if some fail)
+                    await Promise.allSettled(fetchOperations);
                     
                 } catch (error) {
-                    console.error('Error fetching analytics data:', error);
-                    this.error = `Failed to load analytics data: ${error.message}`;
+                    console.error('General error fetching analytics data:', error);
+                    this.error = `Failed to load some analytics data. Please try again later.`;
                 } finally {
                     this.isLoading = false;
                 }
@@ -400,6 +415,9 @@
                     
                     const speciesData = await response.json();
                     
+                    // Ensure speciesData is an array
+                    const speciesArray = Array.isArray(speciesData) ? speciesData : [];
+                    
                     // Calculate summary metrics
                     let totalDetections = 0;
                     let totalConfidence = 0;
@@ -407,20 +425,23 @@
                     let mostCommonCount = 0;
                     
                     // Process each species
-                    speciesData.forEach(species => {
-                        totalDetections += species.count;
-                        totalConfidence += species.avg_confidence * species.count; // Weighted average
+                    speciesArray.forEach(species => {
+                        const count = species.count || 0;
+                        const confidence = species.avg_confidence || 0;
                         
-                        if (species.count > mostCommonCount) {
-                            mostCommonCount = species.count;
-                            mostCommonSpecies = species.common_name;
+                        totalDetections += count;
+                        totalConfidence += confidence * count; // Weighted average
+                        
+                        if (count > mostCommonCount) {
+                            mostCommonCount = count;
+                            mostCommonSpecies = species.common_name || 'Unknown';
                         }
                     });
                     
                     // Update summary data
                     this.summary = {
                         totalDetections: totalDetections,
-                        uniqueSpecies: speciesData.length,
+                        uniqueSpecies: speciesArray.length,
                         avgConfidence: totalDetections > 0 ? totalConfidence / totalDetections : 0,
                         mostCommonSpecies: mostCommonSpecies,
                         mostCommonCount: mostCommonCount
@@ -428,6 +449,14 @@
                     
                 } catch (error) {
                     console.error('Error fetching summary data:', error);
+                    // Set default values on error
+                    this.summary = {
+                        totalDetections: 0,
+                        uniqueSpecies: 0,
+                        avgConfidence: 0,
+                        mostCommonSpecies: '',
+                        mostCommonCount: 0
+                    };
                     throw error;
                 }
             },
@@ -444,11 +473,16 @@
                     
                     const speciesData = await response.json();
                     
+                    // Ensure speciesData is an array
+                    const speciesArray = Array.isArray(speciesData) ? speciesData : [];
+                    
                     // Create species chart
-                    this.createSpeciesChart(speciesData);
+                    this.createSpeciesChart(speciesArray);
                     
                 } catch (error) {
                     console.error('Error fetching species summary:', error);
+                    // Create empty chart on error
+                    this.createSpeciesChart([]);
                     throw error;
                 }
             },
@@ -525,8 +559,11 @@
                     
                     const data = await response.json();
                     
+                    // Check if data.results exists, if not use the data directly or empty array
+                    const detections = data.results || data || [];
+                    
                     // Map the API response to our expected format
-                    this.recentDetections = data.results.map(detection => ({
+                    this.recentDetections = detections.map(detection => ({
                         id: detection.id,
                         timestamp: detection.timestamp,
                         commonName: detection.common_name,
@@ -537,6 +574,7 @@
                     
                 } catch (error) {
                     console.error('Error fetching recent detections:', error);
+                    this.recentDetections = []; // Ensure we have an empty array on error
                     throw error;
                 }
             },
@@ -577,6 +615,9 @@
                     
                 } catch (error) {
                     console.error('Error fetching time of day data:', error);
+                    // Initialize with empty data
+                    this.createTimeOfDayChart([]);
+                    this.createTrendChart([]);
                     throw error;
                 }
             },
@@ -596,23 +637,28 @@
                 // Initialize counts for each period
                 const periodCounts = new Array(periods.length).fill(0);
                 
-                // Process and aggregate data by time period
-                data.forEach(entry => {
-                    // Extract hour from timestamp
-                    const hour = parseInt(entry.hour);
-                    
-                    // Map hour to period index
-                    let periodIndex;
-                    if (hour >= 0 && hour < 5) periodIndex = 0;
-                    else if (hour >= 5 && hour < 9) periodIndex = 1;
-                    else if (hour >= 9 && hour < 12) periodIndex = 2;
-                    else if (hour >= 12 && hour < 17) periodIndex = 3;
-                    else if (hour >= 17 && hour < 20) periodIndex = 4;
-                    else periodIndex = 5;
-                    
-                    // Add count to the appropriate period
-                    periodCounts[periodIndex] += entry.count;
-                });
+                // Check if data is an array before using forEach
+                if (Array.isArray(data)) {
+                    // Process and aggregate data by time period
+                    data.forEach(entry => {
+                        // Extract hour from timestamp
+                        const hour = parseInt(entry.hour);
+                        
+                        // Map hour to period index
+                        let periodIndex;
+                        if (hour >= 0 && hour < 5) periodIndex = 0;
+                        else if (hour >= 5 && hour < 9) periodIndex = 1;
+                        else if (hour >= 9 && hour < 12) periodIndex = 2;
+                        else if (hour >= 12 && hour < 17) periodIndex = 3;
+                        else if (hour >= 17 && hour < 20) periodIndex = 4;
+                        else periodIndex = 5;
+                        
+                        // Add count to the appropriate period
+                        periodCounts[periodIndex] += entry.count;
+                    });
+                } else {
+                    console.warn('Time of day data is not an array:', data);
+                }
                 
                 // Generate colors
                 const backgroundColors = [
@@ -670,13 +716,18 @@
                 // Group data by day
                 const dailyData = {};
                 
-                data.forEach(entry => {
-                    const date = entry.date;
-                    if (!dailyData[date]) {
-                        dailyData[date] = 0;
-                    }
-                    dailyData[date] += entry.count;
-                });
+                // Check if data is an array before using forEach
+                if (Array.isArray(data)) {
+                    data.forEach(entry => {
+                        const date = entry.date;
+                        if (!dailyData[date]) {
+                            dailyData[date] = 0;
+                        }
+                        dailyData[date] += entry.count;
+                    });
+                } else {
+                    console.warn('Trend data is not an array:', data);
+                }
                 
                 // Sort dates
                 const sortedDates = Object.keys(dailyData).sort();
