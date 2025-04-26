@@ -4,6 +4,8 @@ assets/tailwind.css
 log/
 clips/
 spectrograms/
+.task/*
+.vscode/*
 tmp
 *.log
 *.log.*
@@ -13,6 +15,8 @@ model/labels_fi.txt
 output/soundscape.wav.txt
 output/soundscape.wav.csv
 birdnet.db
+birdnet.db-shm
+birdnet.db-wal
 birdnet.txt
 custom_confidence_list.txt
 node_modules
