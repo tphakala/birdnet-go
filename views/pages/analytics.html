@@ -275,6 +275,17 @@
             },
             
             init() {
+                // Set Chart.js default font to match theme
+                try {
+                    const bodyFont = window.getComputedStyle(document.body).fontFamily;
+                    if (bodyFont) {
+                        Chart.defaults.font.family = bodyFont;
+                    }
+                } catch (e) {
+                    console.error("Could not set Chart.js default font family:", e);
+                    // Fallback or default font will be used by Chart.js
+                }
+
                 // Set default dates for custom range
                 const today = new Date();
                 const lastMonth = new Date();
@@ -338,7 +349,8 @@
                         grid: gridColor
                     },
                     font: {
-                        family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+                        // family is now set globally via Chart.defaults.font.family
+                        // family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
                     },
                     scales: {
                         grid: {
