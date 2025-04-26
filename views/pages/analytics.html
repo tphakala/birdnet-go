@@ -1122,7 +1122,7 @@
                         throw new Error(`Server responded with ${response.status}`);
                     }
                     const data = await response.json();
-                    console.log('Raw new species data from API:', JSON.stringify(data, null, 2)); // Log the raw data
+                    
                     this.newSpeciesData = Array.isArray(data) ? data : [];
                     this.createNewSpeciesChart(this.newSpeciesData);
                 } catch (error) {
