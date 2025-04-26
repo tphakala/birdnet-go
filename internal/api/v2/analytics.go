@@ -184,8 +184,8 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 	thumbnailURLs := make(map[string]string)
 	if c.BirdImageCache != nil {
 		batchResults := c.BirdImageCache.GetBatch(scientificNames)
-		for name, img := range batchResults {
-			thumbnailURLs[name] = img.URL
+		for name := range batchResults {
+			thumbnailURLs[name] = batchResults[name].URL // Access by key to avoid copying the struct
 		}
 	}
 
