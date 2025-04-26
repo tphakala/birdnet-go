@@ -189,6 +189,12 @@ func (m *mockStore) SearchDetections(filters *datastore.SearchFilters) ([]datast
 	return nil, 0, nil
 }
 
+// GetHourlyDistribution implements the datastore.Interface GetHourlyDistribution method
+func (m *mockStore) GetHourlyDistribution(startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
+	// Default implementation returns empty array for this mock
+	return []datastore.HourlyDistributionData{}, nil
+}
+
 // mockFailingStore is a mock implementation that simulates database failures
 type mockFailingStore struct {
 	mockStore
