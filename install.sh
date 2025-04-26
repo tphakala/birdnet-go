@@ -474,6 +474,123 @@ check_preserved_data() {
     return 1  # No preserved data
 }
 
+# Function to convert only relative paths to absolute paths
+convert_relative_to_absolute_path() {
+    local config_file=$1
+    local abs_path=$2
+    
+    # Look specifically for the audio export path in the export section
+    local export_section_line=$(grep -n "export:" "$config_file" | cut -d: -f1)
+    if [ -z "$export_section_line" ]; then
+        print_message "⚠️ Export section not found in config file" "$YELLOW"
+        return 1
+    fi
+    
+    # Find the path line within the export section (looking only at the next few lines after export:)
+    local clip_path_line=$(tail -n +$export_section_line "$config_file" | grep -n "path:" | head -1 | cut -d: -f1)
+    if [ -z "$clip_path_line" ]; then
+        print_message "⚠️ Clip path setting not found in export section" "$YELLOW"
+        return 1
+    fi
+    
+    # Calculate the actual line number in the file
+    clip_path_line=$((export_section_line + clip_path_line - 1))
+    
+    # Extract the current path value
+    local current_path=$(sed -n "${clip_path_line}p" "$config_file" | sed -E 's/^[[:space:]]*path:[[:space:]]*([^#]*).*/\1/' | xargs)
+    
+    # Remove quotes if present
+    current_path=${current_path#\"}
+    current_path=${current_path%\"}
+    
+    # Only convert if path is relative (doesn't start with /)
+    if [[ ! "$current_path" =~ ^/ ]]; then
+        print_message "Converting relative path '${current_path}' to absolute path '${abs_path}'" "$YELLOW"
+        # Use line-specific sed to replace just the clips path line
+        sed -i "${clip_path_line}s|path: .*|path: ${abs_path}        # path to audio clip export directory|" "$config_file"
+        return 0
+    else
+        print_message "Path '${current_path}' is already absolute, skipping conversion" "$GREEN"
+        return 1
+    fi
+}
+
+# Function to handle all path migrations
+update_paths_in_config() {
+    if [ -f "$CONFIG_FILE" ]; then
+        print_message "🔧 Updating paths in configuration file..." "$YELLOW"
+        if convert_relative_to_absolute_path "$CONFIG_FILE" "/data/clips/"; then
+            print_message "✅ Audio export path updated to absolute path" "$GREEN"
+        else
+            print_message "ℹ️ Audio export path already absolute; no changes made" "$YELLOW"
+        fi
+    fi
+}
+
+# Helper function to clean up HLS tmpfs mount
+cleanup_hls_mount() {
+    local hls_mount="${CONFIG_DIR}/hls"
+    local mount_unit=$(systemctl list-units --type=mount | grep -i "$hls_mount" | awk '{print $1}')
+    
+    print_message "🧹 Cleaning up tmpfs mounts..." "$YELLOW"
+    
+    # First check if the mount exists
+    if mount | grep -q "$hls_mount" || [ -n "$mount_unit" ]; then
+        if [ -n "$mount_unit" ]; then
+            print_message "Found systemd mount unit: $mount_unit" "$YELLOW"
+            
+            # Try to stop the mount unit using systemctl
+            print_message "Stopping systemd mount unit..." "$YELLOW"
+            sudo systemctl stop "$mount_unit" 2>/dev/null
+            
+            # Check if it's still active
+            if systemctl is-active --quiet "$mount_unit"; then
+                print_message "⚠️ Failed to stop mount unit, trying manual unmount..." "$YELLOW"
+            else
+                print_message "✅ Successfully stopped systemd mount unit" "$GREEN"
+                return 0
+            fi
+        else
+            print_message "Found tmpfs mount at $hls_mount, attempting to unmount..." "$YELLOW"
+        fi
+        
+        # Try regular unmount approaches as fallback
+        # Try regular unmount first
+        umount "$hls_mount" 2>/dev/null
+        
+        # If still mounted, try with force flag
+        if mount | grep -q "$hls_mount"; then
+            umount -f "$hls_mount" 2>/dev/null
+        fi
+        
+        # If still mounted, try with sudo
+        if mount | grep -q "$hls_mount"; then
+            sudo umount "$hls_mount" 2>/dev/null
+        fi
+        
+        # If still mounted, try sudo with force flag
+        if mount | grep -q "$hls_mount"; then
+            sudo umount -f "$hls_mount" 2>/dev/null
+        fi
+        
+        # If still mounted, try with lazy unmount as last resort
+        if mount | grep -q "$hls_mount"; then
+            print_message "⚠️ Regular unmount failed, trying lazy unmount..." "$YELLOW"
+            sudo umount -l "$hls_mount" 2>/dev/null
+        fi
+        
+        # Final check
+        if mount | grep -q "$hls_mount"; then
+            print_message "❌ Failed to unmount $hls_mount" "$RED"
+            print_message "You may need to reboot the system to fully remove it" "$YELLOW"
+        else
+            print_message "✅ Successfully unmounted $hls_mount" "$GREEN"
+        fi
+    else
+        print_message "No tmpfs mount found at $hls_mount" "$GREEN"
+    fi
+}
+
 # Function to download base config file
 download_base_config() {
     # If config file already exists and we're not doing a fresh install, just use the existing config
@@ -499,34 +616,44 @@ download_base_config() {
         exit 1
     fi
 
+    local config_updated=false
     if [ -f "$CONFIG_FILE" ]; then
         if cmp -s "$CONFIG_FILE" "$temp_config"; then
             print_message "✅ Base configuration already exists" "$GREEN"
             rm -f "$temp_config"
-            return 0
-        fi
-
-        print_message "⚠️ Existing configuration file found." "$YELLOW"
-        print_message "❓ Do you want to overwrite it? Backup of current configuration will be created (y/n): " "$YELLOW" "nonewline"
-        read -r response
-        
-        if [[ "$response" =~ ^[Yy]$ ]]; then
-            # Create backup with timestamp
-            local backup_file
-            backup_file="${CONFIG_FILE}.$(date '+%Y%m%d_%H%M%S').backup"
-            cp "$CONFIG_FILE" "$backup_file"
-            print_message "✅ Backup created: " "$GREEN" "nonewline"
-            print_message "$backup_file" "$NC"
-            
-            mv "$temp_config" "$CONFIG_FILE"
-            print_message "✅ Configuration updated successfully" "$GREEN"
         else
-            print_message "✅ Keeping existing configuration file" "$YELLOW"
-            rm -f "$temp_config"
+            print_message "⚠️ Existing configuration file found." "$YELLOW"
+            print_message "❓ Do you want to overwrite it? Backup of current configuration will be created (y/n): " "$YELLOW" "nonewline"
+            read -r response
+            
+            if [[ "$response" =~ ^[Yy]$ ]]; then
+                # Create backup with timestamp
+                local backup_file
+                backup_file="${CONFIG_FILE}.$(date '+%Y%m%d_%H%M%S').backup"
+                cp "$CONFIG_FILE" "$backup_file"
+                print_message "✅ Backup created: " "$GREEN" "nonewline"
+                print_message "$backup_file" "$NC"
+                
+                mv "$temp_config" "$CONFIG_FILE"
+                print_message "✅ Configuration updated successfully" "$GREEN"
+                config_updated=true
+            else
+                print_message "✅ Keeping existing configuration file" "$YELLOW"
+                rm -f "$temp_config"
+            fi
         fi
     else
         mv "$temp_config" "$CONFIG_FILE"
         print_message "✅ Base configuration downloaded successfully" "$GREEN"
+        config_updated=true
+    fi
+    
+    # Always ensure clips path is absolute, regardless of whether config was updated or existing
+    print_message "\n🔧 Checking audio export path configuration..." "$YELLOW"
+    if convert_relative_to_absolute_path "$CONFIG_FILE" "/data/clips/"; then
+        print_message "✅ Audio export path updated to absolute path" "$GREEN"
+    else
+        print_message "ℹ️ Audio export path already absolute; no changes made" "$YELLOW"
     fi
 }
 
@@ -1127,12 +1254,16 @@ generate_systemd_service_content() {
 Description=BirdNET-Go
 After=docker.service
 Requires=docker.service
+RequiresMountsFor=${CONFIG_DIR}/hls
 
 [Service]
 Restart=always
-# Create tmpfs mount for HLS segments (only if not already mounted)
+# Remove any existing birdnet-go container to prevent name conflicts
+ExecStartPre=-/usr/bin/docker rm -f birdnet-go
+# Create tmpfs mount for HLS segments
 ExecStartPre=/bin/mkdir -p ${CONFIG_DIR}/hls
-ExecStartPre=/usr/bin/sh -c '[ -n "$(findmnt -n ${CONFIG_DIR}/hls)" ] || /bin/mount -t tmpfs -o size=50M,mode=0755,uid=${HOST_UID},gid=${HOST_GID},noexec,nosuid,nodev tmpfs ${CONFIG_DIR}/hls'
+# Mount tmpfs, the '|| true' ensures it doesn't fail if already mounted
+ExecStartPre=/bin/sh -c 'mount -t tmpfs -o size=50M,mode=0755,uid=${HOST_UID},gid=${HOST_GID},noexec,nosuid,nodev tmpfs ${CONFIG_DIR}/hls || true'
 ExecStart=/usr/bin/docker run --rm \\
     --name birdnet-go \\
     -p ${WEB_PORT}:8080 \\
@@ -1144,8 +1275,9 @@ ExecStart=/usr/bin/docker run --rm \\
     -v ${CONFIG_DIR}:/config \\
     -v ${DATA_DIR}:/data \\
     ${BIRDNET_GO_IMAGE}
-# Ensure tmpfs is unmounted on service stop
-ExecStopPost=/bin/sh -c '[ -n "$(findmnt -n ${CONFIG_DIR}/hls)" ] && /bin/umount -f ${CONFIG_DIR}/hls || true'
+# Cleanup tasks on stop
+ExecStopPost=/bin/sh -c 'umount -f ${CONFIG_DIR}/hls || true'
+ExecStopPost=-/usr/bin/docker rm -f birdnet-go
 
 [Install]
 WantedBy=multi-user.target
@@ -1238,6 +1370,12 @@ handle_container_update() {
     # Stop the service and container
     stop_birdnet_service
     
+    # Clean up existing tmpfs mounts
+    cleanup_hls_mount
+    
+    # Update configuration paths
+    update_paths_in_config
+    
     # Pull new image
     print_message "📥 Pulling latest nightly image..." "$YELLOW"
     if ! docker pull "${BIRDNET_GO_IMAGE}"; then
@@ -1305,6 +1443,11 @@ disable_birdnet_service_and_remove_containers() {
 
 clean_installation_preserve_data() {
     print_message "🧹 Cleaning BirdNET-Go installation (preserving user data)..." "$YELLOW"
+    # First ensure any service is stopped
+    stop_birdnet_service false
+    # Clean up tmpfs mounts before removing service
+    cleanup_hls_mount
+    # Remove service and containers
     disable_birdnet_service_and_remove_containers
     print_message "✅ BirdNET-Go uninstalled, user data preserved in $CONFIG_DIR and $DATA_DIR" "$GREEN"
     return 0
@@ -1314,7 +1457,11 @@ clean_installation_preserve_data() {
 clean_installation() {
     print_message "🧹 Cleaning existing installation..." "$YELLOW"
     
-    # First stop services and remove containers
+    # First ensure any service is stopped
+    stop_birdnet_service false
+    # Clean up tmpfs mounts before attempting to remove directories
+    cleanup_hls_mount
+    # Remove service and containers
     disable_birdnet_service_and_remove_containers
     
     # Unified directory removal with simplified error handling
@@ -1336,9 +1483,9 @@ clean_installation() {
                 for dir in "$CONFIG_DIR" "$DATA_DIR"; do
                     if [ -d "$dir" ]; then
                         error_list="${error_list}Files in $dir:\n"
-                        while read -r file; do
+                        find "$dir" -type f 2>/dev/null | while read -r file; do
                             error_list="${error_list}  • $file\n"
-                        done < <(find "$dir" -type f ! -writable 2>/dev/null)
+                        done
                     fi
                 done
             }
@@ -1960,6 +2107,8 @@ print_message "📁 Data directory: " "$GREEN" "nonewline"
 print_message "$DATA_DIR" "$NC"
 mkdir -p "$CONFIG_DIR"
 mkdir -p "$DATA_DIR"
+mkdir -p "$DATA_DIR/clips"
+print_message "✅ Created data directory and clips subdirectory" "$GREEN"
 
 # Download base config file
 download_base_config
