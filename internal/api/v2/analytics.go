@@ -20,8 +20,8 @@ type SpeciesDailySummary struct {
 	Count          int    `json:"count"`
 	HourlyCounts   []int  `json:"hourly_counts"`
 	HighConfidence bool   `json:"high_confidence"`
-	First          string `json:"first_seen,omitempty"`
-	Latest         string `json:"latest_seen,omitempty"`
+	FirstHeard     string `json:"first_heard,omitempty"`
+	LatestHeard    string `json:"latest_heard,omitempty"`
 	ThumbnailURL   string `json:"thumbnail_url,omitempty"`
 }
 
@@ -31,8 +31,8 @@ type SpeciesSummary struct {
 	CommonName     string  `json:"common_name"`
 	SpeciesCode    string  `json:"species_code,omitempty"`
 	Count          int     `json:"count"`
-	FirstSeen      string  `json:"first_seen,omitempty"`
-	LastSeen       string  `json:"last_seen,omitempty"`
+	FirstHeard     string  `json:"first_heard,omitempty"`
+	LastHeard      string  `json:"last_heard,omitempty"`
 	AvgConfidence  float64 `json:"avg_confidence,omitempty"`
 	MaxConfidence  float64 `json:"max_confidence,omitempty"`
 	ThumbnailURL   string  `json:"thumbnail_url,omitempty"`
@@ -49,7 +49,7 @@ type HourlyDistribution struct {
 type NewSpeciesResponse struct {
 	ScientificName string `json:"scientific_name"`
 	CommonName     string `json:"common_name"`
-	FirstSeenDate  string `json:"first_seen_date"`
+	FirstHeardDate string `json:"first_heard_date"`
 	ThumbnailURL   string `json:"thumbnail_url,omitempty"`
 	CountInPeriod  int    `json:"count_in_period"` // How many times seen in the query period
 }
@@ -222,8 +222,8 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 			Count:          data.Count,
 			HourlyCounts:   hourlyCounts,
 			HighConfidence: data.HighConfidence,
-			First:          data.First,
-			Latest:         data.Latest,
+			FirstHeard:     data.First,
+			LatestHeard:    data.Latest,
 			ThumbnailURL:   thumbnailURL,
 		})
 	}
@@ -268,15 +268,15 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	for i := range summaryData {
 		data := &summaryData[i]
 		// Format the times as strings
-		firstSeen := ""
-		lastSeen := ""
+		firstHeard := ""
+		lastHeard := ""
 
 		if !data.FirstSeen.IsZero() {
-			firstSeen = data.FirstSeen.Format("2006-01-02 15:04:05")
+			firstHeard = data.FirstSeen.Format("2006-01-02 15:04:05")
 		}
 
 		if !data.LastSeen.IsZero() {
-			lastSeen = data.LastSeen.Format("2006-01-02 15:04:05")
+			lastHeard = data.LastSeen.Format("2006-01-02 15:04:05")
 		}
 
 		// Get bird thumbnail URL if available
@@ -294,8 +294,8 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 			CommonName:     data.CommonName,
 			SpeciesCode:    data.SpeciesCode,
 			Count:          data.Count,
-			FirstSeen:      firstSeen,
-			LastSeen:       lastSeen,
+			FirstHeard:     firstHeard,
+			LastHeard:      lastHeard,
 			AvgConfidence:  data.AvgConfidence,
 			MaxConfidence:  data.MaxConfidence,
 			ThumbnailURL:   thumbnailURL,
@@ -579,8 +579,8 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 		response = append(response, NewSpeciesResponse{
 			ScientificName: data.ScientificName,
 			CommonName:     data.CommonName,
-			FirstSeenDate:  data.FirstSeenDate,
-			ThumbnailURL:   thumbnailURL, // Use fetched or placeholder URL
+			FirstHeardDate: data.FirstSeenDate,
+			ThumbnailURL:   thumbnailURL,
 			CountInPeriod:  data.CountInPeriod,
 		})
 	}

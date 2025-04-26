@@ -506,6 +506,13 @@
                             break;
                     }
                     
+                    // Update the filters state with the calculated dates for non-custom periods
+                    // so the chart axes reflect the actual fetched range.
+                    if (this.filters.timePeriod !== 'custom') {
+                        this.filters.startDate = startDate;
+                        this.filters.endDate = endDate;
+                    }
+                    
                     // Run API calls
                     const fetchOperations = [
                         this.fetchSummaryData(startDate, endDate).catch(err => {
@@ -1166,8 +1173,9 @@
 
                 // 1. Filter the original data first for valid start dates and calculable end dates
                 const validData = data.filter(item => {
-                    const endDate = addOneDay(item.first_seen_date);
-                    return item.first_seen_date && typeof item.first_seen_date === 'string' && endDate;
+                    // Use the new field name from the API response
+                    const endDate = addOneDay(item.first_heard_date);
+                    return item.first_heard_date && typeof item.first_heard_date === 'string' && endDate;
                 });
 
                 if (validData.length === 0) {
@@ -1176,21 +1184,21 @@
                     return; 
                 }
 
-                // Sort the valid data by first seen date (newest first to easily slice top N)
-                validData.sort((a, b) => new Date(b.first_seen_date) - new Date(a.first_seen_date));
+                // Sort the valid data by first heard date (newest first to easily slice top N)
+                validData.sort((a, b) => new Date(b.first_heard_date) - new Date(a.first_heard_date));
 
                 // Limit to the top N most recent new species
                 const displayLimit = 20;
                 const limitedData = validData.slice(0, displayLimit);
 
                 // Sort again by oldest first for timeline rendering
-                limitedData.sort((a, b) => new Date(a.first_seen_date) - new Date(b.first_seen_date));
+                limitedData.sort((a, b) => new Date(a.first_heard_date) - new Date(b.first_heard_date));
 
                 // 2. Create labels and chart values from the limited/sorted data
                 const labels = limitedData.map(item => item.common_name || item.scientific_name);
                 const chartValues = limitedData.map(item => [
-                    item.first_seen_date, 
-                    addOneDay(item.first_seen_date) // We know this works from the filter step
+                    item.first_heard_date, 
+                    addOneDay(item.first_heard_date) // We know this works from the filter step
                 ]);
 
                 const theme = this.getChartTheme();
@@ -1202,8 +1210,8 @@
                     if (this.filters.endDate) maxDate = this.filters.endDate;
                 }
                 // Determine min/max from validData if necessary
-                if (!minDate && validData.length > 0) minDate = validData[0].first_seen_date;
-                if (!maxDate && validData.length > 0) maxDate = addOneDay(validData[validData.length - 1].first_seen_date);
+                if (!minDate && validData.length > 0) minDate = validData[0].first_heard_date;
+                if (!maxDate && validData.length > 0) maxDate = addOneDay(validData[validData.length - 1].first_heard_date);
 
                 // Add padding to maxDate to ensure last bar is visible
                 if (maxDate) {
@@ -1215,7 +1223,7 @@
                     data: {
                         labels: labels, // Use the derived labels
                         datasets: [{
-                            label: 'First Detected On',
+                            label: 'First Heard On',
                             data: chartValues, // Use the derived [start, end] pairs
                             backgroundColor: colors,
                             borderWidth: 1,
@@ -1242,7 +1250,7 @@
                                     label: (context) => {
                                         // Get the original start date from the dataset for the tooltip
                                         const startDate = context.dataset.data[context.dataIndex][0];
-                                        return `First Seen: ${startDate}`;
+                                        return `First Heard: ${startDate}`; // Updated label
                                     }
                                 }
                             }
@@ -1261,7 +1269,7 @@
                                 max: maxDate,
                                 title: {
                                     display: true,
-                                    text: 'First Detection Date',
+                                    text: 'First Heard Date', // Updated axis title
                                     color: theme.color.text
                                 },
                                 ticks: { color: theme.color.text },
