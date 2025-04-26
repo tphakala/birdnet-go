@@ -40,9 +40,9 @@ type SpeciesSummary struct {
 
 // HourlyDistribution represents detections aggregated by hour
 type HourlyDistribution struct {
-	Hour  int    `json:"hour"`
-	Count int    `json:"count"`
-	Date  string `json:"date,omitempty"` // Optional, can be used when filtering by a specific date
+	Hour  int `json:"hour"`
+	Count int `json:"count"`
+	// Date string `json:"date,omitempty"` // Removed as it's not populated or used
 }
 
 // NewSpeciesResponse represents a newly detected species in the API response
@@ -63,13 +63,13 @@ func (c *Controller) initAnalyticsRoutes() {
 	speciesGroup := analyticsGroup.Group("/species")
 	speciesGroup.GET("/daily", c.GetDailySpeciesSummary)
 	speciesGroup.GET("/summary", c.GetSpeciesSummary)
-	speciesGroup.GET("/new", c.GetNewSpeciesDetections) // New endpoint
+	speciesGroup.GET("/detections/new", c.GetNewSpeciesDetections) // Renamed endpoint
 
 	// Time analytics routes (can be implemented later)
 	timeGroup := analyticsGroup.Group("/time")
 	timeGroup.GET("/hourly", c.GetHourlyAnalytics)
 	timeGroup.GET("/daily", c.GetDailyAnalytics)
-	timeGroup.GET("/distribution", c.GetTimeOfDayDistribution) // New endpoint for time-of-day distribution
+	timeGroup.GET("/distribution/hourly", c.GetTimeOfDayDistribution) // Renamed endpoint for time-of-day distribution
 }
 
 // GetDailySpeciesSummary handles GET /api/v2/analytics/species/daily
@@ -186,10 +186,13 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 	thumbnailURLs := make(map[string]string)
 	if c.BirdImageCache != nil {
 		batchResults := c.BirdImageCache.GetBatch(scientificNames)
-		for name := range batchResults {
-			imgURL := batchResults[name].URL
-			if imgURL != "" {
-				thumbnailURLs[name] = imgURL
+		// Only populate map if results are not empty
+		if len(batchResults) > 0 {
+			for name := range batchResults {
+				imgURL := batchResults[name].URL
+				if imgURL != "" {
+					thumbnailURLs[name] = imgURL
+				}
 			}
 		}
 	}
@@ -555,10 +558,13 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 	thumbnailURLs := make(map[string]string)
 	if c.BirdImageCache != nil {
 		batchResults := c.BirdImageCache.GetBatch(scientificNames)
-		for name := range batchResults {
-			imgURL := batchResults[name].URL
-			if imgURL != "" {
-				thumbnailURLs[name] = imgURL
+		// Only populate map if results are not empty
+		if len(batchResults) > 0 {
+			for name := range batchResults {
+				imgURL := batchResults[name].URL
+				if imgURL != "" {
+					thumbnailURLs[name] = imgURL
+				}
 			}
 		}
 	}

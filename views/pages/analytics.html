@@ -480,19 +480,19 @@
                             break;
                         case 'week':
                             endDate = this.formatDateForInput(today);
-                            startDate = this.formatDateForInput(new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000));
+                            startDate = this.formatDateForInput(new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000)); // 6 days ago to today = 7 days total
                             break;
                         case 'month':
                             endDate = this.formatDateForInput(today);
-                            startDate = this.formatDateForInput(new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000));
+                            startDate = this.formatDateForInput(new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000)); // 29 days ago to today = 30 days total
                             break;
                         case '90days':
                             endDate = this.formatDateForInput(today);
-                            startDate = this.formatDateForInput(new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000));
+                            startDate = this.formatDateForInput(new Date(today.getTime() - 89 * 24 * 60 * 60 * 1000)); // 89 days ago to today = 90 days total
                             break;
                         case 'year':
                             endDate = this.formatDateForInput(today);
-                            startDate = this.formatDateForInput(new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000));
+                            startDate = this.formatDateForInput(new Date(today.getTime() - 364 * 24 * 60 * 60 * 1000)); // 364 days ago to today = 365 days total
                             break;
                         case 'custom':
                             startDate = this.filters.startDate;
@@ -524,7 +524,7 @@
                         this.fetchTrendData(startDate, endDate).catch(err => {
                             console.error('Error in trend data:', err);
                         }),
-                        this.fetchNewSpeciesData(startDate, endDate).catch(err => { // Add call for new data
+                        this.fetchNewSpeciesData(startDate, endDate).catch(err => {
                             console.error('Error in new species data:', err);
                             this.newSpeciesData = [];
                         })
@@ -544,11 +544,12 @@
             // Fetch summary metrics
             async fetchSummaryData(startDate, endDate) {
                 try {
-                    // Get species summary from API
-                    let url = '/api/v2/analytics/species/summary?limit=100';
-                    if (startDate) url += `&start_date=${startDate}`;
-                    if (endDate) url += `&end_date=${endDate}`;
-                    
+                    // Get species summary from API using URLSearchParams
+                    const params = new URLSearchParams({ limit: '100' }); // Limit as string
+                    if (startDate) params.set('start_date', startDate);
+                    if (endDate) params.set('end_date', endDate);
+                    const url = `/api/v2/analytics/species/summary?${params.toString()}`;
+
                     const response = await fetch(url);
                     
                     if (!response.ok) {
@@ -606,11 +607,12 @@
             // Fetch species summary for chart
             async fetchSpeciesSummary(startDate, endDate) {
                 try {
-                    // Get top 10 species 
-                    let url = '/api/v2/analytics/species/summary?limit=10';
-                    if (startDate) url += `&start_date=${startDate}`;
-                    if (endDate) url += `&end_date=${endDate}`;
-                    
+                    // Get top 10 species using URLSearchParams
+                    const params = new URLSearchParams({ limit: '10' }); // Limit as string
+                    if (startDate) params.set('start_date', startDate);
+                    if (endDate) params.set('end_date', endDate);
+                    const url = `/api/v2/analytics/species/summary?${params.toString()}`;
+
                     const response = await fetch(url);
                     
                     if (!response.ok) {
@@ -754,23 +756,18 @@
             // Fetch time of day data
             async fetchTimeOfDayData(startDate, endDate) {
                 try {
-                    // Build the query parameters
-                    let url = '/api/v2/analytics/time/distribution';
+                    // Build the query parameters using URLSearchParams
+                    let url = '/api/v2/analytics/time/distribution/hourly';
                     const params = new URLSearchParams();
-                    
-                    if (startDate) {
-                        params.append('start_date', startDate);
-                    }
-                    
-                    if (endDate) {
-                        params.append('end_date', endDate);
-                    }
-                    
+                    if (startDate) params.set('start_date', startDate);
+                    if (endDate) params.set('end_date', endDate);
+
                     // Add the params to the URL if any were set
-                    if (params.toString()) {
-                        url += '?' + params.toString();
+                    const queryString = params.toString();
+                    if (queryString) {
+                        url += '?' + queryString;
                     }
-                    
+
                     const response = await fetch(url);
                     
                     if (!response.ok) {
@@ -793,23 +790,18 @@
             // Fetch trend data
             async fetchTrendData(startDate, endDate) {
                 try {
-                    // Build the query parameters
+                    // Build the query parameters using URLSearchParams
                     let url = '/api/v2/analytics/time/daily';
                     const params = new URLSearchParams();
-                    
-                    if (startDate) {
-                        params.append('start_date', startDate);
-                    }
-                    
-                    if (endDate) {
-                        params.append('end_date', endDate);
-                    }
-                    
+                    if (startDate) params.set('start_date', startDate);
+                    if (endDate) params.set('end_date', endDate);
+
                     // Add the params to the URL if any were set
-                    if (params.toString()) {
-                        url += '?' + params.toString();
+                    const queryString = params.toString();
+                    if (queryString) {
+                        url += '?' + queryString;
                     }
-                    
+
                     const response = await fetch(url);
                     
                     if (!response.ok) {
@@ -1111,11 +1103,14 @@
             // Fetch new species data
             async fetchNewSpeciesData(startDate, endDate) {
                 try {
-                    let url = '/api/v2/analytics/species/new';
+                    // Build the query parameters using URLSearchParams
+                    let url = '/api/v2/analytics/species/detections/new';
                     const params = new URLSearchParams();
-                    if (startDate) params.append('start_date', startDate);
-                    if (endDate) params.append('end_date', endDate);
-                    if (params.toString()) url += '?' + params.toString();
+                    if (startDate) params.set('start_date', startDate);
+                    if (endDate) params.set('end_date', endDate);
+                    
+                    const queryString = params.toString();
+                    if (queryString) url += '?' + queryString;
 
                     const response = await fetch(url);
                     if (!response.ok) {

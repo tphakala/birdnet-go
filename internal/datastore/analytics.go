@@ -250,32 +250,49 @@ func (ds *DataStore) GetDetectionTrends(period string, limit int) ([]DailyAnalyt
 // GetHourlyDistribution retrieves hourly detection distribution across a date range
 // Groups detections by hour of day (0-23) regardless of the specific date
 func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) ([]HourlyDistributionData, error) {
-	// Parse dates to ensure they're valid
-	parsedStartDate, err := time.Parse("2006-01-02", startDate)
-	if err != nil {
-		return nil, fmt.Errorf("invalid start date format: %w", err)
+	var parsedStartDate, parsedEndDate time.Time
+	var err error
+
+	// Only parse start date if provided
+	if startDate != "" {
+		parsedStartDate, err = time.Parse("2006-01-02", startDate)
+		if err != nil {
+			return nil, fmt.Errorf("invalid start date format: %w", err)
+		}
 	}
 
-	parsedEndDate, err := time.Parse("2006-01-02", endDate)
-	if err != nil {
-		return nil, fmt.Errorf("invalid end date format: %w", err)
+	// Only parse end date if provided
+	if endDate != "" {
+		parsedEndDate, err = time.Parse("2006-01-02", endDate)
+		if err != nil {
+			return nil, fmt.Errorf("invalid end date format: %w", err)
+		}
 	}
 
-	// Ensure start date is before or equal to end date
-	if parsedStartDate.After(parsedEndDate) {
-		return nil, fmt.Errorf("start date cannot be after end date")
+	// Ensure start date is before or equal to end date only if both were provided
+	if startDate != "" && endDate != "" {
+		if parsedStartDate.After(parsedEndDate) {
+			return nil, fmt.Errorf("start date cannot be after end date")
+		}
 	}
 
 	// Prepare the SQL query
 	query := ds.DB.Table("notes")
 
 	// Extract hour from the time field using database-specific hour format
-	// This uses the same helper method used elsewhere for consistent hour extraction
 	hourExpr := ds.GetHourFormat()
 	query = query.Select(fmt.Sprintf("%s AS hour, COUNT(*) AS count", hourExpr))
 
-	// Apply date range filter
-	query = query.Where("date BETWEEN ? AND ?", startDate, endDate)
+	// Apply date range filter conditionally
+	switch {
+	case startDate != "" && endDate != "":
+		query = query.Where("date BETWEEN ? AND ?", startDate, endDate)
+	case startDate != "":
+		query = query.Where("date >= ?", startDate)
+	case endDate != "":
+		query = query.Where("date <= ?", endDate)
+		// No date filter if both are empty
+	}
 
 	// Apply species filter if provided
 	if species != "" {
@@ -339,7 +356,7 @@ func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, o
 	    SELECT 
 	        scientific_name, 
 	        COUNT(*) as count_in_period,
-			ANY_VALUE(common_name) as common_name -- Use ANY_VALUE for MySQL compatibility
+			MAX(common_name) as common_name -- Reverted from ANY_VALUE for testing
 	    FROM notes
 	    WHERE date BETWEEN ? AND ?
 	    GROUP BY scientific_name
