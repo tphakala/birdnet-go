@@ -217,10 +217,10 @@
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body card-padding">
             <h2 class="card-title">Recent Detections</h2>
-            <div x-show="isLoading" class="flex justify-center items-center p-8">
+            <div x-show="isLoading" class="flex justify-center items-center p-8" aria-live="polite">
                 <span class="loading loading-spinner loading-lg text-primary"></span>
             </div>
-            <div class="overflow-x-auto" x-show="!isLoading">
+            <div class="overflow-x-auto" x-show="!isLoading" aria-live="polite">
                 <table class="table w-full">
                     <thead>
                         <tr>

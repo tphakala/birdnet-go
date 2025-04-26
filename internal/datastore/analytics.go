@@ -318,8 +318,14 @@ func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, o
 	}
 	// Offset defaults to 0 if negative
 
+	// Ensure start date is before or equal to end date using string comparison (safe for YYYY-MM-DD)
+	if startDate != "" && endDate != "" && startDate > endDate {
+		return nil, fmt.Errorf("start date cannot be after end date")
+	}
+
 	// Revised query with pagination
 	// NOTE: This query benefits significantly from a composite index on (scientific_name, date)
+	// Uses ANY_VALUE for MySQL compatibility
 	query := `
 	WITH SpeciesFirstSeen AS (
 	    SELECT 
@@ -333,7 +339,7 @@ func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, o
 	    SELECT 
 	        scientific_name, 
 	        COUNT(*) as count_in_period,
-			MAX(common_name) as common_name
+			ANY_VALUE(common_name) as common_name -- Use ANY_VALUE for MySQL compatibility
 	    FROM notes
 	    WHERE date BETWEEN ? AND ?
 	    GROUP BY scientific_name

@@ -10,6 +10,8 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+const placeholderImageURL = "/assets/images/bird-placeholder.svg"
+
 // SpeciesDailySummary represents a bird in the daily species summary API response
 type SpeciesDailySummary struct {
 	ScientificName string `json:"scientific_name"`
@@ -185,7 +187,10 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 	if c.BirdImageCache != nil {
 		batchResults := c.BirdImageCache.GetBatch(scientificNames)
 		for name := range batchResults {
-			thumbnailURLs[name] = batchResults[name].URL // Access by key to avoid copying the struct
+			imgURL := batchResults[name].URL
+			if imgURL != "" {
+				thumbnailURLs[name] = imgURL
+			}
 		}
 	}
 
@@ -200,8 +205,11 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 		hourlyCounts := make([]int, 24)
 		copy(hourlyCounts, data.HourlyCounts[:])
 
-		// Get bird thumbnail URL from batch results
-		thumbnailURL := thumbnailURLs[data.ScientificName] // Retrieve from map
+		// Get bird thumbnail URL from batch results, with fallback
+		thumbnailURL, ok := thumbnailURLs[data.ScientificName]
+		if !ok || thumbnailURL == "" {
+			thumbnailURL = placeholderImageURL
+		}
 
 		// Add to result
 		result = append(result, SpeciesDailySummary{
@@ -241,26 +249,9 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	startDate := ctx.QueryParam("start_date")
 	endDate := ctx.QueryParam("end_date")
 
-	// Validate date formats if provided
-	if startDate != "" {
-		if _, err := time.Parse("2006-01-02", startDate); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid start_date format. Use YYYY-MM-DD")
-		}
-	}
-
-	if endDate != "" {
-		if _, err := time.Parse("2006-01-02", endDate); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
-		}
-	}
-
-	// Ensure chronological order
-	if startDate != "" && endDate != "" {
-		start, _ := time.Parse("2006-01-02", startDate)
-		end, _ := time.Parse("2006-01-02", endDate)
-		if start.After(end) {
-			return echo.NewHTTPError(http.StatusBadRequest, "`start_date` cannot be after `end_date`")
-		}
+	// Validate date range
+	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
+		return err
 	}
 
 	// Retrieve species summary data from the datastore with date filtering
@@ -379,34 +370,22 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	endDate := ctx.QueryParam("end_date")
 	species := ctx.QueryParam("species")
 
-	// For the tests, validate that start_date is required
+	// Validate required start_date
 	if startDate == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "Missing required parameter: start_date")
 	}
 
-	// Validate date formats
-	if _, err := time.Parse("2006-01-02", startDate); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid start_date format. Use YYYY-MM-DD")
+	// Validate date formats and chronological order for provided dates
+	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
+		return err
 	}
 
-	// If endDate is provided, validate its format
-	if endDate != "" {
-		if _, err := time.Parse("2006-01-02", endDate); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
-		}
-	} else {
-		// If only start date is provided, use 30 days after that
+	// Default end date if not provided
+	if endDate == "" {
 		startTime, err := time.Parse("2006-01-02", startDate)
-		if err == nil {
+		if err == nil { // Already validated format, so this should not fail
 			endDate = startTime.AddDate(0, 0, 30).Format("2006-01-02")
 		}
-	}
-
-	// Ensure chronological order
-	start, _ := time.Parse("2006-01-02", startDate)
-	end, _ := time.Parse("2006-01-02", endDate)
-	if start.After(end) {
-		return echo.NewHTTPError(http.StatusBadRequest, "`start_date` cannot be after `end_date`")
 	}
 
 	// Get daily analytics data from the datastore
@@ -457,37 +436,20 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 	endDate := ctx.QueryParam("end_date")
 	species := ctx.QueryParam("species") // Optional species filter
 
-	// Set default date range if not provided
+	// Set default date range if not provided (before validation)
 	if startDate == "" {
-		// Default to 30 days ago
 		startDate = time.Now().AddDate(0, 0, -30).Format("2006-01-02")
 	}
-
 	if endDate == "" {
-		// Default to today
 		endDate = time.Now().Format("2006-01-02")
 	}
 
-	// Validate date formats
-	if _, err := time.Parse("2006-01-02", startDate); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid start_date format. Use YYYY-MM-DD")
-	}
-
-	if _, err := time.Parse("2006-01-02", endDate); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
-	}
-
-	// Ensure chronological order
-	if startDate != "" && endDate != "" {
-		start, _ := time.Parse("2006-01-02", startDate)
-		end, _ := time.Parse("2006-01-02", endDate)
-		if start.After(end) {
-			return echo.NewHTTPError(http.StatusBadRequest, "`start_date` cannot be after `end_date`")
-		}
+	// Validate date formats and chronological order
+	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
+		return err
 	}
 
 	// Get hourly distribution data from the datastore
-	// We'll need to add this method to the datastore interface
 	hourlyData, err := c.DS.GetHourlyDistribution(startDate, endDate, species)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get hourly distribution data", http.StatusInternalServerError)
@@ -584,20 +546,35 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 
 	// Convert to response format and fetch thumbnails
 	response := make([]NewSpeciesResponse, 0, len(newSpeciesData))
+	scientificNames := make([]string, 0, len(newSpeciesData))
 	for _, data := range newSpeciesData {
-		var thumbnailURL string
-		if c.BirdImageCache != nil {
-			birdImage, err := c.BirdImageCache.Get(data.ScientificName)
-			if err == nil {
-				thumbnailURL = birdImage.URL
+		scientificNames = append(scientificNames, data.ScientificName)
+	}
+
+	// Batch fetch thumbnail URLs if cache is available
+	thumbnailURLs := make(map[string]string)
+	if c.BirdImageCache != nil {
+		batchResults := c.BirdImageCache.GetBatch(scientificNames)
+		for name := range batchResults {
+			imgURL := batchResults[name].URL
+			if imgURL != "" {
+				thumbnailURLs[name] = imgURL
 			}
+		}
+	}
+
+	for _, data := range newSpeciesData {
+		// Get thumbnail URL from batch results, with fallback
+		thumbnailURL, ok := thumbnailURLs[data.ScientificName]
+		if !ok || thumbnailURL == "" {
+			thumbnailURL = placeholderImageURL
 		}
 
 		response = append(response, NewSpeciesResponse{
 			ScientificName: data.ScientificName,
 			CommonName:     data.CommonName,
 			FirstSeenDate:  data.FirstSeenDate,
-			ThumbnailURL:   thumbnailURL,
+			ThumbnailURL:   thumbnailURL, // Use fetched or placeholder URL
 			CountInPeriod:  data.CountInPeriod,
 		})
 	}
@@ -612,4 +589,36 @@ func sumCounts(counts []int) int {
 		total += count
 	}
 	return total
+}
+
+// parseAndValidateDateRange checks if provided date strings are valid and in chronological order.
+// It returns an echo.HTTPError if validation fails, otherwise nil.
+func parseAndValidateDateRange(startDateStr, endDateStr string) error {
+	var start, end time.Time
+	var err error
+
+	// Validate start date format if provided
+	if startDateStr != "" {
+		start, err = time.Parse("2006-01-02", startDateStr)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid start_date format. Use YYYY-MM-DD")
+		}
+	}
+
+	// Validate end date format if provided
+	if endDateStr != "" {
+		end, err = time.Parse("2006-01-02", endDateStr)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
+		}
+	}
+
+	// Ensure chronological order only if both dates are provided and valid
+	if startDateStr != "" && endDateStr != "" && !start.IsZero() && !end.IsZero() {
+		if start.After(end) {
+			return echo.NewHTTPError(http.StatusBadRequest, "`start_date` cannot be after `end_date`")
+		}
+	}
+
+	return nil // Dates are valid
 }
