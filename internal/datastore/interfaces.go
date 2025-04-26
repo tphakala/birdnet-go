@@ -69,6 +69,7 @@ type Interface interface {
 	GetHourlyAnalyticsData(date string, species string) ([]HourlyAnalyticsData, error)
 	GetDailyAnalyticsData(startDate, endDate string, species string) ([]DailyAnalyticsData, error)
 	GetDetectionTrends(period string, limit int) ([]DailyAnalyticsData, error)
+	GetHourlyDistribution(startDate, endDate string, species string) ([]HourlyDistributionData, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 }
