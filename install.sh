@@ -474,12 +474,41 @@ check_preserved_data() {
     return 1  # No preserved data
 }
 
+# Function to convert only relative paths to absolute paths
+convert_relative_to_absolute_path() {
+    local config_file=$1
+    local path_key=$2
+    local abs_path=$3
+    
+    # Check if the path is already absolute
+    local current_path
+    current_path=$(grep -E "^[[:space:]]*${path_key}:" "$config_file" | sed -E "s/^[[:space:]]*${path_key}:[[:space:]]*//;s/[[:space:]]*#.*//")
+    
+    # Remove quotes if present
+    current_path=${current_path#\"}
+    current_path=${current_path%\"}
+    
+    # Only convert if path is relative (doesn't start with /)
+    if [[ ! "$current_path" =~ ^/ ]]; then
+        print_message "Converting relative path '${current_path}' to absolute path '${abs_path}'" "$YELLOW"
+        sed -i "s|${path_key}: [\"]*${current_path}[\"]*|${path_key}: ${abs_path}|" "$config_file"
+        return 0
+    else
+        print_message "Path '${current_path}' is already absolute, skipping conversion" "$GREEN"
+        return 1
+    fi
+}
+
 # Function to download base config file
 download_base_config() {
     # If config file already exists and we're not doing a fresh install, just use the existing config
     if [ -f "$CONFIG_FILE" ] && [ "$FRESH_INSTALL" != "true" ]; then
         print_message "✅ Using existing configuration file: " "$GREEN" "nonewline"
         print_message "$CONFIG_FILE" "$NC"
+        
+        # Convert relative paths to absolute paths in existing config
+        convert_relative_to_absolute_path "$CONFIG_FILE" "path" "/data/clips/"
+        
         return 0
     fi
     
@@ -520,13 +549,22 @@ download_base_config() {
             
             mv "$temp_config" "$CONFIG_FILE"
             print_message "✅ Configuration updated successfully" "$GREEN"
+            
+            # Convert relative paths to absolute paths
+            convert_relative_to_absolute_path "$CONFIG_FILE" "path" "/data/clips/"
         else
             print_message "✅ Keeping existing configuration file" "$YELLOW"
             rm -f "$temp_config"
+            
+            # Convert relative paths to absolute paths
+            convert_relative_to_absolute_path "$CONFIG_FILE" "path" "/data/clips/"
         fi
     else
         mv "$temp_config" "$CONFIG_FILE"
         print_message "✅ Base configuration downloaded successfully" "$GREEN"
+        
+        # Convert relative paths to absolute paths
+        convert_relative_to_absolute_path "$CONFIG_FILE" "path" "/data/clips/"
     fi
 }
 
@@ -1960,6 +1998,8 @@ print_message "📁 Data directory: " "$GREEN" "nonewline"
 print_message "$DATA_DIR" "$NC"
 mkdir -p "$CONFIG_DIR"
 mkdir -p "$DATA_DIR"
+mkdir -p "$DATA_DIR/clips"
+print_message "✅ Created data directory and clips subdirectory" "$GREEN"
 
 # Download base config file
 download_base_config
