@@ -250,6 +250,12 @@ func (m *MockDataStore) SearchDetections(filters *datastore.SearchFilters) ([]da
 	return args.Get(0).([]datastore.DetectionRecord), args.Int(1), args.Error(2)
 }
 
+// GetNewSpeciesDetections implements the datastore.Interface GetNewSpeciesDetections method
+func (m *MockDataStore) GetNewSpeciesDetections(startDate, endDate string) ([]datastore.NewSpeciesData, error) {
+	args := m.Called(startDate, endDate)
+	return args.Get(0).([]datastore.NewSpeciesData), args.Error(1)
+}
+
 // TestImageProvider implements the imageprovider.Provider interface for testing
 // with a function field for easier test setup.
 // Use this when you need a simple mock with customizable behavior via FetchFunc.
@@ -407,6 +413,12 @@ func (m *MockDataStoreV2) GetDetectionTrends(period string, limit int) ([]datast
 }
 func (m *MockDataStoreV2) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	return nil, 0, nil
+}
+
+// GetNewSpeciesDetections implements the datastore.Interface GetNewSpeciesDetections method
+func (m *MockDataStoreV2) GetNewSpeciesDetections(startDate, endDate string) ([]datastore.NewSpeciesData, error) {
+	// For this specialized mock, return empty data by default
+	return []datastore.NewSpeciesData{}, nil
 }
 
 // MockImageProvider is a mock implementation of imageprovider.ImageProvider interface
