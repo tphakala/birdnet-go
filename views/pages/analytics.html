@@ -88,47 +88,39 @@
     <!-- Filter Controls -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body card-padding">
-            {{template "sectionHeader" dict "title" "Filter Data" "id" "analytics-filters-heading"}}
+            <h2 class="card-title" id="analytics-filters-heading">Filter Data</h2>
             
             <form id="analyticsFiltersForm" class="space-y-4" @submit.prevent="fetchData()" x-ref="filtersForm">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <!-- Time Period Filter -->
-                    {{template "selectField" dict 
-                        "id" "timePeriod" 
-                        "name" "timePeriod" 
-                        "label" "Time Period" 
-                        "model" "filters.timePeriod"
-                        "options" (dict 
-                            "all" "All Time" 
-                            "today" "Today" 
-                            "week" "Last 7 Days" 
-                            "month" "Last 30 Days" 
-                            "year" "Last 12 Months" 
-                            "custom" "Custom Range"
-                        )
-                        "tooltip" "Select the time range for which to display analytics data"
-                    }}
+                    <div class="form-control">
+                        <label class="label" for="timePeriod">
+                            <span class="label-text">Time Period</span>
+                        </label>
+                        <select id="timePeriod" x-model="filters.timePeriod" class="select select-bordered w-full">
+                            <option value="all">All Time</option>
+                            <option value="today">Today</option>
+                            <option value="week">Last 7 Days</option>
+                            <option value="month">Last 30 Days</option>
+                            <option value="year">Last 12 Months</option>
+                            <option value="custom">Custom Range</option>
+                        </select>
+                    </div>
                     
                     <!-- Start Date (only visible when custom range selected) -->
-                    <div x-show="filters.timePeriod === 'custom'">
-                        {{template "dateInput" dict 
-                            "id" "startDate" 
-                            "name" "startDate" 
-                            "label" "From" 
-                            "model" "filters.startDate"
-                            "tooltip" "Start date of the custom range"
-                        }}
+                    <div class="form-control" x-show="filters.timePeriod === 'custom'">
+                        <label class="label" for="startDate">
+                            <span class="label-text">From</span>
+                        </label>
+                        <input type="date" id="startDate" x-model="filters.startDate" class="input input-bordered w-full" />
                     </div>
                     
                     <!-- End Date (only visible when custom range selected) -->
-                    <div x-show="filters.timePeriod === 'custom'">
-                        {{template "dateInput" dict 
-                            "id" "endDate" 
-                            "name" "endDate" 
-                            "label" "To" 
-                            "model" "filters.endDate"
-                            "tooltip" "End date of the custom range"
-                        }}
+                    <div class="form-control" x-show="filters.timePeriod === 'custom'">
+                        <label class="label" for="endDate">
+                            <span class="label-text">To</span>
+                        </label>
+                        <input type="date" id="endDate" x-model="filters.endDate" class="input input-bordered w-full" />
                     </div>
                 </div>
                 
@@ -152,11 +144,11 @@
         <!-- Species Distribution Chart -->
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body card-padding">
-                {{template "sectionHeader" dict "title" "Top 10 Species"}}
+                <h2 class="card-title">Top 10 Species</h2>
                 <div x-show="isLoading" class="flex justify-center items-center p-8">
                     <span class="loading loading-spinner loading-lg text-primary"></span>
                 </div>
-                <div x-show="!isLoading" class="h-80">
+                <div x-show="!isLoading" class="h-80 chart-container">
                     <canvas id="speciesChart" class="w-full h-full" role="img" aria-label="Top 10 Species Distribution Chart"></canvas>
                 </div>
             </div>
@@ -165,11 +157,11 @@
         <!-- Time of Day Chart -->
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body card-padding">
-                {{template "sectionHeader" dict "title" "Detections by Time of Day"}}
+                <h2 class="card-title">Detections by Time of Day</h2>
                 <div x-show="isLoading" class="flex justify-center items-center p-8">
                     <span class="loading loading-spinner loading-lg text-primary"></span>
                 </div>
-                <div x-show="!isLoading" class="h-80">
+                <div x-show="!isLoading" class="h-80 chart-container">
                     <canvas id="timeOfDayChart" class="w-full h-full" role="img" aria-label="Detections by Time of Day Chart"></canvas>
                 </div>
             </div>
@@ -179,11 +171,11 @@
     <!-- Trend Charts -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body card-padding">
-            {{template "sectionHeader" dict "title" "Detection Trends"}}
+            <h2 class="card-title">Detection Trends</h2>
             <div x-show="isLoading" class="flex justify-center items-center p-8">
                 <span class="loading loading-spinner loading-lg text-primary"></span>
             </div>
-            <div x-show="!isLoading" class="h-80">
+            <div x-show="!isLoading" class="h-80 chart-container">
                 <canvas id="trendChart" class="w-full h-full" role="img" aria-label="Detection Trends Over Time Chart"></canvas>
             </div>
         </div>
@@ -192,7 +184,7 @@
     <!-- Data Table for Top Detections -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body card-padding">
-            {{template "sectionHeader" dict "title" "Recent Detections"}}
+            <h2 class="card-title">Recent Detections</h2>
             <div x-show="isLoading" class="flex justify-center items-center p-8">
                 <span class="loading loading-spinner loading-lg text-primary"></span>
             </div>
@@ -241,13 +233,7 @@
                                         <span class="text-sm" x-text="formatPercentage(detection.confidence)"></span>
                                     </div>
                                 </td>
-                                <td>
-                                    <div class="flex items-center gap-2">
-                                        <!-- Using the timeOfDayIcon component -->
-                                        <div x-html="getTimeOfDayIcon(detection.timeOfDay)"></div>
-                                        <span x-text="detection.timeOfDay || 'Unknown'"></span>
-                                    </div>
-                                </td>
+                                <td x-text="detection.timeOfDay || 'Unknown'"></td>
                             </tr>
                         </template>
                         <!-- Empty state -->
@@ -264,9 +250,7 @@
 <!-- Include Chart.js -->
 <script src="/assets/chart.min.js"></script>
 
-<!-- Move Alpine.js initialization before the x-data declaration -->
 <script>
-    // Initialize the Alpine component before the page loads
     document.addEventListener('alpine:init', () => {
         Alpine.data('analyticsUI', () => ({
             isLoading: true,
@@ -291,7 +275,6 @@
             },
             
             init() {
-                console.log("analyticsUI init");
                 // Set default dates for custom range
                 const today = new Date();
                 const lastMonth = new Date();
@@ -302,6 +285,72 @@
                 
                 // Fetch initial data
                 this.fetchData();
+            },
+            
+            // Get theme color from CSS variables - used for chart theming
+            getThemeColor(colorName, opacity = 1) {
+                // Get the CSS variable value
+                let color = getComputedStyle(document.documentElement).getPropertyValue(`--${colorName}`).trim();
+                
+                // If color is in hex format, convert to rgba
+                if (color.startsWith('#')) {
+                    const r = parseInt(color.slice(1, 3), 16);
+                    const g = parseInt(color.slice(3, 5), 16);
+                    const b = parseInt(color.slice(5, 7), 16);
+                    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+                }
+                
+                // If color is already rgba or rgb, modify opacity
+                if (color.startsWith('rgb')) {
+                    // Replace existing opacity if rgba
+                    if (color.startsWith('rgba')) {
+                        return color.replace(/rgba\((.+?),\s*[\d.]+\)/, `rgba($1, ${opacity})`);
+                    }
+                    // Convert rgb to rgba
+                    return color.replace(/rgb\((.+?)\)/, `rgba($1, ${opacity})`);
+                }
+                
+                // Return as-is if we can't parse it
+                return color;
+            },
+            
+            // Get chart theme - shared configuration for all charts
+            getChartTheme() {
+                const textColor = this.getThemeColor('base-content', 0.8);
+                const gridColor = this.getThemeColor('base-content', 0.1);
+                
+                return {
+                    color: {
+                        text: textColor,
+                        grid: gridColor
+                    },
+                    font: {
+                        family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+                    },
+                    scales: {
+                        grid: {
+                            color: gridColor
+                        },
+                        ticks: {
+                            color: textColor
+                        },
+                        title: {
+                            color: textColor
+                        }
+                    },
+                    legend: {
+                        labels: {
+                            color: textColor
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: this.getThemeColor('base-100', 0.8),
+                        titleColor: this.getThemeColor('base-content'),
+                        bodyColor: this.getThemeColor('base-content'),
+                        borderColor: this.getThemeColor('base-content', 0.2),
+                        borderWidth: 1
+                    }
+                };
             },
             
             // Format date for date input (YYYY-MM-DD)
@@ -424,7 +473,11 @@
             async fetchSummaryData(startDate, endDate) {
                 try {
                     // Get species summary from API
-                    const response = await fetch('/api/v2/analytics/species/summary?limit=100');
+                    let url = '/api/v2/analytics/species/summary?limit=100';
+                    if (startDate) url += `&start_date=${startDate}`;
+                    if (endDate) url += `&end_date=${endDate}`;
+                    
+                    const response = await fetch(url);
                     
                     if (!response.ok) {
                         throw new Error(`Server responded with ${response.status}`);
@@ -527,6 +580,9 @@
                 // Generate colors
                 const backgroundColors = this.generateColorPalette(data.length, 0.7);
                 
+                // Get theme styling
+                const theme = this.getChartTheme();
+                
                 // Create chart
                 this.charts.species = new Chart(ctx, {
                     type: 'bar',
@@ -545,9 +601,17 @@
                         indexAxis: 'y',
                         plugins: {
                             legend: {
-                                display: false
+                                display: false,
+                                labels: {
+                                    color: theme.color.text
+                                }
                             },
                             tooltip: {
+                                backgroundColor: theme.tooltip.backgroundColor,
+                                titleColor: theme.tooltip.titleColor,
+                                bodyColor: theme.tooltip.bodyColor,
+                                borderColor: theme.tooltip.borderColor,
+                                borderWidth: theme.tooltip.borderWidth,
                                 callbacks: {
                                     label: (context) => {
                                         return `Detections: ${this.formatNumber(context.raw)}`;
@@ -560,7 +624,22 @@
                                 beginAtZero: true,
                                 title: {
                                     display: true,
-                                    text: 'Number of Detections'
+                                    text: 'Number of Detections',
+                                    color: theme.color.text
+                                },
+                                ticks: {
+                                    color: theme.color.text
+                                },
+                                grid: {
+                                    color: theme.color.grid
+                                }
+                            },
+                            y: {
+                                ticks: {
+                                    color: theme.color.text
+                                },
+                                grid: {
+                                    color: theme.color.grid
                                 }
                             }
                         }
@@ -691,6 +770,9 @@
                     'rgba(42, 36, 122, 0.7)'    // Night (dark blue)
                 ];
                 
+                // Get theme styling
+                const theme = this.getChartTheme();
+                
                 // Create chart
                 this.charts.timeOfDay = new Chart(ctx, {
                     type: 'doughnut',
@@ -710,10 +792,17 @@
                                 position: 'right',
                                 labels: {
                                     boxWidth: 15,
-                                    padding: 15
+                                    padding: 15,
+                                    color: theme.color.text,
+                                    font: theme.font
                                 }
                             },
                             tooltip: {
+                                backgroundColor: theme.tooltip.backgroundColor,
+                                titleColor: theme.tooltip.titleColor,
+                                bodyColor: theme.tooltip.bodyColor,
+                                borderColor: theme.tooltip.borderColor,
+                                borderWidth: theme.tooltip.borderWidth,
                                 callbacks: {
                                     label: (context) => {
                                         return `Detections: ${this.formatNumber(context.raw)}`;
@@ -757,6 +846,10 @@
                 const labels = sortedDates;
                 const counts = sortedDates.map(date => dailyData[date]);
                 
+                // Get theme styling
+                const theme = this.getChartTheme();
+                const primaryColor = this.getThemeColor('primary', 1);
+                
                 // Create chart
                 this.charts.trend = new Chart(ctx, {
                     type: 'line',
@@ -766,9 +859,9 @@
                             label: 'Daily Detections',
                             data: counts,
                             fill: false,
-                            borderColor: 'rgba(59, 130, 246, 1)', // Primary blue
+                            borderColor: primaryColor,
                             tension: 0.1,
-                            pointBackgroundColor: 'rgba(59, 130, 246, 1)'
+                            pointBackgroundColor: primaryColor
                         }]
                     },
                     options: {
@@ -777,9 +870,18 @@
                         plugins: {
                             legend: {
                                 display: true,
-                                position: 'top'
+                                position: 'top',
+                                labels: {
+                                    color: theme.color.text,
+                                    font: theme.font
+                                }
                             },
                             tooltip: {
+                                backgroundColor: theme.tooltip.backgroundColor,
+                                titleColor: theme.tooltip.titleColor,
+                                bodyColor: theme.tooltip.bodyColor,
+                                borderColor: theme.tooltip.borderColor,
+                                borderWidth: theme.tooltip.borderWidth,
                                 callbacks: {
                                     label: (context) => {
                                         return `Detections: ${this.formatNumber(context.raw)}`;
@@ -792,13 +894,27 @@
                                 beginAtZero: true,
                                 title: {
                                     display: true,
-                                    text: 'Number of Detections'
+                                    text: 'Number of Detections',
+                                    color: theme.color.text
+                                },
+                                ticks: {
+                                    color: theme.color.text
+                                },
+                                grid: {
+                                    color: theme.color.grid
                                 }
                             },
                             x: {
                                 title: {
                                     display: true,
-                                    text: 'Date'
+                                    text: 'Date',
+                                    color: theme.color.text
+                                },
+                                ticks: {
+                                    color: theme.color.text
+                                },
+                                grid: {
+                                    color: theme.color.grid
                                 }
                             }
                         }
@@ -847,21 +963,6 @@
                     
                     return palette.slice(0, count);
                 }
-            },
-            
-            // Helper to get time of day icon HTML
-            getTimeOfDayIcon(timeOfDay) {
-                if (!timeOfDay) return '';
-                
-                // Use a simple mapping for now, can be enhanced later
-                const iconMapping = {
-                    'Night': '{{template "timeOfDayIcon" dict "time" "night"}}',
-                    'Sunrise': '{{template "timeOfDayIcon" dict "time" "sunrise"}}',
-                    'Day': '{{template "timeOfDayIcon" dict "time" "day"}}',
-                    'Sunset': '{{template "timeOfDayIcon" dict "time" "sunset"}}'
-                };
-                
-                return iconMapping[timeOfDay] || '';
             }
         }));
     });

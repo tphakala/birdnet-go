@@ -990,3 +990,47 @@ thead.sticky-header {
 [data-theme="dark"] .border-gray-200 {
   border-color: rgba(255, 255, 255, 0.1);
 }
+
+/* ========================================================================
+ 13. Chart.js Theme Compatibility
+ ======================================================================== */
+
+/* Chart container styling */
+.chart-container {
+    background-color: var(--base-100);
+}
+
+/* Custom tooltip styling */
+#chartjs-tooltip {
+    background-color: var(--base-100, #ffffff);
+    color: var(--base-content, #333333);
+    border: 1px solid var(--base-300, #cccccc);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 8px;
+    border-radius: var(--rounded-md, 6px);
+    font-size: 14px;
+    font-family: var(--font-sans, sans-serif);
+}
+
+/* Canvas legibility improvement */
+canvas {
+    image-rendering: crisp-edges;
+}
+
+/* Better contrast for light text on light backgrounds */
+@media (prefers-color-scheme: light) {
+    #speciesChart text,
+    #timeOfDayChart text,
+    #trendChart text {
+        fill: var(--base-content, #333333) !important;
+    }
+}
+
+/* Better contrast for dark text on dark backgrounds */
+@media (prefers-color-scheme: dark) {
+    #speciesChart text,
+    #timeOfDayChart text,
+    #trendChart text {
+        fill: var(--base-content, #ffffff) !important;
+    }
+}
