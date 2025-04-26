@@ -912,7 +912,7 @@
             },
             
             // Create detection trend chart
-            createTrendChart(data) {
+            createTrendChart(responseData) {
                 const ctx = document.getElementById('trendChart').getContext('2d');
                 
                 // Destroy existing chart if it exists
@@ -920,7 +920,10 @@
                     this.charts.trend.destroy();
                 }
                 
-                // Group data by day
+                // Extract the actual data array from the response object
+                const data = responseData.data || [];
+                
+                // Group data by day (already grouped by API, but ensure format)
                 const dailyData = {};
                 
                 // Check if data is an array before using forEach
@@ -933,7 +936,7 @@
                         dailyData[date] += entry.count;
                     });
                 } else {
-                    console.warn('Trend data is not an array:', data);
+                    console.warn('Trend data.data is not an array:', data);
                 }
                 
                 // Sort dates
