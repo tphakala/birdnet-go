@@ -452,14 +452,14 @@
             // Reset filters to default
             resetFilters() {
                 this.filters.timePeriod = 'week';
-                
+
                 const today = new Date();
-                const lastMonth = new Date();
-                lastMonth.setDate(today.getDate() - 30);
-                
+                const lastWeek = new Date();
+                lastWeek.setDate(today.getDate() - 6); // 7-day window incl. today
+
                 this.filters.endDate = this.formatDateForInput(today);
-                this.filters.startDate = this.formatDateForInput(lastMonth);
-                
+                this.filters.startDate = this.formatDateForInput(lastWeek);
+
                 this.fetchData();
             },
             

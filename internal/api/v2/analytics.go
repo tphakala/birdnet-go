@@ -2,6 +2,8 @@
 package api
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -53,6 +55,13 @@ type NewSpeciesResponse struct {
 	ThumbnailURL   string `json:"thumbnail_url,omitempty"`
 	CountInPeriod  int    `json:"count_in_period"` // How many times seen in the query period
 }
+
+// Define standard errors for date validation
+var (
+	ErrInvalidStartDate = errors.New("invalid start_date format. Use YYYY-MM-DD")
+	ErrInvalidEndDate   = errors.New("invalid end_date format. Use YYYY-MM-DD")
+	ErrDateOrder        = errors.New("start_date cannot be after end_date")
+)
 
 // initAnalyticsRoutes registers all analytics-related API endpoints
 func (c *Controller) initAnalyticsRoutes() {
@@ -254,7 +263,12 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 
 	// Validate date range
 	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
-		return err
+		// Convert standard error to HTTP error
+		if errors.Is(err, ErrInvalidStartDate) || errors.Is(err, ErrInvalidEndDate) || errors.Is(err, ErrDateOrder) {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+		// Handle unexpected errors
+		return echo.NewHTTPError(http.StatusInternalServerError, "Error validating date range")
 	}
 
 	// Retrieve species summary data from the datastore with date filtering
@@ -380,7 +394,12 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 
 	// Validate date formats and chronological order for provided dates
 	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
-		return err
+		// Convert standard error to HTTP error
+		if errors.Is(err, ErrInvalidStartDate) || errors.Is(err, ErrInvalidEndDate) || errors.Is(err, ErrDateOrder) {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+		// Handle unexpected errors
+		return echo.NewHTTPError(http.StatusInternalServerError, "Error validating date range")
 	}
 
 	// Default end date if not provided
@@ -449,7 +468,12 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 
 	// Validate date formats and chronological order
 	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
-		return err
+		// Convert standard error to HTTP error
+		if errors.Is(err, ErrInvalidStartDate) || errors.Is(err, ErrInvalidEndDate) || errors.Is(err, ErrDateOrder) {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+		// Handle unexpected errors
+		return echo.NewHTTPError(http.StatusInternalServerError, "Error validating date range")
 	}
 
 	// Get hourly distribution data from the datastore
@@ -598,7 +622,7 @@ func sumCounts(counts []int) int {
 }
 
 // parseAndValidateDateRange checks if provided date strings are valid and in chronological order.
-// It returns an echo.HTTPError if validation fails, otherwise nil.
+// It returns standard Go errors for validation failures.
 func parseAndValidateDateRange(startDateStr, endDateStr string) error {
 	var start, end time.Time
 	var err error
@@ -607,7 +631,8 @@ func parseAndValidateDateRange(startDateStr, endDateStr string) error {
 	if startDateStr != "" {
 		start, err = time.Parse("2006-01-02", startDateStr)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid start_date format. Use YYYY-MM-DD")
+			// Return standard error
+			return fmt.Errorf("%w: %w", ErrInvalidStartDate, err)
 		}
 	}
 
@@ -615,14 +640,16 @@ func parseAndValidateDateRange(startDateStr, endDateStr string) error {
 	if endDateStr != "" {
 		end, err = time.Parse("2006-01-02", endDateStr)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
+			// Return standard error
+			return fmt.Errorf("%w: %w", ErrInvalidEndDate, err)
 		}
 	}
 
 	// Ensure chronological order only if both dates are provided and valid
 	if startDateStr != "" && endDateStr != "" && !start.IsZero() && !end.IsZero() {
 		if start.After(end) {
-			return echo.NewHTTPError(http.StatusBadRequest, "`start_date` cannot be after `end_date`")
+			// Return standard error
+			return ErrDateOrder
 		}
 	}
 

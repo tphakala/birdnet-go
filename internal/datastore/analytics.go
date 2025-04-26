@@ -297,12 +297,12 @@ func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) (
 	// Apply species filter if provided
 	if species != "" {
 		// Try to match on either common_name or scientific_name
-		query = query.Where("common_name LIKE ? OR scientific_name LIKE ?",
-			"%"+species+"%", "%"+species+"%")
+		query = query.Where("common_name = ? OR scientific_name = ?",
+			species, species)
 	}
 
 	// Group by hour
-	query = query.Group("hour")
+	query = query.Group(hourExpr)
 
 	// Order by hour
 	query = query.Order("hour ASC")
