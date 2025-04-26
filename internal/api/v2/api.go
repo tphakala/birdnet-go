@@ -56,14 +56,15 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	if mediaPath == "" {
 		return nil, fmt.Errorf("settings.realtime.audio.export.path must not be empty")
 	}
-	// Resolve relative path to absolute based on executable directory
+
+	// Resolve relative path to absolute based on working directory
 	if !filepath.IsAbs(mediaPath) {
-		exePath, err := os.Executable()
+		// Get the current working directory
+		workDir, err := os.Getwd()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get executable path to resolve relative media path: %w", err)
+			return nil, fmt.Errorf("failed to get working directory to resolve relative media path: %w", err)
 		}
-		exeDir := filepath.Dir(exePath)
-		mediaPath = filepath.Join(exeDir, mediaPath)
+		mediaPath = filepath.Join(workDir, mediaPath)
 		logger.Printf("Resolved relative media export path \"%s\" to absolute path \"%s\"", settings.Realtime.Audio.Export.Path, mediaPath) // Log the resolution
 	}
 
