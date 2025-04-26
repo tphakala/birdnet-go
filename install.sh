@@ -519,7 +519,75 @@ convert_relative_to_absolute_path() {
 update_paths_in_config() {
     if [ -f "$CONFIG_FILE" ]; then
         print_message "🔧 Updating paths in configuration file..." "$YELLOW"
-        convert_relative_to_absolute_path "$CONFIG_FILE" "/data/clips/"
+        if convert_relative_to_absolute_path "$CONFIG_FILE" "/data/clips/"; then
+            print_message "✅ Audio export path updated to absolute path" "$GREEN"
+        else
+            print_message "ℹ️ Audio export path already absolute; no changes made" "$YELLOW"
+        fi
+    fi
+}
+
+# Helper function to clean up HLS tmpfs mount
+cleanup_hls_mount() {
+    local hls_mount="${CONFIG_DIR}/hls"
+    local mount_unit=$(systemctl list-units --type=mount | grep -i "$hls_mount" | awk '{print $1}')
+    
+    print_message "🧹 Cleaning up tmpfs mounts..." "$YELLOW"
+    
+    # First check if the mount exists
+    if mount | grep -q "$hls_mount" || [ -n "$mount_unit" ]; then
+        if [ -n "$mount_unit" ]; then
+            print_message "Found systemd mount unit: $mount_unit" "$YELLOW"
+            
+            # Try to stop the mount unit using systemctl
+            print_message "Stopping systemd mount unit..." "$YELLOW"
+            sudo systemctl stop "$mount_unit" 2>/dev/null
+            
+            # Check if it's still active
+            if systemctl is-active --quiet "$mount_unit"; then
+                print_message "⚠️ Failed to stop mount unit, trying manual unmount..." "$YELLOW"
+            else
+                print_message "✅ Successfully stopped systemd mount unit" "$GREEN"
+                return 0
+            fi
+        else
+            print_message "Found tmpfs mount at $hls_mount, attempting to unmount..." "$YELLOW"
+        fi
+        
+        # Try regular unmount approaches as fallback
+        # Try regular unmount first
+        umount "$hls_mount" 2>/dev/null
+        
+        # If still mounted, try with force flag
+        if mount | grep -q "$hls_mount"; then
+            umount -f "$hls_mount" 2>/dev/null
+        fi
+        
+        # If still mounted, try with sudo
+        if mount | grep -q "$hls_mount"; then
+            sudo umount "$hls_mount" 2>/dev/null
+        fi
+        
+        # If still mounted, try sudo with force flag
+        if mount | grep -q "$hls_mount"; then
+            sudo umount -f "$hls_mount" 2>/dev/null
+        fi
+        
+        # If still mounted, try with lazy unmount as last resort
+        if mount | grep -q "$hls_mount"; then
+            print_message "⚠️ Regular unmount failed, trying lazy unmount..." "$YELLOW"
+            sudo umount -l "$hls_mount" 2>/dev/null
+        fi
+        
+        # Final check
+        if mount | grep -q "$hls_mount"; then
+            print_message "❌ Failed to unmount $hls_mount" "$RED"
+            print_message "You may need to reboot the system to fully remove it" "$YELLOW"
+        else
+            print_message "✅ Successfully unmounted $hls_mount" "$GREEN"
+        fi
+    else
+        print_message "No tmpfs mount found at $hls_mount" "$GREEN"
     fi
 }
 
@@ -582,7 +650,11 @@ download_base_config() {
     
     # Always ensure clips path is absolute, regardless of whether config was updated or existing
     print_message "\n🔧 Checking audio export path configuration..." "$YELLOW"
-    convert_relative_to_absolute_path "$CONFIG_FILE" "/data/clips/"
+    if convert_relative_to_absolute_path "$CONFIG_FILE" "/data/clips/"; then
+        print_message "✅ Audio export path updated to absolute path" "$GREEN"
+    else
+        print_message "ℹ️ Audio export path already absolute; no changes made" "$YELLOW"
+    fi
 }
 
 # Function to test RTSP URL
@@ -1182,6 +1254,7 @@ generate_systemd_service_content() {
 Description=BirdNET-Go
 After=docker.service
 Requires=docker.service
+RequiresMountsFor=${CONFIG_DIR}/hls
 
 [Service]
 Restart=always
@@ -1202,9 +1275,8 @@ ExecStart=/usr/bin/docker run --rm \\
     -v ${CONFIG_DIR}:/config \\
     -v ${DATA_DIR}:/data \\
     ${BIRDNET_GO_IMAGE}
-# Simple unmount command with fallback
+# Cleanup tasks on stop
 ExecStopPost=/bin/sh -c 'umount -f ${CONFIG_DIR}/hls || true'
-# Ensure container is removed on stop to prevent conflicts on restart
 ExecStopPost=-/usr/bin/docker rm -f birdnet-go
 
 [Install]
@@ -1299,8 +1371,7 @@ handle_container_update() {
     stop_birdnet_service
     
     # Clean up existing tmpfs mounts
-    print_message "🧹 Cleaning up tmpfs mounts..." "$YELLOW"
-    sudo umount -f "${CONFIG_DIR}/hls" 2>/dev/null || true
+    cleanup_hls_mount
     
     # Update configuration paths
     update_paths_in_config
@@ -1372,6 +1443,11 @@ disable_birdnet_service_and_remove_containers() {
 
 clean_installation_preserve_data() {
     print_message "🧹 Cleaning BirdNET-Go installation (preserving user data)..." "$YELLOW"
+    # First ensure any service is stopped
+    stop_birdnet_service false
+    # Clean up tmpfs mounts before removing service
+    cleanup_hls_mount
+    # Remove service and containers
     disable_birdnet_service_and_remove_containers
     print_message "✅ BirdNET-Go uninstalled, user data preserved in $CONFIG_DIR and $DATA_DIR" "$GREEN"
     return 0
@@ -1381,7 +1457,11 @@ clean_installation_preserve_data() {
 clean_installation() {
     print_message "🧹 Cleaning existing installation..." "$YELLOW"
     
-    # First stop services and remove containers
+    # First ensure any service is stopped
+    stop_birdnet_service false
+    # Clean up tmpfs mounts before attempting to remove directories
+    cleanup_hls_mount
+    # Remove service and containers
     disable_birdnet_service_and_remove_containers
     
     # Unified directory removal with simplified error handling
@@ -1403,9 +1483,9 @@ clean_installation() {
                 for dir in "$CONFIG_DIR" "$DATA_DIR"; do
                     if [ -d "$dir" ]; then
                         error_list="${error_list}Files in $dir:\n"
-                        while read -r file; do
+                        find "$dir" -type f 2>/dev/null | while read -r file; do
                             error_list="${error_list}  • $file\n"
-                        done < <(find "$dir" -type f ! -writable 2>/dev/null)
+                        done
                     fi
                 done
             }
