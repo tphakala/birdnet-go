@@ -9,7 +9,7 @@
   - Maintain this architecture for any future enhancements to the analytics functionality
 */}}
 
-<div class="col-span-12 space-y-4" x-data="analyticsUI" role="region" aria-label="Bird Detection Analytics">
+<div class="col-span-12 space-y-4" x-cloak x-data="analyticsUI" role="region" aria-label="Bird Detection Analytics">
     <!-- Summary Stats Cards -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <!-- Total Detections Card -->
@@ -88,39 +88,47 @@
     <!-- Filter Controls -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body card-padding">
-            <h2 class="card-title" id="analytics-filters-heading">Filter Data</h2>
+            {{template "sectionHeader" dict "title" "Filter Data" "id" "analytics-filters-heading"}}
             
             <form id="analyticsFiltersForm" class="space-y-4" @submit.prevent="fetchData()" x-ref="filtersForm">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <!-- Time Period Filter -->
-                    <div class="form-control">
-                        <label class="label" for="timePeriod">
-                            <span class="label-text">Time Period</span>
-                        </label>
-                        <select id="timePeriod" x-model="filters.timePeriod" class="select select-bordered w-full">
-                            <option value="all">All Time</option>
-                            <option value="today">Today</option>
-                            <option value="week">Last 7 Days</option>
-                            <option value="month">Last 30 Days</option>
-                            <option value="year">Last 12 Months</option>
-                            <option value="custom">Custom Range</option>
-                        </select>
-                    </div>
+                    {{template "selectField" dict 
+                        "id" "timePeriod" 
+                        "name" "timePeriod" 
+                        "label" "Time Period" 
+                        "model" "filters.timePeriod"
+                        "options" (dict 
+                            "all" "All Time" 
+                            "today" "Today" 
+                            "week" "Last 7 Days" 
+                            "month" "Last 30 Days" 
+                            "year" "Last 12 Months" 
+                            "custom" "Custom Range"
+                        )
+                        "tooltip" "Select the time range for which to display analytics data"
+                    }}
                     
                     <!-- Start Date (only visible when custom range selected) -->
-                    <div class="form-control" x-show="filters.timePeriod === 'custom'">
-                        <label class="label" for="startDate">
-                            <span class="label-text">From</span>
-                        </label>
-                        <input type="date" id="startDate" x-model="filters.startDate" class="input input-bordered w-full" />
+                    <div x-show="filters.timePeriod === 'custom'">
+                        {{template "dateInput" dict 
+                            "id" "startDate" 
+                            "name" "startDate" 
+                            "label" "From" 
+                            "model" "filters.startDate"
+                            "tooltip" "Start date of the custom range"
+                        }}
                     </div>
                     
                     <!-- End Date (only visible when custom range selected) -->
-                    <div class="form-control" x-show="filters.timePeriod === 'custom'">
-                        <label class="label" for="endDate">
-                            <span class="label-text">To</span>
-                        </label>
-                        <input type="date" id="endDate" x-model="filters.endDate" class="input input-bordered w-full" />
+                    <div x-show="filters.timePeriod === 'custom'">
+                        {{template "dateInput" dict 
+                            "id" "endDate" 
+                            "name" "endDate" 
+                            "label" "To" 
+                            "model" "filters.endDate"
+                            "tooltip" "End date of the custom range"
+                        }}
                     </div>
                 </div>
                 
@@ -144,12 +152,12 @@
         <!-- Species Distribution Chart -->
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body card-padding">
-                <h2 class="card-title">Top 10 Species</h2>
+                {{template "sectionHeader" dict "title" "Top 10 Species"}}
                 <div x-show="isLoading" class="flex justify-center items-center p-8">
                     <span class="loading loading-spinner loading-lg text-primary"></span>
                 </div>
                 <div x-show="!isLoading" class="h-80">
-                    <canvas id="speciesChart" class="w-full h-full"></canvas>
+                    <canvas id="speciesChart" class="w-full h-full" role="img" aria-label="Top 10 Species Distribution Chart"></canvas>
                 </div>
             </div>
         </div>
@@ -157,12 +165,12 @@
         <!-- Time of Day Chart -->
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body card-padding">
-                <h2 class="card-title">Detections by Time of Day</h2>
+                {{template "sectionHeader" dict "title" "Detections by Time of Day"}}
                 <div x-show="isLoading" class="flex justify-center items-center p-8">
                     <span class="loading loading-spinner loading-lg text-primary"></span>
                 </div>
                 <div x-show="!isLoading" class="h-80">
-                    <canvas id="timeOfDayChart" class="w-full h-full"></canvas>
+                    <canvas id="timeOfDayChart" class="w-full h-full" role="img" aria-label="Detections by Time of Day Chart"></canvas>
                 </div>
             </div>
         </div>
@@ -171,12 +179,12 @@
     <!-- Trend Charts -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body card-padding">
-            <h2 class="card-title">Detection Trends</h2>
+            {{template "sectionHeader" dict "title" "Detection Trends"}}
             <div x-show="isLoading" class="flex justify-center items-center p-8">
                 <span class="loading loading-spinner loading-lg text-primary"></span>
             </div>
             <div x-show="!isLoading" class="h-80">
-                <canvas id="trendChart" class="w-full h-full"></canvas>
+                <canvas id="trendChart" class="w-full h-full" role="img" aria-label="Detection Trends Over Time Chart"></canvas>
             </div>
         </div>
     </div>
@@ -184,7 +192,7 @@
     <!-- Data Table for Top Detections -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body card-padding">
-            <h2 class="card-title">Recent Detections</h2>
+            {{template "sectionHeader" dict "title" "Recent Detections"}}
             <div x-show="isLoading" class="flex justify-center items-center p-8">
                 <span class="loading loading-spinner loading-lg text-primary"></span>
             </div>
@@ -233,7 +241,13 @@
                                         <span class="text-sm" x-text="formatPercentage(detection.confidence)"></span>
                                     </div>
                                 </td>
-                                <td x-text="detection.timeOfDay || 'Unknown'"></td>
+                                <td>
+                                    <div class="flex items-center gap-2">
+                                        <!-- Using the timeOfDayIcon component -->
+                                        <div x-html="getTimeOfDayIcon(detection.timeOfDay)"></div>
+                                        <span x-text="detection.timeOfDay || 'Unknown'"></span>
+                                    </div>
+                                </td>
                             </tr>
                         </template>
                         <!-- Empty state -->
@@ -250,7 +264,9 @@
 <!-- Include Chart.js -->
 <script src="/assets/chart.min.js"></script>
 
+<!-- Move Alpine.js initialization before the x-data declaration -->
 <script>
+    // Initialize the Alpine component before the page loads
     document.addEventListener('alpine:init', () => {
         Alpine.data('analyticsUI', () => ({
             isLoading: true,
@@ -275,6 +291,7 @@
             },
             
             init() {
+                console.log("analyticsUI init");
                 // Set default dates for custom range
                 const today = new Date();
                 const lastMonth = new Date();
@@ -378,7 +395,7 @@
                             console.error('Error in summary data:', err);
                             // Already set default values in the method
                         }),
-                        this.fetchSpeciesSummary().catch(err => {
+                        this.fetchSpeciesSummary(startDate, endDate).catch(err => {
                             console.error('Error in species summary:', err);
                             // Already handled in the method
                         }),
@@ -462,10 +479,14 @@
             },
             
             // Fetch species summary for chart
-            async fetchSpeciesSummary() {
+            async fetchSpeciesSummary(startDate, endDate) {
                 try {
                     // Get top 10 species 
-                    const response = await fetch('/api/v2/analytics/species/summary?limit=10');
+                    let url = '/api/v2/analytics/species/summary?limit=10';
+                    if (startDate) url += `&start_date=${startDate}`;
+                    if (endDate) url += `&end_date=${endDate}`;
+                    
+                    const response = await fetch(url);
                     
                     if (!response.ok) {
                         throw new Error(`Server responded with ${response.status}`);
@@ -826,6 +847,21 @@
                     
                     return palette.slice(0, count);
                 }
+            },
+            
+            // Helper to get time of day icon HTML
+            getTimeOfDayIcon(timeOfDay) {
+                if (!timeOfDay) return '';
+                
+                // Use a simple mapping for now, can be enhanced later
+                const iconMapping = {
+                    'Night': '{{template "timeOfDayIcon" dict "time" "night"}}',
+                    'Sunrise': '{{template "timeOfDayIcon" dict "time" "sunrise"}}',
+                    'Day': '{{template "timeOfDayIcon" dict "time" "day"}}',
+                    'Sunset': '{{template "timeOfDayIcon" dict "time" "sunset"}}'
+                };
+                
+                return iconMapping[timeOfDay] || '';
             }
         }));
     });
