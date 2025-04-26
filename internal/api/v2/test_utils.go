@@ -239,6 +239,12 @@ func (m *MockDataStore) GetDetectionTrends(period string, limit int) ([]datastor
 	return args.Get(0).([]datastore.DailyAnalyticsData), args.Error(1)
 }
 
+// GetHourlyDistribution implements the datastore.Interface GetHourlyDistribution method
+func (m *MockDataStore) GetHourlyDistribution(startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
+	args := m.Called(startDate, endDate, species)
+	return args.Get(0).([]datastore.HourlyDistributionData), args.Error(1)
+}
+
 func (m *MockDataStore) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	args := m.Called(filters)
 	return args.Get(0).([]datastore.DetectionRecord), args.Int(1), args.Error(2)
@@ -298,8 +304,9 @@ func setupAnalyticsTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *C
 // This is a specialized version used primarily for analytics tests that only need
 // to mock specific methods like GetTopBirdsData
 type MockDataStoreV2 struct {
-	GetTopBirdsDataFunc      func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error)
-	GetHourlyOccurrencesFunc func(date, commonName string, minConfidenceNormalized float64) ([24]int, error)
+	GetTopBirdsDataFunc       func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error)
+	GetHourlyOccurrencesFunc  func(date, commonName string, minConfidenceNormalized float64) ([24]int, error)
+	GetHourlyDistributionFunc func(startDate, endDate string, species string) ([]datastore.HourlyDistributionData, error)
 }
 
 // GetTopBirdsData implements the datastore.Interface GetTopBirdsData method
@@ -314,6 +321,15 @@ func (m *MockDataStoreV2) GetHourlyOccurrences(date, commonName string, minConfi
 	}
 	// Default implementation returns empty array
 	return [24]int{}, nil
+}
+
+// GetHourlyDistribution implements the datastore.Interface GetHourlyDistribution method
+func (m *MockDataStoreV2) GetHourlyDistribution(startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
+	if m.GetHourlyDistributionFunc != nil {
+		return m.GetHourlyDistributionFunc(startDate, endDate, species)
+	}
+	// Default implementation returns empty array
+	return []datastore.HourlyDistributionData{}, nil
 }
 
 // Satisfy the remaining methods of the datastore.Interface (with empty implementations)
