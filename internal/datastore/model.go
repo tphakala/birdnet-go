@@ -7,14 +7,14 @@ import "time"
 type Note struct {
 	ID         uint `gorm:"primaryKey"`
 	SourceNode string
-	Date       string `gorm:"index:idx_notes_date;index:idx_notes_date_commonname_confidence"`
+	Date       string `gorm:"index:idx_notes_date;index:idx_notes_date_commonname_confidence;index:idx_notes_sciname_date"`
 	Time       string `gorm:"index:idx_notes_time"`
 	//InputFile      string
 	Source         string
 	BeginTime      time.Time
 	EndTime        time.Time
 	SpeciesCode    string
-	ScientificName string  `gorm:"index:idx_notes_sciname"`
+	ScientificName string  `gorm:"index:idx_notes_sciname;index:idx_notes_sciname_date"`
 	CommonName     string  `gorm:"index:idx_notes_comname;index:idx_notes_date_commonname_confidence"`
 	Confidence     float64 `gorm:"index:idx_notes_date_commonname_confidence"`
 	Latitude       float64

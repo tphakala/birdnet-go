@@ -196,8 +196,8 @@ func (m *mockStore) GetHourlyDistribution(startDate, endDate, species string) ([
 }
 
 // GetNewSpeciesDetections implements the datastore.Interface GetNewSpeciesDetections method
-func (m *mockStore) GetNewSpeciesDetections(startDate, endDate string) ([]datastore.NewSpeciesData, error) {
-	// Default implementation returns empty array for this mock
+func (m *mockStore) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	// This is a mock test implementation, so we'll return empty data
 	return []datastore.NewSpeciesData{}, nil
 }
 

@@ -269,10 +269,10 @@ func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) (
 	// Prepare the SQL query
 	query := ds.DB.Table("notes")
 
-	// Extract hour from the time field
-	// Use SQLite's built-in functions to parse the time string
-	// This assumes time is stored in format like "15:04:05"
-	query = query.Select("CAST(substr(time, 1, 2) AS INTEGER) AS hour, COUNT(*) AS count")
+	// Extract hour from the time field using database-specific hour format
+	// This uses the same helper method used elsewhere for consistent hour extraction
+	hourExpr := ds.GetHourFormat()
+	query = query.Select(fmt.Sprintf("%s AS hour, COUNT(*) AS count", hourExpr))
 
 	// Apply date range filter
 	query = query.Where("date BETWEEN ? AND ?", startDate, endDate)
@@ -300,7 +300,9 @@ func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) (
 }
 
 // GetNewSpeciesDetections finds species whose absolute first detection falls within the specified date range.
-func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string) ([]NewSpeciesData, error) {
+// It supports pagination with limit and offset parameters.
+// NOTE: For optimal performance with large datasets, add a composite index on (scientific_name, date)
+func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]NewSpeciesData, error) {
 	// Temporary struct to scan raw results, ensuring date can be checked for null/empty
 	type RawNewSpeciesResult struct {
 		ScientificName     string
@@ -310,7 +312,14 @@ func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string) ([]NewSp
 	}
 	var rawResults []RawNewSpeciesResult
 
-	// Revised query (keeping the SQL improvements)
+	// Default pagination values if not specified
+	if limit <= 0 {
+		limit = 100 // Default limit
+	}
+	// Offset defaults to 0 if negative
+
+	// Revised query with pagination
+	// NOTE: This query benefits significantly from a composite index on (scientific_name, date)
 	query := `
 	WITH SpeciesFirstSeen AS (
 	    SELECT 
@@ -337,11 +346,12 @@ func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string) ([]NewSp
 	FROM SpeciesFirstSeen sfs
 	JOIN SpeciesInPeriod sip ON sfs.scientific_name = sip.scientific_name
 	WHERE sfs.first_detection_date BETWEEN ? AND ?
-	ORDER BY sfs.first_detection_date DESC;
+	ORDER BY sfs.first_detection_date DESC
+	LIMIT ? OFFSET ?;
 	`
 
 	// Execute the raw SQL query into the temporary struct
-	if err := ds.DB.Raw(query, startDate, endDate, startDate, endDate).Scan(&rawResults).Error; err != nil {
+	if err := ds.DB.Raw(query, startDate, endDate, startDate, endDate, limit, offset).Scan(&rawResults).Error; err != nil {
 		return nil, fmt.Errorf("failed to get new species detections raw results: %w", err)
 	}
 
