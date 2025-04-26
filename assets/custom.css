@@ -857,6 +857,12 @@ thead.sticky-header {
   border-radius: 0.3rem;
 }
 
+/* Card Padding - Consistent across all pages */
+.card-padding {
+  padding: 1rem;
+  margin: 0.5rem;
+}
+
 /* Progress width classes (0-100) */
 /* We'll generate a few key percentages that are commonly used */
 .progress-width-0 { width: 0%; }

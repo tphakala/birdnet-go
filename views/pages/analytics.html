@@ -1,0 +1,450 @@
+{{define "analytics"}}
+
+{{/* 
+  IMPORTANT IMPLEMENTATION NOTES:
+  - DO NOT USE HTMX for any data requests on this page
+  - Use ONLY JSON API endpoints with fetch/Alpine.js for all data operations
+  - This page is part of migration away from HTMX to pure JSON API architecture
+  - All analytics functionality must use JSON API endpoints with proper fetch requests
+  - Maintain this architecture for any future enhancements to the analytics functionality
+*/}}
+
+<div class="col-span-12 space-y-4" x-data="analyticsUI" role="region" aria-label="Bird Detection Analytics">
+    <!-- Summary Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Total Detections Card -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body card-padding">
+                <h2 class="card-title text-lg">Total Detections</h2>
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-primary" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-3xl font-bold" x-text="isLoading ? '...' : formatNumber(summary.totalDetections)">0</div>
+                        <div class="text-xs text-base-content/60" x-text="getPeriodLabel()">All time</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Unique Species Card -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body card-padding">
+                <h2 class="card-title text-lg">Unique Species</h2>
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-full bg-secondary/20 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-secondary" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-3xl font-bold" x-text="isLoading ? '...' : formatNumber(summary.uniqueSpecies)">0</div>
+                        <div class="text-xs text-base-content/60" x-text="getPeriodLabel()">All time</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Average Confidence Card -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body card-padding">
+                <h2 class="card-title text-lg">Avg. Confidence</h2>
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-full bg-accent/20 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-accent" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-3xl font-bold" x-text="isLoading ? '...' : formatPercentage(summary.avgConfidence)">0%</div>
+                        <div class="text-xs text-base-content/60" x-text="getPeriodLabel()">All time</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Most Common Species Card -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body card-padding">
+                <h2 class="card-title text-lg">Most Common</h2>
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-full bg-success/20 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-success" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M3.293 9.707a1 1 0 010-1.414l6-6a1 1 0 011.414 0l6 6a1 1 0 01-1.414 1.414L11 5.414V17a1 1 0 11-2 0V5.414L4.707 9.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="font-bold text-lg truncate max-w-[150px]" x-text="isLoading ? '...' : (summary.mostCommonSpecies || 'None')">-</div>
+                        <div class="text-xs text-base-content/60" x-text="isLoading ? '' : (summary.mostCommonCount > 0 ? formatNumber(summary.mostCommonCount) + ' detections' : '')">0 detections</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Controls -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body card-padding">
+            <h2 class="card-title" id="analytics-filters-heading">Filter Data</h2>
+            
+            <form id="analyticsFiltersForm" class="space-y-4" @submit.prevent="fetchData()" x-ref="filtersForm">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Time Period Filter -->
+                    <div class="form-control">
+                        <label class="label" for="timePeriod">
+                            <span class="label-text">Time Period</span>
+                        </label>
+                        <select id="timePeriod" x-model="filters.timePeriod" class="select select-bordered w-full">
+                            <option value="all">All Time</option>
+                            <option value="today">Today</option>
+                            <option value="week">Last 7 Days</option>
+                            <option value="month">Last 30 Days</option>
+                            <option value="year">Last 12 Months</option>
+                            <option value="custom">Custom Range</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Start Date (only visible when custom range selected) -->
+                    <div class="form-control" x-show="filters.timePeriod === 'custom'">
+                        <label class="label" for="startDate">
+                            <span class="label-text">From</span>
+                        </label>
+                        <input type="date" id="startDate" x-model="filters.startDate" class="input input-bordered w-full" />
+                    </div>
+                    
+                    <!-- End Date (only visible when custom range selected) -->
+                    <div class="form-control" x-show="filters.timePeriod === 'custom'">
+                        <label class="label" for="endDate">
+                            <span class="label-text">To</span>
+                        </label>
+                        <input type="date" id="endDate" x-model="filters.endDate" class="input input-bordered w-full" />
+                    </div>
+                </div>
+                
+                <!-- Additional filters can be added here -->
+                
+                <div class="flex justify-end gap-2">
+                    <button type="button" class="btn btn-ghost" @click="resetFilters()">Reset</button>
+                    <button type="submit" class="btn btn-primary" :disabled="isLoading">
+                        <template x-if="isLoading">
+                            <span class="loading loading-spinner loading-sm"></span>
+                        </template>
+                        Apply Filters
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Species Distribution Chart -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body card-padding">
+                <h2 class="card-title">Top 10 Species</h2>
+                <div x-show="isLoading" class="flex justify-center items-center p-8">
+                    <span class="loading loading-spinner loading-lg text-primary"></span>
+                </div>
+                <div x-show="!isLoading" class="h-80">
+                    <!-- Chart placeholder - will be replaced with actual chart -->
+                    <div class="bg-base-200 h-full rounded-lg flex items-center justify-center">
+                        <div class="text-center p-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            </svg>
+                            <p class="mt-2 text-base-content/50">Species distribution chart will be displayed here</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Time of Day Chart -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body card-padding">
+                <h2 class="card-title">Detections by Time of Day</h2>
+                <div x-show="isLoading" class="flex justify-center items-center p-8">
+                    <span class="loading loading-spinner loading-lg text-primary"></span>
+                </div>
+                <div x-show="!isLoading" class="h-80">
+                    <!-- Chart placeholder - will be replaced with actual chart -->
+                    <div class="bg-base-200 h-full rounded-lg flex items-center justify-center">
+                        <div class="text-center p-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <p class="mt-2 text-base-content/50">Time of day chart will be displayed here</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Trend Charts -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body card-padding">
+            <h2 class="card-title">Detection Trends</h2>
+            <div x-show="isLoading" class="flex justify-center items-center p-8">
+                <span class="loading loading-spinner loading-lg text-primary"></span>
+            </div>
+            <div x-show="!isLoading" class="h-80">
+                <!-- Chart placeholder - will be replaced with actual chart -->
+                <div class="bg-base-200 h-full rounded-lg flex items-center justify-center">
+                    <div class="text-center p-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                        </svg>
+                        <p class="mt-2 text-base-content/50">Detection trends chart will be displayed here</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Data Table for Top Detections -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body card-padding">
+            <h2 class="card-title">Recent Detections</h2>
+            <div x-show="isLoading" class="flex justify-center items-center p-8">
+                <span class="loading loading-spinner loading-lg text-primary"></span>
+            </div>
+            <div class="overflow-x-auto" x-show="!isLoading">
+                <table class="table w-full">
+                    <thead>
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>Species</th>
+                            <th>Confidence</th>
+                            <th>Time of Day</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="(detection, index) in recentDetections" :key="detection.id">
+                            <tr :class="index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'">
+                                <td x-text="formatDateTime(detection.timestamp)"></td>
+                                <td>
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-8 h-8 rounded-full bg-base-200 overflow-hidden">
+                                            <img 
+                                                :src="'/api/v2/media/species-image?name=' + encodeURIComponent(detection.scientificName)" 
+                                                :alt="detection.commonName || 'Unknown species'"
+                                                class="w-full h-full object-cover"
+                                                @error="$event.target.src = '/assets/images/bird-placeholder.svg';"
+                                                loading="lazy"
+                                            />
+                                        </div>
+                                        <div>
+                                            <div class="font-medium" x-text="detection.commonName || 'Unknown'"></div>
+                                            <div class="text-xs opacity-50" x-text="detection.scientificName || ''"></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-16 h-4 rounded-full overflow-hidden bg-base-200">
+                                            <div class="h-full" 
+                                                 :class="{
+                                                    'bg-success': detection.confidence >= 0.8,
+                                                    'bg-warning': detection.confidence >= 0.4 && detection.confidence < 0.8,
+                                                    'bg-error': detection.confidence < 0.4
+                                                 }"
+                                                 :style="'width: ' + (detection.confidence * 100) + '%'"></div>
+                                        </div>
+                                        <span class="text-sm" x-text="formatPercentage(detection.confidence)"></span>
+                                    </div>
+                                </td>
+                                <td x-text="detection.timeOfDay || 'Unknown'"></td>
+                            </tr>
+                        </template>
+                        <!-- Empty state -->
+                        <tr x-show="recentDetections.length === 0">
+                            <td colspan="4" class="text-center py-4 text-base-content/50">No recent detections found</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('analyticsUI', () => ({
+            isLoading: true,
+            error: null,
+            filters: {
+                timePeriod: 'week',  // Default to last 7 days
+                startDate: '',
+                endDate: ''
+            },
+            summary: {
+                totalDetections: 0,
+                uniqueSpecies: 0,
+                avgConfidence: 0,
+                mostCommonSpecies: '',
+                mostCommonCount: 0
+            },
+            recentDetections: [], // Will hold the most recent detections
+            
+            init() {
+                // Set default dates for custom range
+                const today = new Date();
+                const lastMonth = new Date();
+                lastMonth.setDate(today.getDate() - 30);
+                
+                this.filters.endDate = this.formatDateForInput(today);
+                this.filters.startDate = this.formatDateForInput(lastMonth);
+                
+                // Fetch initial data
+                this.fetchData();
+            },
+            
+            // Format date for date input (YYYY-MM-DD)
+            formatDateForInput(date) {
+                return date.toISOString().split('T')[0];
+            },
+            
+            // Format number with thousand separators
+            formatNumber(number) {
+                return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            },
+            
+            // Format percentage
+            formatPercentage(value) {
+                return (value * 100).toFixed(1) + '%';
+            },
+            
+            // Format datetime for display
+            formatDateTime(dateString) {
+                if (!dateString) return '';
+                const date = new Date(dateString);
+                return date.toLocaleString();
+            },
+            
+            // Get period label based on current filter
+            getPeriodLabel() {
+                switch(this.filters.timePeriod) {
+                    case 'today': return 'Today';
+                    case 'week': return 'Last 7 days';
+                    case 'month': return 'Last 30 days';
+                    case 'year': return 'Last 12 months';
+                    case 'custom': return 'Custom range';
+                    default: return 'All time';
+                }
+            },
+            
+            // Reset filters to default
+            resetFilters() {
+                this.filters.timePeriod = 'week';
+                
+                const today = new Date();
+                const lastMonth = new Date();
+                lastMonth.setDate(today.getDate() - 30);
+                
+                this.filters.endDate = this.formatDateForInput(today);
+                this.filters.startDate = this.formatDateForInput(lastMonth);
+                
+                this.fetchData();
+            },
+            
+            // Fetch data from the API
+            async fetchData() {
+                this.isLoading = true;
+                this.error = null;
+                
+                try {
+                    // Prepare request parameters
+                    const params = {
+                        timePeriod: this.filters.timePeriod
+                    };
+                    
+                    // Add dates if using custom period
+                    if (this.filters.timePeriod === 'custom') {
+                        params.startDate = this.filters.startDate;
+                        params.endDate = this.filters.endDate;
+                    }
+                    
+                    // For demo/placeholder purposes, simulate API response with setTimeout
+                    // This will be replaced with actual API call when ready
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    // Simulate API response with sample data
+                    // Note: This will be replaced with a real API call
+                    this.summary = {
+                        totalDetections: 1234,
+                        uniqueSpecies: 47,
+                        avgConfidence: 0.76,
+                        mostCommonSpecies: 'European Robin',
+                        mostCommonCount: 267
+                    };
+                    
+                    this.recentDetections = [
+                        {
+                            id: 1,
+                            timestamp: new Date().toISOString(),
+                            commonName: 'European Robin',
+                            scientificName: 'Erithacus rubecula',
+                            confidence: 0.91,
+                            timeOfDay: 'Day'
+                        },
+                        {
+                            id: 2,
+                            timestamp: new Date(Date.now() - 3600000).toISOString(),
+                            commonName: 'Common Blackbird',
+                            scientificName: 'Turdus merula',
+                            confidence: 0.85,
+                            timeOfDay: 'Day'
+                        },
+                        {
+                            id: 3,
+                            timestamp: new Date(Date.now() - 7200000).toISOString(),
+                            commonName: 'Great Tit',
+                            scientificName: 'Parus major',
+                            confidence: 0.76,
+                            timeOfDay: 'Day'
+                        }
+                    ];
+                    
+                    /*
+                    // Uncomment this when API endpoint is ready and replace above mock data
+                    const response = await fetch('/api/v2/analytics/summary', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+                        },
+                        body: JSON.stringify(params)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`Server responded with ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    this.summary = data.summary;
+                    this.recentDetections = data.recentDetections;
+                    */
+                    
+                } catch (error) {
+                    console.error('Error fetching analytics data:', error);
+                    this.error = `Failed to load analytics data: ${error.message}`;
+                } finally {
+                    this.isLoading = false;
+                }
+            }
+        }));
+    });
+</script>
+
+<style>
+    /* Using a broader selector to properly hide all x-cloak elements */
+    [x-cloak] {
+        display: none !important;
+    }
+</style>
+
+{{end}}
