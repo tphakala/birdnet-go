@@ -37,6 +37,14 @@ type HourlyDistributionData struct {
 	Date  string `json:"date,omitempty"` // Optional field, only set when filtering by specific date
 }
 
+// NewSpeciesData represents a species detected for the first time within a period
+type NewSpeciesData struct {
+	ScientificName string `json:"scientific_name"`
+	CommonName     string `json:"common_name"`
+	FirstSeenDate  string `json:"first_seen_date"` // The absolute first date
+	CountInPeriod  int    `json:"count_in_period"` // Optional: How many times seen in the query period
+}
+
 // GetSpeciesSummaryData retrieves overall statistics for all bird species
 // Optional date range filtering with startDate and endDate parameters in YYYY-MM-DD format
 func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]SpeciesSummaryData, error) {
@@ -285,6 +293,49 @@ func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) (
 	var results []HourlyDistributionData
 	if err := query.Find(&results).Error; err != nil {
 		return nil, fmt.Errorf("failed to retrieve hourly distribution: %w", err)
+	}
+
+	return results, nil
+}
+
+// GetNewSpeciesDetections finds species whose absolute first detection falls within the specified date range.
+func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string) ([]NewSpeciesData, error) {
+	var results []NewSpeciesData
+
+	// This query finds the absolute first detection date for each species
+	// and then filters to keep only those whose first detection date is within the specified range.
+	// It also counts how many detections occurred within the specified period for those newly found species.
+	query := `
+	WITH SpeciesFirstSeen AS (
+	    SELECT 
+	        scientific_name, 
+	        MIN(date) as first_detection_date
+	    FROM notes
+	    GROUP BY scientific_name
+	), 
+	SpeciesInPeriod AS (
+	    SELECT 
+	        scientific_name, 
+	        COUNT(*) as count_in_period,
+			MAX(common_name) as common_name -- Get common name from within the period
+	    FROM notes
+	    WHERE date BETWEEN ? AND ?
+	    GROUP BY scientific_name
+	)
+	SELECT 
+	    sfs.scientific_name, 
+	    sip.common_name, 
+	    sfs.first_detection_date, 
+	    sip.count_in_period
+	FROM SpeciesFirstSeen sfs
+	JOIN SpeciesInPeriod sip ON sfs.scientific_name = sip.scientific_name
+	WHERE sfs.first_detection_date BETWEEN ? AND ?
+	ORDER BY sfs.first_detection_date DESC;
+	`
+
+	// Execute the raw SQL query
+	if err := ds.DB.Raw(query, startDate, endDate, startDate, endDate).Scan(&results).Error; err != nil {
+		return nil, fmt.Errorf("failed to get new species detections: %w", err)
 	}
 
 	return results, nil

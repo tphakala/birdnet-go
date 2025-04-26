@@ -102,6 +102,7 @@
                             <option value="today">Today</option>
                             <option value="week">Last 7 Days</option>
                             <option value="month">Last 30 Days</option>
+                            <option value="90days">Last 90 Days</option>
                             <option value="year">Last 12 Months</option>
                             <option value="custom">Custom Range</option>
                         </select>
@@ -181,6 +182,22 @@
         </div>
     </div>
     
+    <!-- New Species Chart -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body card-padding">
+            <h2 class="card-title">New Species Detected</h2>
+            <div x-show="isLoading" class="flex justify-center items-center p-8">
+                <span class="loading loading-spinner loading-lg text-primary"></span>
+            </div>
+            <div x-show="!isLoading && newSpeciesData.length === 0" class="text-center py-4 text-base-content/50">
+                No new species detected in this period.
+            </div>
+            <div x-show="!isLoading && newSpeciesData.length > 0" class="h-80 chart-container">
+                <canvas id="newSpeciesChart" class="w-full h-full" role="img" aria-label="Chart showing species detected for the first time in this period"></canvas>
+            </div>
+        </div>
+    </div>
+    
     <!-- Data Table for Top Detections -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body card-padding">
@@ -249,6 +266,8 @@
 
 <!-- Include Chart.js -->
 <script src="/assets/chart.min.js"></script>
+<!-- Include the Date Adapter (e.g., date-fns) -->
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 
 <script>
     document.addEventListener('alpine:init', () => {
@@ -268,10 +287,12 @@
                 mostCommonCount: 0
             },
             recentDetections: [], // Will hold the most recent detections
+            newSpeciesData: [],   // Data for the new species chart
             charts: {
                 species: null,
                 timeOfDay: null,
-                trend: null
+                trend: null,
+                newSpecies: null // Chart instance for new species
             },
             
             init() {
@@ -406,6 +427,7 @@
                     case 'today': return 'Today';
                     case 'week': return 'Last 7 days';
                     case 'month': return 'Last 30 days';
+                    case '90days': return 'Last 90 days';
                     case 'year': return 'Last 12 months';
                     case 'custom': return 'Custom range';
                     default: return 'All time';
@@ -449,6 +471,10 @@
                             endDate = this.formatDateForInput(today);
                             startDate = this.formatDateForInput(new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000));
                             break;
+                        case '90days':
+                            endDate = this.formatDateForInput(today);
+                            startDate = this.formatDateForInput(new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000));
+                            break;
                         case 'year':
                             endDate = this.formatDateForInput(today);
                             startDate = this.formatDateForInput(new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000));
@@ -459,19 +485,19 @@
                             break;
                         case 'all':
                         default:
-                            // For "all time", we'll let the API decide the range
+                            // For "all time", clear dates to let API use its default or handle appropriately
+                            startDate = null;
+                            endDate = null;
                             break;
                     }
                     
-                    // Run API calls in sequence to avoid race conditions
+                    // Run API calls
                     const fetchOperations = [
                         this.fetchSummaryData(startDate, endDate).catch(err => {
                             console.error('Error in summary data:', err);
-                            // Already set default values in the method
                         }),
                         this.fetchSpeciesSummary(startDate, endDate).catch(err => {
                             console.error('Error in species summary:', err);
-                            // Already handled in the method
                         }),
                         this.fetchRecentDetections().catch(err => {
                             console.error('Error in recent detections:', err);
@@ -479,15 +505,17 @@
                         }),
                         this.fetchTimeOfDayData(startDate, endDate).catch(err => {
                             console.error('Error in time of day data:', err);
-                            // Already handled in the method
                         }),
                         this.fetchTrendData(startDate, endDate).catch(err => {
                             console.error('Error in trend data:', err);
-                            // Already handled in the method
+                        }),
+                        this.fetchNewSpeciesData(startDate, endDate).catch(err => { // Add call for new data
+                            console.error('Error in new species data:', err);
+                            this.newSpeciesData = [];
                         })
                     ];
                     
-                    // Wait for all fetch operations to complete (even if some fail)
+                    // Wait for all fetch operations to complete
                     await Promise.allSettled(fetchOperations);
                     
                 } catch (error) {
@@ -680,7 +708,7 @@
             async fetchRecentDetections() {
                 try {
                     // Get most recent detections
-                    const response = await fetch('/api/v2/detections?limit=10&sort=desc');
+                    const response = await fetch('/api/v2/detections/recent?limit=10'); // Updated endpoint if needed
                     
                     if (!response.ok) {
                         throw new Error(`Server responded with ${response.status}`);
@@ -688,17 +716,17 @@
                     
                     const data = await response.json();
                     
-                    // Check if data.results exists, if not use the data directly or empty array
-                    const detections = data.results || data || [];
+                    // Ensure detections is always an array before mapping
+                    const detections = Array.isArray(data) ? data : [];
                     
                     // Map the API response to our expected format
                     this.recentDetections = detections.map(detection => ({
                         id: detection.id,
-                        timestamp: detection.timestamp,
-                        commonName: detection.common_name,
-                        scientificName: detection.scientific_name,
+                        timestamp: detection.timestamp || (detection.date && detection.time ? `${detection.date} ${detection.time}` : null), // Combine if separate
+                        commonName: detection.commonName,
+                        scientificName: detection.scientificName,
                         confidence: detection.confidence,
-                        timeOfDay: detection.time_of_day || this.calculateTimeOfDay(detection.timestamp)
+                        timeOfDay: detection.timeOfDay || this.calculateTimeOfDay(detection.timestamp || `${detection.date} ${detection.time}`)
                     }));
                     
                 } catch (error) {
@@ -1063,6 +1091,164 @@
                     
                     return palette.slice(0, count);
                 }
+            },
+            
+            // Fetch new species data
+            async fetchNewSpeciesData(startDate, endDate) {
+                try {
+                    let url = '/api/v2/analytics/species/new';
+                    const params = new URLSearchParams();
+                    if (startDate) params.append('start_date', startDate);
+                    if (endDate) params.append('end_date', endDate);
+                    if (params.toString()) url += '?' + params.toString();
+
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        throw new Error(`Server responded with ${response.status}`);
+                    }
+                    const data = await response.json();
+                    this.newSpeciesData = Array.isArray(data) ? data : [];
+                    this.createNewSpeciesChart(this.newSpeciesData);
+                } catch (error) {
+                    console.error('Error fetching new species data:', error);
+                    this.newSpeciesData = [];
+                    this.createNewSpeciesChart([]); // Ensure chart clears on error
+                    throw error; // Re-throw for Promise.allSettled
+                }
+            },
+            
+            // Create new species chart (Timeline style)
+            createNewSpeciesChart(data) {
+                const ctx = document.getElementById('newSpeciesChart').getContext('2d');
+                if (this.charts.newSpecies) {
+                    this.charts.newSpecies.destroy();
+                    this.charts.newSpecies = null; // Explicitly nullify after destroy
+                }
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    return; 
+                }
+
+                // Sort by first seen date (oldest first for timeline)
+                data.sort((a, b) => new Date(a.first_seen_date) - new Date(b.first_seen_date));
+
+                const labels = data.map(item => item.common_name || item.scientific_name);
+                
+                // Helper to add one day to a date string (YYYY-MM-DD)
+                const addOneDay = (dateStr) => {
+                    if (!dateStr || typeof dateStr !== 'string') {
+                        console.warn('addOneDay received invalid input:', dateStr);
+                        // Return something that Chart.js time adapter might handle or ignore
+                        // Returning null might be safer if the time adapter handles it.
+                        // Alternatively, return the original invalid string or a default far-future/past date.
+                        return null; 
+                    }
+                    const date = new Date(dateStr);
+                    // Check if the date is valid after parsing
+                    if (isNaN(date.getTime())) { 
+                         console.warn('addOneDay could not parse date string:', dateStr);
+                         return null; // Return null for invalid dates
+                    }
+                    date.setDate(date.getDate() + 1);
+                    // Check if the date became invalid after adding a day (though unlikely here)
+                    if (isNaN(date.getTime())) { 
+                         console.warn('addOneDay resulted in invalid date after adding a day:', dateStr);
+                         return null;
+                    }
+                    return date.toISOString().split('T')[0];
+                };
+
+                // Format data for time-based horizontal bar chart
+                const chartData = data.map(item => ({
+                    x: [item.first_seen_date, addOneDay(item.first_seen_date)], // Bar starts at first_seen_date, ends next day
+                    y: item.common_name || item.scientific_name
+                })).filter(item => item.x[0] && item.x[1]); // Filter out items with invalid dates
+
+                const theme = this.getChartTheme();
+                const colors = this.generateColorPalette(data.length, 0.7);
+
+                // Determine min and max dates for the x-axis based on filter
+                let minDate = null, maxDate = null;
+                if (this.filters.timePeriod !== 'all') {
+                    if (this.filters.startDate) minDate = this.filters.startDate;
+                    if (this.filters.endDate) maxDate = this.filters.endDate;
+                    // If using predefined periods like 'week', calculate start/end if needed
+                    // (Assuming filters.startDate/endDate are populated correctly in fetchData)
+                }
+                // Fallback if filters didn't provide dates (e.g., 'all time' initially)
+                if (!minDate && data.length > 0) minDate = data[0].first_seen_date; // Use earliest first seen date
+                if (!maxDate && data.length > 0) maxDate = addOneDay(data[data.length - 1].first_seen_date); // Use latest + 1 day
+
+
+                this.charts.newSpecies = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        // Labels are now derived from the data structure's 'y' property
+                        // labels: labels, 
+                        datasets: [{
+                            label: 'First Detected On',
+                            data: chartData,
+                            backgroundColor: colors,
+                            borderWidth: 1,
+                            barPercentage: 0.6, // Adjust bar thickness
+                            categoryPercentage: 0.8 // Adjust spacing between bars
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y', // Horizontal bars
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: theme.tooltip.backgroundColor,
+                                titleColor: theme.tooltip.titleColor,
+                                bodyColor: theme.tooltip.bodyColor,
+                                borderColor: theme.tooltip.borderColor,
+                                borderWidth: theme.tooltip.borderWidth,
+                                callbacks: {
+                                    title: (tooltipItems) => {
+                                         // Show species name as title
+                                        return tooltipItems[0].label;
+                                    },
+                                    label: (context) => {
+                                        // Find the original data item to get the date
+                                        const index = context.dataIndex;
+                                        const item = data[index]; // Use original sorted data
+                                        return `First Seen: ${item.first_seen_date}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                type: 'time',
+                                time: {
+                                    unit: 'day',
+                                    tooltipFormat: 'yyyy-MM-dd', 
+                                    displayFormats: {
+                                        day: 'MMM d' // Format for axis labels
+                                    }
+                                },
+                                min: minDate, // Set based on filter period
+                                max: maxDate, // Set based on filter period
+                                title: {
+                                    display: true,
+                                    text: 'First Detection Date',
+                                    color: theme.color.text
+                                },
+                                ticks: { color: theme.color.text },
+                                grid: { color: theme.color.grid }
+                            },
+                            y: {
+                                type: 'category', // Y-axis is the species name
+                                labels: labels,   // Explicitly set labels for the category axis
+                                ticks: { color: theme.color.text },
+                                grid: { display: false } // Hide y-axis grid lines for cleaner look
+                            }
+                        }
+                    }
+                });
             }
         }));
     });

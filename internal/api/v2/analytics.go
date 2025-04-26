@@ -43,6 +43,15 @@ type HourlyDistribution struct {
 	Date  string `json:"date,omitempty"` // Optional, can be used when filtering by a specific date
 }
 
+// NewSpeciesResponse represents a newly detected species in the API response
+type NewSpeciesResponse struct {
+	ScientificName string `json:"scientific_name"`
+	CommonName     string `json:"common_name"`
+	FirstSeenDate  string `json:"first_seen_date"`
+	ThumbnailURL   string `json:"thumbnail_url,omitempty"`
+	CountInPeriod  int    `json:"count_in_period"` // How many times seen in the query period
+}
+
 // initAnalyticsRoutes registers all analytics-related API endpoints
 func (c *Controller) initAnalyticsRoutes() {
 	// Create analytics API group - publicly accessible
@@ -52,6 +61,7 @@ func (c *Controller) initAnalyticsRoutes() {
 	speciesGroup := analyticsGroup.Group("/species")
 	speciesGroup.GET("/daily", c.GetDailySpeciesSummary)
 	speciesGroup.GET("/summary", c.GetSpeciesSummary)
+	speciesGroup.GET("/new", c.GetNewSpeciesDetections) // New endpoint
 
 	// Time analytics routes (can be implemented later)
 	timeGroup := analyticsGroup.Group("/time")
@@ -473,6 +483,67 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 	}
 
 	return ctx.JSON(http.StatusOK, completeHourlyData)
+}
+
+// GetNewSpeciesDetections handles GET /api/v2/analytics/species/new
+// Returns species whose absolute first detection occurred within the specified date range.
+func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
+	// Get query parameters
+	startDate := ctx.QueryParam("start_date")
+	endDate := ctx.QueryParam("end_date")
+
+	// Set default date range if not provided (e.g., last 30 days)
+	if startDate == "" {
+		startDate = time.Now().AddDate(0, 0, -30).Format("2006-01-02")
+	}
+	if endDate == "" {
+		endDate = time.Now().Format("2006-01-02")
+	}
+
+	// Validate date formats
+	if _, err := time.Parse("2006-01-02", startDate); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid start_date format. Use YYYY-MM-DD")
+	}
+	if _, err := time.Parse("2006-01-02", endDate); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
+	}
+
+	// Fetch data from datastore
+	newSpeciesData, err := c.DS.GetNewSpeciesDetections(startDate, endDate)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to get new species detections", http.StatusInternalServerError)
+	}
+
+	// Convert to response format and fetch thumbnails
+	response := make([]NewSpeciesResponse, 0, len(newSpeciesData))
+	for _, data := range newSpeciesData {
+		var thumbnailURL string
+		if c.BirdImageCache != nil {
+			birdImage, err := c.BirdImageCache.Get(data.ScientificName)
+			if err == nil {
+				thumbnailURL = birdImage.URL
+			}
+		}
+
+		response = append(response, NewSpeciesResponse{
+			ScientificName: data.ScientificName,
+			CommonName:     data.CommonName,
+			FirstSeenDate:  data.FirstSeenDate,
+			ThumbnailURL:   thumbnailURL,
+			CountInPeriod:  data.CountInPeriod,
+		})
+	}
+
+	// Optional limit if needed in the future
+	limitStr := ctx.QueryParam("limit")
+	if limitStr != "" {
+		limit, err := strconv.Atoi(limitStr)
+		if err == nil && limit > 0 && limit < len(response) {
+			response = response[:limit]
+		}
+	}
+
+	return ctx.JSON(http.StatusOK, response)
 }
 
 // Helper function to sum array values
