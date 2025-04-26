@@ -534,6 +534,8 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 		})
 	}
 
+	c.logger.Printf("DEBUG: New species data being sent to frontend: %+v", response) // Log the response data
+
 	// Optional limit if needed in the future
 	limitStr := ctx.QueryParam("limit")
 	if limitStr != "" {

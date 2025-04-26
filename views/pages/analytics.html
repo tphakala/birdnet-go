@@ -1107,6 +1107,7 @@
                         throw new Error(`Server responded with ${response.status}`);
                     }
                     const data = await response.json();
+                    console.log('Raw new species data from API:', JSON.stringify(data, null, 2)); // Log the raw data
                     this.newSpeciesData = Array.isArray(data) ? data : [];
                     this.createNewSpeciesChart(this.newSpeciesData);
                 } catch (error) {
@@ -1122,82 +1123,88 @@
                 const ctx = document.getElementById('newSpeciesChart').getContext('2d');
                 if (this.charts.newSpecies) {
                     this.charts.newSpecies.destroy();
-                    this.charts.newSpecies = null; // Explicitly nullify after destroy
+                    this.charts.newSpecies = null; 
                 }
 
-                if (!Array.isArray(data) || data.length === 0) {
-                    return; 
+                if (!Array.isArray(data)) {
+                    console.warn("Received non-array data for new species chart:", data);
+                    return; // Exit if data is not an array
                 }
-
-                // Sort by first seen date (oldest first for timeline)
-                data.sort((a, b) => new Date(a.first_seen_date) - new Date(b.first_seen_date));
-
-                const labels = data.map(item => item.common_name || item.scientific_name);
                 
                 // Helper to add one day to a date string (YYYY-MM-DD)
                 const addOneDay = (dateStr) => {
+                    // Basic validation for non-empty string
                     if (!dateStr || typeof dateStr !== 'string') {
                         console.warn('addOneDay received invalid input:', dateStr);
-                        // Return something that Chart.js time adapter might handle or ignore
-                        // Returning null might be safer if the time adapter handles it.
-                        // Alternatively, return the original invalid string or a default far-future/past date.
                         return null; 
                     }
                     const date = new Date(dateStr);
-                    // Check if the date is valid after parsing
+                    // Check if the date parsing itself was valid
                     if (isNaN(date.getTime())) { 
-                         console.warn('addOneDay could not parse date string:', dateStr);
-                         return null; // Return null for invalid dates
+                        console.warn('addOneDay could not parse date string:', dateStr);
+                        return null; 
                     }
+                    // Add a day
                     date.setDate(date.getDate() + 1);
-                    // Check if the date became invalid after adding a day (though unlikely here)
+                    // Check if the date became invalid after adding a day (less likely but possible)
                     if (isNaN(date.getTime())) { 
-                         console.warn('addOneDay resulted in invalid date after adding a day:', dateStr);
-                         return null;
+                        console.warn('addOneDay resulted in invalid date after adding a day:', dateStr);
+                        return null;
                     }
                     return date.toISOString().split('T')[0];
                 };
 
-                // Format data for time-based horizontal bar chart
-                const chartData = data.map(item => ({
-                    x: [item.first_seen_date, addOneDay(item.first_seen_date)], // Bar starts at first_seen_date, ends next day
-                    y: item.common_name || item.scientific_name
-                })).filter(item => item.x[0] && item.x[1]); // Filter out items with invalid dates
+                // 1. Filter the original data first for valid start dates and calculable end dates
+                const validData = data.filter(item => {
+                    const endDate = addOneDay(item.first_seen_date);
+                    return item.first_seen_date && typeof item.first_seen_date === 'string' && endDate;
+                });
+
+                if (validData.length === 0) {
+                    console.warn("No valid data points remain for new species chart after date validation.");
+                    // Optionally display a message on the canvas or just leave it empty
+                    return; 
+                }
+
+                // Sort the valid data by first seen date (oldest first for timeline)
+                validData.sort((a, b) => new Date(a.first_seen_date) - new Date(b.first_seen_date));
+
+                // 2. Create labels and chart values from the filtered/sorted data
+                const labels = validData.map(item => item.common_name || item.scientific_name);
+                const chartValues = validData.map(item => [
+                    item.first_seen_date, 
+                    addOneDay(item.first_seen_date) // We know this works from the filter step
+                ]);
 
                 const theme = this.getChartTheme();
-                const colors = this.generateColorPalette(data.length, 0.7);
+                const colors = this.generateColorPalette(labels.length, 0.7); // Use labels length
 
-                // Determine min and max dates for the x-axis based on filter
                 let minDate = null, maxDate = null;
                 if (this.filters.timePeriod !== 'all') {
                     if (this.filters.startDate) minDate = this.filters.startDate;
                     if (this.filters.endDate) maxDate = this.filters.endDate;
-                    // If using predefined periods like 'week', calculate start/end if needed
-                    // (Assuming filters.startDate/endDate are populated correctly in fetchData)
                 }
-                // Fallback if filters didn't provide dates (e.g., 'all time' initially)
-                if (!minDate && data.length > 0) minDate = data[0].first_seen_date; // Use earliest first seen date
-                if (!maxDate && data.length > 0) maxDate = addOneDay(data[data.length - 1].first_seen_date); // Use latest + 1 day
-
+                // Determine min/max from validData if necessary
+                if (!minDate && validData.length > 0) minDate = validData[0].first_seen_date;
+                if (!maxDate && validData.length > 0) maxDate = addOneDay(validData[validData.length - 1].first_seen_date);
 
                 this.charts.newSpecies = new Chart(ctx, {
                     type: 'bar',
                     data: {
-                        // Labels are now derived from the data structure's 'y' property
-                        // labels: labels, 
+                        labels: labels, // Use the derived labels
                         datasets: [{
                             label: 'First Detected On',
-                            data: chartData,
+                            data: chartValues, // Use the derived [start, end] pairs
                             backgroundColor: colors,
                             borderWidth: 1,
-                            barPercentage: 0.6, // Adjust bar thickness
-                            categoryPercentage: 0.8 // Adjust spacing between bars
+                            barPercentage: 0.5, 
+                            categoryPercentage: 0.7 
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        indexAxis: 'y', // Horizontal bars
+                        indexAxis: 'y',
                         plugins: {
                             legend: { display: false },
                             tooltip: {
@@ -1208,14 +1215,12 @@
                                 borderWidth: theme.tooltip.borderWidth,
                                 callbacks: {
                                     title: (tooltipItems) => {
-                                         // Show species name as title
-                                        return tooltipItems[0].label;
+                                        return tooltipItems[0].label; 
                                     },
                                     label: (context) => {
-                                        // Find the original data item to get the date
-                                        const index = context.dataIndex;
-                                        const item = data[index]; // Use original sorted data
-                                        return `First Seen: ${item.first_seen_date}`;
+                                        // Get the original start date from the dataset for the tooltip
+                                        const startDate = context.dataset.data[context.dataIndex][0];
+                                        return `First Seen: ${startDate}`;
                                     }
                                 }
                             }
@@ -1227,11 +1232,11 @@
                                     unit: 'day',
                                     tooltipFormat: 'yyyy-MM-dd', 
                                     displayFormats: {
-                                        day: 'MMM d' // Format for axis labels
+                                        day: 'MMM d'
                                     }
                                 },
-                                min: minDate, // Set based on filter period
-                                max: maxDate, // Set based on filter period
+                                min: minDate,
+                                max: maxDate,
                                 title: {
                                     display: true,
                                     text: 'First Detection Date',
@@ -1241,10 +1246,10 @@
                                 grid: { color: theme.color.grid }
                             },
                             y: {
-                                type: 'category', // Y-axis is the species name
-                                labels: labels,   // Explicitly set labels for the category axis
+                                type: 'category',
+                                // No need to set labels here when they are in data.labels
                                 ticks: { color: theme.color.text },
-                                grid: { display: false } // Hide y-axis grid lines for cleaner look
+                                grid: { display: false } 
                             }
                         }
                     }
