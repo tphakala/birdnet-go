@@ -1,0 +1,1299 @@
+{{define "analytics"}}
+
+{{/* 
+  IMPORTANT IMPLEMENTATION NOTES:
+  - DO NOT USE HTMX for any data requests on this page
+  - Use ONLY JSON API endpoints with fetch/Alpine.js for all data operations
+  - This page is part of migration away from HTMX to pure JSON API architecture
+  - All analytics functionality must use JSON API endpoints with proper fetch requests
+  - Maintain this architecture for any future enhancements to the analytics functionality
+*/}}
+
+<div class="col-span-12 space-y-4" x-cloak x-data="analyticsUI" role="region" aria-label="Bird Detection Analytics">
+    <!-- Summary Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Total Detections Card -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body card-padding">
+                <h2 class="card-title text-lg">Total Detections</h2>
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-primary" viewBox="0 0 921.998 921.998" fill="currentColor" aria-hidden="true">
+                            <path d="M869.694,385.652c-11.246-12.453-132.373-110.907-154.023-117.272c-9.421-2.735-18.892-4.447-28.681-5.164
+                                c-45.272-3.315-95.213,10.875-126.684,44.794c-2.741,2.956-4.311,4.645-4.311,4.645s1.172-1.996,3.224-5.488
+                                c9.706-16.365,23.847-30.577,38.989-41.956c6.979-5.243,14.37-9.937,22.088-14.014c2.116-1.118,21.797-11.751,23.12-10.357
+                                c-0.003-0.003-10.744-11.33-10.744-11.33c-17.273-17.276-35.963-32.167-61.415-32.167c-31.547,0-58.505,19.559-69.472,47.201
+                                c-9.306-6.917-24.11-11.392-40.788-11.392c-16.678,0-31.481,4.475-40.788,11.392c-10.967-27.643-37.925-47.201-69.472-47.201
+                                c-25.452,0-44.142,14.891-61.416,32.166c0,0-10.741,11.327-10.744,11.33c1.322-1.395,21.003,9.239,23.12,10.357
+                                c7.718,4.077,15.109,8.771,22.088,14.014c15.145,11.378,29.283,25.591,38.989,41.956c2.052,3.493,3.224,5.488,3.224,5.488
+                                s-1.566-1.689-4.31-4.645c-31.471-33.919-81.411-48.109-126.683-44.794c-9.789,0.717-19.26,2.429-28.681,5.164
+                                c-21.651,6.365-142.778,104.819-154.023,117.272C19.797,421.645,0,469.336,0,521.655c0,112.112,90.886,203,203,203
+                                c102.56,0,187.34-76.062,201.048-174.851c15.983,11.645,35.663,18.52,56.951,18.52c21.289,0,40.968-6.875,56.951-18.52
+                                c13.708,98.788,98.487,174.851,201.048,174.851c112.114,0,203-90.888,203-203C921.996,469.336,902.199,421.647,869.694,385.652z
+                                M198.497,649.155c-67.611,0-122.421-54.811-122.421-122.421s54.81-122.42,122.421-122.42s122.421,54.81,122.421,122.42
+                                S266.108,649.155,198.497,649.155z M460.997,515.234c-17.833,0-32.29-14.457-32.29-32.29s14.457-32.289,32.29-32.289
+                                s32.29,14.457,32.29,32.289C493.287,500.777,478.83,515.234,460.997,515.234z M723.497,649.155
+                                c-67.611,0-122.421-54.811-122.421-122.421s54.81-122.42,122.421-122.42s122.421,54.81,122.421,122.42
+                                S791.108,649.155,723.497,649.155z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-3xl font-bold" x-text="isLoading ? '...' : formatNumber(summary.totalDetections)">0</div>
+                        <div class="text-xs text-base-content/60" x-text="getPeriodLabel()">All time</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Unique Species Card -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body card-padding">
+                <h2 class="card-title text-lg">Unique Species</h2>
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-full bg-secondary/20 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-secondary" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
+                            <path d="M236.4375,73.34375,213.207,57.85547A60.00943,60.00943,0,0,0,96,76V93.19385L1.75293,211.00244A7.99963,7.99963,0,0,0,8,224H112A104.11791,104.11791,0,0,0,216,120V100.28125l20.4375-13.625a7.99959,7.99959,0,0,0,0-13.3125Zm-126.292,67.77783-40,48a7.99987,7.99987,0,0,1-12.291-10.24316l40-48a7.99987,7.99987,0,0,1,12.291,10.24316ZM164,80a12,12,0,1,1,12-12A12,12,0,0,1,164,80Z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-3xl font-bold" x-text="isLoading ? '...' : formatNumber(summary.uniqueSpecies)">0</div>
+                        <div class="text-xs text-base-content/60" x-text="getPeriodLabel()">All time</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Average Confidence Card -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body card-padding">
+                <h2 class="card-title text-lg">Avg. Confidence</h2>
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-full bg-accent/20 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-accent" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-3xl font-bold" x-text="isLoading ? '...' : formatPercentage(summary.avgConfidence)">0%</div>
+                        <div class="text-xs text-base-content/60" x-text="getPeriodLabel()">All time</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Most Common Species Card -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body card-padding">
+                <h2 class="card-title text-lg">Most Common</h2>
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-full bg-success/20 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-success" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M3.293 9.707a1 1 0 010-1.414l6-6a1 1 0 011.414 0l6 6a1 1 0 01-1.414 1.414L11 5.414V17a1 1 0 11-2 0V5.414L4.707 9.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="font-bold text-lg truncate max-w-[150px]" x-text="isLoading ? '...' : (summary.mostCommonSpecies || 'None')">-</div>
+                        <div class="text-xs text-base-content/60" x-text="isLoading ? '' : (summary.mostCommonCount > 0 ? formatNumber(summary.mostCommonCount) + ' detections' : '')">0 detections</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Controls -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body card-padding">
+            <h2 class="card-title" id="analytics-filters-heading">Filter Data</h2>
+            
+            <form id="analyticsFiltersForm" class="space-y-4" @submit.prevent="fetchData()" x-ref="filtersForm">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Time Period Filter -->
+                    <div class="form-control">
+                        <label class="label" for="timePeriod">
+                            <span class="label-text">Time Period</span>
+                        </label>
+                        <select id="timePeriod" x-model="filters.timePeriod" class="select select-bordered w-full">
+                            <option value="all">All Time</option>
+                            <option value="today">Today</option>
+                            <option value="week">Last 7 Days</option>
+                            <option value="month">Last 30 Days</option>
+                            <option value="90days">Last 90 Days</option>
+                            <option value="year">Last 12 Months</option>
+                            <option value="custom">Custom Range</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Start Date (only visible when custom range selected) -->
+                    <div class="form-control" x-show="filters.timePeriod === 'custom'">
+                        <label class="label" for="startDate">
+                            <span class="label-text">From</span>
+                        </label>
+                        <input type="date" id="startDate" x-model="filters.startDate" class="input input-bordered w-full" />
+                    </div>
+                    
+                    <!-- End Date (only visible when custom range selected) -->
+                    <div class="form-control" x-show="filters.timePeriod === 'custom'">
+                        <label class="label" for="endDate">
+                            <span class="label-text">To</span>
+                        </label>
+                        <input type="date" id="endDate" x-model="filters.endDate" class="input input-bordered w-full" />
+                    </div>
+                </div>
+                
+                <!-- Additional filters can be added here -->
+                
+                <div class="flex justify-end gap-2">
+                    <button type="button" class="btn btn-ghost" @click="resetFilters()">Reset</button>
+                    <button type="submit" class="btn btn-primary" :disabled="isLoading">
+                        <template x-if="isLoading">
+                            <span class="loading loading-spinner loading-sm"></span>
+                        </template>
+                        Apply Filters
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Species Distribution Chart -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body card-padding">
+                <h2 class="card-title">Top 10 Species</h2>
+                <div x-show="isLoading" class="flex justify-center items-center p-8">
+                    <span class="loading loading-spinner loading-lg text-primary"></span>
+                </div>
+                <div x-show="!isLoading" class="h-80 chart-container">
+                    <canvas id="speciesChart" class="w-full h-full" role="img" aria-label="Top 10 Species Distribution Chart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Time of Day Chart -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body card-padding">
+                <h2 class="card-title">Detections by Time of Day</h2>
+                <div x-show="isLoading" class="flex justify-center items-center p-8">
+                    <span class="loading loading-spinner loading-lg text-primary"></span>
+                </div>
+                <div x-show="!isLoading" class="h-80 chart-container">
+                    <canvas id="timeOfDayChart" class="w-full h-full" role="img" aria-label="Detections by Time of Day Chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Trend Charts -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body card-padding">
+            <h2 class="card-title">Detection Trends</h2>
+            <div x-show="isLoading" class="flex justify-center items-center p-8">
+                <span class="loading loading-spinner loading-lg text-primary"></span>
+            </div>
+            <div x-show="!isLoading" class="h-80 chart-container">
+                <canvas id="trendChart" class="w-full h-full" role="img" aria-label="Detection Trends Over Time Chart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- New Species Chart -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body card-padding">
+            <h2 class="card-title">New Species Detected</h2>
+            <div x-show="isLoading" class="flex justify-center items-center p-8">
+                <span class="loading loading-spinner loading-lg text-primary"></span>
+            </div>
+            <div x-show="!isLoading && newSpeciesData.length === 0" class="text-center py-4 text-base-content/50">
+                No new species detected in this period.
+            </div>
+            <div id="newSpeciesChartContainer" x-show="!isLoading && newSpeciesData.length > 0" class="chart-container">
+                <canvas id="newSpeciesChart" class="w-full h-full" role="img" aria-label="Chart showing species detected for the first time in this period"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Data Table for Top Detections -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body card-padding">
+            <h2 class="card-title">Recent Detections</h2>
+            <div x-show="isLoading" class="flex justify-center items-center p-8" aria-live="polite">
+                <span class="loading loading-spinner loading-lg text-primary"></span>
+            </div>
+            <div class="overflow-x-auto" x-show="!isLoading" aria-live="polite">
+                <table class="table w-full">
+                    <thead>
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>Species</th>
+                            <th>Confidence</th>
+                            <th>Time of Day</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="(detection, index) in recentDetections" :key="detection.id">
+                            <tr :class="index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'">
+                                <td x-text="formatDateTime(detection.timestamp)"></td>
+                                <td>
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-8 h-8 rounded-full bg-base-200 overflow-hidden">
+                                            <img 
+                                                :src="'/api/v2/media/species-image?name=' + encodeURIComponent(detection.scientificName)" 
+                                                :alt="detection.commonName || 'Unknown species'"
+                                                class="w-full h-full object-cover"
+                                                @error="$event.target.src = '/assets/images/bird-placeholder.svg';"
+                                                loading="lazy"
+                                            />
+                                        </div>
+                                        <div>
+                                            <div class="font-medium" x-text="detection.commonName || 'Unknown'"></div>
+                                            <div class="text-xs opacity-50" x-text="detection.scientificName || ''"></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-16 h-4 rounded-full overflow-hidden bg-base-200">
+                                            <div class="h-full" 
+                                                 :class="{
+                                                    'bg-success': detection.confidence >= 0.8,
+                                                    'bg-warning': detection.confidence >= 0.4 && detection.confidence < 0.8,
+                                                    'bg-error': detection.confidence < 0.4
+                                                 }"
+                                                 :style="'width: ' + (detection.confidence * 100) + '%'"></div>
+                                        </div>
+                                        <span class="text-sm" x-text="formatPercentage(detection.confidence)"></span>
+                                    </div>
+                                </td>
+                                <td x-text="detection.timeOfDay || 'Unknown'"></td>
+                            </tr>
+                        </template>
+                        <!-- Empty state -->
+                        <tr x-show="recentDetections.length === 0">
+                            <td colspan="4" class="text-center py-4 text-base-content/50">No recent detections found</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Include Chart.js -->
+<script src="/assets/chart.min.js"></script>
+<!-- Include the Date Adapter (e.g., date-fns) -->
+<script src="/assets/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('analyticsUI', () => ({
+            isLoading: true,
+            error: null,
+            filters: {
+                timePeriod: 'week',  // Default to last 7 days
+                startDate: '',
+                endDate: ''
+            },
+            summary: {
+                totalDetections: 0,
+                uniqueSpecies: 0,
+                avgConfidence: 0,
+                mostCommonSpecies: '',
+                mostCommonCount: 0
+            },
+            recentDetections: [], // Will hold the most recent detections
+            newSpeciesData: [],   // Data for the new species chart
+            charts: {
+                species: null,
+                timeOfDay: null,
+                trend: null,
+                newSpecies: null // Chart instance for new species
+            },
+            
+            init() {
+                // Set Chart.js default font to match theme
+                try {
+                    const bodyFont = window.getComputedStyle(document.body).fontFamily;
+                    if (bodyFont) {
+                        Chart.defaults.font.family = bodyFont;
+                    }
+                } catch (e) {
+                    console.error("Could not set Chart.js default font family:", e);
+                    // Fallback or default font will be used by Chart.js
+                }
+
+                // Set default dates for custom range
+                const today = new Date();
+                const lastMonth = new Date();
+                lastMonth.setDate(today.getDate() - 30);
+                
+                this.filters.endDate = this.formatDateForInput(today);
+                this.filters.startDate = this.formatDateForInput(lastMonth);
+                
+                // Fetch initial data
+                this.fetchData();
+            },
+            
+            // Get theme color from CSS variables - used for chart theming
+            getThemeColor(colorName, opacity = 1) {
+                // Get the CSS variable value
+                let color = getComputedStyle(document.documentElement).getPropertyValue(`--${colorName}`).trim();
+                
+                // If color is in hex format, convert to rgba
+                if (color.startsWith('#')) {
+                    const r = parseInt(color.slice(1, 3), 16);
+                    const g = parseInt(color.slice(3, 5), 16);
+                    const b = parseInt(color.slice(5, 7), 16);
+                    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+                }
+                
+                // If color is already rgba or rgb, modify opacity
+                if (color.startsWith('rgb')) {
+                    // Replace existing opacity if rgba
+                    if (color.startsWith('rgba')) {
+                        return color.replace(/rgba\((.+?),\s*[\d.]+\)/, `rgba($1, ${opacity})`);
+                    }
+                    // Convert rgb to rgba
+                    return color.replace(/rgb\((.+?)\)/, `rgba($1, ${opacity})`);
+                }
+                
+                // Return as-is if we can't parse it
+                return color;
+            },
+            
+            // Get chart theme - shared configuration for all charts
+            getChartTheme() {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                let textColor, gridColor, tooltipBgColor, tooltipBorderColor;
+
+                if (currentTheme === 'dark') {
+                    textColor = 'rgba(200, 200, 200, 1)'; // Example dark theme text color (adjust as needed)
+                    gridColor = 'rgba(255, 255, 255, 0.1)'; // Example dark theme grid color
+                    tooltipBgColor = 'rgba(55, 65, 81, 0.9)'; // Darker tooltip background
+                    tooltipBorderColor = 'rgba(255, 255, 255, 0.2)'; 
+                } else {
+                    // Assume light theme (or default)
+                    textColor = 'rgba(55, 65, 81, 1)';   // Example light theme text color (adjust as needed)
+                    gridColor = 'rgba(0, 0, 0, 0.1)';   // Example light theme grid color
+                    tooltipBgColor = 'rgba(255, 255, 255, 0.9)'; // Lighter tooltip background
+                    tooltipBorderColor = 'rgba(0, 0, 0, 0.2)';
+                }
+
+                return {
+                    color: {
+                        text: textColor,
+                        grid: gridColor
+                    },
+                    font: {
+                        // family is now set globally via Chart.defaults.font.family
+                        // family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+                    },
+                    scales: {
+                        grid: {
+                            color: gridColor
+                        },
+                        ticks: {
+                            color: textColor
+                        },
+                        title: {
+                            color: textColor
+                        }
+                    },
+                    legend: {
+                        labels: {
+                            color: textColor
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: tooltipBgColor,
+                        titleColor: textColor,
+                        bodyColor: textColor,
+                        borderColor: tooltipBorderColor,
+                        borderWidth: 1
+                    }
+                };
+            },
+            
+            // Format date for date input (YYYY-MM-DD)
+            formatDateForInput(date) {
+                return date.toISOString().split('T')[0];
+            },
+            
+            // Format number with thousand separators
+            formatNumber(number) {
+                return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            },
+            
+            // Format percentage
+            formatPercentage(value) {
+                return (value * 100).toFixed(1) + '%';
+            },
+            
+            // Format datetime for display
+            formatDateTime(dateString) {
+                if (!dateString) return '';
+                const date = new Date(dateString);
+                return date.toLocaleString();
+            },
+            
+            // Get period label based on current filter
+            getPeriodLabel() {
+                switch(this.filters.timePeriod) {
+                    case 'today': return 'Today';
+                    case 'week': return 'Last 7 days';
+                    case 'month': return 'Last 30 days';
+                    case '90days': return 'Last 90 days';
+                    case 'year': return 'Last 12 months';
+                    case 'custom': return 'Custom range';
+                    default: return 'All time';
+                }
+            },
+            
+            // Reset filters to default
+            resetFilters() {
+                this.filters.timePeriod = 'week';
+
+                const today = new Date();
+                const lastWeek = new Date();
+                lastWeek.setDate(today.getDate() - 6); // 7-day window incl. today
+
+                this.filters.endDate = this.formatDateForInput(today);
+                this.filters.startDate = this.formatDateForInput(lastWeek);
+
+                this.fetchData();
+            },
+            
+            // Fetch data from the API
+            async fetchData() {
+                this.isLoading = true;
+                this.error = null;
+                
+                try {
+                    // Determine date range based on time period
+                    let startDate, endDate;
+                    const today = new Date();
+                    
+                    switch(this.filters.timePeriod) {
+                        case 'today':
+                            startDate = this.formatDateForInput(today);
+                            endDate = startDate;
+                            break;
+                        case 'week':
+                            endDate = this.formatDateForInput(today);
+                            startDate = this.formatDateForInput(new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000)); // 6 days ago to today = 7 days total
+                            break;
+                        case 'month':
+                            endDate = this.formatDateForInput(today);
+                            startDate = this.formatDateForInput(new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000)); // 29 days ago to today = 30 days total
+                            break;
+                        case '90days':
+                            endDate = this.formatDateForInput(today);
+                            startDate = this.formatDateForInput(new Date(today.getTime() - 89 * 24 * 60 * 60 * 1000)); // 89 days ago to today = 90 days total
+                            break;
+                        case 'year':
+                            endDate = this.formatDateForInput(today);
+                            startDate = this.formatDateForInput(new Date(today.getTime() - 364 * 24 * 60 * 60 * 1000)); // 364 days ago to today = 365 days total
+                            break;
+                        case 'custom':
+                            startDate = this.filters.startDate;
+                            endDate = this.filters.endDate;
+                            break;
+                        case 'all':
+                        default:
+                            // For "all time", clear dates to let API use its default or handle appropriately
+                            startDate = null;
+                            endDate = null;
+                            break;
+                    }
+                    
+                    // Update the filters state with the calculated dates for non-custom periods
+                    // so the chart axes reflect the actual fetched range.
+                    if (this.filters.timePeriod !== 'custom') {
+                        this.filters.startDate = startDate;
+                        this.filters.endDate = endDate;
+                    }
+                    
+                    // Run API calls
+                    const fetchOperations = [
+                        this.fetchSummaryData(startDate, endDate).catch(err => {
+                            console.error('Error in summary data:', err);
+                        }),
+                        this.fetchSpeciesSummary(startDate, endDate).catch(err => {
+                            console.error('Error in species summary:', err);
+                        }),
+                        this.fetchRecentDetections().catch(err => {
+                            console.error('Error in recent detections:', err);
+                            this.recentDetections = [];
+                        }),
+                        this.fetchTimeOfDayData(startDate, endDate).catch(err => {
+                            console.error('Error in time of day data:', err);
+                        }),
+                        this.fetchTrendData(startDate, endDate).catch(err => {
+                            console.error('Error in trend data:', err);
+                        }),
+                        this.fetchNewSpeciesData(startDate, endDate).catch(err => {
+                            console.error('Error in new species data:', err);
+                            this.newSpeciesData = [];
+                        })
+                    ];
+                    
+                    // Wait for all fetch operations to complete
+                    await Promise.allSettled(fetchOperations);
+                    
+                } catch (error) {
+                    console.error('General error fetching analytics data:', error);
+                    this.error = `Failed to load some analytics data. Please try again later.`;
+                } finally {
+                    this.isLoading = false;
+                }
+            },
+            
+            // Fetch summary metrics
+            async fetchSummaryData(startDate, endDate) {
+                try {
+                    // Get species summary from API using URLSearchParams
+                    const params = new URLSearchParams({ limit: '100' }); // Limit as string
+                    if (startDate) params.set('start_date', startDate);
+                    if (endDate) params.set('end_date', endDate);
+                    const url = `/api/v2/analytics/species/summary?${params.toString()}`;
+
+                    const response = await fetch(url);
+                    
+                    if (!response.ok) {
+                        throw new Error(`Server responded with ${response.status}`);
+                    }
+                    
+                    const speciesData = await response.json();
+                    
+                    // Ensure speciesData is an array
+                    const speciesArray = Array.isArray(speciesData) ? speciesData : [];
+                    
+                    // Calculate summary metrics
+                    let totalDetections = 0;
+                    let totalConfidence = 0;
+                    let mostCommonSpecies = '';
+                    let mostCommonCount = 0;
+                    
+                    // Process each species
+                    speciesArray.forEach(species => {
+                        const count = species.count || 0;
+                        const confidence = species.avg_confidence || 0;
+                        
+                        totalDetections += count;
+                        totalConfidence += confidence * count; // Weighted average
+                        
+                        if (count > mostCommonCount) {
+                            mostCommonCount = count;
+                            mostCommonSpecies = species.common_name || 'Unknown';
+                        }
+                    });
+                    
+                    // Update summary data
+                    this.summary = {
+                        totalDetections: totalDetections,
+                        uniqueSpecies: speciesArray.length,
+                        avgConfidence: totalDetections > 0 ? totalConfidence / totalDetections : 0,
+                        mostCommonSpecies: mostCommonSpecies,
+                        mostCommonCount: mostCommonCount
+                    };
+                    
+                } catch (error) {
+                    console.error('Error fetching summary data:', error);
+                    // Set default values on error
+                    this.summary = {
+                        totalDetections: 0,
+                        uniqueSpecies: 0,
+                        avgConfidence: 0,
+                        mostCommonSpecies: '',
+                        mostCommonCount: 0
+                    };
+                    throw error;
+                }
+            },
+            
+            // Fetch species summary for chart
+            async fetchSpeciesSummary(startDate, endDate) {
+                try {
+                    // Get top 10 species using URLSearchParams
+                    const params = new URLSearchParams({ limit: '10' }); // Limit as string
+                    if (startDate) params.set('start_date', startDate);
+                    if (endDate) params.set('end_date', endDate);
+                    const url = `/api/v2/analytics/species/summary?${params.toString()}`;
+
+                    const response = await fetch(url);
+                    
+                    if (!response.ok) {
+                        throw new Error(`Server responded with ${response.status}`);
+                    }
+                    
+                    const speciesData = await response.json();
+                    
+                    // Ensure speciesData is an array
+                    const speciesArray = Array.isArray(speciesData) ? speciesData : [];
+                    
+                    // Create species chart
+                    this.createSpeciesChart(speciesArray);
+                    
+                } catch (error) {
+                    console.error('Error fetching species summary:', error);
+                    // Create empty chart on error
+                    this.createSpeciesChart([]);
+                    throw error;
+                }
+            },
+            
+            // Create species distribution chart
+            createSpeciesChart(data) {
+                const ctx = document.getElementById('speciesChart').getContext('2d');
+                
+                // Destroy existing chart if it exists
+                if (this.charts.species) {
+                    this.charts.species.destroy();
+                }
+                
+                // Sort data by count in descending order
+                data.sort((a, b) => b.count - a.count);
+                
+                // Extract data for chart
+                const labels = data.map(item => item.common_name);
+                const counts = data.map(item => item.count);
+                
+                // Generate colors
+                const backgroundColors = this.generateColorPalette(data.length, 0.7);
+                
+                // Get theme styling
+                const theme = this.getChartTheme();
+                
+                // Create chart
+                this.charts.species = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Number of Detections',
+                            data: counts,
+                            backgroundColor: backgroundColors,
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        plugins: {
+                            legend: {
+                                display: false,
+                                labels: {
+                                    color: theme.color.text
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: theme.tooltip.backgroundColor,
+                                titleColor: theme.tooltip.titleColor,
+                                bodyColor: theme.tooltip.bodyColor,
+                                borderColor: theme.tooltip.borderColor,
+                                borderWidth: theme.tooltip.borderWidth,
+                                callbacks: {
+                                    label: (context) => {
+                                        return `Detections: ${this.formatNumber(context.raw)}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Number of Detections',
+                                    color: theme.color.text
+                                },
+                                ticks: {
+                                    color: theme.color.text
+                                },
+                                grid: {
+                                    color: theme.color.grid
+                                }
+                            },
+                            y: {
+                                ticks: {
+                                    color: theme.color.text
+                                },
+                                grid: {
+                                    color: theme.color.grid
+                                }
+                            }
+                        }
+                    }
+                });
+            },
+            
+            // Fetch recent detections
+            async fetchRecentDetections() {
+                try {
+                    // Get most recent detections
+                    const response = await fetch('/api/v2/detections/recent?limit=10'); // Updated endpoint if needed
+                    
+                    if (!response.ok) {
+                        throw new Error(`Server responded with ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    // Ensure detections is always an array before mapping
+                    const detections = Array.isArray(data) ? data : [];
+                    
+                    // Map the API response to our expected format
+                    this.recentDetections = detections.map(detection => ({
+                        id: detection.id,
+                        timestamp: detection.timestamp || (detection.date && detection.time ? `${detection.date} ${detection.time}` : null), // Combine if separate
+                        commonName: detection.commonName,
+                        scientificName: detection.scientificName,
+                        confidence: detection.confidence,
+                        timeOfDay: detection.timeOfDay || this.calculateTimeOfDay(detection.timestamp || `${detection.date} ${detection.time}`)
+                    }));
+                    
+                } catch (error) {
+                    console.error('Error fetching recent detections:', error);
+                    this.recentDetections = []; // Ensure we have an empty array on error
+                    throw error;
+                }
+            },
+            
+            // Fetch time of day data
+            async fetchTimeOfDayData(startDate, endDate) {
+                try {
+                    // Build the query parameters using URLSearchParams
+                    let url = '/api/v2/analytics/time/distribution/hourly';
+                    const params = new URLSearchParams();
+                    if (startDate) params.set('start_date', startDate);
+                    if (endDate) params.set('end_date', endDate);
+
+                    // Add the params to the URL if any were set
+                    const queryString = params.toString();
+                    if (queryString) {
+                        url += '?' + queryString;
+                    }
+
+                    const response = await fetch(url);
+                    
+                    if (!response.ok) {
+                        throw new Error(`Server responded with ${response.status}`);
+                    }
+                    
+                    const timeData = await response.json();
+                    
+                    // Create time of day chart
+                    this.createTimeOfDayChart(timeData);
+                    
+                } catch (error) {
+                    console.error('Error fetching time of day data:', error);
+                    // Initialize with empty data
+                    this.createTimeOfDayChart([]);
+                    throw error;
+                }
+            },
+            
+            // Fetch trend data
+            async fetchTrendData(startDate, endDate) {
+                try {
+                    // Build the query parameters using URLSearchParams
+                    let url = '/api/v2/analytics/time/daily';
+                    const params = new URLSearchParams();
+                    if (startDate) params.set('start_date', startDate);
+                    if (endDate) params.set('end_date', endDate);
+
+                    // Add the params to the URL if any were set
+                    const queryString = params.toString();
+                    if (queryString) {
+                        url += '?' + queryString;
+                    }
+
+                    const response = await fetch(url);
+                    
+                    if (!response.ok) {
+                        throw new Error(`Server responded with ${response.status}`);
+                    }
+                    
+                    const trendData = await response.json();
+                    
+                    // Create trend chart
+                    this.createTrendChart(trendData);
+                    
+                } catch (error) {
+                    console.error('Error fetching trend data:', error);
+                    // Initialize with empty data
+                    this.createTrendChart([]);
+                    throw error;
+                }
+            },
+            
+            // Create time of day chart
+            createTimeOfDayChart(data) {
+                const ctx = document.getElementById('timeOfDayChart').getContext('2d');
+                
+                // Destroy existing chart if it exists
+                if (this.charts.timeOfDay) {
+                    this.charts.timeOfDay.destroy();
+                }
+                
+                // Define the time periods
+                const periods = ['Night (0-4)', 'Dawn (5-8)', 'Morning (9-11)', 'Afternoon (12-16)', 'Evening (17-19)', 'Night (20-23)'];
+                
+                // Initialize counts for each period
+                const periodCounts = new Array(periods.length).fill(0);
+                
+                // Check if data is an array before using forEach
+                if (Array.isArray(data)) {
+                    // Process and aggregate data by time period
+                    data.forEach(entry => {
+                        // Get hour directly from the data
+                        const hour = entry.hour;
+                        
+                        // Map hour to period index
+                        let periodIndex;
+                        if (hour >= 0 && hour < 5) periodIndex = 0;
+                        else if (hour >= 5 && hour < 9) periodIndex = 1;
+                        else if (hour >= 9 && hour < 12) periodIndex = 2;
+                        else if (hour >= 12 && hour < 17) periodIndex = 3;
+                        else if (hour >= 17 && hour < 20) periodIndex = 4;
+                        else periodIndex = 5; // Hour 20-23 maps to index 5
+                        
+                        // Add count to the appropriate period
+                        periodCounts[periodIndex] += entry.count;
+                    });
+                } else {
+                    console.warn('Time of day data is not an array:', data);
+                }
+                
+                // Combine the two 'Night' periods if desired, or keep them separate
+                // Here we keep them separate as per the labels array
+                
+                // Generate colors - Use a consistent color or a palette
+                // const primaryColor = this.getThemeColor('primary', 0.7);
+                // const backgroundColors = new Array(periods.length).fill(primaryColor);
+
+                // Optional: Use distinct colors per period if needed
+                const backgroundColors = [
+                    'rgba(55, 48, 163, 0.7)',   // Night (0-4)
+                    'rgba(251, 146, 60, 0.7)',  // Dawn (5-8)
+                    'rgba(250, 204, 21, 0.7)',  // Morning (9-11)
+                    'rgba(56, 189, 248, 0.7)',  // Afternoon (12-16)
+                    'rgba(251, 113, 133, 0.7)', // Evening (17-19)
+                    'rgba(42, 36, 122, 0.7)'    // Night (20-23)
+                ];
+                // */
+                
+                // Get theme styling
+                const theme = this.getChartTheme();
+                
+                // Create chart as a vertical bar chart
+                this.charts.timeOfDay = new Chart(ctx, {
+                    type: 'bar', // Change type to 'bar'
+                    data: {
+                        labels: periods,
+                        datasets: [{
+                            label: 'Detections', // Add a label for the dataset
+                            data: periodCounts,
+                            backgroundColor: backgroundColors,
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'x', // Ensure vertical bars
+                        plugins: {
+                            legend: {
+                                display: false // Hide legend for single dataset
+                            },
+                            tooltip: {
+                                backgroundColor: theme.tooltip.backgroundColor,
+                                titleColor: theme.tooltip.titleColor,
+                                bodyColor: theme.tooltip.bodyColor,
+                                borderColor: theme.tooltip.borderColor,
+                                borderWidth: theme.tooltip.borderWidth,
+                                callbacks: {
+                                    label: (context) => {
+                                        return `Detections: ${this.formatNumber(context.raw)}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: { // Add scales for bar chart
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Number of Detections',
+                                    color: theme.color.text
+                                },
+                                ticks: {
+                                    color: theme.color.text
+                                },
+                                grid: {
+                                    color: theme.color.grid
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Time Period',
+                                    color: theme.color.text
+                                },
+                                ticks: {
+                                    color: theme.color.text
+                                },
+                                grid: {
+                                    color: theme.color.grid
+                                }
+                            }
+                        }
+                    }
+                });
+            },
+            
+            // Create detection trend chart
+            createTrendChart(responseData) {
+                const ctx = document.getElementById('trendChart').getContext('2d');
+                
+                // Destroy existing chart if it exists
+                if (this.charts.trend) {
+                    this.charts.trend.destroy();
+                }
+                
+                // Extract the actual data array from the response object
+                const data = responseData.data || [];
+                
+                // Group data by day (already grouped by API, but ensure format)
+                const dailyData = {};
+                
+                // Check if data is an array before using forEach
+                if (Array.isArray(data)) {
+                    data.forEach(entry => {
+                        const date = entry.date;
+                        if (!dailyData[date]) {
+                            dailyData[date] = 0;
+                        }
+                        dailyData[date] += entry.count;
+                    });
+                } else {
+                    console.warn('Trend data.data is not an array:', data);
+                }
+                
+                // Sort dates
+                const sortedDates = Object.keys(dailyData).sort();
+                
+                // Extract data for chart
+                const labels = sortedDates;
+                const counts = sortedDates.map(date => dailyData[date]);
+                
+                // Get theme styling
+                const theme = this.getChartTheme();
+                const primaryColor = this.getThemeColor('primary', 1);
+                
+                // Create chart
+                this.charts.trend = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Daily Detections',
+                            data: counts,
+                            fill: false,
+                            borderColor: primaryColor,
+                            tension: 0.1,
+                            pointBackgroundColor: primaryColor
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: {
+                                    color: theme.color.text,
+                                    font: theme.font
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: theme.tooltip.backgroundColor,
+                                titleColor: theme.tooltip.titleColor,
+                                bodyColor: theme.tooltip.bodyColor,
+                                borderColor: theme.tooltip.borderColor,
+                                borderWidth: theme.tooltip.borderWidth,
+                                callbacks: {
+                                    label: (context) => {
+                                        return `Detections: ${this.formatNumber(context.raw)}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Number of Detections',
+                                    color: theme.color.text
+                                },
+                                ticks: {
+                                    color: theme.color.text
+                                },
+                                grid: {
+                                    color: theme.color.grid
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Date',
+                                    color: theme.color.text
+                                },
+                                ticks: {
+                                    color: theme.color.text
+                                },
+                                grid: {
+                                    color: theme.color.grid
+                                }
+                            }
+                        }
+                    }
+                });
+            },
+            
+            // Helper to calculate time of day from timestamp if not provided by API
+            calculateTimeOfDay(timestamp) {
+                const date = new Date(timestamp);
+                const hour = date.getHours();
+                
+                if (hour >= 5 && hour < 8) return 'Sunrise';
+                if (hour >= 8 && hour < 17) return 'Day';
+                if (hour >= 17 && hour < 20) return 'Sunset';
+                return 'Night';
+            },
+            
+            // Generate color palette for charts
+            generateColorPalette(count, alpha = 1) {
+                const baseColors = [
+                    `rgba(59, 130, 246, ${alpha})`,   // Blue
+                    `rgba(16, 185, 129, ${alpha})`,   // Green
+                    `rgba(245, 158, 11, ${alpha})`,   // Orange
+                    `rgba(236, 72, 153, ${alpha})`,   // Pink
+                    `rgba(139, 92, 246, ${alpha})`,   // Purple
+                    `rgba(239, 68, 68, ${alpha})`,    // Red
+                    `rgba(20, 184, 166, ${alpha})`,   // Teal
+                    `rgba(234, 179, 8, ${alpha})`,    // Yellow
+                    `rgba(99, 102, 241, ${alpha})`,   // Indigo
+                    `rgba(249, 115, 22, ${alpha})`    // Orange-red
+                ];
+                
+                // If we need more colors than our base palette, we'll create variations
+                if (count <= baseColors.length) {
+                    return baseColors.slice(0, count);
+                } else {
+                    let palette = [...baseColors];
+                    
+                    // Create variations by adjusting opacity
+                    while (palette.length < count) {
+                        const newAlpha = alpha * 0.8; // Reduce opacity for variation
+                        const variations = baseColors.map(color => color.replace(`${alpha})`, `${newAlpha})`));
+                        palette = [...palette, ...variations];
+                    }
+                    
+                    return palette.slice(0, count);
+                }
+            },
+            
+            // Fetch new species data
+            async fetchNewSpeciesData(startDate, endDate) {
+                try {
+                    // Build the query parameters using URLSearchParams
+                    let url = '/api/v2/analytics/species/detections/new';
+                    const params = new URLSearchParams();
+                    if (startDate) params.set('start_date', startDate);
+                    if (endDate) params.set('end_date', endDate);
+                    
+                    const queryString = params.toString();
+                    if (queryString) url += '?' + queryString;
+
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        throw new Error(`Server responded with ${response.status}`);
+                    }
+                    const data = await response.json();
+                    
+                    this.newSpeciesData = Array.isArray(data) ? data : [];
+                    this.createNewSpeciesChart(this.newSpeciesData);
+                } catch (error) {
+                    console.error('Error fetching new species data:', error);
+                    this.newSpeciesData = [];
+                    this.createNewSpeciesChart([]); // Ensure chart clears on error
+                    throw error; // Re-throw for Promise.allSettled
+                }
+            },
+            
+            // Create new species chart (Timeline style)
+            createNewSpeciesChart(data) {
+                const ctx = document.getElementById('newSpeciesChart').getContext('2d');
+                if (this.charts.newSpecies) {
+                    this.charts.newSpecies.destroy();
+                    this.charts.newSpecies = null; 
+                }
+
+                if (!Array.isArray(data)) {
+                    console.warn("Received non-array data for new species chart:", data);
+                    return; // Exit if data is not an array
+                }
+                
+                // Helper to add one day to a date string (YYYY-MM-DD)
+                const addOneDay = (dateStr) => {
+                    // Basic validation for non-empty string
+                    if (!dateStr || typeof dateStr !== 'string') {
+                        console.warn('addOneDay received invalid input:', dateStr);
+                        return null; 
+                    }
+                    const date = new Date(dateStr);
+                    // Check if the date parsing itself was valid
+                    if (isNaN(date.getTime())) { 
+                        console.warn('addOneDay could not parse date string:', dateStr);
+                        return null; 
+                    }
+                    // Add a day
+                    date.setDate(date.getDate() + 1);
+                    // Check if the date became invalid after adding a day (less likely but possible)
+                    if (isNaN(date.getTime())) { 
+                        console.warn('addOneDay resulted in invalid date after adding a day:', dateStr);
+                        return null;
+                    }
+                    return date.toISOString().split('T')[0];
+                };
+
+                // 1. Filter the original data first for valid start dates and calculable end dates
+                const validData = data.filter(item => {
+                    // Use the new field name from the API response
+                    const endDate = addOneDay(item.first_heard_date);
+                    return item.first_heard_date && typeof item.first_heard_date === 'string' && endDate;
+                });
+
+                if (validData.length === 0) {
+                    console.warn("No valid data points remain for new species chart after date validation.");
+                    // Optionally display a message on the canvas or just leave it empty
+                    return; 
+                }
+
+                // Sort the valid data by first heard date (newest first to easily slice top N)
+                validData.sort((a, b) => new Date(b.first_heard_date) - new Date(a.first_heard_date));
+
+                // Limit to the top N most recent new species
+                const displayLimit = 20;
+                const limitedData = validData.slice(0, displayLimit);
+
+                // Sort again by oldest first for timeline rendering
+                limitedData.sort((a, b) => new Date(a.first_heard_date) - new Date(b.first_heard_date));
+
+                // 2. Create labels and chart values from the limited/sorted data
+                const labels = limitedData.map(item => item.common_name || item.scientific_name);
+                const chartValues = limitedData.map(item => [
+                    item.first_heard_date, 
+                    addOneDay(item.first_heard_date) // We know this works from the filter step
+                ]);
+
+                const theme = this.getChartTheme();
+                const colors = this.generateColorPalette(labels.length, 0.7); // Use labels length
+
+                let minDate = null, maxDate = null;
+                if (this.filters.timePeriod !== 'all') {
+                    if (this.filters.startDate) minDate = this.filters.startDate;
+                    if (this.filters.endDate) maxDate = this.filters.endDate;
+                }
+                // Determine min/max from validData if necessary
+                if (!minDate && validData.length > 0) minDate = validData[0].first_heard_date;
+                if (!maxDate && validData.length > 0) maxDate = addOneDay(validData[validData.length - 1].first_heard_date);
+
+                // Add padding to maxDate to ensure last bar is visible
+                if (maxDate) {
+                    maxDate = addOneDay(maxDate);
+                }
+
+                this.charts.newSpecies = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels, // Use the derived labels
+                        datasets: [{
+                            label: 'First Heard On',
+                            data: chartValues, // Use the derived [start, end] pairs
+                            backgroundColor: colors,
+                            borderWidth: 1,
+                            barPercentage: 0.5, 
+                            categoryPercentage: 0.7 
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: theme.tooltip.backgroundColor,
+                                titleColor: theme.tooltip.titleColor,
+                                bodyColor: theme.tooltip.bodyColor,
+                                borderColor: theme.tooltip.borderColor,
+                                borderWidth: theme.tooltip.borderWidth,
+                                callbacks: {
+                                    title: (tooltipItems) => {
+                                        return tooltipItems[0].label; 
+                                    },
+                                    label: (context) => {
+                                        // Get the original start date from the dataset for the tooltip
+                                        const startDate = context.dataset.data[context.dataIndex][0];
+                                        return `First Heard: ${startDate}`; // Updated label
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                type: 'time',
+                                time: {
+                                    unit: 'day',
+                                    tooltipFormat: 'yyyy-MM-dd', 
+                                    displayFormats: {
+                                        day: 'MMM d'
+                                    }
+                                },
+                                min: minDate,
+                                max: maxDate,
+                                title: {
+                                    display: true,
+                                    text: 'First Heard Date', // Updated axis title
+                                    color: theme.color.text
+                                },
+                                ticks: { color: theme.color.text },
+                                grid: { color: theme.color.grid }
+                            },
+                            y: {
+                                type: 'category',
+                                // No need to set labels here when they are in data.labels
+                                ticks: { color: theme.color.text },
+                                grid: { display: false } 
+                            }
+                        }
+                    }
+                });
+            }
+        }));
+    });
+</script>
+
+<style>
+    /* Using a broader selector to properly hide all x-cloak elements */
+    [x-cloak] {
+        display: none !important;
+    }
+</style>
+
+{{end}}

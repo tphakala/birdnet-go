@@ -3,6 +3,7 @@
 package api
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -23,6 +24,34 @@ import (
 // It provides a full mock of all datastore methods with proper expectations
 type MockDataStore struct {
 	mock.Mock
+}
+
+// safeSlice is a helper for mock methods returning slices.
+// It safely handles nil arguments and performs type assertion.
+func safeSlice[T any](args mock.Arguments, index int) []T {
+	if arg := args.Get(index); arg != nil {
+		// Check if the argument is already of the target slice type
+		if slice, ok := arg.([]T); ok {
+			return slice
+		}
+		// Fail fast – most likely the test registered a value of the wrong type.
+		panic(fmt.Sprintf("safeSlice: expected []%T at index %d, got %T", *new(T), index, arg))
+	}
+	return nil // Return nil if the argument itself is nil
+}
+
+// safePointer is a helper for mock methods returning pointers.
+// It safely handles nil arguments and performs type assertion.
+func safePointer[T any](args mock.Arguments, index int) *T {
+	if arg := args.Get(index); arg != nil {
+		// Check if the argument is already of the target pointer type
+		if ptr, ok := arg.(T); ok {
+			return &ptr
+		}
+		// Fail fast – most likely the test registered a value of the wrong type.
+		panic(fmt.Sprintf("safePointer: expected *%T at index %d, got %T", *new(T), index, arg))
+	}
+	return nil // Return nil if the argument itself is nil
 }
 
 // Implement required methods of the datastore.Interface
@@ -48,17 +77,20 @@ func (m *MockDataStore) Delete(id string) error {
 
 func (m *MockDataStore) Get(id string) (datastore.Note, error) {
 	args := m.Called(id)
+	if args.Get(0) == nil {
+		return datastore.Note{}, args.Error(1)
+	}
 	return args.Get(0).(datastore.Note), args.Error(1)
 }
 
 func (m *MockDataStore) GetAllNotes() ([]datastore.Note, error) {
 	args := m.Called()
-	return args.Get(0).([]datastore.Note), args.Error(1)
+	return safeSlice[datastore.Note](args, 0), args.Error(1)
 }
 
 func (m *MockDataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
 	args := m.Called(selectedDate, minConfidenceNormalized)
-	return args.Get(0).([]datastore.Note), args.Error(1)
+	return safeSlice[datastore.Note](args, 0), args.Error(1)
 }
 
 func (m *MockDataStore) GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
@@ -68,22 +100,22 @@ func (m *MockDataStore) GetHourlyOccurrences(date, commonName string, minConfide
 
 func (m *MockDataStore) SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit, offset int) ([]datastore.Note, error) {
 	args := m.Called(species, date, hour, duration, sortAscending, limit, offset)
-	return args.Get(0).([]datastore.Note), args.Error(1)
+	return safeSlice[datastore.Note](args, 0), args.Error(1)
 }
 
 func (m *MockDataStore) GetLastDetections(numDetections int) ([]datastore.Note, error) {
 	args := m.Called(numDetections)
-	return args.Get(0).([]datastore.Note), args.Error(1)
+	return safeSlice[datastore.Note](args, 0), args.Error(1)
 }
 
 func (m *MockDataStore) GetAllDetectedSpecies() ([]datastore.Note, error) {
 	args := m.Called()
-	return args.Get(0).([]datastore.Note), args.Error(1)
+	return safeSlice[datastore.Note](args, 0), args.Error(1)
 }
 
 func (m *MockDataStore) SearchNotes(query string, sortAscending bool, limit, offset int) ([]datastore.Note, error) {
 	args := m.Called(query, sortAscending, limit, offset)
-	return args.Get(0).([]datastore.Note), args.Error(1)
+	return safeSlice[datastore.Note](args, 0), args.Error(1)
 }
 
 func (m *MockDataStore) GetNoteClipPath(noteID string) (string, error) {
@@ -108,7 +140,7 @@ func (m *MockDataStore) SaveNoteReview(review *datastore.NoteReview) error {
 
 func (m *MockDataStore) GetNoteComments(noteID string) ([]datastore.NoteComment, error) {
 	args := m.Called(noteID)
-	return args.Get(0).([]datastore.NoteComment), args.Error(1)
+	return safeSlice[datastore.NoteComment](args, 0), args.Error(1)
 }
 
 func (m *MockDataStore) SaveNoteComment(comment *datastore.NoteComment) error {
@@ -143,7 +175,7 @@ func (m *MockDataStore) SaveHourlyWeather(hourlyWeather *datastore.HourlyWeather
 
 func (m *MockDataStore) GetHourlyWeather(date string) ([]datastore.HourlyWeather, error) {
 	args := m.Called(date)
-	return args.Get(0).([]datastore.HourlyWeather), args.Error(1)
+	return safeSlice[datastore.HourlyWeather](args, 0), args.Error(1)
 }
 
 func (m *MockDataStore) LatestHourlyWeather() (*datastore.HourlyWeather, error) {
@@ -153,7 +185,7 @@ func (m *MockDataStore) LatestHourlyWeather() (*datastore.HourlyWeather, error) 
 
 func (m *MockDataStore) GetHourlyDetections(date, hour string, duration, limit, offset int) ([]datastore.Note, error) {
 	args := m.Called(date, hour, duration, limit, offset)
-	return args.Get(0).([]datastore.Note), args.Error(1)
+	return safeSlice[datastore.Note](args, 0), args.Error(1)
 }
 
 func (m *MockDataStore) CountSpeciesDetections(species, date, hour string, duration int) (int64, error) {
@@ -206,12 +238,12 @@ func (m *MockDataStore) SaveImageCache(cache *datastore.ImageCache) error {
 
 func (m *MockDataStore) GetAllImageCaches(providerName string) ([]datastore.ImageCache, error) {
 	args := m.Called(providerName)
-	return args.Get(0).([]datastore.ImageCache), args.Error(1)
+	return safeSlice[datastore.ImageCache](args, 0), args.Error(1)
 }
 
 func (m *MockDataStore) GetLockedNotesClipPaths() ([]string, error) {
 	args := m.Called()
-	return args.Get(0).([]string), args.Error(1)
+	return safeSlice[string](args, 0), args.Error(1)
 }
 
 func (m *MockDataStore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
@@ -219,29 +251,41 @@ func (m *MockDataStore) CountHourlyDetections(date, hour string, duration int) (
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *MockDataStore) GetSpeciesSummaryData() ([]datastore.SpeciesSummaryData, error) {
-	args := m.Called()
-	return args.Get(0).([]datastore.SpeciesSummaryData), args.Error(1)
+func (m *MockDataStore) GetSpeciesSummaryData(startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
+	args := m.Called(startDate, endDate)
+	return safeSlice[datastore.SpeciesSummaryData](args, 0), args.Error(1)
 }
 
 func (m *MockDataStore) GetHourlyAnalyticsData(date, species string) ([]datastore.HourlyAnalyticsData, error) {
 	args := m.Called(date, species)
-	return args.Get(0).([]datastore.HourlyAnalyticsData), args.Error(1)
+	return safeSlice[datastore.HourlyAnalyticsData](args, 0), args.Error(1)
 }
 
 func (m *MockDataStore) GetDailyAnalyticsData(startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
 	args := m.Called(startDate, endDate, species)
-	return args.Get(0).([]datastore.DailyAnalyticsData), args.Error(1)
+	return safeSlice[datastore.DailyAnalyticsData](args, 0), args.Error(1)
 }
 
 func (m *MockDataStore) GetDetectionTrends(period string, limit int) ([]datastore.DailyAnalyticsData, error) {
 	args := m.Called(period, limit)
-	return args.Get(0).([]datastore.DailyAnalyticsData), args.Error(1)
+	return safeSlice[datastore.DailyAnalyticsData](args, 0), args.Error(1)
+}
+
+// GetHourlyDistribution implements the datastore.Interface GetHourlyDistribution method
+func (m *MockDataStore) GetHourlyDistribution(startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
+	args := m.Called(startDate, endDate, species)
+	return safeSlice[datastore.HourlyDistributionData](args, 0), args.Error(1)
 }
 
 func (m *MockDataStore) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	args := m.Called(filters)
-	return args.Get(0).([]datastore.DetectionRecord), args.Int(1), args.Error(2)
+	return safeSlice[datastore.DetectionRecord](args, 0), args.Int(1), args.Error(2)
+}
+
+// GetNewSpeciesDetections implements the datastore.Interface GetNewSpeciesDetections method
+func (m *MockDataStore) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	args := m.Called(startDate, endDate, limit, offset)
+	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
 }
 
 // TestImageProvider implements the imageprovider.Provider interface for testing
@@ -294,103 +338,215 @@ func setupAnalyticsTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *C
 	return e, mockDS, controller
 }
 
-// MockDataStoreV2 implements a partial mock of the datastore.Interface for testing
-// This is a specialized version used primarily for analytics tests that only need
-// to mock specific methods like GetTopBirdsData
+// MockDataStoreV2 provides a mock implementation for datastore.Interface
+// Focused on methods used specifically in newer V2 analytics endpoints
+// Embeds testify/mock for standard expectation handling
 type MockDataStoreV2 struct {
-	GetTopBirdsDataFunc      func(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error)
-	GetHourlyOccurrencesFunc func(date, commonName string, minConfidenceNormalized float64) ([24]int, error)
+	mock.Mock // Embed testify mock
+	// Removed function fields like GetTopBirdsDataFunc, etc.
 }
 
-// GetTopBirdsData implements the datastore.Interface GetTopBirdsData method
+// Implement required methods of the datastore.Interface using testify/mock
+
 func (m *MockDataStoreV2) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
-	return m.GetTopBirdsDataFunc(selectedDate, minConfidenceNormalized)
+	args := m.Called(selectedDate, minConfidenceNormalized)
+	return safeSlice[datastore.Note](args, 0), args.Error(1)
 }
 
-// GetHourlyOccurrences implements the datastore.Interface GetHourlyOccurrences method
 func (m *MockDataStoreV2) GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
-	if m.GetHourlyOccurrencesFunc != nil {
-		return m.GetHourlyOccurrencesFunc(date, commonName, minConfidenceNormalized)
-	}
-	// Default implementation returns empty array
-	return [24]int{}, nil
+	args := m.Called(date, commonName, minConfidenceNormalized)
+	return args.Get(0).([24]int), args.Error(1)
 }
+
+// GetHourlyDistribution implements the datastore.Interface GetHourlyDistribution method
+func (m *MockDataStoreV2) GetHourlyDistribution(startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
+	args := m.Called(startDate, endDate, species)
+	return safeSlice[datastore.HourlyDistributionData](args, 0), args.Error(1)
+}
+
+// ---- Methods below are stubs required by the interface but likely unused in V2 analytics tests ----
+// ---- If needed, implement them fully using m.Called() similar to above methods ----
 
 // Satisfy the remaining methods of the datastore.Interface (with empty implementations)
-func (m *MockDataStoreV2) Open() error                                                  { return nil }
-func (m *MockDataStoreV2) Save(note *datastore.Note, results []datastore.Results) error { return nil }
-func (m *MockDataStoreV2) Delete(id string) error                                       { return nil }
-func (m *MockDataStoreV2) Get(id string) (datastore.Note, error)                        { return datastore.Note{}, nil }
-func (m *MockDataStoreV2) Close() error                                                 { return nil }
-func (m *MockDataStoreV2) GetAllNotes() ([]datastore.Note, error)                       { return nil, nil }
+// These need to be implemented to satisfy the interface, even if not used directly in tests.
+// If a test needs a specific behavior for one of these, define an expectation using m.On(...)
+
+func (m *MockDataStoreV2) Open() error { args := m.Called(); return args.Error(0) }
+func (m *MockDataStoreV2) Save(note *datastore.Note, results []datastore.Results) error {
+	args := m.Called(note, results)
+	return args.Error(0)
+}
+func (m *MockDataStoreV2) Delete(id string) error { args := m.Called(id); return args.Error(0) }
+func (m *MockDataStoreV2) Get(id string) (datastore.Note, error) {
+	args := m.Called(id)
+	return args.Get(0).(datastore.Note), args.Error(1)
+}
+func (m *MockDataStoreV2) Close() error { args := m.Called(); return args.Error(0) }
+func (m *MockDataStoreV2) GetAllNotes() ([]datastore.Note, error) {
+	args := m.Called()
+	return safeSlice[datastore.Note](args, 0), args.Error(1)
+}
 func (m *MockDataStoreV2) SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit, offset int) ([]datastore.Note, error) {
-	return nil, nil
+	args := m.Called(species, date, hour, duration, sortAscending, limit, offset)
+	return safeSlice[datastore.Note](args, 0), args.Error(1)
 }
 func (m *MockDataStoreV2) GetLastDetections(numDetections int) ([]datastore.Note, error) {
-	return nil, nil
+	args := m.Called(numDetections)
+	return safeSlice[datastore.Note](args, 0), args.Error(1)
 }
-func (m *MockDataStoreV2) GetAllDetectedSpecies() ([]datastore.Note, error) { return nil, nil }
+func (m *MockDataStoreV2) GetAllDetectedSpecies() ([]datastore.Note, error) {
+	args := m.Called()
+	return safeSlice[datastore.Note](args, 0), args.Error(1)
+}
 func (m *MockDataStoreV2) SearchNotes(query string, sortAscending bool, limit, offset int) ([]datastore.Note, error) {
-	return nil, nil
+	args := m.Called(query, sortAscending, limit, offset)
+	return safeSlice[datastore.Note](args, 0), args.Error(1)
 }
-func (m *MockDataStoreV2) GetNoteClipPath(noteID string) (string, error) { return "", nil }
-func (m *MockDataStoreV2) DeleteNoteClipPath(noteID string) error        { return nil }
+func (m *MockDataStoreV2) GetNoteClipPath(noteID string) (string, error) {
+	args := m.Called(noteID)
+	return args.String(0), args.Error(1)
+}
+func (m *MockDataStoreV2) DeleteNoteClipPath(noteID string) error {
+	args := m.Called(noteID)
+	return args.Error(0)
+}
 func (m *MockDataStoreV2) GetNoteReview(noteID string) (*datastore.NoteReview, error) {
-	return nil, nil
+	args := m.Called(noteID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*datastore.NoteReview), args.Error(1)
 }
-func (m *MockDataStoreV2) SaveNoteReview(review *datastore.NoteReview) error { return nil }
+func (m *MockDataStoreV2) SaveNoteReview(review *datastore.NoteReview) error {
+	args := m.Called(review)
+	return args.Error(0)
+}
 func (m *MockDataStoreV2) GetNoteComments(noteID string) ([]datastore.NoteComment, error) {
-	return nil, nil
+	args := m.Called(noteID)
+	return safeSlice[datastore.NoteComment](args, 0), args.Error(1)
 }
-func (m *MockDataStoreV2) SaveNoteComment(comment *datastore.NoteComment) error     { return nil }
-func (m *MockDataStoreV2) UpdateNoteComment(commentID, entry string) error          { return nil }
-func (m *MockDataStoreV2) DeleteNoteComment(commentID string) error                 { return nil }
-func (m *MockDataStoreV2) SaveDailyEvents(dailyEvents *datastore.DailyEvents) error { return nil }
+func (m *MockDataStoreV2) SaveNoteComment(comment *datastore.NoteComment) error {
+	args := m.Called(comment)
+	return args.Error(0)
+}
+func (m *MockDataStoreV2) UpdateNoteComment(commentID, entry string) error {
+	args := m.Called(commentID, entry)
+	return args.Error(0)
+}
+func (m *MockDataStoreV2) DeleteNoteComment(commentID string) error {
+	args := m.Called(commentID)
+	return args.Error(0)
+}
+func (m *MockDataStoreV2) SaveDailyEvents(dailyEvents *datastore.DailyEvents) error {
+	args := m.Called(dailyEvents)
+	return args.Error(0)
+}
 func (m *MockDataStoreV2) GetDailyEvents(date string) (datastore.DailyEvents, error) {
-	return datastore.DailyEvents{}, nil
+	args := m.Called(date)
+	return args.Get(0).(datastore.DailyEvents), args.Error(1)
 }
-func (m *MockDataStoreV2) SaveHourlyWeather(hourlyWeather *datastore.HourlyWeather) error { return nil }
+func (m *MockDataStoreV2) SaveHourlyWeather(hourlyWeather *datastore.HourlyWeather) error {
+	args := m.Called(hourlyWeather)
+	return args.Error(0)
+}
 func (m *MockDataStoreV2) GetHourlyWeather(date string) ([]datastore.HourlyWeather, error) {
-	return nil, nil
+	args := m.Called(date)
+	return safeSlice[datastore.HourlyWeather](args, 0), args.Error(1)
 }
-func (m *MockDataStoreV2) LatestHourlyWeather() (*datastore.HourlyWeather, error) { return nil, nil }
+func (m *MockDataStoreV2) LatestHourlyWeather() (*datastore.HourlyWeather, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*datastore.HourlyWeather), args.Error(1)
+}
 func (m *MockDataStoreV2) GetHourlyDetections(date, hour string, duration, limit, offset int) ([]datastore.Note, error) {
-	return nil, nil
+	args := m.Called(date, hour, duration, limit, offset)
+	return safeSlice[datastore.Note](args, 0), args.Error(1)
 }
 func (m *MockDataStoreV2) CountSpeciesDetections(species, date, hour string, duration int) (int64, error) {
-	return 0, nil
+	args := m.Called(species, date, hour, duration)
+	return args.Get(0).(int64), args.Error(1)
 }
-func (m *MockDataStoreV2) CountSearchResults(query string) (int64, error)         { return 0, nil }
-func (m *MockDataStoreV2) Transaction(fc func(tx *gorm.DB) error) error           { return nil }
-func (m *MockDataStoreV2) LockNote(noteID string) error                           { return nil }
-func (m *MockDataStoreV2) UnlockNote(noteID string) error                         { return nil }
-func (m *MockDataStoreV2) GetNoteLock(noteID string) (*datastore.NoteLock, error) { return nil, nil }
-func (m *MockDataStoreV2) IsNoteLocked(noteID string) (bool, error)               { return false, nil }
+func (m *MockDataStoreV2) CountSearchResults(query string) (int64, error) {
+	args := m.Called(query)
+	return args.Get(0).(int64), args.Error(1)
+}
+func (m *MockDataStoreV2) Transaction(fc func(tx *gorm.DB) error) error {
+	args := m.Called(fc)
+	return args.Error(0)
+}
+func (m *MockDataStoreV2) LockNote(noteID string) error {
+	args := m.Called(noteID)
+	return args.Error(0)
+}
+func (m *MockDataStoreV2) UnlockNote(noteID string) error {
+	args := m.Called(noteID)
+	return args.Error(0)
+}
+func (m *MockDataStoreV2) GetNoteLock(noteID string) (*datastore.NoteLock, error) {
+	args := m.Called(noteID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*datastore.NoteLock), args.Error(1)
+}
+func (m *MockDataStoreV2) IsNoteLocked(noteID string) (bool, error) {
+	args := m.Called(noteID)
+	return args.Bool(0), args.Error(1)
+}
 func (m *MockDataStoreV2) GetImageCache(query datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
-	return nil, nil
+	args := m.Called(query)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*datastore.ImageCache), args.Error(1)
 }
-func (m *MockDataStoreV2) SaveImageCache(cache *datastore.ImageCache) error { return nil }
+func (m *MockDataStoreV2) SaveImageCache(cache *datastore.ImageCache) error {
+	args := m.Called(cache)
+	return args.Error(0)
+}
 func (m *MockDataStoreV2) GetAllImageCaches(providerName string) ([]datastore.ImageCache, error) {
-	return nil, nil
+	args := m.Called(providerName)
+	return safeSlice[datastore.ImageCache](args, 0), args.Error(1)
 }
-func (m *MockDataStoreV2) GetLockedNotesClipPaths() ([]string, error) { return nil, nil }
+func (m *MockDataStoreV2) GetLockedNotesClipPaths() ([]string, error) {
+	args := m.Called()
+	return safeSlice[string](args, 0), args.Error(1)
+}
 func (m *MockDataStoreV2) CountHourlyDetections(date, hour string, duration int) (int64, error) {
-	return 0, nil
+	args := m.Called(date, hour, duration)
+	return args.Get(0).(int64), args.Error(1)
 }
-func (m *MockDataStoreV2) GetSpeciesSummaryData() ([]datastore.SpeciesSummaryData, error) {
-	return nil, nil
+func (m *MockDataStoreV2) GetSpeciesSummaryData(startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
+	args := m.Called(startDate, endDate)
+	return safeSlice[datastore.SpeciesSummaryData](args, 0), args.Error(1)
 }
 func (m *MockDataStoreV2) GetHourlyAnalyticsData(date, species string) ([]datastore.HourlyAnalyticsData, error) {
-	return nil, nil
+	args := m.Called(date, species)
+	return safeSlice[datastore.HourlyAnalyticsData](args, 0), args.Error(1)
 }
 func (m *MockDataStoreV2) GetDailyAnalyticsData(startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
-	return nil, nil
+	args := m.Called(startDate, endDate, species)
+	return safeSlice[datastore.DailyAnalyticsData](args, 0), args.Error(1)
 }
+
+// GetNewSpeciesDetections implements the datastore.Interface GetNewSpeciesDetections method
+func (m *MockDataStoreV2) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	args := m.Called(startDate, endDate, limit, offset)
+	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
+}
+
+// GetDetectionTrends implements the datastore.Interface GetDetectionTrends method
 func (m *MockDataStoreV2) GetDetectionTrends(period string, limit int) ([]datastore.DailyAnalyticsData, error) {
-	return nil, nil
+	args := m.Called(period, limit)
+	return safeSlice[datastore.DailyAnalyticsData](args, 0), args.Error(1)
 }
+
+// SearchDetections implements the datastore.Interface SearchDetections method
 func (m *MockDataStoreV2) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
-	return nil, 0, nil
+	args := m.Called(filters)
+	return safeSlice[datastore.DetectionRecord](args, 0), args.Int(1), args.Error(2)
 }
 
 // MockImageProvider is a mock implementation of imageprovider.ImageProvider interface
@@ -468,4 +624,12 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 	}
 
 	return e, mockDS, controller
+}
+
+func (m *MockDataStore) GetNote(id int) (datastore.Note, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return datastore.Note{}, args.Error(1)
+	}
+	return args.Get(0).(datastore.Note), args.Error(1)
 }

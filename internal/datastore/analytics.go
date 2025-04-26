@@ -3,6 +3,7 @@ package datastore
 
 import (
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -30,13 +31,28 @@ type DailyAnalyticsData struct {
 	Count int
 }
 
+// HourlyDistributionData represents aggregated detection counts by hour of day
+type HourlyDistributionData struct {
+	Hour  int    `json:"hour"`
+	Count int    `json:"count"`
+	Date  string `json:"date,omitempty"` // Optional field, only set when filtering by specific date
+}
+
+// NewSpeciesData represents a species detected for the first time within a period
+type NewSpeciesData struct {
+	ScientificName string `json:"scientific_name"`
+	CommonName     string `json:"common_name"`
+	FirstSeenDate  string `json:"first_seen_date"` // The absolute first date
+	CountInPeriod  int    `json:"count_in_period"` // Optional: How many times seen in the query period
+}
+
 // GetSpeciesSummaryData retrieves overall statistics for all bird species
-func (ds *DataStore) GetSpeciesSummaryData() ([]SpeciesSummaryData, error) {
+// Optional date range filtering with startDate and endDate parameters in YYYY-MM-DD format
+func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]SpeciesSummaryData, error) {
 	var summaries []SpeciesSummaryData
 
-	// SQL query to get species summary data
-	// This includes: count, first/last detection, and confidence stats
-	query := `
+	// Start building query
+	queryStr := `
 		SELECT 
 			scientific_name,
 			MAX(common_name) as common_name,
@@ -47,11 +63,32 @@ func (ds *DataStore) GetSpeciesSummaryData() ([]SpeciesSummaryData, error) {
 			AVG(confidence) as avg_confidence,
 			MAX(confidence) as max_confidence
 		FROM notes
+	`
+
+	// Add WHERE clause if date filters are provided
+	var whereClause string
+	var args []interface{}
+
+	switch {
+	case startDate != "" && endDate != "":
+		whereClause = "WHERE date >= ? AND date <= ?"
+		args = append(args, startDate, endDate)
+	case startDate != "":
+		whereClause = "WHERE date >= ?"
+		args = append(args, startDate)
+	case endDate != "":
+		whereClause = "WHERE date <= ?"
+		args = append(args, endDate)
+	}
+
+	// Complete the query
+	queryStr += whereClause + `
 		GROUP BY scientific_name
 		ORDER BY count DESC
 	`
 
-	rows, err := ds.DB.Raw(query).Rows()
+	// Execute the query
+	rows, err := ds.DB.Raw(queryStr, args...).Rows()
 	if err != nil {
 		return nil, fmt.Errorf("error getting species summary data: %w", err)
 	}
@@ -208,4 +245,155 @@ func (ds *DataStore) GetDetectionTrends(period string, limit int) ([]DailyAnalyt
 	}
 
 	return trends, nil
+}
+
+// GetHourlyDistribution retrieves hourly detection distribution across a date range
+// Groups detections by hour of day (0-23) regardless of the specific date
+func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) ([]HourlyDistributionData, error) {
+	var parsedStartDate, parsedEndDate time.Time
+	var err error
+
+	// Only parse start date if provided
+	if startDate != "" {
+		parsedStartDate, err = time.Parse("2006-01-02", startDate)
+		if err != nil {
+			return nil, fmt.Errorf("invalid start date format: %w", err)
+		}
+	}
+
+	// Only parse end date if provided
+	if endDate != "" {
+		parsedEndDate, err = time.Parse("2006-01-02", endDate)
+		if err != nil {
+			return nil, fmt.Errorf("invalid end date format: %w", err)
+		}
+	}
+
+	// Ensure start date is before or equal to end date only if both were provided
+	if startDate != "" && endDate != "" {
+		if parsedStartDate.After(parsedEndDate) {
+			return nil, fmt.Errorf("start date cannot be after end date")
+		}
+	}
+
+	// Prepare the SQL query
+	query := ds.DB.Table("notes")
+
+	// Extract hour from the time field using database-specific hour format
+	hourExpr := ds.GetHourFormat()
+	query = query.Select(fmt.Sprintf("%s AS hour, COUNT(*) AS count", hourExpr))
+
+	// Apply date range filter conditionally
+	switch {
+	case startDate != "" && endDate != "":
+		query = query.Where("date BETWEEN ? AND ?", startDate, endDate)
+	case startDate != "":
+		query = query.Where("date >= ?", startDate)
+	case endDate != "":
+		query = query.Where("date <= ?", endDate)
+		// No date filter if both are empty
+	}
+
+	// Apply species filter if provided
+	if species != "" {
+		// Try to match on either common_name or scientific_name
+		query = query.Where("common_name = ? OR scientific_name = ?",
+			species, species)
+	}
+
+	// Group by hour
+	query = query.Group(hourExpr)
+
+	// Order by hour
+	query = query.Order("hour ASC")
+
+	// Execute the query
+	var results []HourlyDistributionData
+	if err := query.Find(&results).Error; err != nil {
+		return nil, fmt.Errorf("failed to retrieve hourly distribution: %w", err)
+	}
+
+	return results, nil
+}
+
+// GetNewSpeciesDetections finds species whose absolute first detection falls within the specified date range.
+// It supports pagination with limit and offset parameters.
+// NOTE: For optimal performance with large datasets, add a composite index on (scientific_name, date)
+func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]NewSpeciesData, error) {
+	// Temporary struct to scan raw results, ensuring date can be checked for null/empty
+	type RawNewSpeciesResult struct {
+		ScientificName     string
+		CommonName         string
+		FirstDetectionDate string // Scan directly into string
+		CountInPeriod      int
+	}
+	var rawResults []RawNewSpeciesResult
+
+	// Default pagination values if not specified
+	if limit <= 0 {
+		limit = 100 // Default limit
+	}
+	// Offset defaults to 0 if negative
+
+	// Ensure start date is before or equal to end date using string comparison (safe for YYYY-MM-DD)
+	if startDate != "" && endDate != "" && startDate > endDate {
+		return nil, fmt.Errorf("start date cannot be after end date")
+	}
+
+	// Revised query with pagination
+	// NOTE: This query benefits significantly from a composite index on (scientific_name, date)
+	// Uses ANY_VALUE for MySQL compatibility
+	query := `
+	WITH SpeciesFirstSeen AS (
+	    SELECT 
+	        scientific_name, 
+	        MIN(CASE WHEN date != '' AND date IS NOT NULL THEN date ELSE NULL END) as first_detection_date
+	    FROM notes
+	    GROUP BY scientific_name
+	    HAVING first_detection_date IS NOT NULL AND first_detection_date != '' 
+	), 
+	SpeciesInPeriod AS (
+	    SELECT 
+	        scientific_name, 
+	        COUNT(*) as count_in_period,
+			MAX(common_name) as common_name -- Reverted from ANY_VALUE for testing
+	    FROM notes
+	    WHERE date BETWEEN ? AND ?
+	    GROUP BY scientific_name
+	)
+	SELECT 
+	    sfs.scientific_name, 
+	    COALESCE(sip.common_name, sfs.scientific_name) as common_name, 
+	    sfs.first_detection_date, 
+	    sip.count_in_period
+	FROM SpeciesFirstSeen sfs
+	JOIN SpeciesInPeriod sip ON sfs.scientific_name = sip.scientific_name
+	WHERE sfs.first_detection_date BETWEEN ? AND ?
+	ORDER BY sfs.first_detection_date DESC
+	LIMIT ? OFFSET ?;
+	`
+
+	// Execute the raw SQL query into the temporary struct
+	if err := ds.DB.Raw(query, startDate, endDate, startDate, endDate, limit, offset).Scan(&rawResults).Error; err != nil {
+		return nil, fmt.Errorf("failed to get new species detections raw results: %w", err)
+	}
+
+	// Filter results in Go to ensure FirstDetectionDate is valid before final assignment
+	var finalResults []NewSpeciesData
+	for _, raw := range rawResults {
+		// Explicitly check if the scanned date is non-empty
+		if raw.FirstDetectionDate != "" {
+			finalResults = append(finalResults, NewSpeciesData{
+				ScientificName: raw.ScientificName,
+				CommonName:     raw.CommonName,
+				FirstSeenDate:  raw.FirstDetectionDate, // Assign only if valid
+				CountInPeriod:  raw.CountInPeriod,
+			})
+		} else {
+			// Log if a record surprisingly had an empty date after SQL filtering
+			log.Printf("WARN: GetNewSpeciesDetections - Skipped record for %s due to empty first_detection_date after SQL query.", raw.ScientificName)
+		}
+	}
+
+	return finalResults, nil
 }

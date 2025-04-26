@@ -2,6 +2,8 @@
 package api
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -9,6 +11,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 )
+
+const placeholderImageURL = "/assets/images/bird-placeholder.svg"
 
 // SpeciesDailySummary represents a bird in the daily species summary API response
 type SpeciesDailySummary struct {
@@ -18,8 +22,8 @@ type SpeciesDailySummary struct {
 	Count          int    `json:"count"`
 	HourlyCounts   []int  `json:"hourly_counts"`
 	HighConfidence bool   `json:"high_confidence"`
-	First          string `json:"first_seen,omitempty"`
-	Latest         string `json:"latest_seen,omitempty"`
+	FirstHeard     string `json:"first_heard,omitempty"`
+	LatestHeard    string `json:"latest_heard,omitempty"`
 	ThumbnailURL   string `json:"thumbnail_url,omitempty"`
 }
 
@@ -29,12 +33,35 @@ type SpeciesSummary struct {
 	CommonName     string  `json:"common_name"`
 	SpeciesCode    string  `json:"species_code,omitempty"`
 	Count          int     `json:"count"`
-	FirstSeen      string  `json:"first_seen,omitempty"`
-	LastSeen       string  `json:"last_seen,omitempty"`
+	FirstHeard     string  `json:"first_heard,omitempty"`
+	LastHeard      string  `json:"last_heard,omitempty"`
 	AvgConfidence  float64 `json:"avg_confidence,omitempty"`
 	MaxConfidence  float64 `json:"max_confidence,omitempty"`
 	ThumbnailURL   string  `json:"thumbnail_url,omitempty"`
 }
+
+// HourlyDistribution represents detections aggregated by hour
+type HourlyDistribution struct {
+	Hour  int `json:"hour"`
+	Count int `json:"count"`
+	// Date string `json:"date,omitempty"` // Removed as it's not populated or used
+}
+
+// NewSpeciesResponse represents a newly detected species in the API response
+type NewSpeciesResponse struct {
+	ScientificName string `json:"scientific_name"`
+	CommonName     string `json:"common_name"`
+	FirstHeardDate string `json:"first_heard_date"`
+	ThumbnailURL   string `json:"thumbnail_url,omitempty"`
+	CountInPeriod  int    `json:"count_in_period"` // How many times seen in the query period
+}
+
+// Define standard errors for date validation
+var (
+	ErrInvalidStartDate = errors.New("invalid start_date format. Use YYYY-MM-DD")
+	ErrInvalidEndDate   = errors.New("invalid end_date format. Use YYYY-MM-DD")
+	ErrDateOrder        = errors.New("start_date cannot be after end_date")
+)
 
 // initAnalyticsRoutes registers all analytics-related API endpoints
 func (c *Controller) initAnalyticsRoutes() {
@@ -45,11 +72,13 @@ func (c *Controller) initAnalyticsRoutes() {
 	speciesGroup := analyticsGroup.Group("/species")
 	speciesGroup.GET("/daily", c.GetDailySpeciesSummary)
 	speciesGroup.GET("/summary", c.GetSpeciesSummary)
+	speciesGroup.GET("/detections/new", c.GetNewSpeciesDetections) // Renamed endpoint
 
 	// Time analytics routes (can be implemented later)
 	timeGroup := analyticsGroup.Group("/time")
 	timeGroup.GET("/hourly", c.GetHourlyAnalytics)
 	timeGroup.GET("/daily", c.GetDailyAnalytics)
+	timeGroup.GET("/distribution/hourly", c.GetTimeOfDayDistribution) // Renamed endpoint for time-of-day distribution
 }
 
 // GetDailySpeciesSummary handles GET /api/v2/analytics/species/daily
@@ -157,6 +186,26 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 
 	// Convert map to slice for response
 	var result []SpeciesDailySummary
+	scientificNames := make([]string, 0, len(birdData))
+	for key := range birdData {
+		scientificNames = append(scientificNames, key)
+	}
+
+	// Batch fetch thumbnail URLs if cache is available
+	thumbnailURLs := make(map[string]string)
+	if c.BirdImageCache != nil {
+		batchResults := c.BirdImageCache.GetBatch(scientificNames)
+		// Only populate map if results are not empty
+		if len(batchResults) > 0 {
+			for name := range batchResults {
+				imgURL := batchResults[name].URL
+				if imgURL != "" {
+					thumbnailURLs[name] = imgURL
+				}
+			}
+		}
+	}
+
 	for key := range birdData {
 		data := birdData[key]
 		// Skip birds with no detections
@@ -168,13 +217,10 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 		hourlyCounts := make([]int, 24)
 		copy(hourlyCounts, data.HourlyCounts[:])
 
-		// Get bird thumbnail URL if available
-		var thumbnailURL string
-		if c.BirdImageCache != nil {
-			birdImage, err := c.BirdImageCache.Get(data.ScientificName)
-			if err == nil {
-				thumbnailURL = birdImage.URL
-			}
+		// Get bird thumbnail URL from batch results, with fallback
+		thumbnailURL, ok := thumbnailURLs[data.ScientificName]
+		if !ok || thumbnailURL == "" {
+			thumbnailURL = placeholderImageURL
 		}
 
 		// Add to result
@@ -185,8 +231,8 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 			Count:          data.Count,
 			HourlyCounts:   hourlyCounts,
 			HighConfidence: data.HighConfidence,
-			First:          data.First,
-			Latest:         data.Latest,
+			FirstHeard:     data.First,
+			LatestHeard:    data.Latest,
 			ThumbnailURL:   thumbnailURL,
 		})
 	}
@@ -211,8 +257,22 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 // GetSpeciesSummary handles GET /api/v2/analytics/species/summary
 // This provides an overall summary of species detections
 func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
-	// Retrieve species summary data from the datastore
-	summaryData, err := c.DS.GetSpeciesSummaryData()
+	// Get query parameters
+	startDate := ctx.QueryParam("start_date")
+	endDate := ctx.QueryParam("end_date")
+
+	// Validate date range
+	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
+		// Convert standard error to HTTP error
+		if errors.Is(err, ErrInvalidStartDate) || errors.Is(err, ErrInvalidEndDate) || errors.Is(err, ErrDateOrder) {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+		// Handle unexpected errors
+		return echo.NewHTTPError(http.StatusInternalServerError, "Error validating date range")
+	}
+
+	// Retrieve species summary data from the datastore with date filtering
+	summaryData, err := c.DS.GetSpeciesSummaryData(startDate, endDate)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get species summary data", http.StatusInternalServerError)
 	}
@@ -222,15 +282,15 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	for i := range summaryData {
 		data := &summaryData[i]
 		// Format the times as strings
-		firstSeen := ""
-		lastSeen := ""
+		firstHeard := ""
+		lastHeard := ""
 
 		if !data.FirstSeen.IsZero() {
-			firstSeen = data.FirstSeen.Format("2006-01-02 15:04:05")
+			firstHeard = data.FirstSeen.Format("2006-01-02 15:04:05")
 		}
 
 		if !data.LastSeen.IsZero() {
-			lastSeen = data.LastSeen.Format("2006-01-02 15:04:05")
+			lastHeard = data.LastSeen.Format("2006-01-02 15:04:05")
 		}
 
 		// Get bird thumbnail URL if available
@@ -248,8 +308,8 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 			CommonName:     data.CommonName,
 			SpeciesCode:    data.SpeciesCode,
 			Count:          data.Count,
-			FirstSeen:      firstSeen,
-			LastSeen:       lastSeen,
+			FirstHeard:     firstHeard,
+			LastHeard:      lastHeard,
 			AvgConfidence:  data.AvgConfidence,
 			MaxConfidence:  data.MaxConfidence,
 			ThumbnailURL:   thumbnailURL,
@@ -327,25 +387,25 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	endDate := ctx.QueryParam("end_date")
 	species := ctx.QueryParam("species")
 
-	// For the tests, validate that start_date is required
+	// Validate required start_date
 	if startDate == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "Missing required parameter: start_date")
 	}
 
-	// Validate date formats
-	if _, err := time.Parse("2006-01-02", startDate); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid start_date format. Use YYYY-MM-DD")
+	// Validate date formats and chronological order for provided dates
+	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
+		// Convert standard error to HTTP error
+		if errors.Is(err, ErrInvalidStartDate) || errors.Is(err, ErrInvalidEndDate) || errors.Is(err, ErrDateOrder) {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+		// Handle unexpected errors
+		return echo.NewHTTPError(http.StatusInternalServerError, "Error validating date range")
 	}
 
-	// If endDate is provided, validate its format
-	if endDate != "" {
-		if _, err := time.Parse("2006-01-02", endDate); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
-		}
-	} else {
-		// If only start date is provided, use 30 days after that
+	// Default end date if not provided
+	if endDate == "" {
 		startTime, err := time.Parse("2006-01-02", startDate)
-		if err == nil {
+		if err == nil { // Already validated format, so this should not fail
 			endDate = startTime.AddDate(0, 0, 30).Format("2006-01-02")
 		}
 	}
@@ -390,6 +450,168 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, response)
 }
 
+// GetTimeOfDayDistribution handles GET /api/v2/analytics/time/distribution
+// Returns an aggregated count of detections by hour of day across the given date range
+func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
+	// Get query parameters
+	startDate := ctx.QueryParam("start_date")
+	endDate := ctx.QueryParam("end_date")
+	species := ctx.QueryParam("species") // Optional species filter
+
+	// Set default date range if not provided (before validation)
+	if startDate == "" {
+		startDate = time.Now().AddDate(0, 0, -30).Format("2006-01-02")
+	}
+	if endDate == "" {
+		endDate = time.Now().Format("2006-01-02")
+	}
+
+	// Validate date formats and chronological order
+	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
+		// Convert standard error to HTTP error
+		if errors.Is(err, ErrInvalidStartDate) || errors.Is(err, ErrInvalidEndDate) || errors.Is(err, ErrDateOrder) {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+		// Handle unexpected errors
+		return echo.NewHTTPError(http.StatusInternalServerError, "Error validating date range")
+	}
+
+	// Get hourly distribution data from the datastore
+	hourlyData, err := c.DS.GetHourlyDistribution(startDate, endDate, species)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to get hourly distribution data", http.StatusInternalServerError)
+	}
+
+	// If no data is available yet, return an array with 24 empty hours
+	if len(hourlyData) == 0 {
+		emptyData := make([]HourlyDistribution, 24)
+		for hour := 0; hour < 24; hour++ {
+			emptyData[hour] = HourlyDistribution{Hour: hour, Count: 0}
+		}
+		return ctx.JSON(http.StatusOK, emptyData)
+	}
+
+	// Ensure we have data for all 24 hours (fill in zeros for missing hours)
+	completeHourlyData := make([]HourlyDistribution, 24)
+	for hour := 0; hour < 24; hour++ {
+		completeHourlyData[hour] = HourlyDistribution{Hour: hour, Count: 0}
+	}
+
+	// Fill in actual counts
+	for _, data := range hourlyData {
+		if data.Hour >= 0 && data.Hour < 24 {
+			completeHourlyData[data.Hour].Count = data.Count
+		}
+	}
+
+	return ctx.JSON(http.StatusOK, completeHourlyData)
+}
+
+// GetNewSpeciesDetections handles GET /api/v2/analytics/species/new
+// Returns species whose absolute first detection occurred within the specified date range.
+func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
+	// Get query parameters
+	startDate := ctx.QueryParam("start_date")
+	endDate := ctx.QueryParam("end_date")
+
+	// Set default date range if not provided (e.g., last 30 days)
+	if startDate == "" {
+		startDate = time.Now().AddDate(0, 0, -30).Format("2006-01-02")
+	}
+	if endDate == "" {
+		endDate = time.Now().Format("2006-01-02")
+	}
+
+	// Validate date formats
+	if _, err := time.Parse("2006-01-02", startDate); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid start_date format. Use YYYY-MM-DD")
+	}
+	if _, err := time.Parse("2006-01-02", endDate); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
+	}
+
+	// Ensure chronological order
+	start, _ := time.Parse("2006-01-02", startDate)
+	end, _ := time.Parse("2006-01-02", endDate)
+	if start.After(end) {
+		return echo.NewHTTPError(http.StatusBadRequest, "`start_date` cannot be after `end_date`")
+	}
+
+	// Parse pagination parameters
+	limit := 100 // Default limit
+	offset := 0  // Default offset
+
+	// Parse limit parameter if provided
+	limitStr := ctx.QueryParam("limit")
+	if limitStr != "" {
+		parsedLimit, err := strconv.Atoi(limitStr)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid limit parameter. Must be a positive integer.")
+		}
+		if parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+
+	// Parse offset parameter if provided
+	offsetStr := ctx.QueryParam("offset")
+	if offsetStr != "" {
+		parsedOffset, err := strconv.Atoi(offsetStr)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid offset parameter. Must be a non-negative integer.")
+		}
+		if parsedOffset >= 0 {
+			offset = parsedOffset
+		}
+	}
+
+	// Fetch data from datastore with pagination
+	newSpeciesData, err := c.DS.GetNewSpeciesDetections(startDate, endDate, limit, offset)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to get new species detections", http.StatusInternalServerError)
+	}
+
+	// Convert to response format and fetch thumbnails
+	response := make([]NewSpeciesResponse, 0, len(newSpeciesData))
+	scientificNames := make([]string, 0, len(newSpeciesData))
+	for _, data := range newSpeciesData {
+		scientificNames = append(scientificNames, data.ScientificName)
+	}
+
+	// Batch fetch thumbnail URLs if cache is available
+	thumbnailURLs := make(map[string]string)
+	if c.BirdImageCache != nil {
+		batchResults := c.BirdImageCache.GetBatch(scientificNames)
+		// Only populate map if results are not empty
+		if len(batchResults) > 0 {
+			for name := range batchResults {
+				imgURL := batchResults[name].URL
+				if imgURL != "" {
+					thumbnailURLs[name] = imgURL
+				}
+			}
+		}
+	}
+
+	for _, data := range newSpeciesData {
+		// Get thumbnail URL from batch results, with fallback
+		thumbnailURL, ok := thumbnailURLs[data.ScientificName]
+		if !ok || thumbnailURL == "" {
+			thumbnailURL = placeholderImageURL
+		}
+
+		response = append(response, NewSpeciesResponse{
+			ScientificName: data.ScientificName,
+			CommonName:     data.CommonName,
+			FirstHeardDate: data.FirstSeenDate,
+			ThumbnailURL:   thumbnailURL,
+			CountInPeriod:  data.CountInPeriod,
+		})
+	}
+
+	return ctx.JSON(http.StatusOK, response)
+}
+
 // Helper function to sum array values
 func sumCounts(counts []int) int {
 	total := 0
@@ -397,4 +619,39 @@ func sumCounts(counts []int) int {
 		total += count
 	}
 	return total
+}
+
+// parseAndValidateDateRange checks if provided date strings are valid and in chronological order.
+// It returns standard Go errors for validation failures.
+func parseAndValidateDateRange(startDateStr, endDateStr string) error {
+	var start, end time.Time
+	var err error
+
+	// Validate start date format if provided
+	if startDateStr != "" {
+		start, err = time.Parse("2006-01-02", startDateStr)
+		if err != nil {
+			// Return standard error
+			return fmt.Errorf("%w: %w", ErrInvalidStartDate, err)
+		}
+	}
+
+	// Validate end date format if provided
+	if endDateStr != "" {
+		end, err = time.Parse("2006-01-02", endDateStr)
+		if err != nil {
+			// Return standard error
+			return fmt.Errorf("%w: %w", ErrInvalidEndDate, err)
+		}
+	}
+
+	// Ensure chronological order only if both dates are provided and valid
+	if startDateStr != "" && endDateStr != "" && !start.IsZero() && !end.IsZero() {
+		if start.After(end) {
+			// Return standard error
+			return ErrDateOrder
+		}
+	}
+
+	return nil // Dates are valid
 }
