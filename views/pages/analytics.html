@@ -316,9 +316,22 @@
             
             // Get chart theme - shared configuration for all charts
             getChartTheme() {
-                const textColor = this.getThemeColor('base-content', 0.8);
-                const gridColor = this.getThemeColor('base-content', 0.1);
-                
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                let textColor, gridColor, tooltipBgColor, tooltipBorderColor;
+
+                if (currentTheme === 'dark') {
+                    textColor = 'rgba(200, 200, 200, 1)'; // Example dark theme text color (adjust as needed)
+                    gridColor = 'rgba(255, 255, 255, 0.1)'; // Example dark theme grid color
+                    tooltipBgColor = 'rgba(55, 65, 81, 0.9)'; // Darker tooltip background
+                    tooltipBorderColor = 'rgba(255, 255, 255, 0.2)'; 
+                } else {
+                    // Assume light theme (or default)
+                    textColor = 'rgba(55, 65, 81, 1)';   // Example light theme text color (adjust as needed)
+                    gridColor = 'rgba(0, 0, 0, 0.1)';   // Example light theme grid color
+                    tooltipBgColor = 'rgba(255, 255, 255, 0.9)'; // Lighter tooltip background
+                    tooltipBorderColor = 'rgba(0, 0, 0, 0.2)';
+                }
+
                 return {
                     color: {
                         text: textColor,
@@ -344,10 +357,10 @@
                         }
                     },
                     tooltip: {
-                        backgroundColor: this.getThemeColor('base-100', 0.8),
-                        titleColor: this.getThemeColor('base-content'),
-                        bodyColor: this.getThemeColor('base-content'),
-                        borderColor: this.getThemeColor('base-content', 0.2),
+                        backgroundColor: tooltipBgColor,
+                        titleColor: textColor,
+                        bodyColor: textColor,
+                        borderColor: tooltipBorderColor,
                         borderWidth: 1
                     }
                 };
