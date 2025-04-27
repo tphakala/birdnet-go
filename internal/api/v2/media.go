@@ -21,6 +21,25 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+// Sentinel errors for media operations
+var (
+	// Audio file errors
+	ErrAudioFileNotFound    = errors.New("audio file not found")
+	ErrInvalidAudioPath     = errors.New("invalid audio path")
+	ErrPathTraversalAttempt = errors.New("security error: path attempts to traverse")
+
+	// Configuration errors
+	ErrFFmpegNotConfigured = errors.New("ffmpeg path not set in settings")
+	ErrSoxNotConfigured    = errors.New("sox path not set in settings")
+
+	// Generation errors
+	ErrSpectrogramGeneration = errors.New("failed to generate spectrogram")
+
+	// Image errors
+	ErrImageNotFound             = errors.New("image not found")
+	ErrImageProviderNotAvailable = errors.New("image provider not available")
+)
+
 // safeFilenamePattern is kept if needed elsewhere, but SecureFS handles validation now
 // var safeFilenamePattern = regexp.MustCompile(`^[\p{L}\p{N}_\-.]+$`)
 
@@ -150,7 +169,7 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, width)
 	if err != nil {
 		switch {
-		case errors.Is(err, os.ErrNotExist), strings.Contains(err.Error(), "audio file not found"):
+		case errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, os.ErrNotExist):
 			// Handle cases where the source audio file doesn't exist
 			return c.HandleError(ctx, err, "Source audio file not found", http.StatusNotFound)
 		case errors.As(err, new(*os.PathError)): // Check for PathError specifically
@@ -158,7 +177,7 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 			if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
 				return c.HandleError(ctx, err, "Source audio file not found (PathError)", http.StatusNotFound)
 			} // Fall through if it's a PathError but not ErrNotExist
-		case strings.Contains(err.Error(), "invalid audio path"), strings.Contains(err.Error(), "security error: path attempts to traverse"):
+		case errors.Is(err, ErrInvalidAudioPath) || errors.Is(err, ErrPathTraversalAttempt):
 			// Handle path traversal or invalid path errors
 			return c.HandleError(ctx, err, "Invalid audio file path specified", http.StatusBadRequest)
 		case errors.Is(err, context.DeadlineExceeded):
@@ -166,7 +185,7 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 		case errors.Is(err, context.Canceled):
 			// Use 499 Client Closed Request (non-standard, but common)
 			return c.HandleError(ctx, err, "Spectrogram generation canceled by client", 499)
-		case strings.Contains(err.Error(), "ffmpeg path not set"), strings.Contains(err.Error(), "sox path not set"):
+		case errors.Is(err, ErrFFmpegNotConfigured) || errors.Is(err, ErrSoxNotConfigured):
 			// Handle configuration errors
 			return c.HandleError(ctx, err, "Server configuration error preventing spectrogram generation", http.StatusInternalServerError)
 		default:
@@ -213,20 +232,20 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, width)
 	if err != nil {
 		switch {
-		case errors.Is(err, os.ErrNotExist), strings.Contains(err.Error(), "audio file not found"):
+		case errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, os.ErrNotExist):
 			return c.HandleError(ctx, err, "Source audio file not found", http.StatusNotFound)
 		case errors.As(err, new(*os.PathError)):
 			var pathErr *os.PathError
 			if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
 				return c.HandleError(ctx, err, "Source audio file not found (PathError)", http.StatusNotFound)
 			} // Fall through
-		case strings.Contains(err.Error(), "invalid audio path"), strings.Contains(err.Error(), "security error: path attempts to traverse"):
+		case errors.Is(err, ErrInvalidAudioPath) || errors.Is(err, ErrPathTraversalAttempt):
 			return c.HandleError(ctx, err, "Invalid audio file path specified", http.StatusBadRequest)
 		case errors.Is(err, context.DeadlineExceeded):
 			return c.HandleError(ctx, err, "Spectrogram generation timed out", http.StatusRequestTimeout)
 		case errors.Is(err, context.Canceled):
 			return c.HandleError(ctx, err, "Spectrogram generation canceled by client", 499)
-		case strings.Contains(err.Error(), "ffmpeg path not set"), strings.Contains(err.Error(), "sox path not set"):
+		case errors.Is(err, ErrFFmpegNotConfigured) || errors.Is(err, ErrSoxNotConfigured):
 			return c.HandleError(ctx, err, "Server configuration error preventing spectrogram generation", http.StatusInternalServerError)
 		default:
 			return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
@@ -328,8 +347,11 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	// The audioPath from the DB is already relative to the baseDir. Validate it.
 	relAudioPath, err := c.SFS.ValidateRelativePath(audioPath) // Use the new validator
 	if err != nil {
-		// Wrap the error for clarity
-		return "", fmt.Errorf("invalid audio path '%s': %w", audioPath, err)
+		// Wrap with the appropriate sentinel error based on the nature of the validation error
+		if strings.Contains(err.Error(), "path attempts to traverse") {
+			return "", fmt.Errorf("%w: %s", ErrPathTraversalAttempt, err.Error())
+		}
+		return "", fmt.Errorf("%w: %s", ErrInvalidAudioPath, err.Error())
 	}
 
 	// Check if the audio file exists within the secure context using the validated relative path
@@ -337,7 +359,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	if _, err := c.SFS.StatRel(relAudioPath); err != nil {
 		// Handle file not found specifically, otherwise wrap
 		if os.IsNotExist(err) {
-			return "", fmt.Errorf("audio file not found at '%s': %w", relAudioPath, err)
+			return "", fmt.Errorf("%w at '%s': %v", ErrAudioFileNotFound, relAudioPath, err)
 		}
 		return "", fmt.Errorf("error checking audio file '%s': %w", relAudioPath, err)
 	}
@@ -397,7 +419,8 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 					return nil, err2
 				}
 				// Return a combined error for general failures
-				return nil, fmt.Errorf("failed to generate spectrogram with SoX for '%s': %w, and with FFmpeg: %w", absAudioPath, err, err2)
+				return nil, fmt.Errorf("%w: SoX error: %v, FFmpeg error: %v",
+					ErrSpectrogramGeneration, err, err2)
 			}
 			log.Printf("Successfully generated spectrogram for '%s' using FFmpeg fallback", absAudioPath)
 		} else {
@@ -423,10 +446,10 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
 	soxBinary := settings.Realtime.Audio.SoxPath
 	if ffmpegBinary == "" {
-		return fmt.Errorf("ffmpeg path not set in settings")
+		return ErrFFmpegNotConfigured
 	}
 	if soxBinary == "" {
-		return fmt.Errorf("SoX path not set in settings")
+		return ErrSoxNotConfigured
 	}
 
 	// Create context with timeout (use the passed-in context as parent)
@@ -537,7 +560,7 @@ func getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath string) []str
 func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpectrogramPath string, width int, settings *conf.Settings) error {
 	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
 	if ffmpegBinary == "" {
-		return fmt.Errorf("ffmpeg path not set in settings")
+		return ErrFFmpegNotConfigured
 	}
 
 	// Create context with timeout (use the passed-in context as parent)
@@ -572,7 +595,7 @@ func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpect
 	cmd.Stdout = &output
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ffmpeg command failed: %w\nOutput: %s", err, output.String())
+		return fmt.Errorf("%w: %v (output: %s)", ErrSpectrogramGeneration, err, output.String())
 	}
 	return nil
 }
@@ -592,15 +615,17 @@ func (c *Controller) GetSpeciesImage(ctx echo.Context) error {
 
 	// Check if BirdImageCache is available
 	if c.BirdImageCache == nil {
-		return c.HandleError(ctx, fmt.Errorf("image provider not available"), "Image service unavailable", http.StatusServiceUnavailable)
+		return c.HandleError(ctx, ErrImageProviderNotAvailable, "Image service unavailable", http.StatusServiceUnavailable)
 	}
 
 	// Fetch the image from cache (which will use AviCommons if available)
 	birdImage, err := c.BirdImageCache.Get(scientificName)
 	if err != nil {
-		// If no image is found, return a 404
+		// Check for "not found" errors using errors.Is
 		if strings.Contains(err.Error(), "not found") {
-			return c.HandleError(ctx, err, "Image not found for species", http.StatusNotFound)
+			// Wrap with our sentinel error for consistent handling
+			wrappedErr := fmt.Errorf("%w: %v", ErrImageNotFound, err)
+			return c.HandleError(ctx, wrappedErr, "Image not found for species", http.StatusNotFound)
 		}
 		// For other errors, return 500
 		return c.HandleError(ctx, err, "Failed to fetch species image", http.StatusInternalServerError)
