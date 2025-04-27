@@ -377,10 +377,16 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	// Generate spectrogram filename with width (relative path)
 	spectrogramFilename := fmt.Sprintf("%s_%d.png", relBaseFilename, width)
 	// Join relative directory and filename
-	relSpectrogramPath := filepath.Join(relAudioDir, spectrogramFilename)
-	// Ensure the resulting path is clean and still relative
-	relSpectrogramPath = filepath.Clean(relSpectrogramPath)
-	relSpectrogramPath = strings.TrimPrefix(relSpectrogramPath, string(filepath.Separator))
+	tmpSpectrogramPath := filepath.Join(relAudioDir, spectrogramFilename)
+	// Validate the resulting path through SecureFS
+	relSpectrogramPath, err := c.SFS.ValidateRelativePath(tmpSpectrogramPath)
+	if err != nil {
+		// Use proper error type checking instead of string matching
+		if errors.Is(err, securefs.ErrPathTraversal) {
+			return "", fmt.Errorf("%w: %s", ErrPathTraversalAttempt, err.Error())
+		}
+		return "", fmt.Errorf("%w: %s", ErrInvalidAudioPath, err.Error())
+	}
 
 	// Absolute path for the spectrogram on the host filesystem
 	absSpectrogramPath := filepath.Join(c.SFS.BaseDir(), relSpectrogramPath)
