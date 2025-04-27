@@ -32,7 +32,7 @@ func setPathParamsFromPath(c echo.Context, path string) {
 		}
 	} else if strings.Contains(path, "/detections/") {
 		parts := strings.Split(path, "/")
-		if len(parts) > 3 {
+		if len(parts) > 4 {
 			c.SetParamNames("id")
 			c.SetParamValues(parts[4]) // Assuming ID is the 5th part (index 4)
 			// Ensure Echo routing uses the pattern
@@ -45,7 +45,7 @@ func setPathParamsFromPath(c echo.Context, path string) {
 // assertSuccessfulResponse checks for expected 2xx status and optional body fragment.
 func assertSuccessfulResponse(t *testing.T, tcName string, expectedStatus int, rec *httptest.ResponseRecorder, handlerErr error, expectedBodyFragment string) {
 	t.Helper()
-	assert.NoError(t, handlerErr, "Test Case '%s': Handler returned an unexpected error for success case: %v", tcName, handlerErr)
+	assert.NoErrorf(t, handlerErr, "tc=%s unexpected error", tcName)
 	assert.Equal(t, expectedStatus, rec.Code, "Test Case '%s': Unexpected status code for success case. Expected %d, got %d", tcName, expectedStatus, rec.Code)
 	if expectedBodyFragment != "" {
 		assert.Contains(t, rec.Body.String(), expectedBodyFragment, "Test Case '%s': Response body does not contain expected fragment '%s'", tcName, expectedBodyFragment)
