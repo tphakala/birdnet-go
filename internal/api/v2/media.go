@@ -161,7 +161,12 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 	// Serve the file using SecureFS. It handles path validation (relative/absolute within baseDir).
 	// ServeFile internally calls relativePath which ensures the path is within the SecureFS baseDir.
 	// Use ServeRelativeFile as clipPath is already relative to the baseDir
-	return c.SFS.ServeRelativeFile(ctx, clipPath)
+	err = c.SFS.ServeRelativeFile(ctx, clipPath)
+	if err != nil {
+		return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
+	}
+
+	return nil
 }
 
 // spectrogramHTTPError handles common spectrogram generation errors and converts them to appropriate HTTP responses
@@ -358,9 +363,11 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	if err != nil {
 		// Use proper error type checking instead of string matching
 		if errors.Is(err, securefs.ErrPathTraversal) {
-			return "", fmt.Errorf("%w: %w", ErrPathTraversalAttempt, err)
+			combined := errors.Join(ErrPathTraversalAttempt, err)
+			return "", fmt.Errorf("%w", combined)
 		}
-		return "", fmt.Errorf("%w: %w", ErrInvalidAudioPath, err)
+		combined := errors.Join(ErrInvalidAudioPath, err)
+		return "", fmt.Errorf("%w", combined)
 	}
 
 	// Check if the audio file exists within the secure context using the validated relative path
@@ -368,7 +375,8 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	if _, err := c.SFS.StatRel(relAudioPath); err != nil {
 		// Handle file not found specifically, otherwise wrap
 		if os.IsNotExist(err) {
-			return "", fmt.Errorf("%w at '%s': %w", ErrAudioFileNotFound, relAudioPath, err)
+			combined := errors.Join(ErrAudioFileNotFound, err)
+			return "", fmt.Errorf("%w at '%s'", combined, relAudioPath)
 		}
 		return "", fmt.Errorf("error checking audio file '%s': %w", relAudioPath, err)
 	}
