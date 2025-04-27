@@ -326,21 +326,21 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 		{
 			name:           "GetHourlyAnalytics - Missing Date",
 			method:         http.MethodGet,
-			path:           "/api/v2/analytics/time/hourly?species=test",
+			path:           "/api/v2/analytics/hourly?species=test",
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   "Missing required parameter: date",
 		},
 		{
 			name:           "GetHourlyAnalytics - Missing Species",
 			method:         http.MethodGet,
-			path:           "/api/v2/analytics/time/hourly?date=2023-01-01",
+			path:           "/api/v2/analytics/hourly?date=2023-01-01",
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   "Missing required parameter: species",
 		},
 		{
 			name:           "GetDailyAnalytics - Missing Start Date",
 			method:         http.MethodGet,
-			path:           "/api/v2/analytics/time/daily?species=test",
+			path:           "/api/v2/analytics/daily?species=test",
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   "Missing required parameter: start_date",
 		},
@@ -389,8 +389,8 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 			// Register the routes for all test cases
 			e.GET("/api/v2/analytics/species/daily", controller.GetDailySpeciesSummary)
 			e.GET("/api/v2/analytics/species/summary", controller.GetSpeciesSummary)
-			e.GET("/api/v2/analytics/time/hourly", controller.GetHourlyAnalytics)
-			e.GET("/api/v2/analytics/time/daily", controller.GetDailyAnalytics)
+			e.GET("/api/v2/analytics/hourly", controller.GetHourlyAnalytics)
+			e.GET("/api/v2/analytics/daily", controller.GetDailyAnalytics)
 			// ... add other routes as needed ...
 
 			// Let Echo's router handle the request routing
