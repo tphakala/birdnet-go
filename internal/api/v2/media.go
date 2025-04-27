@@ -360,7 +360,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	if _, err := c.SFS.StatRel(relAudioPath); err != nil {
 		// Handle file not found specifically, otherwise wrap
 		if os.IsNotExist(err) {
-			return "", fmt.Errorf("%w at '%s': %v", ErrAudioFileNotFound, relAudioPath, err)
+			return "", fmt.Errorf("%w at '%s': %w", ErrAudioFileNotFound, relAudioPath, err)
 		}
 		return "", fmt.Errorf("error checking audio file '%s': %w", relAudioPath, err)
 	}
@@ -420,7 +420,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 					return nil, err2
 				}
 				// Return a combined error for general failures
-				return nil, fmt.Errorf("%w: SoX error: %v, FFmpeg error: %v",
+				return nil, fmt.Errorf("%w: SoX error: %w, FFmpeg error: %w",
 					ErrSpectrogramGeneration, err, err2)
 			}
 			log.Printf("Successfully generated spectrogram for '%s' using FFmpeg fallback", absAudioPath)
@@ -601,7 +601,7 @@ func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpect
 	cmd.Stdout = &output
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%w: %v (output: %s)", ErrSpectrogramGeneration, err, output.String())
+		return fmt.Errorf("%w: %w (output: %s)", ErrSpectrogramGeneration, err, output.String())
 	}
 	return nil
 }
@@ -630,7 +630,7 @@ func (c *Controller) GetSpeciesImage(ctx echo.Context) error {
 		// Check for "not found" errors using errors.Is
 		if strings.Contains(err.Error(), "not found") {
 			// Wrap with our sentinel error for consistent handling
-			wrappedErr := fmt.Errorf("%w: %v", ErrImageNotFound, err)
+			wrappedErr := fmt.Errorf("%w: %w", ErrImageNotFound, err)
 			return c.HandleError(ctx, wrappedErr, "Image not found for species", http.StatusNotFound)
 		}
 		// For other errors, return 500
