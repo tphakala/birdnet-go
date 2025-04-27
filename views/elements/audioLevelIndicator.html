@@ -365,7 +365,7 @@
         
         // Start playing HLS stream for the selected source
         startPlayback(sourceId) {
-            console.log('Starting audio playback for source: ' + sourceId);
+            console.log(`Starting audio playback for source: ${this.getSourceDisplayName(sourceId)}`);
             
             // If we're already starting playback for this source and still stabilizing, do nothing
             if (this.playbackStabilizing && this.playingSource === sourceId) {
