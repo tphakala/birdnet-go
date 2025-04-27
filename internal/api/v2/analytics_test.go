@@ -905,10 +905,7 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 	// *even if* the species itself is below the threshold (filtering happens later in Go code)
 	// We expect it to be called for American Crow with the filter
 	mockDS.On("GetHourlyOccurrences", "2025-03-07", "American Crow", expectedMinConfidence).Return(expectedAmcroConfidenceHourly, nil)
-	// ---> FIX: Remove expectation for the filtered species <---
-	/* We also expect it to be called for Red-bellied Woodpecker, even though it's below threshold.
-	// The mock should return empty counts because the handler logic will filter it later.
-	mockDS.On("GetHourlyOccurrences", "2025-03-07", "Red-bellied Woodpecker", expectedMinConfidence).Return([24]int{}, nil) */
+	// Note: No expectation is set for Red-bellied Woodpecker as it's filtered out
 
 	// Create a controller with our mock
 	controller := &Controller{
