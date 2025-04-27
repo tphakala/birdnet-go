@@ -3,7 +3,9 @@ package api
 
 import (
 	"fmt"
+	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +16,34 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
+
+// Regex to validate YYYY-MM-DD format and check for unwanted characters
+var validDateRegex = regexp.MustCompile(`^(\d{4})-(\d{2})-(\d{2})$`)
+
+// Function to validate date string format and content
+func validateDateParam(dateStr string, paramName string) error {
+	if dateStr == "" {
+		return nil // Optional parameter, no error if empty
+	}
+
+	// Basic format check first
+	if !validDateRegex.MatchString(dateStr) {
+		return fmt.Errorf("invalid %s format, use YYYY-MM-DD", paramName)
+	}
+
+	// Check for obviously invalid characters (more robust than just format)
+	if strings.ContainsAny(dateStr, "/.\\%<>") {
+		return fmt.Errorf("invalid characters detected in %s", paramName)
+	}
+
+	// Try parsing the date to catch invalid dates like 2023-02-30
+	_, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return fmt.Errorf("invalid date value for %s: %w", paramName, err)
+	}
+
+	return nil
+}
 
 // initDetectionRoutes registers all detection-related API endpoints
 func (c *Controller) initDetectionRoutes() {
@@ -86,6 +116,27 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	duration, _ := strconv.Atoi(ctx.QueryParam("duration"))
 	species := ctx.QueryParam("species")
 	search := ctx.QueryParam("search")
+	startDateStr := ctx.QueryParam("start_date")
+	endDateStr := ctx.QueryParam("end_date")
+
+	// --- BEGIN CHANGE: Validate start_date and end_date ---
+	if err := validateDateParam(startDateStr, "start_date"); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if err := validateDateParam(endDateStr, "end_date"); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	// Check if start_date is after end_date
+	if startDateStr != "" && endDateStr != "" {
+		// We know parsing works from validateDateParam
+		startDate, _ := time.Parse("2006-01-02", startDateStr)
+		endDate, _ := time.Parse("2006-01-02", endDateStr)
+		if startDate.After(endDate) {
+			return echo.NewHTTPError(http.StatusBadRequest, "start_date cannot be after end_date")
+		}
+	}
+	// --- END CHANGE ---
 
 	// --- BEGIN CHANGE: Validate numResults ---
 	numResultsStr := ctx.QueryParam("numResults")
@@ -96,12 +147,18 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 		var err error
 		numResults, err = strconv.Atoi(numResultsStr)
 		if err != nil {
+			// DEBUG LOGGING
+			log.Printf("[DEBUG] GetDetections: Invalid numResults string '%s', error: %v", numResultsStr, err)
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid numeric value for numResults: %v", err))
 		}
 		// Add check for unreasonable values
 		if numResults < 0 {
+			// DEBUG LOGGING
+			log.Printf("[DEBUG] GetDetections: Negative numResults value: %d", numResults)
 			return echo.NewHTTPError(http.StatusBadRequest, "numResults cannot be negative")
 		} else if numResults > 1000 { // Enforce a reasonable maximum
+			// DEBUG LOGGING
+			log.Printf("[DEBUG] GetDetections: Too large numResults value: %d", numResults)
 			return echo.NewHTTPError(http.StatusBadRequest, "numResults exceeds maximum allowed value (1000)")
 		}
 	}
@@ -116,14 +173,20 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 		var err error
 		offset, err = strconv.Atoi(offsetStr)
 		if err != nil {
+			// DEBUG LOGGING
+			log.Printf("[DEBUG] GetDetections: Invalid offset string '%s', error: %v", offsetStr, err)
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid numeric value for offset: %v", err))
 		}
 		// Add check for unreasonable values
 		if offset < 0 {
+			// DEBUG LOGGING
+			log.Printf("[DEBUG] GetDetections: Negative offset value: %d", offset)
 			return echo.NewHTTPError(http.StatusBadRequest, "offset cannot be negative")
 		}
 		const maxOffset = 1000000 // Define a reasonable maximum offset
 		if offset > maxOffset {
+			// DEBUG LOGGING
+			log.Printf("[DEBUG] GetDetections: Too large offset value: %d", offset)
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("offset exceeds maximum allowed value (%d)", maxOffset))
 		}
 	}
