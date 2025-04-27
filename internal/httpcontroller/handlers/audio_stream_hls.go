@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -152,13 +152,6 @@ func (h *Handlers) validateHLSRequest(c echo.Context) (sourceID, clientID, hlsBa
 
 	if sourceID == "" {
 		return "", "", "", echo.NewHTTPError(http.StatusBadRequest, "Source ID is required")
-	}
-
-	// Validate sourceID for security - ensure it only contains safe characters
-	safeSourceIDRegex := regexp.MustCompile(`^[A-Za-z0-9_\-]+$`)
-	if !safeSourceIDRegex.MatchString(sourceID) {
-		log.Printf("🚨 Security warning: Invalid source ID format detected: %s", sourceID)
-		return "", "", "", echo.NewHTTPError(http.StatusBadRequest, "Invalid source ID format")
 	}
 
 	// Check authentication if the server requires it
@@ -438,29 +431,19 @@ func buildFFmpegArgs(inputSource, outputDir, playlistPath string) []string {
 	return args
 }
 
-// validateSourceID validates the sourceID is safe for file paths
-func validateSourceID(sourceID string) (string, error) {
-	// Validate sourceID for security - ensure it only contains safe characters
-	safeSourceIDRegex := regexp.MustCompile(`^[A-Za-z0-9_\-]+$`)
-	if !safeSourceIDRegex.MatchString(sourceID) {
-		return "", fmt.Errorf("invalid source ID format: contains unauthorized characters")
-	}
-
-	// Apply strict sanitization for defense in depth
-	reSafe := regexp.MustCompile(`[^A-Za-z0-9_\-]`)
-	safeSourceID := reSafe.ReplaceAllString(sourceID, "_")
-
-	// Ensure the sanitized ID is still valid
-	if safeSourceID == "" {
-		return "", fmt.Errorf("invalid source ID after sanitization")
-	}
-
-	return safeSourceID, nil
+// generateFilesystemSafeName creates a filesystem-safe string from an arbitrary input
+// using URL-safe Base64 encoding.
+func generateFilesystemSafeName(input string) string {
+	// Use RawURLEncoding to avoid '+' and '/' characters in filenames/paths
+	encoded := base64.RawURLEncoding.EncodeToString([]byte(input))
+	// Base64 URL encoding is generally safe for most filesystems.
+	// Padding '=' chars are removed by RawURLEncoding.
+	return encoded
 }
 
 // prepareStreamDirectory creates and validates the output directory
-func prepareStreamDirectory(secFS *securefs.SecureFS, hlsBaseDir, safeSourceID string) (outputDir, playlistPath string, err error) {
-	outputDir = filepath.Join(hlsBaseDir, fmt.Sprintf("stream_%s", safeSourceID))
+func prepareStreamDirectory(secFS *securefs.SecureFS, hlsBaseDir, filesystemSafeSourceID string) (outputDir, playlistPath string, err error) {
+	outputDir = filepath.Join(hlsBaseDir, fmt.Sprintf("stream_%s", filesystemSafeSourceID))
 
 	// Verify the output directory is within the HLS base directory for safety
 	isWithin, err := securefs.IsPathWithinBase(hlsBaseDir, outputDir)
@@ -550,19 +533,16 @@ func setupFFmpeg(ctx context.Context, sourceID, ffmpegPath, readerPath, outputDi
 
 // getOrCreateHLSStream gets an existing stream or creates a new one
 func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo, error) {
-	// Validate sourceID for security
-	safeSourceID, err := validateSourceID(sourceID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if stream exists
+	// Use the original sourceID for lookups and identification
 	if stream := getExistingStream(sourceID); stream != nil {
 		return stream, nil
 	}
 
 	// Stream doesn't exist, we need to create it
 	log.Printf("🎬 Creating new HLS stream for source: %s", sourceID)
+
+	// Generate a filesystem-safe name for directory creation
+	filesystemSafeSourceID := generateFilesystemSafeName(sourceID)
 
 	// Create a context that can be canceled to terminate the stream
 	streamCtx, streamCancel := context.WithCancel(ctx)
@@ -582,8 +562,8 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	}
 	defer secFS.Close()
 
-	// Prepare the output directory and playlist path
-	outputDir, playlistPath, err := prepareStreamDirectory(secFS, hlsBaseDir, safeSourceID)
+	// Prepare the output directory and playlist path using the filesystem-safe name
+	outputDir, playlistPath, err := prepareStreamDirectory(secFS, hlsBaseDir, filesystemSafeSourceID)
 	if err != nil {
 		streamCancel() // Clean up context
 		return nil, err
@@ -634,9 +614,9 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 		return nil, err
 	}
 
-	// Create stream info
+	// Create stream info - store the ORIGINAL sourceID here
 	stream := &HLSStreamInfo{
-		SourceID:     sourceID,
+		SourceID:     sourceID, // Use original sourceID for identification
 		FFmpegCmd:    cmd,
 		OutputDir:    outputDir,
 		PlaylistPath: playlistPath,
