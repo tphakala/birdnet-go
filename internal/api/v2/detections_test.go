@@ -74,7 +74,7 @@ func TestGetDetections(t *testing.T) {
 		mockSetup      func(*mock.Mock)
 		expectedStatus int
 		expectedCount  int
-		checkResponse  func(*testing.T, *httptest.ResponseRecorder)
+		checkResponse  func(*testing.T, *httptest.ResponseRecorder, error)
 		handler        func(c echo.Context) error
 	}{
 		{
@@ -89,7 +89,8 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
-			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder, handlerErr error) {
+				assert.NoError(t, handlerErr, "Expected no error for successful request")
 				var response PaginatedResponse
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
 				assert.NoError(t, err)
@@ -119,7 +120,8 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
-			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder, handlerErr error) {
+				assert.NoError(t, handlerErr, "Expected no error for successful request")
 				var response PaginatedResponse
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
 				assert.NoError(t, err)
@@ -148,7 +150,7 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
-			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder, handlerErr error) {
 				var response PaginatedResponse
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
 				assert.NoError(t, err)
@@ -176,7 +178,7 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
-			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder, handlerErr error) {
 				var response PaginatedResponse
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
 				assert.NoError(t, err)
@@ -202,7 +204,8 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK, // Now expecting 200 OK
 			expectedCount:  0,
-			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder, handlerErr error) {
+				assert.NoError(t, handlerErr, "Expected no error for successful request")
 				var response PaginatedResponse
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
 				assert.NoError(t, err)
@@ -214,23 +217,23 @@ func TestGetDetections(t *testing.T) {
 			},
 		},
 		{
-			name: "Invalid offset parameter",
-			queryParams: map[string]string{
-				"offset": "abc", // Non-integer value
-			},
-			mockSetup: func(m *mock.Mock) {
-				// Controller should sanitize to default value
-				m.On("SearchNotes", "", false, 100, 0).Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
-			},
-			expectedStatus: http.StatusOK, // Now expecting 200 OK
-			expectedCount:  0,
-			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var response PaginatedResponse
-				err := json.Unmarshal(rec.Body.Bytes(), &response)
-				assert.NoError(t, err)
-				// Verify default value was applied
-				assert.Equal(t, 0, response.Offset)
+			name:           "Invalid_offset_parameter",
+			queryParams:    map[string]string{"offset": "abc"},
+			expectedStatus: http.StatusBadRequest,
+			mockSetup:      func(m *mock.Mock) { /* No DB interaction expected */ },
+			expectedCount:  0, // Not relevant for error case
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder, handlerErr error) {
+				// Check for expected error from handler
+				assert.Error(t, handlerErr, "Expected an error for invalid offset")
+				var httpErr *echo.HTTPError
+				if errors.As(handlerErr, &httpErr) {
+					assert.Equal(t, http.StatusBadRequest, httpErr.Code, "HTTP status code mismatch in error")
+					assert.Contains(t, httpErr.Message, "Invalid numeric value for offset", "Error message mismatch")
+				} else {
+					assert.Fail(t, "Expected error to be echo.HTTPError", "Got %T: %v", handlerErr, handlerErr)
+				}
+				// Also check recorder code, although handlerErr check is primary
+				assert.Equal(t, http.StatusBadRequest, rec.Code, "Recorder status code mismatch for error case")
 			},
 			handler: func(c echo.Context) error {
 				return controller.GetDetections(c)
@@ -248,7 +251,7 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK, // Now expecting 200 OK
 			expectedCount:  0,
-			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder, handlerErr error) {
 				// Verify response is successful
 				var response PaginatedResponse
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
@@ -271,7 +274,7 @@ func TestGetDetections(t *testing.T) {
 				m.On("SearchNotes", "", false, 1000, 9223372036854775807).Return([]datastore.Note{}, nil)
 				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
 			},
-			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder, handlerErr error) {
 				// Verify response is successful
 				var response PaginatedResponse
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
