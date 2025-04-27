@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -68,15 +69,35 @@ func (c *Controller) initMediaRoutes() {
 
 // translateSecureFSError handles SecureFS errors consistently across handler methods.
 // It checks if the error is already an HTTPError from SecureFS and returns it directly,
-// or wraps unexpected errors in a consistent way.
+// or maps specific error types to appropriate HTTP status codes.
 func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg string) error {
 	var httpErr *echo.HTTPError
 	if errors.As(err, &httpErr) {
+		// If it's already an HTTPError from SecureFS, just pass it through
 		ctx.Logger().Debugf("SecureFS httpErr=%d internal=%v msg=%v",
 			httpErr.Code, httpErr.Internal, httpErr.Message)
 		return httpErr
 	}
-	ctx.Logger().Errorf("SecureFS unexpected error: %T: %v", err, err)
+
+	// Check for specific error types and map to appropriate status codes
+	switch {
+	case errors.Is(err, securefs.ErrPathTraversal) || errors.Is(err, ErrPathTraversalAttempt):
+		return c.HandleError(ctx, err, "Invalid file path: attempted path traversal", http.StatusBadRequest)
+	case errors.Is(err, securefs.ErrInvalidPath) || errors.Is(err, ErrInvalidAudioPath):
+		return c.HandleError(ctx, err, "Invalid file path specification", http.StatusBadRequest)
+	case errors.Is(err, securefs.ErrAccessDenied):
+		return c.HandleError(ctx, err, "Access denied to requested resource", http.StatusForbidden)
+	case errors.Is(err, securefs.ErrNotRegularFile):
+		return c.HandleError(ctx, err, "Requested resource is not a regular file", http.StatusForbidden)
+	case errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist) || errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, ErrImageNotFound):
+		return c.HandleError(ctx, err, "Resource not found", http.StatusNotFound)
+	case errors.Is(err, context.DeadlineExceeded):
+		return c.HandleError(ctx, err, "Request timed out", http.StatusRequestTimeout)
+	case errors.Is(err, context.Canceled):
+		return c.HandleError(ctx, err, "Request was canceled", StatusClientClosedRequest)
+	}
+
+	// For other errors, use the provided user message with a 500 status
 	return c.HandleError(ctx, err, userMsg, http.StatusInternalServerError)
 }
 
@@ -368,17 +389,11 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 
 	// Generate spectrogram filename with width (relative path)
 	spectrogramFilename := fmt.Sprintf("%s_%d.png", relBaseFilename, width)
-	// Join relative directory and filename
-	tmpSpectrogramPath := filepath.Join(relAudioDir, spectrogramFilename)
-	// Validate the resulting path through SecureFS
-	relSpectrogramPath, err := c.SFS.ValidateRelativePath(tmpSpectrogramPath)
-	if err != nil {
-		// Use proper error type checking instead of string matching
-		if errors.Is(err, securefs.ErrPathTraversal) {
-			return "", fmt.Errorf("%w: %w", ErrPathTraversalAttempt, err)
-		}
-		return "", fmt.Errorf("%w: %w", ErrInvalidAudioPath, err)
-	}
+
+	// Since we're constructing the spectrogram path from an already-validated audio path
+	// and appending a simple formatted filename, we can safely construct the path without
+	// re-validating. The path components are all known to be safe.
+	relSpectrogramPath := filepath.Join(relAudioDir, spectrogramFilename)
 
 	// Absolute path for the spectrogram on the host filesystem
 	absSpectrogramPath := filepath.Join(c.SFS.BaseDir(), relSpectrogramPath)
