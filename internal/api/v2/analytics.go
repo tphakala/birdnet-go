@@ -419,7 +419,7 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 		// Handle unexpected errors from parseAndValidateDateRange
-		log.Printf("Error validating date range values (start: %s, end: %s): %v", startDate, endDate, err)
+		log.Printf("Error validating date range: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "Error validating date range values")
 	}
 
