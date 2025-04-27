@@ -170,11 +170,6 @@ func (c *Controller) spectrogramHTTPError(ctx echo.Context, err error) error {
 	case errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, os.ErrNotExist):
 		// Handle cases where the source audio file doesn't exist
 		return c.HandleError(ctx, err, "Source audio file not found", http.StatusNotFound)
-	case func() bool {
-		var pathErr *os.PathError
-		return errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist)
-	}():
-		return c.HandleError(ctx, err, "Source audio file not found (PathError)", http.StatusNotFound)
 	case errors.Is(err, ErrInvalidAudioPath) || errors.Is(err, ErrPathTraversalAttempt):
 		// Handle path traversal or invalid path errors
 		return c.HandleError(ctx, err, "Invalid audio file path specified", http.StatusBadRequest)
@@ -465,7 +460,8 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 	ext = strings.TrimPrefix(ext, ".")
 	useFFmpeg := true
 	for _, soxType := range settings.Realtime.Audio.SoxAudioTypes {
-		if strings.EqualFold(ext, soxType) {
+		soxType = strings.TrimPrefix(strings.ToLower(soxType), ".")
+		if ext == soxType {
 			useFFmpeg = false
 			break
 		}
@@ -641,10 +637,8 @@ func (c *Controller) GetSpeciesImage(ctx echo.Context) error {
 	birdImage, err := c.BirdImageCache.Get(scientificName)
 	if err != nil {
 		// Check for "not found" errors using errors.Is
-		if strings.Contains(err.Error(), "not found") {
-			// Wrap with our sentinel error for consistent handling
-			wrappedErr := fmt.Errorf("%w: %w", ErrImageNotFound, err)
-			return c.HandleError(ctx, wrappedErr, "Image not found for species", http.StatusNotFound)
+		if errors.Is(err, ErrImageNotFound) {
+			return c.HandleError(ctx, err, "Image not found for species", http.StatusNotFound)
 		}
 		// For other errors, return 500
 		return c.HandleError(ctx, err, "Failed to fetch species image", http.StatusInternalServerError)
