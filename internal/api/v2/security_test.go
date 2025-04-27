@@ -22,6 +22,9 @@ import (
 // setPathParamsFromPath extracts path parameters (like :id) from a URL path
 // and sets them on the Echo context.
 func setPathParamsFromPath(c echo.Context, path string) {
+	// First, remove query string if present
+	path = strings.SplitN(path, "?", 2)[0]
+
 	if strings.Contains(path, "/detections/") && strings.Contains(path, "/review") {
 		parts := strings.Split(path, "/")
 		if len(parts) > 4 {
@@ -797,10 +800,4 @@ func TestCSRFProtection(t *testing.T) {
 			}
 		}
 	})
-}
-
-// HandleMalformedJSON is a placeholder handler for testing malformed JSON payloads.
-func (c *Controller) HandleMalformedJSON(ctx echo.Context) error {
-	// Simulate a binding error
-	return echo.NewHTTPError(http.StatusBadRequest, "Simulated JSON binding error")
 }
