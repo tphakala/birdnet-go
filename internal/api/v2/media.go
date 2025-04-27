@@ -41,6 +41,20 @@ func (c *Controller) initMediaRoutes() {
 	c.Group.GET("/media/species-image", c.GetSpeciesImage)
 }
 
+// translateSecureFSError handles SecureFS errors consistently across handler methods.
+// It checks if the error is already an HTTPError from SecureFS and returns it directly,
+// or wraps unexpected errors in a consistent way.
+func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg string) error {
+	var httpErr *echo.HTTPError
+	if errors.As(err, &httpErr) {
+		ctx.Logger().Debugf("SecureFS httpErr=%d internal=%v msg=%v",
+			httpErr.Code, httpErr.Internal, httpErr.Message)
+		return httpErr
+	}
+	ctx.Logger().Errorf("SecureFS unexpected error: %T: %v", err, err)
+	return c.HandleError(ctx, err, userMsg, http.StatusInternalServerError)
+}
+
 // getContentType determines the content type based on file extension (can remain as helper)
 func getContentType(filename string) string {
 	ext := strings.ToLower(filepath.Ext(filename))
@@ -71,18 +85,7 @@ func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 	err := c.SFS.ServeRelativeFile(ctx, filename)
 
 	if err != nil {
-		// Check if it's already an HTTPError we can return directly
-		var httpErr *echo.HTTPError
-		if errors.As(err, &httpErr) {
-			// Log the underlying cause for debugging
-			log.Printf("ServeAudioClip: SecureFS returned HTTPError %d. Internal: %v. Message: %v", httpErr.Code, httpErr.Internal, httpErr.Message)
-			return httpErr // Return the error SecureFS intended
-		}
-
-		// If ServeRelativeFile returned an error that wasn't an echo.HTTPError,
-		// treat it as an unexpected internal server error.
-		log.Printf("ServeAudioClip: Unexpected error type from SecureFS: %T: %v", err, err)
-		return c.HandleError(ctx, err, "Failed to serve audio clip due to an unexpected error", http.StatusInternalServerError)
+		return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
 	}
 
 	// If err is nil, ServeRelativeFile handled the response successfully
@@ -173,7 +176,11 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Serve the generated spectrogram using SecureFS
-	return c.SFS.ServeRelativeFile(ctx, spectrogramPath)
+	err = c.SFS.ServeRelativeFile(ctx, spectrogramPath)
+	if err != nil {
+		return c.translateSecureFSError(ctx, err, "Failed to serve spectrogram image")
+	}
+	return nil
 }
 
 // ServeAudioByQueryID serves an audio clip using query parameter for ID
@@ -227,7 +234,11 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	}
 
 	// Serve the generated spectrogram using SecureFS
-	return c.SFS.ServeRelativeFile(ctx, spectrogramPath)
+	err = c.SFS.ServeRelativeFile(ctx, spectrogramPath)
+	if err != nil {
+		return c.translateSecureFSError(ctx, err, "Failed to serve spectrogram image")
+	}
+	return nil
 }
 
 // httpRange specifies the byte range to be sent to the client
