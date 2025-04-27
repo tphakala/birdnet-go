@@ -22,6 +22,11 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+// Non-standard HTTP status codes
+const (
+	StatusClientClosedRequest = 499 // Nginx's non-standard status for client closed connection
+)
+
 // Sentinel errors for media operations
 var (
 	// Audio file errors
@@ -155,8 +160,8 @@ func (c *Controller) spectrogramHTTPError(ctx echo.Context, err error) error {
 	case errors.Is(err, context.DeadlineExceeded):
 		return c.HandleError(ctx, err, "Spectrogram generation timed out", http.StatusRequestTimeout)
 	case errors.Is(err, context.Canceled):
-		// Use 499 Client Closed Request (non-standard, but common)
-		return c.HandleError(ctx, err, "Spectrogram generation canceled by client", 499)
+		// Use StatusClientClosedRequest (non-standard, but common for Nginx)
+		return c.HandleError(ctx, err, "Spectrogram generation canceled by client", StatusClientClosedRequest)
 	case errors.Is(err, ErrFFmpegNotConfigured) || errors.Is(err, ErrSoxNotConfigured):
 		// Handle configuration errors
 		return c.HandleError(ctx, err, "Server configuration error preventing spectrogram generation", http.StatusInternalServerError)
