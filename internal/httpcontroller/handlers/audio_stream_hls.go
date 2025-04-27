@@ -241,7 +241,7 @@ func (h *Handlers) servePlaylistFile(c echo.Context, stream *HLSStreamInfo, hlsB
 	updateStreamActivity(stream.SourceID, "", "playlist_request")
 
 	if hlsVerboseLogging {
-		log.Printf("📄 Updated activity timestamp for stream %s due to playlist request", stream.SourceID)
+		log.Printf("📄 Updated activity timestamp for stream %s due to playlist request", conf.SanitizeRTSPUrl(stream.SourceID))
 	}
 
 	// Sanitize the path
@@ -274,13 +274,13 @@ func (h *Handlers) servePlaylistFile(c echo.Context, stream *HLSStreamInfo, hlsB
 		hlsStreamMutex.Unlock()
 
 		if !streamExists {
-			log.Printf("❌ HLS stream no longer exists for source %s", stream.SourceID)
+			log.Printf("❌ HLS stream no longer exists for source %s", conf.SanitizeRTSPUrl(stream.SourceID))
 			return echo.NewHTTPError(http.StatusNotFound, "Stream no longer exists")
 		}
 
 		// Send a temporary empty playlist to avoid client errors
 		// This will cause the client to retry after a short delay
-		log.Printf("⏳ Sending temporary empty playlist for source %s (real playlist not ready yet)", stream.SourceID)
+		log.Printf("⏳ Sending temporary empty playlist for source %s (real playlist not ready yet)", conf.SanitizeRTSPUrl(stream.SourceID))
 
 		// Create a basic empty HLS playlist
 		// Important: DO NOT include EXT-X-ENDLIST tag which signals the end of the stream
@@ -818,7 +818,7 @@ func cleanupStream(sourceID string) {
 		return
 	}
 
-	log.Printf("🧹 Cleaning up HLS stream for source: %s", sourceID)
+	log.Printf("🧹 Cleaning up HLS stream for source: %s", conf.SanitizeRTSPUrl(sourceID))
 
 	// Remove from map first, then release lock
 	delete(hlsStreams, sourceID)
