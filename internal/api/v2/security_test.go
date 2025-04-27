@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -19,30 +20,74 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
-// setPathParamsFromPath extracts path parameters (like :id) from a URL path
-// and sets them on the Echo context.
+// setPathParamsFromPath extracts path parameters from a URL path and
+// sets them on the Echo context using a table-driven approach for maintainability.
 func setPathParamsFromPath(c echo.Context, path string) {
 	// First, remove query string if present
 	path = strings.SplitN(path, "?", 2)[0]
 
-	if strings.Contains(path, "/detections/") && strings.Contains(path, "/review") {
-		parts := strings.Split(path, "/")
-		if len(parts) > 4 {
-			c.SetParamNames("id")
-			c.SetParamValues(parts[4])
-			// Ensure Echo routing uses the pattern, not the specific ID for matching
-			c.SetPath("/api/v2/detections/:id/review")
-		}
-	} else if strings.Contains(path, "/detections/") {
-		parts := strings.Split(path, "/")
-		if len(parts) > 4 {
-			c.SetParamNames("id")
-			c.SetParamValues(parts[4]) // Assuming ID is the 5th part (index 4)
-			// Ensure Echo routing uses the pattern
-			c.SetPath("/api/v2/detections/:id")
+	// Table of route patterns to match against
+	// Each entry defines:
+	// - A regex pattern to match the URL path
+	// - The parameter names to extract
+	// - The corresponding Echo route pattern to set
+	// - A function to extract parameter values from the path segments
+	patterns := []struct {
+		regex        *regexp.Regexp
+		paramNames   []string
+		echoPattern  string
+		extractValue func([]string) []string
+	}{
+		{
+			// Pattern: /api/v2/detections/:id/review
+			regex:       regexp.MustCompile(`^/api/v2/detections/([^/]+)/review`),
+			paramNames:  []string{"id"},
+			echoPattern: "/api/v2/detections/:id/review",
+			extractValue: func(matches []string) []string {
+				if len(matches) > 1 {
+					return []string{matches[1]} // ID is in the first capture group
+				}
+				return []string{}
+			},
+		},
+		{
+			// Pattern: /api/v2/detections/:id
+			regex:       regexp.MustCompile(`^/api/v2/detections/([^/]+)$`),
+			paramNames:  []string{"id"},
+			echoPattern: "/api/v2/detections/:id",
+			extractValue: func(matches []string) []string {
+				if len(matches) > 1 {
+					return []string{matches[1]} // ID is in the first capture group
+				}
+				return []string{}
+			},
+		},
+		// Add more pattern definitions here for other parameterized routes
+		// Example:
+		// {
+		//    regex:       regexp.MustCompile(`^/api/v2/detections/([^/]+)/lock`),
+		//    paramNames:  []string{"id"},
+		//    echoPattern: "/api/v2/detections/:id/lock",
+		//    extractValue: func(matches []string) []string { return []string{matches[1]} },
+		// },
+	}
+
+	// Try each pattern in order
+	for _, pattern := range patterns {
+		matches := pattern.regex.FindStringSubmatch(path)
+		if len(matches) > 0 {
+			paramValues := pattern.extractValue(matches)
+			if len(paramValues) == len(pattern.paramNames) {
+				c.SetParamNames(pattern.paramNames...)
+				c.SetParamValues(paramValues...)
+				c.SetPath(pattern.echoPattern)
+				return
+			}
 		}
 	}
-	// Add more else if blocks here for other parameterized routes if needed
+
+	// If no patterns matched, leave the context unchanged
+	// This allows the original path to be used for non-parameterized routes
 }
 
 // assertSuccessfulResponse checks for expected 2xx status and optional body fragment.
