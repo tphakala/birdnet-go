@@ -86,22 +86,66 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	duration, _ := strconv.Atoi(ctx.QueryParam("duration"))
 	species := ctx.QueryParam("species")
 	search := ctx.QueryParam("search")
-	numResults, _ := strconv.Atoi(ctx.QueryParam("numResults"))
-	offset, _ := strconv.Atoi(ctx.QueryParam("offset"))
+
+	// --- BEGIN CHANGE: Validate numResults ---
+	numResultsStr := ctx.QueryParam("numResults")
+	var numResults int
+	if numResultsStr == "" {
+		numResults = 100 // Default value
+	} else {
+		var err error
+		numResults, err = strconv.Atoi(numResultsStr)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid numeric value for numResults: %v", err))
+		}
+		// Add check for unreasonable values
+		if numResults < 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "numResults cannot be negative")
+		} else if numResults > 1000 { // Enforce a reasonable maximum
+			return echo.NewHTTPError(http.StatusBadRequest, "numResults exceeds maximum allowed value (1000)")
+		}
+	}
+	// --- END CHANGE ---
+
+	// --- BEGIN CHANGE: Validate offset ---
+	offsetStr := ctx.QueryParam("offset")
+	var offset int
+	if offsetStr == "" {
+		offset = 0 // Default value
+	} else {
+		var err error
+		offset, err = strconv.Atoi(offsetStr)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid numeric value for offset: %v", err))
+		}
+		// Add check for unreasonable values
+		if offset < 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "offset cannot be negative")
+		}
+		const maxOffset = 1000000 // Define a reasonable maximum offset
+		if offset > maxOffset {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("offset exceeds maximum allowed value (%d)", maxOffset))
+		}
+	}
+	// --- END CHANGE ---
+
 	queryType := ctx.QueryParam("queryType") // "hourly", "species", "search", or "all"
 
-	// Set default values and enforce maximum limit
-	if numResults <= 0 {
-		numResults = 100
-	} else if numResults > 1000 {
-		// Enforce a maximum limit to prevent excessive loads
-		numResults = 1000
-	}
+	// Default values are set above during parsing/validation
+	// Clamping is replaced by explicit error returns above
+	// // Set default values and enforce maximum limit (moved validation above)
+	// // Apply clamping AFTER successful parsing
+	// if numResults <= 0 { // <= 0 check is now handled by < 0 error check and default value
+	// 	numResults = 100
+	// } else if numResults > 1000 {
+	// 	// Enforce a maximum limit to prevent excessive loads
+	// 	numResults = 1000
+	// }
 
-	// Ensure offset is non-negative for security and to prevent unexpected behavior
-	if offset < 0 {
-		offset = 0
-	}
+	// // Ensure offset is non-negative for security and to prevent unexpected behavior
+	// if offset < 0 {
+	// 	offset = 0
+	// }
 
 	// Set default duration
 	if duration <= 0 {
