@@ -146,23 +146,30 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	// Pass the request context for cancellation/timeout
 	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, width)
 	if err != nil {
-		var pathErr *os.PathError
-		if errors.Is(err, os.ErrNotExist) || (errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist)) || strings.Contains(err.Error(), "audio file not found") {
+		switch {
+		case errors.Is(err, os.ErrNotExist), strings.Contains(err.Error(), "audio file not found"):
 			// Handle cases where the source audio file doesn't exist
 			return c.HandleError(ctx, err, "Source audio file not found", http.StatusNotFound)
-		} else if strings.Contains(err.Error(), "invalid audio path") || strings.Contains(err.Error(), "security error: path attempts to traverse") {
+		case errors.As(err, new(*os.PathError)): // Check for PathError specifically
+			var pathErr *os.PathError
+			if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
+				return c.HandleError(ctx, err, "Source audio file not found (PathError)", http.StatusNotFound)
+			} // Fall through if it's a PathError but not ErrNotExist
+		case strings.Contains(err.Error(), "invalid audio path"), strings.Contains(err.Error(), "security error: path attempts to traverse"):
 			// Handle path traversal or invalid path errors
 			return c.HandleError(ctx, err, "Invalid audio file path specified", http.StatusBadRequest)
-		} else if errors.Is(err, context.DeadlineExceeded) {
+		case errors.Is(err, context.DeadlineExceeded):
 			return c.HandleError(ctx, err, "Spectrogram generation timed out", http.StatusRequestTimeout)
-		} else if errors.Is(err, context.Canceled) {
+		case errors.Is(err, context.Canceled):
+			// Use 499 Client Closed Request (non-standard, but common)
 			return c.HandleError(ctx, err, "Spectrogram generation canceled by client", 499)
-		} else if strings.Contains(err.Error(), "ffmpeg path not set") || strings.Contains(err.Error(), "sox path not set") {
+		case strings.Contains(err.Error(), "ffmpeg path not set"), strings.Contains(err.Error(), "sox path not set"):
 			// Handle configuration errors
 			return c.HandleError(ctx, err, "Server configuration error preventing spectrogram generation", http.StatusInternalServerError)
+		default:
+			// Default to internal server error for other generation failures
+			return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
 		}
-		// Default to internal server error for other generation failures
-		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
 	}
 
 	// Serve the generated spectrogram using SecureFS
@@ -198,20 +205,25 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	// Pass the request context for cancellation/timeout
 	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, width)
 	if err != nil {
-		var pathErr *os.PathError
-		if errors.Is(err, os.ErrNotExist) || (errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist)) || strings.Contains(err.Error(), "audio file not found") {
+		switch {
+		case errors.Is(err, os.ErrNotExist), strings.Contains(err.Error(), "audio file not found"):
 			return c.HandleError(ctx, err, "Source audio file not found", http.StatusNotFound)
-		} else if strings.Contains(err.Error(), "invalid audio path") || strings.Contains(err.Error(), "security error: path attempts to traverse") {
+		case errors.As(err, new(*os.PathError)):
+			var pathErr *os.PathError
+			if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
+				return c.HandleError(ctx, err, "Source audio file not found (PathError)", http.StatusNotFound)
+			} // Fall through
+		case strings.Contains(err.Error(), "invalid audio path"), strings.Contains(err.Error(), "security error: path attempts to traverse"):
 			return c.HandleError(ctx, err, "Invalid audio file path specified", http.StatusBadRequest)
-		} else if errors.Is(err, context.DeadlineExceeded) {
+		case errors.Is(err, context.DeadlineExceeded):
 			return c.HandleError(ctx, err, "Spectrogram generation timed out", http.StatusRequestTimeout)
-		} else if errors.Is(err, context.Canceled) {
+		case errors.Is(err, context.Canceled):
 			return c.HandleError(ctx, err, "Spectrogram generation canceled by client", 499)
-		} else if strings.Contains(err.Error(), "ffmpeg path not set") || strings.Contains(err.Error(), "sox path not set") {
+		case strings.Contains(err.Error(), "ffmpeg path not set"), strings.Contains(err.Error(), "sox path not set"):
 			return c.HandleError(ctx, err, "Server configuration error preventing spectrogram generation", http.StatusInternalServerError)
+		default:
+			return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
 		}
-		// Default to internal server error
-		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
 	}
 
 	// Serve the generated spectrogram using SecureFS
