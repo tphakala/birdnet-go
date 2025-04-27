@@ -25,6 +25,7 @@ import (
 func TestGetDetections(t *testing.T) {
 	// Setup
 	e, mockDS, controller := setupTestEnvironment(t)
+	controller.initDetectionRoutes() // Ensure routes are registered on the test echo instance
 
 	// Create mock data
 	mockNotes := []datastore.Note{
@@ -303,7 +304,7 @@ func TestGetDetections(t *testing.T) {
 			}
 			req.URL.RawQuery = q.Encode()
 
-			// Call handler via Echo instance to engage full error handling
+			// Call handler via Echo instance again
 			e.ServeHTTP(rec, req)
 
 			// Check the recorder's status code FIRST
