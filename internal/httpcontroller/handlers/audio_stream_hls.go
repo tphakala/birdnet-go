@@ -651,7 +651,7 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	// Start goroutine to feed audio data to FFmpeg
 	// Only for non-Windows platforms - Windows uses stdin approach
 	if runtime.GOOS != "windows" {
-		go feedAudioToFFmpeg(conf.SanitizeRTSPUrl(sourceID), stream.FifoPipe, stream.ctx)
+		go feedAudioToFFmpeg(sourceID, stream.FifoPipe, stream.ctx)
 	}
 
 	// Start goroutine to handle context cancellation
