@@ -157,10 +157,10 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 		// DEBUG LOGGING
 		log.Printf("[DEBUG] GetDetections: Parsed numResults value: %d", numResults)
 		// Add check for unreasonable values
-		if numResults < 0 {
+		if numResults <= 0 {
 			// DEBUG LOGGING
-			log.Printf("[DEBUG] GetDetections: Negative numResults value: %d", numResults)
-			return echo.NewHTTPError(http.StatusBadRequest, "numResults cannot be negative")
+			log.Printf("[DEBUG] GetDetections: Zero or negative numResults value: %d", numResults)
+			return echo.NewHTTPError(http.StatusBadRequest, "numResults must be greater than zero")
 		} else if numResults > 1000 { // Enforce a reasonable maximum
 			// DEBUG LOGGING
 			log.Printf("[DEBUG] GetDetections: Too large numResults value: %d", numResults)

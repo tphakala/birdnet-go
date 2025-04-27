@@ -332,7 +332,7 @@ func TestInputValidation(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			// The specific error message depends on which validation fails first
 			// Based on the code, numResults validation comes first
-			expectedError: "numResults cannot be negative",
+			expectedError: "numResults must be greater than zero",
 		},
 		// Advanced XSS test cases
 		{

@@ -209,7 +209,7 @@ func TestGetDetections(t *testing.T) {
 				var errResp map[string]string
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 				if assert.NoError(t, err, "Failed to unmarshal error response") {
-					assert.Contains(t, errResp["message"], "numResults cannot be negative", "Error message mismatch in response body")
+					assert.Contains(t, errResp["message"], "numResults must be greater than zero", "Error message mismatch in response body")
 				}
 			},
 			handler: func(c echo.Context) error {
