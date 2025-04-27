@@ -385,30 +385,17 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 
 			req := httptest.NewRequest(tc.method, tc.path, http.NoBody)
 			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			// Find the route and handler - requires router setup or direct call
-			// This part needs careful implementation based on how routes are registered/tested
-			// For simplicity, we might call the handler directly if possible,
-			// but need to map path to handler function.
-			var handlerErr error
-			switch {
-			case tc.path == "/api/v2/analytics/species/daily?date=invalid-date": // Example mapping
-				handlerErr = controller.GetDailySpeciesSummary(c)
-			case tc.path == "/api/v2/analytics/species/summary?start_date=2023-01-10&end_date=2023-01-01":
-				handlerErr = controller.GetSpeciesSummary(c)
-			// Add cases for other tested paths...
-			default:
-				// Need a way to route the request or call the correct handler
-				// For now, let's assume we find the handler; otherwise, this test structure needs revision.
-				// Or, perhaps, register routes on 'e' and use e.ServeHTTP(rec, req)
-				e.GET("/api/v2/analytics/species/daily", controller.GetDailySpeciesSummary)
-				e.GET("/api/v2/analytics/species/summary", controller.GetSpeciesSummary)
-				e.GET("/api/v2/analytics/time/hourly", controller.GetHourlyAnalytics)
-				e.GET("/api/v2/analytics/time/daily", controller.GetDailyAnalytics)
-				// ... add other routes tested ...
-				e.ServeHTTP(rec, req) // Use Echo's router
-				handlerErr = nil      // Error is captured in response code/body
-			}
+
+			// Register the routes for all test cases
+			e.GET("/api/v2/analytics/species/daily", controller.GetDailySpeciesSummary)
+			e.GET("/api/v2/analytics/species/summary", controller.GetSpeciesSummary)
+			e.GET("/api/v2/analytics/time/hourly", controller.GetHourlyAnalytics)
+			e.GET("/api/v2/analytics/time/daily", controller.GetDailyAnalytics)
+			// ... add other routes as needed ...
+
+			// Let Echo's router handle the request routing
+			e.ServeHTTP(rec, req)
+			var handlerErr error // Initially nil by default
 
 			// If handler called directly and returned an error, check if it's an HTTPError
 			if handlerErr != nil {
