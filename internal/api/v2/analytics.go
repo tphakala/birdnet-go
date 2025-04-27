@@ -4,7 +4,9 @@ package api
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"time"
@@ -63,6 +65,9 @@ var (
 	ErrDateOrder        = errors.New("start_date cannot be after end_date")
 )
 
+// dateRegex ensures YYYY-MM-DD format
+var dateRegex = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
 // initAnalyticsRoutes registers all analytics-related API endpoints
 func (c *Controller) initAnalyticsRoutes() {
 	// Create analytics API group - publicly accessible
@@ -88,6 +93,10 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 	selectedDate := ctx.QueryParam("date")
 	if selectedDate == "" {
 		selectedDate = time.Now().Format("2006-01-02")
+	} else {
+		if _, err := time.Parse("2006-01-02", selectedDate); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid date format. Use YYYY-MM-DD")
+		}
 	}
 
 	// Parse min confidence parameter
@@ -387,27 +396,37 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	endDate := ctx.QueryParam("end_date")
 	species := ctx.QueryParam("species")
 
-	// Validate required start_date
+	// --- Enhanced Validation ---
+	// Check for empty required parameter first
 	if startDate == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "Missing required parameter: start_date")
 	}
 
-	// Validate date formats and chronological order for provided dates
+	// Validate format strictly using regex to prevent any non-date characters
+	if !dateRegex.MatchString(startDate) {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid start_date format or contains invalid characters. Use YYYY-MM-DD")
+	}
+	if endDate != "" && !dateRegex.MatchString(endDate) {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format or contains invalid characters. Use YYYY-MM-DD")
+	}
+	// --- End Enhanced Validation ---
+
+	// Validate date values and chronological order (format is already checked by regex)
 	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
 		// Convert standard error to HTTP error
 		if errors.Is(err, ErrInvalidStartDate) || errors.Is(err, ErrInvalidEndDate) || errors.Is(err, ErrDateOrder) {
+			// Use the specific error message from parseAndValidateDateRange
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
-		// Handle unexpected errors
-		return echo.NewHTTPError(http.StatusInternalServerError, "Error validating date range")
+		// Handle unexpected errors from parseAndValidateDateRange
+		log.Printf("Error validating date range: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Error validating date range values")
 	}
 
 	// Default end date if not provided
 	if endDate == "" {
-		startTime, err := time.Parse("2006-01-02", startDate)
-		if err == nil { // Already validated format, so this should not fail
-			endDate = startTime.AddDate(0, 0, 30).Format("2006-01-02")
-		}
+		startTime, _ := time.Parse("2006-01-02", startDate) // Regex ensures this parse succeeds
+		endDate = startTime.AddDate(0, 0, 30).Format("2006-01-02")
 	}
 
 	// Get daily analytics data from the datastore

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -18,7 +19,32 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"golang.org/x/sync/singleflight"
+)
+
+// Non-standard HTTP status codes
+const (
+	StatusClientClosedRequest = 499 // Nginx's non-standard status for client closed connection
+)
+
+// Sentinel errors for media operations
+var (
+	// Audio file errors
+	ErrAudioFileNotFound    = errors.New("audio file not found")
+	ErrInvalidAudioPath     = errors.New("invalid audio path")
+	ErrPathTraversalAttempt = errors.New("security error: path attempts to traverse")
+
+	// Configuration errors
+	ErrFFmpegNotConfigured = errors.New("ffmpeg path not set in settings")
+	ErrSoxNotConfigured    = errors.New("sox path not set in settings")
+
+	// Generation errors
+	ErrSpectrogramGeneration = errors.New("failed to generate spectrogram")
+
+	// Image errors
+	ErrImageNotFound             = errors.New("image not found")
+	ErrImageProviderNotAvailable = errors.New("image provider not available")
 )
 
 // safeFilenamePattern is kept if needed elsewhere, but SecureFS handles validation now
@@ -39,6 +65,40 @@ func (c *Controller) initMediaRoutes() {
 
 	// Bird image endpoint
 	c.Group.GET("/media/species-image", c.GetSpeciesImage)
+}
+
+// translateSecureFSError handles SecureFS errors consistently across handler methods.
+// It checks if the error is already an HTTPError from SecureFS and returns it directly,
+// or maps specific error types to appropriate HTTP status codes.
+func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg string) error {
+	var httpErr *echo.HTTPError
+	if errors.As(err, &httpErr) {
+		// If it's already an HTTPError from SecureFS, just pass it through
+		ctx.Logger().Debugf("SecureFS httpErr=%d internal=%v msg=%v",
+			httpErr.Code, httpErr.Internal, httpErr.Message)
+		return httpErr
+	}
+
+	// Check for specific error types and map to appropriate status codes
+	switch {
+	case errors.Is(err, securefs.ErrPathTraversal) || errors.Is(err, ErrPathTraversalAttempt):
+		return c.HandleError(ctx, err, "Invalid file path: attempted path traversal", http.StatusBadRequest)
+	case errors.Is(err, securefs.ErrInvalidPath) || errors.Is(err, ErrInvalidAudioPath):
+		return c.HandleError(ctx, err, "Invalid file path specification", http.StatusBadRequest)
+	case errors.Is(err, securefs.ErrAccessDenied):
+		return c.HandleError(ctx, err, "Access denied to requested resource", http.StatusForbidden)
+	case errors.Is(err, securefs.ErrNotRegularFile):
+		return c.HandleError(ctx, err, "Requested resource is not a regular file", http.StatusForbidden)
+	case errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist) || errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, ErrImageNotFound):
+		return c.HandleError(ctx, err, "Resource not found", http.StatusNotFound)
+	case errors.Is(err, context.DeadlineExceeded):
+		return c.HandleError(ctx, err, "Request timed out", http.StatusRequestTimeout)
+	case errors.Is(err, context.Canceled):
+		return c.HandleError(ctx, err, "Request was canceled", StatusClientClosedRequest)
+	}
+
+	// For other errors, use the provided user message with a 500 status
+	return c.HandleError(ctx, err, userMsg, http.StatusInternalServerError)
 }
 
 // getContentType determines the content type based on file extension (can remain as helper)
@@ -62,10 +122,20 @@ func getContentType(filename string) string {
 // ServeAudioClip serves an audio clip file by filename using SecureFS
 func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 	filename := ctx.Param("filename")
-	// Construct the conceptual path within the SecureFS base directory
-	// Note: We don't need the exportPath directly here, SecureFS handles it.
-	// We pass the filename which SecureFS expects to find relative to its baseDir.
-	return c.SFS.ServeFile(ctx, filename)
+	if filename == "" {
+		return c.HandleError(ctx, fmt.Errorf("missing filename"), "Filename parameter is required", http.StatusBadRequest)
+	}
+
+	// Serve the file using SecureFS. It handles path validation and serves the file.
+	// ServeRelativeFile is expected to return appropriate echo.HTTPErrors (400, 404, 500).
+	err := c.SFS.ServeRelativeFile(ctx, filename)
+
+	if err != nil {
+		return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
+	}
+
+	// If err is nil, ServeRelativeFile handled the response successfully
+	return nil
 }
 
 // ServeAudioByID serves an audio clip file based on note ID using SecureFS
@@ -91,7 +161,35 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 	// Serve the file using SecureFS. It handles path validation (relative/absolute within baseDir).
 	// ServeFile internally calls relativePath which ensures the path is within the SecureFS baseDir.
 	// Use ServeRelativeFile as clipPath is already relative to the baseDir
-	return c.SFS.ServeRelativeFile(ctx, clipPath)
+	err = c.SFS.ServeRelativeFile(ctx, clipPath)
+	if err != nil {
+		return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
+	}
+
+	return nil
+}
+
+// spectrogramHTTPError handles common spectrogram generation errors and converts them to appropriate HTTP responses
+func (c *Controller) spectrogramHTTPError(ctx echo.Context, err error) error {
+	switch {
+	case errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, os.ErrNotExist):
+		// Handle cases where the source audio file doesn't exist
+		return c.HandleError(ctx, err, "Source audio file not found", http.StatusNotFound)
+	case errors.Is(err, ErrInvalidAudioPath) || errors.Is(err, ErrPathTraversalAttempt):
+		// Handle path traversal or invalid path errors
+		return c.HandleError(ctx, err, "Invalid audio file path specified", http.StatusBadRequest)
+	case errors.Is(err, context.DeadlineExceeded):
+		return c.HandleError(ctx, err, "Spectrogram generation timed out", http.StatusRequestTimeout)
+	case errors.Is(err, context.Canceled):
+		// Use StatusClientClosedRequest (non-standard, but common for Nginx)
+		return c.HandleError(ctx, err, "Spectrogram generation canceled by client", StatusClientClosedRequest)
+	case errors.Is(err, ErrFFmpegNotConfigured) || errors.Is(err, ErrSoxNotConfigured):
+		// Handle configuration errors
+		return c.HandleError(ctx, err, "Server configuration error preventing spectrogram generation", http.StatusInternalServerError)
+	default:
+		// Default to internal server error for other generation failures
+		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
+	}
 }
 
 // ServeSpectrogramByID serves a spectrogram image based on note ID using SecureFS
@@ -122,29 +220,18 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 		}
 	}
 
-	// Use the SecureFS GenerateSpectrogram method (to be implemented in securefs.go)
-	// Update: Call the controller's generateSpectrogram method instead
 	// Pass the request context for cancellation/timeout
 	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, width)
 	if err != nil {
-		// Handle specific errors if GenerateSpectrogram provides them (e.g., source audio not found)
-		if os.IsNotExist(err) {
-			return c.HandleError(ctx, err, "Source audio file not found", http.StatusNotFound)
-		}
-		// Check for context errors specifically
-		if errors.Is(err, context.DeadlineExceeded) {
-			return c.HandleError(ctx, err, "Spectrogram generation timed out", http.StatusRequestTimeout)
-		}
-		if errors.Is(err, context.Canceled) {
-			return c.HandleError(ctx, err, "Spectrogram generation canceled by client", http.StatusRequestTimeout) // Or another appropriate code
-		}
-		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
+		return c.spectrogramHTTPError(ctx, err)
 	}
 
 	// Serve the generated spectrogram using SecureFS
-	// Pass the path returned by GenerateSpectrogram (which should be relative to SFS base)
-	// Use ServeRelativeFile as spectrogramPath is already relative to the baseDir
-	return c.SFS.ServeRelativeFile(ctx, spectrogramPath)
+	err = c.SFS.ServeRelativeFile(ctx, spectrogramPath)
+	if err != nil {
+		return c.translateSecureFSError(ctx, err, "Failed to serve spectrogram image")
+	}
+	return nil
 }
 
 // ServeAudioByQueryID serves an audio clip using query parameter for ID
@@ -173,27 +260,18 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 		}
 	}
 
-	// Use SecureFS GenerateSpectrogram, passing the filename relative to the baseDir
-	// Update: Call the controller's generateSpectrogram method instead
 	// Pass the request context for cancellation/timeout
 	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, width)
 	if err != nil {
-		if os.IsNotExist(err) { // Check if the original audio file was not found
-			return c.HandleError(ctx, err, "Source audio file not found", http.StatusNotFound)
-		}
-		// Check for context errors specifically
-		if errors.Is(err, context.DeadlineExceeded) {
-			return c.HandleError(ctx, err, "Spectrogram generation timed out", http.StatusRequestTimeout)
-		}
-		if errors.Is(err, context.Canceled) {
-			return c.HandleError(ctx, err, "Spectrogram generation canceled by client", http.StatusRequestTimeout) // Or another appropriate code
-		}
-		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
+		return c.spectrogramHTTPError(ctx, err)
 	}
 
 	// Serve the generated spectrogram using SecureFS
-	// Use ServeRelativeFile as spectrogramPath is already relative to the baseDir
-	return c.SFS.ServeRelativeFile(ctx, spectrogramPath)
+	err = c.SFS.ServeRelativeFile(ctx, spectrogramPath)
+	if err != nil {
+		return c.translateSecureFSError(ctx, err, "Failed to serve spectrogram image")
+	}
+	return nil
 }
 
 // httpRange specifies the byte range to be sent to the client
@@ -283,8 +361,13 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	// The audioPath from the DB is already relative to the baseDir. Validate it.
 	relAudioPath, err := c.SFS.ValidateRelativePath(audioPath) // Use the new validator
 	if err != nil {
-		// Wrap the error for clarity
-		return "", fmt.Errorf("invalid audio path '%s': %w", audioPath, err)
+		// Use proper error type checking instead of string matching
+		if errors.Is(err, securefs.ErrPathTraversal) {
+			combined := errors.Join(ErrPathTraversalAttempt, err)
+			return "", fmt.Errorf("%w", combined)
+		}
+		combined := errors.Join(ErrInvalidAudioPath, err)
+		return "", fmt.Errorf("%w", combined)
 	}
 
 	// Check if the audio file exists within the secure context using the validated relative path
@@ -292,7 +375,8 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	if _, err := c.SFS.StatRel(relAudioPath); err != nil {
 		// Handle file not found specifically, otherwise wrap
 		if os.IsNotExist(err) {
-			return "", fmt.Errorf("audio file not found at '%s': %w", relAudioPath, err)
+			combined := errors.Join(ErrAudioFileNotFound, err)
+			return "", fmt.Errorf("%w at '%s'", combined, relAudioPath)
 		}
 		return "", fmt.Errorf("error checking audio file '%s': %w", relAudioPath, err)
 	}
@@ -308,11 +392,11 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 
 	// Generate spectrogram filename with width (relative path)
 	spectrogramFilename := fmt.Sprintf("%s_%d.png", relBaseFilename, width)
-	// Join relative directory and filename
+
+	// Since we're constructing the spectrogram path from an already-validated audio path
+	// and appending a simple formatted filename, we can safely construct the path without
+	// re-validating. The path components are all known to be safe.
 	relSpectrogramPath := filepath.Join(relAudioDir, spectrogramFilename)
-	// Ensure the resulting path is clean and still relative
-	relSpectrogramPath = filepath.Clean(relSpectrogramPath)
-	relSpectrogramPath = strings.TrimPrefix(relSpectrogramPath, string(filepath.Separator))
 
 	// Absolute path for the spectrogram on the host filesystem
 	absSpectrogramPath := filepath.Join(c.SFS.BaseDir(), relSpectrogramPath)
@@ -352,7 +436,8 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 					return nil, err2
 				}
 				// Return a combined error for general failures
-				return nil, fmt.Errorf("failed to generate spectrogram with SoX for '%s': %w, and with FFmpeg: %w", absAudioPath, err, err2)
+				return nil, fmt.Errorf("%w: SoX error: %w, FFmpeg error: %w",
+					ErrSpectrogramGeneration, err, err2)
 			}
 			log.Printf("Successfully generated spectrogram for '%s' using FFmpeg fallback", absAudioPath)
 		} else {
@@ -377,11 +462,27 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrogramPath string, width int, settings *conf.Settings) error {
 	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
 	soxBinary := settings.Realtime.Audio.SoxPath
-	if ffmpegBinary == "" {
-		return fmt.Errorf("ffmpeg path not set in settings")
+
+	// Check if the file extension is supported directly by SoX without needing FFmpeg
+	ext := strings.ToLower(filepath.Ext(absAudioClipPath))
+	ext = strings.TrimPrefix(ext, ".")
+	useFFmpeg := true
+	for _, soxType := range settings.Realtime.Audio.SoxAudioTypes {
+		soxType = strings.TrimPrefix(strings.ToLower(soxType), ".")
+		if ext == soxType {
+			useFFmpeg = false
+			break
+		}
 	}
+
+	// Only check for FFmpeg if we need to use it
+	if useFFmpeg && ffmpegBinary == "" {
+		return ErrFFmpegNotConfigured
+	}
+
+	// SoX is always required
 	if soxBinary == "" {
-		return fmt.Errorf("SoX path not set in settings")
+		return ErrSoxNotConfigured
 	}
 
 	// Create context with timeout (use the passed-in context as parent)
@@ -393,16 +494,6 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 
 	heightStr := strconv.Itoa(width / 2)
 	widthStr := strconv.Itoa(width)
-
-	ext := strings.ToLower(filepath.Ext(absAudioClipPath))
-	ext = strings.TrimPrefix(ext, ".")
-	useFFmpeg := true
-	for _, soxType := range settings.Realtime.Audio.SoxAudioTypes {
-		if strings.EqualFold(ext, soxType) {
-			useFFmpeg = false
-			break
-		}
-	}
 
 	var cmd *exec.Cmd
 	var soxCmd *exec.Cmd
@@ -492,7 +583,7 @@ func getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath string) []str
 func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpectrogramPath string, width int, settings *conf.Settings) error {
 	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
 	if ffmpegBinary == "" {
-		return fmt.Errorf("ffmpeg path not set in settings")
+		return ErrFFmpegNotConfigured
 	}
 
 	// Create context with timeout (use the passed-in context as parent)
@@ -527,7 +618,7 @@ func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpect
 	cmd.Stdout = &output
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ffmpeg command failed: %w\nOutput: %s", err, output.String())
+		return fmt.Errorf("%w: %w (output: %s)", ErrSpectrogramGeneration, err, output.String())
 	}
 	return nil
 }
@@ -547,14 +638,14 @@ func (c *Controller) GetSpeciesImage(ctx echo.Context) error {
 
 	// Check if BirdImageCache is available
 	if c.BirdImageCache == nil {
-		return c.HandleError(ctx, fmt.Errorf("image provider not available"), "Image service unavailable", http.StatusServiceUnavailable)
+		return c.HandleError(ctx, ErrImageProviderNotAvailable, "Image service unavailable", http.StatusServiceUnavailable)
 	}
 
 	// Fetch the image from cache (which will use AviCommons if available)
 	birdImage, err := c.BirdImageCache.Get(scientificName)
 	if err != nil {
-		// If no image is found, return a 404
-		if strings.Contains(err.Error(), "not found") {
+		// Check for "not found" errors using errors.Is
+		if errors.Is(err, ErrImageNotFound) {
 			return c.HandleError(ctx, err, "Image not found for species", http.StatusNotFound)
 		}
 		// For other errors, return 500
