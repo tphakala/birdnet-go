@@ -172,11 +172,11 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 		case errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, os.ErrNotExist):
 			// Handle cases where the source audio file doesn't exist
 			return c.HandleError(ctx, err, "Source audio file not found", http.StatusNotFound)
-		case errors.As(err, new(*os.PathError)): // Check for PathError specifically
+		case func() bool {
 			var pathErr *os.PathError
-			if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
-				return c.HandleError(ctx, err, "Source audio file not found (PathError)", http.StatusNotFound)
-			} // Fall through if it's a PathError but not ErrNotExist
+			return errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist)
+		}():
+			return c.HandleError(ctx, err, "Source audio file not found (PathError)", http.StatusNotFound)
 		case errors.Is(err, ErrInvalidAudioPath) || errors.Is(err, ErrPathTraversalAttempt):
 			// Handle path traversal or invalid path errors
 			return c.HandleError(ctx, err, "Invalid audio file path specified", http.StatusBadRequest)
@@ -234,11 +234,11 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 		switch {
 		case errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, os.ErrNotExist):
 			return c.HandleError(ctx, err, "Source audio file not found", http.StatusNotFound)
-		case errors.As(err, new(*os.PathError)):
+		case func() bool {
 			var pathErr *os.PathError
-			if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
-				return c.HandleError(ctx, err, "Source audio file not found (PathError)", http.StatusNotFound)
-			} // Fall through
+			return errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist)
+		}():
+			return c.HandleError(ctx, err, "Source audio file not found (PathError)", http.StatusNotFound)
 		case errors.Is(err, ErrInvalidAudioPath) || errors.Is(err, ErrPathTraversalAttempt):
 			return c.HandleError(ctx, err, "Invalid audio file path specified", http.StatusBadRequest)
 		case errors.Is(err, context.DeadlineExceeded):
@@ -445,9 +445,24 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrogramPath string, width int, settings *conf.Settings) error {
 	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
 	soxBinary := settings.Realtime.Audio.SoxPath
-	if ffmpegBinary == "" {
+
+	// Check if the file extension is supported directly by SoX without needing FFmpeg
+	ext := strings.ToLower(filepath.Ext(absAudioClipPath))
+	ext = strings.TrimPrefix(ext, ".")
+	useFFmpeg := true
+	for _, soxType := range settings.Realtime.Audio.SoxAudioTypes {
+		if strings.EqualFold(ext, soxType) {
+			useFFmpeg = false
+			break
+		}
+	}
+
+	// Only check for FFmpeg if we need to use it
+	if useFFmpeg && ffmpegBinary == "" {
 		return ErrFFmpegNotConfigured
 	}
+
+	// SoX is always required
 	if soxBinary == "" {
 		return ErrSoxNotConfigured
 	}
@@ -461,16 +476,6 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 
 	heightStr := strconv.Itoa(width / 2)
 	widthStr := strconv.Itoa(width)
-
-	ext := strings.ToLower(filepath.Ext(absAudioClipPath))
-	ext = strings.TrimPrefix(ext, ".")
-	useFFmpeg := true
-	for _, soxType := range settings.Realtime.Audio.SoxAudioTypes {
-		if strings.EqualFold(ext, soxType) {
-			useFFmpeg = false
-			break
-		}
-	}
 
 	var cmd *exec.Cmd
 	var soxCmd *exec.Cmd
