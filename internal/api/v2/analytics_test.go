@@ -395,27 +395,12 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 
 			// Let Echo's router handle the request routing
 			e.ServeHTTP(rec, req)
-			var handlerErr error // Initially nil by default
 
-			// If handler called directly and returned an error, check if it's an HTTPError
-			if handlerErr != nil {
-				var httpErr *echo.HTTPError
-				if errors.As(handlerErr, &httpErr) {
-					assert.Equal(t, tc.expectedStatus, httpErr.Code)
-					if tc.expectedBody != "" {
-						assert.Contains(t, fmt.Sprint(httpErr.Message), tc.expectedBody)
-					}
-				} else {
-					// Unexpected error type
-					assert.Fail(t, "Handler returned non-HTTP error", handlerErr.Error())
-				}
-			} else {
-				// If using ServeHTTP, check recorder
-				assert.Equal(t, tc.expectedStatus, rec.Code)
-				if tc.expectedBody != "" {
-					bodyBytes, _ := io.ReadAll(rec.Body)
-					assert.Contains(t, string(bodyBytes), tc.expectedBody)
-				}
+			// Using ServeHTTP - validation happens on the recorder
+			assert.Equal(t, tc.expectedStatus, rec.Code)
+			if tc.expectedBody != "" {
+				bodyBytes, _ := io.ReadAll(rec.Body)
+				assert.Contains(t, string(bodyBytes), tc.expectedBody)
 			}
 
 			// Only assert expectations if the handler was expected to interact with the mock
