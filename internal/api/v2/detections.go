@@ -21,6 +21,8 @@ import (
 var validDateRegex = regexp.MustCompile(`^(\d{4})-(\d{2})-(\d{2})$`)
 
 // Function to validate date string format and content
+// Returns nil for empty strings (treating them as optional parameters)
+// Callers should implement additional checks if the parameter is required.
 func validateDateParam(dateStr, paramName string) error {
 	if dateStr == "" {
 		return nil // Optional parameter, no error if empty
@@ -31,12 +33,11 @@ func validateDateParam(dateStr, paramName string) error {
 		return fmt.Errorf("invalid %s format, use YYYY-MM-DD", paramName)
 	}
 
-	// Check for obviously invalid characters (more robust than just format)
-	if strings.ContainsAny(dateStr, "/.\\%<>") {
-		return fmt.Errorf("invalid characters detected in %s", paramName)
-	}
+	// The regex above already ensures only digits and hyphens in correct positions
+	// so the strings.ContainsAny check below is redundant and has been removed
 
 	// Try parsing the date to catch invalid dates like 2023-02-30
+	// This also catches dates with timezone annotations like 2024-04-05Z
 	_, err := time.Parse("2006-01-02", dateStr)
 	if err != nil {
 		return fmt.Errorf("invalid date value for %s: %w", paramName, err)
