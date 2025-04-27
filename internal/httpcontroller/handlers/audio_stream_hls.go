@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"log"
@@ -432,12 +433,14 @@ func buildFFmpegArgs(inputSource, outputDir, playlistPath string) []string {
 }
 
 // generateFilesystemSafeName creates a filesystem-safe string from an arbitrary input
-// using URL-safe Base64 encoding.
+// using a SHA-256 hash followed by URL-safe Base64 encoding.
+// This produces a fixed-length, collision-resistant name suitable for paths.
 func generateFilesystemSafeName(input string) string {
-	// Use RawURLEncoding to avoid '+' and '/' characters in filenames/paths
-	encoded := base64.RawURLEncoding.EncodeToString([]byte(input))
-	// Base64 URL encoding is generally safe for most filesystems.
-	// Padding '=' chars are removed by RawURLEncoding.
+	// Hash the input string using SHA-256
+	sum := sha256.Sum256([]byte(input))
+	// Encode the hash using RawURLEncoding (no padding, URL-safe characters)
+	// A 256-bit hash results in a 43-character string.
+	encoded := base64.RawURLEncoding.EncodeToString(sum[:])
 	return encoded
 }
 
