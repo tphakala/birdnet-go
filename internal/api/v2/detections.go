@@ -144,6 +144,8 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	if numResultsStr == "" {
 		numResults = 100 // Default value
 	} else {
+		// DEBUG LOGGING
+		log.Printf("[DEBUG] GetDetections: Raw numResults string: '%s'", numResultsStr)
 		var err error
 		numResults, err = strconv.Atoi(numResultsStr)
 		if err != nil {
@@ -151,6 +153,8 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 			log.Printf("[DEBUG] GetDetections: Invalid numResults string '%s', error: %v", numResultsStr, err)
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid numeric value for numResults: %v", err))
 		}
+		// DEBUG LOGGING
+		log.Printf("[DEBUG] GetDetections: Parsed numResults value: %d", numResults)
 		// Add check for unreasonable values
 		if numResults < 0 {
 			// DEBUG LOGGING
@@ -170,6 +174,8 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	if offsetStr == "" {
 		offset = 0 // Default value
 	} else {
+		// DEBUG LOGGING
+		log.Printf("[DEBUG] GetDetections: Raw offset string: '%s'", offsetStr)
 		var err error
 		offset, err = strconv.Atoi(offsetStr)
 		if err != nil {
@@ -177,6 +183,8 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 			log.Printf("[DEBUG] GetDetections: Invalid offset string '%s', error: %v", offsetStr, err)
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid numeric value for offset: %v", err))
 		}
+		// DEBUG LOGGING
+		log.Printf("[DEBUG] GetDetections: Parsed offset value: %d", offset)
 		// Add check for unreasonable values
 		if offset < 0 {
 			// DEBUG LOGGING
