@@ -361,7 +361,13 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 
 			// Initialize a mock image cache for controller creation
 			testMetrics, _ := telemetry.NewMetrics() // Create a dummy metrics instance
-			mockImageCache := imageprovider.InitCache("test", nil, testMetrics, mockDS)
+			// Fix: Replace nil provider with a stub provider to avoid nil pointer panics
+			stubProvider := &TestImageProvider{
+				FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
+					return imageprovider.BirdImage{}, nil
+				},
+			}
+			mockImageCache := imageprovider.InitCache("test", stubProvider, testMetrics, mockDS)
 			t.Cleanup(func() { mockImageCache.Close() })
 
 			controller := &Controller{
@@ -547,7 +553,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	// ---> FIX: Provide a non-nil telemetry.Metrics instance <---
 	testMetrics, _ := telemetry.NewMetrics() // Create a dummy metrics instance
 	imageCache := imageprovider.InitCache("test", mockImageProvider, testMetrics, mockDS)
-	t.Cleanup(func() { imageCache.Close() }) // Ensure cache cleanup
+	t.Cleanup(func() { imageCache.Close() })
 
 	// Create a controller with our mocks
 	controller := &Controller{
