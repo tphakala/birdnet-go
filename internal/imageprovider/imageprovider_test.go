@@ -506,6 +506,7 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 		AuthorName:     "Old Author",
 		AuthorURL:      "http://example.com/old-author",
 		CachedAt:       time.Now().Add(-15 * 24 * time.Hour), // 15 days old
+		ProviderName:   "wikimedia",                          // Add provider name to match the default cache provider
 	}
 	t.Logf("Created old entry: CachedAt=%v", oldEntry.CachedAt)
 
@@ -531,7 +532,7 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	// Check if the entry was refreshed
-	refreshed, err := mockStore.GetImageCache(datastore.ImageCacheQuery{ScientificName: "Turdus merula", ProviderName: "mock"})
+	refreshed, err := mockStore.GetImageCache(datastore.ImageCacheQuery{ScientificName: "Turdus merula", ProviderName: "wikimedia"})
 	if err != nil {
 		t.Fatalf("Failed to get refreshed cache entry: %v", err)
 	}

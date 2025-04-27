@@ -5,6 +5,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -252,7 +253,7 @@ func TestControlActionsWithNilChannel(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Check error response content
-			assert.Contains(t, errorResp["error"], "control channel not initialized")
+			assert.Contains(t, fmt.Sprint(errorResp["error"]), "control channel not initialized")
 			assert.Contains(t, errorResp["message"], "System control interface not available")
 			assert.Equal(t, float64(http.StatusInternalServerError), errorResp["code"])
 		})

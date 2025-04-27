@@ -1,6 +1,7 @@
 package securefs
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -142,7 +143,8 @@ func IsPathValidWithinBase(baseDir, path string) error {
 	}
 
 	if !isWithin {
-		return fmt.Errorf("security error: path %s is outside allowed directory %s", path, baseDir)
+		return fmt.Errorf("%w: path %s is outside allowed directory %s",
+			ErrPathTraversal, path, baseDir)
 	}
 
 	return nil
@@ -193,22 +195,23 @@ func (sfs *SecureFS) RelativePath(path string) (string, error) {
 	return relPath, nil
 }
 
-// ValidateRelativePath checks if a path, assumed to be relative to the base directory,
-// is safe and canonical. It prevents path traversal and ensures the path is clean.
-// It returns the cleaned, validated relative path suitable for use with os.Root operations.
+// ValidateRelativePath validates a path assumed to be relative to the base directory.
+// It returns a cleaned, validated path or an error if the path is not valid.
 func (sfs *SecureFS) ValidateRelativePath(relPath string) (string, error) {
 	// Clean the path first to resolve . and .. components where possible
 	cleanedPath := filepath.Clean(relPath)
 
 	// Check for absolute paths after cleaning (should not happen if input is truly relative)
 	if filepath.IsAbs(cleanedPath) {
-		return "", fmt.Errorf("security error: path must be relative, but got '%s' after cleaning '%s'", cleanedPath, relPath)
+		return "", fmt.Errorf("%w: path must be relative, but got '%s' after cleaning '%s'",
+			ErrInvalidPath, cleanedPath, relPath)
 	}
 
 	// Check for attempts to traverse upwards from the root.
 	// After cleaning, paths starting with ".." indicate an attempt to go above the root.
 	if strings.HasPrefix(cleanedPath, ".."+string(filepath.Separator)) || cleanedPath == ".." {
-		return "", fmt.Errorf("security error: path attempts to traverse outside base directory: '%s' (cleaned from '%s')", cleanedPath, relPath)
+		return "", fmt.Errorf("%w: '%s' (cleaned from '%s')",
+			ErrPathTraversal, cleanedPath, relPath)
 	}
 
 	// Ensure no leading separator after cleaning (should be handled by Clean, but double-check)
@@ -469,32 +472,49 @@ func (sfs *SecureFS) WriteFile(path string, data []byte, perm os.FileMode) error
 	return err
 }
 
-// serveInternal is the common logic for serving files, taking an opener function
-// to handle the specific path validation and file opening logic.
+// serveInternal handles the core logic for serving a file using an opener function.
+// The opener function is responsible for securely opening the file and returning
+// the file handle, the effective path used (for logging/headers), and any error.
 func (sfs *SecureFS) serveInternal(c echo.Context, opener func() (*os.File, string, error)) error {
-	// Execute the opener function to get the file handle and validated relative path
-	file, relPath, err := opener()
+	f, effectivePath, err := opener()
 	if err != nil {
-		// Handle different types of errors from the opener
-		if os.IsNotExist(err) {
-			log.Printf("Serve Internal: File not found error: %v", err)
-			return echo.NewHTTPError(http.StatusNotFound, "File not found")
-		}
-		if strings.Contains(err.Error(), "security error") || strings.Contains(err.Error(), "path validation error") || strings.Contains(err.Error(), "failed to make path relative") {
-			log.Printf("Serve Internal: Validation/Security Error: %v", err)
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid file path requested")
-		}
-		// Handle generic open errors
-		log.Printf("Serve Internal: Open Error: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to open file")
-	}
-	defer file.Close()
+		// Log the specific error for debugging
+		// Added path for context in logs
+		log.Printf("SecureFS: Error opening file via opener for path %s: %v", effectivePath, err)
 
-	// Get file info for content-length and modification time
-	stat, err := file.Stat()
+		// Check for specific path-related errors
+		// Use errors.Is for robust checking, including fs.ErrNotExist and os.ErrNotExist
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
+			return echo.NewHTTPError(http.StatusNotFound, fmt.Sprintf("File not found: %s", effectivePath))
+		}
+		// Use errors.Is for robust checking, including fs.ErrPermission and os.ErrPermission
+		if errors.Is(err, fs.ErrPermission) || errors.Is(err, os.ErrPermission) || errors.Is(err, ErrAccessDenied) {
+			return echo.NewHTTPError(http.StatusForbidden, "Access denied")
+		}
+		// Check for security validation errors (like path traversal)
+		if errors.Is(err, ErrPathTraversal) || errors.Is(err, ErrInvalidPath) {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid file path").SetInternal(err)
+		}
+		if errors.Is(err, ErrNotRegularFile) {
+			return echo.NewHTTPError(http.StatusForbidden, "Not a regular file")
+		}
+
+		// For backward compatibility, also check strings (can be removed in future)
+		if strings.HasPrefix(err.Error(), "security error:") {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid file path").SetInternal(err)
+		}
+
+		// Handle other potential errors, log them, and return a generic 500 error
+		log.Printf("SecureFS: Unhandled error serving file for path %s: %v", effectivePath, err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Error serving file").SetInternal(err)
+	}
+	defer f.Close()
+
+	// Get file info for size and modification time
+	stat, err := f.Stat()
 	if err != nil {
-		log.Printf("Serve Internal: Stat Error: %v for relPath %s", err, relPath)
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info")
+		log.Printf("Serve Internal: Stat Error: %v for relPath %s", err, effectivePath)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info").SetInternal(err)
 	}
 
 	// Only serve regular files
@@ -503,14 +523,15 @@ func (sfs *SecureFS) serveInternal(c echo.Context, opener func() (*os.File, stri
 	}
 
 	// Set content type based on file extension using the validated relative path
-	contentType := mime.TypeByExtension(filepath.Ext(relPath))
-	if contentType != "" {
-		c.Response().Header().Set(echo.HeaderContentType, contentType)
+	contentType := mime.TypeByExtension(filepath.Ext(effectivePath))
+	if contentType == "" {
+		contentType = "application/octet-stream" // Default content type
 	}
+	c.Response().Header().Set(echo.HeaderContentType, contentType)
 
 	// Use http.ServeContent which properly handles Range requests, caching, etc.
 	// It uses the validated relative path's base name for the download filename suggestion.
-	http.ServeContent(c.Response(), c.Request(), filepath.Base(relPath), stat.ModTime(), file)
+	http.ServeContent(c.Response(), c.Request(), filepath.Base(effectivePath), stat.ModTime(), f)
 	return nil
 }
 
@@ -522,15 +543,16 @@ func (sfs *SecureFS) ServeFile(c echo.Context, path string) error {
 		// Get relative path securely
 		relPath, err := sfs.RelativePath(path)
 		if err != nil {
-			// Wrap error for context, preserving original type if possible
-			return nil, "", fmt.Errorf("ServeFile validation failed for path '%s': %w", path, err)
+			// DO NOT wrap validation errors, return them directly
+			// Return original path for better error logging even on validation failure
+			return nil, path, err
 		}
 
 		// Open the file using the sandboxed root
 		file, err := sfs.root.Open(relPath)
 		if err != nil {
-			// Wrap error for context
-			return nil, "", fmt.Errorf("ServeFile open failed for relPath '%s': %w", relPath, err)
+			// Wrap operational errors for context
+			return nil, relPath, fmt.Errorf("ServeFile open failed for relPath '%s': %w", relPath, err)
 		}
 		// Return the file handle, the validated relative path, and nil error
 		return file, relPath, nil
@@ -544,15 +566,16 @@ func (sfs *SecureFS) ServeRelativeFile(c echo.Context, relPath string) error {
 		// Validate the assumed relative path
 		validatedRelPath, err := sfs.ValidateRelativePath(relPath)
 		if err != nil {
-			// Wrap error for context
-			return nil, "", fmt.Errorf("ServeRelativeFile validation failed for relPath '%s': %w", relPath, err)
+			// DO NOT wrap validation errors, return them directly
+			// Return original path for better error logging even on validation failure
+			return nil, relPath, err
 		}
 
 		// Open the file using the sandboxed root with the validated path
 		file, err := sfs.root.Open(validatedRelPath)
 		if err != nil {
-			// Wrap error for context
-			return nil, "", fmt.Errorf("ServeRelativeFile open failed for validatedRelPath '%s': %w", validatedRelPath, err)
+			// Wrap operational errors for context
+			return nil, validatedRelPath, fmt.Errorf("ServeRelativeFile open failed for validatedRelPath '%s': %w", validatedRelPath, err)
 		}
 		// Return the file handle, the validated relative path, and nil error
 		return file, validatedRelPath, nil
