@@ -19,6 +19,74 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
+// setPathParamsFromPath extracts path parameters (like :id) from a URL path
+// and sets them on the Echo context.
+func setPathParamsFromPath(c echo.Context, path string) {
+	if strings.Contains(path, "/detections/") && strings.Contains(path, "/review") {
+		parts := strings.Split(path, "/")
+		if len(parts) > 4 {
+			c.SetParamNames("id")
+			c.SetParamValues(parts[4])
+			// Ensure Echo routing uses the pattern, not the specific ID for matching
+			c.SetPath("/api/v2/detections/:id/review")
+		}
+	} else if strings.Contains(path, "/detections/") {
+		parts := strings.Split(path, "/")
+		if len(parts) > 3 {
+			c.SetParamNames("id")
+			c.SetParamValues(parts[4]) // Assuming ID is the 5th part (index 4)
+			// Ensure Echo routing uses the pattern
+			c.SetPath("/api/v2/detections/:id")
+		}
+	}
+	// Add more else if blocks here for other parameterized routes if needed
+}
+
+// assertSuccessfulResponse checks for expected 2xx status and optional body fragment.
+func assertSuccessfulResponse(t *testing.T, tcName string, expectedStatus int, rec *httptest.ResponseRecorder, handlerErr error, expectedBodyFragment string) {
+	t.Helper()
+	assert.NoError(t, handlerErr, "Test Case '%s': Handler returned an unexpected error for success case: %v", tcName, handlerErr)
+	assert.Equal(t, expectedStatus, rec.Code, "Test Case '%s': Unexpected status code for success case. Expected %d, got %d", tcName, expectedStatus, rec.Code)
+	if expectedBodyFragment != "" {
+		assert.Contains(t, rec.Body.String(), expectedBodyFragment, "Test Case '%s': Response body does not contain expected fragment '%s'", tcName, expectedBodyFragment)
+	}
+}
+
+// assertErrorResponse checks for expected 4xx/5xx status and error message.
+// It handles cases where the error is returned by the handler directly (echo.HTTPError)
+// or written to the response recorder by Echo's error handler.
+func assertErrorResponse(t *testing.T, tcName string, expectedStatus int, rec *httptest.ResponseRecorder, handlerErr error, expectedError string) {
+	t.Helper()
+	if handlerErr != nil {
+		// Case 1: Handler returned an error value (e.g., echo.HTTPError from validation)
+		var httpErr *echo.HTTPError
+		if errors.As(handlerErr, &httpErr) {
+			assert.Equal(t, expectedStatus, httpErr.Code, "Test Case '%s': Expected status %d, got %d from returned error", tcName, expectedStatus, httpErr.Code)
+			if expectedError != "" {
+				// Check the internal error message wrapped by echo.HTTPError or the Message field
+				internalErr := httpErr.Unwrap()
+				if internalErr != nil {
+					assert.Contains(t, internalErr.Error(), expectedError, "Test Case '%s': Expected internal error message containing '%s', got '%s'", tcName, expectedError, internalErr.Error())
+				} else if msgStr, ok := httpErr.Message.(string); ok {
+					assert.Contains(t, msgStr, expectedError, "Test Case '%s': Expected error message containing '%s', got '%s'", tcName, expectedError, msgStr)
+				} else {
+					assert.Fail(t, "HTTPError.Message is not a string or Unwrap returned nil", "Test Case '%s': Could not extract error message from echo.HTTPError", tcName)
+				}
+			}
+		} else {
+			// Handler returned a non-HTTPError, assume 500 check
+			assert.Equal(t, expectedStatus, http.StatusInternalServerError, "Test Case '%s': Handler returned non-HTTPError '%v', expected status %d, implying 500", tcName, handlerErr, expectedStatus)
+			assert.Failf(t, "Test Case '%s': Expected an echo.HTTPError but got a different error type", tcName, "Error: %v", handlerErr)
+		}
+	} else {
+		// Case 2: Handler returned nil, check the response recorder (Echo error handler wrote response)
+		assert.Equal(t, expectedStatus, rec.Code, "Test Case '%s': Handler returned nil, expected status %d, got response code %d", tcName, expectedStatus, rec.Code)
+		if expectedError != "" {
+			assert.Contains(t, rec.Body.String(), expectedError, "Test Case '%s': Handler returned nil, expected status %d. Body '%s' does not contain expected error '%s'", tcName, expectedStatus, rec.Body.String(), expectedError)
+		}
+	}
+}
+
 // TestInputValidation tests that API endpoints properly validate and reject invalid inputs
 func TestInputValidation(t *testing.T) {
 	// Setup
@@ -487,73 +555,17 @@ func TestInputValidation(t *testing.T) {
 			c := e.NewContext(req, rec)
 			c.SetPath(tc.path)
 
-			// Set path parameters if present (extract ID from path)
-			if strings.Contains(tc.path, "/detections/") && strings.Contains(tc.path, "/review") {
-				parts := strings.Split(tc.path, "/")
-				if len(parts) > 4 {
-					c.SetParamNames("id")
-					c.SetParamValues(parts[4])
-					// Create path without URL-encoded characters for Echo's routing
-					pathWithoutEncoding := "/api/v2/detections/" + parts[4] + "/review"
-					c.SetPath(pathWithoutEncoding)
-				}
-			} else if strings.Contains(tc.path, "/detections/") {
-				parts := strings.Split(tc.path, "/")
-				if len(parts) > 3 {
-					c.SetParamNames("id")
-					c.SetParamValues(parts[4])
-					// Create path without URL-encoded characters for Echo's routing
-					pathWithoutEncoding := "/api/v2/detections/" + parts[4]
-					c.SetPath(pathWithoutEncoding)
-				}
-			}
+			// Set path parameters using the helper
+			setPathParamsFromPath(c, tc.path)
 
 			// Call handler
 			handlerErr := tc.handler(c)
 
-			// Check response status and error messages
+			// Check response status and error messages using helpers
 			if tc.expectedStatus >= 400 {
-				// Handle expected error cases (4xx or 5xx)
-				if handlerErr != nil {
-					// Case 1: Handler returned an error value (e.g., echo.HTTPError from validation)
-					var httpErr *echo.HTTPError
-					if errors.As(handlerErr, &httpErr) {
-						assert.Equal(t, tc.expectedStatus, httpErr.Code, "Test Case '%s': Expected status %d, got %d from returned error", tc.name, tc.expectedStatus, httpErr.Code)
-						if tc.expectedError != "" {
-							// Check the internal error message wrapped by echo.HTTPError
-							internalErr := httpErr.Unwrap()
-							if internalErr != nil {
-								assert.Contains(t, internalErr.Error(), tc.expectedError, "Test Case '%s': Expected internal error message containing '%s', got '%s'", tc.name, tc.expectedError, internalErr.Error())
-							} else if msgStr, ok := httpErr.Message.(string); ok {
-								// Fallback to checking the Message field if Unwrap is nil
-								assert.Contains(t, msgStr, tc.expectedError, "Test Case '%s': Expected error message containing '%s', got '%s'", tc.name, tc.expectedError, msgStr)
-							} else {
-								// If message is not string or nil, fail the check
-								assert.Fail(t, "HTTPError.Message is not a string or Unwrap returned nil", "Test Case '%s': Could not extract error message from echo.HTTPError", tc.name)
-							}
-						}
-					} else {
-						// Handler returned a non-HTTPError, which might be unexpected
-						// We might still compare the status code if we assume it implies 500
-						assert.Equal(t, tc.expectedStatus, http.StatusInternalServerError, "Test Case '%s': Handler returned non-HTTPError '%v', expected status %d, implying 500", tc.name, handlerErr, tc.expectedStatus)
-						assert.Failf(t, "Test Case '%s': Expected an echo.HTTPError but got a different error type", tc.name, "Error: %v", handlerErr)
-					}
-				} else {
-					// Case 2: Handler returned nil, check the response recorder
-					// This happens when c.HandleError or ctx.JSON is used to write the error response
-					assert.Equal(t, tc.expectedStatus, rec.Code, "Test Case '%s': Handler returned nil, expected status %d, got response code %d", tc.name, tc.expectedStatus, rec.Code)
-					if tc.expectedError != "" {
-						// Check if the response body contains the expected error message (often JSON)
-						assert.Contains(t, rec.Body.String(), tc.expectedError, "Test Case '%s': Handler returned nil, expected status %d. Body '%s' does not contain expected error '%s'", tc.name, tc.expectedStatus, rec.Body.String(), tc.expectedError)
-					}
-				}
+				assertErrorResponse(t, tc.name, tc.expectedStatus, rec, handlerErr, tc.expectedError)
 			} else {
-				// Handle success cases (expected 2xx)
-				assert.NoError(t, handlerErr, "Test Case '%s': Handler returned an unexpected error for success case: %v", tc.name, handlerErr)
-				assert.Equal(t, tc.expectedStatus, rec.Code, "Test Case '%s': Unexpected status code for success case. Expected %d, got %d", tc.name, tc.expectedStatus, rec.Code)
-				if tc.expectedBodyFragment != "" {
-					assert.Contains(t, rec.Body.String(), tc.expectedBodyFragment, "Test Case '%s': Response body does not contain expected fragment '%s'", tc.name, tc.expectedBodyFragment)
-				}
+				assertSuccessfulResponse(t, tc.name, tc.expectedStatus, rec, handlerErr, tc.expectedBodyFragment)
 			}
 
 			// Verify mock expectations
