@@ -1,6 +1,7 @@
 package securefs
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -469,32 +470,41 @@ func (sfs *SecureFS) WriteFile(path string, data []byte, perm os.FileMode) error
 	return err
 }
 
-// serveInternal is the common logic for serving files, taking an opener function
-// to handle the specific path validation and file opening logic.
+// serveInternal handles the core logic for serving a file using an opener function.
+// The opener function is responsible for securely opening the file and returning
+// the file handle, the effective path used (for logging/headers), and any error.
 func (sfs *SecureFS) serveInternal(c echo.Context, opener func() (*os.File, string, error)) error {
-	// Execute the opener function to get the file handle and validated relative path
-	file, relPath, err := opener()
+	f, effectivePath, err := opener()
 	if err != nil {
-		// Handle different types of errors from the opener
-		if os.IsNotExist(err) {
-			log.Printf("Serve Internal: File not found error: %v", err)
-			return echo.NewHTTPError(http.StatusNotFound, "File not found")
-		}
-		if strings.Contains(err.Error(), "security error") || strings.Contains(err.Error(), "path validation error") || strings.Contains(err.Error(), "failed to make path relative") {
-			log.Printf("Serve Internal: Validation/Security Error: %v", err)
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid file path requested")
-		}
-		// Handle generic open errors
-		log.Printf("Serve Internal: Open Error: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to open file")
-	}
-	defer file.Close()
+		// Log the specific error for debugging
+		// Added path for context in logs
+		log.Printf("SecureFS: Error opening file via opener for path %s: %v", effectivePath, err)
 
-	// Get file info for content-length and modification time
-	stat, err := file.Stat()
+		// Check for specific path-related errors
+		// Use errors.Is for robust checking, including fs.ErrNotExist and os.ErrNotExist
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
+			return echo.NewHTTPError(http.StatusNotFound, fmt.Sprintf("File not found: %s", effectivePath))
+		}
+		// Use errors.Is for robust checking, including fs.ErrPermission and os.ErrPermission
+		if errors.Is(err, fs.ErrPermission) || errors.Is(err, os.ErrPermission) {
+			return echo.NewHTTPError(http.StatusForbidden, "Access denied")
+		}
+		// Check for security validation errors (like path traversal)
+		if strings.HasPrefix(err.Error(), "security error:") {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid file path").SetInternal(err)
+		}
+
+		// Handle other potential errors, log them, and return a generic 500 error
+		log.Printf("SecureFS: Unhandled error serving file for path %s: %v", effectivePath, err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Error serving file").SetInternal(err)
+	}
+	defer f.Close()
+
+	// Get file info for size and modification time
+	stat, err := f.Stat()
 	if err != nil {
-		log.Printf("Serve Internal: Stat Error: %v for relPath %s", err, relPath)
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info")
+		log.Printf("Serve Internal: Stat Error: %v for relPath %s", err, effectivePath)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info").SetInternal(err)
 	}
 
 	// Only serve regular files
@@ -503,14 +513,15 @@ func (sfs *SecureFS) serveInternal(c echo.Context, opener func() (*os.File, stri
 	}
 
 	// Set content type based on file extension using the validated relative path
-	contentType := mime.TypeByExtension(filepath.Ext(relPath))
-	if contentType != "" {
-		c.Response().Header().Set(echo.HeaderContentType, contentType)
+	contentType := mime.TypeByExtension(filepath.Ext(effectivePath))
+	if contentType == "" {
+		contentType = "application/octet-stream" // Default content type
 	}
+	c.Response().Header().Set(echo.HeaderContentType, contentType)
 
 	// Use http.ServeContent which properly handles Range requests, caching, etc.
 	// It uses the validated relative path's base name for the download filename suggestion.
-	http.ServeContent(c.Response(), c.Request(), filepath.Base(relPath), stat.ModTime(), file)
+	http.ServeContent(c.Response(), c.Request(), filepath.Base(effectivePath), stat.ModTime(), f)
 	return nil
 }
 
