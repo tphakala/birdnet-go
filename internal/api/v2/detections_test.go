@@ -21,6 +21,28 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
+// decodePaginated is a helper to unmarshal a response body into a PaginatedResponse
+// and extract the data as a map slice for easier testing.
+func decodePaginated(t *testing.T, body []byte) ([]map[string]interface{}, PaginatedResponse) {
+	var response PaginatedResponse
+	err := json.Unmarshal(body, &response)
+	assert.NoError(t, err, "Failed to unmarshal response body")
+
+	// Extract the detections data
+	detections, ok := response.Data.([]interface{})
+	if !ok {
+		t.Fatalf("Expected Data to be []interface{}, got %T", response.Data)
+	}
+
+	// Convert to []map[string]interface{} for easier access
+	result := make([]map[string]interface{}, len(detections))
+	for i, d := range detections {
+		result[i] = d.(map[string]interface{})
+	}
+
+	return result, response
+}
+
 // TestGetDetections tests the GetDetections endpoint with various query types
 func TestGetDetections(t *testing.T) {
 	// Setup
@@ -90,13 +112,7 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				var response PaginatedResponse
-				err := json.Unmarshal(rec.Body.Bytes(), &response)
-				assert.NoError(t, err)
-				detections, ok := response.Data.([]interface{})
-				if !ok {
-					t.Fatalf("Expected Data to be []interface{}, got %T", response.Data)
-				}
+				detections, _ := decodePaginated(t, rec.Body.Bytes())
 				assert.Equal(t, 2, len(detections))
 			},
 		},
@@ -117,13 +133,7 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				var response PaginatedResponse
-				err := json.Unmarshal(rec.Body.Bytes(), &response)
-				assert.NoError(t, err)
-				detections, ok := response.Data.([]interface{})
-				if !ok {
-					t.Fatalf("Expected Data to be []interface{}, got %T", response.Data)
-				}
+				detections, _ := decodePaginated(t, rec.Body.Bytes())
 				assert.Equal(t, 1, len(detections))
 			},
 		},
@@ -143,13 +153,7 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				var response PaginatedResponse
-				err := json.Unmarshal(rec.Body.Bytes(), &response)
-				assert.NoError(t, err)
-				detections, ok := response.Data.([]interface{})
-				if !ok {
-					t.Fatalf("Expected Data to be []interface{}, got %T", response.Data)
-				}
+				detections, _ := decodePaginated(t, rec.Body.Bytes())
 				assert.Equal(t, 1, len(detections))
 			},
 		},
@@ -168,13 +172,7 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				var response PaginatedResponse
-				err := json.Unmarshal(rec.Body.Bytes(), &response)
-				assert.NoError(t, err)
-				detections, ok := response.Data.([]interface{})
-				if !ok {
-					t.Fatalf("Expected Data to be []interface{}, got %T", response.Data)
-				}
+				detections, _ := decodePaginated(t, rec.Body.Bytes())
 				assert.Equal(t, 1, len(detections))
 			},
 		},

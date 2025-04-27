@@ -592,7 +592,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 		assert.Equal(t, "American Crow", amcro.CommonName)
 		assert.Equal(t, "AMCRO", amcro.SpeciesCode)
 		assert.Equal(t, amcroTotal, amcro.Count, "American Crow count mismatch") // Count is sum of hourly
-		assert.ElementsMatch(t, expectedAmcroHourlyCounts[:], amcro.HourlyCounts, "American Crow hourly counts mismatch")
+		assert.Equal(t, expectedAmcroHourlyCounts[:], amcro.HourlyCounts, "American Crow hourly counts mismatch")
 		assert.Equal(t, "08:15:00", amcro.FirstHeard, "American Crow first heard time")
 		assert.Equal(t, "14:45:00", amcro.LatestHeard, "American Crow latest heard time")
 		assert.True(t, amcro.HighConfidence, "American Crow should be high confidence") // Based on 0.95 > 0.8
@@ -605,7 +605,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 		assert.Equal(t, "Red-bellied Woodpecker", rbwo.CommonName)
 		assert.Equal(t, "RBWO", rbwo.SpeciesCode)
 		assert.Equal(t, rbwoTotal, rbwo.Count, "Red-bellied Woodpecker count mismatch") // Count is sum of hourly
-		assert.ElementsMatch(t, expectedRbwoHourlyCounts[:], rbwo.HourlyCounts, "Red-bellied Woodpecker hourly counts mismatch")
+		assert.Equal(t, expectedRbwoHourlyCounts[:], rbwo.HourlyCounts, "Red-bellied Woodpecker hourly counts mismatch")
 		assert.Equal(t, "10:20:00", rbwo.FirstHeard, "Red-bellied Woodpecker first heard time")
 		assert.Equal(t, "16:05:00", rbwo.LatestHeard, "Red-bellied Woodpecker latest heard time")
 		assert.True(t, rbwo.HighConfidence, "Red-bellied Woodpecker should be high confidence") // Based on 0.8 >= 0.8
