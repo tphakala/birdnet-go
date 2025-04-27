@@ -77,9 +77,10 @@ func assertErrorResponse(t *testing.T, tcName string, expectedStatus int, rec *h
 				}
 			}
 		} else {
-			// Handler returned a non-HTTPError, assume 500 check
-			assert.Equal(t, expectedStatus, http.StatusInternalServerError, "Test Case '%s': Handler returned non-HTTPError '%v', expected status %d, implying 500", tcName, handlerErr, expectedStatus)
-			assert.Failf(t, "Test Case '%s': Expected an echo.HTTPError but got a different error type", tcName, "Error: %v", handlerErr)
+			// Handler returned a non-HTTPError, which doesn't match expected behavior
+			assert.Failf(t,
+				"Test Case '%s': Unexpected non-HTTP error (%v). Expected an echo.HTTPError with status %d",
+				tcName, handlerErr, expectedStatus)
 		}
 	} else {
 		// Case 2: Handler returned nil, check the response recorder (Echo error handler wrote response)
