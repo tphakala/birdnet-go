@@ -28,16 +28,25 @@ func decodePaginated(t *testing.T, body []byte) ([]map[string]interface{}, Pagin
 	err := json.Unmarshal(body, &response)
 	assert.NoError(t, err, "Failed to unmarshal response body")
 
+	// Short-circuit if the payload is empty
+	if response.Data == nil {
+		return nil, response
+	}
+
 	// Extract the detections data
-	detections, ok := response.Data.([]interface{})
+	detectionsIface, ok := response.Data.([]interface{})
 	if !ok {
-		t.Fatalf("Expected Data to be []interface{}, got %T", response.Data)
+		t.Fatalf("Expected Data to be an array, got %T", response.Data)
 	}
 
 	// Convert to []map[string]interface{} for easier access
-	result := make([]map[string]interface{}, len(detections))
-	for i, d := range detections {
-		result[i] = d.(map[string]interface{})
+	result := make([]map[string]interface{}, len(detectionsIface))
+	for i, d := range detectionsIface {
+		if m, ok := d.(map[string]interface{}); ok {
+			result[i] = m
+		} else {
+			t.Fatalf("Expected detection element to be object, got %T", d)
+		}
 	}
 
 	return result, response
