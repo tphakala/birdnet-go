@@ -232,6 +232,14 @@ func InitCache(providerName string, e ImageProvider, t *telemetry.Metrics, store
 
 // loadFromDBCache loads a BirdImage from the database cache
 func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, error) {
+	// Check if store is nil to prevent nil pointer dereference
+	if c.store == nil {
+		if c.debug {
+			log.Printf("Debug [%s]: DB store is nil, cannot load from cache for %s", c.providerName, scientificName)
+		}
+		return nil, nil
+	}
+
 	var cachedImage *datastore.ImageCache // Correct type based on GetImageCache return
 	var err error
 	query := datastore.ImageCacheQuery{ // Pass query by value
