@@ -18,6 +18,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -347,8 +348,8 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	// The audioPath from the DB is already relative to the baseDir. Validate it.
 	relAudioPath, err := c.SFS.ValidateRelativePath(audioPath) // Use the new validator
 	if err != nil {
-		// Wrap with the appropriate sentinel error based on the nature of the validation error
-		if strings.Contains(err.Error(), "path attempts to traverse") {
+		// Use proper error type checking instead of string matching
+		if errors.Is(err, securefs.ErrPathTraversal) {
 			return "", fmt.Errorf("%w: %s", ErrPathTraversalAttempt, err.Error())
 		}
 		return "", fmt.Errorf("%w: %s", ErrInvalidAudioPath, err.Error())

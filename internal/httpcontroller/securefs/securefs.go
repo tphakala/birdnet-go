@@ -143,7 +143,8 @@ func IsPathValidWithinBase(baseDir, path string) error {
 	}
 
 	if !isWithin {
-		return fmt.Errorf("security error: path %s is outside allowed directory %s", path, baseDir)
+		return fmt.Errorf("%w: path %s is outside allowed directory %s",
+			ErrPathTraversal, path, baseDir)
 	}
 
 	return nil
@@ -194,22 +195,23 @@ func (sfs *SecureFS) RelativePath(path string) (string, error) {
 	return relPath, nil
 }
 
-// ValidateRelativePath checks if a path, assumed to be relative to the base directory,
-// is safe and canonical. It prevents path traversal and ensures the path is clean.
-// It returns the cleaned, validated relative path suitable for use with os.Root operations.
+// ValidateRelativePath validates a path assumed to be relative to the base directory.
+// It returns a cleaned, validated path or an error if the path is not valid.
 func (sfs *SecureFS) ValidateRelativePath(relPath string) (string, error) {
 	// Clean the path first to resolve . and .. components where possible
 	cleanedPath := filepath.Clean(relPath)
 
 	// Check for absolute paths after cleaning (should not happen if input is truly relative)
 	if filepath.IsAbs(cleanedPath) {
-		return "", fmt.Errorf("security error: path must be relative, but got '%s' after cleaning '%s'", cleanedPath, relPath)
+		return "", fmt.Errorf("%w: path must be relative, but got '%s' after cleaning '%s'",
+			ErrInvalidPath, cleanedPath, relPath)
 	}
 
 	// Check for attempts to traverse upwards from the root.
 	// After cleaning, paths starting with ".." indicate an attempt to go above the root.
 	if strings.HasPrefix(cleanedPath, ".."+string(filepath.Separator)) || cleanedPath == ".." {
-		return "", fmt.Errorf("security error: path attempts to traverse outside base directory: '%s' (cleaned from '%s')", cleanedPath, relPath)
+		return "", fmt.Errorf("%w: '%s' (cleaned from '%s')",
+			ErrPathTraversal, cleanedPath, relPath)
 	}
 
 	// Ensure no leading separator after cleaning (should be handled by Clean, but double-check)
@@ -486,10 +488,18 @@ func (sfs *SecureFS) serveInternal(c echo.Context, opener func() (*os.File, stri
 			return echo.NewHTTPError(http.StatusNotFound, fmt.Sprintf("File not found: %s", effectivePath))
 		}
 		// Use errors.Is for robust checking, including fs.ErrPermission and os.ErrPermission
-		if errors.Is(err, fs.ErrPermission) || errors.Is(err, os.ErrPermission) {
+		if errors.Is(err, fs.ErrPermission) || errors.Is(err, os.ErrPermission) || errors.Is(err, ErrAccessDenied) {
 			return echo.NewHTTPError(http.StatusForbidden, "Access denied")
 		}
 		// Check for security validation errors (like path traversal)
+		if errors.Is(err, ErrPathTraversal) || errors.Is(err, ErrInvalidPath) {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid file path").SetInternal(err)
+		}
+		if errors.Is(err, ErrNotRegularFile) {
+			return echo.NewHTTPError(http.StatusForbidden, "Not a regular file")
+		}
+
+		// For backward compatibility, also check strings (can be removed in future)
 		if strings.HasPrefix(err.Error(), "security error:") {
 			return echo.NewHTTPError(http.StatusBadRequest, "Invalid file path").SetInternal(err)
 		}
