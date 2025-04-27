@@ -156,7 +156,7 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 		} else if errors.Is(err, context.DeadlineExceeded) {
 			return c.HandleError(ctx, err, "Spectrogram generation timed out", http.StatusRequestTimeout)
 		} else if errors.Is(err, context.Canceled) {
-			return c.HandleError(ctx, err, "Spectrogram generation canceled by client", http.StatusRequestTimeout) // Use 499 Client Closed Request
+			return c.HandleError(ctx, err, "Spectrogram generation canceled by client", 499)
 		} else if strings.Contains(err.Error(), "ffmpeg path not set") || strings.Contains(err.Error(), "sox path not set") {
 			// Handle configuration errors
 			return c.HandleError(ctx, err, "Server configuration error preventing spectrogram generation", http.StatusInternalServerError)
@@ -206,7 +206,7 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 		} else if errors.Is(err, context.DeadlineExceeded) {
 			return c.HandleError(ctx, err, "Spectrogram generation timed out", http.StatusRequestTimeout)
 		} else if errors.Is(err, context.Canceled) {
-			return c.HandleError(ctx, err, "Spectrogram generation canceled by client", 499) // Use 499 Client Closed Request
+			return c.HandleError(ctx, err, "Spectrogram generation canceled by client", 499)
 		} else if strings.Contains(err.Error(), "ffmpeg path not set") || strings.Contains(err.Error(), "sox path not set") {
 			return c.HandleError(ctx, err, "Server configuration error preventing spectrogram generation", http.StatusInternalServerError)
 		}
