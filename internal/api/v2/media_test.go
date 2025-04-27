@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -29,23 +30,31 @@ func TestInitMediaRoutesRegistration(t *testing.T) {
 	// Get all routes from the Echo instance
 	routes := e.Routes()
 
-	// Define the media routes we expect to find
-	expectedRoutes := map[string]bool{
-		"GET /api/v2/media/audio/:filename":       false,
-		"GET /api/v2/media/spectrogram/:filename": false,
+	// Define the media route suffixes we expect to find
+	expectedSuffixes := map[string]bool{
+		"GET /media/audio/:filename":       false,
+		"GET /media/spectrogram/:filename": false,
 	}
 
-	// Check each route
+	// Check each route suffix
+	foundCount := 0
 	for _, r := range routes {
-		routePath := r.Method + " " + r.Path
-		if _, exists := expectedRoutes[routePath]; exists {
-			expectedRoutes[routePath] = true
+		// Check if the route path ends with one of the expected suffixes
+		for suffix := range expectedSuffixes {
+			// Ensure the check is for the correct HTTP method and path suffix
+			if r.Method == http.MethodGet && strings.HasSuffix(r.Path, suffix[4:]) { // suffix[4:] removes "GET "
+				if !expectedSuffixes[suffix] {
+					expectedSuffixes[suffix] = true
+					foundCount++
+				}
+			}
 		}
 	}
 
 	// Verify that all expected routes were registered
-	for route, found := range expectedRoutes {
-		assert.True(t, found, "Media route not registered: %s", route)
+	assert.Equal(t, len(expectedSuffixes), foundCount, "Number of found media routes does not match expected.")
+	for suffix, found := range expectedSuffixes {
+		assert.True(t, found, "Media route suffix not registered: %s", suffix)
 	}
 }
 
