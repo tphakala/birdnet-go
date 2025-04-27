@@ -350,8 +350,28 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup: Ensure settings are valid for controller creation within the loop
-			appSettings := &conf.Settings{}
-			appSettings.Realtime.Audio.Export.Path = t.TempDir()
+			appSettings := &conf.Settings{
+				Realtime: conf.RealtimeSettings{
+					Audio: conf.AudioSettings{
+						Export: struct {
+							Debug     bool
+							Enabled   bool
+							Path      string
+							Type      string
+							Bitrate   string
+							Retention struct {
+								Debug    bool
+								Policy   string
+								MaxAge   string
+								MaxUsage string
+								MinClips int
+							}
+						}{
+							Path: t.TempDir(),
+						},
+					},
+				},
+			}
 
 			mockDS := new(MockDataStoreV2)
 			// Add necessary mock expectations based on the specific endpoint being tested, if any.
@@ -386,8 +406,6 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 
 			req := httptest.NewRequest(tc.method, tc.path, http.NoBody)
 			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetPath(tc.path)
 
 			// Let Echo's router handle the request routing
 			e.ServeHTTP(rec, req)
