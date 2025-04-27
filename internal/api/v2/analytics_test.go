@@ -347,49 +347,49 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 		// Add more invalid cases as needed
 	}
 
+	// Setup: Ensure settings are valid for controller creation
+	appSettings := &conf.Settings{
+		Realtime: conf.RealtimeSettings{
+			Audio: conf.AudioSettings{
+				Export: struct {
+					Debug     bool
+					Enabled   bool
+					Path      string
+					Type      string
+					Bitrate   string
+					Retention struct {
+						Debug    bool
+						Policy   string
+						MaxAge   string
+						MaxUsage string
+						MinClips int
+					}
+				}{
+					Path: t.TempDir(),
+				},
+			},
+		},
+	}
+
+	mockDS := new(MockDataStoreV2)
+	// Add necessary mock expectations based on the specific endpoint being tested, if any.
+	mockDS.On("GetSettings").Return(appSettings, nil) // Needed for cache init if controller setup does it
+	// Add GetAllImageCaches mock if cache init happens here
+	mockDS.On("GetAllImageCaches", mock.AnythingOfType("string")).Return([]datastore.ImageCache{}, nil)
+
+	// Initialize a mock image cache for controller creation - ONCE for all test cases
+	testMetrics, _ := telemetry.NewMetrics() // Create a dummy metrics instance
+	// Create a stub provider to avoid nil pointer panics
+	stubProvider := &TestImageProvider{
+		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
+			return imageprovider.BirdImage{}, nil
+		},
+	}
+	mockImageCache := imageprovider.InitCache("test", stubProvider, testMetrics, mockDS)
+	t.Cleanup(func() { mockImageCache.Close() })
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup: Ensure settings are valid for controller creation within the loop
-			appSettings := &conf.Settings{
-				Realtime: conf.RealtimeSettings{
-					Audio: conf.AudioSettings{
-						Export: struct {
-							Debug     bool
-							Enabled   bool
-							Path      string
-							Type      string
-							Bitrate   string
-							Retention struct {
-								Debug    bool
-								Policy   string
-								MaxAge   string
-								MaxUsage string
-								MinClips int
-							}
-						}{
-							Path: t.TempDir(),
-						},
-					},
-				},
-			}
-
-			mockDS := new(MockDataStoreV2)
-			// Add necessary mock expectations based on the specific endpoint being tested, if any.
-			mockDS.On("GetSettings").Return(appSettings, nil) // Needed for cache init if controller setup does it
-			// Add GetAllImageCaches mock if cache init happens here
-			mockDS.On("GetAllImageCaches", mock.AnythingOfType("string")).Return([]datastore.ImageCache{}, nil)
-
-			// Initialize a mock image cache for controller creation
-			testMetrics, _ := telemetry.NewMetrics() // Create a dummy metrics instance
-			// Fix: Replace nil provider with a stub provider to avoid nil pointer panics
-			stubProvider := &TestImageProvider{
-				FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
-					return imageprovider.BirdImage{}, nil
-				},
-			}
-			mockImageCache := imageprovider.InitCache("test", stubProvider, testMetrics, mockDS)
-			t.Cleanup(func() { mockImageCache.Close() })
-
 			controller := &Controller{
 				DS:             mockDS,
 				Settings:       appSettings,
@@ -420,8 +420,8 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 					var errorResp map[string]interface{}
 					err := json.Unmarshal(rec.Body.Bytes(), &errorResp)
 					assert.NoError(t, err)
-					if errorResp["error"] != nil {
-						assert.Contains(t, errorResp["error"].(string), tc.expectedBody)
+					if errVal, ok := errorResp["error"]; ok {
+						assert.Contains(t, fmt.Sprint(errVal), tc.expectedBody)
 					}
 				}
 			}
@@ -531,17 +531,6 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 				// Add other fields if necessary
 			}, nil
 		},
-		/* GetBatchFunc: func(scientificNames []string) map[string]imageprovider.BirdImage {
-			results := make(map[string]imageprovider.BirdImage)
-			for _, name := range scientificNames {
-				// Simulate fetching or return cached placeholder
-				results[name] = imageprovider.BirdImage{
-					ScientificName: name,
-					URL:            fmt.Sprintf("http://example.com/%s.jpg", name),
-				}
-			}
-			return results
-		}, */
 	}
 
 	// Create a bird image cache with our mock provider
