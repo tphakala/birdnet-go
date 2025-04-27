@@ -76,7 +76,6 @@ func TestGetDetections(t *testing.T) {
 		expectedStatus int
 		expectedCount  int
 		checkResponse  func(t *testing.T, testName string, rec *httptest.ResponseRecorder)
-		handler        func(c echo.Context) error
 	}{
 		{
 			name: "All detections",
@@ -99,9 +98,6 @@ func TestGetDetections(t *testing.T) {
 					t.Fatalf("Expected Data to be []interface{}, got %T", response.Data)
 				}
 				assert.Equal(t, 2, len(detections))
-			},
-			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
 			},
 		},
 		{
@@ -130,9 +126,6 @@ func TestGetDetections(t *testing.T) {
 				}
 				assert.Equal(t, 1, len(detections))
 			},
-			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
-			},
 		},
 		{
 			name: "Species detections",
@@ -159,9 +152,6 @@ func TestGetDetections(t *testing.T) {
 				}
 				assert.Equal(t, 1, len(detections))
 			},
-			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
-			},
 		},
 		{
 			name: "Search detections",
@@ -187,9 +177,6 @@ func TestGetDetections(t *testing.T) {
 				}
 				assert.Equal(t, 1, len(detections))
 			},
-			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
-			},
 		},
 		{
 			name: "Invalid numResults parameter",
@@ -212,9 +199,6 @@ func TestGetDetections(t *testing.T) {
 					assert.Contains(t, errResp["message"], "numResults must be greater than zero", "Error message mismatch in response body")
 				}
 			},
-			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
-			},
 		},
 		{
 			name:           "Invalid_offset_parameter",
@@ -232,9 +216,6 @@ func TestGetDetections(t *testing.T) {
 				if assert.NoError(t, err, "Failed to unmarshal error response") {
 					assert.Contains(t, errResp["message"], "Invalid numeric value for offset", "Error message mismatch in response body")
 				}
-			},
-			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
 			},
 		},
 		{
@@ -254,9 +235,6 @@ func TestGetDetections(t *testing.T) {
 				var response PaginatedResponse
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
 				assert.NoError(t, err)
-			},
-			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
 			},
 		},
 		{
@@ -279,9 +257,6 @@ func TestGetDetections(t *testing.T) {
 				if assert.NoError(t, err, "Failed to unmarshal error response") {
 					assert.Contains(t, errResp["message"], "numResults exceeds maximum allowed value", "Error message mismatch in response body")
 				}
-			},
-			handler: func(c echo.Context) error {
-				return controller.GetDetections(c)
 			},
 		},
 	}
