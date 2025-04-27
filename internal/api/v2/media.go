@@ -337,9 +337,9 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	if err != nil {
 		// Use proper error type checking instead of string matching
 		if errors.Is(err, securefs.ErrPathTraversal) {
-			return "", fmt.Errorf("%w: %s", ErrPathTraversalAttempt, err.Error())
+			return "", fmt.Errorf("%w: %w", ErrPathTraversalAttempt, err)
 		}
-		return "", fmt.Errorf("%w: %s", ErrInvalidAudioPath, err.Error())
+		return "", fmt.Errorf("%w: %w", ErrInvalidAudioPath, err)
 	}
 
 	// Check if the audio file exists within the secure context using the validated relative path
@@ -370,9 +370,9 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	if err != nil {
 		// Use proper error type checking instead of string matching
 		if errors.Is(err, securefs.ErrPathTraversal) {
-			return "", fmt.Errorf("%w: %s", ErrPathTraversalAttempt, err.Error())
+			return "", fmt.Errorf("%w: %w", ErrPathTraversalAttempt, err)
 		}
-		return "", fmt.Errorf("%w: %s", ErrInvalidAudioPath, err.Error())
+		return "", fmt.Errorf("%w: %w", ErrInvalidAudioPath, err)
 	}
 
 	// Absolute path for the spectrogram on the host filesystem
