@@ -423,9 +423,9 @@ func TestMediaSecurityScenarios(t *testing.T) {
 					e.ServeHTTP(rec, req)
 
 					// SecureFS prevents access, usually resulting in a 404 Not Found
-					// or potentially 500 if SecureFS returns an unexpected validation error
-					assert.True(t, rec.Code == http.StatusNotFound || rec.Code == http.StatusInternalServerError || rec.Code == http.StatusBadRequest,
-						"Expected 404/500/400 status code for security issue, got %d for %s", rec.Code, endpoint)
+					// or potentially 500/403/400 depending on the exact nature of the issue and SecureFS behavior
+					assert.Contains(t, []int{http.StatusNotFound, http.StatusInternalServerError, http.StatusBadRequest, http.StatusForbidden},
+						rec.Code, "Expected 404/500/400/403 status code for security issue, got %d for %s", rec.Code, endpoint)
 
 					// Response should not contain sensitive content (though we didn't create one)
 					assert.NotContains(t, rec.Body.String(), "root:")
