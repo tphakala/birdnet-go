@@ -416,7 +416,7 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 				if errors.As(handlerErr, &httpErr) {
 					assert.Equal(t, tc.expectedStatus, httpErr.Code)
 					if tc.expectedBody != "" {
-						assert.Contains(t, httpErr.Message, tc.expectedBody)
+						assert.Contains(t, fmt.Sprint(httpErr.Message), tc.expectedBody)
 					}
 				} else {
 					// Unexpected error type
