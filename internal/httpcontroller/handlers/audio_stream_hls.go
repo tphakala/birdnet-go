@@ -152,9 +152,8 @@ func (h *Handlers) validateHLSRequest(c echo.Context) (sourceID, clientID, hlsBa
 	// Decode the source ID from the URL path parameter
 	decodedSourceID, decodeErr := url.PathUnescape(sourceIDParam)
 	if decodeErr != nil {
-		log.Printf("⚠️ Failed to URL-decode source ID parameter '%s': %v", sourceIDParam, decodeErr)
-		// Fallback to using the potentially encoded parameter, but log a warning
-		decodedSourceID = sourceIDParam
+		log.Printf("❌ Invalid URL encoding for source ID parameter '%s': %v", sourceIDParam, decodeErr)
+		return "", "", "", echo.NewHTTPError(http.StatusBadRequest, "Invalid source ID encoding")
 	}
 	// Use the decoded source ID for internal logic and logging
 	sourceID = decodedSourceID
@@ -698,7 +697,7 @@ func setupWindowsAudioFeed(ctx context.Context, sourceID string, cmd *exec.Cmd) 
 		}
 		defer cleanup()
 
-		// Process audio data and write to stdin
+		// Process audio data and write to stdin, handling partial writes
 		for {
 			select {
 			case <-ctx.Done():
@@ -710,16 +709,15 @@ func setupWindowsAudioFeed(ctx context.Context, sourceID string, cmd *exec.Cmd) 
 					return
 				}
 
-				// Write data to FFmpeg's stdin
-				n, err := stdin.Write(data)
-				if err != nil {
-					log.Printf("❌ Error writing to FFmpeg stdin: %v", err)
-					return
-				}
-				if n != len(data) {
-					log.Printf("❌ Incomplete write to FFmpeg stdin: wrote %d of %d bytes", n, len(data))
-					// Depending on FFmpeg's behavior, this might be recoverable or might require stream termination
-					// For now, just log it.
+				// Write data to FFmpeg's stdin, handling partial writes
+				written := 0
+				for written < len(data) {
+					n, err := stdin.Write(data[written:])
+					if err != nil {
+						log.Printf("❌ Error writing to FFmpeg stdin: %v", err)
+						return // Exit goroutine on write error
+					}
+					written += n
 				}
 			}
 		}
