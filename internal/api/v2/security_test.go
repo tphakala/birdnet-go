@@ -118,7 +118,9 @@ func assertErrorResponse(t *testing.T, tcName string, expectedStatus int, rec *h
 				} else if msgStr, ok := httpErr.Message.(string); ok {
 					assert.Contains(t, msgStr, expectedError, "Test Case '%s': Expected error message containing '%s', got '%s'", tcName, expectedError, msgStr)
 				} else {
-					assert.Fail(t, "HTTPError.Message is not a string or Unwrap returned nil", "Test Case '%s': Could not extract error message from echo.HTTPError", tcName)
+					assert.Failf(t, "Could not extract error message from echo.HTTPError",
+						"Test Case '%s': HTTPError.Message is not a string and Unwrap returned nil (status=%d)",
+						tcName, expectedStatus)
 				}
 			}
 		} else {
