@@ -120,10 +120,10 @@ func TestGetHourlyAnalytics(t *testing.T) {
 	mockDS.On("GetHourlyAnalyticsData", date, species).Return(mockHourlyData, nil)
 
 	// Create a request
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/hourly?date=2023-01-01&species=Turdus+migratorius", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/hourly?date=2023-01-01&species=Turdus+migratorius", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/hourly")
+	c.SetPath("/api/v2/analytics/time/hourly")
 	c.QueryParams().Set("date", date)
 	c.QueryParams().Set("species", species)
 
@@ -189,10 +189,10 @@ func TestGetDailyAnalytics(t *testing.T) {
 
 	// Create a request
 	req := httptest.NewRequest(http.MethodGet,
-		"/api/v2/analytics/daily?start_date=2023-01-01&end_date=2023-01-07&species=Turdus+migratorius", http.NoBody)
+		"/api/v2/analytics/time/daily?start_date=2023-01-01&end_date=2023-01-07&species=Turdus+migratorius", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/daily")
+	c.SetPath("/api/v2/analytics/time/daily")
 	c.QueryParams().Set("start_date", startDate)
 	c.QueryParams().Set("end_date", endDate)
 	c.QueryParams().Set("species", species)
@@ -268,10 +268,10 @@ func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
 
 	// Create a request
 	req := httptest.NewRequest(http.MethodGet,
-		"/api/v2/analytics/daily?start_date=2023-01-01&end_date=2023-01-07", http.NoBody)
+		"/api/v2/analytics/time/daily?start_date=2023-01-01&end_date=2023-01-07", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/daily")
+	c.SetPath("/api/v2/analytics/time/daily")
 	c.QueryParams().Set("start_date", startDate)
 	c.QueryParams().Set("end_date", endDate)
 
@@ -326,21 +326,21 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 		{
 			name:           "GetHourlyAnalytics - Missing Date",
 			method:         http.MethodGet,
-			path:           "/api/v2/analytics/hourly?species=test",
+			path:           "/api/v2/analytics/time/hourly?species=test",
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   "Missing required parameter: date",
 		},
 		{
 			name:           "GetHourlyAnalytics - Missing Species",
 			method:         http.MethodGet,
-			path:           "/api/v2/analytics/hourly?date=2023-01-01",
+			path:           "/api/v2/analytics/time/hourly?date=2023-01-01",
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   "Missing required parameter: species",
 		},
 		{
 			name:           "GetDailyAnalytics - Missing Start Date",
 			method:         http.MethodGet,
-			path:           "/api/v2/analytics/daily?species=test",
+			path:           "/api/v2/analytics/time/daily?species=test",
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   "Missing required parameter: start_date",
 		},
@@ -379,28 +379,33 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 			}
 
 			e := echo.New()
-			// Register routes needed for this test run (If using ServeHTTP)
-			// controller.Group = e.Group("/api/v2") // Assign group if needed
-			// controller.initAnalyticsRoutes() // Initialize only the routes needed or use direct calls
+			// Register routes needed for this test run
+			controller.Group = e.Group("/api/v2") // Assign group for proper route initialization
+			controller.Echo = e                   // Set Echo instance for the controller
+			controller.initAnalyticsRoutes()      // Initialize routes using the actual method
 
 			req := httptest.NewRequest(tc.method, tc.path, http.NoBody)
 			rec := httptest.NewRecorder()
-
-			// Register the routes for all test cases
-			e.GET("/api/v2/analytics/species/daily", controller.GetDailySpeciesSummary)
-			e.GET("/api/v2/analytics/species/summary", controller.GetSpeciesSummary)
-			e.GET("/api/v2/analytics/hourly", controller.GetHourlyAnalytics)
-			e.GET("/api/v2/analytics/daily", controller.GetDailyAnalytics)
-			// ... add other routes as needed ...
+			c := e.NewContext(req, rec)
+			c.SetPath(tc.path)
 
 			// Let Echo's router handle the request routing
 			e.ServeHTTP(rec, req)
 
-			// Using ServeHTTP - validation happens on the recorder
-			assert.Equal(t, tc.expectedStatus, rec.Code)
-			if tc.expectedBody != "" {
-				bodyBytes, _ := io.ReadAll(rec.Body)
-				assert.Contains(t, string(bodyBytes), tc.expectedBody)
+			// Check response
+			if tc.expectedStatus == http.StatusOK {
+				assert.Equal(t, tc.expectedStatus, rec.Code)
+			} else {
+				// For error cases, check the error message
+				assert.Equal(t, tc.expectedStatus, rec.Code)
+				if tc.expectedBody != "" {
+					var errorResp map[string]interface{}
+					err := json.Unmarshal(rec.Body.Bytes(), &errorResp)
+					assert.NoError(t, err)
+					if errorResp["error"] != nil {
+						assert.Contains(t, errorResp["error"].(string), tc.expectedBody)
+					}
+				}
 			}
 
 			// Only assert expectations if the handler was expected to interact with the mock
