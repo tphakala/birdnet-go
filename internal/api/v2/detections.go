@@ -21,7 +21,7 @@ import (
 var validDateRegex = regexp.MustCompile(`^(\d{4})-(\d{2})-(\d{2})$`)
 
 // Function to validate date string format and content
-func validateDateParam(dateStr string, paramName string) error {
+func validateDateParam(dateStr, paramName string) error {
 	if dateStr == "" {
 		return nil // Optional parameter, no error if empty
 	}
