@@ -544,14 +544,15 @@ func (sfs *SecureFS) ServeFile(c echo.Context, path string) error {
 		relPath, err := sfs.RelativePath(path)
 		if err != nil {
 			// DO NOT wrap validation errors, return them directly
-			return nil, "", err
+			// Return original path for better error logging even on validation failure
+			return nil, path, err
 		}
 
 		// Open the file using the sandboxed root
 		file, err := sfs.root.Open(relPath)
 		if err != nil {
 			// Wrap operational errors for context
-			return nil, "", fmt.Errorf("ServeFile open failed for relPath '%s': %w", relPath, err)
+			return nil, relPath, fmt.Errorf("ServeFile open failed for relPath '%s': %w", relPath, err)
 		}
 		// Return the file handle, the validated relative path, and nil error
 		return file, relPath, nil
@@ -566,14 +567,15 @@ func (sfs *SecureFS) ServeRelativeFile(c echo.Context, relPath string) error {
 		validatedRelPath, err := sfs.ValidateRelativePath(relPath)
 		if err != nil {
 			// DO NOT wrap validation errors, return them directly
-			return nil, "", err
+			// Return original path for better error logging even on validation failure
+			return nil, relPath, err
 		}
 
 		// Open the file using the sandboxed root with the validated path
 		file, err := sfs.root.Open(validatedRelPath)
 		if err != nil {
 			// Wrap operational errors for context
-			return nil, "", fmt.Errorf("ServeRelativeFile open failed for validatedRelPath '%s': %w", validatedRelPath, err)
+			return nil, validatedRelPath, fmt.Errorf("ServeRelativeFile open failed for validatedRelPath '%s': %w", validatedRelPath, err)
 		}
 		// Return the file handle, the validated relative path, and nil error
 		return file, validatedRelPath, nil
