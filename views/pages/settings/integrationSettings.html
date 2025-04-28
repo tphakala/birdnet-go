@@ -15,7 +15,7 @@
         threshold: {{.Settings.Realtime.Birdweather.Threshold}},
         locationAccuracy: {{.Settings.Realtime.Birdweather.LocationAccuracy}}
     },
-    ffmpegAvailable: {{.IsFfmpegAvailable}},
+    ffmpegAvailable: {{ ffmpegAvailable }},
     birdweatherSettingsOpen: false,
     showTooltip: null,
     hasChanges: false,
@@ -46,11 +46,11 @@
          aria-labelledby="birdweatherDescription">
 
         <!-- FFmpeg availability notice -->
-        <div x-show="!ffmpegAvailable" class="alert alert-warning mb-4 shadow-sm">
+        <div x-show="!ffmpegAvailable" class="alert alert-warning mb-4 shadow-sm" x-cloak>
             <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
             <div>
                 <h3 class="font-bold">FFmpeg not detected</h3>
-                <p class="text-sm">Please install FFmpeg to enable high-quality FLAC uploads. Without FFmpeg, BirdWeather will use WAV format which results in larger file sizes and no audio normalization.</p>
+                <p class="text-sm">Please install FFmpeg to enable FLAC encoding support, BirdWeather is deprecating WAV uploads in favor of compressed FLAC audio files.</p>
             </div>
         </div>
 
