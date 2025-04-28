@@ -305,11 +305,17 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 
 			// age based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "age" {
-				result := diskmanager.AgeBasedCleanup(quitChan, dataStore)
-				if result.Err != nil {
-					log.Printf("Error during age-based cleanup: %v", result.Err)
-				} else {
-					log.Printf("🧹 Age-based cleanup completed successfully, clips removed: %d, current disk utilization: %d%%", result.ClipsRemoved, result.DiskUtilization)
+				// Fetch current settings
+				currentSettings := conf.Setting()
+				if currentSettings.Realtime.Audio.Export.Retention.MaxAge != "" {
+					log.Printf("Disk Manager: Running age-based cleanup policy...")
+					// Pass settings directly
+					result := diskmanager.AgeBasedCleanup(currentSettings, quitChan, dataStore)
+					if result.Err != nil {
+						log.Printf("Disk Manager: Age-based cleanup failed: %v", result.Err)
+					} else {
+						log.Printf("🧹 Age-based cleanup completed successfully, clips removed: %d, current disk utilization: %d%%", result.ClipsRemoved, result.DiskUtilization)
+					}
 				}
 			}
 
