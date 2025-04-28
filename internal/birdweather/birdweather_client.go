@@ -21,6 +21,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
 // SoundscapeResponse represents the JSON structure of the response from the Birdweather API when uploading a soundscape.
@@ -108,6 +109,36 @@ func handleNetworkError(err error) error {
 	return fmt.Errorf("network error: %w", err)
 }
 
+// encodeFlacUsingFFmpeg converts PCM data to FLAC format using FFmpeg directly into a bytes buffer.
+// It applies loudness normalization to match standard streaming loudness levels.
+// This avoids writing temporary files to disk.
+func encodeFlacUsingFFmpeg(pcmData []byte, settings *conf.Settings) (*bytes.Buffer, error) {
+	// Add check for empty pcmData
+	if len(pcmData) == 0 {
+		return nil, fmt.Errorf("pcmData is empty")
+	}
+
+	// Define the custom FFmpeg arguments for FLAC encoding with normalization
+	customArgs := []string{
+		"-af", "loudnorm=I=-14:TP=-1:LRA=11", // Loudness normalization filter
+		"-c:a", "flac", // Output codec: FLAC
+		"-f", "flac", // Output format: FLAC
+	}
+
+	// Use the custom FFmpeg export function to get the buffer directly
+	buffer, err := myaudio.ExportAudioWithCustomFFmpegArgs(pcmData, settings.Realtime.Audio.FfmpegPath, customArgs)
+	if err != nil {
+		// If the combined command fails, return the error
+		log.Printf("❌ FFmpeg FLAC encoding/normalization failed: %v", err)
+		return nil, fmt.Errorf("failed to export/normalize PCM to FLAC: %w", err)
+	} else if settings.Realtime.Birdweather.Debug {
+		log.Println("✅ Encoded and normalized PCM to FLAC in memory")
+	}
+
+	// Return the buffer containing the FLAC data
+	return buffer, nil
+}
+
 // UploadSoundscape uploads a soundscape file to the Birdweather API and returns the soundscape ID if successful.
 // It handles the PCM to WAV conversion, compresses the data, and manages HTTP request creation and response handling safely.
 func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscapeID string, err error) {
@@ -116,47 +147,74 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 		return "", fmt.Errorf("pcmData is empty")
 	}
 
-	// Encode PCM data to WAV format
-	wavBuffer, err := encodePCMtoWAV(pcmData)
-	if err != nil {
-		log.Printf("❌ Failed to encode PCM to WAV: %v\n", err)
-		return "", fmt.Errorf("failed to encode PCM to WAV: %w", err)
+	// Create a variable to hold the audio data buffer and extension
+	var audioBuffer *bytes.Buffer
+	var audioExt string
+
+	// Check if FFmpeg is available
+	ffmpegAvailable := conf.IsFfmpegAvailable() && b.Settings.Realtime.Audio.FfmpegPath != ""
+
+	// Use FLAC if FFmpeg is available, otherwise fall back to WAV
+	if ffmpegAvailable {
+		// Encode PCM data to FLAC format with normalization
+		audioBuffer, err = encodeFlacUsingFFmpeg(pcmData, b.Settings)
+		if err != nil {
+			log.Printf("❌ Failed to encode/normalize PCM to FLAC, falling back to WAV: %v\n", err)
+			// Fall back to WAV if FLAC encoding fails
+			audioBuffer, err = encodePCMtoWAV(pcmData)
+			if err != nil {
+				log.Printf("❌ Failed to encode PCM to WAV: %v\n", err)
+				return "", fmt.Errorf("failed to encode PCM to WAV after FLAC failure: %w", err)
+			}
+			audioExt = "wav"
+		} else {
+			audioExt = "flac"
+			log.Printf("✅ Using FLAC format for BirdWeather upload")
+		}
+	} else {
+		// Encode PCM data to WAV format
+		audioBuffer, err = encodePCMtoWAV(pcmData)
+		if err != nil {
+			log.Printf("❌ Failed to encode PCM to WAV: %v\n", err)
+			return "", fmt.Errorf("failed to encode PCM to WAV: %w", err)
+		}
+		audioExt = "wav"
 	}
 
-	// If debug is enabled, save the WAV file locally with timestamp information
+	// If debug is enabled, save the audio file locally with timestamp information
 	if b.Settings.Realtime.Birdweather.Debug {
 		// Parse the timestamp
 		parsedTime, parseErr := time.Parse("2006-01-02T15:04:05.000-0700", timestamp)
 		if parseErr != nil {
-			log.Printf("🔍 Attempting to save debug WAV file with timestamp: %s", timestamp)
-			log.Printf("⚠️ Warning: couldn't parse timestamp for debug WAV file: %v", parseErr)
+			log.Printf("🔍 Attempting to save debug %s file with timestamp: %s", audioExt, timestamp)
+			log.Printf("⚠️ Warning: couldn't parse timestamp for debug %s file: %v", audioExt, parseErr)
 		} else {
-			// Create a debug directory for WAV files
-			debugDir := filepath.Join("debug", "birdweather", "wav")
+			// Create a debug directory for audio files
+			debugDir := filepath.Join("debug", "birdweather", audioExt)
 
 			// Generate a unique filename based on the timestamp
-			debugFilename := filepath.Join(debugDir, fmt.Sprintf("bw_debug_%s.wav",
-				parsedTime.Format("20060102_150405")))
+			debugFilename := filepath.Join(debugDir, fmt.Sprintf("bw_debug_%s.%s",
+				parsedTime.Format("20060102_150405"), audioExt))
 
 			// Calculate the end time (3 seconds after start)
 			endTime := parsedTime.Add(3 * time.Second)
 
-			// Save the WAV buffer with timestamp information
-			wavCopy := bytes.NewBuffer(wavBuffer.Bytes())
-			if saveErr := saveBufferToWAV(wavCopy, debugFilename, parsedTime, endTime); saveErr != nil {
-				log.Printf("⚠️ Warning: couldn't save debug WAV file: %v", saveErr)
+			// Save the audio buffer with timestamp information
+			audioCopy := bytes.NewBuffer(audioBuffer.Bytes())
+			if saveErr := saveBufferToFile(audioCopy, debugFilename, parsedTime, endTime); saveErr != nil {
+				log.Printf("⚠️ Warning: couldn't save debug %s file: %v", audioExt, saveErr)
 			} else {
-				log.Printf("✅ Saved debug WAV file to %s", debugFilename)
+				log.Printf("✅ Saved debug %s file to %s", audioExt, debugFilename)
 			}
 		}
 	}
 
-	// Compress the WAV data
-	var gzipWavData bytes.Buffer
-	gzipWriter := gzip.NewWriter(&gzipWavData)
-	if _, err := io.Copy(gzipWriter, wavBuffer); err != nil {
-		log.Printf("❌ Failed to compress WAV data: %v\n", err)
-		return "", fmt.Errorf("failed to compress WAV data: %w", err)
+	// Compress the audio data
+	var gzipAudioData bytes.Buffer
+	gzipWriter := gzip.NewWriter(&gzipAudioData)
+	if _, err := io.Copy(gzipWriter, audioBuffer); err != nil {
+		log.Printf("❌ Failed to compress %s data: %v\n", audioExt, err)
+		return "", fmt.Errorf("failed to compress %s data: %w", audioExt, err)
 	}
 	if err := gzipWriter.Close(); err != nil {
 		log.Printf("❌ Failed to finalize compression: %v\n", err)
@@ -164,8 +222,9 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	}
 
 	// Create and execute the POST request
-	soundscapeURL := fmt.Sprintf("https://app.birdweather.com/api/v1/stations/%s/soundscapes?timestamp=%s", b.BirdweatherID, timestamp)
-	req, err := http.NewRequest("POST", soundscapeURL, &gzipWavData)
+	soundscapeURL := fmt.Sprintf("https://app.birdweather.com/api/v1/stations/%s/soundscapes?timestamp=%s&type=%s",
+		b.BirdweatherID, timestamp, audioExt)
+	req, err := http.NewRequest("POST", soundscapeURL, &gzipAudioData)
 	if err != nil {
 		log.Printf("❌ Failed to create POST request: %v\n", err)
 		return "", fmt.Errorf("failed to create POST request: %w", err)
