@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 	"math"
 	"os"
@@ -234,7 +235,7 @@ func TestContextTimeout(t *testing.T) {
 	if err == nil {
 		t.Error("Expected context timeout error, got nil")
 	}
-	if err != context.DeadlineExceeded {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Expected context.DeadlineExceeded error, got: %v", err)
 	}
 }
