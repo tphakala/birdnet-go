@@ -297,7 +297,10 @@ func TestUploadSoundscape_ServerError(t *testing.T) {
 	// Create client with mocked URL
 	settings := MockSettings()
 	client, _ := New(settings)
-	client.HTTPClient = server.Client()
+	// Use the same mockTransport as the successful test to redirect the request
+	client.HTTPClient.Transport = &mockTransport{
+		server: server,
+	}
 
 	// Create test PCM data
 	pcmData := make([]byte, 48000)
