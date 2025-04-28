@@ -18,9 +18,10 @@ type AgeCleanupResult struct {
 }
 
 // AgeBasedCleanup removes clips from the filesystem based on their age and the number of clips per species.
+// It now accepts settings directly to avoid global state dependency.
 // Returns an AgeCleanupResult containing error, number of clips removed, and current disk utilization percentage.
-func AgeBasedCleanup(quit <-chan struct{}, db Interface) AgeCleanupResult {
-	settings := conf.Setting() // Use the singleton getter
+func AgeBasedCleanup(settings *conf.Settings, quit <-chan struct{}, db Interface) AgeCleanupResult {
+	// settings := conf.Setting() // No longer needed, settings are passed in
 
 	debug := settings.Realtime.Audio.Export.Retention.Debug
 	baseDir := settings.Realtime.Audio.Export.Path
@@ -28,7 +29,21 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) AgeCleanupResult {
 	retentionPeriodStr := settings.Realtime.Audio.Export.Retention.MaxAge
 
 	retentionPeriodInHours, err := conf.ParseRetentionPeriod(retentionPeriodStr)
-	if err != nil {
+	// --- TEMPORARY DEBUGGING --- Remove after resolving
+	// Add a require.Error check here in the main code to ensure ParseRetentionPeriod IS returning an error
+	/* // Removing the temporary debug check
+	if retentionPeriodStr == "invalid" {
+		// In a real scenario, you wouldn't use require in non-test code,
+		// but this helps pinpoint the issue during debugging.
+		// We expect err to be non-nil here when retentionPeriodStr is "invalid".
+		if err == nil {
+			// This should ideally not happen based on ParseRetentionPeriod logic.
+			// If it does, something is fundamentally wrong with the call or the function itself.
+			log.Fatalf("FATAL DEBUG: conf.ParseRetentionPeriod(\"invalid\") returned nil error unexpectedly!")
+		}
+	}
+	*/              // --- END TEMPORARY DEBUGGING ---
+	if err != nil { // Should enter this block because ParseRetentionPeriod("invalid") returns error
 		log.Printf("Invalid retention period format '%s': %v\n", retentionPeriodStr, err)
 		// Attempt to get disk usage even on config error, if possible
 		diskUsage, diskErr := GetDiskUsage(baseDir)

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // TestInvalidFileNameErrorMessages tests that the error messages for invalid file names are detailed
@@ -160,8 +161,19 @@ func TestCleanupReturnValues(t *testing.T) {
 
 	// Test AgeBasedCleanup
 	t.Run("AgeBasedCleanup", func(t *testing.T) {
-		// Call AgeBasedCleanup
-		result := AgeBasedCleanup(quitChan, mockDB)
+		// Call AgeBasedCleanup in a goroutine so we can close the channel
+		var result AgeCleanupResult
+		done := make(chan bool)
+		go func() {
+			// Need a mock settings for age-based cleanup call
+			mockAgeSettings := &conf.Settings{}
+			result = AgeBasedCleanup(mockAgeSettings, quitChan, mockDB)
+			done <- true
+		}()
+
+		// Close the quit channel to signal the function to stop
+		close(quitChan)
+		<-done // Wait for the goroutine to finish
 
 		// Verify the return values
 		if result.Err != nil {
@@ -178,8 +190,20 @@ func TestCleanupReturnValues(t *testing.T) {
 
 	// Test UsageBasedCleanup
 	t.Run("UsageBasedCleanup", func(t *testing.T) {
-		// Call UsageBasedCleanup
-		result := UsageBasedCleanup(quitChan, mockDB)
+		// Recreate quitChan for this subtest
+		quitChanSub := make(chan struct{})
+
+		// Call UsageBasedCleanup in a goroutine
+		var result UsageCleanupResult
+		done := make(chan bool)
+		go func() {
+			result = UsageBasedCleanup(quitChanSub, mockDB)
+			done <- true
+		}()
+
+		// Close the quit channel to signal the function to stop
+		close(quitChanSub)
+		<-done // Wait for the goroutine to finish
 
 		// Verify the return values
 		if result.Err != nil {
