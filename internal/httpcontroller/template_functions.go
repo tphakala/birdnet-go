@@ -31,6 +31,7 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"mod":                   modFunc,
 		"seq":                   seqFunc,
 		"dict":                  dictFunc,
+		"list":                  listFunc,
 		"even":                  even,
 		"ge":                    geFunc,
 		"calcWidth":             calcWidth,
@@ -393,4 +394,10 @@ func geFunc(a, b interface{}) bool {
 // roundToNearest rounds a number to the nearest multiple of another number
 func roundToNearest(value, multiple int) int {
 	return int(math.Round(float64(value)/float64(multiple)) * float64(multiple))
+}
+
+// listFunc creates a list of interface values.
+// This is useful for creating ordered lists for templates.
+func listFunc(items ...interface{}) []interface{} {
+	return items
 }
