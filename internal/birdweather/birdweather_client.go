@@ -17,11 +17,18 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
+
+// targetIntegratedLoudnessLUFS defines the target loudness for normalization.
+// EBU R128 standard target is -23 LUFS.
+const targetIntegratedLoudnessLUFS = -23.0
 
 // SoundscapeResponse represents the JSON structure of the response from the Birdweather API when uploading a soundscape.
 type SoundscapeResponse struct {
@@ -108,6 +115,112 @@ func handleNetworkError(err error) error {
 	return fmt.Errorf("network error: %w", err)
 }
 
+// encodeFlacUsingFFmpeg converts PCM data to FLAC format using FFmpeg directly into a bytes buffer.
+// It applies a simple gain adjustment instead of dynamic loudness normalization to avoid pumping effects.
+// This avoids writing temporary files to disk.
+// It accepts a context for timeout/cancellation control and the explicit path to the FFmpeg executable.
+func encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ffmpegPath string, settings *conf.Settings) (*bytes.Buffer, error) {
+	// Add check for empty pcmData
+	if len(pcmData) == 0 {
+		return nil, fmt.Errorf("pcmData is empty")
+	}
+
+	// ffmpegPath is now passed directly
+
+	// --- Pass 1: Analyze Loudness ---
+	log.Println("🔊 Performing loudness analysis (Pass 1)")
+	// Use the provided context for the analysis
+	loudnessStats, err := myaudio.AnalyzeAudioLoudnessWithContext(ctx, pcmData, ffmpegPath)
+	if err != nil {
+		// Check if the error is due to context cancellation
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("⚠️ Loudness analysis cancelled or timed out: %v", err)
+			return nil, err // Propagate context error
+		}
+
+		log.Printf("⚠️ Loudness analysis (Pass 1) failed: %v. Falling back to single-pass gain adjustment.", err)
+		// Fallback to a conservative fixed gain adjustment
+		// A fixed gain of 15dB is a reasonable middle ground for bird call recordings
+		gainValue := 15.0
+		volumeArgs := fmt.Sprintf("volume=%.1fdB", gainValue)
+		customArgs := []string{
+			"-af", volumeArgs, // Simple gain adjustment
+			"-c:a", "flac",
+			"-f", "flac",
+		}
+
+		// Use the provided context for the fallback export operation
+		buffer, err := myaudio.ExportAudioWithCustomFFmpegArgsContext(ctx, pcmData, ffmpegPath, customArgs)
+		if err != nil {
+			log.Printf("❌ Fallback FLAC export with fixed gain failed: %v", err)
+			return nil, fmt.Errorf("fallback FLAC export with fixed gain failed: %w", err)
+		}
+		log.Printf("✅ Encoded PCM to FLAC using fixed %.1f dB gain (fallback)", gainValue)
+		return buffer, nil
+	}
+
+	log.Printf("📊 Loudness analysis results: I=%.2f, LRA=%.2f, TP=%.2f, Thresh=%.2f",
+		parseDouble(loudnessStats.InputI, -99.0),
+		parseDouble(loudnessStats.InputLRA, 0.0),
+		parseDouble(loudnessStats.InputTP, -99.0),
+		parseDouble(loudnessStats.InputThresh, -99.0))
+
+	// --- Calculate gain needed to reach target loudness ---
+	inputLUFS := parseDouble(loudnessStats.InputI, -70.0)
+	gainNeeded := targetIntegratedLoudnessLUFS - inputLUFS
+
+	// Apply safety limits to prevent excessive amplification or attenuation
+	maxGain := 30.0 // Maximum gain in dB (absolute value)
+	if gainNeeded > maxGain {
+		log.Printf("⚠️ Limiting gain from %.2f dB to %.2f dB to prevent excessive noise amplification",
+			gainNeeded, maxGain)
+		gainNeeded = maxGain
+	} else if gainNeeded < -maxGain {
+		log.Printf("⚠️ Limiting gain from %.2f dB to %.2f dB to prevent excessive attenuation",
+			gainNeeded, -maxGain)
+		gainNeeded = -maxGain
+	}
+
+	// Log the gain that will be applied
+	if settings.Realtime.Birdweather.Debug {
+		log.Printf("💡 Approx. gain based on Target I (%.1f LUFS) and Measured I (%.2f LUFS): %.2f dB",
+			targetIntegratedLoudnessLUFS, inputLUFS, gainNeeded)
+	}
+
+	// --- Pass 2: Apply simple gain adjustment and encode ---
+	log.Println("🔊 Applying gain adjustment and encoding to FLAC (Pass 2)")
+
+	// Use simple volume filter instead of loudnorm
+	volumeArgs := fmt.Sprintf("volume=%.2fdB", gainNeeded)
+
+	customArgs := []string{
+		"-af", volumeArgs, // Simple gain adjustment filter
+		"-c:a", "flac", // Output codec: FLAC
+		"-f", "flac", // Output format: FLAC
+	}
+
+	// Use the provided context for the final encoding operation
+	buffer, err := myaudio.ExportAudioWithCustomFFmpegArgsContext(ctx, pcmData, ffmpegPath, customArgs)
+	if err != nil {
+		log.Printf("❌ FFmpeg FLAC encoding with gain adjustment failed: %v", err)
+		return nil, fmt.Errorf("failed to export PCM to FLAC with gain adjustment: %w", err)
+	}
+
+	log.Printf("✅ Encoded PCM to FLAC with %.2f dB gain adjustment", gainNeeded)
+
+	// Return the buffer containing the FLAC data
+	return buffer, nil
+}
+
+// parseDouble safely parses a string to float64, returning defaultValue on error.
+func parseDouble(s string, defaultValue float64) float64 {
+	val, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil {
+		return defaultValue
+	}
+	return val
+}
+
 // UploadSoundscape uploads a soundscape file to the Birdweather API and returns the soundscape ID if successful.
 // It handles the PCM to WAV conversion, compresses the data, and manages HTTP request creation and response handling safely.
 func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscapeID string, err error) {
@@ -116,47 +229,94 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 		return "", fmt.Errorf("pcmData is empty")
 	}
 
-	// Encode PCM data to WAV format
-	wavBuffer, err := encodePCMtoWAV(pcmData)
-	if err != nil {
-		log.Printf("❌ Failed to encode PCM to WAV: %v\n", err)
-		return "", fmt.Errorf("failed to encode PCM to WAV: %w", err)
+	// Create a variable to hold the audio data buffer and extension
+	var audioBuffer *bytes.Buffer
+	var audioExt string
+
+	// Create a context with timeout for potentially long operations like encoding
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Use the validated FFmpeg path from settings.
+	// This path is determined during config validation (ValidateAudioSettings)
+	// and is either an explicit valid path, a path found in PATH, or empty if unavailable.
+	ffmpegPathForExec := b.Settings.Realtime.Audio.FfmpegPath
+	ffmpegAvailable := ffmpegPathForExec != ""
+
+	// Use FLAC if FFmpeg is available, otherwise fall back to WAV
+	if ffmpegAvailable {
+		// Encode PCM data to FLAC format with normalization, passing the context and validated path
+		audioBuffer, err = encodeFlacUsingFFmpeg(ctx, pcmData, ffmpegPathForExec, b.Settings)
+		if err != nil {
+			// Log the FLAC encoding error
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				log.Printf("⚠️ FLAC encoding timed out or was cancelled, falling back to WAV: %v\n", err)
+			} else {
+				log.Printf("❌ Failed to encode/normalize PCM to FLAC, falling back to WAV: %v\n", err)
+			}
+
+			// Fall back to WAV if FLAC encoding fails, using a *new* context
+			wavCtx, cancelWav := context.WithTimeout(context.Background(), 30*time.Second) // Fresh timeout for WAV
+			defer cancelWav()
+			audioBuffer, err = myaudio.EncodePCMtoWAVWithContext(wavCtx, pcmData)
+			if err != nil {
+				log.Printf("❌ Failed to encode PCM to WAV after FLAC failure: %v\n", err)
+				return "", fmt.Errorf("failed to encode PCM to WAV after FLAC failure: %w", err)
+			}
+			audioExt = "wav"
+			log.Printf("✅ Using WAV format for BirdWeather upload (fallback)")
+		} else {
+			audioExt = "flac"
+			log.Printf("✅ Using FLAC format for BirdWeather upload")
+		}
+	} else {
+		log.Println("🔊 FFmpeg not available (checked configured path and system PATH), encoding to WAV format")
+		// Encode PCM data to WAV format using a dedicated context
+		wavCtx, cancelWav := context.WithTimeout(context.Background(), 30*time.Second) // Fresh timeout for WAV
+		defer cancelWav()
+		audioBuffer, err = myaudio.EncodePCMtoWAVWithContext(wavCtx, pcmData)
+		if err != nil {
+			log.Printf("❌ Failed to encode PCM to WAV: %v\n", err)
+			return "", fmt.Errorf("failed to encode PCM to WAV: %w", err)
+		}
+		audioExt = "wav"
+		log.Printf("✅ Using WAV format for BirdWeather upload")
 	}
 
-	// If debug is enabled, save the WAV file locally with timestamp information
+	// If debug is enabled, save the audio file locally with timestamp information
 	if b.Settings.Realtime.Birdweather.Debug {
 		// Parse the timestamp
 		parsedTime, parseErr := time.Parse("2006-01-02T15:04:05.000-0700", timestamp)
 		if parseErr != nil {
-			log.Printf("🔍 Attempting to save debug WAV file with timestamp: %s", timestamp)
-			log.Printf("⚠️ Warning: couldn't parse timestamp for debug WAV file: %v", parseErr)
+			log.Printf("🔍 Attempting to save debug %s file with timestamp: %s", audioExt, timestamp)
+			log.Printf("⚠️ Warning: couldn't parse timestamp for debug %s file: %v", audioExt, parseErr)
 		} else {
-			// Create a debug directory for WAV files
-			debugDir := filepath.Join("debug", "birdweather", "wav")
+			// Create a debug directory for audio files
+			debugDir := filepath.Join("debug", "birdweather", audioExt)
 
 			// Generate a unique filename based on the timestamp
-			debugFilename := filepath.Join(debugDir, fmt.Sprintf("bw_debug_%s.wav",
-				parsedTime.Format("20060102_150405")))
+			debugFilename := filepath.Join(debugDir, fmt.Sprintf("bw_debug_%s.%s",
+				parsedTime.Format("20060102_150405"), audioExt))
 
 			// Calculate the end time (3 seconds after start)
 			endTime := parsedTime.Add(3 * time.Second)
 
-			// Save the WAV buffer with timestamp information
-			wavCopy := bytes.NewBuffer(wavBuffer.Bytes())
-			if saveErr := saveBufferToWAV(wavCopy, debugFilename, parsedTime, endTime); saveErr != nil {
-				log.Printf("⚠️ Warning: couldn't save debug WAV file: %v", saveErr)
+			// Save the audio buffer with timestamp information
+			audioCopy := bytes.NewBuffer(audioBuffer.Bytes())
+			if saveErr := saveBufferToFile(audioCopy, debugFilename, parsedTime, endTime); saveErr != nil {
+				log.Printf("⚠️ Warning: couldn't save debug %s file: %v", audioExt, saveErr)
 			} else {
-				log.Printf("✅ Saved debug WAV file to %s", debugFilename)
+				log.Printf("✅ Saved debug %s file to %s", audioExt, debugFilename)
 			}
 		}
 	}
 
-	// Compress the WAV data
-	var gzipWavData bytes.Buffer
-	gzipWriter := gzip.NewWriter(&gzipWavData)
-	if _, err := io.Copy(gzipWriter, wavBuffer); err != nil {
-		log.Printf("❌ Failed to compress WAV data: %v\n", err)
-		return "", fmt.Errorf("failed to compress WAV data: %w", err)
+	// Compress the audio data
+	var gzipAudioData bytes.Buffer
+	gzipWriter := gzip.NewWriter(&gzipAudioData)
+	if _, err := io.Copy(gzipWriter, audioBuffer); err != nil {
+		log.Printf("❌ Failed to compress %s data: %v\n", audioExt, err)
+		return "", fmt.Errorf("failed to compress %s data: %w", audioExt, err)
 	}
 	if err := gzipWriter.Close(); err != nil {
 		log.Printf("❌ Failed to finalize compression: %v\n", err)
@@ -164,8 +324,9 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	}
 
 	// Create and execute the POST request
-	soundscapeURL := fmt.Sprintf("https://app.birdweather.com/api/v1/stations/%s/soundscapes?timestamp=%s", b.BirdweatherID, timestamp)
-	req, err := http.NewRequest("POST", soundscapeURL, &gzipWavData)
+	soundscapeURL := fmt.Sprintf("https://app.birdweather.com/api/v1/stations/%s/soundscapes?timestamp=%s&type=%s",
+		b.BirdweatherID, url.QueryEscape(timestamp), audioExt)
+	req, err := http.NewRequest("POST", soundscapeURL, &gzipAudioData)
 	if err != nil {
 		log.Printf("❌ Failed to create POST request: %v\n", err)
 		return "", fmt.Errorf("failed to create POST request: %w", err)
