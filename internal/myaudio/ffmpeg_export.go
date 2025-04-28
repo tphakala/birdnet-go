@@ -331,9 +331,13 @@ func runCustomFFmpegCommandToBufferWithContext(ctx context.Context, ffmpegPath s
 		case readErr = <-readDoneChan:
 			// Reading has also completed
 		case <-ctx.Done():
+			_ = cmd.Process.Kill() // best-effort kill
+			_ = cmd.Wait()         // reap and free resources
 			return nil, ctx.Err()
 		}
 	case <-ctx.Done():
+		_ = cmd.Process.Kill() // best-effort kill
+		_ = cmd.Wait()         // reap and free resources
 		return nil, ctx.Err()
 	}
 
@@ -351,6 +355,8 @@ func runCustomFFmpegCommandToBufferWithContext(ctx context.Context, ffmpegPath s
 	if err := cmd.Wait(); err != nil {
 		// Check if the error is due to context cancellation
 		if ctx.Err() != nil {
+			// Context was cancelled *after* I/O completed but before Wait finished
+			// Process might already be terminated by Kill in select block, but Wait still needed
 			return nil, ctx.Err()
 		}
 		return nil, fmt.Errorf("FFmpeg failed: %w, stderr: %s", err, stderr.String())
