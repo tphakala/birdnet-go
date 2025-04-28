@@ -272,7 +272,9 @@ func TestEncodeFlacUsingFFmpeg(t *testing.T) {
 	}
 
 	// Encode PCM to FLAC with normalization
-	flacBuffer, err := encodeFlacUsingFFmpeg(pcmData, settings)
+	// Pass a background context since this test doesn't need timeout control itself
+	ctx := context.Background()
+	flacBuffer, err := encodeFlacUsingFFmpeg(ctx, pcmData, settings)
 	if err != nil {
 		t.Errorf("encodeFlacUsingFFmpeg failed with valid input: %v", err)
 		return
