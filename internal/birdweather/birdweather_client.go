@@ -129,7 +129,11 @@ func encodeFlacUsingFFmpeg(pcmData []byte, settings *conf.Settings) (*bytes.Buff
 
 	// --- Pass 1: Analyze Loudness ---
 	log.Println("🔊 Performing loudness analysis (Pass 1)")
-	loudnessStats, err := myaudio.AnalyzeAudioLoudness(pcmData, ffmpegPath)
+	// Create a context with timeout to prevent hanging FFmpeg processes
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	loudnessStats, err := myaudio.AnalyzeAudioLoudnessWithContext(ctx, pcmData, ffmpegPath)
 	if err != nil {
 		log.Printf("⚠️ Loudness analysis (Pass 1) failed: %v. Falling back to single-pass gain adjustment.", err)
 		// Fallback to a conservative fixed gain adjustment
@@ -141,7 +145,12 @@ func encodeFlacUsingFFmpeg(pcmData []byte, settings *conf.Settings) (*bytes.Buff
 			"-c:a", "flac",
 			"-f", "flac",
 		}
-		buffer, err := myaudio.ExportAudioWithCustomFFmpegArgs(pcmData, ffmpegPath, customArgs)
+
+		// Create a new context for the fallback operation
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+
+		buffer, err := myaudio.ExportAudioWithCustomFFmpegArgsContext(ctx, pcmData, ffmpegPath, customArgs)
 		if err != nil {
 			log.Printf("❌ Fallback FLAC export with fixed gain failed: %v", err)
 			return nil, fmt.Errorf("fallback FLAC export with fixed gain failed: %w", err)
@@ -160,12 +169,16 @@ func encodeFlacUsingFFmpeg(pcmData []byte, settings *conf.Settings) (*bytes.Buff
 	inputLUFS := parseDouble(loudnessStats.InputI, -70.0)
 	gainNeeded := targetIntegratedLoudnessLUFS - inputLUFS
 
-	// Apply safety limits to prevent excessive amplification
-	maxGain := 30.0 // Maximum gain in dB
+	// Apply safety limits to prevent excessive amplification or attenuation
+	maxGain := 30.0 // Maximum gain in dB (absolute value)
 	if gainNeeded > maxGain {
 		log.Printf("⚠️ Limiting gain from %.2f dB to %.2f dB to prevent excessive noise amplification",
 			gainNeeded, maxGain)
 		gainNeeded = maxGain
+	} else if gainNeeded < -maxGain {
+		log.Printf("⚠️ Limiting gain from %.2f dB to %.2f dB to prevent excessive attenuation",
+			gainNeeded, -maxGain)
+		gainNeeded = -maxGain
 	}
 
 	// Log the gain that will be applied
@@ -186,8 +199,12 @@ func encodeFlacUsingFFmpeg(pcmData []byte, settings *conf.Settings) (*bytes.Buff
 		"-f", "flac", // Output format: FLAC
 	}
 
+	// Create a new context for the final encoding operation
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel2()
+
 	// Use the custom FFmpeg export function for the second pass
-	buffer, err := myaudio.ExportAudioWithCustomFFmpegArgs(pcmData, ffmpegPath, customArgs)
+	buffer, err := myaudio.ExportAudioWithCustomFFmpegArgsContext(ctx2, pcmData, ffmpegPath, customArgs)
 	if err != nil {
 		log.Printf("❌ FFmpeg FLAC encoding with gain adjustment failed: %v", err)
 		return nil, fmt.Errorf("failed to export PCM to FLAC with gain adjustment: %w", err)
@@ -220,6 +237,10 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	var audioBuffer *bytes.Buffer
 	var audioExt string
 
+	// Create a context with timeout for FFmpeg operations
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	// Check if FFmpeg is available
 	ffmpegAvailable := conf.IsFfmpegAvailable() && b.Settings.Realtime.Audio.FfmpegPath != ""
 
@@ -230,7 +251,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 		if err != nil {
 			log.Printf("❌ Failed to encode/normalize PCM to FLAC, falling back to WAV: %v\n", err)
 			// Fall back to WAV if FLAC encoding fails
-			audioBuffer, err = encodePCMtoWAV(pcmData)
+			audioBuffer, err = myaudio.EncodePCMtoWAVWithContext(ctx, pcmData)
 			if err != nil {
 				log.Printf("❌ Failed to encode PCM to WAV: %v\n", err)
 				return "", fmt.Errorf("failed to encode PCM to WAV after FLAC failure: %w", err)
@@ -242,7 +263,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 		}
 	} else {
 		// Encode PCM data to WAV format
-		audioBuffer, err = encodePCMtoWAV(pcmData)
+		audioBuffer, err = myaudio.EncodePCMtoWAVWithContext(ctx, pcmData)
 		if err != nil {
 			log.Printf("❌ Failed to encode PCM to WAV: %v\n", err)
 			return "", fmt.Errorf("failed to encode PCM to WAV: %w", err)
