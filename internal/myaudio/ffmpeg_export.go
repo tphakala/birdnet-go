@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -66,12 +68,17 @@ func finalizeOutput(tempFilePath string) error {
 }
 
 // runFFmpegCommand executes the FFmpeg command to process the audio
+// This version includes a context timeout to prevent hangs.
 func runFFmpegCommand(ffmpegPath string, pcmData []byte, tempFilePath string, settings *conf.AudioSettings) error {
 	// Build the FFmpeg command arguments
 	args := buildFFmpegArgs(tempFilePath, settings)
 
-	// Create the FFmpeg command
-	cmd := exec.Command(ffmpegPath, args...)
+	// Create a context with a timeout (e.g., 30 seconds)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Create the FFmpeg command with context
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
 
 	// Create a pipe to send PCM data to FFmpeg's stdin
 	stdin, err := cmd.StdinPipe()
@@ -79,21 +86,59 @@ func runFFmpegCommand(ffmpegPath string, pcmData []byte, tempFilePath string, se
 		return fmt.Errorf("failed to create stdin pipe: %w", err)
 	}
 
+	// Capture stderr for error reporting
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
 	// Start the FFmpeg command
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start FFmpeg: %w", err)
+		// Check if the error is due to context cancellation
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("failed to start FFmpeg (timeout): %w", ctx.Err())
+		}
+		return fmt.Errorf("failed to start FFmpeg: %w, stderr: %s", err, stderr.String())
 	}
 
-	// Write PCM data to FFmpeg's stdin
-	if _, err := stdin.Write(pcmData); err != nil {
-		return fmt.Errorf("failed to write PCM data to FFmpeg: %w", err)
+	// Write PCM data to FFmpeg's stdin in a separate goroutine
+	writeErrChan := make(chan error, 1)
+	go func() {
+		defer stdin.Close() // Close stdin when writing is done
+
+		// Check if context is already done before writing
+		select {
+		case <-ctx.Done():
+			writeErrChan <- ctx.Err()
+			return
+		default:
+			// Continue with writing
+		}
+
+		_, writeErr := stdin.Write(pcmData)
+		writeErrChan <- writeErr
+	}()
+
+	// Wait for the write to complete or for context to be cancelled
+	select {
+	case writeErr := <-writeErrChan:
+		if writeErr != nil {
+			// Attempt to kill the process if write failed mid-way
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait() // Clean up resources
+			return fmt.Errorf("failed to write PCM data to FFmpeg: %w, stderr: %s", writeErr, stderr.String())
+		}
+	case <-ctx.Done():
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return fmt.Errorf("context cancelled during write: %w", ctx.Err())
 	}
-	// Close stdin to signal end of input
-	stdin.Close()
 
 	// Wait for FFmpeg to finish processing
 	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("FFmpeg failed: %w", err)
+		// Check if the error is due to context cancellation
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("FFmpeg command timed out: %w", ctx.Err())
+		}
+		return fmt.Errorf("FFmpeg command failed: %w, stderr: %s", err, stderr.String())
 	}
 
 	// Return nil if everything succeeded
@@ -373,7 +418,7 @@ func AnalyzeAudioLoudnessWithContext(ctx context.Context, pcmData []byte, ffmpeg
 		"-ar", ffmpegSampleRate, // Sample rate
 		"-ac", ffmpegNumChannels, // Number of channels
 		"-i", "-", // Read from stdin
-		"-af", fmt.Sprintf("loudnorm=I=-23:LRA=7:TP=-2:print_format=json"), // Loudnorm analysis
+		"-af", "loudnorm=I=-23:LRA=7:TP=-2:print_format=json", // Loudnorm analysis
 		"-f", "null", // Output to null device
 		"-", // Output to stdout (null device doesn't create any actual output)
 	}
