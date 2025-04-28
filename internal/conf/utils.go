@@ -391,6 +391,34 @@ func IsSoxAvailable() (isAvailable bool, formats []string) {
 	return true, audioFormats // SoX is available, return the list of supported formats
 }
 
+// ValidateToolPath checks if a tool is available, either at an explicit path or in the system PATH.
+// It returns the validated path to the tool if found, or an empty string and an error otherwise.
+func ValidateToolPath(configuredPath string, toolName string) (string, error) {
+	if configuredPath != "" {
+		// Check if the explicitly configured path exists and is a file
+		if info, err := os.Stat(configuredPath); err == nil && !info.IsDir() {
+			// Ideally, we'd check execute permissions here, but os.Stat doesn't provide a cross-platform way.
+			// We assume if it exists and isn't a directory, it's likely the executable.
+			// The actual execution will fail later if it's not executable.
+			return configuredPath, nil
+		}
+		// If configured path is invalid, log a warning but still check PATH as a fallback
+		log.Printf("Warning: Configured path '%s' for tool '%s' is invalid or not found. Checking system PATH.", configuredPath, toolName)
+	}
+
+	// If no configured path or the configured path was invalid, check the system PATH
+	pathFromLookPath, err := exec.LookPath(toolName)
+	if err == nil {
+		return pathFromLookPath, nil // Found in PATH
+	}
+
+	// If not found in configured path or system PATH
+	if configuredPath != "" {
+		return "", fmt.Errorf("tool '%s' not found at configured path '%s' or in system PATH", toolName, configuredPath)
+	}
+	return "", fmt.Errorf("tool '%s' not found in system PATH and no path configured", toolName)
+}
+
 // moveFile moves a file from src to dst, working across devices
 func moveFile(src, dst string) error {
 	// Try to rename the file first (this works for moves within the same filesystem)
