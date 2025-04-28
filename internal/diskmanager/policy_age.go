@@ -88,10 +88,6 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) AgeCleanupResult {
 	})
 	if debug {
 		log.Printf("Sorted %d files by timestamp (oldest first).", len(files))
-		// Optionally log the first few files to confirm sorting
-		// for k := 0; k < min(5, len(files)); k++ {
-		//  log.Printf("  - File %d: %s (%s)", k, files[k].Path, files[k].Timestamp)
-		// }
 	}
 
 	// Create a map to keep track of the number of files per species per subdirectory
@@ -100,13 +96,6 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) AgeCleanupResult {
 	globalSpeciesCount := buildGlobalSpeciesCountMap(files)
 	if debug {
 		log.Printf("Built global species count map. Found %d distinct species overall.", len(globalSpeciesCount))
-		// Optional: Log counts for a few species
-		// count := 0
-		// for species, num := range globalSpeciesCount {
-		//  log.Printf("  - Species: %s, Count: %d", species, num)
-		//  count++
-		//  if count >= 5 { break }
-		// }
 	}
 
 	// Define the policy-specific deletion logic for age-based cleanup

@@ -63,8 +63,8 @@ func buildGlobalSpeciesCountMap(files []FileInfo) map[string]int {
 }
 
 // ShouldDeleteFunc defines the signature for policy-specific deletion logic.
-// It returns true if the file should be considered for deletion based on the policy.
-// It also returns the current disk usage if relevant/calculated, otherwise -1.
+// Return `true` if the file should be deleted according to the policy.
+// The second return value is an error, if policy evaluation failed.
 type ShouldDeleteFunc func(file *FileInfo, params *CleanupParameters, currentDiskUsage float64) (shouldDelete bool, err error)
 
 // deleteFile removes a file from the filesystem and attempts to remove its corresponding .png file
