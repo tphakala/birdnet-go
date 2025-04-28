@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"math"
+	"os"
 	"testing"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 func TestEncodePCMtoWAV_EmptyInput(t *testing.T) {
@@ -203,4 +207,83 @@ func TestEncodePCMtoWAV_LargeInput(t *testing.T) {
 	if len(wavData) != expectedSize {
 		t.Errorf("Expected WAV size to be %d bytes, got %d bytes", expectedSize, len(wavData))
 	}
+}
+
+func TestEncodeFlacUsingFFmpeg(t *testing.T) {
+	// Skip the test if FFmpeg is not available
+	if !conf.IsFfmpegAvailable() {
+		t.Skip("FFmpeg not available, skipping FLAC encoding test")
+	}
+
+	// Create a settings object with ffmpeg path
+	settings := &conf.Settings{
+		Realtime: conf.RealtimeSettings{
+			Audio: conf.AudioSettings{
+				FfmpegPath: getFFmpegPath(),
+			},
+			Birdweather: conf.BirdweatherSettings{
+				Debug: true, // Enable debug for testing
+			},
+		},
+	}
+
+	// Create test PCM data (1 second of audio at 48kHz, 16-bit mono)
+	// Using a simple sine wave pattern for better normalization testing
+	sampleCount := 48000 // 1 second at 48kHz
+	pcmData := make([]byte, sampleCount*2)
+
+	// Generate a sine wave at 440Hz (A4 note)
+	for i := 0; i < sampleCount; i++ {
+		// Calculate sine wave value (-32767 to 32767)
+		value := int16(32767.0 * math.Sin(2.0*math.Pi*440.0*float64(i)/48000.0))
+		// Convert to bytes and store in PCM data
+		binary.LittleEndian.PutUint16(pcmData[i*2:], uint16(value))
+	}
+
+	// Encode PCM to FLAC with normalization
+	flacBuffer, err := encodeFlacUsingFFmpeg(pcmData, settings)
+	if err != nil {
+		t.Errorf("encodeFlacUsingFFmpeg failed with valid input: %v", err)
+		return
+	}
+
+	// Basic validation
+	if flacBuffer == nil {
+		t.Fatal("encodeFlacUsingFFmpeg returned nil buffer")
+	}
+
+	flacBytes := flacBuffer.Bytes()
+
+	// Verify minimum size - FLAC files should be at least 42 bytes
+	// (4-byte "fLaC" marker + minimal metadata blocks + frame header)
+	if len(flacBytes) < 42 {
+		t.Fatalf("FLAC data too small, got %d bytes", len(flacBytes))
+	}
+
+	// Check for FLAC signature - "fLaC" at the beginning of the file
+	if !bytes.Equal(flacBytes[0:4], []byte("fLaC")) {
+		t.Fatalf("FLAC signature not found, got %v", flacBytes[0:4])
+	}
+
+	// Verify the file is at least as big as would be expected for 1 second of audio
+	// Conservatively, FLAC of silence should compress to at least 1/10 of the PCM size
+	minExpectedSize := len(pcmData) / 10
+	if len(flacBytes) < minExpectedSize {
+		t.Errorf("FLAC file suspiciously small: %d bytes (expected at least %d)",
+			len(flacBytes), minExpectedSize)
+	}
+
+	t.Logf("Successfully encoded PCM to normalized FLAC, size: %d bytes", flacBuffer.Len())
+}
+
+// helper function to get FFmpeg path
+func getFFmpegPath() string {
+	// First try the environment
+	ffmpegPath := os.Getenv("FFMPEG_PATH")
+	if ffmpegPath != "" {
+		return ffmpegPath
+	}
+
+	// Otherwise use default binary name
+	return conf.GetFfmpegBinaryName()
 }
