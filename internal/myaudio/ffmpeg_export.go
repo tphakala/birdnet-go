@@ -2,11 +2,13 @@ package myaudio
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -285,4 +287,98 @@ func validateFFmpegPathInternal(ffmpegPath string) error {
 	}
 	// Basic check passed (exists either at path or in system PATH)
 	return nil
+}
+
+// LoudnessStats holds the measured loudness statistics from FFmpeg's loudnorm filter.
+type LoudnessStats struct {
+	InputI            string `json:"input_i"`
+	InputTP           string `json:"input_tp"`
+	InputLRA          string `json:"input_lra"`
+	InputThresh       string `json:"input_thresh"`
+	OutputI           string `json:"output_i"`      // Not used for 2-pass, but part of JSON
+	OutputTP          string `json:"output_tp"`     // Not used for 2-pass
+	OutputLRA         string `json:"output_lra"`    // Not used for 2-pass
+	OutputThresh      string `json:"output_thresh"` // Not used for 2-pass
+	NormalizationType string `json:"normalization_type"`
+	TargetOffset      string `json:"target_offset"` // Not used for 2-pass
+}
+
+// AnalyzeAudioLoudness runs the first pass of FFmpeg's loudnorm filter to get audio statistics.
+func AnalyzeAudioLoudness(pcmData []byte, ffmpegPath string) (*LoudnessStats, error) {
+	// Validate the FFmpeg path
+	if err := validateFFmpegPathInternal(ffmpegPath); err != nil {
+		return nil, err
+	}
+
+	// Get standard input format arguments
+	ffmpegSampleRate, ffmpegNumChannels, ffmpegFormat := getFFmpegFormat(conf.SampleRate, conf.NumChannels, conf.BitDepth)
+
+	// Build arguments for Pass 1 analysis
+	args := []string{
+		"-f", ffmpegFormat, // Input format
+		"-ar", ffmpegSampleRate, // Sample rate
+		"-ac", ffmpegNumChannels, // Channels
+		"-i", "-", // Read from stdin
+		"-af", "loudnorm=print_format=json", // Loudnorm filter in analysis mode
+		"-f", "null", // Null output format
+		"-", // Null output destination
+	}
+
+	cmd := exec.Command(ffmpegPath, args...)
+
+	// Create pipe for stdin
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("loudness analysis: failed to create stdin pipe: %w", err)
+	}
+
+	// Capture stderr, as loudnorm prints JSON there
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	// Start command
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("loudness analysis: failed to start ffmpeg: %w", err)
+	}
+
+	// Write PCM data in a goroutine
+	writeErrChan := make(chan error, 1)
+	go func() {
+		defer stdin.Close()
+		_, writeErr := stdin.Write(pcmData)
+		writeErrChan <- writeErr
+	}()
+
+	// Wait for command completion and check write error
+	waitErr := cmd.Wait()
+	writeErr := <-writeErrChan
+
+	if writeErr != nil {
+		return nil, fmt.Errorf("loudness analysis: error writing PCM data to ffmpeg: %w, stderr: %s", writeErr, stderr.String())
+	}
+	// Even if waitErr is nil, loudnorm might print JSON, so we continue.
+	// If waitErr is not nil, it indicates a more serious FFmpeg problem.
+	if waitErr != nil && stderr.Len() == 0 { // Only return error if FFmpeg truly failed AND didn't print JSON
+		return nil, fmt.Errorf("loudness analysis: ffmpeg failed: %w, stderr: %s", waitErr, stderr.String())
+	}
+
+	// Extract JSON from stderr
+	// The JSON output is usually the last part of the stderr.
+	stderrStr := stderr.String()
+	jsonStart := strings.LastIndex(stderrStr, "{")
+	jsonEnd := strings.LastIndex(stderrStr, "}")
+
+	if jsonStart == -1 || jsonEnd == -1 || jsonStart > jsonEnd {
+		return nil, fmt.Errorf("loudness analysis: failed to find JSON in ffmpeg stderr. Output: %s", stderrStr)
+	}
+
+	jsonOutput := stderrStr[jsonStart : jsonEnd+1]
+
+	// Parse JSON
+	var stats LoudnessStats
+	if err := json.Unmarshal([]byte(jsonOutput), &stats); err != nil {
+		return nil, fmt.Errorf("loudness analysis: failed to parse JSON from ffmpeg: %w, json: %s", err, jsonOutput)
+	}
+
+	return &stats, nil
 }
