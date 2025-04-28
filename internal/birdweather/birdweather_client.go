@@ -17,12 +17,19 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
+
+// targetIntegratedLoudnessLUFS defines the target loudness for normalization.
+// EBU R128 standard target is -23 LUFS.
+const targetIntegratedLoudnessLUFS = -23.0
+const targetTruePeak = -1.0
+const targetLoudnessRange = 18.0
 
 // SoundscapeResponse represents the JSON structure of the response from the Birdweather API when uploading a soundscape.
 type SoundscapeResponse struct {
@@ -110,7 +117,7 @@ func handleNetworkError(err error) error {
 }
 
 // encodeFlacUsingFFmpeg converts PCM data to FLAC format using FFmpeg directly into a bytes buffer.
-// It applies loudness normalization to match standard streaming loudness levels.
+// It applies a simple gain adjustment instead of dynamic loudness normalization to avoid pumping effects.
 // This avoids writing temporary files to disk.
 func encodeFlacUsingFFmpeg(pcmData []byte, settings *conf.Settings) (*bytes.Buffer, error) {
 	// Add check for empty pcmData
@@ -118,25 +125,87 @@ func encodeFlacUsingFFmpeg(pcmData []byte, settings *conf.Settings) (*bytes.Buff
 		return nil, fmt.Errorf("pcmData is empty")
 	}
 
-	// Define the custom FFmpeg arguments for FLAC encoding with normalization
+	ffmpegPath := settings.Realtime.Audio.FfmpegPath
+
+	// --- Pass 1: Analyze Loudness ---
+	log.Println("🔊 Performing loudness analysis (Pass 1)")
+	loudnessStats, err := myaudio.AnalyzeAudioLoudness(pcmData, ffmpegPath)
+	if err != nil {
+		log.Printf("⚠️ Loudness analysis (Pass 1) failed: %v. Falling back to single-pass gain adjustment.", err)
+		// Fallback to a conservative fixed gain adjustment
+		// A fixed gain of 15dB is a reasonable middle ground for bird call recordings
+		gainValue := 15.0
+		volumeArgs := fmt.Sprintf("volume=%.1fdB", gainValue)
+		customArgs := []string{
+			"-af", volumeArgs, // Simple gain adjustment
+			"-c:a", "flac",
+			"-f", "flac",
+		}
+		buffer, err := myaudio.ExportAudioWithCustomFFmpegArgs(pcmData, ffmpegPath, customArgs)
+		if err != nil {
+			log.Printf("❌ Fallback FLAC export with fixed gain failed: %v", err)
+			return nil, fmt.Errorf("fallback FLAC export with fixed gain failed: %w", err)
+		}
+		log.Printf("✅ Encoded PCM to FLAC using fixed %.1f dB gain (fallback)", gainValue)
+		return buffer, nil
+	}
+
+	log.Printf("📊 Loudness analysis results: I=%.2f, LRA=%.2f, TP=%.2f, Thresh=%.2f",
+		parseDouble(loudnessStats.InputI, -99.0),
+		parseDouble(loudnessStats.InputLRA, 0.0),
+		parseDouble(loudnessStats.InputTP, -99.0),
+		parseDouble(loudnessStats.InputThresh, -99.0))
+
+	// --- Calculate gain needed to reach target loudness ---
+	inputLUFS := parseDouble(loudnessStats.InputI, -70.0)
+	gainNeeded := targetIntegratedLoudnessLUFS - inputLUFS
+
+	// Apply safety limits to prevent excessive amplification
+	maxGain := 30.0 // Maximum gain in dB
+	if gainNeeded > maxGain {
+		log.Printf("⚠️ Limiting gain from %.2f dB to %.2f dB to prevent excessive noise amplification",
+			gainNeeded, maxGain)
+		gainNeeded = maxGain
+	}
+
+	// Log the gain that will be applied
+	if settings.Realtime.Birdweather.Debug {
+		log.Printf("💡 Approx. gain based on Target I (%.1f LUFS) and Measured I (%.2f LUFS): %.2f dB",
+			targetIntegratedLoudnessLUFS, inputLUFS, gainNeeded)
+	}
+
+	// --- Pass 2: Apply simple gain adjustment and encode ---
+	log.Println("🔊 Applying gain adjustment and encoding to FLAC (Pass 2)")
+
+	// Use simple volume filter instead of loudnorm
+	volumeArgs := fmt.Sprintf("volume=%.2fdB", gainNeeded)
+
 	customArgs := []string{
-		"-af", "loudnorm=I=-14:TP=-1:LRA=11", // Loudness normalization filter
+		"-af", volumeArgs, // Simple gain adjustment filter
 		"-c:a", "flac", // Output codec: FLAC
 		"-f", "flac", // Output format: FLAC
 	}
 
-	// Use the custom FFmpeg export function to get the buffer directly
-	buffer, err := myaudio.ExportAudioWithCustomFFmpegArgs(pcmData, settings.Realtime.Audio.FfmpegPath, customArgs)
+	// Use the custom FFmpeg export function for the second pass
+	buffer, err := myaudio.ExportAudioWithCustomFFmpegArgs(pcmData, ffmpegPath, customArgs)
 	if err != nil {
-		// If the combined command fails, return the error
-		log.Printf("❌ FFmpeg FLAC encoding/normalization failed: %v", err)
-		return nil, fmt.Errorf("failed to export/normalize PCM to FLAC: %w", err)
-	} else if settings.Realtime.Birdweather.Debug {
-		log.Println("✅ Encoded and normalized PCM to FLAC in memory")
+		log.Printf("❌ FFmpeg FLAC encoding with gain adjustment failed: %v", err)
+		return nil, fmt.Errorf("failed to export PCM to FLAC with gain adjustment: %w", err)
 	}
+
+	log.Printf("✅ Encoded PCM to FLAC with %.2f dB gain adjustment", gainNeeded)
 
 	// Return the buffer containing the FLAC data
 	return buffer, nil
+}
+
+// parseDouble safely parses a string to float64, returning defaultValue on error.
+func parseDouble(s string, defaultValue float64) float64 {
+	val, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return defaultValue
+	}
+	return val
 }
 
 // UploadSoundscape uploads a soundscape file to the Birdweather API and returns the soundscape ID if successful.
