@@ -361,22 +361,33 @@ func runCustomFFmpegCommandToBufferWithContext(ctx context.Context, ffmpegPath s
 }
 
 // validateFFmpegPathInternal checks if the provided FFmpeg path is valid and executable.
+// If ffmpegPath is empty, it checks if "ffmpeg" is available in the system PATH.
 func validateFFmpegPathInternal(ffmpegPath string) error {
 	if ffmpegPath == "" {
-		return fmt.Errorf("FFmpeg path is not configured")
-	}
-	// Check if the file exists
-	if _, err := os.Stat(ffmpegPath); os.IsNotExist(err) {
-		// If not found at the specified path, try looking in PATH
-		if _, pathErr := exec.LookPath(ffmpegPath); pathErr != nil {
-			return fmt.Errorf("FFmpeg not found at path '%s' or in system PATH: %w", ffmpegPath, err)
+		// If no path provided, check if "ffmpeg" is in the system PATH
+		if _, err := exec.LookPath("ffmpeg"); err != nil {
+			return fmt.Errorf("FFmpeg path is not configured and 'ffmpeg' executable not found in system PATH: %w", err)
 		}
-		// If found in PATH, we can proceed (the path might just be the binary name)
+		// Found in PATH, valid configuration
+		return nil
+	}
+
+	// If a path is provided, validate it specifically
+	// Check if the file exists at the specified path
+	if _, err := os.Stat(ffmpegPath); os.IsNotExist(err) {
+		// If not found at the specified path, check if the name exists in PATH (e.g., user provided just "ffmpeg")
+		if _, pathErr := exec.LookPath(ffmpegPath); pathErr != nil {
+			// Not found at the path AND not found in system PATH
+			return fmt.Errorf("FFmpeg not found at specified path '%s' or in system PATH: %w", ffmpegPath, err)
+		}
+		// Found in PATH (even though not at the literal path), consider it valid
+		return nil
 	} else if err != nil {
 		// Another error occurred during stat (e.g., permission denied)
-		return fmt.Errorf("error accessing FFmpeg path '%s': %w", ffmpegPath, err)
+		return fmt.Errorf("error accessing specified FFmpeg path '%s': %w", ffmpegPath, err)
 	}
-	// Basic check passed (exists either at path or in system PATH)
+
+	// Path exists and is accessible
 	return nil
 }
 

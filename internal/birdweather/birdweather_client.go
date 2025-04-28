@@ -117,14 +117,14 @@ func handleNetworkError(err error) error {
 // encodeFlacUsingFFmpeg converts PCM data to FLAC format using FFmpeg directly into a bytes buffer.
 // It applies a simple gain adjustment instead of dynamic loudness normalization to avoid pumping effects.
 // This avoids writing temporary files to disk.
-// It accepts a context for timeout/cancellation control.
-func encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, settings *conf.Settings) (*bytes.Buffer, error) {
+// It accepts a context for timeout/cancellation control and the explicit path to the FFmpeg executable.
+func encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ffmpegPath string, settings *conf.Settings) (*bytes.Buffer, error) {
 	// Add check for empty pcmData
 	if len(pcmData) == 0 {
 		return nil, fmt.Errorf("pcmData is empty")
 	}
 
-	ffmpegPath := settings.Realtime.Audio.FfmpegPath
+	// ffmpegPath is now passed directly
 
 	// --- Pass 1: Analyze Loudness ---
 	log.Println("🔊 Performing loudness analysis (Pass 1)")
@@ -232,38 +232,57 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	var audioBuffer *bytes.Buffer
 	var audioExt string
 
-	// Create a context with timeout for FFmpeg operations
+	// Create a context with timeout for potentially long operations like encoding
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Check if FFmpeg is available
-	ffmpegAvailable := conf.IsFfmpegAvailable() && b.Settings.Realtime.Audio.FfmpegPath != ""
+	// Check if FFmpeg is available in the system PATH
+	ffmpegAvailable := conf.IsFfmpegAvailable()
+
+	// Determine the effective FFmpeg path to use (explicit setting or default "ffmpeg")
+	ffmpegPathForExec := b.Settings.Realtime.Audio.FfmpegPath
+	if ffmpegPathForExec == "" && ffmpegAvailable {
+		ffmpegPathForExec = "ffmpeg" // Default to rely on PATH if setting is empty and ffmpeg is available
+	}
 
 	// Use FLAC if FFmpeg is available, otherwise fall back to WAV
 	if ffmpegAvailable {
-		// Encode PCM data to FLAC format with normalization, passing the context
-		audioBuffer, err = encodeFlacUsingFFmpeg(ctx, pcmData, b.Settings)
+		// Encode PCM data to FLAC format with normalization, passing the context and resolved path
+		audioBuffer, err = encodeFlacUsingFFmpeg(ctx, pcmData, ffmpegPathForExec, b.Settings)
 		if err != nil {
-			log.Printf("❌ Failed to encode/normalize PCM to FLAC, falling back to WAV: %v\n", err)
-			// Fall back to WAV if FLAC encoding fails
-			audioBuffer, err = myaudio.EncodePCMtoWAVWithContext(ctx, pcmData)
+			// Log the FLAC encoding error
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				log.Printf("⚠️ FLAC encoding timed out or was cancelled, falling back to WAV: %v\n", err)
+			} else {
+				log.Printf("❌ Failed to encode/normalize PCM to FLAC, falling back to WAV: %v\n", err)
+			}
+
+			// Fall back to WAV if FLAC encoding fails, using a *new* context
+			wavCtx, cancelWav := context.WithTimeout(context.Background(), 30*time.Second) // Fresh timeout for WAV
+			defer cancelWav()
+			audioBuffer, err = myaudio.EncodePCMtoWAVWithContext(wavCtx, pcmData)
 			if err != nil {
-				log.Printf("❌ Failed to encode PCM to WAV: %v\n", err)
+				log.Printf("❌ Failed to encode PCM to WAV after FLAC failure: %v\n", err)
 				return "", fmt.Errorf("failed to encode PCM to WAV after FLAC failure: %w", err)
 			}
 			audioExt = "wav"
+			log.Printf("✅ Using WAV format for BirdWeather upload (fallback)")
 		} else {
 			audioExt = "flac"
 			log.Printf("✅ Using FLAC format for BirdWeather upload")
 		}
 	} else {
-		// Encode PCM data to WAV format
-		audioBuffer, err = myaudio.EncodePCMtoWAVWithContext(ctx, pcmData)
+		log.Println("🔊 FFmpeg not available, encoding to WAV format")
+		// Encode PCM data to WAV format using a dedicated context
+		wavCtx, cancelWav := context.WithTimeout(context.Background(), 30*time.Second) // Fresh timeout for WAV
+		defer cancelWav()
+		audioBuffer, err = myaudio.EncodePCMtoWAVWithContext(wavCtx, pcmData)
 		if err != nil {
 			log.Printf("❌ Failed to encode PCM to WAV: %v\n", err)
 			return "", fmt.Errorf("failed to encode PCM to WAV: %w", err)
 		}
 		audioExt = "wav"
+		log.Printf("✅ Using WAV format for BirdWeather upload")
 	}
 
 	// If debug is enabled, save the audio file locally with timestamp information
