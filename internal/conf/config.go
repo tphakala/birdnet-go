@@ -56,7 +56,7 @@ type AudioSettings struct {
 			MaxAge           string // maximum age of audio clips to keep
 			MaxUsage         string // maximum disk usage percentage before cleanup
 			MinClips         int    // minimum number of clips per species to keep
-			KeepSpectrograms bool   // true to keep spectrograms
+			KeepSpectrograms bool   `mapstructure:"keepspectrograms"` // true to keep spectrograms
 		}
 	}
 	Equalizer EqualizerSettings // equalizer settings
