@@ -271,10 +271,13 @@ func TestEncodeFlacUsingFFmpeg(t *testing.T) {
 		binary.LittleEndian.PutUint16(pcmData[i*2:], uint16(value))
 	}
 
+	// Determine the ffmpeg path for the test
+	ffmpegPathForTest := getFFmpegPath()
+
 	// Encode PCM to FLAC with normalization
 	// Pass a background context since this test doesn't need timeout control itself
 	ctx := context.Background()
-	flacBuffer, err := encodeFlacUsingFFmpeg(ctx, pcmData, settings)
+	flacBuffer, err := encodeFlacUsingFFmpeg(ctx, pcmData, ffmpegPathForTest, settings)
 	if err != nil {
 		t.Errorf("encodeFlacUsingFFmpeg failed with valid input: %v", err)
 		return
