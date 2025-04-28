@@ -1,9 +1,8 @@
-// audio.go this contains code for encoding PCM to WAV format in memory.
+// audio.go contains helper functions for audio file handling
 package birdweather
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -14,52 +13,6 @@ import (
 
 // WAVHeaderSize is the standard size of a WAV file header in bytes
 const WAVHeaderSize = 44
-
-// encodePCMtoWAV creates WAV data from PCM and returns it in a bytes.Buffer.
-func encodePCMtoWAV(pcmData []byte) (*bytes.Buffer, error) {
-	// Add check for empty pcmData
-	if len(pcmData) == 0 {
-		return nil, fmt.Errorf("pcmData is empty")
-	}
-
-	const sampleRate = 48000 // Correct sample rate is 48kHz
-	const bitDepth = 16      // Bits per sample
-	const numChannels = 1    // Mono audio
-
-	// Calculating sizes and rates
-	byteRate := sampleRate * numChannels * (bitDepth / 8) // 48000 * 1 * 2 = 96000 bytes per second
-	blockAlign := numChannels * (bitDepth / 8)            // 1 * 2 = 2 bytes per frame
-	subChunk2Size := uint32(len(pcmData))                 // Size of the data chunk in bytes
-	chunkSize := 36 + subChunk2Size                       // 36 is fixed size for header
-
-	// Initialize a buffer to build the WAV file
-	buffer := bytes.NewBuffer(nil)
-
-	// List of data elements to write sequentially to the buffer
-	elements := []interface{}{
-		[]byte("RIFF"), chunkSize, []byte("WAVE"),
-		[]byte("fmt "), uint32(16), uint16(1), uint16(numChannels),
-		uint32(sampleRate), uint32(byteRate), uint16(blockAlign), uint16(bitDepth),
-		[]byte("data"), subChunk2Size, pcmData,
-	}
-
-	// Sequential write operation handling errors
-	for _, elem := range elements {
-		if b, ok := elem.([]byte); ok {
-			// Ensure all byte slices are properly converted before writing
-			if _, err := buffer.Write(b); err != nil {
-				return nil, fmt.Errorf("failed to write byte slice to buffer: %w", err)
-			}
-		} else {
-			// Handle all other data types
-			if err := binary.Write(buffer, binary.LittleEndian, elem); err != nil {
-				return nil, fmt.Errorf("failed to write element to buffer: %w", err)
-			}
-		}
-	}
-
-	return buffer, nil
-}
 
 // saveBufferToFile writes a bytes.Buffer containing audio data to a file, along with
 // timestamp and format information for debugging purposes.

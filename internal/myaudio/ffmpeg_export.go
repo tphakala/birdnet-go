@@ -2,6 +2,8 @@ package myaudio
 
 import (
 	"bytes"
+	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -381,4 +383,289 @@ func AnalyzeAudioLoudness(pcmData []byte, ffmpegPath string) (*LoudnessStats, er
 	}
 
 	return &stats, nil
+}
+
+// ExportAudioWithCustomFFmpegArgsContext exports PCM data using FFmpeg with custom arguments directly to a memory buffer.
+// This is the context-aware version of ExportAudioWithCustomFFmpegArgs that allows timeout/cancellation.
+// ffmpegPath is the path to the FFmpeg executable.
+// customArgs is a slice of strings representing additional FFmpeg arguments (including output format/codec).
+func ExportAudioWithCustomFFmpegArgsContext(ctx context.Context, pcmData []byte, ffmpegPath string, customArgs []string) (*bytes.Buffer, error) {
+	// Validate the FFmpeg path
+	if err := validateFFmpegPathInternal(ffmpegPath); err != nil {
+		return nil, err
+	}
+
+	// Run the FFmpeg command, capturing output to a buffer
+	outputBuffer, err := runCustomFFmpegCommandToBufferWithContext(ctx, ffmpegPath, pcmData, customArgs)
+	if err != nil {
+		return nil, err // Error already includes FFmpeg output if execution failed
+	}
+
+	// Return the buffer containing the exported audio data
+	return outputBuffer, nil
+}
+
+// runCustomFFmpegCommandToBufferWithContext executes FFmpeg, piping PCM input and capturing codec output to a buffer.
+// This version accepts a context to allow for timeout/cancellation.
+func runCustomFFmpegCommandToBufferWithContext(ctx context.Context, ffmpegPath string, pcmData []byte, customArgs []string) (*bytes.Buffer, error) {
+	// Get standard input format arguments
+	ffmpegSampleRate, ffmpegNumChannels, ffmpegFormat := getFFmpegFormat(conf.SampleRate, conf.NumChannels, conf.BitDepth)
+
+	// Build the base arguments for PCM input from stdin
+	args := []string{
+		"-f", ffmpegFormat, // Input format based on bit depth
+		"-ar", ffmpegSampleRate, // Sample rate
+		"-ac", ffmpegNumChannels, // Number of channels
+		"-i", "-", // Read from stdin
+	}
+
+	// Append the custom arguments provided by the caller (should include codec, filters, format)
+	args = append(args, customArgs...)
+
+	// Append the output destination: pipe:1 (stdout)
+	args = append(args, "pipe:1")
+
+	// Create the FFmpeg command with context
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
+
+	// Create pipes for stdin and stdout
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stdin pipe: %w", err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+
+	// Capture stderr for better error reporting
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	// Start the FFmpeg command
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start FFmpeg: %w, stderr: %s", err, stderr.String())
+	}
+
+	// Use a separate goroutine to write PCM data to prevent blocking
+	// and capture potential write errors
+	writeErrChan := make(chan error, 1)
+	go func() {
+		defer stdin.Close() // Close stdin when writing is done
+
+		// Check if context is already done before writing
+		select {
+		case <-ctx.Done():
+			writeErrChan <- ctx.Err()
+			return
+		default:
+			// Continue with writing
+		}
+
+		_, writeErr := stdin.Write(pcmData)
+		writeErrChan <- writeErr
+	}()
+
+	// Read stdout into a buffer
+	outputBuffer := bytes.NewBuffer(nil)
+	readDoneChan := make(chan error, 1)
+	go func() {
+		_, readErr := io.Copy(outputBuffer, stdout)
+		readDoneChan <- readErr
+	}()
+
+	// Wait for both writing and reading to complete or for context to be cancelled
+	var writeErr, readErr error
+	select {
+	case writeErr = <-writeErrChan:
+		// Writing completed, now wait for reading to complete or context to be cancelled
+		select {
+		case readErr = <-readDoneChan:
+			// Reading has also completed
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	// Check for write error
+	if writeErr != nil {
+		return nil, fmt.Errorf("failed to write PCM data to FFmpeg: %w", writeErr)
+	}
+
+	// Check for read error
+	if readErr != nil {
+		return nil, fmt.Errorf("failed to read FFmpeg output: %w", readErr)
+	}
+
+	// Wait for FFmpeg to finish processing
+	if err := cmd.Wait(); err != nil {
+		// Check if the error is due to context cancellation
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("FFmpeg failed: %w, stderr: %s", err, stderr.String())
+	}
+
+	// Return the buffer containing the exported audio data
+	return outputBuffer, nil
+}
+
+// AnalyzeAudioLoudnessWithContext analyzes audio loudness using FFmpeg's loudnorm filter in analyze mode
+// This is the context-aware version of AnalyzeAudioLoudness that allows timeout/cancellation
+func AnalyzeAudioLoudnessWithContext(ctx context.Context, pcmData []byte, ffmpegPath string) (*LoudnessStats, error) {
+	// Validate the FFmpeg path
+	if err := validateFFmpegPathInternal(ffmpegPath); err != nil {
+		return nil, err
+	}
+
+	// Get standard input format arguments
+	ffmpegSampleRate, ffmpegNumChannels, ffmpegFormat := getFFmpegFormat(conf.SampleRate, conf.NumChannels, conf.BitDepth)
+
+	// Build the FFmpeg command with loudnorm filter in print_format=json mode
+	args := []string{
+		"-f", ffmpegFormat, // Input format based on bit depth
+		"-ar", ffmpegSampleRate, // Sample rate
+		"-ac", ffmpegNumChannels, // Number of channels
+		"-i", "-", // Read from stdin
+		"-af", fmt.Sprintf("loudnorm=I=-23:LRA=7:TP=-2:print_format=json"), // Loudnorm analysis
+		"-f", "null", // Output to null device
+		"-", // Output to stdout (null device doesn't create any actual output)
+	}
+
+	// Create the FFmpeg command with context
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
+
+	// Create a pipe to write PCM data to FFmpeg's stdin
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stdin pipe: %w", err)
+	}
+
+	// Capture stderr for JSON output from loudnorm filter
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	// Start the FFmpeg command
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start FFmpeg: %w", err)
+	}
+
+	// Write PCM data to FFmpeg's stdin in a separate goroutine to prevent blocking
+	// while waiting for stderr to capture output
+	writeErrChan := make(chan error, 1)
+	go func() {
+		defer stdin.Close() // Close stdin when done
+
+		// Check if context is already done before writing
+		select {
+		case <-ctx.Done():
+			writeErrChan <- ctx.Err()
+			return
+		default:
+			// Continue with writing
+		}
+
+		_, writeErr := stdin.Write(pcmData)
+		writeErrChan <- writeErr
+	}()
+
+	// Wait for the write to complete or for context to be cancelled
+	select {
+	case writeErr := <-writeErrChan:
+		if writeErr != nil {
+			return nil, fmt.Errorf("failed to write PCM data to FFmpeg: %w", writeErr)
+		}
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	// Wait for FFmpeg to finish processing
+	if err := cmd.Wait(); err != nil {
+		// Check if the error is due to context cancellation
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		// The loudnorm filter ends with an error (code 1) because it doesn't output anything to stdout,
+		// which is expected, and we capture the meaningful output from stderr
+		// We'll continue parsing the output from stderr instead of returning an error
+	}
+
+	// Extract the JSON from the stderr output
+	stderrStr := stderr.String()
+	jsonStartIdx := strings.Index(stderrStr, "{")
+	jsonEndIdx := strings.LastIndex(stderrStr, "}")
+	if jsonStartIdx == -1 || jsonEndIdx == -1 || jsonEndIdx < jsonStartIdx {
+		return nil, fmt.Errorf("failed to extract JSON from FFmpeg output: %s", stderrStr)
+	}
+	jsonStr := stderrStr[jsonStartIdx : jsonEndIdx+1]
+
+	// Parse the JSON output
+	var stats LoudnessStats
+	if err := json.Unmarshal([]byte(jsonStr), &stats); err != nil {
+		return nil, fmt.Errorf("failed to parse FFmpeg loudnorm analysis: %w", err)
+	}
+
+	return &stats, nil
+}
+
+// EncodePCMtoWAVWithContext encodes PCM data in WAV format using context for cancellation/timeout
+func EncodePCMtoWAVWithContext(ctx context.Context, pcmData []byte) (*bytes.Buffer, error) {
+	if len(pcmData) == 0 {
+		return nil, fmt.Errorf("PCM data is empty")
+	}
+
+	// Constants for WAV format
+	const bitDepth = conf.BitDepth       // Bits per sample
+	const sampleRate = conf.SampleRate   // Sample rate
+	const numChannels = conf.NumChannels // Mono audio
+
+	// Calculating sizes and rates
+	byteRate := sampleRate * numChannels * (bitDepth / 8) // 48000 * 1 * 2 = 96000 bytes per second
+	blockAlign := numChannels * (bitDepth / 8)            // 1 * 2 = 2 bytes per frame
+	subChunk2Size := uint32(len(pcmData))                 // Size of the data chunk in bytes
+	chunkSize := 36 + subChunk2Size                       // 36 is fixed size for header
+
+	// Initialize a buffer to build the WAV file
+	buffer := bytes.NewBuffer(nil)
+
+	// List of data elements to write sequentially to the buffer
+	elements := []interface{}{
+		[]byte("RIFF"), chunkSize, []byte("WAVE"),
+		[]byte("fmt "), uint32(16), uint16(1), uint16(numChannels),
+		uint32(sampleRate), uint32(byteRate), uint16(blockAlign), uint16(bitDepth),
+		[]byte("data"), subChunk2Size,
+	}
+
+	// Check if context is done before proceeding
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+		// Continue with writing
+	}
+
+	// Sequential write operation handling errors
+	for _, elem := range elements {
+		if b, ok := elem.([]byte); ok {
+			// Ensure all byte slices are properly converted before writing
+			if _, err := buffer.Write(b); err != nil {
+				return nil, fmt.Errorf("failed to write byte slice to buffer: %w", err)
+			}
+		} else {
+			// Handle all other data types
+			if err := binary.Write(buffer, binary.LittleEndian, elem); err != nil {
+				return nil, fmt.Errorf("failed to write element to buffer: %w", err)
+			}
+		}
+	}
+
+	// Write PCM data to buffer
+	if _, err := buffer.Write(pcmData); err != nil {
+		return nil, fmt.Errorf("failed to write PCM data to WAV buffer: %w", err)
+	}
+
+	return buffer, nil
 }
