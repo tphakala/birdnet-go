@@ -264,22 +264,23 @@ debug/
 
 ## Loudness Normalization Technical Details
 
-When FFmpeg is available, bird call audio is processed using the `loudnorm` filter to achieve these targets:
+When FFmpeg is available, bird call audio is processed using the `loudnorm` filter with a **two-pass** method to achieve these targets:
 
-- **Integrated Loudness (I)**: -14 LUFS - industry standard for streaming content
+- **Integrated Loudness (I)**: -23 LUFS - standard target for EBU R128 compliance
 - **True Peak (TP)**: -1 dB - prevents clipping during playback
 - **Loudness Range (LRA)**: 11 LU - maintains appropriate dynamic range
 
-The normalization process is performed in a **single FFmpeg step**:
-1. Reads raw PCM audio data from stdin
-2. Applies the `loudnorm` filter
-3. Encodes the normalized audio directly to FLAC format
+The normalization process involves:
+1.  **Pass 1 (Analysis)**: Reads raw PCM audio data and runs `loudnorm` in analysis mode (`print_format=json`) to measure the input audio's characteristics (I, LRA, TP, Threshold).
+2.  **Pass 2 (Normalization & Encoding)**: Reads the PCM data again, applies the `loudnorm` filter using the measured values from Pass 1 (`linear=true`, `measured_*` parameters), and encodes the normalized audio directly to FLAC format in a single step.
 
 Benefits:
-- Improves listening experience across different devices
-- Makes quiet bird calls more audible without clipping loud ones
-- Maintains audio quality through lossless compression
-- Efficient single-pass processing
+- Produces higher quality, more consistent normalization compared to single-pass, avoiding audible artifacts like "pumping".
+- Improves listening experience across different devices.
+- Makes quiet bird calls more audible without clipping loud ones.
+- Maintains audio quality through lossless compression.
+- Efficiently performs analysis on raw PCM data.
+- Falls back to single-pass normalization if the analysis pass fails.
 
 ## Testing
 
