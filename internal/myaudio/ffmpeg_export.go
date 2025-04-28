@@ -24,9 +24,9 @@ const tempExt = ".temp"
 // outputPath is full path with audio file name and extension based on format
 // pcmData is the PCM data to export
 func ExportAudioWithFFmpeg(pcmData []byte, outputPath string, settings *conf.AudioSettings) error {
-	// Validate the FFmpeg path
-	if err := validateFFmpegPathInternal(settings.FfmpegPath); err != nil {
-		return err
+	// Assume settings.FfmpegPath is validated by conf.ValidateAudioSettings
+	if settings.FfmpegPath == "" {
+		return fmt.Errorf("FFmpeg path is not configured or invalid")
 	}
 
 	// Create a temporary file for FFmpeg output, returns full path with tempExt
@@ -238,9 +238,9 @@ func runCustomFFmpegCommandToBuffer(ffmpegPath string, pcmData []byte, customArg
 // ffmpegPath is the path to the FFmpeg executable.
 // customArgs is a slice of strings representing additional FFmpeg arguments (including output format/codec).
 func ExportAudioWithCustomFFmpegArgsContext(ctx context.Context, pcmData []byte, ffmpegPath string, customArgs []string) (*bytes.Buffer, error) {
-	// Validate the FFmpeg path
-	if err := validateFFmpegPathInternal(ffmpegPath); err != nil {
-		return nil, err
+	// Assume ffmpegPath is valid (validated by caller, usually via conf.ValidateAudioSettings)
+	if ffmpegPath == "" {
+		return nil, fmt.Errorf("FFmpeg path provided is empty")
 	}
 
 	// Run the FFmpeg command, capturing output to a buffer
@@ -362,7 +362,7 @@ func runCustomFFmpegCommandToBufferWithContext(ctx context.Context, ffmpegPath s
 
 // validateFFmpegPathInternal checks if the provided FFmpeg path is valid and executable.
 // If ffmpegPath is empty, it checks if "ffmpeg" is available in the system PATH.
-func validateFFmpegPathInternal(ffmpegPath string) error {
+/* func validateFFmpegPathInternal(ffmpegPath string) error {
 	if ffmpegPath == "" {
 		// If no path provided, check if "ffmpeg" is in the system PATH
 		if _, err := exec.LookPath("ffmpeg"); err != nil {
@@ -389,7 +389,7 @@ func validateFFmpegPathInternal(ffmpegPath string) error {
 
 	// Path exists and is accessible
 	return nil
-}
+} */
 
 // LoudnessStats holds the measured loudness statistics from FFmpeg's loudnorm filter.
 type LoudnessStats struct {
@@ -415,9 +415,9 @@ func AnalyzeAudioLoudness(pcmData []byte, ffmpegPath string) (*LoudnessStats, er
 // AnalyzeAudioLoudnessWithContext analyzes audio loudness using FFmpeg's loudnorm filter in analyze mode
 // This is the context-aware version of AnalyzeAudioLoudness that allows timeout/cancellation
 func AnalyzeAudioLoudnessWithContext(ctx context.Context, pcmData []byte, ffmpegPath string) (*LoudnessStats, error) {
-	// Validate the FFmpeg path
-	if err := validateFFmpegPathInternal(ffmpegPath); err != nil {
-		return nil, err
+	// Assume ffmpegPath is valid (validated by caller, usually via conf.ValidateAudioSettings)
+	if ffmpegPath == "" {
+		return nil, fmt.Errorf("FFmpeg path provided is empty")
 	}
 
 	// Get standard input format arguments
