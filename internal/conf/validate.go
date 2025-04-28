@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -211,22 +212,27 @@ func validateBirdweatherSettings(settings *BirdweatherSettings) error {
 
 // validateAudioSettings validates the audio settings and sets ffmpeg and sox paths
 func validateAudioSettings(settings *AudioSettings) error {
-	// Check if ffmpeg is available
-	if IsFfmpegAvailable() {
-		settings.FfmpegPath = GetFfmpegBinaryName()
+	// Validate and determine the effective FFmpeg path
+	validatedFfmpegPath, ffmpegErr := ValidateToolPath(settings.FfmpegPath, GetFfmpegBinaryName())
+	if ffmpegErr != nil {
+		log.Printf("FFmpeg validation failed: %v. Audio export/conversion requiring FFmpeg might be disabled or use defaults.", ffmpegErr)
+		settings.FfmpegPath = "" // Ensure path is empty if validation failed
 	} else {
-		settings.FfmpegPath = ""
-		log.Println("FFmpeg not found in system PATH")
+		settings.FfmpegPath = validatedFfmpegPath // Store the validated path (explicit or from PATH)
 	}
 
-	// Check if sox is available
-	soxAvailable, soxFormats := IsSoxAvailable()
-	if soxAvailable {
-		settings.SoxPath = GetSoxBinaryName()
-		settings.SoxAudioTypes = soxFormats
-	} else {
+	// Validate and determine the effective SoX path
+	// We only need to know if it's available and its formats, so LookPath is sufficient here.
+	soxPath, soxLookPathErr := exec.LookPath(GetSoxBinaryName())
+	if soxLookPathErr != nil {
 		settings.SoxPath = ""
-		log.Println("sox not found in system PATH")
+		settings.SoxAudioTypes = nil
+		log.Println("SoX not found in system PATH. Audio source processing requiring SoX might be disabled.")
+	} else {
+		settings.SoxPath = soxPath
+		// Get supported formats if SoX is found
+		_, formats := IsSoxAvailable() // We already know it's available from LookPath
+		settings.SoxAudioTypes = formats
 	}
 
 	// Validate audio export settings
