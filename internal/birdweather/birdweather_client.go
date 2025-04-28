@@ -324,7 +324,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 
 	// Create and execute the POST request
 	soundscapeURL := fmt.Sprintf("https://app.birdweather.com/api/v1/stations/%s/soundscapes?timestamp=%s&type=%s",
-		b.BirdweatherID, timestamp, audioExt)
+		b.BirdweatherID, url.QueryEscape(timestamp), audioExt)
 	req, err := http.NewRequest("POST", soundscapeURL, &gzipAudioData)
 	if err != nil {
 		log.Printf("❌ Failed to create POST request: %v\n", err)
