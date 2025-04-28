@@ -393,7 +393,7 @@ func IsSoxAvailable() (isAvailable bool, formats []string) {
 
 // ValidateToolPath checks if a tool is available, either at an explicit path or in the system PATH.
 // It returns the validated path to the tool if found, or an empty string and an error otherwise.
-func ValidateToolPath(configuredPath string, toolName string) (string, error) {
+func ValidateToolPath(configuredPath, toolName string) (string, error) {
 	if configuredPath != "" {
 		// Check if the explicitly configured path exists and is a file
 		if info, err := os.Stat(configuredPath); err == nil && !info.IsDir() {
