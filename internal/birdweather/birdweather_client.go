@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -213,7 +214,7 @@ func encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ffmpegPath strin
 
 // parseDouble safely parses a string to float64, returning defaultValue on error.
 func parseDouble(s string, defaultValue float64) float64 {
-	val, err := strconv.ParseFloat(s, 64)
+	val, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
 	if err != nil {
 		return defaultValue
 	}
