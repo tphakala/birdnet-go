@@ -604,7 +604,7 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 						MaxAge           string
 						MaxUsage         string
 						MinClips         int
-						KeepSpectrograms bool
+						KeepSpectrograms bool `mapstructure:"keepspectrograms"`
 					}
 				}{
 					Path: t.TempDir(), // Set the required path

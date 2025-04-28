@@ -363,7 +363,7 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 						MaxAge           string
 						MaxUsage         string
 						MinClips         int
-						KeepSpectrograms bool
+						KeepSpectrograms bool `mapstructure:"keepspectrograms"`
 					}
 				}{
 					Path: t.TempDir(),
