@@ -236,18 +236,15 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Check if FFmpeg is available in the system PATH
-	ffmpegAvailable := conf.IsFfmpegAvailable()
-
-	// Determine the effective FFmpeg path to use (explicit setting or default "ffmpeg")
+	// Use the validated FFmpeg path from settings.
+	// This path is determined during config validation (ValidateAudioSettings)
+	// and is either an explicit valid path, a path found in PATH, or empty if unavailable.
 	ffmpegPathForExec := b.Settings.Realtime.Audio.FfmpegPath
-	if ffmpegPathForExec == "" && ffmpegAvailable {
-		ffmpegPathForExec = "ffmpeg" // Default to rely on PATH if setting is empty and ffmpeg is available
-	}
+	ffmpegAvailable := ffmpegPathForExec != ""
 
 	// Use FLAC if FFmpeg is available, otherwise fall back to WAV
 	if ffmpegAvailable {
-		// Encode PCM data to FLAC format with normalization, passing the context and resolved path
+		// Encode PCM data to FLAC format with normalization, passing the context and validated path
 		audioBuffer, err = encodeFlacUsingFFmpeg(ctx, pcmData, ffmpegPathForExec, b.Settings)
 		if err != nil {
 			// Log the FLAC encoding error
@@ -272,7 +269,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 			log.Printf("✅ Using FLAC format for BirdWeather upload")
 		}
 	} else {
-		log.Println("🔊 FFmpeg not available, encoding to WAV format")
+		log.Println("🔊 FFmpeg not available (checked configured path and system PATH), encoding to WAV format")
 		// Encode PCM data to WAV format using a dedicated context
 		wavCtx, cancelWav := context.WithTimeout(context.Background(), 30*time.Second) // Fresh timeout for WAV
 		defer cancelWav()
