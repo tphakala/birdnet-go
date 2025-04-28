@@ -28,8 +28,6 @@ import (
 // targetIntegratedLoudnessLUFS defines the target loudness for normalization.
 // EBU R128 standard target is -23 LUFS.
 const targetIntegratedLoudnessLUFS = -23.0
-const targetTruePeak = -1.0
-const targetLoudnessRange = 18.0
 
 // SoundscapeResponse represents the JSON structure of the response from the Birdweather API when uploading a soundscape.
 type SoundscapeResponse struct {
@@ -119,7 +117,8 @@ func handleNetworkError(err error) error {
 // encodeFlacUsingFFmpeg converts PCM data to FLAC format using FFmpeg directly into a bytes buffer.
 // It applies a simple gain adjustment instead of dynamic loudness normalization to avoid pumping effects.
 // This avoids writing temporary files to disk.
-func encodeFlacUsingFFmpeg(pcmData []byte, settings *conf.Settings) (*bytes.Buffer, error) {
+// It accepts a context for timeout/cancellation control.
+func encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, settings *conf.Settings) (*bytes.Buffer, error) {
 	// Add check for empty pcmData
 	if len(pcmData) == 0 {
 		return nil, fmt.Errorf("pcmData is empty")
@@ -129,12 +128,15 @@ func encodeFlacUsingFFmpeg(pcmData []byte, settings *conf.Settings) (*bytes.Buff
 
 	// --- Pass 1: Analyze Loudness ---
 	log.Println("🔊 Performing loudness analysis (Pass 1)")
-	// Create a context with timeout to prevent hanging FFmpeg processes
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-
+	// Use the provided context for the analysis
 	loudnessStats, err := myaudio.AnalyzeAudioLoudnessWithContext(ctx, pcmData, ffmpegPath)
 	if err != nil {
+		// Check if the error is due to context cancellation
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("⚠️ Loudness analysis cancelled or timed out: %v", err)
+			return nil, err // Propagate context error
+		}
+
 		log.Printf("⚠️ Loudness analysis (Pass 1) failed: %v. Falling back to single-pass gain adjustment.", err)
 		// Fallback to a conservative fixed gain adjustment
 		// A fixed gain of 15dB is a reasonable middle ground for bird call recordings
@@ -146,10 +148,7 @@ func encodeFlacUsingFFmpeg(pcmData []byte, settings *conf.Settings) (*bytes.Buff
 			"-f", "flac",
 		}
 
-		// Create a new context for the fallback operation
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-
+		// Use the provided context for the fallback export operation
 		buffer, err := myaudio.ExportAudioWithCustomFFmpegArgsContext(ctx, pcmData, ffmpegPath, customArgs)
 		if err != nil {
 			log.Printf("❌ Fallback FLAC export with fixed gain failed: %v", err)
@@ -199,12 +198,8 @@ func encodeFlacUsingFFmpeg(pcmData []byte, settings *conf.Settings) (*bytes.Buff
 		"-f", "flac", // Output format: FLAC
 	}
 
-	// Create a new context for the final encoding operation
-	ctx2, cancel2 := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel2()
-
-	// Use the custom FFmpeg export function for the second pass
-	buffer, err := myaudio.ExportAudioWithCustomFFmpegArgsContext(ctx2, pcmData, ffmpegPath, customArgs)
+	// Use the provided context for the final encoding operation
+	buffer, err := myaudio.ExportAudioWithCustomFFmpegArgsContext(ctx, pcmData, ffmpegPath, customArgs)
 	if err != nil {
 		log.Printf("❌ FFmpeg FLAC encoding with gain adjustment failed: %v", err)
 		return nil, fmt.Errorf("failed to export PCM to FLAC with gain adjustment: %w", err)
@@ -246,8 +241,8 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 
 	// Use FLAC if FFmpeg is available, otherwise fall back to WAV
 	if ffmpegAvailable {
-		// Encode PCM data to FLAC format with normalization
-		audioBuffer, err = encodeFlacUsingFFmpeg(pcmData, b.Settings)
+		// Encode PCM data to FLAC format with normalization, passing the context
+		audioBuffer, err = encodeFlacUsingFFmpeg(ctx, pcmData, b.Settings)
 		if err != nil {
 			log.Printf("❌ Failed to encode/normalize PCM to FLAC, falling back to WAV: %v\n", err)
 			// Fall back to WAV if FLAC encoding fails
