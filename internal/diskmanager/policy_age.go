@@ -4,9 +4,7 @@ package diskmanager
 import (
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
-	"runtime"
+	"sort" // Added for sorting
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -22,175 +20,129 @@ type AgeCleanupResult struct {
 // AgeBasedCleanup removes clips from the filesystem based on their age and the number of clips per species.
 // Returns an AgeCleanupResult containing error, number of clips removed, and current disk utilization percentage.
 func AgeBasedCleanup(quit <-chan struct{}, db Interface) AgeCleanupResult {
-	settings := conf.Setting()
+	settings := conf.Setting() // Use the singleton getter
 
 	debug := settings.Realtime.Audio.Export.Retention.Debug
 	baseDir := settings.Realtime.Audio.Export.Path
 	minClipsPerSpecies := settings.Realtime.Audio.Export.Retention.MinClips
-	retentionPeriod := settings.Realtime.Audio.Export.Retention.MaxAge
+	retentionPeriodStr := settings.Realtime.Audio.Export.Retention.MaxAge
 
-	retentionPeriodInHours, err := conf.ParseRetentionPeriod(retentionPeriod)
+	retentionPeriodInHours, err := conf.ParseRetentionPeriod(retentionPeriodStr)
 	if err != nil {
-		log.Printf("Invalid retention period: %s\n", err)
-		return AgeCleanupResult{Err: err, ClipsRemoved: 0, DiskUtilization: 0}
+		log.Printf("Invalid retention period format '%s': %v\n", retentionPeriodStr, err)
+		// Attempt to get disk usage even on config error, if possible
+		diskUsage, diskErr := GetDiskUsage(baseDir)
+		utilization := 0
+		if diskErr == nil {
+			utilization = int(diskUsage)
+		}
+		return AgeCleanupResult{Err: fmt.Errorf("invalid retention period format '%s': %w", retentionPeriodStr, err), ClipsRemoved: 0, DiskUtilization: utilization}
 	}
+
+	expirationTime := time.Now().Add(-time.Duration(retentionPeriodInHours) * time.Hour)
 
 	if debug {
-		log.Printf("Starting age-based cleanup process. Base directory: %s, Retention period: %s", baseDir, retentionPeriod)
+		log.Printf("Starting age-based cleanup process. Base directory: %s, Retention period: %s (expires before %s)",
+			baseDir, retentionPeriodStr, expirationTime.Format(time.RFC3339))
 	}
 
-	// Get the list of audio files, limited to allowed file types defined in file_utils.go
-	files, err := GetAudioFiles(baseDir, allowedFileTypes, db, debug)
+	// Prepare common parameters
+	params := &CleanupParameters{
+		BaseDir:            baseDir,
+		MinClipsPerSpecies: minClipsPerSpecies,
+		Debug:              debug,
+		QuitChan:           quit,
+		DB:                 db,
+		AllowedFileTypes:   allowedFileTypes, // Assumes allowedFileTypes is accessible (defined in file_utils.go)
+		Settings:           settings,
+	}
+
+	// Get the list of audio files
+	files, err := GetAudioFiles(params.BaseDir, params.AllowedFileTypes, params.DB, params.Debug)
 	if err != nil {
-		return AgeCleanupResult{Err: fmt.Errorf("failed to get audio files for age-based cleanup: %w", err), ClipsRemoved: 0, DiskUtilization: 0}
+		// Try to get disk usage even if getting files failed
+		diskUsage, diskErr := GetDiskUsage(baseDir)
+		utilization := 0
+		if diskErr == nil {
+			utilization = int(diskUsage)
+		}
+		return AgeCleanupResult{Err: fmt.Errorf("failed to get audio files for age-based cleanup: %w", err), ClipsRemoved: 0, DiskUtilization: utilization}
 	}
 
 	if len(files) == 0 {
 		if debug {
-			log.Printf("No eligible audio files found for cleanup in %s", baseDir)
+			log.Printf("No eligible audio files found for age-based cleanup in %s", baseDir)
 		}
-
-		// Get current disk utilization even if no files were processed
-		diskUsage, err := GetDiskUsage(baseDir)
-		if err != nil {
-			return AgeCleanupResult{Err: fmt.Errorf("failed to get disk usage: %w", err), ClipsRemoved: 0, DiskUtilization: 0}
+		diskUsage, diskErr := GetDiskUsage(baseDir)
+		utilization := 0
+		if diskErr == nil {
+			utilization = int(diskUsage)
 		}
+		return AgeCleanupResult{Err: nil, ClipsRemoved: 0, DiskUtilization: utilization}
+	}
 
-		return AgeCleanupResult{Err: nil, ClipsRemoved: 0, DiskUtilization: int(diskUsage)}
+	// --- Sort files by timestamp (oldest first) ---
+	// This addresses the potential bug where newer files might be deleted before older ones if both met the age criteria.
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].Timestamp.Before(files[j].Timestamp)
+	})
+	if debug {
+		log.Printf("Sorted %d files by timestamp (oldest first).", len(files))
+		// Optionally log the first few files to confirm sorting
+		// for k := 0; k < min(5, len(files)); k++ {
+		//  log.Printf("  - File %d: %s (%s)", k, files[k].Path, files[k].Timestamp)
+		// }
 	}
 
 	// Create a map to keep track of the number of files per species per subdirectory
-	speciesMonthCount := buildSpeciesCountMap(files)
-
-	expirationTime := time.Now().Add(-time.Duration(retentionPeriodInHours) * time.Hour)
-
-	deletedCount, err := processFiles(files, speciesMonthCount, expirationTime, minClipsPerSpecies, debug, quit)
-
-	// Get current disk utilization after cleanup
-	diskUsage, diskErr := GetDiskUsage(baseDir)
-	if diskErr != nil {
-		return AgeCleanupResult{Err: fmt.Errorf("cleanup completed but failed to get disk usage: %w", diskErr), ClipsRemoved: deletedCount, DiskUtilization: 0}
+	// Use the common function now - // Correction: Age policy needs GLOBAL count.
+	// speciesDirCount := buildSpeciesCountMap(files) // Not needed for age policy's global check
+	globalSpeciesCount := buildGlobalSpeciesCountMap(files)
+	if debug {
+		log.Printf("Built global species count map. Found %d distinct species overall.", len(globalSpeciesCount))
+		// Optional: Log counts for a few species
+		// count := 0
+		// for species, num := range globalSpeciesCount {
+		//  log.Printf("  - Species: %s, Count: %d", species, num)
+		//  count++
+		//  if count >= 5 { break }
+		// }
 	}
 
-	return AgeCleanupResult{Err: err, ClipsRemoved: deletedCount, DiskUtilization: int(diskUsage)}
-}
-
-// buildSpeciesCountMap creates a map to track the number of files per species per subdirectory
-func buildSpeciesCountMap(files []FileInfo) map[string]map[string]int {
-	speciesMonthCount := make(map[string]map[string]int)
-	for _, file := range files {
-		subDir := filepath.Dir(file.Path)
-		if _, exists := speciesMonthCount[file.Species]; !exists {
-			speciesMonthCount[file.Species] = make(map[string]int)
+	// Define the policy-specific deletion logic for age-based cleanup
+	// Update signature to match ShouldDeleteFunc
+	ageShouldDelete := func(file *FileInfo, params *CleanupParameters, currentDiskUsage float64) (bool, error) {
+		isExpired := file.Timestamp.Before(expirationTime)
+		if params.Debug && isExpired {
+			log.Printf("File %s is older than retention period (%s). Candidate for deletion.", file.Path, expirationTime.Format(time.RFC3339))
 		}
-		speciesMonthCount[file.Species][subDir]++
+		// Age policy doesn't use currentDiskUsage, but must match signature
+		return isExpired, nil
 	}
-	return speciesMonthCount
-}
 
-// processFiles handles the deletion of expired files while respecting constraints
-// Returns the number of deleted files and any error that occurred
-func processFiles(files []FileInfo, speciesMonthCount map[string]map[string]int,
-	expirationTime time.Time, minClipsPerSpecies int, debug bool, quit <-chan struct{}) (int, error) {
+	// Call the common cleanup loop
+	// Pass nil for speciesDirCount as age policy uses global count check inside the loop
+	deletedCount, cleanupErr := performCleanupLoop(files, params, nil, globalSpeciesCount, ageShouldDelete)
 
-	maxDeletions := 1000 // Maximum number of files to delete in one run
-	deletedFiles := 0    // Counter for the number of deleted files
-	errorCount := 0      // Counter for deletion errors
-
-	for i := range files {
-		select {
-		case <-quit:
-			log.Printf("Cleanup interrupted by quit signal\n")
-			return deletedFiles, nil
-		default:
-			file := &files[i]
-			if shouldSkipFile(file, debug) {
-				continue
-			}
-
-			if !file.Timestamp.Before(expirationTime) {
-				continue
-			}
-
-			// Sleep a while to throttle the cleanup
-			time.Sleep(100 * time.Millisecond)
-
-			subDir := filepath.Dir(file.Path)
-			if !canDeleteFile(file, subDir, speciesMonthCount, minClipsPerSpecies, debug) {
-				continue
-			}
-
-			if err := deleteFile(file, debug); err != nil {
-				errorCount++
-				log.Printf("Failed to remove %s: %s\n", file.Path, err)
-				if errorCount > 10 {
-					return deletedFiles, fmt.Errorf("too many errors (%d) during age-based cleanup, last error: %w", errorCount, err)
-				}
-				continue
-			}
-
-			speciesMonthCount[file.Species][subDir]--
-			deletedFiles++
-
-			// Yield to other goroutines
-			runtime.Gosched()
-
-			if deletedFiles >= maxDeletions {
-				if debug {
-					log.Printf("Reached maximum number of deletions (%d). Ending cleanup.", maxDeletions)
-				}
-				return deletedFiles, nil
-			}
+	// Get final disk utilization after cleanup attempt
+	finalDiskUsage, diskErr := GetDiskUsage(baseDir)
+	var finalUtilization int // Declare variable, default value is 0
+	if diskErr == nil {
+		finalUtilization = int(finalDiskUsage)
+	} else {
+		log.Printf("Age cleanup completed but failed to get final disk usage: %v", diskErr)
+		// Return the cleanup error if it exists, otherwise the disk usage error
+		if cleanupErr != nil {
+			return AgeCleanupResult{Err: fmt.Errorf("cleanup error: %w; failed to get final disk usage: %w", cleanupErr, diskErr), ClipsRemoved: deletedCount, DiskUtilization: 0}
 		}
+		// If only disk error exists, finalUtilization remains 0
+		return AgeCleanupResult{Err: fmt.Errorf("failed to get final disk usage: %w", diskErr), ClipsRemoved: deletedCount, DiskUtilization: 0}
 	}
 
 	if debug {
-		log.Printf("Age retention policy applied, total files deleted: %d", deletedFiles)
+		log.Printf("Age-based cleanup finished. Deleted: %d files. Final Disk Util: %d%%", deletedCount, finalUtilization)
 	}
 
-	return deletedFiles, nil
-}
-
-// shouldSkipFile checks if a file should be skipped (e.g., if it's locked)
-func shouldSkipFile(file *FileInfo, debug bool) bool {
-	if file.Locked {
-		if debug {
-			log.Printf("Skipping locked file: %s", file.Path)
-		}
-		return true
-	}
-	return false
-}
-
-// canDeleteFile checks if a file can be deleted based on species count constraints
-func canDeleteFile(file *FileInfo, subDir string, speciesMonthCount map[string]map[string]int,
-	minClipsPerSpecies int, debug bool) bool {
-
-	if speciesMonthCount[file.Species][subDir] <= minClipsPerSpecies {
-		if debug {
-			log.Printf("Species clip count for %s in %s is at the minimum threshold (%d). Skipping file deletion.",
-				file.Species, subDir, minClipsPerSpecies)
-		}
-		return false
-	}
-
-	if debug {
-		log.Printf("File %s is older than retention period, deleting.", file.Path)
-	}
-
-	return true
-}
-
-// deleteFile removes a file from the filesystem
-func deleteFile(file *FileInfo, debug bool) error {
-	err := os.Remove(file.Path)
-	if err != nil {
-		return err
-	}
-
-	if debug {
-		log.Printf("File %s deleted", file.Path)
-	}
-
-	return nil
+	// Return the result, prioritizing the cleanup error if one occurred
+	return AgeCleanupResult{Err: cleanupErr, ClipsRemoved: deletedCount, DiskUtilization: finalUtilization}
 }

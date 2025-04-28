@@ -358,11 +358,12 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 					Type      string
 					Bitrate   string
 					Retention struct {
-						Debug    bool
-						Policy   string
-						MaxAge   string
-						MaxUsage string
-						MinClips int
+						Debug            bool
+						Policy           string
+						MaxAge           string
+						MaxUsage         string
+						MinClips         int
+						KeepSpectrograms bool
 					}
 				}{
 					Path: t.TempDir(),

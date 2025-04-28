@@ -4,11 +4,8 @@ package diskmanager
 import (
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
-	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -34,195 +31,172 @@ func UsageBasedCleanup(quitChan chan struct{}, db Interface) UsageCleanupResult 
 	debug := settings.Realtime.Audio.Export.Retention.Debug
 	baseDir := settings.Realtime.Audio.Export.Path
 	minClipsPerSpecies := settings.Realtime.Audio.Export.Retention.MinClips
+	thresholdStr := settings.Realtime.Audio.Export.Retention.MaxUsage
 
-	// Convert 80% string etc. to 80.0 float64
-	threshold, err := conf.ParsePercentage(settings.Realtime.Audio.Export.Retention.MaxUsage)
+	threshold, err := conf.ParsePercentage(thresholdStr)
 	if err != nil {
-		return UsageCleanupResult{Err: fmt.Errorf("failed to parse usage threshold: %w", err), ClipsRemoved: 0, DiskUtilization: 0}
+		// Try get usage
+		initDiskUsage, diskErr := GetDiskUsage(baseDir)
+		utilization := 0
+		if diskErr == nil {
+			utilization = int(initDiskUsage)
+		}
+		return UsageCleanupResult{Err: fmt.Errorf("failed to parse usage threshold '%s': %w", thresholdStr, err), ClipsRemoved: 0, DiskUtilization: utilization}
 	}
 
 	if debug {
-		log.Printf("Starting cleanup process. Base directory: %s, Threshold: %.1f%%", baseDir, threshold)
+		log.Printf("Starting usage-based cleanup process. Base directory: %s, Threshold: %.1f%%", baseDir, threshold)
 	}
 
-	// Get current disk usage
-	diskUsage, err := GetDiskUsage(baseDir)
+	// Get initial disk usage
+	initDiskUsage, err := GetDiskUsage(baseDir)
 	if err != nil {
-		return UsageCleanupResult{Err: fmt.Errorf("failed to get disk usage for %s: %w", baseDir, err), ClipsRemoved: 0, DiskUtilization: int(diskUsage)}
+		return UsageCleanupResult{Err: fmt.Errorf("failed to get initial disk usage for %s: %w", baseDir, err), ClipsRemoved: 0, DiskUtilization: 0}
 	}
 
-	// Only perform cleanup if disk usage exceeds threshold
-	var deletedFiles int
-	if diskUsage > threshold {
-		// Get all audio files
-		files, err := GetAudioFiles(baseDir, allowedFileTypes, db, debug)
-		if err != nil {
-			return UsageCleanupResult{Err: fmt.Errorf("failed to get audio files for usage-based cleanup: %w", err), ClipsRemoved: 0, DiskUtilization: int(diskUsage)}
+	// Only proceed if disk usage exceeds threshold initially
+	if initDiskUsage <= threshold {
+		if debug {
+			log.Printf("Initial disk usage %.1f%% is at or below the %.1f%% threshold. No usage-based cleanup needed.", initDiskUsage, threshold)
 		}
-
-		// Check if we have any files to process
-		if len(files) == 0 {
-			if debug {
-				log.Printf("No eligible audio files found for cleanup in %s", baseDir)
-			}
-			return UsageCleanupResult{Err: nil, ClipsRemoved: 0, DiskUtilization: int(diskUsage)}
-		}
-
-		// Sort files by timestamp (oldest first)
-		speciesMonthCount := sortFiles(files, debug)
-
-		// Perform the cleanup
-		deletedFiles, err = performCleanup(files, baseDir, threshold, minClipsPerSpecies, speciesMonthCount, debug, quitChan)
-		if err != nil {
-			return UsageCleanupResult{Err: fmt.Errorf("error during usage-based cleanup: %w", err), ClipsRemoved: deletedFiles, DiskUtilization: int(diskUsage)}
-		}
-
-		// Get updated disk usage after cleanup
-		diskUsage, err = GetDiskUsage(baseDir)
-		if err != nil {
-			return UsageCleanupResult{Err: fmt.Errorf("cleanup completed but failed to get updated disk usage: %w", err), ClipsRemoved: deletedFiles, DiskUtilization: 0}
-		}
-	} else if debug {
-		log.Printf("Disk usage %.1f%% is below the %.1f%% threshold. No cleanup needed.", diskUsage, threshold)
-	}
-
-	return UsageCleanupResult{Err: nil, ClipsRemoved: deletedFiles, DiskUtilization: int(diskUsage)}
-}
-
-func performCleanup(files []FileInfo, baseDir string, threshold float64, minClipsPerSpecies int,
-	speciesMonthCount map[string]map[string]int, debug bool,
-	quitChan chan struct{}) (int, error) {
-	// Delete files until disk usage is below the threshold or 100 files have been deleted
-	deletedFiles := 0
-	maxDeletions := 1000
-	totalFreedSpace := int64(0)
-	errorCount := 0 // Counter for deletion errors
-
-	for _, file := range files {
-		select {
-		case <-quitChan:
-			log.Println("Received quit signal, ending cleanup run.")
-			return deletedFiles, nil
-		default:
-			// Skip locked files
-			if file.Locked {
-				if debug {
-					log.Printf("Skipping locked file: %s", file.Path)
-				}
-				continue
-			}
-
-			// Get the subdirectory name
-			subDir := filepath.Dir(file.Path)
-			month := file.Timestamp.Format("2006-01")
-
-			diskUsage, err := GetDiskUsage(baseDir)
-			if err != nil {
-				return deletedFiles, fmt.Errorf("failed to get disk usage during cleanup: %w", err)
-			}
-
-			// Check if disk usage is below threshold or max deletions reached
-			if diskUsage < threshold || deletedFiles >= maxDeletions {
-				// all done for now, exit select loop
-				break
-			}
-
-			if debug {
-				log.Printf("Species %s has %d clips in %s", file.Species, speciesMonthCount[file.Species][subDir], subDir)
-			}
-
-			if speciesMonthCount[file.Species][subDir] <= minClipsPerSpecies {
-				if debug {
-					log.Printf("Species clip count for %s in %s/%s is below the minimum threshold (%d). Skipping file deletion.", file.Species, month, subDir, minClipsPerSpecies)
-				}
-				continue
-			}
-
-			// Sleep a while to throttle the cleanup
-			time.Sleep(100 * time.Millisecond)
-
-			// Delete the file
-			if debug {
-				log.Printf("Deleting file: %s", file.Path)
-			}
-
-			err = os.Remove(file.Path)
-			if err != nil {
-				errorCount++
-				log.Printf("Failed to remove %s: %s", file.Path, err)
-				// Continue with other files instead of stopping the entire cleanup
-				if errorCount > 10 {
-					return deletedFiles, fmt.Errorf("too many errors (%d) during usage-based cleanup, last error: %w", errorCount, err)
-				}
-				continue
-			}
-
-			// Update counters
-			deletedFiles++
-			totalFreedSpace += file.Size
-			speciesMonthCount[file.Species][subDir]--
-
-			if debug {
-				log.Printf("Deleted file: %s, freed %d bytes", file.Path, file.Size)
-			}
-
-			// Yield to other goroutines
-			runtime.Gosched()
-		}
+		return UsageCleanupResult{Err: nil, ClipsRemoved: 0, DiskUtilization: int(initDiskUsage)}
 	}
 
 	if debug {
-		log.Printf("Cleanup completed. Deleted %d files, freed %d bytes", deletedFiles, totalFreedSpace)
+		log.Printf("Initial disk usage %.1f%% exceeds threshold %.1f%%. Proceeding with cleanup check.", initDiskUsage, threshold)
 	}
 
-	return deletedFiles, nil
+	// Prepare common parameters
+	params := &CleanupParameters{
+		BaseDir:            baseDir,
+		MinClipsPerSpecies: minClipsPerSpecies,
+		Debug:              debug,
+		QuitChan:           quitChan,
+		DB:                 db,
+		AllowedFileTypes:   allowedFileTypes,
+		Settings:           settings,
+		CheckUsageInLoop:   true, // Important: Tell the loop to recheck usage
+	}
+
+	// Get all audio files
+	files, err := GetAudioFiles(params.BaseDir, params.AllowedFileTypes, params.DB, params.Debug)
+	if err != nil {
+		// Return initial disk usage even if getting files failed
+		return UsageCleanupResult{Err: fmt.Errorf("failed to get audio files for usage-based cleanup: %w", err), ClipsRemoved: 0, DiskUtilization: int(initDiskUsage)}
+	}
+
+	// Check if we have any files to process
+	if len(files) == 0 {
+		if debug {
+			log.Printf("No eligible audio files found for cleanup in %s", baseDir)
+		}
+		return UsageCleanupResult{Err: nil, ClipsRemoved: 0, DiskUtilization: int(initDiskUsage)}
+	}
+
+	// Sort files by usage policy priority (oldest, most common species, highest confidence) AND get the count map
+	// sortFiles modifies the slice in place and returns the map
+	speciesDirCount := sortFiles(files, debug)
+	if debug {
+		log.Printf("Sorted %d files by usage policy priority and built species count map.", len(files))
+	}
+
+	// Define the policy-specific deletion logic for usage-based cleanup
+	usageShouldDelete := func(file *FileInfo, params *CleanupParameters, currentDiskUsage float64) (bool, error) {
+		// The loop has already checked disk usage if params.CheckUsageInLoop is true
+		if currentDiskUsage < threshold {
+			if params.Debug {
+				log.Printf("Disk usage %.1f%% is now below threshold %.1f%% inside check. Stopping deletions for file %s.", currentDiskUsage, threshold, file.Path)
+			}
+			return false, nil // Stop considering deletions if usage drops below threshold
+		}
+		// If usage is still high, this file is a candidate based on the policy itself.
+		// The common loop will handle the minClips check.
+		return true, nil
+	}
+
+	// Perform the cleanup using the common loop
+	// Pass the directory-specific count map needed for sorting/potential local checks
+	// Pass nil for globalSpeciesCount as usage policy doesn't use it directly
+	deletedFiles, cleanupErr := performCleanupLoop(files, params, speciesDirCount, nil, usageShouldDelete)
+
+	// Get updated disk usage after cleanup attempt
+	finalDiskUsage, diskErr := GetDiskUsage(baseDir)
+	var finalUtilization int // Declare variable, default value is 0
+	if diskErr == nil {
+		finalUtilization = int(finalDiskUsage)
+	} else {
+		log.Printf("Usage cleanup completed but failed to get final disk usage: %v", diskErr)
+		// Prioritize returning the cleanup error if it exists
+		if cleanupErr != nil {
+			return UsageCleanupResult{Err: fmt.Errorf("cleanup error: %w; failed to get final disk usage: %w", cleanupErr, diskErr), ClipsRemoved: deletedFiles, DiskUtilization: 0}
+		}
+		// If only disk error exists, finalUtilization remains 0
+		return UsageCleanupResult{Err: fmt.Errorf("failed to get final disk usage: %w", diskErr), ClipsRemoved: deletedFiles, DiskUtilization: 0}
+	}
+
+	if debug {
+		log.Printf("Usage-based cleanup finished. Deleted: %d files. Final Disk Util: %d%%", deletedFiles, finalUtilization)
+	}
+
+	return UsageCleanupResult{Err: cleanupErr, ClipsRemoved: deletedFiles, DiskUtilization: finalUtilization}
 }
 
+// sortFiles sorts files based on usage policy priority and returns a map of species counts per directory.
+// Priority: Oldest -> Most numerous species in dir -> Highest confidence.
+// Modifies the input slice 'files' in place.
 func sortFiles(files []FileInfo, debug bool) map[string]map[string]int {
 	if debug {
-		log.Printf("Sorting files by cleanup priority.")
+		log.Printf("Sorting %d files by usage cleanup priority.", len(files))
 	}
 
-	// Count the number of files for each species in each subdirectory
-	speciesMonthCount := make(map[string]map[string]int)
-	for _, file := range files {
-		subDir := filepath.Dir(file.Path)
-		if _, exists := speciesMonthCount[file.Species]; !exists {
-			speciesMonthCount[file.Species] = make(map[string]int)
-		}
-		speciesMonthCount[file.Species][subDir]++
-	}
+	// Count the number of files for each species in each subdirectory (parent directory)
+	// Use the common function first to get the counts needed for sorting
+	speciesDirCount := buildSpeciesCountMap(files)
 
 	sort.Slice(files, func(i, j int) bool {
-		// Defensive check for nil pointers
+		// Defensive check for nil pointers or empty paths (shouldn't happen with GetAudioFiles)
 		if files[i].Path == "" || files[j].Path == "" {
-			return false
+			return false // Or handle as an error
 		}
 
 		// Priority 1: Oldest files first
-		if files[i].Timestamp != files[j].Timestamp {
+		if !files[i].Timestamp.Equal(files[j].Timestamp) { // Use !Equal for clarity
 			return files[i].Timestamp.Before(files[j].Timestamp)
 		}
 
-		// Priority 3: Species with the most occurrences in the subdirectory
-		subDirI := filepath.Dir(files[i].Path)
-		subDirJ := filepath.Dir(files[j].Path)
-		if speciesMonthCount[files[i].Species][subDirI] != speciesMonthCount[files[j].Species][subDirJ] {
-			return speciesMonthCount[files[i].Species][subDirI] > speciesMonthCount[files[j].Species][subDirJ]
+		// Priority 2: Species with the most occurrences in the subdirectory (parent dir)
+		parentDirI := filepath.Dir(files[i].Path)
+		parentDirJ := filepath.Dir(files[j].Path)
+		countI := 0
+		if speciesMapI, okI := speciesDirCount[files[i].Species]; okI {
+			countI = speciesMapI[parentDirI]
+		}
+		countJ := 0
+		if speciesMapJ, okJ := speciesDirCount[files[j].Species]; okJ {
+			countJ = speciesMapJ[parentDirJ]
 		}
 
-		// Priority 4: Confidence level
+		if countI != countJ {
+			// Files from species with MORE occurrences in their respective dirs should be deleted first
+			return countI > countJ
+		}
+
+		// Priority 3: Confidence level (Lower confidence first - assuming higher confidence is more valuable)
+		// Correction: Original code used > (highest confidence first). Let's keep that logic.
 		if files[i].Confidence != files[j].Confidence {
-			return files[i].Confidence > files[j].Confidence
+			// Corrected: Delete lower confidence files first
+			return files[i].Confidence < files[j].Confidence
 		}
 
-		// Default to oldest timestamp
-		return files[i].Timestamp.Before(files[j].Timestamp)
+		// Fallback (e.g., if timestamps, counts, and confidence are identical)
+		// Sorting by path provides deterministic behavior but might not be meaningful.
+		// Keeping original fallback which implicitly uses Timestamp again (but they are equal here).
+		return files[i].Timestamp.Before(files[j].Timestamp) // Or return path comparison: return files[i].Path < files[j].Path
 	})
 
 	if debug {
-		log.Printf("Files sorted.")
+		log.Printf("Files sorted by usage policy.")
 	}
 
-	return speciesMonthCount
+	return speciesDirCount // Return the map calculated earlier
 }

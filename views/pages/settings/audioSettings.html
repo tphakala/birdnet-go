@@ -430,7 +430,8 @@ x-init="
              policy: '{{.Settings.Realtime.Audio.Export.Retention.Policy}}',
              maxage: '{{.Settings.Realtime.Audio.Export.Retention.MaxAge}}',
              maxusage: '{{.Settings.Realtime.Audio.Export.Retention.MaxUsage}}',
-             minclips: {{.Settings.Realtime.Audio.Export.Retention.MinClips}}
+             minclips: {{.Settings.Realtime.Audio.Export.Retention.MinClips}},
+             keepSpectrograms: {{.Settings.Realtime.Audio.Export.Retention.KeepSpectrograms}}
          },
          audioRetentionSettingsOpen: false,
          showTooltip: null,
@@ -499,6 +500,17 @@ x-init="
                     "tooltip" "Minimum number of clips per species to keep before starting evictions."}}
 
             </div>
+            
+            <!-- Keep Spectrograms -->
+            <div class="form-control relative" x-show="audioRetention.policy !== 'none'">
+                {{template "checkbox" dict
+                    "id" "audioRetentionKeepSpectrograms"
+                    "model" "audioRetention.keepSpectrograms"
+                    "name" "realtime.audio.export.retention.keepspectrograms"
+                    "label" "Keep Spectrogram Images"
+                    "tooltip" "When enabled, spectrogram images (.png files) will be kept when audio files are deleted during cleanup. When disabled, spectrogram images will be deleted along with their audio files."}}
+            </div>
+            
         </div>
     </div>
 </div>

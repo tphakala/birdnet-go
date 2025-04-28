@@ -599,11 +599,12 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 					Type      string
 					Bitrate   string
 					Retention struct {
-						Debug    bool
-						Policy   string
-						MaxAge   string
-						MaxUsage string
-						MinClips int
+						Debug            bool
+						Policy           string
+						MaxAge           string
+						MaxUsage         string
+						MinClips         int
+						KeepSpectrograms bool
 					}
 				}{
 					Path: t.TempDir(), // Set the required path

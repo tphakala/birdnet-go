@@ -51,11 +51,12 @@ type AudioSettings struct {
 		Type      string // audio file type, wav, mp3 or flac
 		Bitrate   string // bitrate for audio export
 		Retention struct {
-			Debug    bool   // true to enable retention debug
-			Policy   string // retention policy, "none", "age" or "usage"
-			MaxAge   string // maximum age of audio clips to keep
-			MaxUsage string // maximum disk usage percentage before cleanup
-			MinClips int    // minimum number of clips per species to keep
+			Debug            bool   // true to enable retention debug
+			Policy           string // retention policy, "none", "age" or "usage"
+			MaxAge           string // maximum age of audio clips to keep
+			MaxUsage         string // maximum disk usage percentage before cleanup
+			MinClips         int    // minimum number of clips per species to keep
+			KeepSpectrograms bool   // true to keep spectrograms
 		}
 	}
 	Equalizer EqualizerSettings // equalizer settings
