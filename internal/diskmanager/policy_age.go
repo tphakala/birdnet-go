@@ -122,6 +122,10 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 
 			// 3. Update state *after* successful deletion
 			speciesTotalCount[file.Species]-- // Decrement total count for the species
+			// Prevent count from going negative (safety check)
+			if speciesTotalCount[file.Species] < 0 {
+				speciesTotalCount[file.Species] = 0
+			}
 			deletedCount++
 
 			// 4. Yield to other goroutines

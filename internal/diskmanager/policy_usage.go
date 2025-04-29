@@ -56,13 +56,8 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	// Create a map to keep track of the number of files per species per subdirectory (Month folder)
 	speciesMonthCount := buildSpeciesSubDirCountMap(files)
 
-	// Sort files: Lowest confidence first, then oldest first as a tie-breaker
-	sort.SliceStable(files, func(i, j int) bool {
-		if files[i].Confidence != files[j].Confidence {
-			return files[i].Confidence < files[j].Confidence // Lowest confidence first
-		}
-		return files[i].Timestamp.Before(files[j].Timestamp) // Oldest first
-	})
+	// Sort files using the dedicated usage policy sorting logic
+	sortFilesForUsage(files, speciesMonthCount, debug)
 
 	// --- Run the main processing loop ---
 	loopParams := &usageLoopParams{
@@ -76,7 +71,7 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 		debug:               debug,
 	}
 	deletedCount, lastKnownGoodUsagePercent, loopErr := processUsageDeletionLoop(files, speciesMonthCount,
-		loopParams, // Pass the struct pointer
+		loopParams, baseDir, // Pass the struct pointer and baseDir
 		quit)
 
 	// --- Calculate Final Usage & Return ---
@@ -99,22 +94,13 @@ type usageLoopParams struct {
 
 // processUsageDeletionLoop contains the core logic for iterating through files and deleting based on usage.
 func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map[string]int,
-	params *usageLoopParams, // Use struct pointer
+	params *usageLoopParams, baseDir string, // Add baseDir parameter
 	quit <-chan struct{}) (deletedCount, lastKnownGoodUsagePercent int, loopErr error) {
 
 	deletedCount = 0
 	errorCount := 0
 	estimatedUsedBytes := params.diskInfo.UsedBytes
 	lastKnownGoodUsagePercent = params.initialUsagePercent
-	baseDir := "" // Need baseDir for refreshing disk usage
-	if len(files) > 0 {
-		baseDir = filepath.Dir(files[0].Path) // Infer from first file path
-		if baseDir == "." || baseDir == "/" { // Handle edge cases where file might be at root
-			// Try to get a more specific path if possible, otherwise log potential inaccuracy
-			log.Printf("Warning: Could not determine a specific base directory for usage refresh checks from file path '%s'. Refresh might be inaccurate.", files[0].Path)
-			// Consider passing baseDir as an argument instead of inferring if this is problematic
-		}
-	}
 
 	for i := range files {
 		select {
