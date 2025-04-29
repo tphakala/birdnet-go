@@ -257,7 +257,8 @@ func TestSortFiles(t *testing.T) {
 	}
 
 	// Sort the files
-	speciesCount := sortFiles(files, true)
+	speciesCount := buildSpeciesSubDirCountMap(files)
+	sortFilesForUsage(files, speciesCount, true)
 
 	// Verify sorting order (oldest first)
 	assert.Equal(t, "anas_platyrhynchos", files[0].Species, "Anas platyrhynchos should be first (oldest)")
@@ -327,7 +328,8 @@ func (c UsageBasedCleanupForTests) Cleanup(quitChan chan struct{}, db Interface)
 		}
 
 		// Sort files by priority
-		speciesCount := sortFiles(h.audioFiles, h.debug)
+		speciesCount := buildSpeciesSubDirCountMap(h.audioFiles)
+		sortFilesForUsage(h.audioFiles, speciesCount, h.debug)
 
 		// Process the files for cleanup
 		for i := range h.audioFiles {
@@ -749,7 +751,8 @@ func testUsageBasedCleanupWithRealFiles(
 
 	// Sort files by timestamp (oldest first) using the same sortFiles function
 	// used elsewhere in the codebase for consistency
-	speciesCount := sortFiles(files, false)
+	speciesCount := buildSpeciesSubDirCountMap(files)
+	sortFilesForUsage(files, speciesCount, false)
 
 	// Process files for deletion if disk usage is above threshold
 	deletedCount := 0
