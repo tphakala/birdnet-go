@@ -93,8 +93,11 @@ func TestFileTypesEligibleForDeletion(t *testing.T) {
 				assert.Equal(t, 80, fileInfo.Confidence, "Confidence should be correctly parsed")
 
 				// Check that the timestamp was parsed correctly
-				expectedTime := parseTime("20210102T150405Z")
-				assert.Equal(t, expectedTime, fileInfo.Timestamp, "Timestamp should be correctly parsed")
+				// IMPORTANT: Timestamps from filenames (with 'Z') are now parsed as local time
+				// so we need to compare against the local time equivalent.
+				expectedTimeLocal, err := time.ParseInLocation("20060102T150405", "20210102T150405", time.Local)
+				require.NoError(t, err, "Failed to parse expected local time for comparison")
+				assert.Equal(t, expectedTimeLocal, fileInfo.Timestamp, "Timestamp should be correctly parsed")
 			} else {
 				// For disallowed files, we must ensure they would be rejected from deletion
 				// We'll fail the test if they would be processed (which indicates a security issue)
@@ -150,8 +153,11 @@ func TestParseFileInfoWithDifferentExtensions(t *testing.T) {
 				assert.Equal(t, 80, fileInfo.Confidence)
 
 				// Check that the timestamp was parsed correctly
-				expectedTime := parseTime("20210102T150405Z")
-				assert.Equal(t, expectedTime, fileInfo.Timestamp)
+				// IMPORTANT: Timestamps from filenames (with 'Z') are now parsed as local time
+				// so we need to compare against the local time equivalent.
+				expectedTimeLocal, err := time.ParseInLocation("20060102T150405", "20210102T150405", time.Local)
+				require.NoError(t, err, "Failed to parse expected local time for comparison")
+				assert.Equal(t, expectedTimeLocal, fileInfo.Timestamp, "Timestamp should be correctly parsed")
 			} else {
 				assert.Error(t, err, "Should return an error")
 			}
@@ -171,8 +177,12 @@ func TestParseFileInfoMp3Extension(t *testing.T) {
 	assert.Equal(t, "bubo_bubo", fileInfo.Species)
 	assert.Equal(t, 80, fileInfo.Confidence)
 
-	expectedTime := parseTime("20250130T184446Z")
-	assert.Equal(t, expectedTime, fileInfo.Timestamp)
+	// Check that the timestamp was parsed correctly
+	// IMPORTANT: Timestamps from filenames (with 'Z') are now parsed as local time
+	// so we need to compare against the local time equivalent.
+	expectedTimeLocal, err := time.ParseInLocation("20060102T150405", "20250130T184446", time.Local)
+	require.NoError(t, err, "Failed to parse expected local time for comparison")
+	assert.Equal(t, expectedTimeLocal, fileInfo.Timestamp, "Timestamp should be correctly parsed")
 }
 
 // TestParseFileInfoProductionFormat tests file names as they actually appear in production
@@ -235,8 +245,16 @@ func TestParseFileInfoProductionFormat(t *testing.T) {
 				assert.Equal(t, tc.expectedConf, fileInfo.Confidence, "Confidence should be correctly parsed")
 
 				// Check that the timestamp was parsed correctly
-				expectedTime := parseTime(tc.expectedTime)
-				assert.Equal(t, expectedTime, fileInfo.Timestamp, "Timestamp should be correctly parsed")
+				// IMPORTANT: Timestamps from filenames (with 'Z') are now parsed as local time
+				// so we need to compare against the local time equivalent.
+
+				// First, parse the timestamp string without the Z suffix
+				timestampStrLocal := strings.TrimSuffix(tc.expectedTime, "Z")
+
+				// Parse it using the local timezone
+				expectedTimeLocal, err := time.ParseInLocation("20060102T150405", timestampStrLocal, time.Local)
+				require.NoError(t, err, "Failed to parse expected local time for comparison")
+				assert.Equal(t, expectedTimeLocal, fileInfo.Timestamp, "Timestamp should be correctly parsed")
 			} else {
 				assert.Error(t, err, "Should return an error: "+tc.description)
 				if err != nil {
@@ -250,6 +268,7 @@ func TestParseFileInfoProductionFormat(t *testing.T) {
 // TestSortFiles tests the sortFiles function
 func TestSortFiles(t *testing.T) {
 	// Create a set of files with different timestamps, species counts, and confidence levels
+	// Note: parseTime helper now parses timestamps as local time due to changes in parseFileInfo
 	files := []FileInfo{
 		{Path: "/base/dir1/bubo_bubo_80p_20210102T150405Z.wav", Species: "bubo_bubo", Confidence: 80, Timestamp: parseTime("20210102T150405Z")},
 		{Path: "/base/dir1/bubo_bubo_90p_20210103T150405Z.wav", Species: "bubo_bubo", Confidence: 90, Timestamp: parseTime("20210103T150405Z")},
