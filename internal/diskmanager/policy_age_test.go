@@ -233,7 +233,8 @@ func TestAgeBasedCleanupBasicFunctionality(t *testing.T) {
 			continue
 		}
 
-		// Recent files should be kept
+		// Recent files should be kept - use local time for comparison
+		// Note: File timestamps (even with 'Z' suffix) are in local time, not UTC
 		if file.Timestamp.After(time.Now().Add(-168 * time.Hour)) { // Assuming 7 day retention
 			t.Logf("Verified that recent file would be preserved: %s", file.Path)
 		} else {
@@ -511,9 +512,6 @@ func simulateAgeBasedCleanup(
 	// Simulate calls that prepareInitialCleanup might make
 	_, _ = GetDiskUsage(baseDir) // Call to satisfy potential interface, result ignored
 
-	// Set a fixed retention period (passed as parameter)
-	// retentionPeriodHours := 168 // Removed hardcoding
-
 	// Track current disk utilization (for returning in result, not for logic)
 	currentDiskUtilization := initialDiskUtilization
 
@@ -552,6 +550,7 @@ func simulateAgeBasedCleanup(
 	}
 
 	// Set the expiration time (now - retention period)
+	// Use local time to match how file timestamps are stored
 	expirationTime := time.Now().Add(-time.Duration(retentionPeriodHours) * time.Hour)
 
 	// Process files for deletion
@@ -564,6 +563,7 @@ func simulateAgeBasedCleanup(
 		}
 
 		// Skip files that are not old enough
+		// Note: Both file.Timestamp and expirationTime are in local time
 		if !file.Timestamp.Before(expirationTime) {
 			continue
 		}
@@ -606,3 +606,41 @@ func simulateAgeBasedCleanup(
 	// Return the results with dynamic disk utilization
 	return CleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: currentDiskUtilization}
 }
+
+/*
+// Helper function to check if a slice contains a value
+func contains(slice []string, value string) bool {
+	for _, item := range slice {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
+// Helper function to create mock FileInfo for testing
+func createMockFileInfo(filename string, size int64) os.FileInfo {
+	return &mockFileInfo{
+		name:    filename,
+		size:    size,
+		mode:    0o644,
+		modTime: time.Now(),
+		isDir:   false,
+	}
+}
+*/
+// Mock implementation of os.FileInfo for testing
+type mockFileInfo struct {
+	name    string
+	size    int64
+	mode    os.FileMode
+	modTime time.Time
+	isDir   bool
+}
+
+func (m *mockFileInfo) Name() string       { return m.name }
+func (m *mockFileInfo) Size() int64        { return m.size }
+func (m *mockFileInfo) Mode() os.FileMode  { return m.mode }
+func (m *mockFileInfo) ModTime() time.Time { return m.modTime }
+func (m *mockFileInfo) IsDir() bool        { return m.isDir }
+func (m *mockFileInfo) Sys() interface{}   { return nil }
