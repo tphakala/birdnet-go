@@ -4,11 +4,8 @@ package diskmanager
 import (
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 	"runtime"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -16,47 +13,35 @@ import (
 
 // AgeBasedCleanup removes clips from the filesystem based on their age and the number of clips per species.
 // Returns a CleanupResult containing error, number of clips removed, and current disk utilization percentage.
-func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult { // Use common result type
-	settings := conf.Setting()
+func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
+	// Perform initial setup (get files, settings, check if proceed)
+	files, baseDir, retention, proceed, initialResult := prepareInitialCleanup(db)
+	if !proceed {
+		return initialResult
+	}
+	debug := retention.Debug
+	keepSpectrograms := retention.KeepSpectrograms
+	minClipsPerSpecies := retention.MinClips
+	retentionPeriodSetting := retention.MaxAge
 
-	debug := settings.Realtime.Audio.Export.Retention.Debug
-	keepSpectrograms := settings.Realtime.Audio.Export.Retention.KeepSpectrograms // Get the setting
-	baseDir := settings.Realtime.Audio.Export.Path
-	minClipsPerSpecies := settings.Realtime.Audio.Export.Retention.MinClips
-	retentionPeriod := settings.Realtime.Audio.Export.Retention.MaxAge
-
-	retentionPeriodInHours, err := conf.ParseRetentionPeriod(retentionPeriod)
+	retentionPeriodInHours, err := conf.ParseRetentionPeriod(retentionPeriodSetting)
 	if err != nil {
-		log.Printf("Invalid retention period: %s\n", err)
-		return CleanupResult{Err: err, ClipsRemoved: 0, DiskUtilization: 0} // Use common result type
+		log.Printf("Invalid retention period '%s': %s\n", retentionPeriodSetting, err)
+		// Try to get current disk usage for the result
+		currentUsage, diskErr := GetDiskUsage(baseDir)
+		utilization := 0
+		if diskErr == nil {
+			utilization = int(currentUsage)
+		}
+		return CleanupResult{Err: fmt.Errorf("invalid retention period '%s': %w", retentionPeriodSetting, err), ClipsRemoved: 0, DiskUtilization: utilization}
 	}
 
 	if debug {
-		log.Printf("Starting age-based cleanup process. Base directory: %s, Retention period: %s", baseDir, retentionPeriod)
-	}
-
-	// Get the list of audio files, limited to allowed file types defined in file_utils.go
-	files, err := GetAudioFiles(baseDir, allowedFileTypes, db, debug)
-	if err != nil {
-		return CleanupResult{Err: fmt.Errorf("failed to get audio files for age-based cleanup: %w", err), ClipsRemoved: 0, DiskUtilization: 0} // Use common result type
-	}
-
-	if len(files) == 0 {
-		if debug {
-			log.Printf("No eligible audio files found for cleanup in %s", baseDir)
-		}
-
-		// Get current disk utilization even if no files were processed
-		diskUsage, err := GetDiskUsage(baseDir)
-		if err != nil {
-			return CleanupResult{Err: fmt.Errorf("failed to get disk usage: %w", err), ClipsRemoved: 0, DiskUtilization: 0} // Use common result type
-		}
-
-		return CleanupResult{Err: nil, ClipsRemoved: 0, DiskUtilization: int(diskUsage)} // Use common result type
+		log.Printf("Starting age-based cleanup. Base directory: %s, Retention period: %s (%d hours)", baseDir, retentionPeriodSetting, retentionPeriodInHours)
 	}
 
 	// Create a map to keep track of the *total* number of files per species
-	speciesTotalCount := buildSpeciesTotalCountMap(files) // Use the new function
+	speciesTotalCount := buildSpeciesTotalCountMap(files)
 
 	// Sort files: Oldest first, then lowest confidence first as a tie-breaker
 	sort.SliceStable(files, func(i, j int) bool {
@@ -124,16 +109,15 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 				continue
 			}
 
-			// 2. Perform deletion using the helper function
+			// 2. Perform deletion using the common helper
 			if delErr := deleteFileAndOptionalSpectrogram(file, reason, keepSpectrograms, debug); delErr != nil {
-				errorCount++
-				log.Printf("Failed to remove %s: %s\n", file.Path, delErr) // Log error here
-				if errorCount > 10 {
-					// Assign error to be returned by the function
-					loopErr = fmt.Errorf("too many errors (%d) during age-based cleanup, last error: %w", errorCount, delErr)
-					return deletedCount, loopErr // Stop processing after too many errors
+				// Use the common error handler
+				shouldStop, loopErrTmp := handleDeletionErrorInLoop(file.Path, delErr, &errorCount, 10)
+				if shouldStop {
+					loopErr = loopErrTmp         // Assign the final error
+					return deletedCount, loopErr // Stop processing
 				}
-				continue // Continue with the next file even if one fails
+				continue // Continue with the next file
 			}
 
 			// 3. Update state *after* successful deletion
@@ -174,37 +158,4 @@ func isEligibleForAgeDeletion(file *FileInfo, expirationTime time.Time, speciesT
 
 	// If all checks pass, the file is eligible
 	return true, "older than retention period and minimum count allows"
-}
-
-// deleteFileAndOptionalSpectrogram handles the deletion of the audio file
-// and its associated spectrogram if required.
-func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectrograms, debug bool) error {
-	// Throttle slightly before deletion
-	time.Sleep(100 * time.Millisecond)
-
-	// Log intent before deleting
-	if debug {
-		log.Printf("Deleting file based on age policy (%s): %s", reason, file.Path)
-	}
-
-	// Delete the audio file (reuse common helper)
-	if err := deleteAudioFile(file, debug); err != nil {
-		// Error logging happens in the calling function (processAgeBasedDeletionLoop)
-		return err // Return the error to be handled by the caller
-	}
-
-	// Optionally delete associated spectrogram PNG file
-	if !keepSpectrograms {
-		pngPath := strings.TrimSuffix(file.Path, filepath.Ext(file.Path)) + ".png"
-		if pngErr := os.Remove(pngPath); pngErr != nil {
-			// Log if the PNG deletion fails, but don't treat as critical error for the main deletion process
-			if debug && !os.IsNotExist(pngErr) {
-				log.Printf("Warning: Failed to remove associated spectrogram %s: %v", pngPath, pngErr)
-			}
-		} else if debug {
-			log.Printf("Deleted associated spectrogram %s", pngPath)
-		}
-	}
-
-	return nil // Deletion successful
 }

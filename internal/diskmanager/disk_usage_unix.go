@@ -20,7 +20,25 @@ func GetDiskUsage(path string) (float64, error) {
 	totalBlocks := stat.Blocks
 	freeBlocks := stat.Bfree
 	usedBlocks := totalBlocks - freeBlocks
-	usagePercentage := float64(usedBlocks) / float64(totalBlocks) * 100.0
+	usagePercent := float64(usedBlocks) / float64(totalBlocks) * 100.0
 
-	return usagePercentage, nil
+	return usagePercent, nil
+}
+
+// GetDetailedDiskUsage returns the total and used disk space in bytes for the filesystem containing the given path.
+func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
+	var stat syscall.Statfs_t
+	err := syscall.Statfs(path, &stat)
+	if err != nil {
+		return DiskSpaceInfo{}, fmt.Errorf("failed to statfs '%s': %w", path, err)
+	}
+
+	totalBytes := stat.Blocks * uint64(stat.Bsize)
+	freeBytes := stat.Bavail * uint64(stat.Bsize) // Available to non-root user
+	usedBytes := totalBytes - freeBytes
+
+	return DiskSpaceInfo{
+		TotalBytes: totalBytes,
+		UsedBytes:  usedBytes,
+	}, nil
 }
