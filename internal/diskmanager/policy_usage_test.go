@@ -278,6 +278,7 @@ type UsageBasedTestHelper struct {
 	diskUsage       float64
 	audioFiles      []FileInfo
 	deletedFiles    []string
+	deletedPngFiles []string // Track PNGs that *should* be deleted
 	lockedFilePaths []string
 
 	// Settings
@@ -286,6 +287,7 @@ type UsageBasedTestHelper struct {
 	minClipsPerSpecies int
 	retentionPolicy    string
 	debug              bool
+	keepSpectrograms   bool // Added keepSpectrograms
 }
 
 // Execute runs the test with the given configuration
@@ -361,6 +363,14 @@ func (c UsageBasedCleanupForTests) Cleanup(quitChan chan struct{}, db Interface)
 				// "Delete" the file
 				h.deletedFiles = append(h.deletedFiles, file.Path)
 
+				// Simulate PNG deletion if keepSpectrograms is false
+				if !h.keepSpectrograms {
+					pngPath := strings.TrimSuffix(file.Path, filepath.Ext(file.Path)) + ".png"
+					// Actually remove the PNG file from the filesystem
+					_ = osRemove(pngPath) // Ignore error, test assertions will catch if file still exists
+					h.deletedPngFiles = append(h.deletedPngFiles, pngPath)
+				}
+
 				// Reduce disk usage after each delete to simulate cleanup progress
 				h.diskUsage -= 2.0 // Simple reduction for testing
 
@@ -374,19 +384,34 @@ func (c UsageBasedCleanupForTests) Cleanup(quitChan chan struct{}, db Interface)
 }
 
 // TestUsageBasedCleanupTriggered tests that cleanup is triggered when usage exceeds threshold
+// and that spectrogram deletion respects the KeepSpectrograms setting.
 func TestUsageBasedCleanupTriggered(t *testing.T) {
 	// Create a temporary test directory
 	tempDir := t.TempDir()
 
-	// Setup test helper
-	helper := &UsageBasedTestHelper{
+	// Helper to create audio and png files
+	createTestFilePair := func(baseName string) (string, string) {
+		audioPath := filepath.Join(tempDir, baseName+".wav")
+		pngPath := filepath.Join(tempDir, baseName+".png")
+		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644), "Failed to create audio file")
+		require.NoError(t, os.WriteFile(pngPath, []byte("png"), 0o644), "Failed to create png file")
+		// No need to set time for this usage-based test
+		return audioPath, pngPath
+	}
+
+	// Create file pairs
+	audioPath1, pngPath1 := createTestFilePair("bubo_bubo_80p_20210101T150405Z")
+	audioPath2, pngPath2 := createTestFilePair("bubo_bubo_85p_20210102T150405Z")
+	audioPath3, pngPath3 := createTestFilePair("anas_platyrhynchos_70p_20210103T150405Z")
+
+	// Base helper setup (common settings)
+	baseHelper := UsageBasedTestHelper{
 		diskUsage: 90.0, // 90% usage exceeds 80% threshold
 		audioFiles: []FileInfo{
-			{Path: tempDir + "/bubo_bubo_80p_20210101T150405Z.wav", Species: "bubo_bubo", Confidence: 80, Timestamp: parseTime("20210101T150405Z"), Size: 1024},
-			{Path: tempDir + "/bubo_bubo_85p_20210102T150405Z.mp3", Species: "bubo_bubo", Confidence: 85, Timestamp: parseTime("20210102T150405Z"), Size: 512},
-			{Path: tempDir + "/anas_platyrhynchos_70p_20210103T150405Z.flac", Species: "anas_platyrhynchos", Confidence: 70, Timestamp: parseTime("20210103T150405Z"), Size: 2048},
+			{Path: audioPath1, Species: "bubo_bubo", Confidence: 80, Timestamp: parseTime("20210101T150405Z"), Size: 1024},
+			{Path: audioPath2, Species: "bubo_bubo", Confidence: 85, Timestamp: parseTime("20210102T150405Z"), Size: 512},
+			{Path: audioPath3, Species: "anas_platyrhynchos", Confidence: 70, Timestamp: parseTime("20210103T150405Z"), Size: 2048},
 		},
-		deletedFiles:       []string{},
 		lockedFilePaths:    []string{},
 		baseDir:            tempDir,
 		maxUsagePercent:    "80%",
@@ -395,11 +420,89 @@ func TestUsageBasedCleanupTriggered(t *testing.T) {
 		debug:              true,
 	}
 
-	// Run the test
-	helper.Execute(t)
+	// --- Scenario 1: KeepSpectrograms = true ---
+	t.Run("KeepSpectrogramsTrue", func(t *testing.T) {
+		// Copy base helper and set keepSpectrograms
+		helper := baseHelper
+		helper.keepSpectrograms = true
+		helper.deletedFiles = []string{} // Reset deletion tracking
+		helper.deletedPngFiles = []string{}
+		// Recreate files before test run
+		createTestFilePair("bubo_bubo_80p_20210101T150405Z")
+		createTestFilePair("bubo_bubo_85p_20210102T150405Z")
+		createTestFilePair("anas_platyrhynchos_70p_20210103T150405Z")
 
-	// Verify files were deleted since disk usage was above threshold
-	assert.NotEmpty(t, helper.deletedFiles, "Files should have been deleted when usage exceeds threshold")
+		// Run the test
+		helper.Execute(t)
+
+		// Verify audio files were deleted
+		assert.NotEmpty(t, helper.deletedFiles, "[KeepTrue] Audio files should have been deleted")
+		// Determine which audio files remain based on helper.deletedFiles
+		remainingAudio := make(map[string]bool)
+		for _, af := range helper.audioFiles {
+			remainingAudio[af.Path] = true
+		}
+		for _, df := range helper.deletedFiles {
+			delete(remainingAudio, df)
+		}
+
+		// Verify PNG files were NOT deleted (check actual file existence)
+		assert.FileExists(t, pngPath1, "[KeepTrue] PNG file 1 should exist")
+		assert.FileExists(t, pngPath2, "[KeepTrue] PNG file 2 should exist")
+		assert.FileExists(t, pngPath3, "[KeepTrue] PNG file 3 should exist")
+	})
+
+	// --- Scenario 2: KeepSpectrograms = false ---
+	t.Run("KeepSpectrogramsFalse", func(t *testing.T) {
+		// Copy base helper and set keepSpectrograms
+		helper := baseHelper
+		helper.keepSpectrograms = false
+		helper.deletedFiles = []string{} // Reset deletion tracking
+		helper.deletedPngFiles = []string{}
+		// Recreate files before test run
+		createTestFilePair("bubo_bubo_80p_20210101T150405Z")
+		createTestFilePair("bubo_bubo_85p_20210102T150405Z")
+		createTestFilePair("anas_platyrhynchos_70p_20210103T150405Z")
+
+		// Run the test
+		helper.Execute(t)
+
+		// Verify audio files were deleted (same expectation as KeepTrue)
+		assert.NotEmpty(t, helper.deletedFiles, "[KeepFalse] Audio files should have been deleted")
+		// Determine which audio files remain
+		remainingAudio := make(map[string]bool)
+		for _, af := range helper.audioFiles {
+			remainingAudio[af.Path] = true
+		}
+		deletedAudioMap := make(map[string]bool)
+		for _, df := range helper.deletedFiles {
+			delete(remainingAudio, df)
+			deletedAudioMap[df] = true
+		}
+
+		// Verify PNG files: Exist if audio exists, deleted if audio was deleted
+		if _, deleted := deletedAudioMap[audioPath1]; deleted {
+			assert.NoFileExists(t, pngPath1, "[KeepFalse] PNG file 1 should be deleted")
+		} else {
+			assert.FileExists(t, pngPath1, "[KeepFalse] PNG file 1 should exist")
+		}
+		if _, deleted := deletedAudioMap[audioPath2]; deleted {
+			assert.NoFileExists(t, pngPath2, "[KeepFalse] PNG file 2 should be deleted")
+		} else {
+			assert.FileExists(t, pngPath2, "[KeepFalse] PNG file 2 should exist")
+		}
+		if _, deleted := deletedAudioMap[audioPath3]; deleted {
+			assert.NoFileExists(t, pngPath3, "[KeepFalse] PNG file 3 should be deleted")
+		} else {
+			assert.FileExists(t, pngPath3, "[KeepFalse] PNG file 3 should exist")
+		}
+
+		// Additionally, verify the helper's tracking matches expectations
+		for _, deletedAudioPath := range helper.deletedFiles {
+			expectedPngPath := strings.TrimSuffix(deletedAudioPath, filepath.Ext(deletedAudioPath)) + ".png"
+			assert.Contains(t, helper.deletedPngFiles, expectedPngPath, "[KeepFalse] Helper should have tracked deleted PNG")
+		}
+	})
 }
 
 // TestUsageBasedCleanupNoTriggerBelowThreshold tests that cleanup is not triggered when usage is below threshold
