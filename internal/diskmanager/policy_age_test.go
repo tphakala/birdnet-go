@@ -342,7 +342,7 @@ func testAgeBasedCleanupWithRealFiles(
 	initialDiskUtilization int,
 	minClipsPerSpecies int,
 	utilizationReductionPerFile int,
-) AgeCleanupResult {
+) CleanupResult {
 	// This implementation simulates the real AgeBasedCleanup function
 	// but with controlled inputs and outputs
 
@@ -431,5 +431,5 @@ func testAgeBasedCleanupWithRealFiles(
 	}
 
 	// Return the results with dynamic disk utilization
-	return AgeCleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: currentDiskUtilization}
+	return CleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: currentDiskUtilization}
 }

@@ -705,7 +705,7 @@ func testUsageBasedCleanupWithRealFiles(
 	initialDiskUsage float64,
 	checkLockedFiles bool,
 	diskUsageReductionPerFile float64,
-) UsageCleanupResult {
+) CleanupResult {
 	// This implementation simulates the real UsageBasedCleanup function
 	// but with controlled inputs and outputs
 
@@ -793,7 +793,7 @@ func testUsageBasedCleanupWithRealFiles(
 	}
 
 	// Return the results with the actual current disk usage
-	return UsageCleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: int(currentDiskUsage)}
+	return CleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: int(currentDiskUsage)}
 }
 
 // TestUsageBasedCleanupBelowThreshold tests that no files are deleted when disk usage is below threshold
