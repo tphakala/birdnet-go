@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -98,7 +99,8 @@ type ShouldDeleteFunc func(file *FileInfo) (shouldDelete bool, reason string)
 // It takes a list of files, common parameters, the species count map, and a policy-specific
 // function (shouldDeleteCheck) to determine if a file meets the criteria for deletion.
 func processFilesGeneric(files []FileInfo, speciesCount map[string]map[string]int,
-	minClipsPerSpecies int, maxDeletions int, debug bool, quit <-chan struct{},
+	minClipsPerSpecies int, maxDeletions int, debug bool, keepSpectrograms bool,
+	quit <-chan struct{},
 	shouldDeleteCheck ShouldDeleteFunc) (int, error) {
 
 	deletedFiles := 0 // Counter for the number of deleted files
@@ -159,6 +161,20 @@ func processFilesGeneric(files []FileInfo, speciesCount map[string]map[string]in
 			// 5. Update state (common updates)
 			speciesCount[file.Species][subDir]-- // Decrement count *after* successful deletion
 			deletedFiles++
+
+			// 6. Optionally delete associated spectrogram PNG file
+			if !keepSpectrograms {
+				pngPath := strings.TrimSuffix(file.Path, filepath.Ext(file.Path)) + ".png"
+				if err := os.Remove(pngPath); err != nil {
+					// Log if the PNG deletion fails, but don't treat as critical error
+					// It might not exist, which is expected in many cases.
+					if debug && !os.IsNotExist(err) {
+						log.Printf("Warning: Failed to remove associated spectrogram %s: %v", pngPath, err)
+					}
+				} else if debug {
+					log.Printf("Deleted associated spectrogram %s", pngPath)
+				}
+			}
 
 			// Yield to other goroutines (common)
 			runtime.Gosched()

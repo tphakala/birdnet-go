@@ -16,6 +16,7 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult { // Use 
 	settings := conf.Setting()
 
 	debug := settings.Realtime.Audio.Export.Retention.Debug
+	keepSpectrograms := settings.Realtime.Audio.Export.Retention.KeepSpectrograms // Get the setting
 	baseDir := settings.Realtime.Audio.Export.Path
 	minClipsPerSpecies := settings.Realtime.Audio.Export.Retention.MinClips
 	retentionPeriod := settings.Realtime.Audio.Export.Retention.MaxAge
@@ -77,7 +78,8 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult { // Use 
 
 	// Call the generic processing loop with the age check
 	deletedCount, err := processFilesGeneric(files, speciesMonthCount,
-		minClipsPerSpecies, maxDeletions, debug, quit,
+		minClipsPerSpecies, maxDeletions, debug, keepSpectrograms,
+		quit,
 		ageCheck)
 
 	// Get current disk utilization after cleanup
