@@ -37,27 +37,33 @@ type EqualizerSettings struct {
 	Filters []EqualizerFilter // equalizer filter configuration
 }
 
+type ExportSettings struct {
+	Debug     bool              // true to enable audio export debug
+	Enabled   bool              // export audio clips containing indentified bird calls
+	Path      string            // path to audio clip export directory
+	Type      string            // audio file type, wav, mp3 or flac
+	Bitrate   string            // bitrate for audio export
+	Retention RetentionSettings // retention settings
+}
+
+type RetentionSettings struct {
+	Debug            bool   // true to enable retention debug
+	Policy           string // retention policy, "none", "age" or "usage"
+	MaxAge           string // maximum age of audio clips to keep
+	MaxUsage         string // maximum disk usage percentage before cleanup
+	MinClips         int    // minimum number of clips per species to keep
+	KeepSpectrograms bool   // true to keep spectrograms
+}
+
 // AudioSettings contains settings for audio processing and export.
 type AudioSettings struct {
-	Source          string   // audio source to use for analysis
-	FfmpegPath      string   // path to ffmpeg, runtime value
-	SoxPath         string   // path to sox, runtime value
-	SoxAudioTypes   []string `yaml:"-"` // supported audio types of sox, runtime value
-	StreamTransport string   // preferred transport for audio streaming: "auto", "sse", or "ws"
-	Export          struct {
-		Debug     bool   // true to enable audio export debug
-		Enabled   bool   // export audio clips containing indentified bird calls
-		Path      string // path to audio clip export directory
-		Type      string // audio file type, wav, mp3 or flac
-		Bitrate   string // bitrate for audio export
-		Retention struct {
-			Debug    bool   // true to enable retention debug
-			Policy   string // retention policy, "none", "age" or "usage"
-			MaxAge   string // maximum age of audio clips to keep
-			MaxUsage string // maximum disk usage percentage before cleanup
-			MinClips int    // minimum number of clips per species to keep
-		}
-	}
+	Source          string         // audio source to use for analysis
+	FfmpegPath      string         // path to ffmpeg, runtime value
+	SoxPath         string         // path to sox, runtime value
+	SoxAudioTypes   []string       `yaml:"-"` // supported audio types of sox, runtime value
+	StreamTransport string         // preferred transport for audio streaming: "auto", "sse", or "ws"
+	Export          ExportSettings // export settings
+
 	Equalizer EqualizerSettings // equalizer settings
 }
 type Thumbnails struct {

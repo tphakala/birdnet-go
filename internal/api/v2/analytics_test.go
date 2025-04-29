@@ -351,20 +351,7 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 	appSettings := &conf.Settings{
 		Realtime: conf.RealtimeSettings{
 			Audio: conf.AudioSettings{
-				Export: struct {
-					Debug     bool
-					Enabled   bool
-					Path      string
-					Type      string
-					Bitrate   string
-					Retention struct {
-						Debug    bool
-						Policy   string
-						MaxAge   string
-						MaxUsage string
-						MinClips int
-					}
-				}{
+				Export: conf.ExportSettings{
 					Path: t.TempDir(),
 				},
 			},
