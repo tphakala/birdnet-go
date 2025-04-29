@@ -4,6 +4,7 @@ package diskmanager
 import (
 	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -51,6 +52,14 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult { // Use 
 
 	// Create a map to keep track of the number of files per species per subdirectory
 	speciesMonthCount := buildSpeciesSubDirCountMap(files)
+
+	// Sort files: Oldest first, then lowest confidence first as a tie-breaker
+	sort.SliceStable(files, func(i, j int) bool {
+		if !files[i].Timestamp.Equal(files[j].Timestamp) {
+			return files[i].Timestamp.Before(files[j].Timestamp) // Oldest first
+		}
+		return files[i].Confidence < files[j].Confidence // Lowest confidence first
+	})
 
 	// Calculate the expiration time for age-based cleanup
 	expirationTime := time.Now().Add(-time.Duration(retentionPeriodInHours) * time.Hour)
