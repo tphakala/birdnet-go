@@ -24,6 +24,15 @@ func buildSpeciesSubDirCountMap(files []FileInfo) map[string]map[string]int {
 	return speciesCount
 }
 
+// buildSpeciesTotalCountMap creates a map to track the total number of files per species across all subdirectories.
+func buildSpeciesTotalCountMap(files []FileInfo) map[string]int {
+	speciesTotalCount := make(map[string]int)
+	for _, file := range files {
+		speciesTotalCount[file.Species]++
+	}
+	return speciesTotalCount
+}
+
 // checkLocked checks if a file should be skipped because it's locked.
 func checkLocked(file *FileInfo, debug bool) bool {
 	if file.Locked {
