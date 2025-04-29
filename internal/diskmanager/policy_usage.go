@@ -4,7 +4,6 @@ package diskmanager
 import (
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -68,8 +67,10 @@ func UsageBasedCleanup(quitChan chan struct{}, db Interface) UsageCleanupResult 
 			return UsageCleanupResult{Err: nil, ClipsRemoved: 0, DiskUtilization: int(diskUsage)}
 		}
 
-		// Sort files by timestamp (oldest first)
-		speciesMonthCount := sortFiles(files, debug)
+		// Sort files by timestamp (oldest first) and build species count map
+		// The sorting itself is specific to usage policy, but map building is common
+		speciesMonthCount := buildSpeciesSubDirCountMap(files) // Use common function
+		sortFilesForUsage(files, speciesMonthCount, debug)     // Keep usage-specific sorting logic separate
 
 		// Perform the cleanup
 		deletedFiles, err = performCleanup(files, baseDir, threshold, minClipsPerSpecies, speciesMonthCount, debug, quitChan)
@@ -114,7 +115,6 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 
 			// Get the subdirectory name
 			subDir := filepath.Dir(file.Path)
-			month := file.Timestamp.Format("2006-01")
 
 			diskUsage, err := GetDiskUsage(baseDir)
 			if err != nil {
@@ -131,22 +131,20 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 				log.Printf("Species %s has %d clips in %s", file.Species, speciesMonthCount[file.Species][subDir], subDir)
 			}
 
-			if speciesMonthCount[file.Species][subDir] <= minClipsPerSpecies {
-				if debug {
-					log.Printf("Species clip count for %s in %s/%s is below the minimum threshold (%d). Skipping file deletion.", file.Species, month, subDir, minClipsPerSpecies)
-				}
+			// Use common function to check min clips constraint
+			if !checkMinClips(&file, subDir, speciesMonthCount, minClipsPerSpecies, debug) {
 				continue
 			}
 
 			// Sleep a while to throttle the cleanup
 			time.Sleep(100 * time.Millisecond)
 
-			// Delete the file
+			// Delete the file using common function
 			if debug {
-				log.Printf("Deleting file: %s", file.Path)
+				log.Printf("Deleting file based on usage policy: %s", file.Path)
 			}
 
-			err = os.Remove(file.Path)
+			err = deleteAudioFile(&file, debug)
 			if err != nil {
 				errorCount++
 				log.Printf("Failed to remove %s: %s", file.Path, err)
@@ -160,7 +158,6 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 			// Update counters
 			deletedFiles++
 			totalFreedSpace += file.Size
-			speciesMonthCount[file.Species][subDir]--
 
 			if debug {
 				log.Printf("Deleted file: %s, freed %d bytes", file.Path, file.Size)
@@ -178,51 +175,71 @@ func performCleanup(files []FileInfo, baseDir string, threshold float64, minClip
 	return deletedFiles, nil
 }
 
-func sortFiles(files []FileInfo, debug bool) map[string]map[string]int {
+// sortFilesForUsage sorts files specifically for the usage-based policy and builds the species count map.
+func sortFilesForUsage(files []FileInfo, speciesMonthCount map[string]map[string]int, debug bool) {
 	if debug {
-		log.Printf("Sorting files by cleanup priority.")
+		log.Printf("Sorting files by usage cleanup priority.")
 	}
 
-	// Count the number of files for each species in each subdirectory
-	speciesMonthCount := make(map[string]map[string]int)
-	for _, file := range files {
-		subDir := filepath.Dir(file.Path)
-		if _, exists := speciesMonthCount[file.Species]; !exists {
-			speciesMonthCount[file.Species] = make(map[string]int)
-		}
-		speciesMonthCount[file.Species][subDir]++
-	}
+	// Count the number of files for each species in each subdirectory - Moved to buildSpeciesSubDirCountMap
+	/*
+	   speciesMonthCount := make(map[string]map[string]int)
+	   for _, file := range files {
+	       subDir := filepath.Dir(file.Path)
+	       if _, exists := speciesMonthCount[file.Species]; !exists {
+	           speciesMonthCount[file.Species] = make(map[string]int)
+	       }
+	       speciesMonthCount[file.Species][subDir]++
+	   }
+	*/
 
 	sort.Slice(files, func(i, j int) bool {
-		// Defensive check for nil pointers
-		if files[i].Path == "" || files[j].Path == "" {
-			return false
-		}
+		// Defensive check for nil pointers - FileInfo is not a pointer slice
+		/*
+		   if files[i].Path == "" || files[j].Path == "" {
+		       return false
+		   }
+		*/
 
 		// Priority 1: Oldest files first
-		if files[i].Timestamp != files[j].Timestamp {
+		if !files[i].Timestamp.Equal(files[j].Timestamp) { // Use !Equal for clarity
 			return files[i].Timestamp.Before(files[j].Timestamp)
 		}
 
-		// Priority 3: Species with the most occurrences in the subdirectory
+		// Priority 2: Species with the most occurrences in the subdirectory
 		subDirI := filepath.Dir(files[i].Path)
 		subDirJ := filepath.Dir(files[j].Path)
-		if speciesMonthCount[files[i].Species][subDirI] != speciesMonthCount[files[j].Species][subDirJ] {
-			return speciesMonthCount[files[i].Species][subDirI] > speciesMonthCount[files[j].Species][subDirJ]
+		countI := 0
+		if speciesMapI, okI := speciesMonthCount[files[i].Species]; okI {
+			if sCountI, okSubDirI := speciesMapI[subDirI]; okSubDirI {
+				countI = sCountI
+			}
+		}
+		countJ := 0
+		if speciesMapJ, okJ := speciesMonthCount[files[j].Species]; okJ {
+			if sCountJ, okSubDirJ := speciesMapJ[subDirJ]; okSubDirJ {
+				countJ = sCountJ
+			}
 		}
 
-		// Priority 4: Confidence level
+		if countI != countJ {
+			return countI > countJ // Higher count means higher priority for deletion (if older)
+		}
+
+		// Priority 3: Lower Confidence level first (change from original)
+		// Rationale: Keep higher confidence clips if timestamps and counts are equal.
 		if files[i].Confidence != files[j].Confidence {
-			return files[i].Confidence > files[j].Confidence
+			return files[i].Confidence < files[j].Confidence // Delete lower confidence first
 		}
 
-		// Default to oldest timestamp
-		return files[i].Timestamp.Before(files[j].Timestamp)
+		// Default to oldest timestamp (already handled in priority 1)
+		return false // Keep original order if all else is equal
 	})
 
 	if debug {
-		log.Printf("Files sorted.")
+		log.Printf("Files sorted for usage cleanup.")
 	}
 
-	return speciesMonthCount
+	// Map is now built externally
+	// return speciesMonthCount
 }
