@@ -261,10 +261,10 @@ func TestAgeBasedCleanupReturnValues(t *testing.T) {
 
 		audioPath := filepath.Join(testDir, baseName+".wav")
 		pngPath := filepath.Join(testDir, baseName+".png")
-		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644), "Failed to create audio file")
-		require.NoError(t, os.WriteFile(pngPath, []byte("png"), 0o644), "Failed to create png file")
-		require.NoError(t, os.Chtimes(audioPath, modTime, modTime), "Failed to set audio time")
-		require.NoError(t, os.Chtimes(pngPath, modTime, modTime), "Failed to set png time")
+		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644), "Failed to create audio file: %s", audioPath)
+		require.NoError(t, os.WriteFile(pngPath, []byte("png"), 0o644), "Failed to create png file: %s", pngPath)
+		require.NoError(t, os.Chtimes(audioPath, modTime, modTime), "Failed to set audio time: %s", audioPath)
+		require.NoError(t, os.Chtimes(pngPath, modTime, modTime), "Failed to set png time: %s", pngPath)
 		return audioPath, pngPath
 	}
 
@@ -363,12 +363,13 @@ func TestAgeBasedCleanupMinClipsGlobal(t *testing.T) {
 
 	// --- File Setup --- Helper to create audio files in specific subdirs
 	createTestFile := func(subdir, species string, confidence int, modTime time.Time) string {
-		require.NoError(t, os.MkdirAll(filepath.Join(testDir, subdir), 0o755), "Failed to create subdir")
+		subdirPath := filepath.Join(testDir, subdir)
+		require.NoError(t, os.MkdirAll(subdirPath, 0o755), "Failed to create subdirectory: %s", subdirPath)
 		timestampStr := modTime.UTC().Format("20060102T150405Z")
 		baseName := fmt.Sprintf("%s_%dp_%s", species, confidence, timestampStr)
 		audioPath := filepath.Join(testDir, subdir, baseName+".wav")
-		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644), "Failed to create audio file")
-		require.NoError(t, os.Chtimes(audioPath, modTime, modTime), "Failed to set audio time")
+		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644), "Failed to create audio file: %s", audioPath)
+		require.NoError(t, os.Chtimes(audioPath, modTime, modTime), "Failed to set time for audio file: %s", audioPath)
 		return audioPath
 	}
 
@@ -607,28 +608,6 @@ func simulateAgeBasedCleanup(
 	return CleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: currentDiskUtilization}
 }
 
-/*
-// Helper function to check if a slice contains a value
-func contains(slice []string, value string) bool {
-	for _, item := range slice {
-		if item == value {
-			return true
-		}
-	}
-	return false
-}
-
-// Helper function to create mock FileInfo for testing
-func createMockFileInfo(filename string, size int64) os.FileInfo {
-	return &mockFileInfo{
-		name:    filename,
-		size:    size,
-		mode:    0o644,
-		modTime: time.Now(),
-		isDir:   false,
-	}
-}
-*/
 // Mock implementation of os.FileInfo for testing
 type mockFileInfo struct {
 	name    string
