@@ -4,7 +4,6 @@ package diskmanager
 import (
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"runtime"
 	"time"
@@ -104,7 +103,7 @@ func processFiles(files []FileInfo, speciesMonthCount map[string]map[string]int,
 			return deletedFiles, nil
 		default:
 			file := &files[i]
-			if shouldSkipFile(file, debug) {
+			if checkLocked(file, debug) {
 				continue
 			}
 
@@ -116,11 +115,15 @@ func processFiles(files []FileInfo, speciesMonthCount map[string]map[string]int,
 			time.Sleep(100 * time.Millisecond)
 
 			subDir := filepath.Dir(file.Path)
-			if !canDeleteFile(file, subDir, speciesMonthCount, minClipsPerSpecies, debug) {
+			if !checkMinClips(file, subDir, speciesMonthCount, minClipsPerSpecies, debug) {
 				continue
 			}
 
-			if err := deleteFile(file, debug); err != nil {
+			if debug {
+				log.Printf("File %s is older than retention period, deleting.", file.Path)
+			}
+
+			if err := deleteAudioFile(file, debug); err != nil {
 				errorCount++
 				log.Printf("Failed to remove %s: %s\n", file.Path, err)
 				if errorCount > 10 {
@@ -152,6 +155,7 @@ func processFiles(files []FileInfo, speciesMonthCount map[string]map[string]int,
 }
 
 // shouldSkipFile checks if a file should be skipped (e.g., if it's locked)
+/* // Removed, moved to policy_common.go
 func shouldSkipFile(file *FileInfo, debug bool) bool {
 	if file.Locked {
 		if debug {
@@ -161,8 +165,10 @@ func shouldSkipFile(file *FileInfo, debug bool) bool {
 	}
 	return false
 }
+*/
 
 // canDeleteFile checks if a file can be deleted based on species count constraints
+/* // Removed, logic merged into processFiles using policy_common.go
 func canDeleteFile(file *FileInfo, subDir string, speciesMonthCount map[string]map[string]int,
 	minClipsPerSpecies int, debug bool) bool {
 
@@ -180,8 +186,10 @@ func canDeleteFile(file *FileInfo, subDir string, speciesMonthCount map[string]m
 
 	return true
 }
+*/
 
 // deleteFile removes a file from the filesystem
+/* // Removed, moved to policy_common.go
 func deleteFile(file *FileInfo, debug bool) error {
 	err := os.Remove(file.Path)
 	if err != nil {
@@ -194,3 +202,4 @@ func deleteFile(file *FileInfo, debug bool) error {
 
 	return nil
 }
+*/
