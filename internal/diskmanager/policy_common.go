@@ -2,9 +2,12 @@
 package diskmanager
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
+	"time"
 )
 
 // buildSpeciesSubDirCountMap creates a map to track the number of files per species per subdirectory.
@@ -77,4 +80,94 @@ func deleteAudioFile(file *FileInfo, debug bool) error {
 	}
 
 	return nil
+}
+
+// CleanupResult contains the results of a cleanup operation
+type CleanupResult struct {
+	Err             error // Any error that occurred during cleanup
+	ClipsRemoved    int   // Number of clips that were removed
+	DiskUtilization int   // Current disk utilization percentage after cleanup
+}
+
+// ShouldDeleteFunc defines the signature for policy-specific deletion checks.
+// It should return true if the file should be deleted based on the policy.
+// It can optionally return a reason string for logging.
+type ShouldDeleteFunc func(file *FileInfo) (shouldDelete bool, reason string)
+
+// processFilesGeneric provides a common loop structure for processing and potentially deleting files.
+// It takes a list of files, common parameters, the species count map, and a policy-specific
+// function (shouldDeleteCheck) to determine if a file meets the criteria for deletion.
+func processFilesGeneric(files []FileInfo, speciesCount map[string]map[string]int,
+	minClipsPerSpecies int, maxDeletions int, debug bool, quit <-chan struct{},
+	shouldDeleteCheck ShouldDeleteFunc) (int, error) {
+
+	deletedFiles := 0 // Counter for the number of deleted files
+	errorCount := 0   // Counter for deletion errors
+
+	for i := range files {
+		select {
+		case <-quit:
+			log.Printf("Cleanup interrupted by quit signal\n")
+			return deletedFiles, nil // Return immediately on quit signal
+		default:
+			// Check if max deletions reached (common exit condition)
+			if deletedFiles >= maxDeletions {
+				if debug {
+					log.Printf("Reached maximum number of deletions (%d). Ending generic cleanup loop.", maxDeletions)
+				}
+				return deletedFiles, nil
+			}
+
+			file := &files[i] // Use pointer to modify original slice elements if needed (though not currently used)
+
+			// 1. Check if locked (common check)
+			if checkLocked(file, debug) {
+				continue
+			}
+
+			// 2. Perform policy-specific check
+			shouldDelete, reason := shouldDeleteCheck(file)
+			if !shouldDelete {
+				continue // Skip if policy check fails
+			}
+
+			// 3. Check minimum clips constraint (common check)
+			subDir := filepath.Dir(file.Path)
+			if !checkMinClips(file, subDir, speciesCount, minClipsPerSpecies, debug) {
+				continue
+			}
+
+			// Throttle slightly before deletion
+			time.Sleep(100 * time.Millisecond)
+
+			// Log intent before deleting (using policy-specific reason)
+			if debug {
+				log.Printf("Deleting file based on policy (%s): %s", reason, file.Path)
+			}
+
+			// 4. Delete the file (common action)
+			if err := deleteAudioFile(file, debug); err != nil {
+				errorCount++
+				log.Printf("Failed to remove %s: %s\n", file.Path, err)
+				// Common error handling: stop after too many errors
+				if errorCount > 10 {
+					return deletedFiles, fmt.Errorf("too many errors (%d) during cleanup, last error: %w", errorCount, err)
+				}
+				continue // Continue with the next file even if one fails
+			}
+
+			// 5. Update state (common updates)
+			speciesCount[file.Species][subDir]-- // Decrement count *after* successful deletion
+			deletedFiles++
+
+			// Yield to other goroutines (common)
+			runtime.Gosched()
+		}
+	}
+
+	if debug {
+		log.Printf("Generic cleanup loop finished. Total files deleted in this run: %d", deletedFiles)
+	}
+
+	return deletedFiles, nil
 }
