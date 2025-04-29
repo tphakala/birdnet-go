@@ -6,6 +6,7 @@ import (
 	"log"
 	"runtime"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -86,9 +87,12 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	minClipsPerSpecies := retention.MinClips
 	retentionPeriodSetting := retention.MaxAge
 
+	// Sanitize the input string first
+	retentionPeriodTrimmed := strings.TrimSpace(retentionPeriodSetting)
+
 	// Convert string retention period setting to hours
 	// e.g., "48h", "30d", "2w", or "3m" into actual hours
-	retentionPeriodInHours, err := conf.ParseRetentionPeriod(retentionPeriodSetting)
+	retentionPeriodInHours, err := conf.ParseRetentionPeriod(retentionPeriodTrimmed)
 	if err != nil {
 		log.Printf("Invalid retention period '%s': %s\n", retentionPeriodSetting, err)
 		// Try to get current disk usage for the result
@@ -97,6 +101,7 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 		if diskErr == nil {
 			utilization = int(currentUsage)
 		}
+		// Log the original, untrimmed setting in the error message
 		return CleanupResult{Err: fmt.Errorf("invalid retention period '%s': %w", retentionPeriodSetting, err), ClipsRemoved: 0, DiskUtilization: utilization}
 	}
 
