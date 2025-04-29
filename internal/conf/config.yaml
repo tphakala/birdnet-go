@@ -56,6 +56,7 @@ realtime:
         maxage: 30d       # age policy: maximum age of clips to keep before starting evictions
         maxusage: 80%     # usage policy: percentage of disk usage to trigger eviction        
         minclips: 10      # minumum number of clips per species to keep before starting evictions
+        keepspectrograms: true # true to keep spectrograms even when clips are deleted
 
 
   dashboard:
