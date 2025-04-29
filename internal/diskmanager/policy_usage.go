@@ -22,6 +22,7 @@ func UsageBasedCleanup(quitChan chan struct{}, db Interface) CleanupResult { // 
 	settings := conf.Setting()
 
 	debug := settings.Realtime.Audio.Export.Retention.Debug
+	keepSpectrograms := settings.Realtime.Audio.Export.Retention.KeepSpectrograms // Get the setting
 	baseDir := settings.Realtime.Audio.Export.Path
 	minClipsPerSpecies := settings.Realtime.Audio.Export.Retention.MinClips
 
@@ -86,7 +87,8 @@ func UsageBasedCleanup(quitChan chan struct{}, db Interface) CleanupResult { // 
 
 		// Call the generic processing loop with the usage check
 		deletedFiles, err = processFilesGeneric(files, speciesMonthCount,
-			minClipsPerSpecies, maxDeletions, debug, quitChan,
+			minClipsPerSpecies, maxDeletions, debug, keepSpectrograms, // Pass keepSpectrograms
+			quitChan,
 			usageCheck)
 
 		if err != nil {
