@@ -6,9 +6,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // buildSpeciesSubDirCountMap creates a map to track the number of files per species per subdirectory.
@@ -92,107 +93,110 @@ func deleteAudioFile(file *FileInfo, debug bool) error {
 	return nil
 }
 
+// deleteFileAndOptionalSpectrogram handles the deletion of the audio file
+// and its associated spectrogram if required, including throttling and logging.
+func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectrograms, debug bool) error {
+	// Throttle slightly before deletion
+	time.Sleep(100 * time.Millisecond)
+
+	// Log intent before deleting
+	if debug {
+		log.Printf("Deleting file based on policy (%s): %s (Size: %d)", reason, file.Path, file.Size)
+	}
+
+	// Delete the audio file (reuse common helper)
+	if err := deleteAudioFile(file, debug); err != nil {
+		// Error logging happens in the calling function
+		return err // Return the error to be handled by the caller
+	}
+
+	// Optionally delete associated spectrogram PNG file
+	if !keepSpectrograms {
+		basePath := strings.TrimSuffix(file.Path, filepath.Ext(file.Path))
+		pngPathLower := basePath + ".png"
+		pngPathUpper := basePath + ".PNG"
+
+		// Attempt to remove lowercase variant
+		if pngErrLower := os.Remove(pngPathLower); pngErrLower != nil {
+			// Log error only if it's not a "not exist" error (and debug is on)
+			// These errors are considered non-critical as spectrograms are optional.
+			if debug && !os.IsNotExist(pngErrLower) {
+				log.Printf("Warning: Failed to remove associated spectrogram %s: %v", pngPathLower, pngErrLower)
+			}
+		} else if debug {
+			log.Printf("Deleted associated spectrogram %s", pngPathLower)
+		}
+
+		// Attempt to remove uppercase variant (handles cases like .WAV -> .PNG)
+		// No need to log success again if lowercase already succeeded and deleted the file on case-insensitive FS.
+		if pngErrUpper := os.Remove(pngPathUpper); pngErrUpper != nil {
+			// Log error only if it's not a "not exist" error (and debug is on)
+			// These errors are considered non-critical as spectrograms are optional.
+			if debug && !os.IsNotExist(pngErrUpper) {
+				log.Printf("Warning: Failed to remove associated spectrogram %s: %v", pngPathUpper, pngErrUpper)
+			}
+		} else if debug && os.IsNotExist(os.Remove(pngPathLower)) { // Log success only if lowercase didn't already remove it
+			log.Printf("Deleted associated spectrogram %s", pngPathUpper)
+		}
+	}
+
+	return nil // Deletion successful
+}
+
+// handleDeletionErrorInLoop manages error counting and logging for deletion errors within processing loops.
+// It returns true if the loop should stop due to too many errors, along with the formatted error.
+func handleDeletionErrorInLoop(filePath string, delErr error, errorCount *int, maxErrors int) (shouldStop bool, loopErr error) {
+	*errorCount++ // Increment the error count via pointer
+	log.Printf("Failed to remove %s: %s\n", filePath, delErr)
+	if *errorCount > maxErrors {
+		loopErr = fmt.Errorf("too many errors (%d) during cleanup, last error: %w", *errorCount, delErr)
+		return true, loopErr // Stop processing
+	}
+	return false, nil // Continue processing
+}
+
+// prepareInitialCleanup fetches settings, audio files, and performs initial checks.
+// It returns the files, base directory, retention settings, and a boolean indicating if cleanup should proceed.
+// If proceed is false, it also returns a completed CleanupResult.
+func prepareInitialCleanup(db Interface) (files []FileInfo, baseDir string, retention conf.RetentionSettings, proceed bool, result CleanupResult) {
+	settings := conf.Setting()
+	debug := settings.Realtime.Audio.Export.Retention.Debug
+	baseDir = settings.Realtime.Audio.Export.Path
+	retention = settings.Realtime.Audio.Export.Retention // Return the whole retention struct
+
+	files, err := GetAudioFiles(baseDir, allowedFileTypes, db, debug)
+	if err != nil {
+		// Try to get current disk usage for the result even if file listing failed
+		currentUsage, diskErr := GetDiskUsage(baseDir)
+		utilization := 0
+		if diskErr == nil {
+			utilization = int(currentUsage)
+		}
+		result = CleanupResult{Err: fmt.Errorf("failed to get audio files for cleanup: %w", err), ClipsRemoved: 0, DiskUtilization: utilization}
+		return nil, baseDir, retention, false, result
+	}
+
+	if len(files) == 0 {
+		if debug {
+			log.Printf("No eligible audio files found for cleanup in %s", baseDir)
+		}
+		// Get current disk utilization even if no files were processed
+		currentUsage, diskErr := GetDiskUsage(baseDir)
+		utilization := 0
+		if diskErr == nil {
+			utilization = int(currentUsage)
+		}
+		result = CleanupResult{Err: nil, ClipsRemoved: 0, DiskUtilization: utilization}
+		return nil, baseDir, retention, false, result
+	}
+
+	// If we got here, proceed with cleanup
+	return files, baseDir, retention, true, CleanupResult{}
+}
+
 // CleanupResult contains the results of a cleanup operation
 type CleanupResult struct {
 	Err             error // Any error that occurred during cleanup
 	ClipsRemoved    int   // Number of clips that were removed
 	DiskUtilization int   // Current disk utilization percentage after cleanup
-}
-
-// ShouldDeleteFunc defines the signature for policy-specific deletion checks.
-// It should return true if the file should be deleted based on the policy.
-// It can optionally return a reason string for logging.
-type ShouldDeleteFunc func(file *FileInfo) (shouldDelete bool, reason string)
-
-// processFilesGeneric provides a common loop structure for processing and potentially deleting files.
-// It takes a list of files, common parameters, the species count map, and a policy-specific
-// function (shouldDeleteCheck) to determine if a file meets the criteria for deletion.
-func processFilesGeneric(files []FileInfo, speciesCount map[string]map[string]int,
-	minClipsPerSpecies int, maxDeletions int, debug bool, keepSpectrograms bool,
-	quit <-chan struct{},
-	shouldDeleteCheck ShouldDeleteFunc) (int, error) {
-
-	deletedFiles := 0 // Counter for the number of deleted files
-	errorCount := 0   // Counter for deletion errors
-
-	for i := range files {
-		select {
-		case <-quit:
-			log.Printf("Cleanup interrupted by quit signal\n")
-			return deletedFiles, nil // Return immediately on quit signal
-		default:
-			// Check if max deletions reached (common exit condition)
-			if deletedFiles >= maxDeletions {
-				if debug {
-					log.Printf("Reached maximum number of deletions (%d). Ending generic cleanup loop.", maxDeletions)
-				}
-				return deletedFiles, nil
-			}
-
-			file := &files[i] // Use pointer to modify original slice elements if needed (though not currently used)
-
-			// 1. Check if locked (common check)
-			if checkLocked(file, debug) {
-				continue
-			}
-
-			// 2. Perform policy-specific check
-			shouldDelete, reason := shouldDeleteCheck(file)
-			if !shouldDelete {
-				continue // Skip if policy check fails
-			}
-
-			// 3. Check minimum clips constraint (common check)
-			subDir := filepath.Dir(file.Path)
-			if !checkMinClips(file, subDir, speciesCount, minClipsPerSpecies, debug) {
-				continue
-			}
-
-			// Throttle slightly before deletion
-			time.Sleep(100 * time.Millisecond)
-
-			// Log intent before deleting (using policy-specific reason)
-			if debug {
-				log.Printf("Deleting file based on policy (%s): %s", reason, file.Path)
-			}
-
-			// 4. Delete the file (common action)
-			if err := deleteAudioFile(file, debug); err != nil {
-				errorCount++
-				log.Printf("Failed to remove %s: %s\n", file.Path, err)
-				// Common error handling: stop after too many errors
-				if errorCount > 10 {
-					return deletedFiles, fmt.Errorf("too many errors (%d) during cleanup, last error: %w", errorCount, err)
-				}
-				continue // Continue with the next file even if one fails
-			}
-
-			// 5. Update state (common updates)
-			speciesCount[file.Species][subDir]-- // Decrement count *after* successful deletion
-			deletedFiles++
-
-			// 6. Optionally delete associated spectrogram PNG file
-			if !keepSpectrograms {
-				pngPath := strings.TrimSuffix(file.Path, filepath.Ext(file.Path)) + ".png"
-				if err := os.Remove(pngPath); err != nil {
-					// Log if the PNG deletion fails, but don't treat as critical error
-					// It might not exist, which is expected in many cases.
-					if debug && !os.IsNotExist(err) {
-						log.Printf("Warning: Failed to remove associated spectrogram %s: %v", pngPath, err)
-					}
-				} else if debug {
-					log.Printf("Deleted associated spectrogram %s", pngPath)
-				}
-			}
-
-			// Yield to other goroutines (common)
-			runtime.Gosched()
-		}
-	}
-
-	if debug {
-		log.Printf("Generic cleanup loop finished. Total files deleted in this run: %d", deletedFiles)
-	}
-
-	return deletedFiles, nil
 }
