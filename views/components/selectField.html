@@ -34,6 +34,11 @@
             {{range .providerOptionList}}
                 <option value="{{.Value}}">{{.Display}}</option>
             {{end}}
+        {{else if .orderedOptions}}
+            {{/* Handle ordered options list */}}
+            {{range .orderedOptions}}
+                <option value="{{.Value}}">{{.Label}}</option>
+            {{end}}
         {{else if .options}}
             {{/* Handle standard map options */}}
             {{range $value, $label := .options}}
