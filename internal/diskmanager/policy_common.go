@@ -135,8 +135,12 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 			if debug && !os.IsNotExist(pngErrUpper) {
 				log.Printf("Warning: Failed to remove associated spectrogram %s: %v", pngPathUpper, pngErrUpper)
 			}
-		} else if debug && os.IsNotExist(os.Remove(pngPathLower)) { // Log success only if lowercase didn't already remove it
-			log.Printf("Deleted associated spectrogram %s", pngPathUpper)
+		} else if debug {
+			// Check if the lowercase file still exists (without deleting it again)
+			// Log success for uppercase only if lowercase wasn't successfully removed.
+			if _, statErr := os.Stat(pngPathLower); os.IsNotExist(statErr) {
+				log.Printf("Deleted associated spectrogram %s", pngPathUpper)
+			}
 		}
 	}
 
