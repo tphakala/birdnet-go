@@ -46,7 +46,6 @@ type BirdImageCache struct {
 	metrics      *metrics.ImageProviderMetrics
 	debug        bool
 	store        datastore.Interface
-	logger       *log.Logger
 	quit         chan struct{}                         // Channel to signal shutdown
 	Initializing sync.Map                              // Track which species are being initialized
 	registry     atomic.Pointer[ImageProviderRegistry] // Use atomic pointer
@@ -368,9 +367,17 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 	}
 
 	logger.Debug("Saving image to DB cache", "url", image.URL, "source_provider", image.SourceProvider)
+
+	// Ensure provider name is not empty, falling back to the cache's own name if needed
+	providerNameToSave := image.SourceProvider
+	if providerNameToSave == "" {
+		logger.Warn("SourceProvider field was empty in BirdImage, falling back to cache provider name for DB save", "fallback_provider", c.providerName)
+		providerNameToSave = c.providerName
+	}
+
 	dbEntry := &datastore.ImageCache{
 		ScientificName: image.ScientificName,
-		ProviderName:   image.SourceProvider, // Save the actual provider that gave the image
+		ProviderName:   providerNameToSave,
 		URL:            image.URL,
 		LicenseName:    image.LicenseName,
 		LicenseURL:     image.LicenseURL,
@@ -429,54 +436,46 @@ func (c *BirdImageCache) loadCachedImages() error {
 	return nil
 }
 
-// tryInitialize ensures only one goroutine initializes a species image.
+// tryInitialize ensures only one goroutine initializes a species image using mutexes.
+// It returns the image, a boolean indicating if it was found in cache (true) or fetched (false), and an error.
 func (c *BirdImageCache) tryInitialize(scientificName string) (BirdImage, bool, error) {
 	logger := imageProviderLogger.With("provider", c.providerName, "scientific_name", scientificName)
+
 	// Fast path: check if already loaded
 	if val, ok := c.dataMap.Load(scientificName); ok {
-		if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil {
-			logger.Debug("Initialization check: already in memory cache")
+		if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil && imgPtr.URL != "" {
+			logger.Debug("Initialization check: already in memory cache (fast path)")
 			return *imgPtr, true, nil
 		}
 	}
 
-	// Check if another goroutine is already initializing this species
-	initializing := make(chan struct{})
-	actual, loaded := c.Initializing.LoadOrStore(scientificName, initializing)
-
-	if loaded {
-		// Another goroutine is initializing, wait for it
-		logger.Debug("Waiting for another goroutine to initialize image")
-		initChan, ok := actual.(chan struct{})
-		if !ok {
-			// Should not happen, but handle defensively
-			logger.Error("Initialization channel has unexpected type", "type", fmt.Sprintf("%T", actual))
-			return BirdImage{}, false, fmt.Errorf("internal error: unexpected type in initialization map")
-		}
-		<-initChan // Wait until the initializing goroutine closes the channel
-		logger.Debug("Initialization by other goroutine complete, checking cache again")
-		// Now check the cache again
-		if val, ok := c.dataMap.Load(scientificName); ok {
-			if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil {
-				return *imgPtr, true, nil
-			}
-		}
-		// If still not found after waiting, something went wrong or fetch failed
-		logger.Warn("Image not found in cache even after waiting for initialization")
-		return BirdImage{}, false, fmt.Errorf("image not found after waiting for initialization")
-	}
-
-	// This goroutine is responsible for initializing
+	// Use a mutex for this specific scientific name to prevent concurrent fetches
+	muInterface, _ := c.Initializing.LoadOrStore(scientificName, &sync.Mutex{})
+	mu := muInterface.(*sync.Mutex)
+	mu.Lock()
 	defer func() {
-		close(initializing)                   // Signal completion
-		c.Initializing.Delete(scientificName) // Clean up the map
-		logger.Debug("Finished initialization responsibility")
+		mu.Unlock()
+		// Clean up the mutex from the map once the operation is done.
+		// It's okay if another goroutine added it again between Unlock and Delete.
+		c.Initializing.Delete(scientificName)
+		logger.Debug("Unlocked and cleaned up mutex")
 	}()
 
-	logger.Debug("This goroutine is responsible for initialization")
+	logger.Debug("Acquired initialization lock")
+
+	// Double check: check cache again *after* acquiring the lock,
+	// in case another goroutine finished initializing while we were waiting.
+	if val, ok := c.dataMap.Load(scientificName); ok {
+		if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil && imgPtr.URL != "" {
+			logger.Debug("Initialization check: found in memory cache after acquiring lock")
+			return *imgPtr, true, nil // Indicate it was found in cache
+		}
+	}
+
+	logger.Debug("Not in cache after lock, proceeding to fetch/store")
 	// Fetch and store the image
 	img, err := c.fetchAndStore(scientificName)
-	return img, false, err // false indicates this goroutine did the work
+	return img, false, err // false indicates this goroutine attempted the fetch
 }
 
 // Get retrieves a bird image from the cache, fetching if necessary.
@@ -484,11 +483,10 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 	logger := imageProviderLogger.With("provider", c.providerName, "scientific_name", scientificName)
 	logger.Debug("Get image request received")
 	// Use tryInitialize to handle concurrent initialization
-	img, initializedByOther, err := c.tryInitialize(scientificName)
+	img, foundInCache, err := c.tryInitialize(scientificName)
 	if err != nil {
-		// Check if the error indicates a provider fetch failure but fallback might be possible
-		if !errors.Is(err, ErrImageNotFound) { // Or check for a specific error type returned by fetchAndStore on fetch failure
-			logger.Error("Failed to initialize or fetch image", "error", err)
+		if !errors.Is(err, ErrImageNotFound) {
+			logger.Error("Failed to initialize or fetch image (tryInitialize returned error)", "error", err)
 		}
 		// Even if initialization failed, maybe a fallback provider has it?
 		// This requires the registry to be set.
@@ -509,15 +507,14 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 		return BirdImage{}, err
 	}
 
-	if initializedByOther {
-		logger.Debug("Image initialized by another goroutine, returning cached result")
+	if foundInCache {
+		logger.Debug("Image found in cache, returning cached result")
 		if c.metrics != nil {
 			c.metrics.IncrementCacheHits()
 		}
 		return img, nil
 	}
 
-	// This goroutine performed the fetch/load (fetchAndStore was called by tryInitialize)
 	logger.Debug("Image initialized by this goroutine (cache miss), returning fetched/loaded result")
 	// Note: Cache miss tracking is already handled in fetchAndStore
 	// if loaded from DB or when fetched from provider
@@ -575,10 +572,6 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 			// Store negative cache result to avoid refetching known misses?
 			// Maybe store an empty BirdImage with a timestamp?
 			logger.Warn("Image explicitly not found by provider")
-			emptyResult := BirdImage{ScientificName: scientificName, SourceProvider: c.providerName, CachedAt: time.Now()} // Mark as checked
-			c.dataMap.Store(scientificName, &emptyResult)                                                                  // Store placeholder in memory
-			// Don't save empty results to DB? Or save with empty URL?
-			// c.saveToDB(&emptyResult) // Decide on persistence strategy for misses
 			return BirdImage{}, fetchErr // Return the specific ErrImageNotFound
 		}
 		// For other errors, don't store anything and return the error
@@ -588,9 +581,6 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 	// If fetch was successful but returned an empty URL (provider couldn't find it)
 	if fetchedImage.URL == "" {
 		logger.Warn("Provider returned success but with an empty image URL")
-		emptyResult := BirdImage{ScientificName: scientificName, SourceProvider: c.providerName, CachedAt: time.Now()} // Mark as checked
-		c.dataMap.Store(scientificName, &emptyResult)                                                                  // Store placeholder in memory
-		// c.saveToDB(&emptyResult) // Decide on persistence
 		return BirdImage{}, ErrImageNotFound // Treat empty URL as not found
 	}
 
