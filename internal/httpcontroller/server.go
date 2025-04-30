@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	echolog "github.com/labstack/gommon/log"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -253,7 +254,7 @@ func (s *Server) initLogger() {
 	// Replace Echo's default logger output ONLY if our structured logger is available
 	if s.webLogger != nil {
 		s.Echo.Logger.SetOutput(io.Discard) // Discard Echo's default log output, rely on middleware
-		s.Echo.Logger.SetLevel(99)          // Effectively disable Echo's logger level checks
+		s.Echo.Logger.SetLevel(echolog.OFF) // Use the constant via the alias
 	}
 }
 
@@ -408,13 +409,17 @@ func (s *Server) LoggingMiddleware() echo.MiddlewareFunc {
 
 			// Add error info if there was an error and log at appropriate level
 			switch {
-			case err != nil:
-				attrs = append(attrs, "error", err.Error())
+			case err != nil || res.Status >= 500: // Error or 5xx status -> Error level
+				if err != nil {
+					attrs = append(attrs, "error", err.Error())
+				} else {
+					// Optionally add a generic error message for 5xx without explicit error
+					attrs = append(attrs, "error", fmt.Sprintf("server error status %d", res.Status))
+				}
 				s.webLogger.Error("HTTP Request", attrs...)
-			case res.Status >= 400:
-				// No explicit error but status code indicates an error
+			case res.Status >= 400: // 4xx status -> Warn level
 				s.webLogger.Warn("HTTP Request", attrs...)
-			default:
+			default: // Others -> Info level
 				s.webLogger.Info("HTTP Request", attrs...)
 			}
 

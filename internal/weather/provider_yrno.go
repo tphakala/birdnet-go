@@ -107,9 +107,13 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 		if resp.StatusCode != http.StatusOK {
 			bodyBytes, _ := io.ReadAll(resp.Body) // Try reading body for context
 			resp.Body.Close()                     // Close body even on error
-			attemptLogger.Warn("Received non-OK status code", "status_code", resp.StatusCode, "response_body", string(bodyBytes))
+			responseBodyStr := string(bodyBytes)
+			if len(responseBodyStr) > 200 {
+				responseBodyStr = responseBodyStr[:200] + "... (truncated)"
+			}
+			attemptLogger.Warn("Received non-OK status code", "status_code", resp.StatusCode, "response_body", responseBodyStr)
 			if i == MaxRetries-1 {
-				logger.Error("Failed to fetch weather data due to non-OK status after max retries", "status_code", resp.StatusCode, "response_body", string(bodyBytes))
+				logger.Error("Failed to fetch weather data due to non-OK status after max retries", "status_code", resp.StatusCode, "response_body", responseBodyStr)
 				return nil, fmt.Errorf("received non-OK response (%d) after %d retries", resp.StatusCode, MaxRetries)
 			}
 			time.Sleep(RetryDelay)

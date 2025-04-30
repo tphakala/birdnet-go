@@ -20,7 +20,7 @@ var (
 func init() {
 	var err error
 	// Default level is Info, adjust if needed or read from config
-	weatherLogger, _, err = logging.NewFileLogger("logs/weather.log", "weather", slog.LevelInfo)
+	weatherLogger, _, err = logging.NewFileLogger("logs/weather.log", "weather", slog.LevelDebug)
 	if err != nil {
 		// Fallback or handle error appropriately
 		// Using the global logger for this critical setup error

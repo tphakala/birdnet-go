@@ -11,7 +11,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-const openWeatherProviderName = "openweathermap"
+const (
+	openWeatherBaseURL      = "https://api.openweathermap.org/data/2.5/weather"
+	openWeatherProviderName = "openweather"
+)
 
 // OpenWeatherResponse represents the structure of weather data returned by the OpenWeather API
 type OpenWeatherResponse struct {
