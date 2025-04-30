@@ -134,10 +134,12 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 				return nil, fmt.Errorf("error creating gzip reader: %w", err)
 			}
 			reader = gzReader
-			defer gzReader.Close() // Ensure gzip reader is closed
 		}
 
 		body, err := io.ReadAll(reader)
+		if gzReader != nil {
+			gzReader.Close() // Close gzip reader immediately after reading
+		}
 		resp.Body.Close() // Close original body now
 		if err != nil {
 			logger.Error("Failed to read response body", "status_code", resp.StatusCode, "error", err)
