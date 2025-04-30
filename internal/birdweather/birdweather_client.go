@@ -375,10 +375,11 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	// Create and execute the POST request
 	soundscapeURL := fmt.Sprintf("https://app.birdweather.com/api/v1/stations/%s/soundscapes?timestamp=%s&type=%s",
 		b.BirdweatherID, url.QueryEscape(timestamp), audioExt)
-	serviceLogger.Debug("Creating soundscape upload request", "url", soundscapeURL)
+	maskedURL := strings.ReplaceAll(soundscapeURL, b.BirdweatherID, "***")
+	serviceLogger.Debug("Creating soundscape upload request", "url", maskedURL)
 	req, err := http.NewRequest("POST", soundscapeURL, &gzipAudioData)
 	if err != nil {
-		serviceLogger.Error("Failed to create soundscape POST request", "url", soundscapeURL, "error", err)
+		serviceLogger.Error("Failed to create soundscape POST request", "url", maskedURL, "error", err)
 		return "", fmt.Errorf("failed to create POST request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
@@ -386,23 +387,23 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	req.Header.Set("User-Agent", "BirdNET-Go")
 
 	// Execute the request
-	serviceLogger.Info("Uploading soundscape", "url", soundscapeURL, "format", audioExt)
+	serviceLogger.Info("Uploading soundscape", "url", maskedURL, "format", audioExt)
 	resp, err := b.HTTPClient.Do(req)
 	if err != nil {
-		serviceLogger.Error("Soundscape upload request failed", "url", soundscapeURL, "error", err)
+		serviceLogger.Error("Soundscape upload request failed", "url", maskedURL, "error", err)
 		return "", handleNetworkError(err)
 	}
 	if resp == nil {
-		serviceLogger.Error("Soundscape upload received nil response", "url", soundscapeURL)
+		serviceLogger.Error("Soundscape upload received nil response", "url", maskedURL)
 		return "", fmt.Errorf("received nil response")
 	}
 	defer resp.Body.Close()
-	serviceLogger.Debug("Received soundscape upload response", "url", soundscapeURL, "status_code", resp.StatusCode)
+	serviceLogger.Debug("Received soundscape upload response", "url", maskedURL, "status_code", resp.StatusCode)
 
 	// Process the response
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		serviceLogger.Error("Failed to read soundscape response body", "url", soundscapeURL, "status_code", resp.StatusCode, "error", err)
+		serviceLogger.Error("Failed to read soundscape response body", "url", maskedURL, "status_code", resp.StatusCode, "error", err)
 		return "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
@@ -412,17 +413,17 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 
 	var sdata SoundscapeResponse
 	if err := json.Unmarshal(responseBody, &sdata); err != nil {
-		serviceLogger.Error("Failed to decode soundscape JSON response", "url", soundscapeURL, "status_code", resp.StatusCode, "body", string(responseBody), "error", err)
+		serviceLogger.Error("Failed to decode soundscape JSON response", "url", maskedURL, "status_code", resp.StatusCode, "body", string(responseBody), "error", err)
 		return "", fmt.Errorf("failed to decode JSON response: %w", err)
 	}
 
 	if !sdata.Success {
-		serviceLogger.Error("Soundscape upload was not successful according to API response", "url", soundscapeURL, "status_code", resp.StatusCode, "response", sdata)
+		serviceLogger.Error("Soundscape upload was not successful according to API response", "url", maskedURL, "status_code", resp.StatusCode, "response", sdata)
 		return "", fmt.Errorf("upload failed, response reported failure")
 	}
 
 	soundscapeID = fmt.Sprintf("%d", sdata.Soundscape.ID)
-	serviceLogger.Info("Soundscape uploaded successfully", "timestamp", timestamp, "soundscape_id", soundscapeID, "url", soundscapeURL)
+	serviceLogger.Info("Soundscape uploaded successfully", "timestamp", timestamp, "soundscape_id", soundscapeID, "url", maskedURL)
 	return soundscapeID, nil
 }
 
@@ -438,6 +439,7 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 	}
 
 	detectionURL := fmt.Sprintf("https://app.birdweather.com/api/v1/stations/%s/detections", b.BirdweatherID)
+	maskedDetectionURL := strings.ReplaceAll(detectionURL, b.BirdweatherID, "***")
 
 	// Fuzz location coordinates with user defined accuracy
 	fuzzedLatitude, fuzzedLongitude := b.RandomizeLocation(b.Accuracy)
@@ -488,28 +490,28 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 	}
 
 	// Execute POST request
-	serviceLogger.Info("Posting detection", "url", detectionURL, "soundscape_id", soundscapeID, "scientific_name", scientificName)
+	serviceLogger.Info("Posting detection", "url", maskedDetectionURL, "soundscape_id", soundscapeID, "scientific_name", scientificName)
 	resp, err := b.HTTPClient.Post(detectionURL, "application/json", bytes.NewBuffer(postDataBytes))
 	if err != nil {
-		serviceLogger.Error("Detection post request failed", "url", detectionURL, "soundscape_id", soundscapeID, "error", err)
+		serviceLogger.Error("Detection post request failed", "url", maskedDetectionURL, "soundscape_id", soundscapeID, "error", err)
 		return handleNetworkError(err)
 	}
 	if resp == nil {
-		serviceLogger.Error("Detection post received nil response", "url", detectionURL, "soundscape_id", soundscapeID)
+		serviceLogger.Error("Detection post received nil response", "url", maskedDetectionURL, "soundscape_id", soundscapeID)
 		return fmt.Errorf("received nil response")
 	}
 	defer resp.Body.Close()
-	serviceLogger.Debug("Received detection post response", "url", detectionURL, "soundscape_id", soundscapeID, "status_code", resp.StatusCode)
+	serviceLogger.Debug("Received detection post response", "url", maskedDetectionURL, "soundscape_id", soundscapeID, "status_code", resp.StatusCode)
 
 	// Handle response
 	if resp.StatusCode != http.StatusCreated {
 		responseBody, readErr := io.ReadAll(resp.Body)
 		if readErr != nil {
-			serviceLogger.Error("Failed to read detection response body after non-201 status", "url", detectionURL, "status_code", resp.StatusCode, "read_error", readErr)
+			serviceLogger.Error("Failed to read detection response body after non-201 status", "url", maskedDetectionURL, "status_code", resp.StatusCode, "read_error", readErr)
 			return fmt.Errorf("failed to read response body: %w", readErr)
 		}
 		err := fmt.Errorf("failed to post detection, status code: %d, response: %s", resp.StatusCode, string(responseBody))
-		serviceLogger.Error("Detection post failed", "url", detectionURL, "soundscape_id", soundscapeID, "status_code", resp.StatusCode, "response_body", string(responseBody), "error", err)
+		serviceLogger.Error("Detection post failed", "url", maskedDetectionURL, "soundscape_id", soundscapeID, "status_code", resp.StatusCode, "response_body", string(responseBody), "error", err)
 		return err
 	}
 
