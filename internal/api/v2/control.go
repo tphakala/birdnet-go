@@ -39,6 +39,10 @@ const (
 
 // initControlRoutes registers all control-related API endpoints
 func (c *Controller) initControlRoutes() {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Initializing control routes")
+	}
+
 	// Create control API group with auth middleware
 	controlGroup := c.Group.Group("/control", c.AuthMiddleware)
 
@@ -47,11 +51,22 @@ func (c *Controller) initControlRoutes() {
 	controlGroup.POST("/reload", c.ReloadModel)
 	controlGroup.POST("/rebuild-filter", c.RebuildFilter)
 	controlGroup.GET("/actions", c.GetAvailableActions)
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Control routes initialized successfully")
+	}
 }
 
 // GetAvailableActions handles GET /api/v2/control/actions
 // Returns a list of available control actions
 func (c *Controller) GetAvailableActions(ctx echo.Context) error {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting available control actions",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	actions := []ControlAction{
 		{
 			Action:      ActionRestartAnalysis,
@@ -67,14 +82,37 @@ func (c *Controller) GetAvailableActions(ctx echo.Context) error {
 		},
 	}
 
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieved available control actions successfully",
+			"action_count", len(actions),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	return ctx.JSON(http.StatusOK, actions)
 }
 
 // RestartAnalysis handles POST /api/v2/control/restart
 // Restarts the audio analysis process
 func (c *Controller) RestartAnalysis(ctx echo.Context) error {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Received request to restart analysis",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	if c.controlChan == nil {
-		return c.HandleError(ctx, fmt.Errorf("control channel not initialized"),
+		err := fmt.Errorf("control channel not initialized")
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Control channel not available for restart analysis",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+		return c.HandleError(ctx, err,
 			"System control interface not available - server may need to be restarted", http.StatusInternalServerError)
 	}
 
@@ -86,10 +124,26 @@ func (c *Controller) RestartAnalysis(ctx echo.Context) error {
 	// Send restart signal with context timeout awareness
 	select {
 	case c.controlChan <- SignalRestartAnalysis:
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Analysis restart signal sent successfully",
+				"action", ActionRestartAnalysis,
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		// Signal sent successfully
 	case <-reqCtx.Done():
+		err := reqCtx.Err()
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Request timeout/cancel while sending restart analysis signal",
+				"error", err.Error(),
+				"action", ActionRestartAnalysis,
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		// Request context is done (timeout or cancelled)
-		return c.HandleError(ctx, reqCtx.Err(),
+		return c.HandleError(ctx, err,
 			"Request timeout while sending control signal", http.StatusRequestTimeout)
 	}
 
@@ -104,8 +158,23 @@ func (c *Controller) RestartAnalysis(ctx echo.Context) error {
 // ReloadModel handles POST /api/v2/control/reload
 // Reloads the BirdNET model
 func (c *Controller) ReloadModel(ctx echo.Context) error {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Received request to reload model",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	if c.controlChan == nil {
-		return c.HandleError(ctx, fmt.Errorf("control channel not initialized"),
+		err := fmt.Errorf("control channel not initialized")
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Control channel not available for reload model",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+		return c.HandleError(ctx, err,
 			"System control interface not available - server may need to be restarted", http.StatusInternalServerError)
 	}
 
@@ -117,10 +186,26 @@ func (c *Controller) ReloadModel(ctx echo.Context) error {
 	// Send reload signal with context timeout awareness
 	select {
 	case c.controlChan <- SignalReloadModel:
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Model reload signal sent successfully",
+				"action", ActionReloadModel,
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		// Signal sent successfully
 	case <-reqCtx.Done():
+		err := reqCtx.Err()
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Request timeout/cancel while sending reload model signal",
+				"error", err.Error(),
+				"action", ActionReloadModel,
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		// Request context is done (timeout or cancelled)
-		return c.HandleError(ctx, reqCtx.Err(),
+		return c.HandleError(ctx, err,
 			"Request timeout while sending control signal", http.StatusRequestTimeout)
 	}
 
@@ -135,8 +220,23 @@ func (c *Controller) ReloadModel(ctx echo.Context) error {
 // RebuildFilter handles POST /api/v2/control/rebuild-filter
 // Rebuilds the species filter based on current location
 func (c *Controller) RebuildFilter(ctx echo.Context) error {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Received request to rebuild species filter",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	if c.controlChan == nil {
-		return c.HandleError(ctx, fmt.Errorf("control channel not initialized"),
+		err := fmt.Errorf("control channel not initialized")
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Control channel not available for rebuild filter",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+		return c.HandleError(ctx, err,
 			"System control interface not available - server may need to be restarted", http.StatusInternalServerError)
 	}
 
@@ -148,10 +248,26 @@ func (c *Controller) RebuildFilter(ctx echo.Context) error {
 	// Send rebuild filter signal with context timeout awareness
 	select {
 	case c.controlChan <- SignalRebuildFilter:
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Filter rebuild signal sent successfully",
+				"action", ActionRebuildFilter,
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		// Signal sent successfully
 	case <-reqCtx.Done():
+		err := reqCtx.Err()
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Request timeout/cancel while sending rebuild filter signal",
+				"error", err.Error(),
+				"action", ActionRebuildFilter,
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		// Request context is done (timeout or cancelled)
-		return c.HandleError(ctx, reqCtx.Err(),
+		return c.HandleError(ctx, err,
 			"Request timeout while sending control signal", http.StatusRequestTimeout)
 	}
 
