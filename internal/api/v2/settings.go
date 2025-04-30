@@ -22,6 +22,10 @@ type UpdateRequest struct {
 
 // initSettingsRoutes registers all settings-related API endpoints
 func (c *Controller) initSettingsRoutes() {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Initializing settings routes")
+	}
+
 	// Create settings API group
 	settingsGroup := c.Group.Group("/settings", c.AuthMiddleware)
 
@@ -34,17 +38,41 @@ func (c *Controller) initSettingsRoutes() {
 	settingsGroup.PUT("", c.UpdateSettings)
 	// PATCH /api/v2/settings/:section - Updates a specific settings section with partial replacement
 	settingsGroup.PATCH("/:section", c.UpdateSectionSettings)
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Settings routes initialized successfully")
+	}
 }
 
 // GetAllSettings handles GET /api/v2/settings
 func (c *Controller) GetAllSettings(ctx echo.Context) error {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting all settings",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	// Acquire read lock to ensure settings aren't being modified during read
 	c.settingsMutex.RLock()
 	defer c.settingsMutex.RUnlock()
 
 	settings := conf.Setting()
 	if settings == nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Settings not initialized when trying to get all settings",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieved all settings successfully",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
 	}
 
 	// Return a copy of the settings
@@ -53,24 +81,61 @@ func (c *Controller) GetAllSettings(ctx echo.Context) error {
 
 // GetSectionSettings handles GET /api/v2/settings/:section
 func (c *Controller) GetSectionSettings(ctx echo.Context) error {
+	section := ctx.Param("section")
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting settings for section",
+			"section", section,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	// Acquire read lock to ensure settings aren't being modified during read
 	c.settingsMutex.RLock()
 	defer c.settingsMutex.RUnlock()
 
-	section := ctx.Param("section")
 	if section == "" {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Missing section parameter",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, fmt.Errorf("section not specified"), "Section parameter is required", http.StatusBadRequest)
 	}
 
 	settings := conf.Setting()
 	if settings == nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Settings not initialized when trying to get section settings",
+				"section", section,
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 	}
 
 	// Get the settings section
 	sectionValue, err := getSettingsSection(settings, section)
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get settings section",
+				"section", section,
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, err, "Failed to get settings section", http.StatusNotFound)
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieved settings section successfully",
+			"section", section,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
 	}
 
 	return ctx.JSON(http.StatusOK, sectionValue)
