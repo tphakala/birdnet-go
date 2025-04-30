@@ -3,8 +3,10 @@ package mqtt
 
 import (
 	"context"
-	"fmt"
+	"io"
+	"log"
 	"log/slog"
+	"path/filepath"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/logging"
@@ -47,34 +49,43 @@ type Config struct {
 	ReconnectDelay    time.Duration
 	// Connection timeouts
 	ConnectTimeout    time.Duration
+	ReconnectTimeout  time.Duration
 	PublishTimeout    time.Duration
 	DisconnectTimeout time.Duration
 }
 
 // Package-level logger for MQTT related events
 var (
-	mqttLogger *slog.Logger
-	// mqttLogCloser func() error // Optional closer func
-	// TODO: Call mqttLogCloser during graceful shutdown if needed
+	mqttLogger    *slog.Logger
+	mqttLogCloser func() error // Stores the closer function
 )
 
 func init() {
 	var err error
-	// Default level is Info. MQTT interactions might benefit from Debug level
-	// during troubleshooting, but Info is a good default.
-	mqttLogger, _, err = logging.NewFileLogger("logs/mqtt.log", "mqtt", slog.LevelInfo)
+	logFilePath := filepath.Join("logs", "mqtt.log") // Use filepath.Join for safety
+
+	// Initialize the service-specific file logger
+	mqttLogger, mqttLogCloser, err = logging.NewFileLogger(logFilePath, "mqtt", slog.LevelInfo) // Capture the closer
 	if err != nil {
-		logging.Error("Failed to initialize MQTT file logger", "error", err)
-		// Fallback to the default structured logger
-		mqttLogger = logging.Structured().With("service", "mqtt")
-		if mqttLogger == nil {
-			panic(fmt.Sprintf("Failed to initialize any logger for MQTT service: %v", err))
-		}
-		logging.Warn("MQTT service falling back to default logger due to file logger initialization error.")
+		// Use standard log for this critical setup error, as logging might not be fully functional
+		log.Printf("ERROR: Failed to initialize MQTT file logger at %s: %v. Service logging disabled.", logFilePath, err)
+		// Fallback to a disabled logger to prevent nil panics
+		mqttLogger = slog.New(slog.NewJSONHandler(io.Discard, nil))
+		mqttLogCloser = func() error { return nil } // No-op closer for fallback
 	} else {
-		logging.Info("MQTT file logger initialized successfully", "path", "logs/mqtt.log")
+		// Use standard log for initial confirmation message
+		log.Printf("MQTT file logger initialized successfully to %s", logFilePath)
 	}
-	// mqttLogCloser = closer
+}
+
+// CloseLogger closes the MQTT-specific file logger, if one was successfully initialized.
+// This should be called during graceful shutdown.
+func CloseLogger() error {
+	if mqttLogCloser != nil {
+		log.Println("Closing MQTT file logger...")
+		return mqttLogCloser()
+	}
+	return nil
 }
 
 // DefaultConfig returns a Config with reasonable default values
@@ -83,6 +94,7 @@ func DefaultConfig() Config {
 		ReconnectCooldown: 5 * time.Second,
 		ReconnectDelay:    1 * time.Second,
 		ConnectTimeout:    30 * time.Second,
+		ReconnectTimeout:  5 * time.Second,
 		PublishTimeout:    10 * time.Second,
 		DisconnectTimeout: 250 * time.Millisecond,
 	}
