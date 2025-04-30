@@ -1,8 +1,8 @@
-Abroscopus albogularis_Rufous-faced Warbler
-Abroscopus schisticeps_Black-faced Warbler
-Abroscopus superciliaris_Yellow-bellied Warbler
+Abroscopus albogularis_Rumenolika grmuša
+Abroscopus schisticeps_Crnolika grmuša
+Abroscopus superciliaris_Žutotrba grmuša
 Aburria aburri_Resasti guan
-Acanthagenys rufogularis_Spiny-cheeked Honeyeater
+Acanthagenys rufogularis_Oštrobrki medojed
 Acanthidops bairdi_Šiljokljuna zeba
 Acanthis cabaret_Mala brezova juričica
 Acanthis flammea_Brezova juričica
@@ -1479,6 +1479,7 @@ Colluricincla boweri_Bauerov svračkoliki drozd
 Colluricincla harmonica_Sivi svračkoliki drozd
 Colluricincla megarhyncha_Arafura Shrikethrush
 Colluricincla rufogaster_Rufous Shrikethrush
+Coloeus monedula_Čavka
 Colonia colonus_Crna dugorepa tiranka
 Colorhamphus parvirostris_Patagonska tiranka
 Columba arquatrix_Rameronski golub
@@ -6519,4 +6520,3 @@ Zosterops pallidus_Belooka sa reke Oranje
 Zosterops palpebrosus_Indijska belooka
 Zosterops senegalensis_Northern Yellow White-eye
 Zosterops simplex_Obična belooka
-Zosterops virens_Kapska belooka
