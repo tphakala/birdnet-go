@@ -37,19 +37,20 @@ var LocaleCodeMapping = map[string]string{
 	"en-uk": "en_uk",
 	"en-us": "en_us",
 	"es":    "es",
-	"et-ee": "et_ee",
+	"et":    "et",
 	"fi":    "fi",
 	"fr":    "fr",
 	"he":    "he",
+	"hi-in": "hi_in", // Hindi (India)
 	"hr":    "hr",
 	"hu":    "hu",
-	"id":    "id",
+	"id":    "id", // Using proper ISO code for Indonesia
 	"is":    "is",
 	"it":    "it",
 	"ja":    "ja",
 	"ko":    "ko",
 	"lt":    "lt",
-	"lv-lv": "lv_lv",
+	"lv":    "lv",
 	"ml":    "ml",
 	"nl":    "nl",
 	"no":    "no",
@@ -66,6 +67,7 @@ var LocaleCodeMapping = map[string]string{
 	"th":    "th",
 	"tr":    "tr",
 	"uk":    "uk",
+	"vi-vn": "vi_vn", // Vietnamese (Vietnam)
 	"zh":    "zh",
 }
 
@@ -84,18 +86,19 @@ var LocaleCodes = map[string]string{
 	"el":    "Greek",
 	"en-uk": "English (UK)",
 	"en-us": "English (US)",
-	"et_ee": "Estonian",
+	"et":    "Estonian",
 	"fi":    "Finnish",
 	"fr":    "French",
 	"de":    "German",
 	"he":    "Hebrew",
+	"hi-in": "Hindi", // Hindi (India)
 	"hu":    "Hungarian",
 	"is":    "Icelandic",
 	"id":    "Indonesian",
 	"it":    "Italian",
 	"ja":    "Japanese",
 	"ko":    "Korean",
-	"lv_lv": "Latvian",
+	"lv":    "Latvian",
 	"lt":    "Lithuanian",
 	"ml":    "Malayalam",
 	"no":    "Norwegian",
@@ -112,6 +115,7 @@ var LocaleCodes = map[string]string{
 	"th":    "Thai",
 	"tr":    "Turkish",
 	"uk":    "Ukrainian",
+	"vi-vn": "Vietnamese", // Vietnamese (Vietnam)
 }
 
 // GetLabelFilename returns the appropriate label filename for the given model version and locale code
