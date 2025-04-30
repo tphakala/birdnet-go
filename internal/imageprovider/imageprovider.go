@@ -46,7 +46,6 @@ type BirdImageCache struct {
 	metrics      *metrics.ImageProviderMetrics
 	debug        bool
 	store        datastore.Interface
-	logger       *log.Logger
 	quit         chan struct{}                         // Channel to signal shutdown
 	Initializing sync.Map                              // Track which species are being initialized
 	registry     atomic.Pointer[ImageProviderRegistry] // Use atomic pointer
