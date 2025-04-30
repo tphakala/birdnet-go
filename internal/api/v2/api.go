@@ -253,23 +253,24 @@ func (c *Controller) LoggingMiddleware() echo.MiddlewareFunc {
 			isTunneled, _ := ctx.Get("is_tunneled").(bool)
 			tunnelProvider, _ := ctx.Get("tunnel_provider").(string)
 
-			// Log the request with structured data
-			attrs := []any{
-				"method", req.Method,
-				"path", req.URL.Path,
-				"query", req.URL.RawQuery,
-				"status", res.Status,
-				"ip", ctx.RealIP(), // Uses custom extractor
-				"tunneled", isTunneled,
-				"tunnel_provider", tunnelProvider,
-				"user_agent", req.UserAgent(),
-				"latency_ms", time.Since(start).Milliseconds(),
+			// Log the request with structured data using LogAttrs to avoid allocations
+			// when the log level is disabled.
+			attrs := []slog.Attr{
+				slog.String("method", req.Method),
+				slog.String("path", req.URL.Path),
+				slog.String("query", req.URL.RawQuery),
+				slog.Int("status", res.Status),
+				slog.String("ip", ctx.RealIP()), // Uses custom extractor
+				slog.Bool("tunneled", isTunneled),
+				slog.String("tunnel_provider", tunnelProvider),
+				slog.String("user_agent", req.UserAgent()),
+				slog.Int64("latency_ms", time.Since(start).Milliseconds()),
 			}
 			if err != nil {
-				attrs = append(attrs, "error", err)
+				attrs = append(attrs, slog.Any("error", err))
 			}
 
-			c.apiLogger.Info("API Request", attrs...)
+			c.apiLogger.LogAttrs(ctx.Request().Context(), slog.LevelInfo, "API Request", attrs...)
 
 			return err
 		}
