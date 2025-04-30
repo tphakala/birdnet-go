@@ -2,6 +2,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	"gorm.io/gorm"
 )
 
 // DailyWeatherResponse represents the API response for daily weather data
@@ -376,7 +378,7 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 		// Determine if it's a not found error or other server error
 		status := http.StatusInternalServerError
 		msg := "Failed to get detection"
-		if err.Error() == "not found" { // Assuming datastore returns a standard "not found" error string
+		if errors.Is(err, gorm.ErrRecordNotFound) { // Use errors.Is for robust check
 			status = http.StatusNotFound
 			msg = "Detection not found"
 		}
@@ -413,6 +415,9 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 		// Error already logged in helper
 		// Proceed with default timeOfDay ("Night") but maybe log the issue here too
 		c.logger.Printf("WARN: [Weather API] Proceeding with default TimeOfDay for detection %s due to parsing/calculation error: %v", id, parseErr)
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Proceeding with default TimeOfDay due to parsing/calculation error", "detection_id", id, "error", parseErr.Error())
+		}
 	}
 
 	// 5. Find Closest Hourly Weather
