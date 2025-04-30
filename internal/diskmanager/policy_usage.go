@@ -30,7 +30,7 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	// Log the start of the cleanup run with structured logger
 	serviceLogger.Info("Usage-based cleanup run started",
 		"policy", "usage",
-		"timestamp", time.Now().Format(time.RFC3339))
+	)
 
 	// Perform initial setup (get files, settings, check if proceed)
 	files, baseDir, retention, proceed, initialResult := prepareInitialCleanup(db)
@@ -58,7 +58,8 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 		// Use the utilization from the initial result if available
 		serviceLogger.Error("Usage-based cleanup failed",
 			"policy", "usage",
-			"error", fmt.Sprintf("Failed to parse usage threshold '%s': %v", usageThresholdSetting, err),
+			"threshold_setting", usageThresholdSetting,
+			"error", err,
 			"files_removed", 0,
 			"disk_utilization", initialResult.DiskUtilization,
 			"timestamp", time.Now().Format(time.RFC3339),
@@ -130,16 +131,14 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 			"files_removed", deletedCount,
 			"disk_utilization", finalUsagePercent,
 			"error", loopErr,
-			"timestamp", time.Now().Format(time.RFC3339),
-			"duration_ms", duration.Milliseconds())
+			"duration", duration)
 	} else {
 		serviceLogger.Info("Usage-based cleanup run completed",
 			"policy", "usage",
 			"files_removed", deletedCount,
 			"disk_utilization", finalUsagePercent,
 			"usage_threshold", usageThreshold,
-			"timestamp", time.Now().Format(time.RFC3339),
-			"duration_ms", duration.Milliseconds())
+			"duration", duration)
 	}
 
 	return CleanupResult{Err: loopErr, ClipsRemoved: deletedCount, DiskUtilization: finalUsagePercent}

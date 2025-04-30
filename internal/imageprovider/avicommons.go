@@ -38,6 +38,11 @@ type AviCommonsProvider struct {
 	debug      bool
 }
 
+var (
+	// loggedUnknownLicenses tracks unknown license codes to avoid repeated warnings.
+	loggedUnknownLicenses sync.Map
+)
+
 // NewAviCommonsProvider creates a new provider instance using data from the provided filesystem.
 // It expects the filesystem to contain 'data/latest.json'.
 func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error) {
@@ -168,8 +173,10 @@ func mapAviCommonsLicense(code string) (name, url string) {
 	case "cc0":
 		return "CC0 1.0 Universal", "https://creativecommons.org/publicdomain/zero/1.0/"
 	default:
-		// Return the code itself if unknown, or consider logging a warning
-		imageProviderLogger.Warn("Unknown Avicommons license code encountered", "code", code)
+		// Log only once per unknown code
+		if _, loaded := loggedUnknownLicenses.LoadOrStore(code, true); !loaded {
+			imageProviderLogger.Warn("Unknown Avicommons license code encountered", "code", code)
+		}
 		return code, ""
 	}
 }

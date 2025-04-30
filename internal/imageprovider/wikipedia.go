@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -122,7 +123,7 @@ func (l *wikiMediaProvider) queryAndGetFirstPage(reqID string, params map[string
 	}
 
 	// Optionally log raw response at Debug level
-	if logger.Enabled(context.Background(), -4) { // Check if Debug level is enabled
+	if logger.Enabled(context.Background(), slog.LevelDebug) { // Check if Debug level is enabled
 		if respObj, errJson := resp.Object(); errJson == nil {
 			logger.Debug("Raw Wikipedia API response", "response", respObj.String())
 		} else {
@@ -151,7 +152,7 @@ func (l *wikiMediaProvider) queryAndGetFirstPage(reqID string, params map[string
 	if len(pages) == 0 {
 		logger.Warn("No pages found in Wikipedia response")
 		// Log full response if debug enabled
-		if logger.Enabled(context.Background(), -4) {
+		if logger.Enabled(context.Background(), slog.LevelDebug) {
 			if respObj, errJson := resp.Object(); errJson == nil {
 				logger.Debug("Full response structure (no pages found)", "response", respObj.String())
 			}
@@ -167,7 +168,7 @@ func (l *wikiMediaProvider) queryAndGetFirstPage(reqID string, params map[string
 	}
 
 	// Optionally log first page content at Debug level
-	if logger.Enabled(context.Background(), -4) {
+	if logger.Enabled(context.Background(), slog.LevelDebug) {
 		if firstPageObj, errJson := pages[0].Object(); errJson == nil {
 			logger.Debug("First page content from API response", "page_content", firstPageObj.String())
 		}
