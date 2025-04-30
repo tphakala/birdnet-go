@@ -17,6 +17,12 @@ const CSRFContextKey = "birdnet-go-csrf"
 // configureMiddleware sets up middleware for the server.
 func (s *Server) configureMiddleware() {
 	s.Echo.Use(middleware.Recover())
+
+	// Add structured logging middleware if available
+	if s.webLogger != nil {
+		s.Echo.Use(s.LoggingMiddleware())
+	}
+
 	s.Echo.Use(s.CSRFMiddleware())
 	s.Echo.Use(s.AuthMiddleware)
 	s.Echo.Use(s.GzipMiddleware())
@@ -50,12 +56,19 @@ func (s *Server) CSRFMiddleware() echo.MiddlewareFunc {
 				path == "/api/v1/oauth2/callback"
 		},
 		ErrorHandler: func(err error, c echo.Context) error {
+			// Keep the original debug logging for backward compatibility
 			s.Debug("🚨 CSRF ERROR: Rejected request")
 			s.Debug("🔍 Request Method: %s, Path: %s", c.Request().Method, c.Request().URL.Path)
 			s.Debug("📌 CSRF Token in Header: %s", c.Request().Header.Get("X-CSRF-Token"))
 			s.Debug("📌 CSRF Token in Form: %s", c.FormValue("_csrf"))
 			s.Debug("📝 All Cookies: %s", c.Request().Header.Get("Cookie"))
 			s.Debug("💡 Error Details: %v", err)
+
+			// Add enhanced structured logging
+			if s.webLogger != nil {
+				s.LogError(c, err, "CSRF validation failed")
+			}
+
 			return echo.NewHTTPError(http.StatusForbidden, "Invalid CSRF token")
 		},
 	}
@@ -108,7 +121,13 @@ func (s *Server) CacheControlMiddleware() echo.MiddlewareFunc {
 
 			err := next(c)
 			if err != nil {
+				// Original debug logging for backward compatibility
 				s.Debug("CacheControlMiddleware: Error processing request: %v", err)
+
+				// Enhanced structured logging
+				if s.webLogger != nil {
+					s.LogError(c, err, "Error in CacheControlMiddleware")
+				}
 			}
 			return err
 		}
