@@ -367,9 +367,17 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 	}
 
 	logger.Debug("Saving image to DB cache", "url", image.URL, "source_provider", image.SourceProvider)
+
+	// Ensure provider name is not empty, falling back to the cache's own name if needed
+	providerNameToSave := image.SourceProvider
+	if providerNameToSave == "" {
+		logger.Warn("SourceProvider field was empty in BirdImage, falling back to cache provider name for DB save", "fallback_provider", c.providerName)
+		providerNameToSave = c.providerName
+	}
+
 	dbEntry := &datastore.ImageCache{
 		ScientificName: image.ScientificName,
-		ProviderName:   image.SourceProvider, // Save the actual provider that gave the image
+		ProviderName:   providerNameToSave,
 		URL:            image.URL,
 		LicenseName:    image.LicenseName,
 		LicenseURL:     image.LicenseURL,
@@ -564,10 +572,6 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 			// Store negative cache result to avoid refetching known misses?
 			// Maybe store an empty BirdImage with a timestamp?
 			logger.Warn("Image explicitly not found by provider")
-			emptyResult := BirdImage{ScientificName: scientificName, SourceProvider: c.providerName, CachedAt: time.Now()} // Mark as checked
-			c.dataMap.Store(scientificName, &emptyResult)                                                                  // Store placeholder in memory
-			// Don't save empty results to DB? Or save with empty URL?
-			// c.saveToDB(&emptyResult) // Decide on persistence strategy for misses
 			return BirdImage{}, fetchErr // Return the specific ErrImageNotFound
 		}
 		// For other errors, don't store anything and return the error
@@ -577,9 +581,6 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 	// If fetch was successful but returned an empty URL (provider couldn't find it)
 	if fetchedImage.URL == "" {
 		logger.Warn("Provider returned success but with an empty image URL")
-		emptyResult := BirdImage{ScientificName: scientificName, SourceProvider: c.providerName, CachedAt: time.Now()} // Mark as checked
-		c.dataMap.Store(scientificName, &emptyResult)                                                                  // Store placeholder in memory
-		// c.saveToDB(&emptyResult) // Decide on persistence
 		return BirdImage{}, ErrImageNotFound // Treat empty URL as not found
 	}
 
