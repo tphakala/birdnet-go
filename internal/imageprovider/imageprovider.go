@@ -519,56 +519,9 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 
 	// This goroutine performed the fetch/load (fetchAndStore was called by tryInitialize)
 	logger.Debug("Image initialized by this goroutine (cache miss), returning fetched/loaded result")
-	if c.metrics != nil {
-		// Cache miss was already potentially recorded in fetchAndStore if loaded from DB
-		// If fetchAndStore fetched from provider, that's a download, not just a miss.
-		// Let's refine metric logic in fetchAndStore.
-	}
+	// Note: Cache miss tracking is already handled in fetchAndStore
+	// if loaded from DB or when fetched from provider
 	return img, nil
-
-	/* OLD LOGIC before tryInitialize
-	   // 1. Check memory cache (fast path)
-	   if val, ok := c.dataMap.Load(scientificName); ok {
-	       if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil {
-	           // TODO: Check TTL here? Or rely on background refresh?
-	           // For now, assume if it's in memory, it's fresh enough.
-	           if c.metrics != nil {
-	               c.metrics.IncrementCacheHits()
-	           }
-	           return *imgPtr, nil
-	       }
-	   }
-
-	   // 2. Cache miss in memory, try fetching (which includes DB check)
-	   if c.metrics != nil {
-	       c.metrics.IncrementCacheMisses()
-	   }
-	   img, err := c.fetchAndStore(scientificName)
-	   if err != nil {
-	       // Log the error from fetchAndStore
-	       log.Printf("Error fetching/storing image for %s: %v", scientificName, err)
-
-	       // Attempt fallback ONLY if the primary fetch failed
-	       registry := c.GetRegistry()
-	       if registry != nil {
-	           triedProviders := map[string]bool{c.providerName: true}
-	           log.Printf("Attempting fallback for %s", scientificName)
-	           fallbackImg, found := c.tryFallbackProviders(scientificName, triedProviders)
-	           if found {
-	               log.Printf("Found image for %s via fallback provider %s", scientificName, fallbackImg.SourceProvider)
-	               // Optionally store the fallback result in this cache's memory map?
-	               // c.dataMap.Store(scientificName, &fallbackImg)
-	               return fallbackImg, nil
-	           }
-	           log.Printf("Fallback failed for %s", scientificName)
-	       }
-	       // Return original error if fetch failed and fallback didn't work
-	       return BirdImage{}, err
-	   }
-
-	   // Return the fetched image
-	   return img, nil
-	*/
 }
 
 // fetchAndStore tries to load from DB, then fetches from the provider if necessary, and stores the result.
