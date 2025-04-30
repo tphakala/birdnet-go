@@ -390,7 +390,7 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 
 // NOTE: Potential Race Condition: If multiple goroutines call this function concurrently,
 // especially during initial startup, there's a risk of race conditions during provider
-// registration (checking GetCache then Register is not atomic). Consider using sync.Once
+// registration (checking Get then Register is not atomic). Consider using sync.Once
 // or ensuring this is called only once during a deterministic startup phase (e.g., in main).
 // setupImageProviderRegistry initializes or retrieves the global image provider registry
 // and registers the default providers (Wikimedia, AviCommons).
@@ -569,12 +569,14 @@ func warmUpImageCacheInBackground(ds datastore.Interface, registry *imageprovide
 
 			needsImage++
 			wg.Add(1)
-			// Mark as initializing *in the default cache* which will handle the fetch
-			defaultCache.Initializing.Store(sciName, struct{}{})
+			// The defaultCache.Get call below will handle initialization and locking.
+			// No need to manually manipulate the Initializing map here.
+			// defaultCache.Initializing.Store(sciName, struct{}{}) // REMOVED - Incorrect usage
 
 			go func(name string) {
 				defer wg.Done()
-				defer defaultCache.Initializing.Delete(name)
+				// The tryInitialize function called by Get handles mutex cleanup.
+				// defer defaultCache.Initializing.Delete(name) // REMOVED - Handled by tryInitialize
 				sem <- struct{}{}
 				defer func() { <-sem }()
 
