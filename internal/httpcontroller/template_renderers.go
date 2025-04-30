@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"log/slog"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -41,7 +42,7 @@ type PageData struct {
 // TemplateRenderer is a custom HTML template renderer for Echo framework.
 type TemplateRenderer struct {
 	templates *template.Template
-	logger    echo.Logger
+	logger    *slog.Logger
 }
 
 // validateErrorTemplates checks if all required error templates exist
@@ -61,14 +62,22 @@ func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c 
 	var buf bytes.Buffer
 	err := t.templates.ExecuteTemplate(&buf, name, data)
 	if err != nil {
-		t.logger.Errorf("Error executing template %s: %v", name, err)
+		if t.logger != nil {
+			t.logger.Error("Error executing template", "template_name", name, "error", err)
+		} else {
+			log.Printf("ERROR (TemplateRenderer): Error executing template %s: %v", name, err)
+		}
 		return err
 	}
 
 	// If execution was successful, write the result to the original writer
 	_, err = buf.WriteTo(w)
 	if err != nil {
-		t.logger.Errorf("Error writing template result: %v", err)
+		if t.logger != nil {
+			t.logger.Error("Error writing template result", "template_name", name, "error", err)
+		} else {
+			log.Printf("ERROR (TemplateRenderer): Error writing template result for %s: %v", name, err)
+		}
 	}
 	return err
 }
@@ -81,18 +90,18 @@ func (s *Server) setupTemplateRenderer() {
 	// Parse all templates from the ViewsFs
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(ViewsFs, "views/*/*.html", "views/*/*/*.html")
 	if err != nil {
-		s.Echo.Logger.Fatal(err)
+		log.Fatalf("Failed to parse templates: %v", err)
 	}
 
-	// Create the renderer
+	// Create the renderer, passing the structured logger
 	renderer := &TemplateRenderer{
 		templates: tmpl,
-		logger:    s.Echo.Logger,
+		logger:    s.webLogger,
 	}
 
 	// Validate that all required error templates exist
 	if err := renderer.validateErrorTemplates(); err != nil {
-		s.Echo.Logger.Fatal(err)
+		log.Fatalf("Template validation failed: %v", err)
 	}
 
 	// Set the custom renderer
