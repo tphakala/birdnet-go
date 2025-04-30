@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -26,11 +27,25 @@ type Policy struct {
 // This function ensures minimum counts per species are preserved to maintain diversity.
 // Returns a CleanupResult containing error, number of clips removed, and current disk utilization percentage.
 func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
+	// Log the start of the cleanup run with structured logger
+	serviceLogger.Info("Usage-based cleanup run started",
+		"policy", "usage",
+		"timestamp", time.Now().Format(time.RFC3339))
+
 	// Perform initial setup (get files, settings, check if proceed)
 	files, baseDir, retention, proceed, initialResult := prepareInitialCleanup(db)
 	if !proceed {
+		serviceLogger.Info("Usage-based cleanup run completed",
+			"policy", "usage",
+			"result", "no action needed",
+			"files_removed", 0,
+			"disk_utilization", initialResult.DiskUtilization,
+			"timestamp", time.Now().Format(time.RFC3339),
+			"duration_ms", 0)
 		return initialResult
 	}
+
+	startTime := time.Now() // Track cleanup duration
 	debug := retention.Debug
 	keepSpectrograms := retention.KeepSpectrograms
 	minClipsPerSpecies := retention.MinClips
@@ -41,6 +56,13 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	usageThresholdFloat, err := conf.ParsePercentage(usageThresholdSetting)
 	if err != nil {
 		// Use the utilization from the initial result if available
+		serviceLogger.Error("Usage-based cleanup failed",
+			"policy", "usage",
+			"error", fmt.Sprintf("Failed to parse usage threshold '%s': %v", usageThresholdSetting, err),
+			"files_removed", 0,
+			"disk_utilization", initialResult.DiskUtilization,
+			"timestamp", time.Now().Format(time.RFC3339),
+			"duration_ms", time.Since(startTime).Milliseconds())
 		return CleanupResult{Err: fmt.Errorf("failed to parse usage threshold '%s': %w", usageThresholdSetting, err), ClipsRemoved: 0, DiskUtilization: initialResult.DiskUtilization}
 	}
 	usageThreshold := int(usageThresholdFloat)
@@ -58,6 +80,18 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 		if err == nil { // If no error from checkInitialUsage, it means usage was below threshold
 			finalUtilization = initialUsagePercent
 		}
+
+		// Early completion - disk usage already below threshold
+		duration := time.Since(startTime)
+		serviceLogger.Info("Usage-based cleanup run completed",
+			"policy", "usage",
+			"result", "usage below threshold",
+			"files_removed", 0,
+			"disk_utilization", finalUtilization,
+			"usage_threshold", usageThreshold,
+			"timestamp", time.Now().Format(time.RFC3339),
+			"duration_ms", duration.Milliseconds())
+
 		return CleanupResult{Err: err, ClipsRemoved: 0, DiskUtilization: finalUtilization}
 	}
 
@@ -87,6 +121,26 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 
 	// --- Calculate Final Usage & Return ---
 	finalUsagePercent := getFinalUsagePercent(baseDir, lastKnownGoodUsagePercent, debug)
+
+	// Log completion with results
+	duration := time.Since(startTime)
+	if loopErr != nil {
+		serviceLogger.Error("Usage-based cleanup run completed with errors",
+			"policy", "usage",
+			"files_removed", deletedCount,
+			"disk_utilization", finalUsagePercent,
+			"error", loopErr,
+			"timestamp", time.Now().Format(time.RFC3339),
+			"duration_ms", duration.Milliseconds())
+	} else {
+		serviceLogger.Info("Usage-based cleanup run completed",
+			"policy", "usage",
+			"files_removed", deletedCount,
+			"disk_utilization", finalUsagePercent,
+			"usage_threshold", usageThreshold,
+			"timestamp", time.Now().Format(time.RFC3339),
+			"duration_ms", duration.Milliseconds())
+	}
 
 	return CleanupResult{Err: loopErr, ClipsRemoved: deletedCount, DiskUtilization: finalUsagePercent}
 }
@@ -152,7 +206,7 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 
 			if deletionErr != nil {
 				// Use the common error handler
-				shouldStop, loopErrTmp := handleDeletionErrorInLoop(file.Path, deletionErr, &errorCount, 10)
+				shouldStop, loopErrTmp := handleDeletionErrorInLoop(file.Path, deletionErr, &errorCount, 10, "usage")
 				if shouldStop {
 					loopErr = loopErrTmp                                    // Assign the final error
 					return deletedCount, lastKnownGoodUsagePercent, loopErr // Stop processing
@@ -260,7 +314,7 @@ func handleUsageDeletionIteration(file *FileInfo, speciesMonthCount map[string]m
 	// Check minimum clips constraint (per species per month dir)
 	// This differs from age-based policy by preserving diversity within each time period (directory)
 	subDir := filepath.Dir(file.Path)
-	if !checkMinClips(file, subDir, speciesMonthCount, minClipsPerSpecies, debug) {
+	if !checkMinClips(file, subDir, speciesMonthCount, minClipsPerSpecies, debug, "usage") {
 		return false, nil
 	}
 
@@ -268,7 +322,7 @@ func handleUsageDeletionIteration(file *FileInfo, speciesMonthCount map[string]m
 	reason := fmt.Sprintf("usage %d%% >= threshold %d%%", currentUsagePercent, usageThreshold)
 
 	// Call the common deletion function
-	if delErr := deleteFileAndOptionalSpectrogram(file, reason, keepSpectrograms, debug); delErr != nil {
+	if delErr := deleteFileAndOptionalSpectrogram(file, reason, keepSpectrograms, debug, "usage"); delErr != nil {
 		// Return the error to be handled by the main loop (e.g., increment error count)
 		return false, delErr
 	}

@@ -77,11 +77,25 @@ func formatDuration(d time.Duration) string {
 //
 // Returns a CleanupResult containing error, number of clips removed, and current disk utilization percentage.
 func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
+	// Log the start of the cleanup run with structured logger
+	serviceLogger.Info("Age-based cleanup run started",
+		"policy", "age",
+		"timestamp", time.Now().Format(time.RFC3339))
+
 	// Perform initial setup (get files, settings, check if proceed)
 	files, baseDir, retention, proceed, initialResult := prepareInitialCleanup(db)
 	if !proceed {
+		serviceLogger.Info("Age-based cleanup run completed",
+			"policy", "age",
+			"result", "no action needed",
+			"files_removed", 0,
+			"disk_utilization", initialResult.DiskUtilization,
+			"timestamp", time.Now().Format(time.RFC3339),
+			"duration_ms", 0)
 		return initialResult
 	}
+
+	startTime := time.Now() // Track cleanup duration
 	debug := retention.Debug
 	keepSpectrograms := retention.KeepSpectrograms
 	minClipsPerSpecies := retention.MinClips
@@ -149,8 +163,28 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	if diskErr != nil {
 		// Combine errors if getting disk usage failed after the loop
 		finalErr := fmt.Errorf("cleanup completed but failed to get disk usage: %w (loop error: %w)", diskErr, loopErr)
+
+		// Log the completion with error
+		duration := time.Since(startTime)
+		serviceLogger.Error("Age-based cleanup run completed with errors",
+			"policy", "age",
+			"files_removed", deletedCount,
+			"disk_utilization", 0,
+			"error", finalErr,
+			"timestamp", time.Now().Format(time.RFC3339),
+			"duration_ms", duration.Milliseconds())
+
 		return CleanupResult{Err: finalErr, ClipsRemoved: deletedCount, DiskUtilization: 0}
 	}
+
+	// Log the successful completion
+	duration := time.Since(startTime)
+	serviceLogger.Info("Age-based cleanup run completed",
+		"policy", "age",
+		"files_removed", deletedCount,
+		"disk_utilization", int(diskUsage),
+		"timestamp", time.Now().Format(time.RFC3339),
+		"duration_ms", duration.Milliseconds())
 
 	// Return the final result, including any error encountered during the loop
 	return CleanupResult{Err: loopErr, ClipsRemoved: deletedCount, DiskUtilization: int(diskUsage)}
@@ -196,9 +230,9 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 			}
 
 			// 2. Perform deletion using the common helper
-			if delErr := deleteFileAndOptionalSpectrogram(file, reason, keepSpectrograms, debug); delErr != nil {
+			if delErr := deleteFileAndOptionalSpectrogram(file, reason, keepSpectrograms, debug, "age"); delErr != nil {
 				// Use the common error handler
-				shouldStop, loopErrTmp := handleDeletionErrorInLoop(file.Path, delErr, &errorCount, 10)
+				shouldStop, loopErrTmp := handleDeletionErrorInLoop(file.Path, delErr, &errorCount, 10, "age")
 				if shouldStop {
 					loopErr = loopErrTmp         // Assign the final error
 					return deletedCount, loopErr // Stop processing
