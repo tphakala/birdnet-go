@@ -52,6 +52,10 @@ var (
 
 // Initialize media routes
 func (c *Controller) initMediaRoutes() {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Initializing media routes")
+	}
+
 	// Original filename-based routes (keep for backward compatibility if needed, but ensure they use SFS)
 	c.Group.GET("/media/audio/:filename", c.ServeAudioClip)
 	c.Group.GET("/media/spectrogram/:filename", c.ServeSpectrogram)
@@ -65,6 +69,10 @@ func (c *Controller) initMediaRoutes() {
 
 	// Bird image endpoint
 	c.Group.GET("/media/species-image", c.GetSpeciesImage)
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Media routes initialized successfully")
+	}
 }
 
 // translateSecureFSError handles SecureFS errors consistently across handler methods.
@@ -76,28 +84,114 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 		// If it's already an HTTPError from SecureFS, just pass it through
 		ctx.Logger().Debugf("SecureFS httpErr=%d internal=%v msg=%v",
 			httpErr.Code, httpErr.Internal, httpErr.Message)
+		// Log this as an error since it represents a failed request from SFS
+		if c.apiLogger != nil {
+			c.apiLogger.Error("SecureFS returned HTTP error",
+				"error", err.Error(),
+				"status_code", httpErr.Code,
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return httpErr
 	}
+
+	// Get tunnel info for logging
+	isTunneled, _ := ctx.Get("is_tunneled").(bool)
+	tunnelProvider, _ := ctx.Get("tunnel_provider").(string)
 
 	// Check for specific error types and map to appropriate status codes
 	switch {
 	case errors.Is(err, securefs.ErrPathTraversal) || errors.Is(err, ErrPathTraversalAttempt):
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Path traversal attempt detected",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+				"tunneled", isTunneled,
+				"tunnel_provider", tunnelProvider,
+			)
+		}
 		return c.HandleError(ctx, err, "Invalid file path: attempted path traversal", http.StatusBadRequest)
 	case errors.Is(err, securefs.ErrInvalidPath) || errors.Is(err, ErrInvalidAudioPath):
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Invalid file path provided",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+				"tunneled", isTunneled,
+				"tunnel_provider", tunnelProvider,
+			)
+		}
 		return c.HandleError(ctx, err, "Invalid file path specification", http.StatusBadRequest)
 	case errors.Is(err, securefs.ErrAccessDenied):
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Access denied to resource",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+				"tunneled", isTunneled,
+				"tunnel_provider", tunnelProvider,
+			)
+		}
 		return c.HandleError(ctx, err, "Access denied to requested resource", http.StatusForbidden)
 	case errors.Is(err, securefs.ErrNotRegularFile):
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Requested resource is not a regular file",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+				"tunneled", isTunneled,
+				"tunnel_provider", tunnelProvider,
+			)
+		}
 		return c.HandleError(ctx, err, "Requested resource is not a regular file", http.StatusForbidden)
 	case errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist) || errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, ErrImageNotFound):
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Resource not found", // Info level as 404 is common
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+				"tunneled", isTunneled,
+				"tunnel_provider", tunnelProvider,
+			)
+		}
 		return c.HandleError(ctx, err, "Resource not found", http.StatusNotFound)
 	case errors.Is(err, context.DeadlineExceeded):
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Request timed out",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+				"tunneled", isTunneled,
+				"tunnel_provider", tunnelProvider,
+			)
+		}
 		return c.HandleError(ctx, err, "Request timed out", http.StatusRequestTimeout)
 	case errors.Is(err, context.Canceled):
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Request canceled by client",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+				"tunneled", isTunneled,
+				"tunnel_provider", tunnelProvider,
+			)
+		}
 		return c.HandleError(ctx, err, "Request was canceled", StatusClientClosedRequest)
 	}
 
-	// For other errors, use the provided user message with a 500 status
+	// For other errors, log as error and use the provided user message with a 500 status
+	if c.apiLogger != nil {
+		c.apiLogger.Error("Unhandled SecureFS/media error",
+			"error", err.Error(),
+			"user_message", userMsg,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+			"tunneled", isTunneled,
+			"tunnel_provider", tunnelProvider,
+		)
+	}
 	return c.HandleError(ctx, err, userMsg, http.StatusInternalServerError)
 }
 
@@ -123,7 +217,21 @@ func getContentType(filename string) string {
 func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 	filename := ctx.Param("filename")
 	if filename == "" {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Missing filename parameter for ServeAudioClip",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, fmt.Errorf("missing filename"), "Filename parameter is required", http.StatusBadRequest)
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Serving audio clip by filename",
+			"filename", filename,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
 	}
 
 	// Serve the file using SecureFS. It handles path validation and serves the file.
@@ -131,7 +239,16 @@ func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 	err := c.SFS.ServeRelativeFile(ctx, filename)
 
 	if err != nil {
+		// Error logging is handled within translateSecureFSError
 		return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Successfully served audio clip by filename",
+			"filename", filename,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
 	}
 
 	// If err is nil, ServeRelativeFile handled the response successfully
