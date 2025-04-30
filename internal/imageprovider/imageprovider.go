@@ -615,17 +615,24 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 	var foundImage BirdImage
 	found := false
 
+	// Create a local copy of triedProviders to avoid modifying the caller's map
+	localTriedProviders := make(map[string]bool, len(triedProviders))
+	for provider := range triedProviders {
+		localTriedProviders[provider] = true
+	}
+
 	registry.RangeProviders(func(name string, cache *BirdImageCache) bool {
-		if triedProviders[name] {
+		if localTriedProviders[name] {
 			logger.Debug("Skipping already tried provider", "provider", name)
 			return true // Continue ranging
 		}
 
 		logger.Info("Attempting fallback fetch from provider", "provider", name)
-		triedProviders[name] = true // Mark as tried
+		localTriedProviders[name] = true // Mark as tried
 
-		// Use the fallback cache's Get method - it handles its own caching/fetching
-		img, err := cache.Get(scientificName)
+		// Instead of calling Get (which would recursively try fallbacks), use fetchAndStore directly
+		// to avoid the fallback chain and potential infinite loop
+		img, err := cache.fetchAndStore(scientificName)
 		if err != nil {
 			// Log error but continue trying other fallbacks
 			logger.Warn("Fallback provider failed to get image", "provider", name, "error", err)
