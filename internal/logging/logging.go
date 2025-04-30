@@ -2,6 +2,7 @@ package logging
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,6 +19,10 @@ import (
 // global logger instances, initialized in Init()
 var structuredLogger *slog.Logger
 var humanReadableLogger *slog.Logger
+
+// Track closable writers for proper resource management in SetOutput
+var currentStructuredOutputCloser io.Closer
+var currentHumanReadableOutputCloser io.Closer
 
 // currentLogLevel stores the dynamic level for all loggers
 var currentLogLevel = new(slog.LevelVar)
@@ -56,6 +61,13 @@ func Init() {
 			fmt.Printf("Failed to open structured log file: %v\n", err)
 			structuredLogFile = os.Stderr // Fallback
 		}
+		// Store the closable file handle (only if it's not stderr)
+		if structuredLogFile != os.Stderr {
+			currentStructuredOutputCloser = structuredLogFile
+		} else {
+			currentStructuredOutputCloser = nil // Ensure it's nil if we fell back to stderr
+		}
+
 		structuredHandler := slog.NewJSONHandler(structuredLogFile, &slog.HandlerOptions{
 			Level: currentLogLevel,
 			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
@@ -73,6 +85,8 @@ func Init() {
 		structuredLogger = slog.New(structuredHandler)
 
 		// Human-readable logger (Text) to console
+		// os.Stdout is not typically closed by the application, so no closer needed here.
+		currentHumanReadableOutputCloser = nil
 		humanReadableHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 			Level: currentLogLevel,
 			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
@@ -101,9 +115,32 @@ func SetLevel(level slog.Level) {
 }
 
 // SetOutput allows redirecting logger output, e.g., to a file.
-// Note: This replaces the *entire* handler configuration.
-// It now correctly preserves the globally set log level using LevelVar.
-func SetOutput(structuredOutput, humanReadableOutput io.Writer) {
+// It safely closes any previously opened closable writers before creating new ones.
+// Returns an error if either provided writer is nil.
+func SetOutput(structuredOutput, humanReadableOutput io.Writer) error {
+	// Input validation
+	if structuredOutput == nil {
+		return errors.New("structuredOutput writer cannot be nil")
+	}
+	if humanReadableOutput == nil {
+		return errors.New("humanReadableOutput writer cannot be nil")
+	}
+
+	// Close existing closable writers
+	var closeErrors []error
+	if currentStructuredOutputCloser != nil {
+		if err := currentStructuredOutputCloser.Close(); err != nil {
+			closeErrors = append(closeErrors, fmt.Errorf("failed to close previous structured output: %w", err))
+		}
+		currentStructuredOutputCloser = nil // Reset even if close failed
+	}
+	if currentHumanReadableOutputCloser != nil {
+		if err := currentHumanReadableOutputCloser.Close(); err != nil {
+			closeErrors = append(closeErrors, fmt.Errorf("failed to close previous human-readable output: %w", err))
+		}
+		currentHumanReadableOutputCloser = nil // Reset even if close failed
+	}
+
 	// Re-initialize with new writers, using the stored LevelVar
 	structuredHandler := slog.NewJSONHandler(structuredOutput, &slog.HandlerOptions{
 		Level: currentLogLevel,
@@ -137,8 +174,23 @@ func SetOutput(structuredOutput, humanReadableOutput io.Writer) {
 	})
 	humanReadableLogger = slog.New(humanReadableHandler)
 
+	// Track the new closers if they implement io.Closer
+	if c, ok := structuredOutput.(io.Closer); ok {
+		currentStructuredOutputCloser = c
+	}
+	if c, ok := humanReadableOutput.(io.Closer); ok {
+		currentHumanReadableOutputCloser = c
+	}
+
 	// Set the default logger again, in case it was the one being reconfigured
 	slog.SetDefault(structuredLogger)
+
+	// Return combined errors from closing previous writers, if any
+	if len(closeErrors) > 0 {
+		return errors.Join(closeErrors...)
+	}
+
+	return nil
 }
 
 // Structured returns the globally configured structured (JSON) logger.
