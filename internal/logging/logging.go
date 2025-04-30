@@ -7,6 +7,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var structuredLogger *slog.Logger
@@ -227,23 +230,60 @@ func Trace(msg string, args ...any) {
 }
 
 // NewFileLogger creates a new slog.Logger instance configured to write JSON logs
-// to the specified file path. It includes a 'service' attribute in all logs.
-// It returns the logger, a function to close the log file, and an error if setup fails.
+// to the specified file path using lumberjack for rotation based on global config.
+// It includes a 'service' attribute in all logs.
+// It returns the logger, a function to close the underlying log writer, and an error if setup fails.
 func NewFileLogger(filePath, serviceName string, level slog.Level) (*slog.Logger, func() error, error) {
-	// Ensure the directory exists
+	// Ensure the directory exists (lumberjack doesn't create directories)
 	logDir := filepath.Dir(filePath)
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		return nil, nil, fmt.Errorf("failed to create log directory %s: %w", logDir, err)
+	if logDir != "." { // Avoid trying to create the current directory if filePath is just a filename
+		if err := os.MkdirAll(logDir, 0o755); err != nil {
+			return nil, nil, fmt.Errorf("failed to create log directory %s: %w", logDir, err)
+		}
 	}
 
-	// Open the log file for appending
-	logFile, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open log file %s: %w", filePath, err)
+	// Fetch main log configuration for rotation settings
+	// Using Main.Log settings as the default for all file loggers created via this func
+	mainLogConf := conf.Setting().Main.Log
+
+	// Configure lumberjack based on config
+	logWriter := &lumberjack.Logger{
+		Filename: filePath,
+		Compress: false, // Compression can be added to LogConfig if needed later
 	}
 
-	// Create a handler writing to the file
-	fileHandler := slog.NewJSONHandler(logFile, &slog.HandlerOptions{
+	// Default values, overridden by config below
+	maxSizeMB := 100
+	maxBackups := 3
+	maxAge := 28 // days
+
+	// Apply rotation settings from config
+	configMaxSizeMB := int(mainLogConf.MaxSize / (1024 * 1024))
+	if configMaxSizeMB > 0 {
+		maxSizeMB = configMaxSizeMB
+	}
+
+	switch mainLogConf.Rotation {
+	case conf.RotationDaily:
+		maxAge = 1
+		maxBackups = 30 // Keep up to 30 daily log files
+	case conf.RotationWeekly:
+		maxAge = 7
+		maxBackups = 4 // Keep up to 4 weekly log files
+	case conf.RotationSize:
+		// Use maxSizeMB derived from config (or default if config value was invalid)
+		// Use default maxAge and maxBackups unless overridden by future config options
+	default:
+		// Unknown rotation type, use defaults for size-based rotation
+		slog.Warn("Unknown log rotation type in config, using size-based defaults", "configuredType", mainLogConf.Rotation)
+	}
+
+	logWriter.MaxSize = maxSizeMB
+	logWriter.MaxBackups = maxBackups
+	logWriter.MaxAge = maxAge
+
+	// Create a handler writing to the lumberjack writer
+	fileHandler := slog.NewJSONHandler(logWriter, &slog.HandlerOptions{
 		Level: level,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			// Customize level names
@@ -263,13 +303,13 @@ func NewFileLogger(filePath, serviceName string, level slog.Level) (*slog.Logger
 	// Create the logger and add the service attribute
 	logger := slog.New(fileHandler).With("service", serviceName)
 
-	// Return the logger and the file closer function
+	// Return the logger and the lumberjack closer function
+	// Note: lumberjack.Logger.Close() doesn't actually close the file handle
+	// immediately in the typical sense, it's more for resource cleanup related
+	// to its internal state if needed. The actual file handle management
+	// happens internally based on rotation.
 	closeFunc := func() error {
-		if err := logFile.Sync(); err != nil {
-			// Log sync error but proceed with closing
-			slog.Error("Failed to sync log file before closing", "file", filePath, "error", err)
-		}
-		return logFile.Close()
+		return logWriter.Close() // Call lumberjack's Close method
 	}
 
 	return logger, closeFunc, nil
