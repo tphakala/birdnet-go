@@ -493,6 +493,41 @@ func (c *Controller) Debug(format string, v ...interface{}) {
 	}
 }
 
+// logAPIRequest is a helper to log API requests with common context fields.
+func (c *Controller) logAPIRequest(ctx echo.Context, level slog.Level, msg string, args ...any) {
+	if c.apiLogger == nil {
+		return // Do nothing if logger isn't initialized
+	}
+
+	// Extract common context info
+	ip := ctx.RealIP()
+	path := ctx.Request().URL.Path
+
+	// Create base attributes
+	baseAttrs := []any{
+		"path", path,
+		"ip", ip,
+	}
+
+	// Append specific attributes to base attributes
+	baseAttrs = append(baseAttrs, args...) // Assign append result back to baseAttrs
+
+	// Log at the specified level
+	switch level {
+	case slog.LevelDebug:
+		c.apiLogger.Debug(msg, baseAttrs...)
+	case slog.LevelInfo:
+		c.apiLogger.Info(msg, baseAttrs...)
+	case slog.LevelWarn:
+		c.apiLogger.Warn(msg, baseAttrs...)
+	case slog.LevelError:
+		c.apiLogger.Error(msg, baseAttrs...)
+	default:
+		// Default to Info if level is unknown or custom (like Fatal)
+		c.apiLogger.Log(ctx.Request().Context(), level, msg, baseAttrs...)
+	}
+}
+
 // InitializeAPI creates a new API controller and registers all routes
 func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
