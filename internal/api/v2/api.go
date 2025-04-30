@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"log/slog"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/patrickmn/go-cache"
@@ -19,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -38,6 +41,8 @@ type Controller struct {
 	detectionCache      *cache.Cache // Cache for detection queries
 	startTime           *time.Time
 	SFS                 *securefs.SecureFS // Add SecureFS instance
+	apiLogger           *slog.Logger       // Structured logger for API operations
+	apiLoggerClose      func() error       // Function to close the log file
 }
 
 // New creates a new API controller, returning an error if initialization fails.
@@ -108,6 +113,18 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		SFS:            sfs, // Assign SecureFS instance
 	}
 
+	// Initialize structured logger for API requests
+	apiLogPath := "logs/web.log"
+	apiLogger, closeFunc, err := logging.NewFileLogger(apiLogPath, "api", slog.LevelInfo)
+	if err != nil {
+		logger.Printf("Warning: Failed to initialize API structured logger: %v", err)
+		// Continue without structured logging rather than failing completely
+	} else {
+		c.apiLogger = apiLogger
+		c.apiLoggerClose = closeFunc
+		logger.Printf("API structured logging initialized to %s", apiLogPath)
+	}
+
 	// Create v2 API group
 	c.Group = e.Group("/api/v2")
 
@@ -115,6 +132,7 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	c.Group.Use(middleware.Logger())
 	c.Group.Use(middleware.Recover())
 	c.Group.Use(middleware.CORS())
+	c.Group.Use(c.LoggingMiddleware()) // Add structured logging middleware
 
 	// Initialize start time for uptime tracking
 	now := time.Now()
@@ -124,6 +142,41 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	c.initRoutes()
 
 	return c, nil // Return controller and nil error
+}
+
+// LoggingMiddleware creates a middleware function that logs API requests
+func (c *Controller) LoggingMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(ctx echo.Context) error {
+			start := time.Now()
+
+			// Process the request
+			err := next(ctx)
+
+			// Skip logging if apiLogger is not initialized
+			if c.apiLogger == nil {
+				return err
+			}
+
+			// Extract request information
+			req := ctx.Request()
+			res := ctx.Response()
+
+			// Log the request with structured data
+			c.apiLogger.Info("API Request",
+				"method", req.Method,
+				"path", req.URL.Path,
+				"query", req.URL.RawQuery,
+				"status", res.Status,
+				"ip", ctx.RealIP(),
+				"user_agent", req.UserAgent(),
+				"latency_ms", time.Since(start).Milliseconds(),
+				"error", err,
+			)
+
+			return err
+		}
+	}
 }
 
 // initRoutes registers all API endpoints
@@ -241,6 +294,13 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 // Shutdown performs cleanup of all resources used by the API controller
 // This should be called when the application is shutting down
 func (c *Controller) Shutdown() {
+	// Close the API logger if it was initialized
+	if c.apiLoggerClose != nil {
+		if err := c.apiLoggerClose(); err != nil {
+			c.logger.Printf("Error closing API log file: %v", err)
+		}
+	}
+
 	// Call shutdown methods of individual components
 	// Currently, only the system component needs cleanup
 	StopCPUMonitoring()
@@ -292,7 +352,22 @@ func generateCorrelationID() string {
 // HandleError constructs and returns an appropriate error response
 func (c *Controller) HandleError(ctx echo.Context, err error, message string, code int) error {
 	errorResp := NewErrorResponse(err, message, code)
+
+	// Log the error with both the existing logger and the structured logger
 	c.logger.Printf("API Error [%s]: %s: %v", errorResp.CorrelationID, message, err)
+
+	// Also log to structured logger if available
+	if c.apiLogger != nil {
+		c.apiLogger.Error("API Error",
+			"correlation_id", errorResp.CorrelationID,
+			"message", message,
+			"error", err.Error(),
+			"code", code,
+			"path", ctx.Request().URL.Path,
+			"method", ctx.Request().Method,
+		)
+	}
+
 	return ctx.JSON(code, errorResp)
 }
 
@@ -300,5 +375,36 @@ func (c *Controller) HandleError(ctx echo.Context, err error, message string, co
 func (c *Controller) Debug(format string, v ...interface{}) {
 	if c.Settings.WebServer.Debug {
 		c.logger.Printf(format, v...)
+
+		// Also log to structured logger if available
+		if c.apiLogger != nil {
+			msg := fmt.Sprintf(format, v...)
+			c.apiLogger.Debug(msg)
+		}
 	}
+}
+
+// InitializeAPI creates a new API controller and registers all routes
+func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
+	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
+	controlChan chan string, logger *log.Logger, proc *processor.Processor) *Controller {
+
+	// Create API controller
+	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, logger)
+	if err != nil {
+		logger.Fatalf("Failed to initialize API: %v", err)
+	}
+
+	// Assign processor after initialization
+	apiController.Processor = proc
+
+	// Log initialization
+	if apiController.apiLogger != nil {
+		apiController.apiLogger.Info("API v2 initialized",
+			"version", settings.Version,
+			"build_date", settings.BuildDate,
+		)
+	}
+
+	return apiController
 }
