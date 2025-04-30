@@ -42,6 +42,10 @@ type BirdWeatherStatus struct {
 
 // initIntegrationsRoutes registers all integration-related API endpoints
 func (c *Controller) initIntegrationsRoutes() {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Initializing integrations routes")
+	}
+
 	// Create integrations API group with auth middleware
 	integrationsGroup := c.Group.Group("/integrations", c.AuthMiddleware)
 
@@ -58,10 +62,20 @@ func (c *Controller) initIntegrationsRoutes() {
 	// Other integration routes could be added here:
 	// - Weather APIs
 	// - External media storage
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Integrations routes initialized successfully")
+	}
 }
 
 // GetMQTTStatus handles GET /api/v2/integrations/mqtt/status
 func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
+	ip := ctx.RealIP()
+	path := ctx.Request().URL.Path
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting MQTT status", "path", path, "ip", ip)
+	}
+
 	// Get MQTT configuration from settings
 	mqttConfig := c.Settings.Realtime.MQTT
 
@@ -75,72 +89,91 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 
 	// If MQTT is not enabled, return status as-is
 	if !mqttConfig.Enabled {
+		if c.apiLogger != nil {
+			c.apiLogger.Info("MQTT is disabled, returning status", "path", path, "ip", ip)
+		}
 		return ctx.JSON(http.StatusOK, status)
 	}
 
-	// Check if we have an active MQTT connection through the control channel
-	if c.controlChan != nil {
-		c.Debug("Requesting MQTT status check")
-
-		// Create a temporary MQTT client to check connection status
-		metrics, err := telemetry.NewMetrics()
-		if err == nil {
-			tempClient, err := mqtt.NewClient(c.Settings, metrics)
-			if err == nil {
-				// Use a short timeout to check connection
-				testCtx, cancel := context.WithTimeout(ctx.Request().Context(), 3*time.Second)
-				defer cancel()
-
-				// Try to connect and set status based on result
-				err = tempClient.Connect(testCtx)
-				status.Connected = err == nil && tempClient.IsConnected()
-
-				if err != nil {
-					status.LastError = fmt.Sprintf("error:connection:mqtt_broker:%s", err.Error()) // Standardized error code format
-				}
-
-				// Disconnect the temporary client
-				tempClient.Disconnect()
-			} else {
-				status.LastError = fmt.Sprintf("error:client:mqtt_client_creation:%s", err.Error()) // Standardized error code format
-			}
-		} else {
-			status.LastError = fmt.Sprintf("error:metrics:initialization:%s", err.Error()) // Standardized error code format
-		}
-	} else if mqttConfig.Enabled {
-		// If control channel is not available but MQTT is enabled,
-		// we can create a temporary client to check connection status
-		metrics, err := telemetry.NewMetrics()
-		if err == nil {
-			tempClient, err := mqtt.NewClient(c.Settings, metrics)
-			if err == nil {
-				// Use a short timeout to check connection
-				testCtx, cancel := context.WithTimeout(ctx.Request().Context(), 3*time.Second)
-				defer cancel()
-
-				// Try to connect and set status based on result
-				err = tempClient.Connect(testCtx)
-				status.Connected = err == nil && tempClient.IsConnected()
-
-				if err != nil {
-					status.LastError = fmt.Sprintf("error:connection:mqtt_broker:%s", err.Error()) // Standardized error code format
-				}
-
-				// Disconnect the temporary client
-				tempClient.Disconnect()
-			} else {
-				status.LastError = fmt.Sprintf("error:client:mqtt_client_creation:%s", err.Error()) // Standardized error code format
-			}
-		} else {
-			status.LastError = fmt.Sprintf("error:metrics:initialization:%s", err.Error()) // Standardized error code format
-		}
+	// Check connection status using a temporary client
+	if c.apiLogger != nil {
+		c.apiLogger.Debug("Checking MQTT connection status", "path", path, "ip", ip)
+	}
+	connected, checkErr := c.checkMQTTConnectionStatus(ctx.Request().Context())
+	status.Connected = connected
+	if checkErr != "" {
+		status.LastError = checkErr
 	}
 
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieved MQTT status successfully",
+			"connected", status.Connected,
+			"broker", status.Broker,
+			"last_error", status.LastError,
+			"path", path,
+			"ip", ip,
+		)
+	}
 	return ctx.JSON(http.StatusOK, status)
+}
+
+// checkMQTTConnectionStatus attempts to connect to the MQTT broker using a temporary client
+// to determine the current connection status.
+// Returns true if connected, false otherwise, along with any error message encountered.
+func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context) (connected bool, lastError string) {
+	metrics, err := telemetry.NewMetrics()
+	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to create metrics for temporary MQTT client", "error", err)
+		}
+		return false, fmt.Sprintf("error:metrics:initialization:%s", err.Error())
+	}
+
+	tempClient, err := mqtt.NewClient(c.Settings, metrics)
+	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to create temporary MQTT client for status check", "error", err)
+		}
+		return false, fmt.Sprintf("error:client:mqtt_client_creation:%s", err.Error())
+	}
+	defer tempClient.Disconnect() // Ensure temporary client is disconnected
+
+	// Use a short timeout for the connection attempt
+	connectCtx, cancel := context.WithTimeout(parentCtx, 3*time.Second)
+	defer cancel()
+
+	// Try to connect
+	err = tempClient.Connect(connectCtx)
+	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Temporary MQTT client connection failed during status check", "error", err, "broker", c.Settings.Realtime.MQTT.Broker)
+		}
+		return false, fmt.Sprintf("error:connection:mqtt_broker:%s", err.Error())
+	}
+
+	// Check if genuinely connected
+	if !tempClient.IsConnected() {
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Temporary MQTT client connected but IsConnected() returned false", "broker", c.Settings.Realtime.MQTT.Broker)
+		}
+		// Consider this a failure for status purposes, though connection might be flapping
+		return false, "error:connection:mqtt_connection_unstable"
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Debug("Temporary MQTT client connected successfully for status check", "broker", c.Settings.Realtime.MQTT.Broker)
+	}
+	return true, "" // Connected successfully
 }
 
 // GetBirdWeatherStatus handles GET /api/v2/integrations/birdweather/status
 func (c *Controller) GetBirdWeatherStatus(ctx echo.Context) error {
+	ip := ctx.RealIP()
+	path := ctx.Request().URL.Path
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting BirdWeather status", "path", path, "ip", ip)
+	}
+
 	// Get BirdWeather configuration from settings
 	bwConfig := c.Settings.Realtime.Birdweather
 
@@ -154,6 +187,15 @@ func (c *Controller) GetBirdWeatherStatus(ctx echo.Context) error {
 
 	// For now, we just return the configuration status
 	// In the future, we could add checks for client status here
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieved BirdWeather status successfully",
+			"enabled", status.Enabled,
+			"station_id", status.StationID,
+			"threshold", status.Threshold,
+			"path", path,
+			"ip", ip,
+		)
+	}
 
 	return ctx.JSON(http.StatusOK, status)
 }
