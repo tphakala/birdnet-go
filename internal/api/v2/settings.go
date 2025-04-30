@@ -4,6 +4,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -22,6 +23,10 @@ type UpdateRequest struct {
 
 // initSettingsRoutes registers all settings-related API endpoints
 func (c *Controller) initSettingsRoutes() {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Initializing settings routes")
+	}
+
 	// Create settings API group
 	settingsGroup := c.Group.Group("/settings", c.AuthMiddleware)
 
@@ -34,17 +39,41 @@ func (c *Controller) initSettingsRoutes() {
 	settingsGroup.PUT("", c.UpdateSettings)
 	// PATCH /api/v2/settings/:section - Updates a specific settings section with partial replacement
 	settingsGroup.PATCH("/:section", c.UpdateSectionSettings)
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Settings routes initialized successfully")
+	}
 }
 
 // GetAllSettings handles GET /api/v2/settings
 func (c *Controller) GetAllSettings(ctx echo.Context) error {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting all settings",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	// Acquire read lock to ensure settings aren't being modified during read
 	c.settingsMutex.RLock()
 	defer c.settingsMutex.RUnlock()
 
 	settings := conf.Setting()
 	if settings == nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Settings not initialized when trying to get all settings",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieved all settings successfully",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
 	}
 
 	// Return a copy of the settings
@@ -53,37 +82,46 @@ func (c *Controller) GetAllSettings(ctx echo.Context) error {
 
 // GetSectionSettings handles GET /api/v2/settings/:section
 func (c *Controller) GetSectionSettings(ctx echo.Context) error {
+	section := ctx.Param("section")
+	c.logAPIRequest(ctx, slog.LevelInfo, "Getting settings for section", "section", section)
+
 	// Acquire read lock to ensure settings aren't being modified during read
 	c.settingsMutex.RLock()
 	defer c.settingsMutex.RUnlock()
 
-	section := ctx.Param("section")
 	if section == "" {
+		c.logAPIRequest(ctx, slog.LevelError, "Missing section parameter")
 		return c.HandleError(ctx, fmt.Errorf("section not specified"), "Section parameter is required", http.StatusBadRequest)
 	}
 
 	settings := conf.Setting()
 	if settings == nil {
+		c.logAPIRequest(ctx, slog.LevelError, "Settings not initialized when trying to get section settings", "section", section)
 		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 	}
 
 	// Get the settings section
 	sectionValue, err := getSettingsSection(settings, section)
 	if err != nil {
+		c.logAPIRequest(ctx, slog.LevelError, "Failed to get settings section", "section", section, "error", err.Error())
 		return c.HandleError(ctx, err, "Failed to get settings section", http.StatusNotFound)
 	}
+
+	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved settings section successfully", "section", section)
 
 	return ctx.JSON(http.StatusOK, sectionValue)
 }
 
 // UpdateSettings handles PUT /api/v2/settings
 func (c *Controller) UpdateSettings(ctx echo.Context) error {
+	c.logAPIRequest(ctx, slog.LevelInfo, "Attempting to update settings")
 	// Acquire write lock to prevent concurrent settings updates
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
 
 	settings := conf.Setting()
 	if settings == nil {
+		c.logAPIRequest(ctx, slog.LevelError, "Settings not initialized during update attempt")
 		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 	}
 
@@ -93,29 +131,34 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	// Parse the request body
 	var updatedSettings conf.Settings
 	if err := ctx.Bind(&updatedSettings); err != nil {
+		// Log binding error
+		c.logAPIRequest(ctx, slog.LevelError, "Failed to bind request body for settings update", "error", err.Error())
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
 	// Verify the request body contains valid data
 	if err := validateSettingsData(&updatedSettings); err != nil {
+		c.logAPIRequest(ctx, slog.LevelError, "Invalid settings data received", "error", err.Error())
 		return c.HandleError(ctx, err, "Invalid settings data", http.StatusBadRequest)
 	}
 
 	// Update only the fields that are allowed to be changed
-	// This ensures that runtime-only fields are not overwritten
 	skippedFields, err := updateAllowedSettingsWithTracking(settings, &updatedSettings)
 	if err != nil {
-		// Log which fields were attempted to be updated but were protected
-		if len(skippedFields) > 0 {
-			c.Debug("Protected fields that were skipped in update: %s", strings.Join(skippedFields, ", "))
-		}
+		// Log error during field update attempt
+		c.logAPIRequest(ctx, slog.LevelError, "Error updating allowed settings fields", "error", err.Error(), "skipped_fields", skippedFields)
 		return c.HandleError(ctx, err, "Failed to update settings", http.StatusInternalServerError)
+	}
+	if len(skippedFields) > 0 {
+		// Log skipped fields at Debug level
+		c.logAPIRequest(ctx, slog.LevelDebug, "Skipped protected fields during settings update", "skipped_fields", skippedFields)
 	}
 
 	// Check if any important settings have changed and trigger actions as needed
 	if err := c.handleSettingsChanges(&oldSettings, settings); err != nil {
 		// Attempt to rollback changes if applying them failed
 		*settings = oldSettings
+		c.logAPIRequest(ctx, slog.LevelError, "Failed to apply settings changes, rolling back", "error", err.Error())
 		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
@@ -123,9 +166,11 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	if err := conf.SaveSettings(); err != nil {
 		// Attempt to rollback changes if saving failed
 		*settings = oldSettings
+		c.logAPIRequest(ctx, slog.LevelError, "Failed to save settings to disk, rolling back", "error", err.Error())
 		return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
+	c.logAPIRequest(ctx, slog.LevelInfo, "Settings updated and saved successfully", "skipped_fields_count", len(skippedFields))
 	return ctx.JSON(http.StatusOK, map[string]interface{}{
 		"message":       "Settings updated successfully",
 		"skippedFields": skippedFields,

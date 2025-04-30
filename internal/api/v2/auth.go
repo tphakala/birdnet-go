@@ -52,12 +52,26 @@ func (c *Controller) Login(ctx echo.Context) error {
 	// Parse login request
 	var req AuthRequest
 	if err := ctx.Bind(&req); err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Invalid login request",
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return c.HandleError(ctx, err, "Invalid login request", http.StatusBadRequest)
 	}
 
 	// If authentication is not enabled, return success
 	server := ctx.Get("server")
 	if server == nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Authentication service unavailable",
+				"error", "server not available in context",
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return c.HandleError(ctx, fmt.Errorf("server not available in context"),
 			"Authentication service not available", http.StatusInternalServerError)
 	}
@@ -71,12 +85,26 @@ func (c *Controller) Login(ctx echo.Context) error {
 	})
 
 	if !ok {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Authentication service unavailable",
+				"error", "server does not support authentication interface",
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return c.HandleError(ctx, fmt.Errorf("server does not support authentication interface"),
 			"Authentication service not available", http.StatusInternalServerError)
 	}
 
 	// If authentication is not enabled, act as if the login was successful
 	if !authServer.isAuthenticationEnabled(ctx) {
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Authentication not required",
+				"username", req.Username,
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return ctx.JSON(http.StatusOK, AuthResponse{
 			Success:   true,
 			Message:   "Authentication is not required on this server",
@@ -92,11 +120,29 @@ func (c *Controller) Login(ctx echo.Context) error {
 		// Add a short delay to prevent brute force attacks
 		time.Sleep(500 * time.Millisecond)
 
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed login attempt",
+				"username", req.Username,
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+				"error", "Invalid credentials",
+			)
+		}
+
 		return ctx.JSON(http.StatusUnauthorized, AuthResponse{
 			Success:   false,
 			Message:   "Invalid credentials",
 			Timestamp: time.Now(),
 		})
+	}
+
+	// Successful login
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Successful login",
+			"username", req.Username,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
 	}
 
 	// In a token-based auth system, we would generate and return tokens here
@@ -117,6 +163,12 @@ func (c *Controller) Logout(ctx echo.Context) error {
 	if server == nil {
 		// If no server in context, we can't properly logout
 		// But we'll return success anyway since the client is ending their session
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Logout without server context",
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return ctx.JSON(http.StatusOK, AuthResponse{
 			Success:   true,
 			Message:   "Logged out",
@@ -129,8 +181,22 @@ func (c *Controller) Logout(ctx echo.Context) error {
 		Logout(c echo.Context) error
 	}); ok {
 		if err := logoutServer.Logout(ctx); err != nil {
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Logout failed",
+					"error", err.Error(),
+					"ip", ctx.RealIP(),
+					"path", ctx.Request().URL.Path,
+				)
+			}
 			return c.HandleError(ctx, err, "Logout failed", http.StatusInternalServerError)
 		}
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("User logged out",
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
 	}
 
 	return ctx.JSON(http.StatusOK, AuthResponse{
@@ -161,6 +227,17 @@ func (c *Controller) GetAuthStatus(ctx echo.Context) error {
 			status.Username = userServer.GetUsername(ctx)
 			status.Method = userServer.GetAuthMethod(ctx)
 		}
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Auth status check",
+			"authenticated", status.Authenticated,
+			"username", status.Username,
+			"method", status.Method,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+			"user_agent", ctx.Request().Header.Get("User-Agent"),
+		)
 	}
 
 	return ctx.JSON(http.StatusOK, status)

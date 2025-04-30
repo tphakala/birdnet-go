@@ -32,6 +32,7 @@ require (
 	golang.org/x/net v0.39.0
 	golang.org/x/term v0.31.0
 	golang.org/x/text v0.24.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.5.6
 	gorm.io/driver/sqlite v1.5.7

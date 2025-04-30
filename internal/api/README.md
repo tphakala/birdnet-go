@@ -183,6 +183,29 @@ Handlers follow a consistent pattern:
    return ctx.JSON(http.StatusOK, detection)
    ```
 
+5. **Logging**: Handlers utilize structured logging via `c.apiLogger`:
+   - Log entry points with `Info` level, including relevant request parameters (e.g., date, species, ID) and context (IP address, request path).
+   - Log successful outcomes with `Info` level, summarizing results (e.g., number of records fetched, action completed).
+   - Log validation errors or expected issues (e.g., resource not found, invalid parameters) with `Warn` level.
+   - Log unexpected errors (e.g., database failures, internal processing errors) with `Error` level, including the underlying error message and relevant context.
+   - Use `c.Debug` for verbose debugging information during development.
+   - Example:
+     ```go
+     if c.apiLogger != nil {
+         c.apiLogger.Info("Handling request for detection", "detection_id", id, "ip", ctx.RealIP(), "path", ctx.Request().URL.Path)
+     }
+     // ... processing ...
+     if err != nil {
+         if c.apiLogger != nil {
+             c.apiLogger.Error("Failed to fetch detection from datastore", "detection_id", id, "error", err.Error(), "ip", ctx.RealIP(), "path", ctx.Request().URL.Path)
+         }
+         return c.HandleError(ctx, err, "Database error", http.StatusInternalServerError)
+     }
+     if c.apiLogger != nil {
+         c.apiLogger.Info("Successfully retrieved detection", "detection_id", id, "ip", ctx.RealIP(), "path", ctx.Request().URL.Path)
+     }
+     ```
+
 ### Settings Management
 
 The API includes comprehensive endpoints for managing application settings:

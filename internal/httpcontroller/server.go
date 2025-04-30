@@ -3,13 +3,15 @@ package httpcontroller
 
 import (
 	"fmt"
+	"io"
 	"log"
+	"log/slog"
 	"net"
 	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	echolog "github.com/labstack/gommon/log"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -17,7 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
-	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
@@ -31,7 +33,6 @@ type Server struct {
 	Settings          *conf.Settings
 	OAuth2Server      *security.OAuth2Server
 	DashboardSettings *conf.Dashboard
-	Logger            *logger.Logger
 	BirdImageCache    *imageprovider.BirdImageCache
 	Handlers          *handlers.Handlers
 	SunCalc           *suncalc.SunCalc
@@ -44,6 +45,10 @@ type Server struct {
 	// Page and partial routes
 	pageRoutes    map[string]PageRouteConfig
 	partialRoutes map[string]PartialRouteConfig
+
+	// New structured loggers
+	webLogger      *slog.Logger // Structured logger for web operations
+	webLoggerClose func() error // Function to close the log file
 }
 
 // New initializes a new HTTP server with given context and datastore.
@@ -234,62 +239,47 @@ func (s *Server) initLogger() {
 		return
 	}
 
-	fileHandler := &logger.DefaultFileHandler{}
-	if err := fileHandler.Open(s.Settings.WebServer.Log.Path); err != nil {
-		log.Fatal(err) // Use standard log here as logger isn't initialized yet
+	// Initialize structured logger for web requests (using slog)
+	webLogPath := "logs/web.log"
+	webLogger, closeFunc, err := logging.NewFileLogger(webLogPath, "web", slog.LevelInfo)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize web structured logger: %v", err)
+		// Continue without structured logging rather than failing completely
+	} else {
+		s.webLogger = webLogger
+		s.webLoggerClose = closeFunc
+		log.Printf("Web structured logging initialized to %s", webLogPath)
 	}
 
-	// Convert conf.RotationType to logger.RotationType
-	var loggerRotationType logger.RotationType
-	switch s.Settings.WebServer.Log.Rotation {
-	case conf.RotationDaily:
-		loggerRotationType = logger.RotationDaily
-	case conf.RotationWeekly:
-		loggerRotationType = logger.RotationWeekly
-	case conf.RotationSize:
-		loggerRotationType = logger.RotationSize
-	default:
-		log.Fatal("Invalid rotation type")
+	// Replace Echo's default logger output ONLY if our structured logger is available
+	if s.webLogger != nil {
+		s.Echo.Logger.SetOutput(io.Discard) // Discard Echo's default log output, rely on middleware
+		s.Echo.Logger.SetLevel(echolog.OFF) // Use the constant via the alias
 	}
-
-	// Create rotation settings
-	rotationSettings := logger.Settings{
-		RotationType: loggerRotationType,
-		MaxSize:      s.Settings.WebServer.Log.MaxSize,
-		RotationDay:  s.Settings.WebServer.Log.RotationDay,
-	}
-
-	s.Logger = logger.NewLogger(map[string]logger.LogOutput{
-		"web":    logger.FileOutput{Handler: fileHandler},
-		"stdout": logger.StdoutOutput{},
-	}, true, rotationSettings)
-
-	// Set Echo's Logger to use the custom logger
-	s.Echo.Logger.SetOutput(s.Logger)
-
-	// Set Echo's logging format
-	s.Echo.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
-		LogURI:      true,
-		LogStatus:   true,
-		LogRemoteIP: true,
-		LogMethod:   true,
-		LogError:    true,
-		HandleError: true,
-		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
-			// Use your custom logger here
-			s.Logger.Info("web", "%s %v %s %d %v", v.RemoteIP, v.Method, v.URI, v.Status, v.Error)
-			return nil
-		},
-	}))
 }
 
 // Debug logs debug messages if debug mode is enabled
 func (s *Server) Debug(format string, v ...interface{}) {
 	if s.Settings.WebServer.Debug {
-		if len(v) == 0 {
+		// Original debug logging (keep for backward compatibility)
+		switch len(v) {
+		case 0:
 			log.Print(format)
-		} else {
+		default:
 			log.Printf(format, v...)
+		}
+
+		// Also log to structured logger if available
+		if s.webLogger != nil {
+			// Format the message if arguments are provided
+			var msg string
+			switch len(v) {
+			case 0:
+				msg = format
+			default:
+				msg = fmt.Sprintf(format, v...)
+			}
+			s.webLogger.Debug(msg)
 		}
 	}
 }
@@ -300,9 +290,140 @@ func (s *Server) Shutdown() error {
 	s.Debug("Running final HLS stream cleanup before shutdown")
 	s.Handlers.CleanupIdleHLSStreams()
 
+	// Close the web logger if it was initialized
+	if s.webLoggerClose != nil {
+		if err := s.webLoggerClose(); err != nil {
+			log.Printf("Error closing web log file: %v", err)
+		}
+	}
+
 	// Close all named-pipe handles created at startup
 	securefs.CleanupNamedPipes()
 
 	// Gracefully shutdown the server
 	return s.Echo.Close()
+}
+
+// LogError logs an error with structured information
+func (s *Server) LogError(c echo.Context, err error, message string) {
+	// Continue using the old logger (for backward compatibility)
+	log.Printf("ERROR: %s: %v", message, err)
+
+	// If the new logger is available, use it for enhanced structured logging
+	if s.webLogger != nil {
+		// Extract request information
+		req := c.Request()
+
+		// Get client IP
+		ip := s.RealIP(c)
+
+		// Add additional error context
+		s.webLogger.Error("Error",
+			"message", message,
+			"error", err.Error(),
+			"path", req.URL.Path,
+			"method", req.Method,
+			"ip", ip,
+			"user_agent", req.UserAgent(),
+		)
+	}
+}
+
+// LogRequest logs details about an HTTP request with structured information
+func (s *Server) LogRequest(c echo.Context, message string, level slog.Level, additionalAttrs ...any) {
+	// Skip if structured logger is not available
+	if s.webLogger == nil {
+		return
+	}
+
+	// Extract request information
+	req := c.Request()
+	res := c.Response()
+
+	// Get client IP
+	ip := s.RealIP(c)
+
+	// Base attributes for all request logs
+	attrs := []any{
+		"method", req.Method,
+		"path", req.URL.Path,
+		"query", req.URL.RawQuery,
+		"status", res.Status,
+		"ip", ip,
+		"user_agent", req.UserAgent(),
+	}
+
+	// Add any additional attributes
+	attrs = append(attrs, additionalAttrs...)
+
+	// Log at the appropriate level
+	switch level {
+	case slog.LevelDebug:
+		s.webLogger.Debug(message, attrs...)
+	case slog.LevelInfo:
+		s.webLogger.Info(message, attrs...)
+	case slog.LevelWarn:
+		s.webLogger.Warn(message, attrs...)
+	case slog.LevelError:
+		s.webLogger.Error(message, attrs...)
+	default:
+		// Default to Info level
+		s.webLogger.Info(message, attrs...)
+	}
+}
+
+// LoggingMiddleware creates a middleware function that logs HTTP requests
+// with detailed structured information, similar to the API v2 logging middleware
+func (s *Server) LoggingMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(ctx echo.Context) error {
+			// Skip if structured logger is not available
+			if s.webLogger == nil {
+				return next(ctx)
+			}
+
+			// Record the start time to calculate latency
+			start := time.Now()
+
+			// Process the request
+			err := next(ctx)
+
+			// Now log the completed request with timing information
+			req := ctx.Request()
+			res := ctx.Response()
+
+			// Get client IP
+			ip := s.RealIP(ctx)
+
+			// Base attributes for request logs
+			attrs := []any{
+				"method", req.Method,
+				"path", req.URL.Path,
+				"query", req.URL.RawQuery,
+				"status", res.Status,
+				"ip", ip,
+				"user_agent", req.UserAgent(),
+				"latency_ms", time.Since(start).Milliseconds(),
+				"bytes_out", res.Size,
+			}
+
+			// Add error info if there was an error and log at appropriate level
+			switch {
+			case err != nil || res.Status >= 500: // Error or 5xx status -> Error level
+				if err != nil {
+					attrs = append(attrs, "error", err.Error())
+				} else {
+					// Optionally add a generic error message for 5xx without explicit error
+					attrs = append(attrs, "error", fmt.Sprintf("server error status %d", res.Status))
+				}
+				s.webLogger.Error("HTTP Request", attrs...)
+			case res.Status >= 400: // 4xx status -> Warn level
+				s.webLogger.Warn("HTTP Request", attrs...)
+			default: // Others -> Info level
+				s.webLogger.Info("HTTP Request", attrs...)
+			}
+
+			return err
+		}
+	}
 }

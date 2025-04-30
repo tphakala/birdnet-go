@@ -2,11 +2,44 @@ package weather
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/logging"
 )
+
+// Package-level logger for weather service
+var (
+	weatherLogger *slog.Logger
+	// weatherLogCloser func() error // Closer function for the file logger
+	// TODO: Call weatherLogCloser during graceful shutdown
+)
+
+func init() {
+	var err error
+	// Default level is Info, adjust if needed or read from config
+	weatherLogger, _, err = logging.NewFileLogger("logs/weather.log", "weather", slog.LevelDebug)
+	if err != nil {
+		// Fallback or handle error appropriately
+		// Using the global logger for this critical setup error
+		logging.Error("Failed to initialize weather file logger", "error", err)
+		// Fallback to the default structured logger if file logger fails
+		weatherLogger = logging.Structured().With("service", "weather")
+		if weatherLogger == nil {
+			// If even the default logger isn't initialized, panic is reasonable
+			// as logging is fundamental.
+			panic(fmt.Sprintf("Failed to initialize any logger for weather service: %v", err))
+		}
+		logging.Warn("Weather service falling back to default logger due to file logger initialization error.")
+	} else {
+		logging.Info("Weather file logger initialized successfully", "path", "logs/weather.log")
+	}
+
+	// Store the closer function if you have a mechanism to call it on shutdown
+	// weatherLogCloser = closer
+}
 
 // Provider represents a weather data provider interface
 type Provider interface {
@@ -92,6 +125,8 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 
 	// Save daily events data
 	if err := s.db.SaveDailyEvents(dailyEvents); err != nil {
+		// Log the error before returning
+		weatherLogger.Error("Failed to save daily events to database", "error", err, "date", dailyEvents.Date, "city", dailyEvents.CityName)
 		return fmt.Errorf("failed to save daily events: %w", err)
 	}
 
@@ -121,9 +156,12 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 
 	// Save hourly weather data
 	if err := s.db.SaveHourlyWeather(hourlyWeather); err != nil {
+		// Log the error before returning
+		weatherLogger.Error("Failed to save hourly weather to database", "error", err, "time", hourlyWeather.Time)
 		return fmt.Errorf("failed to save hourly weather: %w", err)
 	}
 
+	weatherLogger.Debug("Successfully saved weather data to database", "time", data.Time, "city", data.Location.City)
 	return nil
 }
 
@@ -142,39 +180,31 @@ func validateWeatherData(data *datastore.HourlyWeather) error {
 func (s *Service) StartPolling(stopChan <-chan struct{}) {
 	interval := time.Duration(s.settings.Realtime.Weather.PollInterval) * time.Minute
 
-	if s.settings.Realtime.Weather.Debug {
-		fmt.Printf("[weather] Starting weather polling service\n"+
-			"  Provider: %s\n"+
-			"  Interval: %d minutes\n",
-			s.settings.Realtime.Weather.Provider,
-			s.settings.Realtime.Weather.PollInterval)
-	}
+	// Use the dedicated weather logger
+	weatherLogger.Info("Starting weather polling service",
+		"provider", s.settings.Realtime.Weather.Provider,
+		"interval_minutes", s.settings.Realtime.Weather.PollInterval,
+	)
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	// Initial fetch
 	if err := s.fetchAndSave(); err != nil {
-		if s.settings.Realtime.Weather.Debug {
-			fmt.Printf("[weather] Initial weather fetch failed: %v\n", err)
-		}
+		// Error is already logged within fetchAndSave
+		weatherLogger.Warn("Initial weather fetch failed", "error", err)
 	}
 
 	for {
 		select {
 		case <-ticker.C:
-			if s.settings.Realtime.Weather.Debug {
-				fmt.Printf("[weather] Polling weather data...\n")
-			}
+			weatherLogger.Info("Polling weather data...")
 			if err := s.fetchAndSave(); err != nil {
-				if s.settings.Realtime.Weather.Debug {
-					fmt.Printf("[weather] Weather fetch failed: %v\n", err)
-				}
+				// Error is logged within fetchAndSave, maybe just warn here?
+				weatherLogger.Warn("Weather fetch poll failed", "error", err)
 			}
 		case <-stopChan:
-			if s.settings.Realtime.Weather.Debug {
-				fmt.Printf("[weather] Stopping weather polling service\n")
-			}
+			weatherLogger.Info("Stopping weather polling service")
 			return
 		}
 	}
@@ -182,49 +212,35 @@ func (s *Service) StartPolling(stopChan <-chan struct{}) {
 
 // fetchAndSave fetches weather data and saves it to the database
 func (s *Service) fetchAndSave() error {
-	if s.settings.Realtime.Weather.Debug {
-		fmt.Printf("[weather] Fetching weather data from provider %s\n",
-			s.settings.Realtime.Weather.Provider)
-	}
-
+	// FetchWeather should now internally log its start/end/errors
 	data, err := s.provider.FetchWeather(s.settings)
 	if err != nil {
-		if s.settings.Realtime.Weather.Debug {
-			fmt.Printf("[weather] Error fetching weather data from provider %s: %v\n",
-				s.settings.Realtime.Weather.Provider, err)
-		}
+		// Provider should log the specific error, we log the failure context here
+		weatherLogger.Error("Failed to fetch weather data from provider",
+			"provider", s.settings.Realtime.Weather.Provider,
+			"error", err, // Keep the wrapped error message
+		)
+		// Return the original error for upstream handling
 		return fmt.Errorf("failed to fetch weather data: %w", err)
 	}
 
-	if s.settings.Realtime.Weather.Debug {
-		fmt.Printf("[weather] Successfully fetched weather data:\n"+
-			"  Provider: %s\n"+
-			"  Time: %v\n"+
-			"  Temperature: %.1f°C\n"+
-			"  Wind: %.1f m/s, %d°\n"+
-			"  Humidity: %d%%\n"+
-			"  Pressure: %d hPa\n"+
-			"  Description: %s\n",
-			s.settings.Realtime.Weather.Provider,
-			data.Time.Format("2006-01-02 15:04:05"),
-			data.Temperature.Current,
-			data.Wind.Speed,
-			data.Wind.Deg,
-			data.Humidity,
-			data.Pressure,
-			data.Description,
-		)
-	}
+	// Log successful fetch details using the weatherLogger
+	weatherLogger.Info("Successfully fetched weather data",
+		"provider", s.settings.Realtime.Weather.Provider,
+		"time", data.Time.Format("2006-01-02 15:04:05"),
+		"temp_c", data.Temperature.Current,
+		"wind_mps", data.Wind.Speed,
+		"humidity_pct", data.Humidity,
+		"pressure_hpa", data.Pressure,
+		"description", data.Description,
+		"city", data.Location.City,
+	)
 
 	if err := s.SaveWeatherData(data); err != nil {
-		if s.settings.Realtime.Weather.Debug {
-			fmt.Printf("[weather] Error saving weather data: %v\n", err)
-		}
-		return fmt.Errorf("failed to save weather data: %w", err)
-	}
-
-	if s.settings.Realtime.Weather.Debug {
-		fmt.Printf("[weather] Successfully saved weather data to database\n")
+		// Error is logged within SaveWeatherData
+		weatherLogger.Error("Failed to save fetched weather data", "error", err)
+		// Return the original error from SaveWeatherData
+		return err // No need to wrap again, SaveWeatherData already logs context
 	}
 
 	return nil

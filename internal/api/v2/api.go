@@ -11,6 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"log/slog"
+	"net"
+	"strings"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/patrickmn/go-cache"
@@ -19,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -38,6 +43,81 @@ type Controller struct {
 	detectionCache      *cache.Cache // Cache for detection queries
 	startTime           *time.Time
 	SFS                 *securefs.SecureFS // Add SecureFS instance
+	apiLogger           *slog.Logger       // Structured logger for API operations
+	apiLoggerClose      func() error       // Function to close the log file
+}
+
+// Custom IP Extractor prioritizing CF-Connecting-IP
+func ipExtractorFromCloudflareHeader(req *http.Request) string {
+	// 1. Check CF-Connecting-IP
+	cfIP := req.Header.Get("CF-Connecting-IP")
+	if cfIP != "" {
+		ip := net.ParseIP(cfIP)
+		if ip != nil {
+			return ip.String() // Return valid IP
+		}
+	}
+
+	// 2. Check X-Forwarded-For (taking the first valid IP)
+	xff := req.Header.Get(echo.HeaderXForwardedFor)
+	if xff != "" {
+		parts := strings.Split(xff, ",")
+		for _, part := range parts {
+			ipStr := strings.TrimSpace(part)
+			ip := net.ParseIP(ipStr)
+			if ip != nil {
+				return ip.String() // Return first valid IP found
+			}
+		}
+	}
+
+	// 3. Check X-Real-IP
+	xri := req.Header.Get(echo.HeaderXRealIP)
+	if xri != "" {
+		ip := net.ParseIP(xri)
+		if ip != nil {
+			return ip.String() // Return valid IP
+		}
+	}
+
+	// 4. Fallback to Remote Address (might be proxy)
+	// Use SplitHostPort for robustness, ignoring potential errors
+	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
+	ip := net.ParseIP(remoteAddr)
+	if ip != nil {
+		return ip.String() // Return valid IP if RemoteAddr is just an IP
+	}
+
+	// If RemoteAddr contained a port or was invalid, return the raw string
+	// (though ideally, it should be a valid IP:port format)
+	return remoteAddr
+}
+
+// TunnelDetectionMiddleware inspects headers to determine if the request is likely proxied
+// and sets context values for logging.
+func (c *Controller) TunnelDetectionMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(ctx echo.Context) error {
+			req := ctx.Request()
+			tunneled := false
+			provider := "unknown"
+
+			// Check Cloudflare header first
+			if req.Header.Get("CF-Connecting-IP") != "" {
+				tunneled = true
+				provider = "cloudflare"
+			} else if req.Header.Get(echo.HeaderXForwardedFor) != "" || req.Header.Get(echo.HeaderXRealIP) != "" {
+				// If other proxy headers exist, mark as tunneled but provider is generic
+				tunneled = true
+				provider = "generic"
+			}
+
+			ctx.Set("is_tunneled", tunneled)
+			ctx.Set("tunnel_provider", provider)
+
+			return next(ctx)
+		}
+	}
 }
 
 // New creates a new API controller, returning an error if initialization fails.
@@ -48,6 +128,17 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	if logger == nil {
 		logger = log.Default()
 	}
+
+	// --- Configure IP Extractor ---
+	// IMPORTANT: For this to be secure in production, you would typically
+	// combine this with middleware that verifies the request came *from*
+	// a trusted proxy (like Cloudflare's IP ranges). Echo doesn't have
+	// built-in trusted proxy IP range checking, so this might require
+	// custom middleware or careful infrastructure setup (e.g., firewall rules).
+	// Without trusting the proxy, these headers can be spoofed.
+	e.IPExtractor = ipExtractorFromCloudflareHeader
+	logger.Println("Configured custom IP extractor prioritizing CF-Connecting-IP")
+	// --- End IP Extractor Configuration ---
 
 	// Validate and Initialize SecureFS for the media export path
 	mediaPath := settings.Realtime.Audio.Export.Path
@@ -108,13 +199,27 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		SFS:            sfs, // Assign SecureFS instance
 	}
 
+	// Initialize structured logger for API requests
+	apiLogPath := "logs/web.log"
+	apiLogger, closeFunc, err := logging.NewFileLogger(apiLogPath, "api", slog.LevelInfo)
+	if err != nil {
+		logger.Printf("Warning: Failed to initialize API structured logger: %v", err)
+		// Continue without structured logging rather than failing completely
+	} else {
+		c.apiLogger = apiLogger
+		c.apiLoggerClose = closeFunc
+		logger.Printf("API structured logging initialized to %s", apiLogPath)
+	}
+
 	// Create v2 API group
 	c.Group = e.Group("/api/v2")
 
 	// Configure middlewares
-	c.Group.Use(middleware.Logger())
-	c.Group.Use(middleware.Recover())
-	c.Group.Use(middleware.CORS())
+	c.Group.Use(middleware.Recover())          // Recover should be early
+	c.Group.Use(c.TunnelDetectionMiddleware()) // Add tunnel detection **before** logging
+	// c.Group.Use(middleware.Logger())        // Removed: Use custom LoggingMiddleware below for structured logging
+	c.Group.Use(middleware.CORS())     // CORS handling
+	c.Group.Use(c.LoggingMiddleware()) // Use custom structured logging middleware
 
 	// Initialize start time for uptime tracking
 	now := time.Now()
@@ -124,6 +229,52 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	c.initRoutes()
 
 	return c, nil // Return controller and nil error
+}
+
+// LoggingMiddleware creates a middleware function that logs API requests
+func (c *Controller) LoggingMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(ctx echo.Context) error {
+			start := time.Now()
+
+			// Process the request
+			err := next(ctx)
+
+			// Skip logging if apiLogger is not initialized
+			if c.apiLogger == nil {
+				return err
+			}
+
+			// Extract request information
+			req := ctx.Request()
+			res := ctx.Response()
+
+			// Get tunnel info from context
+			isTunneled, _ := ctx.Get("is_tunneled").(bool)
+			tunnelProvider, _ := ctx.Get("tunnel_provider").(string)
+
+			// Log the request with structured data using LogAttrs to avoid allocations
+			// when the log level is disabled.
+			attrs := []slog.Attr{
+				slog.String("method", req.Method),
+				slog.String("path", req.URL.Path),
+				slog.String("query", req.URL.RawQuery),
+				slog.Int("status", res.Status),
+				slog.String("ip", ctx.RealIP()), // Uses custom extractor
+				slog.Bool("tunneled", isTunneled),
+				slog.String("tunnel_provider", tunnelProvider),
+				slog.String("user_agent", req.UserAgent()),
+				slog.Int64("latency_ms", time.Since(start).Milliseconds()),
+			}
+			if err != nil {
+				attrs = append(attrs, slog.Any("error", err))
+			}
+
+			c.apiLogger.LogAttrs(ctx.Request().Context(), slog.LevelInfo, "API Request", attrs...)
+
+			return err
+		}
+	}
 }
 
 // initRoutes registers all API endpoints
@@ -241,6 +392,13 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 // Shutdown performs cleanup of all resources used by the API controller
 // This should be called when the application is shutting down
 func (c *Controller) Shutdown() {
+	// Close the API logger if it was initialized
+	if c.apiLoggerClose != nil {
+		if err := c.apiLoggerClose(); err != nil {
+			c.logger.Printf("Error closing API log file: %v", err)
+		}
+	}
+
 	// Call shutdown methods of individual components
 	// Currently, only the system component needs cleanup
 	StopCPUMonitoring()
@@ -292,13 +450,106 @@ func generateCorrelationID() string {
 // HandleError constructs and returns an appropriate error response
 func (c *Controller) HandleError(ctx echo.Context, err error, message string, code int) error {
 	errorResp := NewErrorResponse(err, message, code)
-	c.logger.Printf("API Error [%s]: %s: %v", errorResp.CorrelationID, message, err)
+
+	// Determine IP to log using the request context
+	ip := ctx.RealIP() // Now uses the custom extractor
+
+	// Get tunnel info from context
+	isTunneled, _ := ctx.Get("is_tunneled").(bool)
+	tunnelProvider, _ := ctx.Get("tunnel_provider").(string)
+
+	// Log the error with both the existing logger and the structured logger
+	c.logger.Printf("API Error [%s] from %s (Tunneled: %v, Provider: %s): %s: %v",
+		errorResp.CorrelationID, ip, isTunneled, tunnelProvider, message, err)
+
+	// Also log to structured logger if available
+	if c.apiLogger != nil {
+		c.apiLogger.Error("API Error",
+			"correlation_id", errorResp.CorrelationID,
+			"message", message,
+			"error", err.Error(),
+			"code", code,
+			"path", ctx.Request().URL.Path,
+			"method", ctx.Request().Method,
+			"ip", ip, // Log the extracted IP
+			"tunneled", isTunneled,
+			"tunnel_provider", tunnelProvider,
+		)
+	}
+
 	return ctx.JSON(code, errorResp)
 }
 
 // Debug logs debug messages when debug mode is enabled
 func (c *Controller) Debug(format string, v ...interface{}) {
 	if c.Settings.WebServer.Debug {
-		c.logger.Printf(format, v...)
+		msg := fmt.Sprintf(format, v...)
+		c.logger.Printf("[DEBUG] %s", msg)
+
+		// Also log to structured logger if available
+		if c.apiLogger != nil {
+			// No IP available here, log simple debug message
+			c.apiLogger.Debug(msg)
+		}
 	}
+}
+
+// logAPIRequest is a helper to log API requests with common context fields.
+func (c *Controller) logAPIRequest(ctx echo.Context, level slog.Level, msg string, args ...any) {
+	if c.apiLogger == nil {
+		return // Do nothing if logger isn't initialized
+	}
+
+	// Extract common context info
+	ip := ctx.RealIP()
+	path := ctx.Request().URL.Path
+
+	// Create base attributes
+	baseAttrs := []any{
+		"path", path,
+		"ip", ip,
+	}
+
+	// Append specific attributes to base attributes
+	baseAttrs = append(baseAttrs, args...) // Assign append result back to baseAttrs
+
+	// Log at the specified level
+	switch level {
+	case slog.LevelDebug:
+		c.apiLogger.Debug(msg, baseAttrs...)
+	case slog.LevelInfo:
+		c.apiLogger.Info(msg, baseAttrs...)
+	case slog.LevelWarn:
+		c.apiLogger.Warn(msg, baseAttrs...)
+	case slog.LevelError:
+		c.apiLogger.Error(msg, baseAttrs...)
+	default:
+		// Default to Info if level is unknown or custom (like Fatal)
+		c.apiLogger.Log(ctx.Request().Context(), level, msg, baseAttrs...)
+	}
+}
+
+// InitializeAPI creates a new API controller and registers all routes
+func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
+	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
+	controlChan chan string, logger *log.Logger, proc *processor.Processor) *Controller {
+
+	// Create API controller
+	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, logger)
+	if err != nil {
+		logger.Fatalf("Failed to initialize API: %v", err)
+	}
+
+	// Assign processor after initialization
+	apiController.Processor = proc
+
+	// Log initialization
+	if apiController.apiLogger != nil {
+		apiController.apiLogger.Info("API v2 initialized",
+			"version", settings.Version,
+			"build_date", settings.BuildDate,
+		)
+	}
+
+	return apiController
 }

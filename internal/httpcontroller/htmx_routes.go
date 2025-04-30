@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -230,7 +231,8 @@ func (s *Server) initRoutes() {
 			)
 			if !c.Response().Committed {
 				if renderErr := c.Render(newErr.Code, "error", newErr); renderErr != nil {
-					c.Logger().Error(renderErr)
+					// Use standard log for this fallback case as structured logger access is complex here
+					log.Printf("ERROR rendering error template: %v", renderErr)
 				}
 			}
 		}
@@ -323,7 +325,8 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 func (s *Server) setupStaticFileServing() {
 	assetsFS, err := fs.Sub(AssetsFs, "assets")
 	if err != nil {
-		s.Echo.Logger.Fatal(err)
+		// Use standard log.Fatal for critical setup errors
+		log.Fatalf("Failed to create sub FS for assets: %v", err)
 	}
 	s.Echo.StaticFS("/assets", echo.MustSubFS(assetsFS, ""))
 }
