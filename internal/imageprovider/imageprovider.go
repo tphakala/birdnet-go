@@ -435,7 +435,7 @@ func (c *BirdImageCache) tryInitialize(scientificName string) (BirdImage, bool, 
 
 	// Fast path: check if already loaded
 	if val, ok := c.dataMap.Load(scientificName); ok {
-		if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil {
+		if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil && imgPtr.URL != "" {
 			logger.Debug("Initialization check: already in memory cache (fast path)")
 			return *imgPtr, true, nil
 		}
@@ -458,7 +458,7 @@ func (c *BirdImageCache) tryInitialize(scientificName string) (BirdImage, bool, 
 	// Double check: check cache again *after* acquiring the lock,
 	// in case another goroutine finished initializing while we were waiting.
 	if val, ok := c.dataMap.Load(scientificName); ok {
-		if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil {
+		if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil && imgPtr.URL != "" {
 			logger.Debug("Initialization check: found in memory cache after acquiring lock")
 			return *imgPtr, true, nil // Indicate it was found in cache
 		}
