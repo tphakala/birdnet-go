@@ -44,7 +44,11 @@ func Init() {
 		currentLogLevel.Set(slog.LevelInfo)
 
 		// Ensure logs directory exists
-		os.MkdirAll("logs", 0o755)
+		err := os.MkdirAll("logs", 0o755)
+		if err != nil {
+			fmt.Printf("Failed to create logs directory: %v\n", err)
+			os.Exit(1) // bail out if we can't create the logs directory
+		}
 
 		// Structured logger (JSON) to file
 		structuredLogFile, err := os.OpenFile("logs/app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
