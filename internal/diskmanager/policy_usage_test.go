@@ -93,8 +93,11 @@ func TestFileTypesEligibleForDeletion(t *testing.T) {
 				assert.Equal(t, 80, fileInfo.Confidence, "Confidence should be correctly parsed")
 
 				// Check that the timestamp was parsed correctly
-				expectedTime := parseTime("20210102T150405Z")
-				assert.Equal(t, expectedTime, fileInfo.Timestamp, "Timestamp should be correctly parsed")
+				// IMPORTANT: Timestamps from filenames (with 'Z') are now parsed as local time
+				// so we need to compare against the local time equivalent.
+				expectedTimeLocal, err := time.ParseInLocation("20060102T150405", "20210102T150405", time.Local)
+				require.NoError(t, err, "Failed to parse expected local time for comparison")
+				assert.Equal(t, expectedTimeLocal, fileInfo.Timestamp, "Timestamp should be correctly parsed")
 			} else {
 				// For disallowed files, we must ensure they would be rejected from deletion
 				// We'll fail the test if they would be processed (which indicates a security issue)
@@ -150,8 +153,11 @@ func TestParseFileInfoWithDifferentExtensions(t *testing.T) {
 				assert.Equal(t, 80, fileInfo.Confidence)
 
 				// Check that the timestamp was parsed correctly
-				expectedTime := parseTime("20210102T150405Z")
-				assert.Equal(t, expectedTime, fileInfo.Timestamp)
+				// IMPORTANT: Timestamps from filenames (with 'Z') are now parsed as local time
+				// so we need to compare against the local time equivalent.
+				expectedTimeLocal, err := time.ParseInLocation("20060102T150405", "20210102T150405", time.Local)
+				require.NoError(t, err, "Failed to parse expected local time for comparison")
+				assert.Equal(t, expectedTimeLocal, fileInfo.Timestamp, "Timestamp should be correctly parsed")
 			} else {
 				assert.Error(t, err, "Should return an error")
 			}
@@ -171,8 +177,12 @@ func TestParseFileInfoMp3Extension(t *testing.T) {
 	assert.Equal(t, "bubo_bubo", fileInfo.Species)
 	assert.Equal(t, 80, fileInfo.Confidence)
 
-	expectedTime := parseTime("20250130T184446Z")
-	assert.Equal(t, expectedTime, fileInfo.Timestamp)
+	// Check that the timestamp was parsed correctly
+	// IMPORTANT: Timestamps from filenames (with 'Z') are now parsed as local time
+	// so we need to compare against the local time equivalent.
+	expectedTimeLocal, err := time.ParseInLocation("20060102T150405", "20250130T184446", time.Local)
+	require.NoError(t, err, "Failed to parse expected local time for comparison")
+	assert.Equal(t, expectedTimeLocal, fileInfo.Timestamp, "Timestamp should be correctly parsed")
 }
 
 // TestParseFileInfoProductionFormat tests file names as they actually appear in production
@@ -235,8 +245,16 @@ func TestParseFileInfoProductionFormat(t *testing.T) {
 				assert.Equal(t, tc.expectedConf, fileInfo.Confidence, "Confidence should be correctly parsed")
 
 				// Check that the timestamp was parsed correctly
-				expectedTime := parseTime(tc.expectedTime)
-				assert.Equal(t, expectedTime, fileInfo.Timestamp, "Timestamp should be correctly parsed")
+				// IMPORTANT: Timestamps from filenames (with 'Z') are now parsed as local time
+				// so we need to compare against the local time equivalent.
+
+				// First, parse the timestamp string without the Z suffix
+				timestampStrLocal := strings.TrimSuffix(tc.expectedTime, "Z")
+
+				// Parse it using the local timezone
+				expectedTimeLocal, err := time.ParseInLocation("20060102T150405", timestampStrLocal, time.Local)
+				require.NoError(t, err, "Failed to parse expected local time for comparison")
+				assert.Equal(t, expectedTimeLocal, fileInfo.Timestamp, "Timestamp should be correctly parsed")
 			} else {
 				assert.Error(t, err, "Should return an error: "+tc.description)
 				if err != nil {
@@ -250,6 +268,7 @@ func TestParseFileInfoProductionFormat(t *testing.T) {
 // TestSortFiles tests the sortFiles function
 func TestSortFiles(t *testing.T) {
 	// Create a set of files with different timestamps, species counts, and confidence levels
+	// Note: parseTime helper now parses timestamps as local time due to changes in parseFileInfo
 	files := []FileInfo{
 		{Path: "/base/dir1/bubo_bubo_80p_20210102T150405Z.wav", Species: "bubo_bubo", Confidence: 80, Timestamp: parseTime("20210102T150405Z")},
 		{Path: "/base/dir1/bubo_bubo_90p_20210103T150405Z.wav", Species: "bubo_bubo", Confidence: 90, Timestamp: parseTime("20210103T150405Z")},
@@ -257,7 +276,8 @@ func TestSortFiles(t *testing.T) {
 	}
 
 	// Sort the files
-	speciesCount := sortFiles(files, true)
+	speciesCount := buildSpeciesSubDirCountMap(files)
+	sortFilesForUsage(files, speciesCount, true)
 
 	// Verify sorting order (oldest first)
 	assert.Equal(t, "anas_platyrhynchos", files[0].Species, "Anas platyrhynchos should be first (oldest)")
@@ -277,6 +297,7 @@ type UsageBasedTestHelper struct {
 	diskUsage       float64
 	audioFiles      []FileInfo
 	deletedFiles    []string
+	deletedPngFiles []string // Track PNGs that *should* be deleted
 	lockedFilePaths []string
 
 	// Settings
@@ -285,6 +306,7 @@ type UsageBasedTestHelper struct {
 	minClipsPerSpecies int
 	retentionPolicy    string
 	debug              bool
+	keepSpectrograms   bool // Added keepSpectrograms
 }
 
 // Execute runs the test with the given configuration
@@ -327,7 +349,8 @@ func (c UsageBasedCleanupForTests) Cleanup(quitChan chan struct{}, db Interface)
 		}
 
 		// Sort files by priority
-		speciesCount := sortFiles(h.audioFiles, h.debug)
+		speciesCount := buildSpeciesSubDirCountMap(h.audioFiles)
+		sortFilesForUsage(h.audioFiles, speciesCount, h.debug)
 
 		// Process the files for cleanup
 		for i := range h.audioFiles {
@@ -359,6 +382,14 @@ func (c UsageBasedCleanupForTests) Cleanup(quitChan chan struct{}, db Interface)
 				// "Delete" the file
 				h.deletedFiles = append(h.deletedFiles, file.Path)
 
+				// Simulate PNG deletion if keepSpectrograms is false
+				if !h.keepSpectrograms {
+					pngPath := strings.TrimSuffix(file.Path, filepath.Ext(file.Path)) + ".png"
+					// Actually remove the PNG file from the filesystem
+					_ = osRemove(pngPath) // Ignore error, test assertions will catch if file still exists
+					h.deletedPngFiles = append(h.deletedPngFiles, pngPath)
+				}
+
 				// Reduce disk usage after each delete to simulate cleanup progress
 				h.diskUsage -= 2.0 // Simple reduction for testing
 
@@ -372,19 +403,34 @@ func (c UsageBasedCleanupForTests) Cleanup(quitChan chan struct{}, db Interface)
 }
 
 // TestUsageBasedCleanupTriggered tests that cleanup is triggered when usage exceeds threshold
+// and that spectrogram deletion respects the KeepSpectrograms setting.
 func TestUsageBasedCleanupTriggered(t *testing.T) {
 	// Create a temporary test directory
 	tempDir := t.TempDir()
 
-	// Setup test helper
-	helper := &UsageBasedTestHelper{
+	// Helper to create audio and png files
+	createTestFilePair := func(baseName string) (string, string) {
+		audioPath := filepath.Join(tempDir, baseName+".wav")
+		pngPath := filepath.Join(tempDir, baseName+".png")
+		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644), "Failed to create audio file")
+		require.NoError(t, os.WriteFile(pngPath, []byte("png"), 0o644), "Failed to create png file")
+		// No need to set time for this usage-based test
+		return audioPath, pngPath
+	}
+
+	// Create file pairs
+	audioPath1, pngPath1 := createTestFilePair("bubo_bubo_80p_20210101T150405Z")
+	audioPath2, pngPath2 := createTestFilePair("bubo_bubo_85p_20210102T150405Z")
+	audioPath3, pngPath3 := createTestFilePair("anas_platyrhynchos_70p_20210103T150405Z")
+
+	// Base helper setup (common settings)
+	baseHelper := UsageBasedTestHelper{
 		diskUsage: 90.0, // 90% usage exceeds 80% threshold
 		audioFiles: []FileInfo{
-			{Path: tempDir + "/bubo_bubo_80p_20210101T150405Z.wav", Species: "bubo_bubo", Confidence: 80, Timestamp: parseTime("20210101T150405Z"), Size: 1024},
-			{Path: tempDir + "/bubo_bubo_85p_20210102T150405Z.mp3", Species: "bubo_bubo", Confidence: 85, Timestamp: parseTime("20210102T150405Z"), Size: 512},
-			{Path: tempDir + "/anas_platyrhynchos_70p_20210103T150405Z.flac", Species: "anas_platyrhynchos", Confidence: 70, Timestamp: parseTime("20210103T150405Z"), Size: 2048},
+			{Path: audioPath1, Species: "bubo_bubo", Confidence: 80, Timestamp: parseTime("20210101T150405Z"), Size: 1024},
+			{Path: audioPath2, Species: "bubo_bubo", Confidence: 85, Timestamp: parseTime("20210102T150405Z"), Size: 512},
+			{Path: audioPath3, Species: "anas_platyrhynchos", Confidence: 70, Timestamp: parseTime("20210103T150405Z"), Size: 2048},
 		},
-		deletedFiles:       []string{},
 		lockedFilePaths:    []string{},
 		baseDir:            tempDir,
 		maxUsagePercent:    "80%",
@@ -393,11 +439,89 @@ func TestUsageBasedCleanupTriggered(t *testing.T) {
 		debug:              true,
 	}
 
-	// Run the test
-	helper.Execute(t)
+	// --- Scenario 1: KeepSpectrograms = true ---
+	t.Run("KeepSpectrogramsTrue", func(t *testing.T) {
+		// Copy base helper and set keepSpectrograms
+		helper := baseHelper
+		helper.keepSpectrograms = true
+		helper.deletedFiles = []string{} // Reset deletion tracking
+		helper.deletedPngFiles = []string{}
+		// Recreate files before test run
+		createTestFilePair("bubo_bubo_80p_20210101T150405Z")
+		createTestFilePair("bubo_bubo_85p_20210102T150405Z")
+		createTestFilePair("anas_platyrhynchos_70p_20210103T150405Z")
 
-	// Verify files were deleted since disk usage was above threshold
-	assert.NotEmpty(t, helper.deletedFiles, "Files should have been deleted when usage exceeds threshold")
+		// Run the test
+		helper.Execute(t)
+
+		// Verify audio files were deleted
+		assert.NotEmpty(t, helper.deletedFiles, "[KeepTrue] Audio files should have been deleted")
+		// Determine which audio files remain based on helper.deletedFiles
+		remainingAudio := make(map[string]bool)
+		for _, af := range helper.audioFiles {
+			remainingAudio[af.Path] = true
+		}
+		for _, df := range helper.deletedFiles {
+			delete(remainingAudio, df)
+		}
+
+		// Verify PNG files were NOT deleted (check actual file existence)
+		assert.FileExists(t, pngPath1, "[KeepTrue] PNG file 1 should exist")
+		assert.FileExists(t, pngPath2, "[KeepTrue] PNG file 2 should exist")
+		assert.FileExists(t, pngPath3, "[KeepTrue] PNG file 3 should exist")
+	})
+
+	// --- Scenario 2: KeepSpectrograms = false ---
+	t.Run("KeepSpectrogramsFalse", func(t *testing.T) {
+		// Copy base helper and set keepSpectrograms
+		helper := baseHelper
+		helper.keepSpectrograms = false
+		helper.deletedFiles = []string{} // Reset deletion tracking
+		helper.deletedPngFiles = []string{}
+		// Recreate files before test run
+		createTestFilePair("bubo_bubo_80p_20210101T150405Z")
+		createTestFilePair("bubo_bubo_85p_20210102T150405Z")
+		createTestFilePair("anas_platyrhynchos_70p_20210103T150405Z")
+
+		// Run the test
+		helper.Execute(t)
+
+		// Verify audio files were deleted (same expectation as KeepTrue)
+		assert.NotEmpty(t, helper.deletedFiles, "[KeepFalse] Audio files should have been deleted")
+		// Determine which audio files remain
+		remainingAudio := make(map[string]bool)
+		for _, af := range helper.audioFiles {
+			remainingAudio[af.Path] = true
+		}
+		deletedAudioMap := make(map[string]bool)
+		for _, df := range helper.deletedFiles {
+			delete(remainingAudio, df)
+			deletedAudioMap[df] = true
+		}
+
+		// Verify PNG files: Exist if audio exists, deleted if audio was deleted
+		if _, deleted := deletedAudioMap[audioPath1]; deleted {
+			assert.NoFileExists(t, pngPath1, "[KeepFalse] PNG file 1 should be deleted")
+		} else {
+			assert.FileExists(t, pngPath1, "[KeepFalse] PNG file 1 should exist")
+		}
+		if _, deleted := deletedAudioMap[audioPath2]; deleted {
+			assert.NoFileExists(t, pngPath2, "[KeepFalse] PNG file 2 should be deleted")
+		} else {
+			assert.FileExists(t, pngPath2, "[KeepFalse] PNG file 2 should exist")
+		}
+		if _, deleted := deletedAudioMap[audioPath3]; deleted {
+			assert.NoFileExists(t, pngPath3, "[KeepFalse] PNG file 3 should be deleted")
+		} else {
+			assert.FileExists(t, pngPath3, "[KeepFalse] PNG file 3 should exist")
+		}
+
+		// Additionally, verify the helper's tracking matches expectations
+		for _, deletedAudioPath := range helper.deletedFiles {
+			expectedPngPath := strings.TrimSuffix(deletedAudioPath, filepath.Ext(deletedAudioPath)) + ".png"
+			assert.Contains(t, helper.deletedPngFiles, expectedPngPath, "[KeepFalse] Helper should have tracked deleted PNG")
+		}
+	})
 }
 
 // TestUsageBasedCleanupNoTriggerBelowThreshold tests that cleanup is not triggered when usage is below threshold
@@ -703,7 +827,7 @@ func testUsageBasedCleanupWithRealFiles(
 	initialDiskUsage float64,
 	checkLockedFiles bool,
 	diskUsageReductionPerFile float64,
-) UsageCleanupResult {
+) CleanupResult {
 	// This implementation simulates the real UsageBasedCleanup function
 	// but with controlled inputs and outputs
 
@@ -749,7 +873,8 @@ func testUsageBasedCleanupWithRealFiles(
 
 	// Sort files by timestamp (oldest first) using the same sortFiles function
 	// used elsewhere in the codebase for consistency
-	speciesCount := sortFiles(files, false)
+	speciesCount := buildSpeciesSubDirCountMap(files)
+	sortFilesForUsage(files, speciesCount, false)
 
 	// Process files for deletion if disk usage is above threshold
 	deletedCount := 0
@@ -790,7 +915,7 @@ func testUsageBasedCleanupWithRealFiles(
 	}
 
 	// Return the results with the actual current disk usage
-	return UsageCleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: int(currentDiskUsage)}
+	return CleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: int(currentDiskUsage)}
 }
 
 // TestUsageBasedCleanupBelowThreshold tests that no files are deleted when disk usage is below threshold

@@ -592,20 +592,7 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 		},
 		Realtime: conf.RealtimeSettings{
 			Audio: conf.AudioSettings{
-				Export: struct {
-					Debug     bool
-					Enabled   bool
-					Path      string // path to audio clip export directory
-					Type      string
-					Bitrate   string
-					Retention struct {
-						Debug    bool
-						Policy   string
-						MaxAge   string
-						MaxUsage string
-						MinClips int
-					}
-				}{
+				Export: conf.ExportSettings{
 					Path: t.TempDir(), // Set the required path
 				},
 			},

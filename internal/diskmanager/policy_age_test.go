@@ -2,6 +2,7 @@ package diskmanager
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -231,7 +233,8 @@ func TestAgeBasedCleanupBasicFunctionality(t *testing.T) {
 			continue
 		}
 
-		// Recent files should be kept
+		// Recent files should be kept - use local time for comparison
+		// Note: File timestamps (even with 'Z' suffix) are in local time, not UTC
 		if file.Timestamp.After(time.Now().Add(-168 * time.Hour)) { // Assuming 7 day retention
 			t.Logf("Verified that recent file would be preserved: %s", file.Path)
 		} else {
@@ -241,99 +244,258 @@ func TestAgeBasedCleanupBasicFunctionality(t *testing.T) {
 }
 
 // TestAgeBasedCleanupReturnValues tests that AgeBasedCleanup returns the expected values
+// and correctly handles spectrogram deletion based on KeepSpectrograms setting.
 func TestAgeBasedCleanupReturnValues(t *testing.T) {
 	// Create a temporary directory for testing
-	testDir, err := os.MkdirTemp("", "age_cleanup_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
-	defer os.RemoveAll(testDir)
+	testDir := t.TempDir()
 
 	// Create a mock DB
 	mockDB := &MockDB{}
 
-	// Create test files with different timestamps
-	// Recent files (within retention period - 3 days old)
-	recentFile := filepath.Join(testDir, "bubo_bubo_80p_20210102T150405Z.wav")
-	err = os.WriteFile(recentFile, []byte("test content"), 0o644)
-	if err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
+	// --- File Setup ---
+	// Helper to create audio and png files
+	createTestFilePair := func(species string, confidence int, modTime time.Time) (string, string) {
+		// Format timestamp correctly for the filename
+		timestampStr := modTime.UTC().Format("20060102T150405Z")
+		baseName := fmt.Sprintf("%s_%dp_%s", species, confidence, timestampStr)
+
+		audioPath := filepath.Join(testDir, baseName+".wav")
+		pngPath := filepath.Join(testDir, baseName+".png")
+		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644), "Failed to create audio file: %s", audioPath)
+		require.NoError(t, os.WriteFile(pngPath, []byte("png"), 0o644), "Failed to create png file: %s", pngPath)
+		require.NoError(t, os.Chtimes(audioPath, modTime, modTime), "Failed to set audio time: %s", audioPath)
+		require.NoError(t, os.Chtimes(pngPath, modTime, modTime), "Failed to set png time: %s", pngPath)
+		return audioPath, pngPath
 	}
 
-	// Set the file's modification time to 3 days ago
+	// Recent file (3 days old)
 	recentTime := time.Now().Add(-72 * time.Hour)
-	err = os.Chtimes(recentFile, recentTime, recentTime)
-	if err != nil {
-		t.Fatalf("Failed to set file time: %v", err)
-	}
+	recentAudioPath, recentPngPath := createTestFilePair("bubo_bubo", 80, recentTime)
 
-	// Old files (beyond retention period - 30 days old)
-	oldFile1 := filepath.Join(testDir, "bubo_bubo_90p_20200102T150405Z.wav")
-	err = os.WriteFile(oldFile1, []byte("test content"), 0o644)
-	if err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	// Set the file's modification time to 30 days ago
+	// Old file 1 (30 days old)
 	oldTime1 := time.Now().Add(-720 * time.Hour)
-	err = os.Chtimes(oldFile1, oldTime1, oldTime1)
-	if err != nil {
-		t.Fatalf("Failed to set file time: %v", err)
-	}
+	old1AudioPath, old1PngPath := createTestFilePair("bubo_bubo", 90, oldTime1)
 
-	oldFile2 := filepath.Join(testDir, "anas_platyrhynchos_60p_20200102T150405Z.wav")
-	err = os.WriteFile(oldFile2, []byte("test content"), 0o644)
-	if err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	// Set the file's modification time to 30 days ago
+	// Old file 2 (30 days old)
 	oldTime2 := time.Now().Add(-720 * time.Hour)
-	err = os.Chtimes(oldFile2, oldTime2, oldTime2)
-	if err != nil {
-		t.Fatalf("Failed to set file time: %v", err)
+	old2AudioPath, old2PngPath := createTestFilePair("anas_platyrhynchos", 60, oldTime2)
+
+	allAudioFiles := []string{recentAudioPath, old1AudioPath, old2AudioPath}
+
+	// --- Test Execution Function ---
+	runTest := func(keepSpectrograms bool) CleanupResult {
+		// Reset file system state (recreate potentially deleted files for next run)
+		// Use the exact same parameters to ensure consistent recreation
+		createTestFilePair("bubo_bubo", 80, recentTime)
+		createTestFilePair("bubo_bubo", 90, oldTime1)
+		createTestFilePair("anas_platyrhynchos", 60, oldTime2)
+
+		quitChan := make(chan struct{})
+		deletedFilesMap := make(map[string]bool)
+		initialDiskUtilization := 90
+		utilizationReductionPerFile := 5
+
+		return simulateAgeBasedCleanup(
+			quitChan,
+			mockDB,
+			testDir,
+			allAudioFiles,
+			deletedFilesMap, // Pass the map to track deletions
+			initialDiskUtilization,
+			0,   // minClipsPerSpecies
+			168, // << Add default 7-day retention for this test
+			keepSpectrograms,
+			utilizationReductionPerFile,
+		)
 	}
 
-	// Create a quit channel
+	// --- Scenario 1: KeepSpectrograms = true ---
+	t.Run("KeepSpectrogramsTrue", func(t *testing.T) {
+		result := runTest(true)
+
+		// Verify return values (same checks as before)
+		assert.NoError(t, result.Err, "[KeepTrue] AgeBasedCleanup should not return an error")
+		assert.Equal(t, 2, result.ClipsRemoved, "[KeepTrue] AgeBasedCleanup should remove 2 audio clips")
+		expectedDiskUtilization := 90 - (2 * 5)
+		assert.Equal(t, expectedDiskUtilization, result.DiskUtilization, "[KeepTrue] Incorrect disk utilization")
+
+		// Verify audio file deletions (using actual file existence)
+		assert.FileExists(t, recentAudioPath, "[KeepTrue] Recent audio file should exist")
+		assert.NoFileExists(t, old1AudioPath, "[KeepTrue] Old audio file 1 should be deleted")
+		assert.NoFileExists(t, old2AudioPath, "[KeepTrue] Old audio file 2 should be deleted")
+
+		// Verify PNG files are NOT deleted
+		assert.FileExists(t, recentPngPath, "[KeepTrue] Recent PNG file should exist")
+		assert.FileExists(t, old1PngPath, "[KeepTrue] Old PNG file 1 should NOT be deleted")
+		assert.FileExists(t, old2PngPath, "[KeepTrue] Old PNG file 2 should NOT be deleted")
+	})
+
+	// --- Scenario 2: KeepSpectrograms = false ---
+	t.Run("KeepSpectrogramsFalse", func(t *testing.T) {
+		result := runTest(false)
+
+		// Verify return values (should be the same as KeepTrue)
+		assert.NoError(t, result.Err, "[KeepFalse] AgeBasedCleanup should not return an error")
+		assert.Equal(t, 2, result.ClipsRemoved, "[KeepFalse] AgeBasedCleanup should remove 2 audio clips")
+		expectedDiskUtilization := 90 - (2 * 5)
+		assert.Equal(t, expectedDiskUtilization, result.DiskUtilization, "[KeepFalse] Incorrect disk utilization")
+
+		// Verify audio file deletions (using actual file existence)
+		assert.FileExists(t, recentAudioPath, "[KeepFalse] Recent audio file should exist")
+		assert.NoFileExists(t, old1AudioPath, "[KeepFalse] Old audio file 1 should be deleted")
+		assert.NoFileExists(t, old2AudioPath, "[KeepFalse] Old audio file 2 should be deleted")
+
+		// Verify PNG files ARE deleted for the deleted audio files
+		assert.FileExists(t, recentPngPath, "[KeepFalse] Recent PNG file should exist")
+		assert.NoFileExists(t, old1PngPath, "[KeepFalse] Old PNG file 1 SHOULD be deleted")
+		assert.NoFileExists(t, old2PngPath, "[KeepFalse] Old PNG file 2 SHOULD be deleted")
+	})
+}
+
+// TestAgeBasedCleanupMinClipsGlobal tests that minClipsPerSpecies is enforced globally,
+// not per subdirectory, for age-based cleanup.
+func TestAgeBasedCleanupMinClipsGlobal(t *testing.T) {
+	t.Parallel() // This test can run in parallel
+
+	// Create a temporary directory for testing
+	testDir := t.TempDir()
+	mockDB := &MockDB{}
+
+	// --- File Setup --- Helper to create audio files in specific subdirs
+	createTestFile := func(subdir, species string, confidence int, modTime time.Time) string {
+		subdirPath := filepath.Join(testDir, subdir)
+		require.NoError(t, os.MkdirAll(subdirPath, 0o755), "Failed to create subdirectory: %s", subdirPath)
+		timestampStr := modTime.UTC().Format("20060102T150405Z")
+		baseName := fmt.Sprintf("%s_%dp_%s", species, confidence, timestampStr)
+		audioPath := filepath.Join(testDir, subdir, baseName+".wav")
+		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644), "Failed to create audio file: %s", audioPath)
+		require.NoError(t, os.Chtimes(audioPath, modTime, modTime), "Failed to set time for audio file: %s", audioPath)
+		return audioPath
+	}
+
+	// Setup file times (all older than 7 days/168 hours for simplicity)
+	oldestTime := time.Now().Add(-1000 * time.Hour)
+	olderTime := time.Now().Add(-900 * time.Hour)
+	oldTime := time.Now().Add(-800 * time.Hour)
+	alsoOldTime := time.Now().Add(-750 * time.Hour)
+
+	// Species A: 3 files, all old, in different dirs
+	// Expected: Keep 1 (the newest of the old ones), delete 2 oldest
+	aFile1 := createTestFile("dir1", "bubo_bubo", 80, oldTime)    // Keep this one
+	aFile2 := createTestFile("dir1", "bubo_bubo", 90, olderTime)  // Delete
+	aFile3 := createTestFile("dir2", "bubo_bubo", 85, oldestTime) // Delete
+
+	// Species B: 1 file, old
+	// Expected: Delete this one
+	bFile1 := createTestFile("dir1", "anas_platyrhynchos", 70, alsoOldTime) // Delete
+
+	allAudioFiles := []string{aFile1, aFile2, aFile3, bFile1}
+	initialDiskUtilization := 100
+	utilizationReductionPerFile := 10
+	minClips := 1 // Crucial setting for this test
+
+	// --- Run Simulation --- Use minClips = 1
 	quitChan := make(chan struct{})
-
-	// Track which files were deleted
-	deletedFiles := make(map[string]bool)
-
-	// Test configuration
-	initialDiskUtilization := 90
-	utilizationReductionPerFile := 5 // Each deleted file reduces utilization by 5%
-
-	// Create a test-specific implementation that uses the real files
-	result := testAgeBasedCleanupWithRealFiles(
+	deletedFilesMap := make(map[string]bool)
+	result := simulateAgeBasedCleanup(
 		quitChan,
 		mockDB,
 		testDir,
-		[]string{recentFile, oldFile1, oldFile2},
-		deletedFiles,
-		initialDiskUtilization,      // Initial disk utilization
-		0,                           // minClipsPerSpecies
-		utilizationReductionPerFile, // Reduction per file deleted
+		allAudioFiles,
+		deletedFilesMap, // Not directly used for assertions here, but required by helper
+		initialDiskUtilization,
+		minClips, // Set minClipsPerSpecies to 1
+		168,      // << Add default 7-day retention for this test
+		false,    // keepSpectrograms = false (doesn't matter much for this test)
+		utilizationReductionPerFile,
 	)
 
-	// Verify the return values
-	assert.NoError(t, result.Err, "AgeBasedCleanup should not return an error")
-	assert.Equal(t, 2, result.ClipsRemoved, "AgeBasedCleanup should remove 2 clips")
+	// --- Assertions --- Expected 2 deletions total (the 2 oldest bubo_bubo)
+	assert.NoError(t, result.Err, "Cleanup should not return an error")
+	assert.Equal(t, 2, result.ClipsRemoved, "Should remove 2 clips (oldest 2 of A), keeping 1 of A and 1 of B")
+	expectedDisk := initialDiskUtilization - (2 * utilizationReductionPerFile) // Only 2 deletions
+	assert.Equal(t, expectedDisk, result.DiskUtilization, "Incorrect final disk utilization")
 
-	// With initial disk utilization of 90% and 2 files deleted at 5% reduction each,
-	// we expect 90 - (2 * 5) = 80% utilization
-	expectedDiskUtilization := initialDiskUtilization - (2 * utilizationReductionPerFile)
-	assert.Equal(t, expectedDiskUtilization, result.DiskUtilization,
-		"AgeBasedCleanup should return %d%% disk utilization", expectedDiskUtilization)
-
-	// Verify that the correct files were deleted
-	assert.True(t, deletedFiles[oldFile1], "Old file 1 should have been deleted")
-	assert.True(t, deletedFiles[oldFile2], "Old file 2 should have been deleted")
-	assert.False(t, deletedFiles[recentFile], "Recent file should not have been deleted")
+	// Verify file existence based on global minClips
+	assert.FileExists(t, aFile1, "Species A newest old file should be kept (minClips=1)")
+	assert.NoFileExists(t, aFile2, "Species A older file should be deleted")
+	assert.NoFileExists(t, aFile3, "Species A oldest file should be deleted")
+	assert.FileExists(t, bFile1, "Species B only old file should be kept (minClips=1)") // Updated assertion
 }
 
-// testAgeBasedCleanupWithRealFiles is a test-specific implementation that uses real files
-func testAgeBasedCleanupWithRealFiles(
+// TestAgeBasedCleanupShortRetention verifies end-to-end AgeBasedCleanup with a short retention.
+func TestAgeBasedCleanupShortRetention(t *testing.T) {
+	// --- Test Setup --- Mocks & Temp Dir
+	testDir := t.TempDir()
+	mockDB := &MockDB{}
+
+	// --- File Setup --- Helper
+	createTestFilePair := func(species string, confidence int, modTime time.Time) (string, string) {
+		timestampStr := modTime.UTC().Format("20060102T150405Z")
+		baseName := fmt.Sprintf("%s_%dp_%s", species, confidence, timestampStr)
+		audioPath := filepath.Join(testDir, baseName+".wav")
+		pngPath := filepath.Join(testDir, baseName+".png")
+		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644))
+		require.NoError(t, os.WriteFile(pngPath, []byte("png"), 0o644))
+		require.NoError(t, os.Chtimes(audioPath, modTime, modTime))
+		require.NoError(t, os.Chtimes(pngPath, modTime, modTime))
+		return audioPath, pngPath
+	}
+
+	// Create files around the 1-hour mark
+	now := time.Now()
+	justRecentTime := now.Add(-30 * time.Minute) // Keep
+	justOldTime := now.Add(-90 * time.Minute)    // Delete
+	olderTime := now.Add(-120 * time.Minute)     // Delete (but keep 1 bubo due to minClips=1)
+
+	// Species A (bubo_bubo)
+	aFileRecent, aPngRecent := createTestFilePair("bubo_bubo", 80, justRecentTime) // Keep (too new)
+	aFileOld, aPngOld := createTestFilePair("bubo_bubo", 90, justOldTime)          // Keep (minClips=1)
+	aFileOlder, aPngOlder := createTestFilePair("bubo_bubo", 70, olderTime)        // Delete (oldest)
+
+	// Species B (anas_platyrhynchos)
+	bFileOld, bPngOld := createTestFilePair("anas_platyrhynchos", 60, justOldTime) // Delete (only one, but >1h)
+
+	// --- Run Simulation Function --- Pass 1 for retentionPeriodHours
+	quitChan := make(chan struct{})
+	deletedFilesMap := make(map[string]bool) // Needed by simulator signature
+	initialDiskUtilization := 50             // Example value, not used by age logic
+	utilizationReductionPerFile := 5         // Example value, not used by age logic
+	minClips := 1
+	result := simulateAgeBasedCleanup(
+		quitChan,
+		mockDB,
+		testDir,
+		[]string{aFileRecent, aFileOld, aFileOlder, bFileOld}, // Pass all created files
+		deletedFilesMap,
+		initialDiskUtilization,
+		minClips, // Min clips to keep
+		1,        // <<< Retention period in hours (1h)
+		false,    // keepSpectrograms
+		utilizationReductionPerFile,
+	)
+
+	// --- Assertions ---
+	assert.NoError(t, result.Err, "AgeBasedCleanup simulation should run without error")
+	assert.Equal(t, 2, result.ClipsRemoved, "Should remove 2 clips (oldest bubo, old anas)")
+
+	// Verify file existence
+	assert.FileExists(t, aFileRecent, "Recent bubo audio should exist")
+	assert.FileExists(t, aPngRecent, "Recent bubo PNG should exist")
+
+	assert.NoFileExists(t, aFileOld, "Old bubo audio should be deleted (older than 1h, minClips met by recent file)")
+	assert.NoFileExists(t, aPngOld, "Old bubo PNG should be deleted")
+
+	assert.NoFileExists(t, aFileOlder, "Older bubo audio should be deleted")
+	assert.NoFileExists(t, aPngOlder, "Older bubo PNG should be deleted")
+
+	assert.FileExists(t, bFileOld, "Old anas audio should be kept (minClips=1)")
+	assert.FileExists(t, bPngOld, "Old anas PNG should be kept")
+}
+
+// simulateAgeBasedCleanup is a test-specific helper that simulates the core logic
+// of AgeBasedCleanup using real files in a temporary directory.
+func simulateAgeBasedCleanup(
 	quit <-chan struct{},
 	db Interface,
 	baseDir string,
@@ -341,15 +503,17 @@ func testAgeBasedCleanupWithRealFiles(
 	deletedFiles map[string]bool,
 	initialDiskUtilization int,
 	minClipsPerSpecies int,
+	retentionPeriodHours int,
+	keepSpectrograms bool,
 	utilizationReductionPerFile int,
-) AgeCleanupResult {
+) CleanupResult {
 	// This implementation simulates the real AgeBasedCleanup function
 	// but with controlled inputs and outputs
 
-	// Set a fixed retention period (7 days in hours)
-	retentionPeriodHours := 168
+	// Simulate calls that prepareInitialCleanup might make
+	_, _ = GetDiskUsage(baseDir) // Call to satisfy potential interface, result ignored
 
-	// Track current disk utilization
+	// Track current disk utilization (for returning in result, not for logic)
 	currentDiskUtilization := initialDiskUtilization
 
 	// Get the list of files
@@ -380,17 +544,14 @@ func testAgeBasedCleanupWithRealFiles(
 		return files[i].Timestamp.Before(files[j].Timestamp)
 	})
 
-	// Create a map to track species counts
-	speciesCount := make(map[string]map[string]int)
+	// Create a map to track *total* species counts across all directories
+	speciesTotalCount := make(map[string]int)
 	for _, file := range files {
-		subDir := filepath.Dir(file.Path)
-		if _, exists := speciesCount[file.Species]; !exists {
-			speciesCount[file.Species] = make(map[string]int)
-		}
-		speciesCount[file.Species][subDir]++
+		speciesTotalCount[file.Species]++
 	}
 
 	// Set the expiration time (now - retention period)
+	// Use local time to match how file timestamps are stored
 	expirationTime := time.Now().Add(-time.Duration(retentionPeriodHours) * time.Hour)
 
 	// Process files for deletion
@@ -403,24 +564,37 @@ func testAgeBasedCleanupWithRealFiles(
 		}
 
 		// Skip files that are not old enough
+		// Note: Both file.Timestamp and expirationTime are in local time
 		if !file.Timestamp.Before(expirationTime) {
 			continue
 		}
 
-		// Get the subdirectory
-		subDir := filepath.Dir(file.Path)
-
-		// Skip if we're at the minimum clips per species
-		if speciesCount[file.Species][subDir] <= minClipsPerSpecies {
+		// Skip if the total count for this species is already at or below the minimum
+		if count, exists := speciesTotalCount[file.Species]; exists && count <= minClipsPerSpecies {
 			continue
 		}
 
-		// "Delete" the file (just mark it in our map)
+		// "Delete" the file (mark it and actually remove the audio file)
 		deletedFiles[file.Path] = true
+		if err := os.Remove(file.Path); err != nil && !os.IsNotExist(err) {
+			// Log the error if it's something other than the file not existing
+			// This shouldn't fail the test, but indicates potential issues.
+			log.Printf("[Test Helper Warning] Failed to remove simulated audio file %s: %v", file.Path, err)
+		}
 		deletedCount++
 
-		// Update the species count
-		speciesCount[file.Species][subDir]--
+		// Simulate PNG deletion if keepSpectrograms is false
+		if !keepSpectrograms {
+			pngPath := strings.TrimSuffix(file.Path, filepath.Ext(file.Path)) + ".png"
+			if err := os.Remove(pngPath); err != nil && !os.IsNotExist(err) {
+				// Log the error if it's something other than the file not existing
+				// This shouldn't fail the test, but indicates potential issues.
+				log.Printf("[Test Helper Warning] Failed to remove simulated PNG %s: %v", pngPath, err)
+			}
+		}
+
+		// Update the *total* species count
+		speciesTotalCount[file.Species]--
 
 		// Reduce disk utilization for each deleted file
 		// In a real system, this would be based on file size relative to total storage
@@ -431,5 +605,21 @@ func testAgeBasedCleanupWithRealFiles(
 	}
 
 	// Return the results with dynamic disk utilization
-	return AgeCleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: currentDiskUtilization}
+	return CleanupResult{Err: nil, ClipsRemoved: deletedCount, DiskUtilization: currentDiskUtilization}
 }
+
+// Mock implementation of os.FileInfo for testing
+type mockFileInfo struct {
+	name    string
+	size    int64
+	mode    os.FileMode
+	modTime time.Time
+	isDir   bool
+}
+
+func (m *mockFileInfo) Name() string       { return m.name }
+func (m *mockFileInfo) Size() int64        { return m.size }
+func (m *mockFileInfo) Mode() os.FileMode  { return m.mode }
+func (m *mockFileInfo) ModTime() time.Time { return m.modTime }
+func (m *mockFileInfo) IsDir() bool        { return m.isDir }
+func (m *mockFileInfo) Sys() interface{}   { return nil }
