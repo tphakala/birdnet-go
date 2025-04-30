@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"log/slog"
+	"net"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -45,6 +47,79 @@ type Controller struct {
 	apiLoggerClose      func() error       // Function to close the log file
 }
 
+// Custom IP Extractor prioritizing CF-Connecting-IP
+func ipExtractorFromCloudflareHeader(req *http.Request) string {
+	// 1. Check CF-Connecting-IP
+	cfIP := req.Header.Get("CF-Connecting-IP")
+	if cfIP != "" {
+		ip := net.ParseIP(cfIP)
+		if ip != nil {
+			return ip.String() // Return valid IP
+		}
+	}
+
+	// 2. Check X-Forwarded-For (taking the first valid IP)
+	xff := req.Header.Get(echo.HeaderXForwardedFor)
+	if xff != "" {
+		parts := strings.Split(xff, ",")
+		for _, part := range parts {
+			ipStr := strings.TrimSpace(part)
+			ip := net.ParseIP(ipStr)
+			if ip != nil {
+				return ip.String() // Return first valid IP found
+			}
+		}
+	}
+
+	// 3. Check X-Real-IP
+	xri := req.Header.Get(echo.HeaderXRealIP)
+	if xri != "" {
+		ip := net.ParseIP(xri)
+		if ip != nil {
+			return ip.String() // Return valid IP
+		}
+	}
+
+	// 4. Fallback to Remote Address (might be proxy)
+	// Use SplitHostPort for robustness, ignoring potential errors
+	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
+	ip := net.ParseIP(remoteAddr)
+	if ip != nil {
+		return ip.String() // Return valid IP if RemoteAddr is just an IP
+	}
+
+	// If RemoteAddr contained a port or was invalid, return the raw string
+	// (though ideally, it should be a valid IP:port format)
+	return remoteAddr
+}
+
+// TunnelDetectionMiddleware inspects headers to determine if the request is likely proxied
+// and sets context values for logging.
+func (c *Controller) TunnelDetectionMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(ctx echo.Context) error {
+			req := ctx.Request()
+			tunneled := false
+			provider := "unknown"
+
+			// Check Cloudflare header first
+			if req.Header.Get("CF-Connecting-IP") != "" {
+				tunneled = true
+				provider = "cloudflare"
+			} else if req.Header.Get(echo.HeaderXForwardedFor) != "" || req.Header.Get(echo.HeaderXRealIP) != "" {
+				// If other proxy headers exist, mark as tunneled but provider is generic
+				tunneled = true
+				provider = "generic"
+			}
+
+			ctx.Set("is_tunneled", tunneled)
+			ctx.Set("tunnel_provider", provider)
+
+			return next(ctx)
+		}
+	}
+}
+
 // New creates a new API controller, returning an error if initialization fails.
 func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
@@ -53,6 +128,17 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	if logger == nil {
 		logger = log.Default()
 	}
+
+	// --- Configure IP Extractor ---
+	// IMPORTANT: For this to be secure in production, you would typically
+	// combine this with middleware that verifies the request came *from*
+	// a trusted proxy (like Cloudflare's IP ranges). Echo doesn't have
+	// built-in trusted proxy IP range checking, so this might require
+	// custom middleware or careful infrastructure setup (e.g., firewall rules).
+	// Without trusting the proxy, these headers can be spoofed.
+	e.IPExtractor = ipExtractorFromCloudflareHeader
+	logger.Println("Configured custom IP extractor prioritizing CF-Connecting-IP")
+	// --- End IP Extractor Configuration ---
 
 	// Validate and Initialize SecureFS for the media export path
 	mediaPath := settings.Realtime.Audio.Export.Path
@@ -129,10 +215,11 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	c.Group = e.Group("/api/v2")
 
 	// Configure middlewares
-	c.Group.Use(middleware.Logger())
-	c.Group.Use(middleware.Recover())
-	c.Group.Use(middleware.CORS())
-	c.Group.Use(c.LoggingMiddleware()) // Add structured logging middleware
+	c.Group.Use(middleware.Recover())          // Recover should be early
+	c.Group.Use(c.TunnelDetectionMiddleware()) // Add tunnel detection **before** logging
+	c.Group.Use(middleware.Logger())           // Basic Echo logger (optional, consider removing if structured is enough)
+	c.Group.Use(middleware.CORS())             // CORS handling
+	c.Group.Use(c.LoggingMiddleware())         // Add structured logging middleware **after** tunnel detection
 
 	// Initialize start time for uptime tracking
 	now := time.Now()
@@ -162,17 +249,27 @@ func (c *Controller) LoggingMiddleware() echo.MiddlewareFunc {
 			req := ctx.Request()
 			res := ctx.Response()
 
+			// Get tunnel info from context
+			isTunneled, _ := ctx.Get("is_tunneled").(bool)
+			tunnelProvider, _ := ctx.Get("tunnel_provider").(string)
+
 			// Log the request with structured data
-			c.apiLogger.Info("API Request",
+			attrs := []any{
 				"method", req.Method,
 				"path", req.URL.Path,
 				"query", req.URL.RawQuery,
 				"status", res.Status,
-				"ip", ctx.RealIP(),
+				"ip", ctx.RealIP(), // Uses custom extractor
+				"tunneled", isTunneled,
+				"tunnel_provider", tunnelProvider,
 				"user_agent", req.UserAgent(),
 				"latency_ms", time.Since(start).Milliseconds(),
-				"error", err,
-			)
+			}
+			if err != nil {
+				attrs = append(attrs, "error", err)
+			}
+
+			c.apiLogger.Info("API Request", attrs...)
 
 			return err
 		}
@@ -353,8 +450,16 @@ func generateCorrelationID() string {
 func (c *Controller) HandleError(ctx echo.Context, err error, message string, code int) error {
 	errorResp := NewErrorResponse(err, message, code)
 
+	// Determine IP to log using the request context
+	ip := ctx.RealIP() // Now uses the custom extractor
+
+	// Get tunnel info from context
+	isTunneled, _ := ctx.Get("is_tunneled").(bool)
+	tunnelProvider, _ := ctx.Get("tunnel_provider").(string)
+
 	// Log the error with both the existing logger and the structured logger
-	c.logger.Printf("API Error [%s]: %s: %v", errorResp.CorrelationID, message, err)
+	c.logger.Printf("API Error [%s] from %s (Tunneled: %v, Provider: %s): %s: %v",
+		errorResp.CorrelationID, ip, isTunneled, tunnelProvider, message, err)
 
 	// Also log to structured logger if available
 	if c.apiLogger != nil {
@@ -365,6 +470,9 @@ func (c *Controller) HandleError(ctx echo.Context, err error, message string, co
 			"code", code,
 			"path", ctx.Request().URL.Path,
 			"method", ctx.Request().Method,
+			"ip", ip, // Log the extracted IP
+			"tunneled", isTunneled,
+			"tunnel_provider", tunnelProvider,
 		)
 	}
 
@@ -374,11 +482,12 @@ func (c *Controller) HandleError(ctx echo.Context, err error, message string, co
 // Debug logs debug messages when debug mode is enabled
 func (c *Controller) Debug(format string, v ...interface{}) {
 	if c.Settings.WebServer.Debug {
-		c.logger.Printf(format, v...)
+		msg := fmt.Sprintf(format, v...)
+		c.logger.Printf("[DEBUG] %s", msg)
 
 		// Also log to structured logger if available
 		if c.apiLogger != nil {
-			msg := fmt.Sprintf(format, v...)
+			// No IP available here, log simple debug message
 			c.apiLogger.Debug(msg)
 		}
 	}
