@@ -1,8 +1,8 @@
-Abroscopus albogularis_Rufous-faced Warbler
-Abroscopus schisticeps_Black-faced Warbler
-Abroscopus superciliaris_Yellow-bellied Warbler
+Abroscopus albogularis_Rumenolika grmuša
+Abroscopus schisticeps_Crnolika grmuša
+Abroscopus superciliaris_Žutotrba grmuša
 Aburria aburri_Resasti guan
-Acanthagenys rufogularis_Spiny-cheeked Honeyeater
+Acanthagenys rufogularis_Oštrobrki medojed
 Acanthidops bairdi_Šiljokljuna zeba
 Acanthis cabaret_Mala brezova juričica
 Acanthis flammea_Brezova juričica
