@@ -82,7 +82,7 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 	// Build filters
 	filters := c.buildSearchFilters(&req, ctxTimeout)
 	if c.apiLogger != nil {
-		c.apiLogger.Debug("Executing search with filters", "filters", fmt.Sprintf("%+v", filters), "path", path, "ip", ip)
+		c.apiLogger.Debug("Executing search with filters", "filters", filters, "path", path, "ip", ip)
 	}
 
 	// Execute the search
