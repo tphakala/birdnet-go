@@ -3,6 +3,7 @@ package httpcontroller
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"net"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -18,7 +18,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
-	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/security"
@@ -33,7 +32,6 @@ type Server struct {
 	Settings          *conf.Settings
 	OAuth2Server      *security.OAuth2Server
 	DashboardSettings *conf.Dashboard
-	Logger            *logger.Logger // Original logger, to be gradually replaced
 	BirdImageCache    *imageprovider.BirdImageCache
 	Handlers          *handlers.Handlers
 	SunCalc           *suncalc.SunCalc
@@ -240,40 +238,6 @@ func (s *Server) initLogger() {
 		return
 	}
 
-	// Initialize traditional logger (for backward compatibility)
-	fileHandler := &logger.DefaultFileHandler{}
-	if err := fileHandler.Open(s.Settings.WebServer.Log.Path); err != nil {
-		log.Fatal(err) // Use standard log here as logger isn't initialized yet
-	}
-
-	// Convert conf.RotationType to logger.RotationType
-	var loggerRotationType logger.RotationType
-	switch s.Settings.WebServer.Log.Rotation {
-	case conf.RotationDaily:
-		loggerRotationType = logger.RotationDaily
-	case conf.RotationWeekly:
-		loggerRotationType = logger.RotationWeekly
-	case conf.RotationSize:
-		loggerRotationType = logger.RotationSize
-	default:
-		log.Fatal("Invalid rotation type")
-	}
-
-	// Create rotation settings
-	rotationSettings := logger.Settings{
-		RotationType: loggerRotationType,
-		MaxSize:      s.Settings.WebServer.Log.MaxSize,
-		RotationDay:  s.Settings.WebServer.Log.RotationDay,
-	}
-
-	s.Logger = logger.NewLogger(map[string]logger.LogOutput{
-		"web":    logger.FileOutput{Handler: fileHandler},
-		"stdout": logger.StdoutOutput{},
-	}, true, rotationSettings)
-
-	// Set Echo's Logger to use the custom logger
-	s.Echo.Logger.SetOutput(s.Logger)
-
 	// Initialize structured logger for web requests (using slog)
 	webLogPath := "logs/web.log"
 	webLogger, closeFunc, err := logging.NewFileLogger(webLogPath, "web", slog.LevelInfo)
@@ -286,39 +250,11 @@ func (s *Server) initLogger() {
 		log.Printf("Web structured logging initialized to %s", webLogPath)
 	}
 
-	// Set Echo's logging format
-	s.Echo.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
-		LogURI:      true,
-		LogStatus:   true,
-		LogRemoteIP: true,
-		LogMethod:   true,
-		LogError:    true,
-		HandleError: true,
-		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
-			// Use your custom logger here
-			s.Logger.Info("web", "%s %v %s %d %v", v.RemoteIP, v.Method, v.URI, v.Status, v.Error)
-
-			// Also log using the structured logger if available
-			if s.webLogger != nil {
-				// Create a structured log entry
-				attrs := []any{
-					"method", v.Method,
-					"path", v.URI,
-					"status", v.Status,
-					"ip", v.RemoteIP,
-				}
-
-				if v.Error != nil {
-					attrs = append(attrs, "error", v.Error.Error())
-					s.webLogger.Error("HTTP Request", attrs...)
-				} else {
-					s.webLogger.Info("HTTP Request", attrs...)
-				}
-			}
-
-			return nil
-		},
-	}))
+	// Replace Echo's default logger output ONLY if our structured logger is available
+	if s.webLogger != nil {
+		s.Echo.Logger.SetOutput(io.Discard) // Discard Echo's default log output, rely on middleware
+		s.Echo.Logger.SetLevel(99)          // Effectively disable Echo's logger level checks
+	}
 }
 
 // Debug logs debug messages if debug mode is enabled
