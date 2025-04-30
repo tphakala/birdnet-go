@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -116,7 +117,7 @@ func SetLevel(level slog.Level) {
 
 // SetOutput allows redirecting logger output, e.g., to a file.
 // Note: This replaces the *entire* handler configuration. Consider more granular controls if needed.
-func SetOutput(structuredOutput io.Writer, humanReadableOutput io.Writer) {
+func SetOutput(structuredOutput, humanReadableOutput io.Writer) {
 	// Get the current level from the existing handlers if possible
 	var currentStructuredLevel slog.Level = slog.LevelDebug // Default
 	if structuredLogger != nil {
@@ -215,28 +216,28 @@ func Error(msg string, args ...any) {
 // Fatal logs a fatal message using the custom Fatal level and then exits.
 // Uses the default logger.
 func Fatal(msg string, args ...any) {
-	slog.Log(nil, LevelFatal, msg, args...)
+	slog.Log(context.TODO(), LevelFatal, msg, args...)
 	os.Exit(1)
 }
 
 // Trace logs a trace message using the custom Trace level.
 // Uses the default logger.
 func Trace(msg string, args ...any) {
-	slog.Log(nil, LevelTrace, msg, args...)
+	slog.Log(context.TODO(), LevelTrace, msg, args...)
 }
 
 // NewFileLogger creates a new slog.Logger instance configured to write JSON logs
 // to the specified file path. It includes a 'service' attribute in all logs.
 // It returns the logger, a function to close the log file, and an error if setup fails.
-func NewFileLogger(filePath string, serviceName string, level slog.Level) (*slog.Logger, func() error, error) {
+func NewFileLogger(filePath, serviceName string, level slog.Level) (*slog.Logger, func() error, error) {
 	// Ensure the directory exists
 	logDir := filepath.Dir(filePath)
-	if err := os.MkdirAll(logDir, 0755); err != nil {
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return nil, nil, fmt.Errorf("failed to create log directory %s: %w", logDir, err)
 	}
 
 	// Open the log file for appending
-	logFile, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logFile, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open log file %s: %w", filePath, err)
 	}
