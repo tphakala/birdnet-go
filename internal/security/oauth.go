@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -59,6 +58,8 @@ type OAuth2Server struct {
 var testConfigPath string
 
 func NewOAuth2Server() *OAuth2Server {
+	// Use the security logger from the start
+	securityLogger.Info("Initializing OAuth2 server")
 	settings := conf.GetSettings()
 	debug := settings.Security.Debug
 
@@ -66,7 +67,7 @@ func NewOAuth2Server() *OAuth2Server {
 		Settings:     settings,
 		authCodes:    make(map[string]AuthCode),
 		accessTokens: make(map[string]AccessToken),
-		debug:        debug,
+		debug:        debug, // Retain debug flag for potential conditional logging
 	}
 
 	// Initialize Gothic with the provided configuration
@@ -75,20 +76,25 @@ func NewOAuth2Server() *OAuth2Server {
 	// Set up token persistence
 	configPaths, err := conf.GetDefaultConfigPaths()
 	if err != nil {
-		log.Printf("Warning: Failed to get config paths for token persistence: %v", err)
-		log.Printf("Token persistence will be disabled - sessions will not survive restarts")
+		securityLogger.Warn("Failed to get config paths for token persistence, persistence disabled", "error", err)
+		// log.Printf("Warning: Failed to get config paths for token persistence: %v", err)
+		// log.Printf("Token persistence will be disabled - sessions will not survive restarts")
 	} else {
 		server.tokensFile = filepath.Join(configPaths[0], "tokens.json")
 		server.persistTokens = true
+		securityLogger.Info("Token persistence configured", "file", server.tokensFile)
 
 		// Ensure the directory exists
 		if err := os.MkdirAll(filepath.Dir(server.tokensFile), 0o755); err != nil {
-			log.Printf("Warning: Failed to create directory for token persistence: %v", err)
+			securityLogger.Error("Failed to create directory for token persistence, persistence disabled", "path", filepath.Dir(server.tokensFile), "error", err)
+			// log.Printf("Warning: Failed to create directory for token persistence: %v", err)
 			server.persistTokens = false
 		} else {
 			// Load any existing tokens
 			if err := server.loadTokens(); err != nil {
-				log.Printf("Warning: Failed to load persisted tokens: %v", err)
+				// Log as Warn, as failure to load old tokens isn't fatal
+				securityLogger.Warn("Failed to load persisted tokens", "file", server.tokensFile, "error", err)
+				// log.Printf("Warning: Failed to load persisted tokens: %v", err)
 			}
 		}
 	}
@@ -96,32 +102,38 @@ func NewOAuth2Server() *OAuth2Server {
 	// Clean up expired tokens every hour
 	server.StartAuthCleanup(time.Hour)
 
+	securityLogger.Info("OAuth2 server initialization complete")
 	return server
 }
 
 // InitializeGoth initializes social authentication providers.
 func InitializeGoth(settings *conf.Settings) {
+	securityLogger.Info("Initializing Goth providers")
 	// Get path for storing sessions
 	var sessionPath string
 
 	if testConfigPath != "" {
+		securityLogger.Info("Using test config path for session storage", "path", testConfigPath)
 		// Use test path if set
 		sessionPath = filepath.Join(testConfigPath, "sessions")
 	} else {
 		// Get path for storing sessions
 		configPaths, err := conf.GetDefaultConfigPaths()
 		if err != nil {
-			log.Printf("Warning: Failed to get config paths for session store: %v", err)
+			securityLogger.Warn("Failed to get config paths for session store, using in-memory cookie store", "error", err)
+			// log.Printf("Warning: Failed to get config paths for session store: %v", err)
 			// Fallback to in-memory store if config paths can't be retrieved
 			gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
-			goto initProviders
+			goto initProviders // Skip filesystem store setup
 		}
 		sessionPath = filepath.Join(configPaths[0], "sessions")
+		securityLogger.Info("Using filesystem session store", "path", sessionPath)
 	}
 
 	// Ensure directory exists
 	if err := os.MkdirAll(sessionPath, 0o755); err != nil {
-		log.Printf("Warning: Failed to create session directory: %v", err)
+		securityLogger.Error("Failed to create session directory, falling back to in-memory cookie store", "path", sessionPath, "error", err)
+		// log.Printf("Warning: Failed to create session directory: %v", err)
 		gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
 	} else {
 		// Create persistent session store with properly sized keys
@@ -136,36 +148,57 @@ func InitializeGoth(settings *conf.Settings) {
 
 		// Configure session store options
 		store := gothic.Store.(*sessions.FilesystemStore)
+		maxAge := 86400 * 7 // 7 days
+		secureCookie := settings.Security.RedirectToHTTPS
 		store.Options = &sessions.Options{
 			Path:     "/",
-			MaxAge:   86400 * 7, // 7 days
+			MaxAge:   maxAge,
 			HttpOnly: true,
-			Secure:   settings.Security.RedirectToHTTPS,
+			Secure:   secureCookie,
 			SameSite: http.SameSiteLaxMode,
 		}
+		securityLogger.Info("Filesystem session store configured", "path", sessionPath, "max_age_seconds", maxAge, "secure", secureCookie)
 
 		// Set reasonable values for session cookie storage
-		store.MaxLength(1024 * 1024) // 1MB max size
+		maxSize := 1024 * 1024 // 1MB max size
+		store.MaxLength(maxSize)
+		securityLogger.Debug("Set session store max length", "max_bytes", maxSize)
 	}
 
 initProviders:
+	securityLogger.Info("Configuring Goth providers")
 	// Initialize Gothic providers
-	googleProvider :=
-		gothGoogle.New(settings.Security.GoogleAuth.ClientID,
-			settings.Security.GoogleAuth.ClientSecret,
-			settings.Security.GoogleAuth.RedirectURI,
-			"https://www.googleapis.com/auth/userinfo.email",
-		)
-	googleProvider.SetAccessType("offline")
-
-	goth.UseProviders(
-		googleProvider,
-		github.New(settings.Security.GithubAuth.ClientID,
+	providers := make([]goth.Provider, 0, 2)
+	if settings.Security.GoogleAuth.Enabled && settings.Security.GoogleAuth.ClientID != "" && settings.Security.GoogleAuth.ClientSecret != "" {
+		securityLogger.Info("Enabling Google Auth provider")
+		googleProvider :=
+			gothGoogle.New(settings.Security.GoogleAuth.ClientID,
+				settings.Security.GoogleAuth.ClientSecret,
+				settings.Security.GoogleAuth.RedirectURI,
+				"https://www.googleapis.com/auth/userinfo.email", // Scope for email
+			)
+		googleProvider.SetAccessType("offline")
+		providers = append(providers, googleProvider)
+	} else {
+		securityLogger.Info("Google Auth provider disabled or not configured")
+	}
+	if settings.Security.GithubAuth.Enabled && settings.Security.GithubAuth.ClientID != "" && settings.Security.GithubAuth.ClientSecret != "" {
+		securityLogger.Info("Enabling GitHub Auth provider")
+		providers = append(providers, github.New(settings.Security.GithubAuth.ClientID,
 			settings.Security.GithubAuth.ClientSecret,
 			settings.Security.GithubAuth.RedirectURI,
-			"user:email",
-		),
-	)
+			"user:email", // Scope for email
+		))
+	} else {
+		securityLogger.Info("GitHub Auth provider disabled or not configured")
+	}
+
+	if len(providers) > 0 {
+		goth.UseProviders(providers...)
+		securityLogger.Info("Goth providers initialized", "count", len(providers))
+	} else {
+		securityLogger.Warn("No Goth providers enabled or configured")
+	}
 }
 
 // createSessionKey creates a key of the proper length for AES encryption from a seed string
@@ -180,40 +213,72 @@ func createSessionKey(seed string) []byte {
 // SetTestConfigPath sets a test path for testing session persistence
 // It should be called before InitializeGoth and reset after the test
 func SetTestConfigPath(path string) {
+	securityLogger.Debug("Setting test config path", "path", path)
 	testConfigPath = path
 }
 
 func (s *OAuth2Server) UpdateProviders() {
+	securityLogger.Info("Updating Goth providers based on potentially changed settings")
 	InitializeGoth(s.Settings)
 }
 
 // IsUserAuthenticated checks if the user is authenticated
 func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
-	if clientIP := net.ParseIP(c.RealIP()); IsInLocalSubnet(clientIP) {
+	clientIP := net.ParseIP(c.RealIP())
+	logger := securityLogger.With("client_ip", c.RealIP())
+	logger.Debug("Checking user authentication status")
+
+	if IsInLocalSubnet(clientIP) {
 		// For clients in the local subnet, consider them authenticated
-		s.Debug("User authenticated from local subnet")
+		logger.Info("User authenticated: request from local subnet")
+		// s.Debug("User authenticated from local subnet") // Removed old debug
 		return true
 	}
 
-	if token, err := gothic.GetFromSession("access_token", c.Request()); err == nil &&
-		token != "" && s.ValidateAccessToken(token) {
-		s.Debug("User was authenticated with valid access_token")
-		return true
-	}
-
-	userId, _ := gothic.GetFromSession("userId", c.Request())
-	if s.Settings.Security.GoogleAuth.Enabled {
-		if googleUser, _ := gothic.GetFromSession("google", c.Request()); isValidUserId(s.Settings.Security.GoogleAuth.UserId, userId) && googleUser != "" {
-			s.Debug("User was authenticated with valid Google user")
+	// Check for basic auth token first
+	if token, err := gothic.GetFromSession("access_token", c.Request()); err == nil && token != "" {
+		logger.Debug("Found access_token in session, validating...")
+		if s.ValidateAccessToken(token) {
+			logger.Info("User authenticated: valid access_token found in session")
+			// s.Debug("User was authenticated with valid access_token") // Removed old debug
 			return true
+		}
+		logger.Warn("Invalid or expired access_token found in session")
+	}
+
+	// Check for social auth sessions
+	userId, err := gothic.GetFromSession("userId", c.Request())
+	if err != nil {
+		logger.Debug("No userId found in session")
+	} else {
+		logger = logger.With("session_user_id", userId)
+		logger.Debug("Found userId in session, checking provider sessions")
+	}
+
+	if s.Settings.Security.GoogleAuth.Enabled {
+		if googleUser, err := gothic.GetFromSession("google", c.Request()); err == nil && googleUser != "" {
+			logger.Debug("Found 'google' key in session")
+			if isValidUserId(s.Settings.Security.GoogleAuth.UserId, userId) {
+				logger.Info("User authenticated: valid Google session found for allowed user ID")
+				// s.Debug("User was authenticated with valid Google user") // Removed old debug
+				return true
+			}
+			logger.Warn("Google session found, but userId does not match allowed IDs", "allowed_ids", s.Settings.Security.GoogleAuth.UserId)
 		}
 	}
 	if s.Settings.Security.GithubAuth.Enabled {
-		if githubUser, _ := gothic.GetFromSession("github", c.Request()); isValidUserId(s.Settings.Security.GithubAuth.UserId, userId) && githubUser != "" {
-			s.Debug("User was authenticated with valid GitHub user")
-			return true
+		if githubUser, err := gothic.GetFromSession("github", c.Request()); err == nil && githubUser != "" {
+			logger.Debug("Found 'github' key in session")
+			if isValidUserId(s.Settings.Security.GithubAuth.UserId, userId) {
+				logger.Info("User authenticated: valid GitHub session found for allowed user ID")
+				// s.Debug("User was authenticated with valid GitHub user") // Removed old debug
+				return true
+			}
+			logger.Warn("GitHub session found, but userId does not match allowed IDs", "allowed_ids", s.Settings.Security.GithubAuth.UserId)
 		}
 	}
+
+	logger.Info("User not authenticated")
 	return false
 }
 
@@ -233,11 +298,13 @@ func isValidUserId(configuredIds, providedId string) bool {
 	return false
 }
 
-// GenerateAuthCode generates a new authorization code with CSRF protection
+// GenerateAuthCode generates a new authorization code
 func (s *OAuth2Server) GenerateAuthCode() (string, error) {
+	securityLogger.Debug("Generating new authorization code")
 	code := make([]byte, 32)
 	_, err := rand.Read(code)
 	if err != nil {
+		securityLogger.Error("Failed to read random bytes for auth code", "error", err)
 		return "", err
 	}
 	authCode := base64.URLEncoding.EncodeToString(code)
@@ -245,262 +312,377 @@ func (s *OAuth2Server) GenerateAuthCode() (string, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
+	expiresAt := time.Now().Add(s.Settings.Security.BasicAuth.AuthCodeExp)
 	s.authCodes[authCode] = AuthCode{
 		Code:      authCode,
-		ExpiresAt: time.Now().Add(s.Settings.Security.BasicAuth.AuthCodeExp),
+		ExpiresAt: expiresAt,
 	}
+	// Do not log the authCode itself
+	securityLogger.Info("Generated and stored new authorization code", "expires_at", expiresAt)
+	go s.persistTokensIfEnabled() // Persist changes
 	return authCode, nil
 }
 
-// ExchangeAuthCode exchanges an authorization code for an access token with CSRF validation
+// ExchangeAuthCode exchanges an authorization code for an access token
 func (s *OAuth2Server) ExchangeAuthCode(code string) (string, error) {
+	// Do not log the code
+	securityLogger.Debug("Attempting to exchange authorization code")
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	authCode, exists := s.authCodes[code]
-	if !exists || time.Now().After(authCode.ExpiresAt) {
-		return "", errors.New("invalid or expired auth code")
+	authCode, ok := s.authCodes[code]
+	if !ok {
+		securityLogger.Warn("Authorization code not found")
+		return "", errors.New("authorization code not found")
 	}
-	delete(s.authCodes, code)
 
-	token := make([]byte, 32)
-	_, err := rand.Read(token)
+	if time.Now().After(authCode.ExpiresAt) {
+		securityLogger.Warn("Authorization code expired", "expired_at", authCode.ExpiresAt)
+		delete(s.authCodes, code)     // Clean up expired code
+		go s.persistTokensIfEnabled() // Persist removal
+		return "", errors.New("authorization code expired")
+	}
+
+	// Generate access token
+	tokenBytes := make([]byte, 32)
+	_, err := rand.Read(tokenBytes)
 	if err != nil {
+		securityLogger.Error("Failed to read random bytes for access token", "error", err)
 		return "", err
 	}
-	accessToken := base64.URLEncoding.EncodeToString(token)
+	accessToken := base64.URLEncoding.EncodeToString(tokenBytes)
+	expiresAt := time.Now().Add(s.Settings.Security.BasicAuth.AccessTokenExp)
+
 	s.accessTokens[accessToken] = AccessToken{
 		Token:     accessToken,
-		ExpiresAt: time.Now().Add(s.Settings.Security.BasicAuth.AccessTokenExp),
+		ExpiresAt: expiresAt,
 	}
 
-	// Save tokens after creating a new one
-	go func() {
-		const maxRetries = 3
-		var err error
-		for i := 0; i < maxRetries; i++ {
-			err = s.saveTokens()
-			if err == nil {
-				return
-			}
-			s.Debug("Error saving tokens (attempt %d/%d): %v", i+1, maxRetries, err)
-			time.Sleep(time.Duration(i+1) * 100 * time.Millisecond) // Exponential backoff
-		}
-		if err != nil {
-			log.Printf("Failed to save tokens after %d attempts: %v", maxRetries, err)
-		}
-	}()
+	// Invalidate the auth code after use
+	delete(s.authCodes, code)
 
+	// Do not log the accessToken
+	securityLogger.Info("Exchanged authorization code for new access token", "expires_at", expiresAt)
+	go s.persistTokensIfEnabled() // Persist changes
 	return accessToken, nil
 }
 
-// ValidateAccessToken validates an access token
+// ValidateAccessToken checks if an access token is valid
 func (s *OAuth2Server) ValidateAccessToken(token string) bool {
+	// Do not log the token
+	securityLogger.Debug("Validating access token")
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
-	accessToken, exists := s.accessTokens[token]
-	if !exists {
+	accessToken, ok := s.accessTokens[token]
+	if !ok {
+		securityLogger.Debug("Access token not found")
 		return false
 	}
 
-	return time.Now().Before(accessToken.ExpiresAt)
+	if time.Now().After(accessToken.ExpiresAt) {
+		securityLogger.Debug("Access token expired", "expired_at", accessToken.ExpiresAt)
+		// No need to delete here, cleanup routine handles it
+		return false
+	}
+
+	securityLogger.Debug("Access token is valid")
+	return true
 }
 
-// IsAuthenticationEnabled checks if authentication is enabled from given IP
+// IsAuthenticationEnabled checks if any authentication method is enabled
 func (s *OAuth2Server) IsAuthenticationEnabled(ip string) bool {
-	// Check if authentication is enabled
-	isAuthenticationEnabled := s.Settings.Security.BasicAuth.Enabled ||
-		s.Settings.Security.GoogleAuth.Enabled ||
-		s.Settings.Security.GithubAuth.Enabled
-
-	if isAuthenticationEnabled && s.IsRequestFromAllowedSubnet(ip) {
-		return false
+	logger := securityLogger.With("ip", ip)
+	logger.Debug("Checking if authentication is enabled for IP")
+	if s.IsRequestFromAllowedSubnet(ip) {
+		logger.Info("Authentication bypassed: request from allowed subnet")
+		return false // Authentication not required for allowed subnets
 	}
-
-	return isAuthenticationEnabled
+	if s.Settings.Security.BasicAuth.Enabled || s.Settings.Security.GoogleAuth.Enabled || s.Settings.Security.GithubAuth.Enabled {
+		logger.Info("Authentication required: at least one provider enabled and IP not in allowed subnet",
+			"basic_enabled", s.Settings.Security.BasicAuth.Enabled,
+			"google_enabled", s.Settings.Security.GoogleAuth.Enabled,
+			"github_enabled", s.Settings.Security.GithubAuth.Enabled,
+		)
+		return true
+	}
+	logger.Info("Authentication not enabled: no providers configured and IP not in allowed subnet")
+	return false
 }
 
-// isRequestFromAllowedSubnet checks if the request is coming from an allowed subnet
-func (s *OAuth2Server) IsRequestFromAllowedSubnet(ip string) bool {
-	// Check if subnet bypass is enabled
-	allowedSubnet := s.Settings.Security.AllowSubnetBypass
-	if !allowedSubnet.Enabled {
+// IsRequestFromAllowedSubnet checks if the request IP is within allowed subnets
+func (s *OAuth2Server) IsRequestFromAllowedSubnet(ipStr string) bool {
+	logger := securityLogger.With("ip", ipStr)
+	logger.Debug("Checking if IP is in allowed subnet")
+
+	// Check if subnet bypass is enabled first
+	if !s.Settings.Security.AllowSubnetBypass.Enabled {
+		logger.Debug("Allowed subnet check: subnet bypass is disabled in settings")
 		return false
 	}
 
-	clientIP := net.ParseIP(ip)
-	if clientIP == nil {
-		s.Debug("Invalid IP address: %s", ip)
+	if ipStr == "" {
+		logger.Debug("Allowed subnet check: empty IP string")
 		return false
+	}
+
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		logger.Warn("Failed to parse IP address for allowed subnet check", "ip_string", ipStr)
+		return false
+	}
+
+	// Check loopback explicitly - often implicitly allowed
+	if ip.IsLoopback() {
+		logger.Debug("Allowed subnet check: IP is loopback")
+		return true
 	}
 
 	// The allowedSubnets string is expected to be a comma-separated list of CIDR ranges.
-	subnets := strings.Split(allowedSubnet.Subnet, ",")
+	allowedSubnetsStr := s.Settings.Security.AllowSubnetBypass.Subnet
+	if allowedSubnetsStr == "" {
+		logger.Debug("Allowed subnet check: no allowed subnets configured (subnet string is empty)")
+		return false
+	}
 
-	for _, subnet := range subnets {
-		_, ipNet, err := net.ParseCIDR(strings.TrimSpace(subnet))
-		if err == nil && ipNet.Contains(clientIP) {
-			s.Debug("Access allowed for IP %s", clientIP)
+	allowedSubnets := strings.Split(allowedSubnetsStr, ",")
+	if len(allowedSubnets) == 0 {
+		// This case should ideally not happen if the string is not empty, but check defensively
+		logger.Debug("Allowed subnet check: no allowed subnets configured (split result is empty)")
+		return false
+	}
+
+	for _, cidr := range allowedSubnets {
+		trimmedCIDR := strings.TrimSpace(cidr)
+		if trimmedCIDR == "" {
+			continue // Skip empty entries
+		}
+		_, subnet, err := net.ParseCIDR(trimmedCIDR)
+		if err != nil {
+			logger.Warn("Failed to parse allowed subnet CIDR", "cidr", trimmedCIDR, "error", err)
+			continue
+		}
+		logger.Debug("Checking against allowed subnet", "cidr", trimmedCIDR)
+		if subnet.Contains(ip) {
+			logger.Debug("IP is within allowed subnet", "cidr", trimmedCIDR)
 			return true
 		}
 	}
 
-	s.Debug("IP %s is not in the allowed subnet", clientIP)
+	logger.Debug("IP is not in any allowed subnet")
 	return false
 }
 
-// loadTokens loads persisted access tokens from disk
+// persistTokensIfEnabled saves tokens if persistence is enabled
+func (s *OAuth2Server) persistTokensIfEnabled() {
+	if s.persistTokens {
+		if err := s.saveTokens(); err != nil {
+			// Throttle logging for repeated save errors
+			s.logThrottledError("save_tokens_error", "Failed to save tokens", err, 5*time.Minute)
+		}
+	}
+}
+
+// loadTokens loads tokens from the persistence file
 func (s *OAuth2Server) loadTokens() error {
 	if !s.persistTokens {
+		securityLogger.Debug("Token persistence is disabled, skipping load")
 		return nil
 	}
 
-	s.Debug("Loading tokens from %s", s.tokensFile)
+	securityLogger.Info("Attempting to load tokens from file", "file", s.tokensFile)
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
 	data, err := os.ReadFile(s.tokensFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			s.Debug("No token file found, starting with empty token store")
-			return nil
+			securityLogger.Info("Token file does not exist, skipping load", "file", s.tokensFile)
+			return nil // Not an error if the file doesn't exist yet
 		}
-		return fmt.Errorf("failed to read token file: %w", err)
+		securityLogger.Error("Failed to read token file", "file", s.tokensFile, "error", err)
+		return fmt.Errorf("failed to read token file %s: %w", s.tokensFile, err)
 	}
 
-	var tokens map[string]AccessToken
-	if err := json.Unmarshal(data, &tokens); err != nil {
-		return fmt.Errorf("failed to parse token file: %w", err)
+	if len(data) == 0 {
+		securityLogger.Info("Token file is empty, skipping load", "file", s.tokensFile)
+		return nil // Empty file is fine
 	}
 
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
+	var storedData struct {
+		AuthCodes    map[string]AuthCode    `json:"auth_codes"`
+		AccessTokens map[string]AccessToken `json:"access_tokens"`
+	}
 
-	// Only load valid tokens
+	if err := json.Unmarshal(data, &storedData); err != nil {
+		securityLogger.Error("Failed to unmarshal token data from file", "file", s.tokensFile, "error", err)
+		return fmt.Errorf("failed to unmarshal token data from %s: %w", s.tokensFile, err)
+	}
+
+	// Restore non-expired tokens
+	loadedAuthCodes := 0
 	now := time.Now()
-	validCount := 0
-	expiredCount := 0
+	for code, authCode := range storedData.AuthCodes {
+		if now.Before(authCode.ExpiresAt) {
+			s.authCodes[code] = authCode
+			loadedAuthCodes++
+		} else {
+			securityLogger.Debug("Ignoring expired auth code during load", "expired_at", authCode.ExpiresAt)
+		}
+	}
 
-	for token, accessToken := range tokens {
+	loadedAccessTokens := 0
+	for token, accessToken := range storedData.AccessTokens {
 		if now.Before(accessToken.ExpiresAt) {
 			s.accessTokens[token] = accessToken
-			validCount++
+			loadedAccessTokens++
 		} else {
-			expiredCount++
+			securityLogger.Debug("Ignoring expired access token during load", "expired_at", accessToken.ExpiresAt)
 		}
 	}
 
-	s.Debug("Loaded %d valid tokens, skipped %d expired tokens", validCount, expiredCount)
+	securityLogger.Info("Successfully loaded tokens from file",
+		"file", s.tokensFile,
+		"auth_codes_loaded", loadedAuthCodes,
+		"access_tokens_loaded", loadedAccessTokens,
+	)
 	return nil
 }
 
-// saveTokens persists access tokens to disk
+// saveTokens saves the current tokens to the persistence file
 func (s *OAuth2Server) saveTokens() error {
 	if !s.persistTokens {
+		securityLogger.Debug("Token persistence is disabled, skipping save")
 		return nil
 	}
 
+	securityLogger.Debug("Attempting to save tokens to file", "file", s.tokensFile)
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
-	// Only save valid tokens
-	validTokens := make(map[string]AccessToken)
-	now := time.Now()
-	for token, accessToken := range s.accessTokens {
-		if now.Before(accessToken.ExpiresAt) {
-			validTokens[token] = accessToken
-		}
+	// Create copies to avoid holding lock during marshaling/writing
+	authCodesCopy := make(map[string]AuthCode, len(s.authCodes))
+	for k, v := range s.authCodes {
+		authCodesCopy[k] = v
+	}
+	accessTokensCopy := make(map[string]AccessToken, len(s.accessTokens))
+	for k, v := range s.accessTokens {
+		accessTokensCopy[k] = v
 	}
 
-	data, err := json.MarshalIndent(validTokens, "", "  ")
+	storedData := struct {
+		AuthCodes    map[string]AuthCode    `json:"auth_codes"`
+		AccessTokens map[string]AccessToken `json:"access_tokens"`
+	}{
+		AuthCodes:    authCodesCopy,
+		AccessTokens: accessTokensCopy,
+	}
+
+	data, err := json.MarshalIndent(storedData, "", "  ")
 	if err != nil {
+		securityLogger.Error("Failed to marshal tokens for persistence", "error", err)
 		return fmt.Errorf("failed to marshal tokens: %w", err)
 	}
 
-	// Write to a temporary file first
+	// Write atomically if possible (write to temp file, then rename)
 	tempFile := s.tokensFile + ".tmp"
 	if err := os.WriteFile(tempFile, data, 0o600); err != nil {
-		return fmt.Errorf("failed to write tokens file: %w", err)
+		securityLogger.Error("Failed to write tokens to temporary file", "file", tempFile, "error", err)
+		return fmt.Errorf("failed to write tokens to temp file %s: %w", tempFile, err)
 	}
 
-	// Atomically rename to ensure consistency
 	if err := os.Rename(tempFile, s.tokensFile); err != nil {
-		// Try to clean up the temp file
-		os.Remove(tempFile)
-		return fmt.Errorf("failed to finalize tokens file: %w", err)
+		securityLogger.Error("Failed to rename temporary token file to final destination", "temp_file", tempFile, "final_file", s.tokensFile, "error", err)
+		// Attempt to clean up temp file
+		_ = os.Remove(tempFile)
+		return fmt.Errorf("failed to rename temp token file %s to %s: %w", tempFile, s.tokensFile, err)
 	}
 
-	s.Debug("Saved %d valid tokens to %s", len(validTokens), s.tokensFile)
+	securityLogger.Debug("Successfully saved tokens to file",
+		"file", s.tokensFile,
+		"auth_codes_saved", len(authCodesCopy),
+		"access_tokens_saved", len(accessTokensCopy),
+	)
 	return nil
 }
 
-// StartAuthCleanup starts a goroutine to periodically clean up expired tokens
+// StartAuthCleanup starts a background goroutine to clean up expired codes and tokens
 func (s *OAuth2Server) StartAuthCleanup(interval time.Duration) {
+	securityLogger.Info("Starting periodic cleanup of expired tokens and codes", "interval", interval)
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-
 		for range ticker.C {
-			now := time.Now()
-			s.mutex.Lock()
-
-			// Clean up expired auth codes
-			for code, ac := range s.authCodes {
-				if now.After(ac.ExpiresAt) {
-					delete(s.authCodes, code)
-				}
-			}
-
-			// Clean up expired access tokens
-			for token, at := range s.accessTokens {
-				if now.After(at.ExpiresAt) {
-					delete(s.accessTokens, token)
-				}
-			}
-
-			s.mutex.Unlock()
-
-			// Save valid tokens after cleanup
-			if err := s.saveTokens(); err != nil {
-				s.Debug("Error saving tokens during cleanup: %v", err)
-			}
+			s.cleanupExpired()
 		}
 	}()
 }
 
-// Debug logs debug messages if debug mode is enabled
+// cleanupExpired removes expired codes and tokens
+func (s *OAuth2Server) cleanupExpired() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	now := time.Now()
+	authCodesExpired := 0
+	accessTokensExpired := 0
+	needsSave := false
+
+	securityLogger.Debug("Running cleanup for expired tokens and codes")
+
+	for code, authCode := range s.authCodes {
+		if now.After(authCode.ExpiresAt) {
+			delete(s.authCodes, code)
+			authCodesExpired++
+			needsSave = true
+		}
+	}
+
+	for token, accessToken := range s.accessTokens {
+		if now.After(accessToken.ExpiresAt) {
+			delete(s.accessTokens, token)
+			accessTokensExpired++
+			needsSave = true
+		}
+	}
+
+	if authCodesExpired > 0 || accessTokensExpired > 0 {
+		securityLogger.Info("Cleaned up expired entries",
+			"auth_codes_removed", authCodesExpired,
+			"access_tokens_removed", accessTokensExpired,
+		)
+		if needsSave {
+			go s.persistTokensIfEnabled() // Persist removals in background
+		}
+	} else {
+		securityLogger.Debug("No expired entries found during cleanup")
+	}
+}
+
+// Debug logs a debug message if debug mode is enabled
+// Deprecated: Use securityLogger.Debug directly
 func (s *OAuth2Server) Debug(format string, v ...interface{}) {
 	if s.debug {
-		prefix := "[security/oauth] "
-		// Avoid excessive repetitive log entries about authentication status
-		if strings.Contains(format, "User was authenticated") ||
-			strings.Contains(format, "User authenticated") {
-			// Skip repetitive auth success messages if recent
-			s.mutex.RLock()
-			now := time.Now()
-			// Create throttle key based on message format (all user auth messages treated as same)
-			throttleKey := "auth_status"
-			lastTime, exists := s.throttledMessages[throttleKey]
-			tooFrequent := exists && now.Sub(lastTime) < 3*time.Second
-			s.mutex.RUnlock()
+		// Convert to slog call - Note: This loses structured context
+		// It's better to replace calls to this with direct securityLogger.Debug calls
+		securityLogger.Debug(fmt.Sprintf(format, v...))
+		// log.Printf("[debug] "+format, v...)
+	}
+}
 
-			if tooFrequent {
-				// Skip this message as it's too frequent
-				return
-			}
+// logThrottledError logs an error message, but only once per specified interval for a given key
+func (s *OAuth2Server) logThrottledError(key, msg string, err error, interval time.Duration) {
+	s.mutex.Lock()
+	if s.throttledMessages == nil {
+		s.throttledMessages = make(map[string]time.Time)
+	}
+	lastLogTime, exists := s.throttledMessages[key]
+	s.mutex.Unlock() // Unlock early before logging
 
-			// Update the throttle time
-			s.mutex.Lock()
-			if s.throttledMessages == nil {
-				s.throttledMessages = make(map[string]time.Time)
-			}
-			s.throttledMessages[throttleKey] = now
-			s.mutex.Unlock()
-		}
-
-		if len(v) == 0 {
-			log.Print(prefix + format)
-		} else {
-			log.Printf(prefix+format, v...)
-		}
+	if !exists || time.Since(lastLogTime) > interval {
+		securityLogger.Error(msg, "key", key, "error", err)
+		s.mutex.Lock()
+		s.throttledMessages[key] = time.Now()
+		s.mutex.Unlock()
 	}
 }
