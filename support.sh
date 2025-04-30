@@ -300,25 +300,61 @@ collect_systemd_info() {
     # Create systemd directory
     mkdir -p "$OUTPUT_DIR/systemd"
     
-    # Check for BirdNET-Go service
+    # Check if journalctl is available and collect tagged logs
+    if command -v journalctl &>/dev/null; then
+        journalctl -t birdnet-go --no-pager -n 1000 > "$OUTPUT_DIR/systemd/birdnet-go-tagged-logs.txt" 2>&1
+        if [ ! -s "$OUTPUT_DIR/systemd/birdnet-go-tagged-logs.txt" ]; then
+            # Remove empty file
+            rm "$OUTPUT_DIR/systemd/birdnet-go-tagged-logs.txt"
+            echo "No logs found with tag 'birdnet-go'" > "$OUTPUT_DIR/systemd/birdnet-go-tagged-logs-status.txt"
+        else
+             echo "Collected logs tagged with 'birdnet-go'" > "$OUTPUT_DIR/systemd/birdnet-go-tagged-logs-status.txt"
+        fi
+    else
+        echo "journalctl command not found, cannot collect tagged logs" > "$OUTPUT_DIR/systemd/journalctl-not-found.txt"
+    fi
+
+    # Check for BirdNET-Go service file specifically
     if systemctl list-unit-files | grep -q birdnet-go.service; then
         # Service status
         systemctl status birdnet-go.service > "$OUTPUT_DIR/systemd/status.txt" 2>&1
         
-        # Service logs (limit to 1000 lines)
-        journalctl -u birdnet-go.service --no-pager -n 1000 > "$OUTPUT_DIR/systemd/service-logs.txt" 2>&1
+        # Service logs (limit to 1000 lines) using -u
+        if command -v journalctl &>/dev/null; then
+            journalctl -u birdnet-go.service --no-pager -n 1000 > "$OUTPUT_DIR/systemd/service-unit-logs.txt" 2>&1
+             if [ ! -s "$OUTPUT_DIR/systemd/service-unit-logs.txt" ]; then
+                # Remove empty file
+                 rm "$OUTPUT_DIR/systemd/service-unit-logs.txt"
+             fi
+        fi
         
-        # Service configuration
-        cp /etc/systemd/system/birdnet-go.service "$OUTPUT_DIR/systemd/service-file.txt" 2>/dev/null
+        # Service configuration file
+        SERVICE_FILE_PATH=$(systemctl show -p FragmentPath birdnet-go.service | cut -d= -f2)
+        if [ -n "$SERVICE_FILE_PATH" ] && [ -f "$SERVICE_FILE_PATH" ]; then
+             cp "$SERVICE_FILE_PATH" "$OUTPUT_DIR/systemd/service-file.txt" 2>/dev/null
+             echo "Copied service file from $SERVICE_FILE_PATH" >> "$OUTPUT_DIR/systemd/service-file-status.txt"
+        elif [ -f /etc/systemd/system/birdnet-go.service ]; then
+             # Fallback to common location
+             cp /etc/systemd/system/birdnet-go.service "$OUTPUT_DIR/systemd/service-file.txt" 2>/dev/null
+             echo "Copied service file from /etc/systemd/system/birdnet-go.service" >> "$OUTPUT_DIR/systemd/service-file-status.txt"
+        else
+            echo "Could not find or copy systemd service file" > "$OUTPUT_DIR/systemd/service-file-status.txt"
+        fi
     else
-        echo "BirdNET-Go systemd service not found" > "$OUTPUT_DIR/systemd/not-installed.txt"
-        print_message "⚠️  BirdNET-Go systemd service not found" "$YELLOW"
+        echo "BirdNET-Go systemd service unit file not found" > "$OUTPUT_DIR/systemd/service-unit-not-found.txt"
+        print_message "ℹ️  BirdNET-Go systemd service unit file not found (this is expected for Docker installs)" "$BLUE"
     fi
     
-    # Check Docker service
+    # Check Docker service status (always useful)
     if systemctl list-unit-files | grep -q docker.service; then
         systemctl status docker.service > "$OUTPUT_DIR/systemd/docker-status.txt" 2>&1
-        journalctl -u docker.service --no-pager -n 100 > "$OUTPUT_DIR/systemd/docker-logs.txt" 2>&1
+        if command -v journalctl &>/dev/null; then
+            journalctl -u docker.service --no-pager -n 100 > "$OUTPUT_DIR/systemd/docker-logs.txt" 2>&1
+            if [ ! -s "$OUTPUT_DIR/systemd/docker-logs.txt" ]; then
+                # Remove empty file
+                 rm "$OUTPUT_DIR/systemd/docker-logs.txt"
+             fi
+        fi
     fi
 }
 
