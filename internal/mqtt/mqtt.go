@@ -3,7 +3,11 @@ package mqtt
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // Client defines the interface for MQTT client operations.
@@ -45,6 +49,32 @@ type Config struct {
 	ConnectTimeout    time.Duration
 	PublishTimeout    time.Duration
 	DisconnectTimeout time.Duration
+}
+
+// Package-level logger for MQTT related events
+var (
+	mqttLogger *slog.Logger
+	// mqttLogCloser func() error // Optional closer func
+	// TODO: Call mqttLogCloser during graceful shutdown if needed
+)
+
+func init() {
+	var err error
+	// Default level is Info. MQTT interactions might benefit from Debug level
+	// during troubleshooting, but Info is a good default.
+	mqttLogger, _, err = logging.NewFileLogger("logs/mqtt.log", "mqtt", slog.LevelInfo)
+	if err != nil {
+		logging.Error("Failed to initialize MQTT file logger", "error", err)
+		// Fallback to the default structured logger
+		mqttLogger = logging.Structured().With("service", "mqtt")
+		if mqttLogger == nil {
+			panic(fmt.Sprintf("Failed to initialize any logger for MQTT service: %v", err))
+		}
+		logging.Warn("MQTT service falling back to default logger due to file logger initialization error.")
+	} else {
+		logging.Info("MQTT file logger initialized successfully", "path", "logs/mqtt.log")
+	}
+	// mqttLogCloser = closer
 }
 
 // DefaultConfig returns a Config with reasonable default values
