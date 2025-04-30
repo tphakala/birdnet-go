@@ -3,8 +3,10 @@ package analysis
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -22,10 +24,36 @@ import (
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
+
+// Package-level logger specific to cleanup timer
+var (
+	cleanupLogger      *slog.Logger
+	closeCleanupLogger func() error
+)
+
+func init() {
+	var err error
+	// Define log file path relative to working directory
+	logFilePath := filepath.Join("logs", "cleanup_timer.log")
+
+	// Initialize the service-specific file logger
+	cleanupLogger, closeCleanupLogger, err = logging.NewFileLogger(logFilePath, "cleanup_timer", slog.LevelDebug)
+	if err != nil {
+		// Fallback: Log error to standard log and disable service logging
+		log.Printf("FATAL: Failed to initialize cleanup timer logger at %s: %v. Service logging disabled.", logFilePath, err)
+		// Set logger to a disabled handler to prevent nil panics
+		cleanupLogger = slog.New(slog.NewJSONHandler(io.Discard, nil))
+		closeCleanupLogger = func() error { return nil } // No-op closer
+	} else {
+		// Use standard log for initial confirmation message
+		log.Printf("Cleanup timer logging initialized to file: %s", logFilePath)
+	}
+}
 
 // audioLevelChan is a channel to send audio level updates
 var audioLevelChan = make(chan myaudio.AudioLevelData, 100)
@@ -292,34 +320,68 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop() // Ensure the ticker is stopped to prevent leaks
 
-	log.Println("Clip retention policy:", conf.Setting().Realtime.Audio.Export.Retention.Policy)
+	policy := conf.Setting().Realtime.Audio.Export.Retention.Policy
+	log.Println("Clip retention policy:", policy)
+	cleanupLogger.Info("Cleanup timer started",
+		"policy", policy,
+		"interval_minutes", 5,
+		"timestamp", time.Now().Format(time.RFC3339))
 
 	for {
 		select {
 		case <-quitChan:
 			// Handle quit signal to stop the monitor
+			cleanupLogger.Info("Cleanup timer stopped",
+				"reason", "quit signal received",
+				"timestamp", time.Now().Format(time.RFC3339))
+			// Ensure clean shutdown
+			if err := diskmanager.CloseLogger(); err != nil {
+				cleanupLogger.Error("Failed to close diskmanager logger", "error", err)
+			}
+			if err := closeCleanupLogger(); err != nil {
+				log.Printf("Failed to close cleanup timer logger: %v", err)
+			}
 			return
 
-		case <-ticker.C:
+		case t := <-ticker.C:
 			log.Println("🧹 Running clip cleanup task")
+			cleanupLogger.Info("Cleanup timer triggered",
+				"timestamp", t.Format(time.RFC3339),
+				"policy", conf.Setting().Realtime.Audio.Export.Retention.Policy)
 
 			// age based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "age" {
+				cleanupLogger.Debug("Starting age-based cleanup via timer")
 				result := diskmanager.AgeBasedCleanup(quitChan, dataStore)
 				if result.Err != nil {
 					log.Printf("Error during age-based cleanup: %v", result.Err)
+					cleanupLogger.Error("Age-based cleanup failed",
+						"error", result.Err,
+						"timestamp", time.Now().Format(time.RFC3339))
 				} else {
 					log.Printf("🧹 Age-based cleanup completed successfully, clips removed: %d, current disk utilization: %d%%", result.ClipsRemoved, result.DiskUtilization)
+					cleanupLogger.Info("Age-based cleanup completed via timer",
+						"clips_removed", result.ClipsRemoved,
+						"disk_utilization", result.DiskUtilization,
+						"timestamp", time.Now().Format(time.RFC3339))
 				}
 			}
 
 			// priority based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "usage" {
+				cleanupLogger.Debug("Starting usage-based cleanup via timer")
 				result := diskmanager.UsageBasedCleanup(quitChan, dataStore)
 				if result.Err != nil {
 					log.Printf("Error during usage-based cleanup: %v", result.Err)
+					cleanupLogger.Error("Usage-based cleanup failed",
+						"error", result.Err,
+						"timestamp", time.Now().Format(time.RFC3339))
 				} else {
 					log.Printf("🧹 Usage-based cleanup completed successfully, clips removed: %d, current disk utilization: %d%%", result.ClipsRemoved, result.DiskUtilization)
+					cleanupLogger.Info("Usage-based cleanup completed via timer",
+						"clips_removed", result.ClipsRemoved,
+						"disk_utilization", result.DiskUtilization,
+						"timestamp", time.Now().Format(time.RFC3339))
 				}
 			}
 		}
