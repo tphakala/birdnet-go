@@ -122,9 +122,27 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 
 	// --- BEGIN CHANGE: Validate start_date and end_date ---
 	if err := validateDateParam(startDateStr, "start_date"); err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Invalid date parameter",
+				"parameter", "start_date",
+				"value", startDateStr,
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	if err := validateDateParam(endDateStr, "end_date"); err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Invalid date parameter",
+				"parameter", "end_date",
+				"value", endDateStr,
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
@@ -134,6 +152,15 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 		startDate, _ := time.Parse("2006-01-02", startDateStr)
 		endDate, _ := time.Parse("2006-01-02", endDateStr)
 		if startDate.After(endDate) {
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Invalid date range",
+					"start_date", startDateStr,
+					"end_date", endDateStr,
+					"error", "start_date cannot be after end_date",
+					"path", ctx.Request().URL.Path,
+					"ip", ctx.RealIP(),
+				)
+			}
 			return echo.NewHTTPError(http.StatusBadRequest, "start_date cannot be after end_date")
 		}
 	}
@@ -152,6 +179,14 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 		if err != nil {
 			// DEBUG LOGGING
 			log.Printf("[DEBUG] GetDetections: Invalid numResults string '%s', error: %v", numResultsStr, err)
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Invalid numResults parameter",
+					"value", numResultsStr,
+					"error", err.Error(),
+					"path", ctx.Request().URL.Path,
+					"ip", ctx.RealIP(),
+				)
+			}
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid numeric value for numResults: %v", err))
 		}
 		// DEBUG LOGGING
@@ -160,10 +195,26 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 		if numResults <= 0 {
 			// DEBUG LOGGING
 			log.Printf("[DEBUG] GetDetections: Zero or negative numResults value: %d", numResults)
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Invalid numResults parameter",
+					"value", numResults,
+					"error", "numResults must be greater than zero",
+					"path", ctx.Request().URL.Path,
+					"ip", ctx.RealIP(),
+				)
+			}
 			return echo.NewHTTPError(http.StatusBadRequest, "numResults must be greater than zero")
 		} else if numResults > 1000 { // Enforce a reasonable maximum
 			// DEBUG LOGGING
 			log.Printf("[DEBUG] GetDetections: Too large numResults value: %d", numResults)
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Invalid numResults parameter",
+					"value", numResults,
+					"error", "numResults exceeds maximum allowed value (1000)",
+					"path", ctx.Request().URL.Path,
+					"ip", ctx.RealIP(),
+				)
+			}
 			return echo.NewHTTPError(http.StatusBadRequest, "numResults exceeds maximum allowed value (1000)")
 		}
 	}
@@ -182,6 +233,14 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 		if err != nil {
 			// DEBUG LOGGING
 			log.Printf("[DEBUG] GetDetections: Invalid offset string '%s', error: %v", offsetStr, err)
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Invalid offset parameter",
+					"value", offsetStr,
+					"error", err.Error(),
+					"path", ctx.Request().URL.Path,
+					"ip", ctx.RealIP(),
+				)
+			}
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid numeric value for offset: %v", err))
 		}
 		// DEBUG LOGGING
@@ -190,12 +249,28 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 		if offset < 0 {
 			// DEBUG LOGGING
 			log.Printf("[DEBUG] GetDetections: Negative offset value: %d", offset)
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Invalid offset parameter",
+					"value", offset,
+					"error", "offset cannot be negative",
+					"path", ctx.Request().URL.Path,
+					"ip", ctx.RealIP(),
+				)
+			}
 			return echo.NewHTTPError(http.StatusBadRequest, "offset cannot be negative")
 		}
 		const maxOffset = 1000000 // Define a reasonable maximum offset
 		if offset > maxOffset {
 			// DEBUG LOGGING
 			log.Printf("[DEBUG] GetDetections: Too large offset value: %d", offset)
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Invalid offset parameter",
+					"value", offset,
+					"error", fmt.Sprintf("offset exceeds maximum allowed value (%d)", maxOffset),
+					"path", ctx.Request().URL.Path,
+					"ip", ctx.RealIP(),
+				)
+			}
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("offset exceeds maximum allowed value (%d)", maxOffset))
 		}
 	}
@@ -228,6 +303,24 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	var err error
 	var totalResults int64
 
+	// Log the retrieval attempt
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieving detections",
+			"queryType", queryType,
+			"date", date,
+			"hour", hour,
+			"duration", duration,
+			"species", species,
+			"search", search,
+			"start_date", startDateStr,
+			"end_date", endDateStr,
+			"limit", numResults,
+			"offset", offset,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	// Get notes based on query type
 	switch queryType {
 	case "hourly":
@@ -241,6 +334,14 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	}
 
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to retrieve detections",
+				"queryType", queryType,
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
@@ -298,6 +399,19 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 		TotalPages:  totalPages,
 	}
 
+	// Log the successful response
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Detections retrieved successfully",
+			"queryType", queryType,
+			"count", len(detections),
+			"total", totalResults,
+			"pages", totalPages,
+			"currentPage", currentPage,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	return ctx.JSON(http.StatusOK, response)
 }
 
@@ -318,11 +432,29 @@ func (c *Controller) getHourlyDetections(date, hour string, duration, numResults
 	// If not in cache, query the database
 	notes, err := c.DS.GetHourlyDetections(date, hour, duration, numResults, offset)
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get hourly detections",
+				"date", date,
+				"hour", hour,
+				"duration", duration,
+				"limit", numResults,
+				"offset", offset,
+				"error", err.Error(),
+			)
+		}
 		return nil, 0, err
 	}
 
 	totalCount, err := c.DS.CountHourlyDetections(date, hour, duration)
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to count hourly detections",
+				"date", date,
+				"hour", hour,
+				"duration", duration,
+				"error", err.Error(),
+			)
+		}
 		return nil, 0, err
 	}
 
@@ -331,6 +463,16 @@ func (c *Controller) getHourlyDetections(date, hour string, duration, numResults
 		Notes []datastore.Note
 		Total int64
 	}{notes, totalCount}, cache.DefaultExpiration)
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieved hourly detections",
+			"date", date,
+			"hour", hour,
+			"duration", duration,
+			"count", len(notes),
+			"total", totalCount,
+		)
+	}
 
 	return notes, totalCount, nil
 }
@@ -352,11 +494,31 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 	// If not in cache, query the database
 	notes, err := c.DS.SpeciesDetections(species, date, hour, duration, false, numResults, offset)
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get species detections",
+				"species", species,
+				"date", date,
+				"hour", hour,
+				"duration", duration,
+				"limit", numResults,
+				"offset", offset,
+				"error", err.Error(),
+			)
+		}
 		return nil, 0, err
 	}
 
 	totalCount, err := c.DS.CountSpeciesDetections(species, date, hour, duration)
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to count species detections",
+				"species", species,
+				"date", date,
+				"hour", hour,
+				"duration", duration,
+				"error", err.Error(),
+			)
+		}
 		return nil, 0, err
 	}
 
@@ -365,6 +527,17 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 		Notes []datastore.Note
 		Total int64
 	}{notes, totalCount}, cache.DefaultExpiration)
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieved species detections",
+			"species", species,
+			"date", date,
+			"hour", hour,
+			"duration", duration,
+			"count", len(notes),
+			"total", totalCount,
+		)
+	}
 
 	return notes, totalCount, nil
 }
@@ -386,11 +559,25 @@ func (c *Controller) getSearchDetections(search string, numResults, offset int) 
 	// If not in cache, query the database
 	notes, err := c.DS.SearchNotes(search, false, numResults, offset)
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to search notes",
+				"query", search,
+				"limit", numResults,
+				"offset", offset,
+				"error", err.Error(),
+			)
+		}
 		return nil, 0, err
 	}
 
 	totalCount, err := c.DS.CountSearchResults(search)
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to count search results",
+				"query", search,
+				"error", err.Error(),
+			)
+		}
 		return nil, 0, err
 	}
 
@@ -399,6 +586,14 @@ func (c *Controller) getSearchDetections(search string, numResults, offset int) 
 		Notes []datastore.Note
 		Total int64
 	}{notes, totalCount}, cache.DefaultExpiration)
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieved search results",
+			"query", search,
+			"count", len(notes),
+			"total", totalCount,
+		)
+	}
 
 	return notes, totalCount, nil
 }
@@ -420,6 +615,13 @@ func (c *Controller) getAllDetections(numResults, offset int) ([]datastore.Note,
 	// Use the datastore.SearchNotes method with an empty query to get all notes
 	notes, err := c.DS.SearchNotes("", false, numResults, offset)
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get all detections",
+				"limit", numResults,
+				"offset", offset,
+				"error", err.Error(),
+			)
+		}
 		return nil, 0, err
 	}
 
@@ -435,6 +637,13 @@ func (c *Controller) getAllDetections(numResults, offset int) ([]datastore.Note,
 		Notes []datastore.Note
 		Total int64
 	}{notes, totalResults}, cache.DefaultExpiration)
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieved all detections",
+			"count", len(notes),
+			"total", totalResults,
+		)
+	}
 
 	return notes, totalResults, nil
 }
