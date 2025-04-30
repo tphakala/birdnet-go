@@ -95,6 +95,14 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 		selectedDate = time.Now().Format("2006-01-02")
 	} else {
 		if _, err := time.Parse("2006-01-02", selectedDate); err != nil {
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Invalid date format in daily species summary",
+					"date", selectedDate,
+					"error", err.Error(),
+					"ip", ctx.RealIP(),
+					"path", ctx.Request().URL.Path,
+				)
+			}
 			return echo.NewHTTPError(http.StatusBadRequest, "Invalid date format. Use YYYY-MM-DD")
 		}
 	}
@@ -106,12 +114,37 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 		parsedConfidence, err := strconv.ParseFloat(minConfidenceStr, 64)
 		if err == nil {
 			minConfidence = parsedConfidence / 100.0 // Convert from percentage to decimal
+		} else if c.apiLogger != nil {
+			c.apiLogger.Warn("Invalid min_confidence parameter",
+				"value", minConfidenceStr,
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
 		}
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieving daily species summary",
+			"date", selectedDate,
+			"min_confidence", minConfidence,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
 	}
 
 	// Get top birds data from the database
 	notes, err := c.DS.GetTopBirdsData(selectedDate, minConfidence)
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get daily species data",
+				"date", selectedDate,
+				"min_confidence", minConfidence,
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return c.HandleError(ctx, err, "Failed to get daily species data", http.StatusInternalServerError)
 	}
 
@@ -139,6 +172,13 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 		hourlyCounts, err := c.DS.GetHourlyOccurrences(selectedDate, note.CommonName, minConfidence)
 		if err != nil {
 			c.Debug("Error getting hourly counts: %v", err)
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Error getting hourly counts",
+					"species", note.CommonName,
+					"date", selectedDate,
+					"error", err.Error(),
+				)
+			}
 			continue
 		}
 
@@ -253,11 +293,30 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 
 	// Limit results if requested
 	limitStr := ctx.QueryParam("limit")
+	var limit int
 	if limitStr != "" {
-		limit, err := strconv.Atoi(limitStr)
+		var err error
+		limit, err = strconv.Atoi(limitStr)
 		if err == nil && limit > 0 && limit < len(result) {
 			result = result[:limit]
+		} else if err != nil && c.apiLogger != nil {
+			c.apiLogger.Warn("Invalid limit parameter",
+				"value", limitStr,
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
 		}
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Daily species summary retrieved",
+			"date", selectedDate,
+			"count", len(result),
+			"limit", limit,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
 	}
 
 	return ctx.JSON(http.StatusOK, result)
@@ -270,19 +329,55 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	startDate := ctx.QueryParam("start_date")
 	endDate := ctx.QueryParam("end_date")
 
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieving species summary",
+			"start_date", startDate,
+			"end_date", endDate,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
+	}
+
 	// Validate date range
 	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
 		// Convert standard error to HTTP error
 		if errors.Is(err, ErrInvalidStartDate) || errors.Is(err, ErrInvalidEndDate) || errors.Is(err, ErrDateOrder) {
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Invalid date parameters",
+					"start_date", startDate,
+					"end_date", endDate,
+					"error", err.Error(),
+					"ip", ctx.RealIP(),
+					"path", ctx.Request().URL.Path,
+				)
+			}
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 		// Handle unexpected errors
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Error validating date range",
+				"start_date", startDate,
+				"end_date", endDate,
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "Error validating date range")
 	}
 
 	// Retrieve species summary data from the datastore with date filtering
 	summaryData, err := c.DS.GetSpeciesSummaryData(startDate, endDate)
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get species summary data",
+				"start_date", startDate,
+				"end_date", endDate,
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return c.HandleError(ctx, err, "Failed to get species summary data", http.StatusInternalServerError)
 	}
 
@@ -329,11 +424,31 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 
 	// Limit results if requested
 	limitStr := ctx.QueryParam("limit")
+	var limit int
 	if limitStr != "" {
-		limit, err := strconv.Atoi(limitStr)
+		var err error
+		limit, err = strconv.Atoi(limitStr)
 		if err == nil && limit > 0 && limit < len(response) {
 			response = response[:limit]
+		} else if err != nil && c.apiLogger != nil {
+			c.apiLogger.Warn("Invalid limit parameter",
+				"value", limitStr,
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
 		}
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Species summary retrieved",
+			"start_date", startDate,
+			"end_date", endDate,
+			"count", len(response),
+			"limit", limit,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
 	}
 
 	return ctx.JSON(http.StatusOK, response)
@@ -348,21 +463,61 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 
 	// Validate required parameters
 	if date == "" {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Missing required parameter in hourly analytics",
+				"parameter", "date",
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return echo.NewHTTPError(http.StatusBadRequest, "Missing required parameter: date")
 	}
 
 	if species == "" {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Missing required parameter in hourly analytics",
+				"parameter", "species",
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return echo.NewHTTPError(http.StatusBadRequest, "Missing required parameter: species")
 	}
 
 	// Validate date format
 	if _, err := time.Parse("2006-01-02", date); err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Invalid date format in hourly analytics",
+				"date", date,
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid date format. Use YYYY-MM-DD")
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieving hourly analytics",
+			"date", date,
+			"species", species,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
 	}
 
 	// Get hourly analytics data from the datastore
 	hourlyData, err := c.DS.GetHourlyAnalyticsData(date, species)
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get hourly analytics data",
+				"date", date,
+				"species", species,
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return c.HandleError(ctx, err, "Failed to get hourly analytics data", http.StatusInternalServerError)
 	}
 
@@ -377,12 +532,25 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 		}
 	}
 
+	// Calculate total count
+	total := sumCounts(hourlyCountsArray)
+
 	// Build the response
 	response := map[string]interface{}{
 		"date":    date,
 		"species": species,
 		"counts":  hourlyCountsArray,
-		"total":   sumCounts(hourlyCountsArray),
+		"total":   total,
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Hourly analytics retrieved",
+			"date", date,
+			"species", species,
+			"total", total,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
 	}
 
 	return ctx.JSON(http.StatusOK, response)
@@ -399,14 +567,35 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	// --- Enhanced Validation ---
 	// Check for empty required parameter first
 	if startDate == "" {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Missing required parameter in daily analytics",
+				"parameter", "start_date",
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return echo.NewHTTPError(http.StatusBadRequest, "Missing required parameter: start_date")
 	}
 
 	// Validate format strictly using regex to prevent any non-date characters
 	if !dateRegex.MatchString(startDate) {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Invalid start_date format in daily analytics",
+				"start_date", startDate,
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid start_date format or contains invalid characters. Use YYYY-MM-DD")
 	}
 	if endDate != "" && !dateRegex.MatchString(endDate) {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Invalid end_date format in daily analytics",
+				"end_date", endDate,
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format or contains invalid characters. Use YYYY-MM-DD")
 	}
 	// --- End Enhanced Validation ---
@@ -415,11 +604,29 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
 		// Convert standard error to HTTP error
 		if errors.Is(err, ErrInvalidStartDate) || errors.Is(err, ErrInvalidEndDate) || errors.Is(err, ErrDateOrder) {
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Invalid date range in daily analytics",
+					"start_date", startDate,
+					"end_date", endDate,
+					"error", err.Error(),
+					"ip", ctx.RealIP(),
+					"path", ctx.Request().URL.Path,
+				)
+			}
 			// Use the specific error message from parseAndValidateDateRange
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 		// Handle unexpected errors from parseAndValidateDateRange
 		log.Printf("Error validating date range: %v", err)
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Unexpected error validating date range",
+				"start_date", startDate,
+				"end_date", endDate,
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "Error validating date range values")
 	}
 
@@ -429,9 +636,29 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 		endDate = startTime.AddDate(0, 0, 30).Format("2006-01-02")
 	}
 
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieving daily analytics",
+			"start_date", startDate,
+			"end_date", endDate,
+			"species", species,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
+	}
+
 	// Get daily analytics data from the datastore
 	dailyData, err := c.DS.GetDailyAnalyticsData(startDate, endDate, species)
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get daily analytics data",
+				"start_date", startDate,
+				"end_date", endDate,
+				"species", species,
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return c.HandleError(ctx, err, "Failed to get daily analytics data", http.StatusInternalServerError)
 	}
 
@@ -466,6 +693,18 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	}
 	response.Total = totalCount
 
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Daily analytics retrieved",
+			"start_date", startDate,
+			"end_date", endDate,
+			"species", species,
+			"data_points", len(response.Data),
+			"total", totalCount,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
+	}
+
 	return ctx.JSON(http.StatusOK, response)
 }
 
@@ -485,19 +724,57 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 		endDate = time.Now().Format("2006-01-02")
 	}
 
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieving time of day distribution",
+			"start_date", startDate,
+			"end_date", endDate,
+			"species", species,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
+	}
+
 	// Validate date formats and chronological order
 	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
 		// Convert standard error to HTTP error
 		if errors.Is(err, ErrInvalidStartDate) || errors.Is(err, ErrInvalidEndDate) || errors.Is(err, ErrDateOrder) {
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Invalid date range in time of day distribution",
+					"start_date", startDate,
+					"end_date", endDate,
+					"error", err.Error(),
+					"ip", ctx.RealIP(),
+					"path", ctx.Request().URL.Path,
+				)
+			}
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 		// Handle unexpected errors
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Unexpected error validating date range",
+				"start_date", startDate,
+				"end_date", endDate,
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "Error validating date range")
 	}
 
 	// Get hourly distribution data from the datastore
 	hourlyData, err := c.DS.GetHourlyDistribution(startDate, endDate, species)
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get hourly distribution data",
+				"start_date", startDate,
+				"end_date", endDate,
+				"species", species,
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return c.HandleError(ctx, err, "Failed to get hourly distribution data", http.StatusInternalServerError)
 	}
 
@@ -507,6 +784,17 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 		for hour := 0; hour < 24; hour++ {
 			emptyData[hour] = HourlyDistribution{Hour: hour, Count: 0}
 		}
+
+		if c.apiLogger != nil {
+			c.apiLogger.Info("No hourly distribution data available",
+				"start_date", startDate,
+				"end_date", endDate,
+				"species", species,
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
+
 		return ctx.JSON(http.StatusOK, emptyData)
 	}
 
@@ -517,10 +805,23 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 	}
 
 	// Fill in actual counts
+	totalCount := 0
 	for _, data := range hourlyData {
 		if data.Hour >= 0 && data.Hour < 24 {
 			completeHourlyData[data.Hour].Count = data.Count
+			totalCount += data.Count
 		}
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Hourly distribution retrieved",
+			"start_date", startDate,
+			"end_date", endDate,
+			"species", species,
+			"total", totalCount,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
 	}
 
 	return ctx.JSON(http.StatusOK, completeHourlyData)
@@ -541,11 +842,36 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 		endDate = time.Now().Format("2006-01-02")
 	}
 
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieving new species detections",
+			"start_date", startDate,
+			"end_date", endDate,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
+	}
+
 	// Validate date formats
 	if _, err := time.Parse("2006-01-02", startDate); err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Invalid start_date format in new species detections",
+				"start_date", startDate,
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid start_date format. Use YYYY-MM-DD")
 	}
 	if _, err := time.Parse("2006-01-02", endDate); err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Invalid end_date format in new species detections",
+				"end_date", endDate,
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
 	}
 
@@ -553,6 +879,15 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 	start, _ := time.Parse("2006-01-02", startDate)
 	end, _ := time.Parse("2006-01-02", endDate)
 	if start.After(end) {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Invalid date range in new species detections",
+				"start_date", startDate,
+				"end_date", endDate,
+				"error", "start_date cannot be after end_date",
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return echo.NewHTTPError(http.StatusBadRequest, "`start_date` cannot be after `end_date`")
 	}
 
@@ -565,6 +900,14 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 	if limitStr != "" {
 		parsedLimit, err := strconv.Atoi(limitStr)
 		if err != nil {
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Invalid limit parameter in new species detections",
+					"limit", limitStr,
+					"error", err.Error(),
+					"ip", ctx.RealIP(),
+					"path", ctx.Request().URL.Path,
+				)
+			}
 			return echo.NewHTTPError(http.StatusBadRequest, "Invalid limit parameter. Must be a positive integer.")
 		}
 		if parsedLimit > 0 {
@@ -577,6 +920,14 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 	if offsetStr != "" {
 		parsedOffset, err := strconv.Atoi(offsetStr)
 		if err != nil {
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Invalid offset parameter in new species detections",
+					"offset", offsetStr,
+					"error", err.Error(),
+					"ip", ctx.RealIP(),
+					"path", ctx.Request().URL.Path,
+				)
+			}
 			return echo.NewHTTPError(http.StatusBadRequest, "Invalid offset parameter. Must be a non-negative integer.")
 		}
 		if parsedOffset >= 0 {
@@ -587,6 +938,17 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 	// Fetch data from datastore with pagination
 	newSpeciesData, err := c.DS.GetNewSpeciesDetections(startDate, endDate, limit, offset)
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get new species detections",
+				"start_date", startDate,
+				"end_date", endDate,
+				"limit", limit,
+				"offset", offset,
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 		return c.HandleError(ctx, err, "Failed to get new species detections", http.StatusInternalServerError)
 	}
 
@@ -626,6 +988,18 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 			ThumbnailURL:   thumbnailURL,
 			CountInPeriod:  data.CountInPeriod,
 		})
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("New species detections retrieved",
+			"start_date", startDate,
+			"end_date", endDate,
+			"count", len(response),
+			"limit", limit,
+			"offset", offset,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
 	}
 
 	return ctx.JSON(http.StatusOK, response)
