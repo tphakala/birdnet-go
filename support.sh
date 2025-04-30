@@ -435,6 +435,47 @@ collect_install_info() {
     fi
 }
 
+# Function to collect BirdNET-Go application logs
+collect_birdnet_logs() {
+    print_message "📝 Collecting BirdNET-Go application logs..." "$BLUE"
+    
+    # Create log directory
+    mkdir -p "$OUTPUT_DIR/birdnet-logs"
+    
+    # Potential log directories
+    POTENTIAL_LOG_DIRS=(
+        "$HOME/.config/birdnet-go/logs"
+        "/etc/birdnet-go/logs"
+        # Add other potential common locations if known
+    )
+    
+    LOGS_FOUND=false
+    for log_dir in "${POTENTIAL_LOG_DIRS[@]}"; do
+        # Expand tilde if present
+        expanded_log_dir=$(eval echo "$log_dir")
+        
+        if [ -d "$expanded_log_dir" ]; then
+            print_message "  Checking directory: $expanded_log_dir" "$BLUE" "nonewline"
+            # Check if directory contains .log files
+            if find "$expanded_log_dir" -maxdepth 1 -name '*.log' -print -quit | grep -q .; then
+                echo " - Found logs."
+                # Copy log files
+                cp -a "$expanded_log_dir"/*.log "$OUTPUT_DIR/birdnet-logs/" 2>/dev/null
+                # Add source information
+                echo "Copied *.log files from: $expanded_log_dir" >> "$OUTPUT_DIR/birdnet-logs/sources.txt"
+                LOGS_FOUND=true
+            else
+                echo " - No .log files found."
+            fi
+        fi
+    done
+    
+    if [ "$LOGS_FOUND" = false ]; then
+        echo "No BirdNET-Go application log files found in standard locations." > "$OUTPUT_DIR/birdnet-logs/not-found.txt"
+        print_message "⚠️  No BirdNET-Go application log files found." "$YELLOW"
+    fi
+}
+
 # Function to bundle everything into a tarball
 create_support_bundle() {
     print_message "📦 Creating support bundle..." "$BLUE"
@@ -501,6 +542,7 @@ collect_birdnet_config || { print_message "❌ Error collecting BirdNET configur
 collect_systemd_info || { print_message "❌ Error collecting systemd information" "$RED"; }
 collect_audio_info || { print_message "❌ Error collecting audio information" "$RED"; }
 collect_install_info || { print_message "❌ Error collecting installation information" "$RED"; }
+collect_birdnet_logs || { print_message "❌ Error collecting BirdNET-Go application logs" "$RED"; }
 
 # Return to normal error handling
 set +e
