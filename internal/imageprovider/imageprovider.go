@@ -429,54 +429,46 @@ func (c *BirdImageCache) loadCachedImages() error {
 	return nil
 }
 
-// tryInitialize ensures only one goroutine initializes a species image.
+// tryInitialize ensures only one goroutine initializes a species image using mutexes.
+// It returns the image, a boolean indicating if it was found in cache (true) or fetched (false), and an error.
 func (c *BirdImageCache) tryInitialize(scientificName string) (BirdImage, bool, error) {
 	logger := imageProviderLogger.With("provider", c.providerName, "scientific_name", scientificName)
+
 	// Fast path: check if already loaded
 	if val, ok := c.dataMap.Load(scientificName); ok {
 		if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil {
-			logger.Debug("Initialization check: already in memory cache")
+			logger.Debug("Initialization check: already in memory cache (fast path)")
 			return *imgPtr, true, nil
 		}
 	}
 
-	// Check if another goroutine is already initializing this species
-	initializing := make(chan struct{})
-	actual, loaded := c.Initializing.LoadOrStore(scientificName, initializing)
-
-	if loaded {
-		// Another goroutine is initializing, wait for it
-		logger.Debug("Waiting for another goroutine to initialize image")
-		initChan, ok := actual.(chan struct{})
-		if !ok {
-			// Should not happen, but handle defensively
-			logger.Error("Initialization channel has unexpected type", "type", fmt.Sprintf("%T", actual))
-			return BirdImage{}, false, fmt.Errorf("internal error: unexpected type in initialization map")
-		}
-		<-initChan // Wait until the initializing goroutine closes the channel
-		logger.Debug("Initialization by other goroutine complete, checking cache again")
-		// Now check the cache again
-		if val, ok := c.dataMap.Load(scientificName); ok {
-			if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil {
-				return *imgPtr, true, nil
-			}
-		}
-		// If still not found after waiting, something went wrong or fetch failed
-		logger.Warn("Image not found in cache even after waiting for initialization")
-		return BirdImage{}, false, fmt.Errorf("image not found after waiting for initialization")
-	}
-
-	// This goroutine is responsible for initializing
+	// Use a mutex for this specific scientific name to prevent concurrent fetches
+	muInterface, _ := c.Initializing.LoadOrStore(scientificName, &sync.Mutex{})
+	mu := muInterface.(*sync.Mutex)
+	mu.Lock()
 	defer func() {
-		close(initializing)                   // Signal completion
-		c.Initializing.Delete(scientificName) // Clean up the map
-		logger.Debug("Finished initialization responsibility")
+		mu.Unlock()
+		// Clean up the mutex from the map once the operation is done.
+		// It's okay if another goroutine added it again between Unlock and Delete.
+		c.Initializing.Delete(scientificName)
+		logger.Debug("Unlocked and cleaned up mutex")
 	}()
 
-	logger.Debug("This goroutine is responsible for initialization")
+	logger.Debug("Acquired initialization lock")
+
+	// Double check: check cache again *after* acquiring the lock,
+	// in case another goroutine finished initializing while we were waiting.
+	if val, ok := c.dataMap.Load(scientificName); ok {
+		if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil {
+			logger.Debug("Initialization check: found in memory cache after acquiring lock")
+			return *imgPtr, true, nil // Indicate it was found in cache
+		}
+	}
+
+	logger.Debug("Not in cache after lock, proceeding to fetch/store")
 	// Fetch and store the image
 	img, err := c.fetchAndStore(scientificName)
-	return img, false, err // false indicates this goroutine did the work
+	return img, false, err // false indicates this goroutine attempted the fetch
 }
 
 // Get retrieves a bird image from the cache, fetching if necessary.
@@ -484,11 +476,10 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 	logger := imageProviderLogger.With("provider", c.providerName, "scientific_name", scientificName)
 	logger.Debug("Get image request received")
 	// Use tryInitialize to handle concurrent initialization
-	img, initializedByOther, err := c.tryInitialize(scientificName)
+	img, foundInCache, err := c.tryInitialize(scientificName)
 	if err != nil {
-		// Check if the error indicates a provider fetch failure but fallback might be possible
-		if !errors.Is(err, ErrImageNotFound) { // Or check for a specific error type returned by fetchAndStore on fetch failure
-			logger.Error("Failed to initialize or fetch image", "error", err)
+		if !errors.Is(err, ErrImageNotFound) {
+			logger.Error("Failed to initialize or fetch image (tryInitialize returned error)", "error", err)
 		}
 		// Even if initialization failed, maybe a fallback provider has it?
 		// This requires the registry to be set.
@@ -509,15 +500,14 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 		return BirdImage{}, err
 	}
 
-	if initializedByOther {
-		logger.Debug("Image initialized by another goroutine, returning cached result")
+	if foundInCache {
+		logger.Debug("Image found in cache, returning cached result")
 		if c.metrics != nil {
 			c.metrics.IncrementCacheHits()
 		}
 		return img, nil
 	}
 
-	// This goroutine performed the fetch/load (fetchAndStore was called by tryInitialize)
 	logger.Debug("Image initialized by this goroutine (cache miss), returning fetched/loaded result")
 	// Note: Cache miss tracking is already handled in fetchAndStore
 	// if loaded from DB or when fetched from provider
