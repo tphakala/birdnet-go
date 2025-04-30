@@ -158,9 +158,23 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 		return FileInfo{}, fmt.Errorf("invalid confidence value in file %s: %w", name, err)
 	}
 
-	timestamp, err := time.Parse("20060102T150405Z", timestampStr)
+	// IMPORTANT: Despite the Z suffix in the filename (which normally indicates UTC),
+	// the timestamps in the filenames are actually in local time.
+	// So we need to parse it in a special way to get the correct local time.
+
+	// First, parse the string but ignore the timezone (by removing the Z)
+	timestampStrLocal := strings.TrimSuffix(timestampStr, "Z")
+
+	// Parse it using a format string without timezone indicator
+	timestamp, err := time.ParseInLocation("20060102T150405", timestampStrLocal, time.Local)
 	if err != nil {
-		return FileInfo{}, fmt.Errorf("invalid timestamp format in file %s: %w", name, err)
+		// Fallback to original method if this fails, for backward compatibility
+		timestamp, err = time.Parse("20060102T150405Z", timestampStr)
+		if err != nil {
+			return FileInfo{}, fmt.Errorf("invalid timestamp format in file %s: %w", name, err)
+		}
+		// Convert UTC time to local time explicitly if needed
+		timestamp = timestamp.In(time.Local)
 	}
 
 	return FileInfo{
