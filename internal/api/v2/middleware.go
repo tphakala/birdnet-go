@@ -42,7 +42,7 @@ func (c *Controller) handleBearerAuth(ctx echo.Context, next echo.HandlerFunc, a
 
 	// Extract and validate the token format
 	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || parts[0] != "Bearer" {
+	if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
 		if c.apiLogger != nil {
 			c.apiLogger.Warn("Invalid Authorization header format", "path", path, "ip", ip)
 		}

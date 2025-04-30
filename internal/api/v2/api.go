@@ -217,9 +217,9 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	// Configure middlewares
 	c.Group.Use(middleware.Recover())          // Recover should be early
 	c.Group.Use(c.TunnelDetectionMiddleware()) // Add tunnel detection **before** logging
-	c.Group.Use(middleware.Logger())           // Basic Echo logger (optional, consider removing if structured is enough)
-	c.Group.Use(middleware.CORS())             // CORS handling
-	c.Group.Use(c.LoggingMiddleware())         // Add structured logging middleware **after** tunnel detection
+	// c.Group.Use(middleware.Logger())        // Removed: Use custom LoggingMiddleware below for structured logging
+	c.Group.Use(middleware.CORS())     // CORS handling
+	c.Group.Use(c.LoggingMiddleware()) // Use custom structured logging middleware
 
 	// Initialize start time for uptime tracking
 	now := time.Now()

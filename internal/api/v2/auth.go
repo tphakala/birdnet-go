@@ -236,6 +236,7 @@ func (c *Controller) GetAuthStatus(ctx echo.Context) error {
 			"method", status.Method,
 			"ip", ctx.RealIP(),
 			"path", ctx.Request().URL.Path,
+			"user_agent", ctx.Request().Header.Get("User-Agent"),
 		)
 	}
 
