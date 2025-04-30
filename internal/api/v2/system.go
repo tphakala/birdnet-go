@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"log"
+
 	"github.com/labstack/echo/v4"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -167,20 +169,46 @@ type JobQueueStats struct {
 
 // GetJobQueueStats returns statistics about the job queue
 func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting job queue statistics",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	// Get the processor from the context
 	processorObj := ctx.Get("processor")
 	if processorObj == nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Processor not available for job queue stats",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, fmt.Errorf("processor not available"), "Processor not available", http.StatusInternalServerError)
 	}
 
 	// Get the processor with the correct type
 	p, ok := processorObj.(*processor.Processor)
 	if !ok {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Invalid processor type for job queue stats",
+				"actual_type", fmt.Sprintf("%T", processorObj),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, fmt.Errorf("invalid processor type"), "Invalid processor type", http.StatusInternalServerError)
 	}
 
 	// Check if job queue is available
 	if p.JobQueue == nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Job queue not available",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, fmt.Errorf("job queue not available"), "Job queue not available", http.StatusInternalServerError)
 	}
 
@@ -190,13 +218,34 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 	// Convert to JSON
 	jsonStats, err := stats.ToJSON()
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to convert job queue stats to JSON",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, err, "Failed to convert job queue stats to JSON", http.StatusInternalServerError)
 	}
 
 	// Parse the JSON string back to a map for proper JSON response
 	var statsMap map[string]interface{}
 	if err := json.Unmarshal([]byte(jsonStats), &statsMap); err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to parse job queue stats JSON",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, err, "Failed to parse job queue stats JSON", http.StatusInternalServerError)
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Job queue statistics retrieved successfully",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
 	}
 
 	return ctx.JSON(http.StatusOK, statsMap)
@@ -204,10 +253,18 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 
 // Initialize system routes
 func (c *Controller) initSystemRoutes() {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Initializing system routes")
+	}
+
 	// Start CPU usage monitoring in background with context for controlled shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	cpuMonitorCancel = cancel // Store for later cleanup
 	go UpdateCPUCache(ctx)
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Started CPU usage monitoring")
+	}
 
 	// Create system API group
 	systemGroup := c.Group.Group("/system")
@@ -225,13 +282,31 @@ func (c *Controller) initSystemRoutes() {
 	audioGroup := protectedGroup.Group("/audio")
 	audioGroup.GET("/devices", c.GetAudioDevices)
 	audioGroup.GET("/active", c.GetActiveAudioDevice)
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("System routes initialized successfully")
+	}
 }
 
 // GetSystemInfo handles GET /api/v2/system/info
 func (c *Controller) GetSystemInfo(ctx echo.Context) error {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting system information",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	// Get host info
 	hostInfo, err := host.Info()
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get host information",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, err, "Failed to get host information", http.StatusInternalServerError)
 	}
 
@@ -239,6 +314,13 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 	hostname, err := os.Hostname()
 	if err != nil {
 		hostname = "unknown"
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to get hostname, using 'unknown'",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 	}
 
 	// Calculate app uptime using monotonic clock to avoid system time changes
@@ -260,20 +342,54 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 		GoVersion:     runtime.Version(),
 	}
 
+	if c.apiLogger != nil {
+		c.apiLogger.Info("System information retrieved successfully",
+			"os", info.OS,
+			"arch", info.Architecture,
+			"hostname", info.Hostname,
+			"platform", info.Platform,
+			"uptime", info.UpTime,
+			"app_uptime", info.AppUptime,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	return ctx.JSON(http.StatusOK, info)
 }
 
 // GetResourceInfo handles GET /api/v2/system/resources
 func (c *Controller) GetResourceInfo(ctx echo.Context) error {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting system resource information",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	// Get memory statistics
 	memInfo, err := mem.VirtualMemory()
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get memory information",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, err, "Failed to get memory information", http.StatusInternalServerError)
 	}
 
 	// Get swap statistics
 	swapInfo, err := mem.SwapMemory()
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get swap information",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, err, "Failed to get swap information", http.StatusInternalServerError)
 	}
 
@@ -283,18 +399,39 @@ func (c *Controller) GetResourceInfo(ctx echo.Context) error {
 	// Get process information (current process)
 	proc, err := process.NewProcess(int32(os.Getpid()))
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get process information",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, err, "Failed to get process information", http.StatusInternalServerError)
 	}
 
 	procMem, err := proc.MemoryInfo()
 	if err != nil {
 		c.Debug("Failed to get process memory info: %v", err)
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to get process memory info",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		// Continue with nil procMem, handled below
 	}
 
 	procCPU, err := proc.CPUPercent()
 	if err != nil {
 		c.Debug("Failed to get process CPU info: %v", err)
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to get process CPU info",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		// Will use 0 as default value
 		procCPU = 0
 	}
@@ -324,14 +461,40 @@ func (c *Controller) GetResourceInfo(ctx echo.Context) error {
 		resourceInfo.CPUUsage = cpuPercent[0]
 	}
 
+	if c.apiLogger != nil {
+		c.apiLogger.Info("System resource information retrieved successfully",
+			"cpu_usage", resourceInfo.CPUUsage,
+			"memory_usage", resourceInfo.MemoryUsage,
+			"swap_usage", resourceInfo.SwapUsage,
+			"process_mem_mb", resourceInfo.ProcessMem,
+			"process_cpu", resourceInfo.ProcessCPU,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	return ctx.JSON(http.StatusOK, resourceInfo)
 }
 
 // GetDiskInfo handles GET /api/v2/system/disks
 func (c *Controller) GetDiskInfo(ctx echo.Context) error {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting disk information",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	// Get partitions
 	partitions, err := disk.Partitions(false)
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get disk partitions",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, err, "Failed to get disk partitions", http.StatusInternalServerError)
 	}
 
@@ -342,6 +505,13 @@ func (c *Controller) GetDiskInfo(ctx echo.Context) error {
 	ioCounters, ioErr := disk.IOCounters()
 	if ioErr != nil {
 		c.Debug("Failed to get IO counters: %v", ioErr)
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to get IO counters",
+				"error", ioErr.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		// Continue without IO metrics
 	}
 
@@ -350,6 +520,13 @@ func (c *Controller) GetDiskInfo(ctx echo.Context) error {
 	var uptimeMs uint64 = 0
 	if err != nil {
 		c.Debug("Failed to get host information for uptime: %v", err)
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to get host information for uptime calculation",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 	} else {
 		// Convert uptime to milliseconds for IO busy calculation
 		uptimeMs = hostInfo.Uptime * 1000
@@ -375,6 +552,14 @@ func (c *Controller) GetDiskInfo(ctx echo.Context) error {
 		usage, err := disk.Usage(partition.Mountpoint)
 		if err != nil {
 			c.Debug("Failed to get usage for %s: %v", partition.Mountpoint, err)
+			if c.apiLogger != nil {
+				c.apiLogger.Warn("Failed to get disk usage",
+					"mountpoint", partition.Mountpoint,
+					"error", err.Error(),
+					"path", ctx.Request().URL.Path,
+					"ip", ctx.RealIP(),
+				)
+			}
 			// Add partial information to indicate the disk exists but usage couldn't be determined
 			diskInfo.Total = 0
 			diskInfo.Used = 0
@@ -435,6 +620,14 @@ func (c *Controller) GetDiskInfo(ctx echo.Context) error {
 		disks = append(disks, diskInfo)
 	}
 
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Disk information retrieved successfully",
+			"disk_count", len(disks),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	return ctx.JSON(http.StatusOK, disks)
 }
 
@@ -484,15 +677,36 @@ func isReadOnlyMount(opts []string) bool {
 
 // GetAudioDevices handles GET /api/v2/system/audio/devices
 func (c *Controller) GetAudioDevices(ctx echo.Context) error {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting audio devices",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	// Get audio devices
 	devices, err := myaudio.ListAudioSources()
 	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to list audio devices",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return c.HandleError(ctx, err, "Failed to list audio devices", http.StatusInternalServerError)
 	}
 
 	// Check if no devices were found
 	if len(devices) == 0 {
 		c.Debug("No audio devices found on the system")
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("No audio devices found on the system",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+				"os", runtime.GOOS,
+			)
+		}
 		return ctx.JSON(http.StatusOK, []AudioDeviceInfo{}) // Return empty array instead of null
 	}
 
@@ -506,16 +720,43 @@ func (c *Controller) GetAudioDevices(ctx echo.Context) error {
 		}
 	}
 
+	if c.apiLogger != nil {
+		deviceNames := make([]string, len(devices))
+		for i, device := range devices {
+			deviceNames[i] = device.Name
+		}
+
+		c.apiLogger.Info("Audio devices retrieved successfully",
+			"device_count", len(apiDevices),
+			"devices", strings.Join(deviceNames, ", "),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	return ctx.JSON(http.StatusOK, apiDevices)
 }
 
 // GetActiveAudioDevice handles GET /api/v2/system/audio/active
 func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting active audio device",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
 	// Get active audio device from settings
 	deviceName := c.Settings.Realtime.Audio.Source
 
 	// Check if no device is configured
 	if deviceName == "" {
+		if c.apiLogger != nil {
+			c.apiLogger.Info("No audio device currently active",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
 		return ctx.JSON(http.StatusOK, map[string]interface{}{
 			"device":   nil,
 			"active":   false,
@@ -560,6 +801,16 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 			diagnostics["note"] = "On Linux, check if PulseAudio/ALSA is running and the user has proper permissions"
 		}
 
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to list audio devices for verification",
+				"device_name", deviceName,
+				"error", err.Error(),
+				"os", runtime.GOOS,
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+
 		// Still return the configured device, but note that we couldn't verify it exists
 		return ctx.JSON(http.StatusOK, map[string]interface{}{
 			"device":      activeDevice,
@@ -597,6 +848,16 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 			diagnostics["suggestion"] = fmt.Sprintf("Consider using one of the available devices: %s", strings.Join(availableDevices, ", "))
 		}
 
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Configured audio device not found on system",
+				"configured_device", deviceName,
+				"available_devices", strings.Join(availableDevices, ", "),
+				"os", runtime.GOOS,
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+
 		return ctx.JSON(http.StatusOK, map[string]interface{}{
 			"device":      activeDevice,
 			"active":      true,
@@ -604,6 +865,18 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 			"message":     errorMsg,
 			"diagnostics": diagnostics,
 		})
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Active audio device verified",
+			"device_name", deviceName,
+			"device_id", activeDevice.ID,
+			"sample_rate", activeDevice.SampleRate,
+			"bit_depth", activeDevice.BitDepth,
+			"channels", activeDevice.Channels,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
 	}
 
 	// Device is configured and verified to exist
@@ -701,8 +974,15 @@ func skipFilesystem(fstype string) bool {
 // Note: This function is safe to call multiple times as it sets cpuMonitorCancel to nil
 // after the first call.
 func StopCPUMonitoring() {
+	// Use a consistent logger for this function since it's static and may not have access to controller
+	logger := log.Default()
+
 	if cpuMonitorCancel != nil {
+		logger.Println("Stopping CPU monitoring...")
 		cpuMonitorCancel()
 		cpuMonitorCancel = nil // Prevent double cancellation
+		logger.Println("CPU monitoring stopped successfully")
+	} else {
+		logger.Println("CPU monitoring already stopped or never started")
 	}
 }
