@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
 const placeholderImageURL = "/assets/images/bird-placeholder.svg"
@@ -68,6 +69,18 @@ var (
 // dateRegex ensures YYYY-MM-DD format
 var dateRegex = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
+// aggregatedBirdInfo holds intermediate aggregated data for a species on a specific day.
+type aggregatedBirdInfo struct {
+	CommonName     string
+	ScientificName string
+	SpeciesCode    string
+	Count          int
+	HourlyCounts   [24]int
+	HighConfidence bool
+	First          string
+	Latest         string
+}
+
 // initAnalyticsRoutes registers all analytics-related API endpoints
 func (c *Controller) initAnalyticsRoutes() {
 	// Create analytics API group - publicly accessible
@@ -87,198 +100,254 @@ func (c *Controller) initAnalyticsRoutes() {
 }
 
 // GetDailySpeciesSummary handles GET /api/v2/analytics/species/daily
-// Provides a summary of bird species detected on a specific day
 func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
-	// Get request parameters
-	selectedDate := ctx.QueryParam("date")
-	if selectedDate == "" {
-		selectedDate = time.Now().Format("2006-01-02")
-	} else {
-		if _, err := time.Parse("2006-01-02", selectedDate); err != nil {
-			if c.apiLogger != nil {
-				c.apiLogger.Error("Invalid date format in daily species summary",
-					"date", selectedDate,
-					"error", err.Error(),
-					"ip", ctx.RealIP(),
-					"path", ctx.Request().URL.Path,
-				)
-			}
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid date format. Use YYYY-MM-DD")
-		}
-	}
+	ip := ctx.RealIP()
+	path := ctx.Request().URL.Path
 
-	// Parse min confidence parameter
-	minConfidenceStr := ctx.QueryParam("min_confidence")
-	minConfidence := 0.0
-	if minConfidenceStr != "" {
-		parsedConfidence, err := strconv.ParseFloat(minConfidenceStr, 64)
-		if err == nil {
-			minConfidence = parsedConfidence / 100.0 // Convert from percentage to decimal
-		} else if c.apiLogger != nil {
-			c.apiLogger.Warn("Invalid min_confidence parameter",
-				"value", minConfidenceStr,
-				"error", err.Error(),
-				"ip", ctx.RealIP(),
-				"path", ctx.Request().URL.Path,
-			)
-		}
+	// 1. Parse Parameters
+	selectedDate, minConfidence, limit, err := c.parseDailySpeciesSummaryParams(ctx)
+	if err != nil {
+		// Error already logged in helper
+		return err // Return the HTTP error created by the helper
 	}
 
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Retrieving daily species summary",
 			"date", selectedDate,
 			"min_confidence", minConfidence,
-			"ip", ctx.RealIP(),
-			"path", ctx.Request().URL.Path,
+			"limit", limit,
+			"ip", ip,
+			"path", path,
 		)
 	}
 
-	// Get top birds data from the database
+	// 2. Get Initial Data
 	notes, err := c.DS.GetTopBirdsData(selectedDate, minConfidence)
 	if err != nil {
 		if c.apiLogger != nil {
-			c.apiLogger.Error("Failed to get daily species data",
-				"date", selectedDate,
-				"min_confidence", minConfidence,
-				"error", err.Error(),
-				"ip", ctx.RealIP(),
-				"path", ctx.Request().URL.Path,
-			)
+			c.apiLogger.Error("Failed to get initial daily species data", "date", selectedDate, "min_confidence", minConfidence, "error", err.Error(), "ip", ip, "path", path)
 		}
 		return c.HandleError(ctx, err, "Failed to get daily species data", http.StatusInternalServerError)
 	}
 
-	// Process notes to get hourly counts and other statistics
-	birdData := make(map[string]struct {
-		CommonName     string
-		ScientificName string
-		SpeciesCode    string
-		Count          int
-		HourlyCounts   [24]int
-		HighConfidence bool
-		First          string
-		Latest         string
+	// 3. Aggregate Data (including fetching hourly counts)
+	aggregatedData, err := c.aggregateDailySpeciesData(notes, selectedDate, minConfidence)
+	if err != nil {
+		// Errors during hourly fetch are logged within the helper, but we need to handle the overall failure
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to aggregate daily species data", "date", selectedDate, "error", err.Error(), "ip", ip, "path", path)
+		}
+		// Decide if this is a user error (bad data?) or server error
+		// For now, assume server error if aggregation fails overall
+		return c.HandleError(ctx, err, "Failed to process daily species data", http.StatusInternalServerError)
+	}
+
+	// 4. Build Response (including fetching thumbnails)
+	result, err := c.buildDailySpeciesSummaryResponse(aggregatedData)
+	if err != nil {
+		// Error logged in helper
+		return c.HandleError(ctx, err, "Failed to build response", http.StatusInternalServerError)
+	}
+
+	// 5. Sort by count
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Count > result[j].Count
 	})
 
-	// Process each note
+	// 6. Apply Limit
+	if limit > 0 && limit < len(result) {
+		result = result[:limit]
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Daily species summary retrieved",
+			"date", selectedDate,
+			"count", len(result),
+			"limit_applied", limit > 0,
+			"ip", ip,
+			"path", path,
+		)
+	}
+
+	// 7. Return JSON
+	return ctx.JSON(http.StatusOK, result)
+}
+
+// parseDailySpeciesSummaryParams parses and validates query parameters for the daily summary.
+func (c *Controller) parseDailySpeciesSummaryParams(ctx echo.Context) (selectedDate string, minConfidence float64, limit int, err error) {
+	ip := ctx.RealIP()
+	path := ctx.Request().URL.Path
+
+	// Parse and validate date
+	selectedDate = ctx.QueryParam("date")
+	if selectedDate == "" {
+		selectedDate = time.Now().Format("2006-01-02")
+	} else if _, parseErr := time.Parse("2006-01-02", selectedDate); parseErr != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Invalid date format parameter", "date", selectedDate, "error", parseErr.Error(), "ip", ip, "path", path)
+		}
+		err = echo.NewHTTPError(http.StatusBadRequest, "Invalid date format. Use YYYY-MM-DD")
+		return
+	}
+
+	// Parse min confidence
+	minConfidence = 0.0 // Default
+	minConfidenceStr := ctx.QueryParam("min_confidence")
+	if minConfidenceStr != "" {
+		parsedConfidence, parseErr := strconv.ParseFloat(minConfidenceStr, 64)
+		if parseErr == nil {
+			minConfidence = parsedConfidence / 100.0 // Convert from percentage to decimal
+		} else if c.apiLogger != nil {
+			c.apiLogger.Warn("Invalid min_confidence parameter, using default 0", "value", minConfidenceStr, "error", parseErr.Error(), "ip", ip, "path", path)
+		}
+	}
+
+	// Parse limit
+	limit = 0 // Default (no limit)
+	limitStr := ctx.QueryParam("limit")
+	if limitStr != "" {
+		parsedLimit, parseErr := strconv.Atoi(limitStr)
+		if parseErr == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		} else if parseErr != nil && c.apiLogger != nil {
+			c.apiLogger.Warn("Invalid limit parameter, ignoring limit", "value", limitStr, "error", parseErr.Error(), "ip", ip, "path", path)
+		}
+	}
+
+	return // Return parsed values (and potentially nil error)
+}
+
+// aggregateDailySpeciesData processes raw notes, fetches hourly counts, and aggregates results.
+func (c *Controller) aggregateDailySpeciesData(notes []datastore.Note, selectedDate string, minConfidence float64) (map[string]aggregatedBirdInfo, error) {
+	aggregatedData := make(map[string]aggregatedBirdInfo)
+
+	// Use a map to track which species' hourly counts have already been fetched to avoid redundant DB calls
+	hourlyFetched := make(map[string]struct{})
+	// Store fetched hourly counts to reuse
+	hourlyCache := make(map[string][24]int)
+
 	for i := range notes {
 		note := &notes[i]
-		// Skip notes with confidence below threshold
+
+		// Skip notes below confidence threshold
 		if note.Confidence < minConfidence {
 			continue
 		}
 
-		// Get hourly counts for this species
-		hourlyCounts, err := c.DS.GetHourlyOccurrences(selectedDate, note.CommonName, minConfidence)
-		if err != nil {
-			c.Debug("Error getting hourly counts: %v", err)
-			if c.apiLogger != nil {
-				c.apiLogger.Error("Error getting hourly counts",
-					"species", note.CommonName,
-					"date", selectedDate,
-					"error", err.Error(),
-				)
+		birdKey := note.ScientificName
+		var hourlyCounts [24]int // Declare without initial assignment
+		var fetchErr error
+
+		// Fetch hourly counts only once per species per request
+		if _, fetched := hourlyFetched[birdKey]; !fetched {
+			hourlyCounts, fetchErr = c.DS.GetHourlyOccurrences(selectedDate, note.CommonName, minConfidence)
+			if fetchErr != nil {
+				c.Debug("Error getting hourly counts for %s: %v", note.CommonName, fetchErr)
+				if c.apiLogger != nil {
+					c.apiLogger.Error("Error getting hourly counts during aggregation", "species", note.CommonName, "date", selectedDate, "error", fetchErr.Error())
+				}
+				// Optionally continue to process other species, or return error immediately
+				// For now, let's continue but log the error.
+				// Set a flag or specific error state if needed.
+			} else {
+				hourlyFetched[birdKey] = struct{}{}
+				hourlyCache[birdKey] = hourlyCounts
 			}
+		} else {
+			// Reuse cached hourly counts
+			hourlyCounts = hourlyCache[birdKey]
+		}
+
+		// If fetching hourly counts failed for this species, skip aggregating it
+		if fetchErr != nil {
 			continue
 		}
 
-		// Calculate total count from hourly counts
+		// Calculate total count for this species for the day
 		totalCount := 0
 		for _, count := range hourlyCounts {
 			totalCount += count
 		}
 
-		// Create or update bird data entry
-		birdKey := note.ScientificName
-		data, exists := birdData[birdKey]
-
+		// Get or create the entry in the aggregated map
+		data, exists := aggregatedData[birdKey]
 		if !exists {
-			// Create new entry if it doesn't exist
-			birdData[birdKey] = struct {
-				CommonName     string
-				ScientificName string
-				SpeciesCode    string
-				Count          int
-				HourlyCounts   [24]int
-				HighConfidence bool
-				First          string
-				Latest         string
-			}{
+			data = aggregatedBirdInfo{
 				CommonName:     note.CommonName,
 				ScientificName: note.ScientificName,
 				SpeciesCode:    note.SpeciesCode,
-				Count:          totalCount,
-				HourlyCounts:   hourlyCounts,
-				HighConfidence: note.Confidence >= 0.8, // Define high confidence
-				First:          note.Time,
+				First:          note.Time, // Initialize first/latest with the current note's time
 				Latest:         note.Time,
 			}
-		} else {
-			// Update existing entry
-			// Update first/latest times if needed
-			if note.Time < data.First {
-				data.First = note.Time
-			}
-			if note.Time > data.Latest {
-				data.Latest = note.Time
-			}
+		}
 
-			// Update other fields
-			data.Count = totalCount
-			data.HourlyCounts = hourlyCounts
-			data.HighConfidence = data.HighConfidence || note.Confidence >= 0.8
+		// Update aggregated data
+		data.Count = totalCount // Use the count derived from GetHourlyOccurrences
+		data.HourlyCounts = hourlyCounts
+		data.HighConfidence = data.HighConfidence || note.Confidence >= 0.8
 
-			// Save updated data back to map
-			birdData[birdKey] = data
+		// Update first/latest times if the current note is earlier/later
+		if note.Time < data.First {
+			data.First = note.Time
+		}
+		if note.Time > data.Latest {
+			data.Latest = note.Time
+		}
+
+		aggregatedData[birdKey] = data
+	}
+
+	// Check if any hourly fetch errors occurred if strict error handling is needed
+	// For now, returning nil error assuming partial results are acceptable if some hourly fetches fail.
+	return aggregatedData, nil
+}
+
+// buildDailySpeciesSummaryResponse converts aggregated data into the final API response slice.
+func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]aggregatedBirdInfo) ([]SpeciesDailySummary, error) {
+	// Collect scientific names for batch thumbnail fetching
+	scientificNames := make([]string, 0, len(aggregatedData))
+	for key := range aggregatedData {
+		// Only include species that actually had detections (Count > 0)
+		if aggregatedData[key].Count > 0 {
+			scientificNames = append(scientificNames, key)
 		}
 	}
 
-	// Convert map to slice for response
-	var result []SpeciesDailySummary
-	scientificNames := make([]string, 0, len(birdData))
-	for key := range birdData {
-		scientificNames = append(scientificNames, key)
-	}
-
-	// Batch fetch thumbnail URLs if cache is available
+	// Batch fetch thumbnail URLs
 	thumbnailURLs := make(map[string]string)
-	if c.BirdImageCache != nil {
+	if c.BirdImageCache != nil && len(scientificNames) > 0 {
 		batchResults := c.BirdImageCache.GetBatch(scientificNames)
-		// Only populate map if results are not empty
 		if len(batchResults) > 0 {
 			for name := range batchResults {
-				imgURL := batchResults[name].URL
-				if imgURL != "" {
-					thumbnailURLs[name] = imgURL
+				imgData := batchResults[name] // Access value using key
+				if imgData.URL != "" {
+					thumbnailURLs[name] = imgData.URL
 				}
 			}
 		}
 	}
 
-	for key := range birdData {
-		data := birdData[key]
-		// Skip birds with no detections
-		if data.Count == 0 {
-			continue
-		}
+	// Build the final result slice
+	result := make([]SpeciesDailySummary, 0, len(scientificNames))
+	for _, scientificName := range scientificNames { // Iterate using the filtered list
+		data := aggregatedData[scientificName]
 
 		// Convert hourly counts array to slice
-		hourlyCounts := make([]int, 24)
-		copy(hourlyCounts, data.HourlyCounts[:])
+		hourlyCountsSlice := make([]int, 24)
+		copy(hourlyCountsSlice, data.HourlyCounts[:])
 
-		// Get bird thumbnail URL from batch results, with fallback
-		thumbnailURL, ok := thumbnailURLs[data.ScientificName]
+		// Get thumbnail URL with fallback
+		thumbnailURL, ok := thumbnailURLs[scientificName]
 		if !ok || thumbnailURL == "" {
 			thumbnailURL = placeholderImageURL
 		}
 
-		// Add to result
 		result = append(result, SpeciesDailySummary{
 			ScientificName: data.ScientificName,
 			CommonName:     data.CommonName,
 			SpeciesCode:    data.SpeciesCode,
 			Count:          data.Count,
-			HourlyCounts:   hourlyCounts,
+			HourlyCounts:   hourlyCountsSlice,
 			HighConfidence: data.HighConfidence,
 			FirstHeard:     data.First,
 			LatestHeard:    data.Latest,
@@ -286,40 +355,7 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 		})
 	}
 
-	// Sort by count in descending order
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Count > result[j].Count
-	})
-
-	// Limit results if requested
-	limitStr := ctx.QueryParam("limit")
-	var limit int
-	if limitStr != "" {
-		var err error
-		limit, err = strconv.Atoi(limitStr)
-		if err == nil && limit > 0 && limit < len(result) {
-			result = result[:limit]
-		} else if err != nil && c.apiLogger != nil {
-			c.apiLogger.Warn("Invalid limit parameter",
-				"value", limitStr,
-				"error", err.Error(),
-				"ip", ctx.RealIP(),
-				"path", ctx.Request().URL.Path,
-			)
-		}
-	}
-
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Daily species summary retrieved",
-			"date", selectedDate,
-			"count", len(result),
-			"limit", limit,
-			"ip", ctx.RealIP(),
-			"path", ctx.Request().URL.Path,
-		)
-	}
-
-	return ctx.JSON(http.StatusOK, result)
+	return result, nil
 }
 
 // GetSpeciesSummary handles GET /api/v2/analytics/species/summary
