@@ -71,6 +71,11 @@ func Init() {
 		structuredHandler := slog.NewJSONHandler(structuredLogFile, &slog.HandlerOptions{
 			Level: currentLogLevel,
 			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+				// Format time to second precision
+				if a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
+					a.Value = slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05Z07:00")) // RFC3339 without sub-seconds
+				}
+				// Customize level names
 				if a.Key == slog.LevelKey {
 					level := a.Value.Any().(slog.Level)
 					levelLabel, exists := levelNames[level]
@@ -90,6 +95,11 @@ func Init() {
 		humanReadableHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 			Level: currentLogLevel,
 			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+				// Format time to second precision
+				if a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
+					a.Value = slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05Z07:00")) // RFC3339 without sub-seconds
+				}
+				// Customize level names
 				if a.Key == slog.LevelKey {
 					level := a.Value.Any().(slog.Level)
 					levelLabel, exists := levelNames[level]
@@ -145,6 +155,11 @@ func SetOutput(structuredOutput, humanReadableOutput io.Writer) error {
 	structuredHandler := slog.NewJSONHandler(structuredOutput, &slog.HandlerOptions{
 		Level: currentLogLevel,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			// Format time to second precision
+			if a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
+				a.Value = slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05Z07:00"))
+			}
+			// Customize level names
 			if a.Key == slog.LevelKey {
 				level := a.Value.Any().(slog.Level)
 				levelLabel, exists := levelNames[level]
@@ -161,6 +176,11 @@ func SetOutput(structuredOutput, humanReadableOutput io.Writer) error {
 	humanReadableHandler := slog.NewTextHandler(humanReadableOutput, &slog.HandlerOptions{
 		Level: currentLogLevel,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			// Format time to second precision
+			if a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
+				a.Value = slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05Z07:00"))
+			}
+			// Customize level names
 			if a.Key == slog.LevelKey {
 				level := a.Value.Any().(slog.Level)
 				levelLabel, exists := levelNames[level]
@@ -307,6 +327,10 @@ func NewFileLogger(filePath, serviceName string, level slog.Level) (*slog.Logger
 	fileHandler := slog.NewJSONHandler(logWriter, &slog.HandlerOptions{
 		Level: level,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			// Format time to second precision
+			if a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
+				a.Value = slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05Z07:00"))
+			}
 			// Customize level names
 			if a.Key == slog.LevelKey {
 				level := a.Value.Any().(slog.Level)
