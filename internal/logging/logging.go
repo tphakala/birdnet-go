@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -39,6 +40,31 @@ var levelNames = map[slog.Leveler]string{
 	LevelFatal: "FATAL",
 }
 
+// defaultReplaceAttr provides common attribute formatting for all loggers.
+// It formats time, customizes level names, and truncates floats to 2 decimal places.
+func defaultReplaceAttr(groups []string, a slog.Attr) slog.Attr {
+	// Format time to second precision (RFC3339 without sub-seconds)
+	if a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
+		a.Value = slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05Z07:00"))
+	}
+	// Customize level names
+	if a.Key == slog.LevelKey {
+		level := a.Value.Any().(slog.Level)
+		levelLabel, exists := levelNames[level]
+		if !exists {
+			levelLabel = level.String()
+		}
+		a.Value = slog.StringValue(levelLabel)
+	}
+	// Truncate float64 values to 2 decimal places
+	if a.Value.Kind() == slog.KindFloat64 {
+		// Multiply by 100, truncate the decimal part, then divide by 100.0
+		truncatedVal := math.Trunc(a.Value.Float64()*100) / 100.0
+		a.Value = slog.Float64Value(truncatedVal)
+	}
+	return a
+}
+
 // Init initializes the global loggers based on configuration.
 // It sets up both a structured (JSON) logger and a human-readable (Text) logger.
 func Init() {
@@ -69,23 +95,8 @@ func Init() {
 		}
 
 		structuredHandler := slog.NewJSONHandler(structuredLogFile, &slog.HandlerOptions{
-			Level: currentLogLevel,
-			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-				// Format time to second precision
-				if a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
-					a.Value = slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05Z07:00")) // RFC3339 without sub-seconds
-				}
-				// Customize level names
-				if a.Key == slog.LevelKey {
-					level := a.Value.Any().(slog.Level)
-					levelLabel, exists := levelNames[level]
-					if !exists {
-						levelLabel = level.String()
-					}
-					a.Value = slog.StringValue(levelLabel)
-				}
-				return a
-			},
+			Level:       currentLogLevel,
+			ReplaceAttr: defaultReplaceAttr,
 		})
 		structuredLogger = slog.New(structuredHandler)
 
@@ -93,23 +104,8 @@ func Init() {
 		// os.Stdout is not typically closed by the application, so no closer needed here.
 		currentHumanReadableOutputCloser = nil
 		humanReadableHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			Level: currentLogLevel,
-			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-				// Format time to second precision
-				if a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
-					a.Value = slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05Z07:00")) // RFC3339 without sub-seconds
-				}
-				// Customize level names
-				if a.Key == slog.LevelKey {
-					level := a.Value.Any().(slog.Level)
-					levelLabel, exists := levelNames[level]
-					if !exists {
-						levelLabel = level.String()
-					}
-					a.Value = slog.StringValue(levelLabel)
-				}
-				return a
-			},
+			Level:       currentLogLevel,
+			ReplaceAttr: defaultReplaceAttr,
 		})
 		humanReadableLogger = slog.New(humanReadableHandler)
 
@@ -153,44 +149,14 @@ func SetOutput(structuredOutput, humanReadableOutput io.Writer) error {
 
 	// Re-initialize with new writers, using the stored LevelVar
 	structuredHandler := slog.NewJSONHandler(structuredOutput, &slog.HandlerOptions{
-		Level: currentLogLevel,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// Format time to second precision
-			if a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
-				a.Value = slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05Z07:00"))
-			}
-			// Customize level names
-			if a.Key == slog.LevelKey {
-				level := a.Value.Any().(slog.Level)
-				levelLabel, exists := levelNames[level]
-				if !exists {
-					levelLabel = level.String()
-				}
-				a.Value = slog.StringValue(levelLabel)
-			}
-			return a
-		},
+		Level:       currentLogLevel,
+		ReplaceAttr: defaultReplaceAttr,
 	})
 	structuredLogger = slog.New(structuredHandler)
 
 	humanReadableHandler := slog.NewTextHandler(humanReadableOutput, &slog.HandlerOptions{
-		Level: currentLogLevel,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// Format time to second precision
-			if a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
-				a.Value = slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05Z07:00"))
-			}
-			// Customize level names
-			if a.Key == slog.LevelKey {
-				level := a.Value.Any().(slog.Level)
-				levelLabel, exists := levelNames[level]
-				if !exists {
-					levelLabel = level.String()
-				}
-				a.Value = slog.StringValue(levelLabel)
-			}
-			return a
-		},
+		Level:       currentLogLevel,
+		ReplaceAttr: defaultReplaceAttr,
 	})
 	humanReadableLogger = slog.New(humanReadableHandler)
 
@@ -325,23 +291,8 @@ func NewFileLogger(filePath, serviceName string, level slog.Level) (*slog.Logger
 
 	// Create a handler writing to the lumberjack writer
 	fileHandler := slog.NewJSONHandler(logWriter, &slog.HandlerOptions{
-		Level: level,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// Format time to second precision
-			if a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
-				a.Value = slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05Z07:00"))
-			}
-			// Customize level names
-			if a.Key == slog.LevelKey {
-				level := a.Value.Any().(slog.Level)
-				levelLabel, exists := levelNames[level]
-				if !exists {
-					levelLabel = level.String()
-				}
-				a.Value = slog.StringValue(levelLabel)
-			}
-			return a
-		},
+		Level:       level,
+		ReplaceAttr: defaultReplaceAttr,
 		// AddSource: true, // Optional: Uncomment to include source file/line
 	})
 
