@@ -96,10 +96,18 @@ func (s *OAuth2Server) configureLocalNetworkCookieStore() {
 			SameSite: http.SameSiteLaxMode,
 		}
 	case *sessions.FilesystemStore:
+		// Calculate MaxAge in seconds from the configured session duration
+		// If not configured, default to 7 days
+		// Note: MaxAge in the cookie store options requires an integer in seconds
+		maxAge := 86400 * 7 // 7 days in seconds
+		if s.Settings.Security.SessionDuration > 0 {
+			maxAge = int(s.Settings.Security.SessionDuration.Seconds())
+		}
+
 		store.Options = &sessions.Options{
 			Path:     "/",
-			MaxAge:   86400 * 7, // 7 days
-			Secure:   false,     // Allow cookies to be sent over HTTP for local LAN access
+			MaxAge:   maxAge,
+			Secure:   false, // Allow cookies to be sent over HTTP for local LAN access
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
 		}
