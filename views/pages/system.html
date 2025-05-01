@@ -1,0 +1,461 @@
+{{define "system"}}
+
+{{/* 
+  IMPORTANT IMPLEMENTATION NOTES:
+  - DO NOT USE HTMX for any data requests on this page
+  - Use ONLY JSON API endpoints with fetch/Alpine.js for all data operations
+  - This page is part of migration away from HTMX to pure JSON API architecture
+  - All system dashboard functionality must use JSON API endpoints with proper fetch requests
+*/}}
+
+<div class="col-span-12 space-y-4" x-data="systemDashboard" x-init="loadAllData()">
+    <h1 class="text-2xl font-bold mb-6">System Dashboard</h1>
+    
+    <!-- Authentication error notification -->
+    <div class="alert alert-warning shadow-lg mb-6" x-show="showAuthError" x-transition>
+        <div>
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+            <div>
+                <h3 class="font-bold">Authentication Required</h3>
+                <div class="text-xs">You need to login to access system information</div>
+            </div>
+        </div>
+        <div class="flex-none">
+            <a href="/login?redirect=/system" class="btn btn-sm btn-primary">Login</a>
+            <button @click="showAuthError = false" class="btn btn-sm btn-ghost">Dismiss</button>
+        </div>
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- System Information Card -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body card-padding">
+                <h2 class="card-title">System Information</h2>
+                <div class="divider"></div>
+                
+                <!-- Loading state -->
+                <div x-show="systemInfo.loading" class="py-4">
+                    <div class="flex flex-col gap-2">
+                        <div class="skeleton h-4 w-full mb-2"></div>
+                        <div class="skeleton h-4 w-3/4 mb-2"></div>
+                        <div class="skeleton h-4 w-5/6"></div>
+                    </div>
+                </div>
+                
+                <!-- Error state -->
+                <div x-show="systemInfo.error && !systemInfo.loading" class="alert alert-error" x-text="systemInfo.error"></div>
+                
+                <!-- Data loaded state -->
+                <div x-show="!systemInfo.loading && !systemInfo.error" class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="text-base-content/70">Operating System:</span>
+                        <span class="font-medium" x-text="systemInfo.data.os || 'N/A'"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-base-content/70">Hostname:</span>
+                        <span class="font-medium" x-text="systemInfo.data.hostname || 'N/A'"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-base-content/70">Platform:</span>
+                        <span class="font-medium" x-text="systemInfo.data.platform || 'N/A'"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-base-content/70">Uptime:</span>
+                        <span class="font-medium" x-text="formatUptime(systemInfo.data.uptime_seconds) || 'N/A'"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-base-content/70">CPUs:</span>
+                        <span class="font-medium" x-text="systemInfo.data.num_cpu || 'N/A'"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-base-content/70">Go Version:</span>
+                        <span class="font-medium" x-text="systemInfo.data.go_version || 'N/A'"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Disk Usage Card -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body card-padding">
+                <h2 class="card-title">Disk Usage</h2>
+                <div class="divider"></div>
+                
+                <!-- Loading state -->
+                <div x-show="diskUsage.loading" class="py-4">
+                    <div class="flex flex-col gap-2">
+                        <div class="skeleton h-4 w-full mb-2"></div>
+                        <div class="skeleton h-4 w-4/5 mb-2"></div>
+                        <div class="skeleton h-4 w-3/4"></div>
+                    </div>
+                </div>
+                
+                <!-- Error state -->
+                <div x-show="diskUsage.error && !diskUsage.loading" class="alert alert-error" x-text="diskUsage.error"></div>
+                
+                <!-- Data loaded state -->
+                <div x-show="!diskUsage.loading && !diskUsage.error && diskUsage.data.length > 0" class="space-y-4">
+                    <template x-for="disk in diskUsage.data" :key="disk.mountpoint">
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span class="font-medium" x-text="disk.mountpoint"></span>
+                                <span x-text="formatStorage(disk.used) + ' / ' + formatStorage(disk.total)"></span>
+                            </div>
+                            <div class="w-full bg-base-200 rounded-full h-2">
+                                <div class="h-2 rounded-full" 
+                                     :class="disk.usage_percent > 90 ? 'bg-error' : disk.usage_percent > 70 ? 'bg-warning' : 'bg-success'"
+                                     :style="`width: ${disk.usage_percent}%`"></div>
+                            </div>
+                            <div class="text-xs text-right mt-1" x-text="disk.usage_percent + '% used'"></div>
+                        </div>
+                    </template>
+                </div>
+                
+                <!-- No data state -->
+                <div x-show="!diskUsage.loading && !diskUsage.error && diskUsage.data.length === 0" class="text-center py-4 text-base-content/70">
+                    No disk information available
+                </div>
+            </div>
+        </div>
+
+        <!-- Memory Usage Card -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body card-padding">
+                <h2 class="card-title">Memory Usage</h2>
+                <div class="divider"></div>
+                
+                <!-- Loading state -->
+                <div x-show="memoryUsage.loading" class="py-4">
+                    <div class="flex flex-col gap-2">
+                        <div class="skeleton h-4 w-full mb-2"></div>
+                        <div class="skeleton h-4 w-1/2 mb-2"></div>
+                        <div class="skeleton h-4 w-4/5"></div>
+                    </div>
+                </div>
+                
+                <!-- Error state -->
+                <div x-show="memoryUsage.error && !memoryUsage.loading" class="alert alert-error" x-text="memoryUsage.error"></div>
+                
+                <!-- Data loaded state -->
+                <div x-show="!memoryUsage.loading && !memoryUsage.error" class="space-y-3">
+                    <!-- RAM Usage -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="font-medium">RAM Usage</span>
+                            <span x-text="formatStorage(memoryUsage.data.used) + ' / ' + formatStorage(memoryUsage.data.total)"></span>
+                        </div>
+                        <div class="w-full bg-base-200 rounded-full h-2">
+                            <div class="h-2 rounded-full" 
+                                 :class="memoryUsage.data.usedPercent > 90 ? 'bg-error' : memoryUsage.data.usedPercent > 70 ? 'bg-warning' : 'bg-success'"
+                                 :style="`width: ${memoryUsage.data.usedPercent}%`"></div>
+                        </div>
+                        <div class="text-xs text-right mt-1" x-text="memoryUsage.data.usedPercent + '% used'"></div>
+                    </div>
+                    
+                    <!-- Memory Details -->
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-base-content/70">Free:</span>
+                            <span x-text="formatStorage(memoryUsage.data.free)"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-base-content/70">Available:</span>
+                            <span x-text="formatStorage(memoryUsage.data.available)"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Process Information Card -->
+    <div class="card bg-base-100 shadow-xl mt-6">
+        <div class="card-body card-padding">
+            <h2 class="card-title">Process Information</h2>
+            <div class="divider"></div>
+            
+            <!-- Loading state -->
+            <div x-show="processes.loading" class="py-4">
+                <div class="flex justify-center">
+                    <span class="loading loading-spinner loading-lg"></span>
+                </div>
+            </div>
+            
+            <!-- Error state -->
+            <div x-show="processes.error && !processes.loading" class="alert alert-error" x-text="processes.error"></div>
+            
+            <!-- Data loaded state -->
+            <div x-show="!processes.loading && !processes.error" class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Process</th>
+                            <th>Status</th>
+                            <th>CPU</th>
+                            <th>Memory</th>
+                            <th>Uptime</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-if="processes.data.length === 0">
+                            <tr>
+                                <td colspan="5" class="text-center">No process information available</td>
+                            </tr>
+                        </template>
+                        <template x-for="process in processes.data" :key="process.pid">
+                            <tr>
+                                <td>
+                                    <div class="font-medium" x-text="process.name"></div>
+                                    <div class="text-xs text-base-content/60" x-text="'PID: ' + process.pid"></div>
+                                </td>
+                                <td>
+                                    <span class="badge" 
+                                          :class="process.status === 'running' ? 'badge-success' : 'badge-warning'"
+                                          x-text="process.status"></span>
+                                </td>
+                                <td x-text="process.cpu + '%'"></td>
+                                <td x-text="formatStorage(process.memory)"></td>
+                                <td x-text="formatUptime(process.uptime)"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Refresh button -->
+    <div class="flex justify-center mt-6">
+        <button class="btn btn-primary" @click="loadAllData()" :disabled="isAnyLoading">
+            <template x-if="isAnyLoading">
+                <span class="loading loading-spinner loading-sm mr-2"></span>
+            </template>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" x-show="!isAnyLoading">
+                <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+            </svg>
+            Refresh Data
+        </button>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('systemDashboard', () => ({
+            // System information state
+            systemInfo: {
+                loading: true,
+                error: null,
+                data: {}
+            },
+            
+            // Disk usage state
+            diskUsage: {
+                loading: true,
+                error: null,
+                data: []
+            },
+            
+            // Memory usage state
+            memoryUsage: {
+                loading: true,
+                error: null,
+                data: {}
+            },
+            
+            // Process information state
+            processes: {
+                loading: true,
+                error: null,
+                data: []
+            },
+            
+            // Authentication error state
+            showAuthError: false,
+            
+            // Computed property to check if any data is loading
+            get isAnyLoading() {
+                return this.systemInfo.loading || 
+                       this.diskUsage.loading || 
+                       this.memoryUsage.loading || 
+                       this.processes.loading;
+            },
+            
+            // Load all data at once
+            loadAllData() {
+                this.loadSystemInfo();
+                this.loadDiskUsage();
+                this.loadMemoryUsage();
+                this.loadProcesses();
+            },
+            
+            // Load system information
+            loadSystemInfo() {
+                this.systemInfo.loading = true;
+                this.systemInfo.error = null;
+                
+                fetch('/api/v2/system/info')
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.status === 401) {
+                                throw new Error("Authentication required. Please log in.");
+                            }
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        this.systemInfo.data = data;
+                        this.systemInfo.loading = false;
+                    })
+                    .catch(error => {
+                        console.error('Error fetching system info:', error);
+                        this.systemInfo.error = `Failed to load system information: ${error.message}`;
+                        this.systemInfo.loading = false;
+                        
+                        // Show authentication error notification if needed
+                        if (error.message.includes("Authentication required")) {
+                            this.showAuthError = true;
+                        }
+                    });
+            },
+            
+            // Load disk usage
+            loadDiskUsage() {
+                this.diskUsage.loading = true;
+                this.diskUsage.error = null;
+                
+                fetch('/api/v2/system/disks')
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.status === 401) {
+                                throw new Error("Authentication required. Please log in.");
+                            }
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        this.diskUsage.data = data;
+                        this.diskUsage.loading = false;
+                    })
+                    .catch(error => {
+                        console.error('Error fetching disk usage:', error);
+                        this.diskUsage.error = `Failed to load disk usage: ${error.message}`;
+                        this.diskUsage.loading = false;
+                        
+                        // Show authentication error notification if needed
+                        if (error.message.includes("Authentication required")) {
+                            this.showAuthError = true;
+                        }
+                    });
+            },
+            
+            // Load memory usage
+            loadMemoryUsage() {
+                this.memoryUsage.loading = true;
+                this.memoryUsage.error = null;
+                
+                fetch('/api/v2/system/resources')
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.status === 401) {
+                                throw new Error("Authentication required. Please log in.");
+                            }
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        // Map the API response to our UI data model
+                        this.memoryUsage.data = {
+                            total: data.memory_total,
+                            used: data.memory_used,
+                            free: data.memory_free,
+                            available: data.memory_free,
+                            usedPercent: data.memory_usage_percent
+                        };
+                        this.memoryUsage.loading = false;
+                    })
+                    .catch(error => {
+                        console.error('Error fetching memory usage:', error);
+                        this.memoryUsage.error = `Failed to load memory usage: ${error.message}`;
+                        this.memoryUsage.loading = false;
+                        
+                        // Show authentication error notification if needed
+                        if (error.message.includes("Authentication required")) {
+                            this.showAuthError = true;
+                        }
+                    });
+            },
+            
+            // Load process information
+            loadProcesses() {
+                this.processes.loading = true;
+                this.processes.error = null;
+                
+                fetch('/api/v2/system/processes')
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.status === 401) {
+                                throw new Error("Authentication required. Please log in.");
+                            }
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        this.processes.data = data || [];
+                        this.processes.loading = false;
+                    })
+                    .catch(error => {
+                        console.error('Error fetching processes:', error);
+                        this.processes.error = `Failed to load process information: ${error.message}`;
+                        this.processes.loading = false;
+                        
+                        // Show authentication error notification if needed
+                        if (error.message.includes("Authentication required")) {
+                            this.showAuthError = true;
+                        }
+                    });
+            },
+            
+            // Helper function to format uptime
+            formatUptime(seconds) {
+                if (seconds === undefined || seconds === null) return 'N/A';
+                
+                const days = Math.floor(seconds / 86400);
+                seconds %= 86400;
+                const hours = Math.floor(seconds / 3600);
+                seconds %= 3600;
+                const minutes = Math.floor(seconds / 60);
+                seconds = Math.floor(seconds % 60);
+                
+                let result = '';
+                if (days > 0) result += `${days}d `;
+                if (hours > 0 || days > 0) result += `${hours}h `;
+                if (minutes > 0 || hours > 0 || days > 0) result += `${minutes}m `;
+                result += `${seconds}s`;
+                
+                return result;
+            },
+            
+            // Helper function to format storage sizes
+            formatStorage(bytes) {
+                if (bytes === undefined || bytes === null) return 'N/A';
+                
+                const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                let size = bytes;
+                let unitIndex = 0;
+                
+                while (size >= 1024 && unitIndex < units.length - 1) {
+                    size /= 1024;
+                    unitIndex++;
+                }
+                
+                return `${size.toFixed(2)} ${units[unitIndex]}`;
+            }
+        }));
+    });
+</script>
+
+{{end}} 

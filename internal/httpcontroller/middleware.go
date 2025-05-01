@@ -7,8 +7,11 @@ import (
 	"net/url"
 	"strings"
 
+	"net"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/security"
 )
 
 // CSRFContextKey is the key used to store CSRF token in the context
@@ -152,32 +155,6 @@ func (s *Server) VaryHeaderMiddleware() echo.MiddlewareFunc {
 	}
 }
 
-// AuthMiddleware checks if the user is authenticated and if the request is protected
-func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		if isProtectedRoute(c.Path()) {
-			// Check if authentication is required for this IP
-			if s.OAuth2Server.IsAuthenticationEnabled(s.RealIP(c)) {
-				if !s.IsAccessAllowed(c) {
-					redirectPath := url.QueryEscape(c.Request().URL.Path)
-					// Validate redirect path against whitelist
-					if !isValidRedirect(redirectPath) {
-						redirectPath = "/"
-					}
-					if c.Request().Header.Get("HX-Request") == "true" {
-						c.Response().Header().Set("HX-Redirect", "/login?redirect="+redirectPath)
-						return c.String(http.StatusUnauthorized, "")
-					}
-					return c.Redirect(http.StatusFound, "/login?redirect="+redirectPath)
-				}
-			}
-
-		}
-		return next(c)
-	}
-
-}
-
 // isProtectedRoute checks if the request is protected
 func isProtectedRoute(path string) bool {
 	// HLS streaming routes should be protected (require authentication)
@@ -191,12 +168,76 @@ func isProtectedRoute(path string) bool {
 		strings.HasPrefix(path, "/api/v1/detections/lock") ||
 		strings.HasPrefix(path, "/api/v1/mqtt/") ||
 		strings.HasPrefix(path, "/api/v1/birdweather/") ||
-		strings.HasPrefix(path, "/api/v2/system/") || // Protect all system API routes
-		strings.HasPrefix(path, "/api/v2/settings/") ||
-		strings.HasPrefix(path, "/api/v2/control/") ||
-		strings.HasPrefix(path, "/api/v2/integrations/") ||
+		strings.HasPrefix(path, "/api/v2/") || // All v2 API routes require auth check (IP-based or login)
 		strings.HasPrefix(path, "/api/v1/audio-stream-hls") || // Protect HLS streams
 		strings.HasPrefix(path, "/logout")
+}
+
+// isPublicApiRoute returns true for API routes that should be publicly accessible without authentication
+func isPublicApiRoute(path string) bool {
+	// Public API routes that should be accessible without login
+	return strings.HasPrefix(path, "/api/v2/detections") || // GET detection data is public
+		strings.HasPrefix(path, "/api/v2/analytics") || // Analytics data is public
+		strings.HasPrefix(path, "/api/v2/media/species-image") || // Images are public
+		strings.HasPrefix(path, "/api/v2/spectrogram") || // Spectrograms are public
+		strings.HasPrefix(path, "/api/v2/audio") // Audio files are public
+}
+
+// AuthMiddleware checks if the user is authenticated and if the request is protected
+func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		path := c.Path()
+
+		// Skip check for non-protected routes
+		if !isProtectedRoute(path) {
+			return next(c)
+		}
+
+		// Allow public API routes without authentication
+		if isPublicApiRoute(path) {
+			return next(c)
+		}
+
+		// Check if authentication is required for this IP
+		if s.OAuth2Server.IsAuthenticationEnabled(s.RealIP(c)) {
+			// Check if client is in local subnet - in that case, we can bypass auth
+			clientIP := net.ParseIP(s.RealIP(c))
+			if security.IsInLocalSubnet(clientIP) {
+				// Local network clients can access protected API endpoints
+				// Add server to context for authorization checks
+				c.Set("server", s)
+				s.Debug("Client %s is in local subnet, allowing access to %s", clientIP.String(), path)
+				return next(c)
+			}
+
+			// Not on local subnet, check if authenticated
+			if !s.IsAccessAllowed(c) {
+				s.Debug("Client %s not authenticated, denying access to %s", s.RealIP(c), path)
+
+				// Handle API routes with JSON response for unauthorized errors
+				if strings.HasPrefix(path, "/api/") {
+					return c.JSON(http.StatusUnauthorized, map[string]string{
+						"error":   "Authentication required",
+						"message": "You must be authenticated to access this API endpoint",
+					})
+				}
+
+				// Handle regular routes with redirect to login
+				redirectPath := url.QueryEscape(c.Request().URL.Path)
+				// Validate redirect path against whitelist
+				if !isValidRedirect(redirectPath) {
+					redirectPath = "/"
+				}
+				if c.Request().Header.Get("HX-Request") == "true" {
+					c.Response().Header().Set("HX-Redirect", "/login?redirect="+redirectPath)
+					return c.String(http.StatusUnauthorized, "")
+				}
+				return c.Redirect(http.StatusFound, "/login?redirect="+redirectPath)
+			}
+		}
+
+		return next(c)
+	}
 }
 
 // generateETag creates a simple hash-based ETag for a given path
