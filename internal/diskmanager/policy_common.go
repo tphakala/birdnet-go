@@ -41,6 +41,11 @@ func init() {
 	}
 }
 
+// GetLogger returns the package-level logger for the diskmanager service.
+func GetLogger() *slog.Logger {
+	return serviceLogger
+}
+
 // buildSpeciesSubDirCountMap creates a map to track the number of files per species per subdirectory.
 func buildSpeciesSubDirCountMap(files []FileInfo) map[string]map[string]int {
 	serviceLogger.Debug("Building species subdirectory count map",
