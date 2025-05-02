@@ -142,10 +142,10 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 // Logout invalidates the current session/token
 func (a *SecurityAdapter) Logout(c echo.Context) error {
 	// Clear all session values
-	gothic.StoreInSession("userId", "", c.Request(), c.Response())       //nolint:errcheck
-	gothic.StoreInSession("access_token", "", c.Request(), c.Response()) //nolint:errcheck
-	gothic.StoreInSession("google", "", c.Request(), c.Response())       //nolint:errcheck
-	gothic.StoreInSession("github", "", c.Request(), c.Response())       //nolint:errcheck
+	gothic.StoreInSession("userId", "", c.Request(), c.Response())       //nolint:errcheck // Error checking not critical during logout
+	gothic.StoreInSession("access_token", "", c.Request(), c.Response()) //nolint:errcheck // Error checking not critical during logout
+	gothic.StoreInSession("google", "", c.Request(), c.Response())       //nolint:errcheck // Error checking not critical during logout
+	gothic.StoreInSession("github", "", c.Request(), c.Response())       //nolint:errcheck // Error checking not critical during logout
 
 	// Log out from gothic session
 	return gothic.Logout(c.Response(), c.Request())
