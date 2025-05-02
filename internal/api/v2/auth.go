@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/auth"
 )
 
 // AuthRequest represents the login request structure
@@ -47,6 +48,19 @@ func (c *Controller) initAuthRoutes() {
 	protectedGroup.GET("/status", c.GetAuthStatus)
 }
 
+// getAuthService retrieves the auth service from context or controller
+func (c *Controller) getAuthService(ctx echo.Context) auth.Service {
+	// First try to get from context (per-request)
+	if service := ctx.Get("auth_service"); service != nil {
+		if authService, ok := service.(auth.Service); ok {
+			return authService
+		}
+	}
+
+	// Fall back to controller's auth service
+	return c.AuthService
+}
+
 // Login handles POST /api/v2/auth/login
 func (c *Controller) Login(ctx echo.Context) error {
 	// Parse login request
@@ -62,42 +76,22 @@ func (c *Controller) Login(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid login request", http.StatusBadRequest)
 	}
 
-	// If authentication is not enabled, return success
-	server := ctx.Get("server")
-	if server == nil {
+	// Get auth service
+	authService := c.getAuthService(ctx)
+	if authService == nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Authentication service unavailable",
-				"error", "server not available in context",
+				"error", "auth service not available",
 				"ip", ctx.RealIP(),
 				"path", ctx.Request().URL.Path,
 			)
 		}
-		return c.HandleError(ctx, fmt.Errorf("server not available in context"),
+		return c.HandleError(ctx, fmt.Errorf("authentication service not available"),
 			"Authentication service not available", http.StatusInternalServerError)
 	}
 
-	// Try to use server's authentication methods
-	var authenticated bool
-	authServer, ok := server.(interface {
-		IsAccessAllowed(c echo.Context) bool
-		isAuthenticationEnabled(c echo.Context) bool
-		AuthenticateBasic(c echo.Context, username, password string) bool
-	})
-
-	if !ok {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Authentication service unavailable",
-				"error", "server does not support authentication interface",
-				"ip", ctx.RealIP(),
-				"path", ctx.Request().URL.Path,
-			)
-		}
-		return c.HandleError(ctx, fmt.Errorf("server does not support authentication interface"),
-			"Authentication service not available", http.StatusInternalServerError)
-	}
-
-	// If authentication is not enabled, act as if the login was successful
-	if !authServer.isAuthenticationEnabled(ctx) {
+	// If authentication is not required, act as if the login was successful
+	if !authService.IsAuthRequired(ctx) {
 		if c.apiLogger != nil {
 			c.apiLogger.Info("Authentication not required",
 				"username", req.Username,
@@ -114,7 +108,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 	}
 
 	// Authenticate using basic auth
-	authenticated = authServer.AuthenticateBasic(ctx, req.Username, req.Password)
+	authenticated := authService.AuthenticateBasic(ctx, req.Username, req.Password)
 
 	if !authenticated {
 		// Add a short delay to prevent brute force attacks
@@ -158,17 +152,16 @@ func (c *Controller) Login(ctx echo.Context) error {
 
 // Logout handles POST /api/v2/auth/logout
 func (c *Controller) Logout(ctx echo.Context) error {
-	// Get the server from context
-	server := ctx.Get("server")
-	if server == nil {
-		// If no server in context, we can't properly logout
-		// But we'll return success anyway since the client is ending their session
+	// Get auth service
+	authService := c.getAuthService(ctx)
+	if authService == nil {
 		if c.apiLogger != nil {
-			c.apiLogger.Warn("Logout without server context",
+			c.apiLogger.Warn("Logout requested but auth service is not available",
 				"ip", ctx.RealIP(),
 				"path", ctx.Request().URL.Path,
 			)
 		}
+		// Return success anyway as the session is effectively ended
 		return ctx.JSON(http.StatusOK, AuthResponse{
 			Success:   true,
 			Message:   "Logged out",
@@ -176,20 +169,16 @@ func (c *Controller) Logout(ctx echo.Context) error {
 		})
 	}
 
-	// Try to use server's logout method if available
-	if logoutServer, ok := server.(interface {
-		Logout(c echo.Context) error
-	}); ok {
-		if err := logoutServer.Logout(ctx); err != nil {
-			if c.apiLogger != nil {
-				c.apiLogger.Error("Logout failed",
-					"error", err.Error(),
-					"ip", ctx.RealIP(),
-					"path", ctx.Request().URL.Path,
-				)
-			}
-			return c.HandleError(ctx, err, "Logout failed", http.StatusInternalServerError)
+	// Try to perform logout via auth service
+	if err := authService.Logout(ctx); err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Logout failed",
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
 		}
+		return c.HandleError(ctx, err, "Logout failed", http.StatusInternalServerError)
 	}
 
 	if c.apiLogger != nil {
@@ -211,22 +200,19 @@ func (c *Controller) GetAuthStatus(ctx echo.Context) error {
 	// This endpoint is protected by AuthMiddleware, so if we get here,
 	// the user is authenticated.
 
+	// Get auth service
+	authService := c.getAuthService(ctx)
+
 	// Initialize default response
 	status := AuthStatus{
 		Authenticated: true,
 		Method:        "session", // Default to session-based auth
 	}
 
-	// Try to get username from server if available
-	server := ctx.Get("server")
-	if server != nil {
-		if userServer, ok := server.(interface {
-			GetUsername(c echo.Context) string
-			GetAuthMethod(c echo.Context) string
-		}); ok {
-			status.Username = userServer.GetUsername(ctx)
-			status.Method = userServer.GetAuthMethod(ctx)
-		}
+	// Get authentication details if service is available
+	if authService != nil {
+		status.Username = authService.GetUsername(ctx)
+		status.Method = authService.GetAuthMethod(ctx)
 	}
 
 	if c.apiLogger != nil {
