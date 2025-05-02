@@ -705,6 +705,26 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
+// getEffectiveAuthMiddleware returns the appropriate authentication middleware function.
+// It prioritizes the configured AuthMiddlewareFn and falls back to the
+// controller's AuthMiddleware method if the function is not set.
+func (c *Controller) getEffectiveAuthMiddleware() echo.MiddlewareFunc {
+	// Use the new auth middleware if available
+	if c.AuthMiddlewareFn != nil {
+		if c.apiLogger != nil {
+			// Log using the same levels as the original code block in system.go
+			c.apiLogger.Info("Using configured AuthMiddlewareFn for route protection")
+		}
+		return c.AuthMiddlewareFn
+	} else {
+		// Fall back to the legacy middleware method
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("AuthMiddlewareFn not configured, using fallback AuthMiddleware method for route protection")
+		}
+		return c.AuthMiddleware // Return the method itself
+	}
+}
+
 // InitializeAPI creates a new API controller and registers all routes
 func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
