@@ -4,7 +4,6 @@ package auth
 import (
 	"crypto/subtle"
 	"log/slog"
-	"net"
 
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth/gothic"
@@ -59,42 +58,47 @@ func (a *SecurityAdapter) GetUsername(c echo.Context) string {
 	return ""
 }
 
-// GetAuthMethod returns the authentication method used
-func (a *SecurityAdapter) GetAuthMethod(c echo.Context) string {
-	// Check if authenticated by token
+// GetAuthMethod returns the authentication method used as a defined constant.
+func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
+	// NOTE: This logic assumes that if a token/provider session exists, it was validated
+	// by middleware *before* this method is called, or it relies on IsUserAuthenticated.
+	// If called independently, it might return a method even if the token/session is expired.
+
+	// Check if authenticated by token (assuming gothic session stores it)
 	if token, err := gothic.GetFromSession("access_token", c.Request()); err == nil && token != "" {
-		if a.OAuth2Server.ValidateAccessToken(token) {
-			return "token"
+		// We assume the middleware validated the token, or IsUserAuthenticated would be false.
+		if a.OAuth2Server.IsUserAuthenticated(c) { // Double-check auth status
+			return AuthMethodToken
 		}
 	}
 
-	// Check if authenticated by Google
+	// Check specific OAuth provider sessions (simplification)
 	if googleUser, err := gothic.GetFromSession("google", c.Request()); err == nil && googleUser != "" {
-		return "google"
+		if a.OAuth2Server.IsUserAuthenticated(c) {
+			return AuthMethodSession // Could refine to AuthMethodGoogle if needed
+		}
 	}
-
-	// Check if authenticated by GitHub
 	if githubUser, err := gothic.GetFromSession("github", c.Request()); err == nil && githubUser != "" {
-		return "github"
+		if a.OAuth2Server.IsUserAuthenticated(c) {
+			return AuthMethodSession // Could refine to AuthMethodGitHub if needed
+		}
 	}
 
-	// Check if authenticated by local subnet
-	clientIP := c.RealIP()
-	if clientIP != "" && security.IsInLocalSubnet(net.ParseIP(clientIP)) {
-		return "local-subnet"
-	}
-
-	// Check if allowed by subnet configuration
+	// Check if authenticated by subnet configuration (bypasses user auth)
 	if a.OAuth2Server.IsRequestFromAllowedSubnet(c.RealIP()) {
-		return "allowed-subnet"
+		// If request is from an allowed subnet, authentication might not have been required.
+		// If user *is* also authenticated, prioritize that? Or report subnet?
+		// Current behavior: report subnet if applicable, even if also session authenticated.
+		return AuthMethodSubnet
 	}
 
-	// Default if method can't be determined but user is authenticated
+	// Check generic session authentication (user is authenticated, but not via token/specific provider/subnet)
 	if a.OAuth2Server.IsUserAuthenticated(c) {
-		return "session"
+		return AuthMethodSession
 	}
 
-	return "none"
+	// If not authenticated and not bypassed by subnet
+	return AuthMethodNone
 }
 
 // ValidateToken checks if a bearer token is valid
