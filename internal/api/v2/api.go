@@ -2,7 +2,8 @@
 package api
 
 import (
-	"crypto/rand" // Import errors for auth service check
+	"crypto/rand"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -53,6 +54,13 @@ type Controller struct {
 	AuthService      auth.Service        // Store the auth service instance
 	authMiddlewareFn echo.MiddlewareFunc // Authentication middleware function (set if auth configured)
 }
+
+// Define specific errors for token handling failures
+var (
+	errMalformedAuthHeader = errors.New("malformed authorization header")
+	errInvalidAuthToken    = errors.New("invalid or expired token")
+	errAuthServiceNil      = errors.New("internal configuration error: auth service is nil")
+)
 
 // Custom IP Extractor prioritizing CF-Connecting-IP
 func ipExtractorFromCloudflareHeader(req *http.Request) string {
@@ -553,21 +561,22 @@ func (c *Controller) logAPIRequest(ctx echo.Context, level slog.Level, msg strin
 }
 
 // handleTokenAuth attempts authentication using a Bearer token from the Authorization header.
-// It returns true if authentication succeeds, false otherwise.
-// It returns an error if the token is invalid or the header is malformed, suitable for sending to the client.
-// It now uses the Controller's AuthService instance.
+// It returns true if authentication succeeds.
+// It returns false and a specific error (errMalformedAuthHeader, errInvalidAuthToken, errAuthServiceNil, or nil for no header)
+// if authentication fails or is not attempted.
+// It no longer writes the HTTP response directly.
 func (c *Controller) handleTokenAuth(ctx echo.Context) (bool, error) {
 	if c.AuthService == nil {
-		// Should not happen if auth is required, indicates config issue
 		if c.apiLogger != nil {
 			c.apiLogger.Error("handleTokenAuth called but AuthService is nil")
 		}
-		return false, ctx.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal auth configuration error"})
+		// Return a specific error indicating the internal config issue
+		return false, errAuthServiceNil
 	}
 
 	authHeader := ctx.Request().Header.Get("Authorization")
 	if authHeader == "" {
-		return false, nil // No header, token auth not attempted
+		return false, nil // No header, token auth not attempted, no error
 	}
 
 	parts := strings.Fields(authHeader)
@@ -578,8 +587,8 @@ func (c *Controller) handleTokenAuth(ctx echo.Context) (bool, error) {
 				"ip", ctx.RealIP(),
 			)
 		}
-		ctx.Response().Header().Set("WWW-Authenticate", `Bearer realm="api"`)
-		return false, ctx.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid Authorization header"})
+		// Return specific error for malformed header
+		return false, errMalformedAuthHeader
 	}
 
 	token := parts[1]
@@ -594,8 +603,8 @@ func (c *Controller) handleTokenAuth(ctx echo.Context) (bool, error) {
 	if c.apiLogger != nil {
 		c.apiLogger.Warn("Token validation failed", "path", ctx.Request().URL.Path, "ip", ctx.RealIP())
 	}
-	ctx.Response().Header().Set("WWW-Authenticate", `Bearer realm="api", error="invalid_token", error_description="Invalid or expired token"`)
-	return false, ctx.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid or expired token"})
+	// Return specific error for invalid token
+	return false, errInvalidAuthToken
 }
 
 // handleSessionAuth attempts authentication using the existing session.
@@ -737,26 +746,47 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		// Try token authentication first
-		authenticated, err := c.handleTokenAuth(ctx) // Use updated handleTokenAuth
-		if err != nil {
-			return err
-		}
+		authenticated, tokenErr := c.handleTokenAuth(ctx)
 		if authenticated {
+			// Token auth successful
 			ctx.Set("isAuthenticated", true)
 			ctx.Set("username", authService.GetUsername(ctx))
 			ctx.Set("authMethod", string(auth.AuthMethodToken)) // Explicitly set Token
 			return next(ctx)
 		}
 
-		// Fall back to session-based authentication
-		if c.handleSessionAuth(ctx) { // Use updated handleSessionAuth
+		// Handle errors from token authentication attempt
+		if tokenErr != nil {
+			switch tokenErr {
+			case errAuthServiceNil:
+				// Logged in handleTokenAuth already
+				return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal auth configuration error"})
+			case errMalformedAuthHeader:
+				// Logged in handleTokenAuth already
+				ctx.Response().Header().Set("WWW-Authenticate", `Bearer realm="api"`)
+				return ctx.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid Authorization header"})
+			case errInvalidAuthToken:
+				// Logged in handleTokenAuth already
+				ctx.Response().Header().Set("WWW-Authenticate", `Bearer realm="api", error="invalid_token", error_description="Invalid or expired token"`)
+				return ctx.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid or expired token"})
+			default:
+				// Handle unexpected errors from handleTokenAuth if any arise
+				if c.apiLogger != nil {
+					c.apiLogger.Error("Unexpected error during token authentication", "error", tokenErr)
+				}
+				return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error during authentication"})
+			}
+		}
+
+		// Token auth not attempted (no header) or failed, try session auth
+		if c.handleSessionAuth(ctx) {
 			ctx.Set("isAuthenticated", true)
 			ctx.Set("username", authService.GetUsername(ctx))
 			ctx.Set("authMethod", string(auth.AuthMethodSession)) // Explicitly set Session
 			return next(ctx)
 		}
 
-		// Authentication failed, handle unauthorized response
+		// Authentication failed completely, handle unauthorized response
 		return c.handleUnauthorized(ctx)
 	}
 }
