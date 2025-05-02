@@ -162,18 +162,6 @@ func (s *Server) initializeServer() {
 	s.Echo.HideBanner = true
 	s.initLogger()
 
-	// Add the processor to Echo context *before* initializing API V2
-	s.Echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			// Only set processor now, server is passed directly
-			if strings.HasPrefix(c.Path(), "/api/v2/") {
-				s.Debug("Setting 'processor' context for API v2 path: %s", c.Path())
-				c.Set("processor", s.Processor)
-			}
-			return next(c)
-		}
-	})
-
 	s.configureMiddleware() // Configure other standard middleware
 	s.initRoutes()          // Initialize HTML/V1 routes
 	s.initHLSCleanupTask()  // Initialize HLS cleanup task
