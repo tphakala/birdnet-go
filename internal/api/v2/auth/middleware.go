@@ -54,8 +54,9 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 			if m.logger != nil {
 				m.logger.Debug("Authentication not required for this client", "ip", ip, "path", path)
 			}
-			// Although not required, we don't set isAuthenticated=true here
-			// as the request isn't strictly authenticated via this middleware.
+			// Set context to indicate bypass
+			c.Set("isAuthenticated", false)
+			c.Set("authMethod", AuthMethodNone)
 			return next(c)
 		}
 
@@ -67,7 +68,7 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
-				token := parts[1] // Never log the token itself
+				token := strings.TrimSpace(parts[1]) // Trim whitespace from token
 
 				// Validate the token, check if the returned error is nil
 				if err := m.AuthService.ValidateToken(token); err == nil {
