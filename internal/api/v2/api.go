@@ -571,7 +571,7 @@ func (c *Controller) handleTokenAuth(ctx echo.Context, authService auth.Service)
 		return false, nil // No header, token auth not attempted
 	}
 
-	parts := strings.SplitN(authHeader, " ", 2)
+	parts := strings.SplitN(strings.TrimSpace(authHeader), " ", 2) // Trim whitespace before splitting
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
 		if c.apiLogger != nil {
 			c.apiLogger.Warn("Invalid Authorization header format",
@@ -580,12 +580,14 @@ func (c *Controller) handleTokenAuth(ctx echo.Context, authService auth.Service)
 			)
 		}
 		// Malformed Authorization header
+		// Add WWW-Authenticate header as per RFC 6750
+		ctx.Response().Header().Set("WWW-Authenticate", `Bearer realm="api"`)
 		return false, ctx.JSON(http.StatusUnauthorized, map[string]string{
 			"error": "Invalid Authorization header format. Use 'Bearer {token}'",
 		})
 	}
 
-	token := parts[1]
+	token := strings.TrimSpace(parts[1]) // Trim whitespace from the token itself
 	if authService.ValidateToken(token) {
 		if c.apiLogger != nil {
 			c.apiLogger.Debug("Token authentication successful",
