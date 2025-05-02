@@ -16,6 +16,18 @@ var (
 	ErrLogoutFailed       = errors.New("logout operation failed")
 )
 
+// AuthMethod represents the method used for authentication.
+type AuthMethod string
+
+// Constants defining the possible authentication methods.
+const (
+	AuthMethodUnknown AuthMethod = "unknown"
+	AuthMethodToken   AuthMethod = "token"
+	AuthMethodSession AuthMethod = "session"
+	AuthMethodSubnet  AuthMethod = "subnet"
+	AuthMethodNone    AuthMethod = "none" // Explicitly indicate no auth applied (e.g., bypassed)
+)
+
 // Service defines the authentication interface for API endpoints
 type Service interface {
 	// CheckAccess validates if a request has access to protected resources.
@@ -28,8 +40,8 @@ type Service interface {
 	// GetUsername retrieves the username of the authenticated user (if available)
 	GetUsername(c echo.Context) string
 
-	// GetAuthMethod returns the authentication method used (token, session, subnet)
-	GetAuthMethod(c echo.Context) string
+	// GetAuthMethod returns the authentication method used as a defined constant.
+	GetAuthMethod(c echo.Context) AuthMethod
 
 	// ValidateToken checks if a bearer token is valid.
 	// Returns nil on success, or ErrInvalidToken on failure.
