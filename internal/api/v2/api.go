@@ -19,11 +19,13 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/patrickmn/go-cache"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	"github.com/tphakala/birdnet-go/internal/api/v2/auth"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -45,6 +47,10 @@ type Controller struct {
 	SFS                 *securefs.SecureFS // Add SecureFS instance
 	apiLogger           *slog.Logger       // Structured logger for API operations
 	apiLoggerClose      func() error       // Function to close the log file
+
+	// Authentication service and middleware
+	AuthService      auth.Service        // Authentication service interface
+	AuthMiddlewareFn echo.MiddlewareFunc // Authentication middleware function
 }
 
 // Custom IP Extractor prioritizing CF-Connecting-IP
@@ -123,7 +129,7 @@ func (c *Controller) TunnelDetectionMiddleware() echo.MiddlewareFunc {
 // New creates a new API controller, returning an error if initialization fails.
 func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
-	controlChan chan string, logger *log.Logger) (*Controller, error) {
+	controlChan chan string, logger *log.Logger, oauth2Server *security.OAuth2Server) (*Controller, error) {
 
 	if logger == nil {
 		logger = log.Default()
@@ -209,6 +215,21 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		c.apiLogger = apiLogger
 		c.apiLoggerClose = closeFunc
 		logger.Printf("API structured logging initialized to %s", apiLogPath)
+	}
+
+	// If OAuth2Server is provided, setup authentication service
+	if oauth2Server != nil {
+		// Create authentication service
+		authService := auth.NewSecurityAdapter(oauth2Server, c.apiLogger)
+		c.AuthService = authService
+
+		// Create authentication middleware
+		authMiddleware := auth.NewMiddleware(authService, c.apiLogger)
+		c.AuthMiddlewareFn = authMiddleware.Authenticate
+
+		logger.Println("Initialized API authentication service and middleware")
+	} else {
+		logger.Println("Warning: OAuth2Server not provided, authentication will not be available")
 	}
 
 	// Create v2 API group
@@ -529,19 +550,161 @@ func (c *Controller) logAPIRequest(ctx echo.Context, level slog.Level, msg strin
 	}
 }
 
+// AuthMiddleware is a method that returns the auth middleware function
+func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(ctx echo.Context) error {
+		// First try to get auth service from context (per-request)
+		var authService auth.Service
+		if service := ctx.Get("auth_service"); service != nil {
+			if as, ok := service.(auth.Service); ok {
+				authService = as
+			}
+		}
+
+		// If not available in context, use the controller's auth service
+		if authService == nil && c.AuthService != nil {
+			authService = c.AuthService
+		}
+
+		// If we have a service, use it for authentication
+		if authService != nil {
+			// Skip auth check if auth is not required for this client IP
+			if !authService.IsAuthRequired(ctx) {
+				if c.apiLogger != nil {
+					c.apiLogger.Debug("Authentication not required",
+						"path", ctx.Request().URL.Path,
+						"ip", ctx.RealIP(),
+					)
+				}
+				return next(ctx)
+			}
+
+			// Try token auth first (from Authorization header)
+			if authHeader := ctx.Request().Header.Get("Authorization"); authHeader != "" {
+				parts := strings.SplitN(authHeader, " ", 2)
+				if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
+					token := parts[1] // Never log the token itself
+
+					if authService.ValidateToken(token) {
+						if c.apiLogger != nil {
+							c.apiLogger.Debug("Token authentication successful",
+								"path", ctx.Request().URL.Path,
+								"ip", ctx.RealIP(),
+							)
+						}
+						return next(ctx)
+					}
+
+					// Token validation failed
+					if c.apiLogger != nil {
+						c.apiLogger.Warn("Token validation failed",
+							"path", ctx.Request().URL.Path,
+							"ip", ctx.RealIP(),
+						)
+					}
+					return ctx.JSON(http.StatusUnauthorized, map[string]string{
+						"error": "Invalid or expired token",
+					})
+				}
+
+				// Malformed Authorization header
+				return ctx.JSON(http.StatusUnauthorized, map[string]string{
+					"error": "Invalid Authorization header format. Use 'Bearer {token}'",
+				})
+			}
+
+			// Fall back to session-based authentication
+			if authService.CheckAccess(ctx) {
+				if c.apiLogger != nil {
+					c.apiLogger.Debug("Session authentication successful",
+						"path", ctx.Request().URL.Path,
+						"ip", ctx.RealIP(),
+					)
+				}
+				return next(ctx)
+			}
+
+			// Authentication failed, determine appropriate response based on client type
+			acceptHeader := ctx.Request().Header.Get("Accept")
+			isHXRequest := ctx.Request().Header.Get("HX-Request") == "true"
+			isBrowserRequest := strings.Contains(acceptHeader, "text/html") || isHXRequest
+
+			if isBrowserRequest {
+				// For browser requests, redirect to login page
+				loginPath := "/login"
+
+				// Optionally store the original URL for post-login redirect
+				originURL := ctx.Request().URL.String()
+				// Avoid redirect loops to login page itself
+				if !strings.HasPrefix(ctx.Path(), loginPath) {
+					loginPath += "?redirect=" + originURL
+				}
+
+				// Special handling for HTMX requests
+				if isHXRequest {
+					ctx.Response().Header().Set("HX-Redirect", loginPath)
+					return ctx.String(http.StatusUnauthorized, "")
+				}
+
+				return ctx.Redirect(http.StatusFound, loginPath)
+			}
+
+			// For API clients, return JSON error response
+			return ctx.JSON(http.StatusUnauthorized, map[string]string{
+				"error": "Authentication required",
+			})
+		}
+
+		// No auth service available, log warning and pass through
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Auth middleware called but no auth service available",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+		return next(ctx)
+	}
+}
+
 // InitializeAPI creates a new API controller and registers all routes
 func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string, logger *log.Logger, proc *processor.Processor) *Controller {
 
+	// OAuth2Server will be nil initially, but we add a middleware to extract it from context
+	var oauth2Server *security.OAuth2Server
+
 	// Create API controller
-	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, logger)
+	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, logger, oauth2Server)
 	if err != nil {
 		logger.Fatalf("Failed to initialize API: %v", err)
 	}
 
 	// Assign processor after initialization
 	apiController.Processor = proc
+
+	// Add middleware to extract server from context for each request
+	// This will be used by the auth service when needed
+	e.Pre(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			// Check if we're handling an API v2 request
+			if strings.HasPrefix(c.Path(), "/api/v2/") {
+				// Get server from context, which is set by the Server middleware
+				if server := c.Get("server"); server != nil {
+					// Try to extract OAuth2Server if it implements the right interface
+					if s, ok := server.(interface{ GetOAuth2Server() *security.OAuth2Server }); ok {
+						oauth2Server := s.GetOAuth2Server()
+						if oauth2Server != nil {
+							// Create a per-request auth service
+							authService := auth.NewSecurityAdapter(oauth2Server, apiController.apiLogger)
+							c.Set("auth_service", authService)
+						}
+					}
+				}
+			}
+			return next(c)
+		}
+	})
 
 	// Log initialization
 	if apiController.apiLogger != nil {
