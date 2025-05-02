@@ -55,7 +55,9 @@ The API implements a comprehensive service-based authentication system:
   - Session-based authentication for browser clients
   - Subnet-based authentication bypass for trusted networks
 
-Protected endpoints use the auth middleware, which determines the appropriate authentication flow based on the client type and available credentials. The system is designed to handle both:
+Protected endpoints use the auth middleware, which determines the appropriate authentication flow based on the client type and available credentials. Upon successful authentication, the middleware sets specific values in the `echo.Context` (`isAuthenticated`, `username`, `authMethod`) to communicate the authentication status and details to downstream handlers. This ensures that handlers like `GetAuthStatus` can accurately report the state determined by the middleware.
+
+The system is designed to handle both:
 
 - **Browser Clients**: Redirected to login page with return URL when authentication is required
 - **API Clients**: Receive proper HTTP 401 responses with JSON error messages
@@ -97,7 +99,7 @@ The middleware follows this decision flow:
 1. Checks for Bearer token and validates if present
 2. Falls back to session authentication for browser clients
 3. Determines appropriate response based on client type 
-4. Allows request to proceed if authentication succeeds
+4. Allows request to proceed if authentication succeeds, setting authentication details in the context
 
 ## Key Features
 
