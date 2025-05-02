@@ -161,11 +161,24 @@ func (s *Server) RealIP(c echo.Context) string {
 func (s *Server) initializeServer() {
 	s.Echo.HideBanner = true
 	s.initLogger()
-	s.configureMiddleware()
-	s.initRoutes()
-	s.initHLSCleanupTask() // Initialize HLS cleanup task
 
-	// Initialize the JSON API v2
+	// Add the processor to Echo context *before* initializing API V2
+	s.Echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			// Only set processor now, server is passed directly
+			if strings.HasPrefix(c.Path(), "/api/v2/") {
+				s.Debug("Setting 'processor' context for API v2 path: %s", c.Path())
+				c.Set("processor", s.Processor)
+			}
+			return next(c)
+		}
+	})
+
+	s.configureMiddleware() // Configure other standard middleware
+	s.initRoutes()          // Initialize HTML/V1 routes
+	s.initHLSCleanupTask()  // Initialize HLS cleanup task
+
+	// Initialize the JSON API v2 - Pass OAuth2Server directly
 	s.Debug("Initializing JSON API v2")
 	s.APIV2 = api.InitializeAPI(
 		s.Echo,
@@ -176,19 +189,8 @@ func (s *Server) initializeServer() {
 		s.controlChan,
 		log.Default(),
 		s.Processor,
+		s.OAuth2Server, // Pass OAuth2Server instance
 	)
-
-	// Add the server and processor to Echo context for API v2 authentication and job queue stats
-	s.Echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			// Add server as a context value for API v2 to access authentication methods
-			if strings.HasPrefix(c.Path(), "/api/v2/") {
-				c.Set("server", s)
-				c.Set("processor", s.Processor)
-			}
-			return next(c)
-		}
-	})
 }
 
 // initHLSCleanupTask initializes a background task to clean up idle HLS streams
