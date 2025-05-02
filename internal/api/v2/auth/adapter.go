@@ -26,8 +26,12 @@ func NewSecurityAdapter(oauth2Server *security.OAuth2Server, logger *slog.Logger
 }
 
 // CheckAccess validates if a request has access to protected resources
-func (a *SecurityAdapter) CheckAccess(c echo.Context) bool {
-	return a.OAuth2Server.IsUserAuthenticated(c)
+// Returns nil if authenticated, ErrSessionNotFound otherwise.
+func (a *SecurityAdapter) CheckAccess(c echo.Context) error {
+	if a.OAuth2Server.IsUserAuthenticated(c) {
+		return nil // Success
+	}
+	return ErrSessionNotFound // Failure
 }
 
 // IsAuthRequired checks if authentication is required for this request
@@ -94,8 +98,12 @@ func (a *SecurityAdapter) GetAuthMethod(c echo.Context) string {
 }
 
 // ValidateToken checks if a bearer token is valid
-func (a *SecurityAdapter) ValidateToken(token string) bool {
-	return a.OAuth2Server.ValidateAccessToken(token)
+// Returns nil if valid, ErrInvalidToken otherwise.
+func (a *SecurityAdapter) ValidateToken(token string) error {
+	if a.OAuth2Server.ValidateAccessToken(token) {
+		return nil // Success
+	}
+	return ErrInvalidToken // Failure
 }
 
 // AuthenticateBasic handles basic authentication with username/password.
@@ -103,7 +111,8 @@ func (a *SecurityAdapter) ValidateToken(token string) bool {
 // Basic authentication relies on a single, fixed username/password combination
 // configured in settings (Security.BasicAuth.ClientID and Security.BasicAuth.Password).
 // The provided username MUST match the configured ClientID.
-func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password string) bool {
+// Returns nil if successful, ErrInvalidCredentials otherwise.
+func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password string) error {
 	// For basic auth, check against configured ClientID and Password
 	storedPassword := a.OAuth2Server.Settings.Security.BasicAuth.Password
 	storedClientID := a.OAuth2Server.Settings.Security.BasicAuth.ClientID // Use ClientID as the username
@@ -113,7 +122,7 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 		if a.logger != nil {
 			a.logger.Debug("Basic auth is not enabled")
 		}
-		return false
+		return ErrInvalidCredentials // Basic auth not enabled counts as invalid credentials here
 	}
 
 	// Constant-time comparison for both username (matching ClientID) and password to prevent timing attacks
@@ -126,23 +135,25 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 		authCode, err := a.OAuth2Server.GenerateAuthCode()
 		if err != nil {
 			if a.logger != nil {
-				a.logger.Error("Failed to generate auth code", "error", err.Error())
+				a.logger.Error("Failed to generate auth code during basic auth", "error", err.Error())
 			}
-			return false
+			// Treat internal errors during login also as invalid credentials from user's perspective
+			return ErrInvalidCredentials
 		}
 
 		// Store the auth code for callback
 		if err := gothic.StoreInSession("auth_code", authCode, c.Request(), c.Response()); err != nil {
 			if a.logger != nil {
-				a.logger.Error("Failed to store auth code in session", "error", err.Error())
+				a.logger.Error("Failed to store auth code in session during basic auth", "error", err.Error())
 			}
-			return false
+			// Treat internal errors during login also as invalid credentials from user's perspective
+			return ErrInvalidCredentials
 		}
 
-		return true
+		return nil // Success
 	}
 
-	return false
+	return ErrInvalidCredentials // Failure
 }
 
 // Logout invalidates the current session/token
