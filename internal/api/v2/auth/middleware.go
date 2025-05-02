@@ -77,7 +77,7 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 					// Set context values on successful authentication
 					c.Set("isAuthenticated", true)
 					c.Set("username", m.AuthService.GetUsername(c))
-					c.Set("authMethod", m.AuthService.GetAuthMethod(c))
+					c.Set("authMethod", AuthMethodToken)
 					return next(c)
 				}
 
@@ -115,8 +115,8 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 			}
 			// Set context values on successful authentication
 			c.Set("isAuthenticated", true)
-			c.Set("username", m.AuthService.GetUsername(c))
 			c.Set("authMethod", m.AuthService.GetAuthMethod(c))
+			c.Set("username", m.AuthService.GetUsername(c))
 			return next(c)
 		}
 
