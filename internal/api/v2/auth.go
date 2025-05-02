@@ -2,12 +2,12 @@
 package api
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/labstack/echo/v4"
-	// Removed: "github.com/tphakala/birdnet-go/internal/api/v2/auth"
+	. "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 )
 
 // AuthRequest represents the login request structure
@@ -64,17 +64,17 @@ func (c *Controller) Login(ctx echo.Context) error {
 	}
 
 	// Get auth service
-	authService := c.getAuthService(ctx)
-	if authService == nil {
+	authService, err := c.getAuthService(ctx)
+	if err != nil {
 		if c.apiLogger != nil {
-			c.apiLogger.Error("Authentication service unavailable",
-				"error", "auth service not available",
+			c.apiLogger.Error("Authentication service unavailable during login",
+				"error", err.Error(),
 				"ip", ctx.RealIP(),
 				"path", ctx.Request().URL.Path,
 			)
 		}
-		return c.HandleError(ctx, fmt.Errorf("authentication service not available"),
-			"Authentication service not available", http.StatusInternalServerError)
+		return c.HandleError(ctx, err,
+			"Authentication service unavailable", http.StatusInternalServerError)
 	}
 
 	// If authentication is not required, act as if the login was successful
@@ -94,10 +94,31 @@ func (c *Controller) Login(ctx echo.Context) error {
 		})
 	}
 
-	// Authenticate using basic auth
-	authenticated := authService.AuthenticateBasic(ctx, req.Username, req.Password)
+	// Check for empty credentials before calling the auth service
+	if req.Username == "" || req.Password == "" {
+		// Add a short delay to prevent timing attacks on username enumeration
+		time.Sleep(500 * time.Millisecond)
 
-	if !authenticated {
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Login attempt with missing credentials",
+				"username_present", req.Username != "",
+				"password_present", req.Password != "",
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
+
+		return ctx.JSON(http.StatusBadRequest, AuthResponse{
+			Success:   false,
+			Message:   "Username and password are required",
+			Timestamp: time.Now(),
+		})
+	}
+
+	// Authenticate using basic auth
+	authErr := authService.AuthenticateBasic(ctx, req.Username, req.Password)
+
+	if authErr != nil {
 		// Add a short delay to prevent brute force attacks
 		time.Sleep(500 * time.Millisecond)
 
@@ -106,13 +127,19 @@ func (c *Controller) Login(ctx echo.Context) error {
 				"username", req.Username,
 				"ip", ctx.RealIP(),
 				"path", ctx.Request().URL.Path,
-				"error", "Invalid credentials",
+				"error", authErr.Error(), // Use the error from the service
 			)
+		}
+
+		// Use the error message from the sentinel error if appropriate
+		message := "Invalid credentials"
+		if errors.Is(authErr, ErrInvalidCredentials) {
+			message = ErrInvalidCredentials.Error()
 		}
 
 		return ctx.JSON(http.StatusUnauthorized, AuthResponse{
 			Success:   false,
-			Message:   "Invalid credentials",
+			Message:   message,
 			Timestamp: time.Now(),
 		})
 	}
@@ -140,18 +167,19 @@ func (c *Controller) Login(ctx echo.Context) error {
 // Logout handles POST /api/v2/auth/logout
 func (c *Controller) Logout(ctx echo.Context) error {
 	// Get auth service
-	authService := c.getAuthService(ctx)
-	if authService == nil {
+	authService, err := c.getAuthService(ctx)
+	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Warn("Logout requested but auth service is not available",
+				"error", err.Error(),
 				"ip", ctx.RealIP(),
 				"path", ctx.Request().URL.Path,
 			)
 		}
-		// Return success anyway as the session is effectively ended
+		// Return success even if service isn't available, as logout intent is met.
 		return ctx.JSON(http.StatusOK, AuthResponse{
 			Success:   true,
-			Message:   "Logged out",
+			Message:   "Logged out (auth service unavailable)",
 			Timestamp: time.Now(),
 		})
 	}
@@ -185,26 +213,9 @@ func (c *Controller) Logout(ctx echo.Context) error {
 // GetAuthStatus handles GET /api/v2/auth/status
 func (c *Controller) GetAuthStatus(ctx echo.Context) error {
 	// Read authentication status details set by the AuthMiddleware in the context.
-	isAuthenticated := false
-	if authVal := ctx.Get("isAuthenticated"); authVal != nil {
-		if val, ok := authVal.(bool); ok {
-			isAuthenticated = val
-		}
-	}
-
-	username := ""
-	if userVal := ctx.Get("username"); userVal != nil {
-		if val, ok := userVal.(string); ok {
-			username = val
-		}
-	}
-
-	authMethod := "unknown"
-	if methodVal := ctx.Get("authMethod"); methodVal != nil {
-		if val, ok := methodVal.(string); ok {
-			authMethod = val
-		}
-	}
+	isAuthenticated := boolFromCtx(ctx, "isAuthenticated", false)
+	username := stringFromCtx(ctx, "username", "")
+	authMethod := stringFromCtx(ctx, "authMethod", "unknown")
 
 	// Construct the response based on context values
 	status := AuthStatus{
@@ -226,3 +237,33 @@ func (c *Controller) GetAuthStatus(ctx echo.Context) error {
 
 	return ctx.JSON(http.StatusOK, status)
 }
+
+// --- Context Helper Functions ---
+
+// boolFromCtx safely retrieves a boolean value from the Echo context.
+// Returns the defaultValue if the key is not found or the type assertion fails.
+func boolFromCtx(ctx echo.Context, key string, defaultValue bool) bool {
+	val := ctx.Get(key)
+	if val == nil {
+		return defaultValue
+	}
+	if boolVal, ok := val.(bool); ok {
+		return boolVal
+	}
+	return defaultValue
+}
+
+// stringFromCtx safely retrieves a string value from the Echo context.
+// Returns the defaultValue if the key is not found or the type assertion fails.
+func stringFromCtx(ctx echo.Context, key string, defaultValue string) string {
+	val := ctx.Get(key)
+	if val == nil {
+		return defaultValue
+	}
+	if stringVal, ok := val.(string); ok {
+		return stringVal
+	}
+	return defaultValue
+}
+
+// --- End Context Helper Functions ---
