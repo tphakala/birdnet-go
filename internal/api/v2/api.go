@@ -673,6 +673,8 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 					"ip", ctx.RealIP(),
 				)
 			}
+			// Although not required, we don't set isAuthenticated=true here
+			// as the request isn't strictly authenticated.
 			return next(ctx)
 		}
 
@@ -682,11 +684,19 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return err
 		}
 		if authenticated { // If token auth was successful
+			// Set context values on successful authentication
+			ctx.Set("isAuthenticated", true)
+			ctx.Set("username", authService.GetUsername(ctx))     // Get username after successful auth
+			ctx.Set("authMethod", authService.GetAuthMethod(ctx)) // Get method after successful auth
 			return next(ctx)
 		}
 
 		// Fall back to session-based authentication
 		if c.handleSessionAuth(ctx, authService) {
+			// Set context values on successful authentication
+			ctx.Set("isAuthenticated", true)
+			ctx.Set("username", authService.GetUsername(ctx))
+			ctx.Set("authMethod", authService.GetAuthMethod(ctx))
 			return next(ctx)
 		}
 

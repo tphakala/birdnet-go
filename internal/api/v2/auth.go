@@ -184,22 +184,33 @@ func (c *Controller) Logout(ctx echo.Context) error {
 
 // GetAuthStatus handles GET /api/v2/auth/status
 func (c *Controller) GetAuthStatus(ctx echo.Context) error {
-	// This endpoint is protected by AuthMiddleware, so if we get here,
-	// the user is authenticated.
-
-	// Get auth service
-	authService := c.getAuthService(ctx)
-
-	// Initialize default response
-	status := AuthStatus{
-		Authenticated: true,
-		Method:        "session", // Default to session-based auth
+	// Read authentication status details set by the AuthMiddleware in the context.
+	isAuthenticated := false
+	if authVal := ctx.Get("isAuthenticated"); authVal != nil {
+		if val, ok := authVal.(bool); ok {
+			isAuthenticated = val
+		}
 	}
 
-	// Get authentication details if service is available
-	if authService != nil {
-		status.Username = authService.GetUsername(ctx)
-		status.Method = authService.GetAuthMethod(ctx)
+	username := ""
+	if userVal := ctx.Get("username"); userVal != nil {
+		if val, ok := userVal.(string); ok {
+			username = val
+		}
+	}
+
+	authMethod := "unknown"
+	if methodVal := ctx.Get("authMethod"); methodVal != nil {
+		if val, ok := methodVal.(string); ok {
+			authMethod = val
+		}
+	}
+
+	// Construct the response based on context values
+	status := AuthStatus{
+		Authenticated: isAuthenticated,
+		Username:      username,
+		Method:        authMethod,
 	}
 
 	if c.apiLogger != nil {
