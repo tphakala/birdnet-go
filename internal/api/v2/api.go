@@ -550,119 +550,148 @@ func (c *Controller) logAPIRequest(ctx echo.Context, level slog.Level, msg strin
 	}
 }
 
-// AuthMiddleware is a method that returns the auth middleware function
-func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(ctx echo.Context) error {
-		// First try to get auth service from context (per-request)
-		var authService auth.Service
-		if service := ctx.Get("auth_service"); service != nil {
-			if as, ok := service.(auth.Service); ok {
-				authService = as
-			}
+// getAuthService retrieves the appropriate auth.Service for the request.
+func (c *Controller) getAuthService(ctx echo.Context) auth.Service {
+	// First try to get auth service from context (per-request)
+	if service := ctx.Get("auth_service"); service != nil {
+		if as, ok := service.(auth.Service); ok {
+			return as
 		}
+	}
+	// Fallback to the controller's auth service
+	return c.AuthService
+}
 
-		// If not available in context, use the controller's auth service
-		if authService == nil && c.AuthService != nil {
-			authService = c.AuthService
-		}
+// handleTokenAuth attempts authentication using a Bearer token from the Authorization header.
+// It returns true if authentication succeeds, false otherwise.
+// It returns an error if the token is invalid or the header is malformed, suitable for sending to the client.
+func (c *Controller) handleTokenAuth(ctx echo.Context, authService auth.Service) (bool, error) {
+	authHeader := ctx.Request().Header.Get("Authorization")
+	if authHeader == "" {
+		return false, nil // No header, token auth not attempted
+	}
 
-		// If we have a service, use it for authentication
-		if authService != nil {
-			// Skip auth check if auth is not required for this client IP
-			if !authService.IsAuthRequired(ctx) {
-				if c.apiLogger != nil {
-					c.apiLogger.Debug("Authentication not required",
-						"path", ctx.Request().URL.Path,
-						"ip", ctx.RealIP(),
-					)
-				}
-				return next(ctx)
-			}
-
-			// Try token auth first (from Authorization header)
-			if authHeader := ctx.Request().Header.Get("Authorization"); authHeader != "" {
-				parts := strings.SplitN(authHeader, " ", 2)
-				if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
-					token := parts[1] // Never log the token itself
-
-					if authService.ValidateToken(token) {
-						if c.apiLogger != nil {
-							c.apiLogger.Debug("Token authentication successful",
-								"path", ctx.Request().URL.Path,
-								"ip", ctx.RealIP(),
-							)
-						}
-						return next(ctx)
-					}
-
-					// Token validation failed
-					if c.apiLogger != nil {
-						c.apiLogger.Warn("Token validation failed",
-							"path", ctx.Request().URL.Path,
-							"ip", ctx.RealIP(),
-						)
-					}
-					return ctx.JSON(http.StatusUnauthorized, map[string]string{
-						"error": "Invalid or expired token",
-					})
-				}
-
-				// Malformed Authorization header
-				return ctx.JSON(http.StatusUnauthorized, map[string]string{
-					"error": "Invalid Authorization header format. Use 'Bearer {token}'",
-				})
-			}
-
-			// Fall back to session-based authentication
-			if authService.CheckAccess(ctx) {
-				if c.apiLogger != nil {
-					c.apiLogger.Debug("Session authentication successful",
-						"path", ctx.Request().URL.Path,
-						"ip", ctx.RealIP(),
-					)
-				}
-				return next(ctx)
-			}
-
-			// Authentication failed, determine appropriate response based on client type
-			acceptHeader := ctx.Request().Header.Get("Accept")
-			isHXRequest := ctx.Request().Header.Get("HX-Request") == "true"
-			isBrowserRequest := strings.Contains(acceptHeader, "text/html") || isHXRequest
-
-			if isBrowserRequest {
-				// For browser requests, redirect to login page
-				loginPath := "/login"
-
-				// Optionally store the original URL for post-login redirect
-				originURL := ctx.Request().URL.String()
-				// Avoid redirect loops to login page itself
-				if !strings.HasPrefix(ctx.Path(), loginPath) {
-					loginPath += "?redirect=" + originURL
-				}
-
-				// Special handling for HTMX requests
-				if isHXRequest {
-					ctx.Response().Header().Set("HX-Redirect", loginPath)
-					return ctx.String(http.StatusUnauthorized, "")
-				}
-
-				return ctx.Redirect(http.StatusFound, loginPath)
-			}
-
-			// For API clients, return JSON error response
-			return ctx.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "Authentication required",
-			})
-		}
-
-		// No auth service available, log warning and pass through
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
 		if c.apiLogger != nil {
-			c.apiLogger.Warn("Auth middleware called but no auth service available",
+			c.apiLogger.Warn("Invalid Authorization header format",
 				"path", ctx.Request().URL.Path,
 				"ip", ctx.RealIP(),
 			)
 		}
-		return next(ctx)
+		// Malformed Authorization header
+		return false, ctx.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "Invalid Authorization header format. Use 'Bearer {token}'",
+		})
+	}
+
+	token := parts[1]
+	if authService.ValidateToken(token) {
+		if c.apiLogger != nil {
+			c.apiLogger.Debug("Token authentication successful",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+		return true, nil // Token validation successful
+	}
+
+	// Token validation failed
+	if c.apiLogger != nil {
+		c.apiLogger.Warn("Token validation failed",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+	return false, ctx.JSON(http.StatusUnauthorized, map[string]string{
+		"error": "Invalid or expired token",
+	})
+}
+
+// handleSessionAuth attempts authentication using the existing session.
+// It returns true if authentication succeeds, false otherwise.
+func (c *Controller) handleSessionAuth(ctx echo.Context, authService auth.Service) bool {
+	if authService.CheckAccess(ctx) {
+		if c.apiLogger != nil {
+			c.apiLogger.Debug("Session authentication successful",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+		return true
+	}
+	return false
+}
+
+// handleUnauthorized determines the appropriate response for unauthenticated requests.
+func (c *Controller) handleUnauthorized(ctx echo.Context) error {
+	acceptHeader := ctx.Request().Header.Get("Accept")
+	isHXRequest := ctx.Request().Header.Get("HX-Request") == "true"
+	isBrowserRequest := strings.Contains(acceptHeader, "text/html") || isHXRequest
+
+	if isBrowserRequest {
+		loginPath := "/login"
+		originURL := ctx.Request().URL.String()
+		if !strings.HasPrefix(ctx.Path(), loginPath) {
+			loginPath += "?redirect=" + originURL
+		}
+
+		if isHXRequest {
+			ctx.Response().Header().Set("HX-Redirect", loginPath)
+			return ctx.String(http.StatusUnauthorized, "")
+		}
+		return ctx.Redirect(http.StatusFound, loginPath)
+	}
+
+	// For API clients, return JSON error response
+	return ctx.JSON(http.StatusUnauthorized, map[string]string{
+		"error": "Authentication required",
+	})
+}
+
+// AuthMiddleware is a method that returns the auth middleware function
+func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(ctx echo.Context) error {
+		authService := c.getAuthService(ctx)
+
+		if authService == nil {
+			// No auth service available, log warning and pass through
+			if c.apiLogger != nil {
+				c.apiLogger.Warn("Auth middleware called but no auth service available",
+					"path", ctx.Request().URL.Path,
+					"ip", ctx.RealIP(),
+				)
+			}
+			return next(ctx)
+		}
+
+		// Skip auth check if auth is not required for this client IP
+		if !authService.IsAuthRequired(ctx) {
+			if c.apiLogger != nil {
+				c.apiLogger.Debug("Authentication not required",
+					"path", ctx.Request().URL.Path,
+					"ip", ctx.RealIP(),
+				)
+			}
+			return next(ctx)
+		}
+
+		// Try token authentication first
+		authenticated, err := c.handleTokenAuth(ctx, authService)
+		if err != nil { // If token auth resulted in an error response (e.g., invalid token/header)
+			return err
+		}
+		if authenticated { // If token auth was successful
+			return next(ctx)
+		}
+
+		// Fall back to session-based authentication
+		if c.handleSessionAuth(ctx, authService) {
+			return next(ctx)
+		}
+
+		// Authentication failed, handle unauthorized response
+		return c.handleUnauthorized(ctx)
 	}
 }
 

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/tphakala/birdnet-go/internal/api/v2/auth"
+	// Removed: "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 )
 
 // AuthRequest represents the login request structure
@@ -46,19 +46,6 @@ func (c *Controller) initAuthRoutes() {
 	protectedGroup := authGroup.Group("", c.AuthMiddleware)
 	protectedGroup.POST("/logout", c.Logout)
 	protectedGroup.GET("/status", c.GetAuthStatus)
-}
-
-// getAuthService retrieves the auth service from context or controller
-func (c *Controller) getAuthService(ctx echo.Context) auth.Service {
-	// First try to get from context (per-request)
-	if service := ctx.Get("auth_service"); service != nil {
-		if authService, ok := service.(auth.Service); ok {
-			return authService
-		}
-	}
-
-	// Fall back to controller's auth service
-	return c.AuthService
 }
 
 // Login handles POST /api/v2/auth/login
