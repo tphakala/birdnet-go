@@ -175,7 +175,48 @@ func validateRealtimeSettings(settings *RealtimeSettings) error {
 	if settings.Interval < 0 {
 		return errors.New("Realtime interval must be non-negative")
 	}
+
+	// Validate MQTT settings
+	if err := validateMQTTSettings(&settings.MQTT); err != nil {
+		return err
+	}
+
 	// Add more realtime settings validation as needed
+	return nil
+}
+
+// validateMQTTSettings validates the MQTT-specific settings
+func validateMQTTSettings(settings *MQTTSettings) error {
+	if settings.Enabled {
+		// Check if broker is provided when enabled
+		if settings.Broker == "" {
+			return errors.New("MQTT broker URL is required when MQTT is enabled")
+		}
+
+		// Check if topic is provided when enabled
+		if settings.Topic == "" {
+			return errors.New("MQTT topic is required when MQTT is enabled")
+		}
+
+		// Explicitly support anonymous connections (empty username and password)
+		// No validation required for username/password - they can be empty for anonymous connections
+
+		// Validate retry settings if enabled
+		if settings.RetrySettings.Enabled {
+			if settings.RetrySettings.MaxRetries < 0 {
+				return errors.New("MQTT max retries must be non-negative")
+			}
+			if settings.RetrySettings.InitialDelay < 0 {
+				return errors.New("MQTT initial delay must be non-negative")
+			}
+			if settings.RetrySettings.MaxDelay < settings.RetrySettings.InitialDelay {
+				return errors.New("MQTT max delay must be greater than or equal to initial delay")
+			}
+			if settings.RetrySettings.BackoffMultiplier <= 0 {
+				return errors.New("MQTT backoff multiplier must be positive")
+			}
+		}
+	}
 	return nil
 }
 
