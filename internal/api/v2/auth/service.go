@@ -17,16 +17,34 @@ var (
 )
 
 // AuthMethod represents the method used for authentication.
-type AuthMethod string
+type AuthMethod uint8
 
 // Constants defining the possible authentication methods.
 const (
-	AuthMethodUnknown AuthMethod = "unknown"
-	AuthMethodToken   AuthMethod = "token"
-	AuthMethodSession AuthMethod = "session"
-	AuthMethodSubnet  AuthMethod = "subnet"
-	AuthMethodNone    AuthMethod = "none" // Explicitly indicate no auth applied (e.g., bypassed)
+	AuthMethodUnknown AuthMethod = iota // 0
+	AuthMethodToken                     // 1
+	AuthMethodSession                   // 2
+	AuthMethodSubnet                    // 3
+	AuthMethodNone                      // 4 - Explicitly indicate no auth applied (e.g., bypassed)
 )
+
+// String returns the string representation of the AuthMethod.
+func (m AuthMethod) String() string {
+	switch m {
+	case AuthMethodToken:
+		return "token"
+	case AuthMethodSession:
+		return "session"
+	case AuthMethodSubnet:
+		return "subnet"
+	case AuthMethodNone:
+		return "none"
+	case AuthMethodUnknown:
+		fallthrough // Treat unknown like default
+	default:
+		return "unknown"
+	}
+}
 
 // Service defines the authentication interface for API endpoints
 type Service interface {
