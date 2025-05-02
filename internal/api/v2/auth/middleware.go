@@ -97,8 +97,10 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 			if m.logger != nil {
 				m.logger.Warn("Malformed Authorization header", "path", path, "ip", ip)
 			}
+			// Add WWW-Authenticate header as per RFC 6750
+			c.Response().Header().Set("WWW-Authenticate", `Bearer realm="api"`)
 			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "Invalid Authorization header format. Use 'Bearer {token}'",
+				"error": "Invalid Authorization header", // Generic message for client
 			})
 		}
 
