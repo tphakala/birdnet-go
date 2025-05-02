@@ -298,32 +298,20 @@ func (a *MqttAction) Execute(data interface{}) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	// Rely on background reconnect; fail action if not currently connected.
+	if !a.MqttClient.IsConnected() {
+		// Log slightly differently to indicate it's waiting for background reconnect
+		log.Printf("🟡 MQTT client is not connected, skipping publish for %s (%s). Waiting for automatic reconnect.", a.Note.CommonName, a.Note.ScientificName)
+		// Return an error that indicates a retry might be useful later
+		// The job queue should handle retries based on this error.
+		return fmt.Errorf("MQTT client not connected")
+	}
+
 	species := strings.ToLower(a.Note.CommonName)
 
 	// Check event frequency
 	if !a.EventTracker.TrackEvent(species, MQTTPublish) {
 		return nil
-	}
-
-	// First, check if the MQTT client is connected
-	if !a.MqttClient.IsConnected() {
-		// Try an immediate reconnect before giving up
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		reconnectErr := a.MqttClient.Connect(ctx)
-		if reconnectErr != nil {
-			log.Printf("❌ Failed to reconnect to MQTT broker: %v", reconnectErr)
-
-			if a.RetryConfig.Enabled {
-				// If retries are enabled, return an error to trigger retry
-				return fmt.Errorf("MQTT client is not connected and reconnect failed: %w", reconnectErr)
-			}
-			log.Println("⛔ MQTT client is not connected, skipping publish")
-			return nil
-		}
-
-		log.Println("✅ Successfully reconnected to MQTT broker")
 	}
 
 	// Validate MQTT settings
@@ -332,9 +320,18 @@ func (a *MqttAction) Execute(data interface{}) error {
 	}
 
 	// Get bird image of detected bird
-	birdImage, err := a.BirdImageCache.Get(a.Note.ScientificName)
-	if err != nil {
-		birdImage = imageprovider.BirdImage{}
+	birdImage := imageprovider.BirdImage{} // Default to empty image
+	// Add nil check for BirdImageCache before calling Get
+	if a.BirdImageCache != nil {
+		var err error
+		birdImage, err = a.BirdImageCache.Get(a.Note.ScientificName)
+		if err != nil {
+			log.Printf("⚠️ Error getting bird image from cache for %s: %v", a.Note.ScientificName, err)
+			// Continue with the default empty image
+		}
+	} else {
+		// Log if the cache is nil, maybe helpful for debugging setup issues
+		log.Printf("🟡 BirdImageCache is nil, cannot fetch image for %s", a.Note.ScientificName)
 	}
 
 	// Create a copy of the Note with sanitized RTSP URL
