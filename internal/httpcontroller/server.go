@@ -427,3 +427,8 @@ func (s *Server) LoggingMiddleware() echo.MiddlewareFunc {
 		}
 	}
 }
+
+// GetOAuth2Server returns the OAuth2Server instance for use by the API
+func (s *Server) GetOAuth2Server() *security.OAuth2Server {
+	return s.OAuth2Server
+}
