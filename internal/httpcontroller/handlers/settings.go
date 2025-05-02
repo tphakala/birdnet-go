@@ -220,6 +220,16 @@ func (h *Handlers) updateAuthenticationSettings(settings *conf.Settings) {
 
 // updateSettingsFromForm updates the settings based on form values
 func updateSettingsFromForm(settings *conf.Settings, formValues map[string][]string) error {
+	// Check for anonymous MQTT connection option
+	if anonymousValues, exists := formValues["realtime.mqtt.anonymous"]; exists && len(anonymousValues) > 0 {
+		// If anonymous is enabled (value is "on" or "true"), ensure username and password are empty
+		if anonymousValues[0] == "on" || anonymousValues[0] == "true" {
+			// Explicitly set username and password to empty strings for anonymous connection
+			settings.Realtime.MQTT.Username = ""
+			settings.Realtime.MQTT.Password = ""
+		}
+	}
+
 	// Delegate the update process to updateStructFromForm
 	return updateStructFromForm(reflect.ValueOf(settings).Elem(), formValues, "")
 }
