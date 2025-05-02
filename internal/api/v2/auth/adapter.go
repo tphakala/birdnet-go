@@ -41,22 +41,30 @@ func (a *SecurityAdapter) IsAuthRequired(c echo.Context) bool {
 }
 
 // GetUsername retrieves the username of the authenticated user (if available)
+// It prioritizes the username stored in the context by the authentication middleware.
 func (a *SecurityAdapter) GetUsername(c echo.Context) string {
-	// Try to get username from session
-	userId, err := gothic.GetFromSession("userId", c.Request())
-	if err == nil && userId != "" {
-		return userId
-	}
-
-	// Alternative: check basic auth client ID as username
-	// This is a simplification; in a real system, we'd retrieve username from token claims
-	if token, err := gothic.GetFromSession("access_token", c.Request()); err == nil && token != "" {
-		if a.OAuth2Server.ValidateAccessToken(token) {
-			return "api-client" // Placeholder for token-based username
+	// 1. Check context first (set by middleware after successful auth)
+	if usernameCtx := c.Get("username"); usernameCtx != nil {
+		if username, ok := usernameCtx.(string); ok && username != "" {
+			return username
 		}
 	}
 
-	// No username found
+	// 2. Fallback: Try to get username from session (for cases where middleware might not have set it, though it should)
+	//    NOTE: Removed the redundant token validation logic that was here.
+	//    If authentication succeeded, the username should already be in the context.
+	userId, err := gothic.GetFromSession("userId", c.Request())
+	if err == nil && userId != "" {
+		if a.logger != nil {
+			a.logger.Debug("Retrieved username from session as fallback", "path", c.Request().URL.Path, "ip", c.RealIP())
+		}
+		return userId
+	}
+
+	// No username found in context or session
+	if a.logger != nil {
+		a.logger.Warn("Could not retrieve username from context or session", "path", c.Request().URL.Path, "ip", c.RealIP())
+	}
 	return ""
 }
 
