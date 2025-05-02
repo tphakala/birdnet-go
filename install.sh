@@ -306,6 +306,17 @@ check_prerequisites() {
     print_message ""
 }
 
+# Function to check if systemd is the init system
+check_systemd() {
+    if [ "$(ps -p 1 -o comm=)" != "systemd" ]; then
+        print_message "❌ This script requires systemd as the init system" "$RED"
+        print_message "Your system appears to be using: $(ps -p 1 -o comm=)" "$YELLOW"
+        exit 1
+    else
+        print_message "✅ Systemd detected as init system" "$GREEN"
+    fi
+}
+
 # Function to check if directories can be created
 check_directory() {
     local dir="$1"
@@ -478,36 +489,41 @@ check_preserved_data() {
 convert_relative_to_absolute_path() {
     local config_file=$1
     local abs_path=$2
-    
+    local export_section_line # Declare separately
+
     # Look specifically for the audio export path in the export section
-    local export_section_line=$(grep -n "export:" "$config_file" | cut -d: -f1)
+    export_section_line=$(grep -n "export:" "$config_file" | cut -d: -f1) # Assign separately
     if [ -z "$export_section_line" ]; then
         print_message "⚠️ Export section not found in config file" "$YELLOW"
         return 1
     fi
-    
+
     # Find the path line within the export section (looking only at the next few lines after export:)
-    local clip_path_line=$(tail -n +$export_section_line "$config_file" | grep -n "path:" | head -1 | cut -d: -f1)
+    local clip_path_line # Declare separately
+    clip_path_line=$(tail -n +$export_section_line "$config_file" | grep -n "path:" | head -1 | cut -d: -f1) # Assign separately
     if [ -z "$clip_path_line" ]; then
         print_message "⚠️ Clip path setting not found in export section" "$YELLOW"
         return 1
     fi
-    
+
     # Calculate the actual line number in the file
     clip_path_line=$((export_section_line + clip_path_line - 1))
-    
+
     # Extract the current path value
-    local current_path=$(sed -n "${clip_path_line}p" "$config_file" | sed -E 's/^[[:space:]]*path:[[:space:]]*([^#]*).*/\1/' | xargs)
-    
+    local current_path # Declare separately
+    # Corrected sed command and assignment
+    current_path=$(sed -n "${clip_path_line}s/^[[:space:]]*path:[[:space:]]*\([^#]*\).*/\1/p" "$config_file" | xargs)
+
     # Remove quotes if present
     current_path=${current_path#\"}
     current_path=${current_path%\"}
-    
+
     # Only convert if path is relative (doesn't start with /)
     if [[ ! "$current_path" =~ ^/ ]]; then
         print_message "Converting relative path '${current_path}' to absolute path '${abs_path}'" "$YELLOW"
         # Use line-specific sed to replace just the clips path line
-        sed -i "${clip_path_line}s|path: .*|path: ${abs_path}        # path to audio clip export directory|" "$config_file"
+        # Corrected sed command for replacement
+        sed -i "${clip_path_line}s|^\([[:space:]]*path:[[:space:]]*\).*|\1${abs_path}        # path to audio clip export directory|" "$config_file"
         return 0
     else
         print_message "Path '${current_path}' is already absolute, skipping conversion" "$GREEN"
@@ -530,7 +546,8 @@ update_paths_in_config() {
 # Helper function to clean up HLS tmpfs mount
 cleanup_hls_mount() {
     local hls_mount="${CONFIG_DIR}/hls"
-    local mount_unit=$(systemctl list-units --type=mount | grep -i "$hls_mount" | awk '{print $1}')
+    local mount_unit # Declare separately
+    mount_unit=$(systemctl list-units --type=mount | grep -i "$hls_mount" | awk '{print $1}') # Assign separately
     
     print_message "🧹 Cleaning up tmpfs mounts..." "$YELLOW"
     
@@ -616,7 +633,6 @@ download_base_config() {
         exit 1
     fi
 
-    local config_updated=false
     if [ -f "$CONFIG_FILE" ]; then
         if cmp -s "$CONFIG_FILE" "$temp_config"; then
             print_message "✅ Base configuration already exists" "$GREEN"
@@ -636,7 +652,6 @@ download_base_config() {
                 
                 mv "$temp_config" "$CONFIG_FILE"
                 print_message "✅ Configuration updated successfully" "$GREEN"
-                config_updated=true
             else
                 print_message "✅ Keeping existing configuration file" "$YELLOW"
                 rm -f "$temp_config"
@@ -645,7 +660,6 @@ download_base_config() {
     else
         mv "$temp_config" "$CONFIG_FILE"
         print_message "✅ Base configuration downloaded successfully" "$GREEN"
-        config_updated=true
     fi
     
     # Always ensure clips path is absolute, regardless of whether config was updated or existing
@@ -2053,6 +2067,9 @@ check_network
 
 # Check prerequisites before proceeding
 check_prerequisites
+
+# Check if systemd is the init system
+check_systemd
 
 # Now proceed with rest of package installation
 print_message "\n🔧 Updating package list..." "$YELLOW"
