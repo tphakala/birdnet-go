@@ -39,8 +39,7 @@ func (m AuthMethod) String() string {
 		return "subnet"
 	case AuthMethodNone:
 		return "none"
-	case AuthMethodUnknown:
-		fallthrough // Treat unknown like default
+	// AuthMethodUnknown is handled by the default case
 	default:
 		return "unknown"
 	}
