@@ -8,32 +8,17 @@
   - All system dashboard functionality must use JSON API endpoints with proper fetch requests
 */}}
 
-<div class="col-span-12 space-y-4" x-data="systemDashboard" x-init="loadAllData()">
-    
-    <!-- Authentication error notification -->
-    <div class="alert alert-warning shadow-lg mb-6" x-show="showAuthError" x-transition x-cloak>
-        <div>
-            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-            <div>
-                <h3 class="font-bold">Authentication Required</h3>
-                <div class="text-xs">You need to login to access system information</div>
-            </div>
-        </div>
-        <div class="flex-none">
-            <a href="/login?redirect=/system" class="btn btn-sm btn-primary">Login</a>
-            <button @click="showAuthError = false" class="btn btn-sm btn-ghost">Dismiss</button>
-        </div>
-    </div>
-    
+<div class="col-span-12 space-y-4" x-data="systemDashboard" x-init="loadAllData()" role="region" aria-label="System Dashboard">
+      
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <!-- System Information Card -->
-        <div class="card bg-base-100 shadow-xl" x-cloak>
+        <div class="card bg-base-100 shadow-sm" x-cloak>
             <div class="card-body card-padding">
-                <h2 class="card-title">System Information</h2>
+                <h2 class="card-title" id="system-info-heading">System Information</h2>
                 <div class="divider"></div>
                 
                 <!-- Loading state -->
-                <div x-show="systemInfo.loading" class="py-4">
+                <div x-show="systemInfo.loading" class="py-4" x-cloak>
                     <div class="flex flex-col gap-2">
                         <div class="skeleton h-4 w-full mb-2"></div>
                         <div class="skeleton h-4 w-3/4 mb-2"></div>
@@ -42,10 +27,10 @@
                 </div>
                 
                 <!-- Error state -->
-                <div x-show="systemInfo.error && !systemInfo.loading" class="alert alert-error" x-text="systemInfo.error" x-cloak></div>
+                <div x-show="systemInfo.error && !systemInfo.loading" class="alert alert-error" x-text="systemInfo.error" x-cloak role="alert" x-cloak></div>
                 
                 <!-- Data loaded state -->
-                <div x-show="!systemInfo.loading && !systemInfo.error" class="space-y-2">
+                <div x-show="!systemInfo.loading && !systemInfo.error" class="space-y-2" aria-labelledby="system-info-heading" x-cloak>
                     <div class="flex justify-between">
                         <span class="text-base-content/70">Operating System:</span>
                         <span class="font-medium" x-text="systemInfo.data.os || 'N/A'"></span>
@@ -80,13 +65,13 @@
         </div>
 
         <!-- Disk Usage Card -->
-        <div class="card bg-base-100 shadow-xl" x-cloak>
+        <div class="card bg-base-100 shadow-sm" x-cloak>
             <div class="card-body card-padding">
-                <h2 class="card-title">Disk Usage</h2>
+                <h2 class="card-title" id="disk-usage-heading">Disk Usage</h2>
                 <div class="divider"></div>
                 
                 <!-- Loading state -->
-                <div x-show="diskUsage.loading" class="py-4">
+                <div x-show="diskUsage.loading" class="py-4" x-cloak>
                     <div class="flex flex-col gap-2">
                         <div class="skeleton h-4 w-full mb-2"></div>
                         <div class="skeleton h-4 w-4/5 mb-2"></div>
@@ -95,17 +80,19 @@
                 </div>
                 
                 <!-- Error state -->
-                <div x-show="diskUsage.error && !diskUsage.loading" class="alert alert-error" x-text="diskUsage.error" x-cloak></div>
+                <div x-show="diskUsage.error && !diskUsage.loading" class="alert alert-error" x-text="diskUsage.error" x-cloak role="alert" x-cloak></div>
                 
                 <!-- Data loaded state -->
-                <div x-show="!diskUsage.loading && !diskUsage.error && diskUsage.data.length > 0" class="space-y-4">
+                <div x-show="!diskUsage.loading && !diskUsage.error && diskUsage.data.length > 0" class="space-y-4" aria-labelledby="disk-usage-heading">
                     <template x-for="disk in diskUsage.data" :key="disk.mountpoint">
                         <div>
                             <div class="flex justify-between mb-1">
                                 <span class="font-medium" x-text="disk.mountpoint"></span>
                                 <span x-text="formatStorage(disk.used) + ' / ' + formatStorage(disk.total)"></span>
                             </div>
-                            <div class="w-full bg-base-200 rounded-full h-2">
+                            <div class="w-full bg-base-200 rounded-full h-2" role="progressbar" 
+                                 :aria-valuenow="disk.usage_percent" aria-valuemin="0" aria-valuemax="100" 
+                                 :aria-valuetext="Math.round(disk.usage_percent) + '% used'">
                                 <div class="h-2 rounded-full" 
                                      :class="disk.usage_percent > 90 ? 'bg-error' : disk.usage_percent > 70 ? 'bg-warning' : 'bg-success'"
                                      :style="`width: ${disk.usage_percent}%`"></div>
@@ -123,13 +110,13 @@
         </div>
 
         <!-- Memory Usage Card -->
-        <div class="card bg-base-100 shadow-xl" x-cloak>
+        <div class="card bg-base-100 shadow-sm" x-cloak>
             <div class="card-body card-padding">
-                <h2 class="card-title">Memory Usage</h2>
+                <h2 class="card-title" id="memory-usage-heading">Memory Usage</h2>
                 <div class="divider"></div>
                 
                 <!-- Loading state -->
-                <div x-show="memoryUsage.loading" class="py-4">
+                <div x-show="memoryUsage.loading" class="py-4" x-cloak>
                     <div class="flex flex-col gap-2">
                         <div class="skeleton h-4 w-full mb-2"></div>
                         <div class="skeleton h-4 w-1/2 mb-2"></div>
@@ -138,17 +125,19 @@
                 </div>
                 
                 <!-- Error state -->
-                <div x-show="memoryUsage.error && !memoryUsage.loading" class="alert alert-error" x-text="memoryUsage.error" x-cloak></div>
+                <div x-show="memoryUsage.error && !memoryUsage.loading" class="alert alert-error" x-text="memoryUsage.error" x-cloak role="alert" x-cloak></div>
                 
                 <!-- Data loaded state -->
-                <div x-show="!memoryUsage.loading && !memoryUsage.error" class="space-y-3">
+                <div x-show="!memoryUsage.loading && !memoryUsage.error" class="space-y-3" aria-labelledby="memory-usage-heading">
                     <!-- RAM Usage -->
                     <div>
                         <div class="flex justify-between mb-1">
                             <span class="font-medium">RAM Usage</span>
                             <span x-text="formatStorage(memoryUsage.data.used) + ' / ' + formatStorage(memoryUsage.data.total)"></span>
                         </div>
-                        <div class="w-full bg-base-200 rounded-full h-2">
+                        <div class="w-full bg-base-200 rounded-full h-2" role="progressbar" 
+                             :aria-valuenow="memoryUsage.data.usedPercent" aria-valuemin="0" aria-valuemax="100" 
+                             :aria-valuetext="Math.round(memoryUsage.data.usedPercent) + '% used'">
                             <div class="h-2 rounded-full" 
                                  :class="memoryUsage.data.usedPercent > 90 ? 'bg-error' : memoryUsage.data.usedPercent > 70 ? 'bg-warning' : 'bg-success'"
                                  :style="`width: ${memoryUsage.data.usedPercent}%`"></div>
@@ -173,41 +162,43 @@
     </div>
 
     <!-- Process Information Card -->
-    <div class="card bg-base-100 shadow-xl mt-6" x-cloak>
+    <div class="card bg-base-100 shadow-sm mt-6" x-cloak>
         <div class="card-body card-padding">
             <div class="flex justify-between items-center mb-2">
-                <h2 class="card-title">Process Information</h2>
+                <h2 class="card-title" id="process-info-heading">Process Information</h2>
                 
                 <!-- Enhanced toggle for showing all processes -->
                 <div class="flex items-center gap-2 bg-base-200 px-3 py-1.5 rounded-lg shadow-sm">
                     <span class="text-sm font-medium">Show all processes</span>
                     <input type="checkbox" class="toggle toggle-sm toggle-primary" 
                            x-model="showAllProcesses" 
-                           @change="loadProcesses()" />
+                           @change="loadProcesses()" 
+                           aria-label="Toggle to show all system processes"/>
                 </div>
             </div>
             <div class="divider mt-0"></div>
             
             <!-- Loading state -->
-            <div x-show="processes.loading" class="py-4">
+            <div x-show="processes.loading" class="py-4" x-cloak>
                 <div class="flex justify-center">
-                    <span class="loading loading-spinner loading-lg"></span>
+                    <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
+                    <span class="sr-only">Loading process information...</span>
                 </div>
             </div>
             
             <!-- Error state -->
-            <div x-show="processes.error && !processes.loading" class="alert alert-error" x-text="processes.error" x-cloak></div>
+            <div x-show="processes.error && !processes.loading" class="alert alert-error" x-text="processes.error" x-cloak role="alert" x-cloak></div>
             
             <!-- Data loaded state -->
-            <div x-show="!processes.loading && !processes.error" class="overflow-x-auto">
+            <div x-show="!processes.loading && !processes.error" class="overflow-x-auto" aria-labelledby="process-info-heading" x-cloak>
                 <table class="table table-zebra w-full">
                     <thead>
                         <tr class="bg-base-200">
-                            <th>Process</th>
-                            <th>Status</th>
-                            <th>CPU</th>
-                            <th>Memory</th>
-                            <th>Uptime</th>
+                            <th scope="col">Process</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">CPU</th>
+                            <th scope="col">Memory</th>
+                            <th scope="col">Uptime</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -221,7 +212,7 @@
                                 <td>
                                     <div class="flex items-start gap-2">
                                         <div class="p-1.5 bg-primary/10 rounded-md text-primary">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                                                 <path fill-rule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L7.586 10 5.293 7.707a1 1 0 010-1.414zM11 12a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd" />
                                             </svg>
                                         </div>
@@ -244,7 +235,9 @@
                                 </td>
                                 <td>
                                     <div class="flex items-center gap-2">
-                                        <div class="w-16 h-2 bg-base-200 rounded-full overflow-hidden">
+                                        <div class="w-16 h-2 bg-base-200 rounded-full overflow-hidden" role="progressbar"
+                                             :aria-valuenow="Math.min(Math.round(process.cpu), 100)" aria-valuemin="0" aria-valuemax="100"
+                                             :aria-valuetext="Math.round(process.cpu) + '% CPU usage'">
                                             <div class="h-full rounded-full bg-primary" 
                                                 :style="`width: ${Math.min(Math.round(process.cpu), 100)}%`"></div>
                                         </div>
@@ -267,9 +260,9 @@
     
     <!-- Refresh button -->
     <div class="flex justify-center mt-6" x-cloak>
-        <button class="btn btn-primary" @click="loadAllData()" :disabled="isAnyLoading">
+        <button class="btn btn-primary" @click="loadAllData()" :disabled="isAnyLoading" aria-label="Refresh system data">
             <template x-if="isAnyLoading">
-                <span class="loading loading-spinner loading-sm mr-2"></span>
+                <span class="loading loading-spinner loading-sm mr-2" aria-hidden="true"></span>
             </template>
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" x-show="!isAnyLoading">
                 <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
@@ -315,6 +308,9 @@
             
             // Authentication error state
             showAuthError: false,
+            
+            // Tooltip state management
+            showTooltip: null,
             
             // Computed property to check if any data is loading
             get isAnyLoading() {
