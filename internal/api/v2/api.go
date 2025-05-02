@@ -13,6 +13,7 @@ import (
 
 	"log/slog"
 	"net"
+	"net/url"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -635,7 +636,7 @@ func (c *Controller) handleUnauthorized(ctx echo.Context) error {
 		loginPath := "/login"
 		originURL := ctx.Request().URL.String()
 		if !strings.HasPrefix(ctx.Path(), loginPath) {
-			loginPath += "?redirect=" + originURL
+			loginPath += "?redirect=" + url.QueryEscape(originURL)
 		}
 
 		if isHXRequest {
