@@ -70,6 +70,11 @@
                         <span class="text-base-content/70">Go Version:</span>
                         <span class="font-medium" x-text="systemInfo.data.go_version || 'N/A'"></span>
                     </div>
+                    <!-- Added CPU Model Row -->
+                    <div class="flex justify-between" x-show="systemInfo.data.system_model"> 
+                        <span class="text-base-content/70">System:</span>
+                        <span class="font-medium" x-text="systemInfo.data.system_model || 'N/A'"></span>
+                    </div>
                 </div>
             </div>
         </div>
