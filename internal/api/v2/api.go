@@ -3,6 +3,7 @@ package api
 
 import (
 	"crypto/rand"
+	"errors" // Import errors for auth service check
 	"fmt"
 	"log"
 	"net/http"
@@ -49,9 +50,8 @@ type Controller struct {
 	apiLogger           *slog.Logger       // Structured logger for API operations
 	apiLoggerClose      func() error       // Function to close the log file
 
-	// Authentication service and middleware
-	AuthService      auth.Service        // Authentication service interface
-	AuthMiddlewareFn echo.MiddlewareFunc // Authentication middleware function
+	// Unexported authentication service and middleware function
+	authMiddlewareFn echo.MiddlewareFunc // Authentication middleware function (set if auth configured)
 }
 
 // Custom IP Extractor prioritizing CF-Connecting-IP
@@ -218,19 +218,21 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		logger.Printf("API structured logging initialized to %s", apiLogPath)
 	}
 
-	// If OAuth2Server is provided, setup authentication service
+	// If OAuth2Server is provided, setup authentication middleware function
 	if oauth2Server != nil {
-		// Create authentication service
-		authService := auth.NewSecurityAdapter(oauth2Server, c.apiLogger)
-		c.AuthService = authService
+		// NOTE: We no longer store the authService instance directly in the controller.
+		// Instead, a per-request authService is created by the Pre middleware in InitializeAPI.
 
-		// Create authentication middleware
-		authMiddleware := auth.NewMiddleware(authService, c.apiLogger)
-		c.AuthMiddlewareFn = authMiddleware.Authenticate
+		// Create the base middleware function provider (used by getEffectiveAuthMiddleware)
+		// This requires creating a temporary adapter just to get the middleware func, which is slightly awkward
+		// but avoids storing the service instance on the controller.
+		tempAuthService := auth.NewSecurityAdapter(oauth2Server, c.apiLogger)
+		authMiddlewareProvider := auth.NewMiddleware(tempAuthService, c.apiLogger)
+		c.authMiddlewareFn = authMiddlewareProvider.Authenticate
 
-		logger.Println("Initialized API authentication service and middleware")
+		logger.Println("Initialized API authentication middleware function")
 	} else {
-		logger.Println("Warning: OAuth2Server not provided, authentication will not be available")
+		logger.Println("Warning: OAuth2Server not provided, API authentication middleware function not set")
 	}
 
 	// Create v2 API group
@@ -552,15 +554,36 @@ func (c *Controller) logAPIRequest(ctx echo.Context, level slog.Level, msg strin
 }
 
 // getAuthService retrieves the appropriate auth.Service for the request.
-func (c *Controller) getAuthService(ctx echo.Context) auth.Service {
-	// First try to get auth service from context (per-request)
-	if service := ctx.Get("auth_service"); service != nil {
-		if as, ok := service.(auth.Service); ok {
-			return as
+// It ONLY retrieves the service set in the context by the Pre middleware.
+// Returns an error if the service is not found or has the wrong type.
+func (c *Controller) getAuthService(ctx echo.Context) (auth.Service, error) {
+	service := ctx.Get("auth_service")
+	if service == nil {
+		// This indicates a potential configuration or middleware setup error
+		// if auth was expected for this route.
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("auth_service not found in context",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
 		}
+		return nil, errors.New("authentication service not available in request context")
 	}
-	// Fallback to the controller's auth service
-	return c.AuthService
+
+	as, ok := service.(auth.Service)
+	if !ok {
+		// This indicates a programming error (wrong type stored in context).
+		if c.apiLogger != nil {
+			c.apiLogger.Error("auth_service in context has incorrect type",
+				"type", fmt.Sprintf("%T", service),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+		return nil, errors.New("invalid authentication service type in request context")
+	}
+
+	return as, nil
 }
 
 // handleTokenAuth attempts authentication using a Bearer token from the Authorization header.
@@ -589,7 +612,9 @@ func (c *Controller) handleTokenAuth(ctx echo.Context, authService auth.Service)
 	}
 
 	token := strings.TrimSpace(parts[1]) // Trim whitespace from the token itself
-	if authService.ValidateToken(token) {
+	// Check token validity using the service, which now returns an error
+	if err := authService.ValidateToken(token); err == nil {
+		// err is nil, token is valid
 		if c.apiLogger != nil {
 			c.apiLogger.Debug("Token authentication successful",
 				"path", ctx.Request().URL.Path,
@@ -599,13 +624,18 @@ func (c *Controller) handleTokenAuth(ctx echo.Context, authService auth.Service)
 		return true, nil // Token validation successful
 	}
 
-	// Token validation failed
+	// Token validation failed (err != nil)
 	if c.apiLogger != nil {
 		c.apiLogger.Warn("Token validation failed",
 			"path", ctx.Request().URL.Path,
 			"ip", ctx.RealIP(),
+			// Optionally log the specific error if needed: "error", err.Error()
 		)
 	}
+	// Return a standard unauthorized error
+	// Add WWW-Authenticate header for RFC 6750 compliance
+	ctx.Response().Header().Set("WWW-Authenticate",
+		`Bearer realm="api", error="invalid_token", error_description="Invalid or expired token"`)
 	return false, ctx.JSON(http.StatusUnauthorized, map[string]string{
 		"error": "Invalid or expired token",
 	})
@@ -613,8 +643,12 @@ func (c *Controller) handleTokenAuth(ctx echo.Context, authService auth.Service)
 
 // handleSessionAuth attempts authentication using the existing session.
 // It returns true if authentication succeeds, false otherwise.
+// (It doesn't return the session error directly to the client, logs internally)
 func (c *Controller) handleSessionAuth(ctx echo.Context, authService auth.Service) bool {
-	if authService.CheckAccess(ctx) {
+	// Check access using the service, which now returns an error
+	err := authService.CheckAccess(ctx)
+	if err == nil {
+		// err is nil, session is valid
 		if c.apiLogger != nil {
 			c.apiLogger.Debug("Session authentication successful",
 				"path", ctx.Request().URL.Path,
@@ -622,6 +656,15 @@ func (c *Controller) handleSessionAuth(ctx echo.Context, authService auth.Servic
 			)
 		}
 		return true
+	}
+
+	// Session validation failed (err != nil)
+	if c.apiLogger != nil {
+		c.apiLogger.Debug("Session authentication failed",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+			"error", err.Error(), // Log the specific reason (e.g., session not found)
+		)
 	}
 	return false
 }
@@ -655,29 +698,36 @@ func (c *Controller) handleUnauthorized(ctx echo.Context) error {
 // AuthMiddleware is a method that returns the auth middleware function
 func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
-		authService := c.getAuthService(ctx)
+		authService, err := c.getAuthService(ctx) // Now returns service and error
 
-		if authService == nil {
-			// No auth service available, log warning and pass through
+		if err != nil {
+			// If service couldn't be retrieved, log and return internal server error.
+			// This shouldn't happen in normal operation if middleware is set up correctly.
 			if c.apiLogger != nil {
-				c.apiLogger.Warn("Auth middleware called but no auth service available",
+				c.apiLogger.Error("Failed to get auth service in middleware",
+					"error", err.Error(),
 					"path", ctx.Request().URL.Path,
 					"ip", ctx.RealIP(),
 				)
 			}
-			return next(ctx)
+			// Do not call HandleError here, as it might depend on the controller state
+			// which might be inconsistent if service retrieval failed.
+			return ctx.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "Internal server error: Cannot process authentication",
+			})
 		}
 
 		// Skip auth check if auth is not required for this client IP
 		if !authService.IsAuthRequired(ctx) {
 			if c.apiLogger != nil {
-				c.apiLogger.Debug("Authentication not required",
+				c.apiLogger.Debug("Authentication not required for this request",
 					"path", ctx.Request().URL.Path,
 					"ip", ctx.RealIP(),
 				)
 			}
-			// Although not required, we don't set isAuthenticated=true here
-			// as the request isn't strictly authenticated.
+			// Set default context values for consistency downstream
+			ctx.Set("isAuthenticated", false)
+			ctx.Set("authMethod", "none") // Indicate no auth was applied
 			return next(ctx)
 		}
 
@@ -709,20 +759,20 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 // getEffectiveAuthMiddleware returns the appropriate authentication middleware function.
-// It prioritizes the configured AuthMiddlewareFn and falls back to the
+// It prioritizes the configured authMiddlewareFn and falls back to the
 // controller's AuthMiddleware method if the function is not set.
 func (c *Controller) getEffectiveAuthMiddleware() echo.MiddlewareFunc {
 	// Use the new auth middleware if available
-	if c.AuthMiddlewareFn != nil {
+	if c.authMiddlewareFn != nil {
 		if c.apiLogger != nil {
 			// Log using the same levels as the original code block in system.go
-			c.apiLogger.Info("Using configured AuthMiddlewareFn for route protection")
+			c.apiLogger.Info("Using configured authMiddlewareFn for route protection")
 		}
-		return c.AuthMiddlewareFn
+		return c.authMiddlewareFn
 	} else {
 		// Fall back to the legacy middleware method
 		if c.apiLogger != nil {
-			c.apiLogger.Warn("AuthMiddlewareFn not configured, using fallback AuthMiddleware method for route protection")
+			c.apiLogger.Warn("authMiddlewareFn not configured, using fallback AuthMiddleware method for route protection")
 		}
 		return c.AuthMiddleware // Return the method itself
 	}
@@ -760,8 +810,18 @@ func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings
 							// Create a per-request auth service
 							authService := auth.NewSecurityAdapter(oauth2Server, apiController.apiLogger)
 							c.Set("auth_service", authService)
+						} else {
+							// OAuth2Server is nil, set a placeholder or log? For now, do nothing, getAuthService will handle nil.
+							// Consider setting a specific "no-op" auth service if needed.
+							// apiController.apiLogger.Debug("OAuth2Server is nil, no auth_service set for request", "path", c.Request().URL.Path)
 						}
+					} else {
+						// Server object doesn't have GetOAuth2Server method
+						// apiController.apiLogger.Warn("Server object in context does not provide GetOAuth2Server", "path", c.Request().URL.Path)
 					}
+				} else {
+					// Server object not found in context
+					// apiController.apiLogger.Warn("Server object not found in context", "path", c.Request().URL.Path)
 				}
 			}
 			return next(c)
