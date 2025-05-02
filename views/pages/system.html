@@ -170,8 +170,18 @@
     <!-- Process Information Card -->
     <div class="card bg-base-100 shadow-xl mt-6" x-cloak>
         <div class="card-body card-padding">
-            <h2 class="card-title">Process Information</h2>
-            <div class="divider"></div>
+            <div class="flex justify-between items-center mb-2">
+                <h2 class="card-title">Process Information</h2>
+                
+                <!-- Enhanced toggle for showing all processes -->
+                <div class="flex items-center gap-2 bg-base-200 px-3 py-1.5 rounded-lg shadow-sm">
+                    <span class="text-sm font-medium">Show all processes</span>
+                    <input type="checkbox" class="toggle toggle-sm toggle-primary" 
+                           x-model="showAllProcesses" 
+                           @change="loadProcesses()" />
+                </div>
+            </div>
+            <div class="divider mt-0"></div>
             
             <!-- Loading state -->
             <div x-show="processes.loading" class="py-4">
@@ -187,7 +197,7 @@
             <div x-show="!processes.loading && !processes.error" class="overflow-x-auto">
                 <table class="table table-zebra w-full">
                     <thead>
-                        <tr>
+                        <tr class="bg-base-200">
                             <th>Process</th>
                             <th>Status</th>
                             <th>CPU</th>
@@ -198,23 +208,50 @@
                     <tbody>
                         <template x-if="processes.data.length === 0">
                             <tr>
-                                <td colspan="5" class="text-center">No process information available</td>
+                                <td colspan="5" class="text-center py-6 text-base-content/70">No process information available</td>
                             </tr>
                         </template>
                         <template x-for="process in processes.data" :key="process.pid">
-                            <tr>
+                            <tr class="hover:bg-base-200/50 transition-colors duration-150">
                                 <td>
-                                    <div class="font-medium" x-text="process.name"></div>
-                                    <div class="text-xs text-base-content/60" x-text="'PID: ' + process.pid"></div>
+                                    <div class="flex items-start gap-2">
+                                        <div class="p-1.5 bg-primary/10 rounded-md text-primary">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L7.586 10 5.293 7.707a1 1 0 010-1.414zM11 12a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <div class="font-medium" x-text="process.name === 'main' ? 'BirdNET-Go' : process.name"></div>
+                                            <div class="text-xs text-base-content/60" x-text="'PID: ' + process.pid"></div>
+                                        </div>
+                                    </div>
                                 </td>
                                 <td>
-                                    <span class="badge" 
-                                          :class="process.status === 'running' ? 'badge-success' : 'badge-warning'"
+                                    <span class="badge badge-sm" 
+                                          :class="{
+                                              'badge-success': process.status === 'running',
+                                              'badge-warning': process.status === 'sleeping' || process.status === 'sleep',
+                                              'badge-error': process.status === 'zombie',
+                                              'badge-info': process.status === 'idle',
+                                              'badge-secondary': !['running', 'sleeping', 'sleep', 'zombie', 'idle'].includes(process.status)
+                                          }"
                                           x-text="process.status"></span>
                                 </td>
-                                <td x-text="Math.round(process.cpu) + '%'"></td>
-                                <td x-text="formatStorage(process.memory)"></td>
-                                <td x-text="formatUptime(process.uptime)"></td>
+                                <td>
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-16 h-2 bg-base-200 rounded-full overflow-hidden">
+                                            <div class="h-full rounded-full bg-primary" 
+                                                :style="`width: ${Math.min(Math.round(process.cpu), 100)}%`"></div>
+                                        </div>
+                                        <span class="text-sm" x-text="Math.round(process.cpu) + '%'"></span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="text-sm font-medium" x-text="formatStorage(process.memory)"></span>
+                                </td>
+                                <td>
+                                    <span class="text-sm" x-text="formatUptime(process.uptime)"></span>
+                                </td>
                             </tr>
                         </template>
                     </tbody>
@@ -267,6 +304,9 @@
                 error: null,
                 data: []
             },
+            
+            // Toggle state for process list
+            showAllProcesses: false,
             
             // Authentication error state
             showAuthError: false,
@@ -392,7 +432,9 @@
                 this.processes.loading = true;
                 this.processes.error = null;
                 
-                fetch('/api/v2/system/processes')
+                const url = this.showAllProcesses ? '/api/v2/system/processes?all=true' : '/api/v2/system/processes';
+
+                fetch(url)
                     .then(response => {
                         if (!response.ok) {
                             if (response.status === 401) {
