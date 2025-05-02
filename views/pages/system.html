@@ -105,7 +105,7 @@
                                      :class="disk.usage_percent > 90 ? 'bg-error' : disk.usage_percent > 70 ? 'bg-warning' : 'bg-success'"
                                      :style="`width: ${disk.usage_percent}%`"></div>
                             </div>
-                            <div class="text-xs text-right mt-1" x-text="disk.usage_percent + '% used'"></div>
+                            <div class="text-xs text-right mt-1" x-text="Math.round(disk.usage_percent) + '% used'"></div>
                         </div>
                     </template>
                 </div>
@@ -148,7 +148,7 @@
                                  :class="memoryUsage.data.usedPercent > 90 ? 'bg-error' : memoryUsage.data.usedPercent > 70 ? 'bg-warning' : 'bg-success'"
                                  :style="`width: ${memoryUsage.data.usedPercent}%`"></div>
                         </div>
-                        <div class="text-xs text-right mt-1" x-text="memoryUsage.data.usedPercent + '% used'"></div>
+                        <div class="text-xs text-right mt-1" x-text="Math.round(memoryUsage.data.usedPercent) + '% used'"></div>
                     </div>
                     
                     <!-- Memory Details -->
@@ -212,7 +212,7 @@
                                           :class="process.status === 'running' ? 'badge-success' : 'badge-warning'"
                                           x-text="process.status"></span>
                                 </td>
-                                <td x-text="process.cpu + '%'"></td>
+                                <td x-text="Math.round(process.cpu) + '%'"></td>
                                 <td x-text="formatStorage(process.memory)"></td>
                                 <td x-text="formatUptime(process.uptime)"></td>
                             </tr>
@@ -451,7 +451,7 @@
                     unitIndex++;
                 }
                 
-                return `${size.toFixed(2)} ${units[unitIndex]}`;
+                return `${Math.round(size)} ${units[unitIndex]}`;
             }
         }));
     });
