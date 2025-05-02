@@ -9,10 +9,9 @@
 */}}
 
 <div class="col-span-12 space-y-4" x-data="systemDashboard" x-init="loadAllData()">
-    <h1 class="text-2xl font-bold mb-6">System Dashboard</h1>
     
     <!-- Authentication error notification -->
-    <div class="alert alert-warning shadow-lg mb-6" x-show="showAuthError" x-transition>
+    <div class="alert alert-warning shadow-lg mb-6" x-show="showAuthError" x-transition x-cloak>
         <div>
             <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
             <div>
@@ -28,7 +27,7 @@
     
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <!-- System Information Card -->
-        <div class="card bg-base-100 shadow-xl">
+        <div class="card bg-base-100 shadow-xl" x-cloak>
             <div class="card-body card-padding">
                 <h2 class="card-title">System Information</h2>
                 <div class="divider"></div>
@@ -43,7 +42,7 @@
                 </div>
                 
                 <!-- Error state -->
-                <div x-show="systemInfo.error && !systemInfo.loading" class="alert alert-error" x-text="systemInfo.error"></div>
+                <div x-show="systemInfo.error && !systemInfo.loading" class="alert alert-error" x-text="systemInfo.error" x-cloak></div>
                 
                 <!-- Data loaded state -->
                 <div x-show="!systemInfo.loading && !systemInfo.error" class="space-y-2">
@@ -76,7 +75,7 @@
         </div>
 
         <!-- Disk Usage Card -->
-        <div class="card bg-base-100 shadow-xl">
+        <div class="card bg-base-100 shadow-xl" x-cloak>
             <div class="card-body card-padding">
                 <h2 class="card-title">Disk Usage</h2>
                 <div class="divider"></div>
@@ -91,7 +90,7 @@
                 </div>
                 
                 <!-- Error state -->
-                <div x-show="diskUsage.error && !diskUsage.loading" class="alert alert-error" x-text="diskUsage.error"></div>
+                <div x-show="diskUsage.error && !diskUsage.loading" class="alert alert-error" x-text="diskUsage.error" x-cloak></div>
                 
                 <!-- Data loaded state -->
                 <div x-show="!diskUsage.loading && !diskUsage.error && diskUsage.data.length > 0" class="space-y-4">
@@ -119,7 +118,7 @@
         </div>
 
         <!-- Memory Usage Card -->
-        <div class="card bg-base-100 shadow-xl">
+        <div class="card bg-base-100 shadow-xl" x-cloak>
             <div class="card-body card-padding">
                 <h2 class="card-title">Memory Usage</h2>
                 <div class="divider"></div>
@@ -134,7 +133,7 @@
                 </div>
                 
                 <!-- Error state -->
-                <div x-show="memoryUsage.error && !memoryUsage.loading" class="alert alert-error" x-text="memoryUsage.error"></div>
+                <div x-show="memoryUsage.error && !memoryUsage.loading" class="alert alert-error" x-text="memoryUsage.error" x-cloak></div>
                 
                 <!-- Data loaded state -->
                 <div x-show="!memoryUsage.loading && !memoryUsage.error" class="space-y-3">
@@ -169,7 +168,7 @@
     </div>
 
     <!-- Process Information Card -->
-    <div class="card bg-base-100 shadow-xl mt-6">
+    <div class="card bg-base-100 shadow-xl mt-6" x-cloak>
         <div class="card-body card-padding">
             <h2 class="card-title">Process Information</h2>
             <div class="divider"></div>
@@ -182,7 +181,7 @@
             </div>
             
             <!-- Error state -->
-            <div x-show="processes.error && !processes.loading" class="alert alert-error" x-text="processes.error"></div>
+            <div x-show="processes.error && !processes.loading" class="alert alert-error" x-text="processes.error" x-cloak></div>
             
             <!-- Data loaded state -->
             <div x-show="!processes.loading && !processes.error" class="overflow-x-auto">
@@ -225,7 +224,7 @@
     </div>
     
     <!-- Refresh button -->
-    <div class="flex justify-center mt-6">
+    <div class="flex justify-center mt-6" x-cloak>
         <button class="btn btn-primary" @click="loadAllData()" :disabled="isAnyLoading">
             <template x-if="isAnyLoading">
                 <span class="loading loading-spinner loading-sm mr-2"></span>
