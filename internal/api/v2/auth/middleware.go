@@ -68,7 +68,9 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 			if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
 				token := parts[1] // Never log the token itself
 
-				if m.AuthService.ValidateToken(token) {
+				// Validate the token, check if the returned error is nil
+				if err := m.AuthService.ValidateToken(token); err == nil {
+					// Token is valid
 					if m.logger != nil {
 						m.logger.Debug("Token authentication successful", "path", path, "ip", ip)
 					}
@@ -79,6 +81,7 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 					return next(c)
 				}
 
+				// Token validation failed (err != nil)
 				if m.logger != nil {
 					m.logger.Warn("Token validation failed", "path", path, "ip", ip)
 				}
@@ -104,7 +107,9 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 			m.logger.Debug("Attempting session authentication", "path", path, "ip", ip)
 		}
 
-		if m.AuthService.CheckAccess(c) {
+		// Check session access, check if the returned error is nil
+		if err := m.AuthService.CheckAccess(c); err == nil {
+			// Session is valid
 			if m.logger != nil {
 				m.logger.Debug("Session authentication successful", "path", path, "ip", ip)
 			}
