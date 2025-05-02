@@ -689,9 +689,22 @@ func (c *Controller) isAuthRequiredWithoutService(ctx echo.Context) bool {
 							continue
 						}
 						_, subnet, err := net.ParseCIDR(trimmedCIDR)
-						if err == nil && subnet.Contains(ip) {
-							authWouldBeRequired = false // Bypass cancels requirement
-							break                       // Found a match, exit inner loop
+						if err == nil {
+							if subnet.Contains(ip) {
+								authWouldBeRequired = false // Bypass cancels requirement
+								break                       // Found a match, exit inner loop
+							}
+						} else {
+							// Log CIDR parsing errors
+							if c.apiLogger != nil {
+								c.apiLogger.Warn("Failed to parse CIDR string from AllowSubnetBypass settings",
+									"cidr_string", trimmedCIDR,
+									"error", err.Error(),
+								)
+							} else {
+								// Fallback to standard logger if apiLogger is nil
+								c.logger.Printf("[WARN] Failed to parse CIDR string \"%s\" from AllowSubnetBypass settings: %v", trimmedCIDR, err)
+							}
 						}
 					}
 				}
