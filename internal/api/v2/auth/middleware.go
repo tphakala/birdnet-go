@@ -26,6 +26,20 @@ func NewMiddleware(service Service, logger *slog.Logger) *Middleware {
 // Authenticate is the main middleware function for authentication
 func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		// Add guard against nil AuthService
+		if m.AuthService == nil {
+			if m.logger != nil {
+				m.logger.Error("Authentication middleware called with nil AuthService",
+					"path", c.Request().URL.Path,
+					"ip", c.RealIP(),
+				)
+			}
+			// Return an internal server error as this is a configuration issue
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "Internal configuration error: authentication service not available",
+			})
+		}
+
 		ip := c.RealIP()
 		path := c.Request().URL.Path
 
@@ -39,6 +53,8 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 			if m.logger != nil {
 				m.logger.Debug("Authentication not required for this client", "ip", ip, "path", path)
 			}
+			// Although not required, we don't set isAuthenticated=true here
+			// as the request isn't strictly authenticated via this middleware.
 			return next(c)
 		}
 
@@ -56,12 +72,19 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 					if m.logger != nil {
 						m.logger.Debug("Token authentication successful", "path", path, "ip", ip)
 					}
+					// Set context values on successful authentication
+					c.Set("isAuthenticated", true)
+					c.Set("username", m.AuthService.GetUsername(c))
+					c.Set("authMethod", m.AuthService.GetAuthMethod(c))
 					return next(c)
 				}
 
 				if m.logger != nil {
 					m.logger.Warn("Token validation failed", "path", path, "ip", ip)
 				}
+				// Add WWW-Authenticate header for RFC 6750 compliance
+				c.Response().Header().Set("WWW-Authenticate",
+					`Bearer realm="api", error="invalid_token", error_description="Invalid or expired token"`)
 				return c.JSON(http.StatusUnauthorized, map[string]string{
 					"error": "Invalid or expired token",
 				})
@@ -85,6 +108,10 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 			if m.logger != nil {
 				m.logger.Debug("Session authentication successful", "path", path, "ip", ip)
 			}
+			// Set context values on successful authentication
+			c.Set("isAuthenticated", true)
+			c.Set("username", m.AuthService.GetUsername(c))
+			c.Set("authMethod", m.AuthService.GetAuthMethod(c))
 			return next(c)
 		}
 
