@@ -39,6 +39,7 @@ type SystemInfo struct {
 	AppUptime     int64     `json:"app_uptime_seconds"`
 	NumCPU        int       `json:"num_cpu"`
 	GoVersion     string    `json:"go_version"`
+	SystemModel   string    `json:"system_model,omitempty"`
 }
 
 // ResourceInfo represents system resource usage data
@@ -354,6 +355,20 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 	// Calculate app uptime using monotonic clock to avoid system time changes
 	appUptime := int64(time.Since(startMonotonicTime).Seconds())
 
+	// Get System Model on Linux
+	var systemModel string
+	if runtime.GOOS == "linux" {
+		systemModel = getSystemModelFromProc()
+		if systemModel == "" && c.apiLogger != nil {
+			c.apiLogger.Debug("Could not determine system model from /proc/cpuinfo",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		} else if c.apiLogger != nil {
+			c.apiLogger.Debug("Determined system model", "model", systemModel)
+		}
+	}
+
 	// Create response
 	info := SystemInfo{
 		OS:            runtime.GOOS,
@@ -368,6 +383,7 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 		AppUptime:     appUptime,
 		NumCPU:        runtime.NumCPU(),
 		GoVersion:     runtime.Version(),
+		SystemModel:   systemModel,
 	}
 
 	if c.apiLogger != nil {
@@ -384,6 +400,32 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 	}
 
 	return ctx.JSON(http.StatusOK, info)
+}
+
+// Helper function to read system model from /proc/cpuinfo on Linux
+// It assumes the relevant "Model" line is the last one found.
+func getSystemModelFromProc() string {
+	data, err := os.ReadFile("/proc/cpuinfo")
+	if err != nil {
+		log.Printf("Warning: Could not read /proc/cpuinfo: %v", err)
+		return ""
+	}
+
+	systemModel := ""
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		// Look specifically for lines starting with "Model" (case-sensitive)
+		if strings.HasPrefix(line, "Model") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				model := strings.TrimSpace(parts[1])
+				if model != "" {
+					systemModel = model // Keep overwriting, last one wins
+				}
+			}
+		}
+	}
+	return systemModel
 }
 
 // GetResourceInfo handles GET /api/v2/system/resources
@@ -965,12 +1007,15 @@ func (c *Controller) GetProcessInfo(ctx echo.Context) error {
 
 		statusList, err := p.Status()
 		var status string
-		if err != nil {
+
+		// Convert if-else chain to switch
+		switch {
+		case err != nil:
 			status = "unknown"
 			if c.apiLogger != nil {
 				c.apiLogger.Warn("Failed to get process status", "pid", p.Pid, "name", name, "error", err.Error())
 			}
-		} else if len(statusList) > 0 {
+		case len(statusList) > 0:
 			// Use the first status code returned
 			switch statusList[0] {
 			case "R": // Running or Runnable (Linux/macOS)
@@ -991,7 +1036,7 @@ func (c *Controller) GetProcessInfo(ctx echo.Context) error {
 			default:
 				status = strings.ToLower(statusList[0]) // Use the code itself if not recognized
 			}
-		} else {
+		default:
 			status = "unknown"
 		}
 
