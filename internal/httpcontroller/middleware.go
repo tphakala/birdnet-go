@@ -17,6 +17,17 @@ import (
 // CSRFContextKey is the key used to store CSRF token in the context
 const CSRFContextKey = "birdnet-go-csrf"
 
+// Defines the V2 API path prefixes that are publicly accessible without authentication.
+// Used as a single source of truth for route classification.
+var publicV2ApiPrefixes = map[string]struct{}{
+	"/api/v2/detections":          {},
+	"/api/v2/analytics":           {},
+	"/api/v2/media/species-image": {},
+	"/api/v2/spectrogram":         {},
+	"/api/v2/audio":               {},
+	"/api/v2/health":              {}, // Health check should always be public
+}
+
 // configureMiddleware sets up middleware for the server.
 func (s *Server) configureMiddleware() {
 	s.Echo.Use(middleware.Recover())
@@ -175,12 +186,13 @@ func isProtectedRoute(path string) bool {
 
 // isPublicApiRoute returns true for API routes that should be publicly accessible without authentication
 func isPublicApiRoute(path string) bool {
-	// Public API routes that should be accessible without login
-	return strings.HasPrefix(path, "/api/v2/detections") || // GET detection data is public
-		strings.HasPrefix(path, "/api/v2/analytics") || // Analytics data is public
-		strings.HasPrefix(path, "/api/v2/media/species-image") || // Images are public
-		strings.HasPrefix(path, "/api/v2/spectrogram") || // Spectrograms are public
-		strings.HasPrefix(path, "/api/v2/audio") // Audio files are public
+	// Check against the defined map of public V2 prefixes.
+	for prefix := range publicV2ApiPrefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // AuthMiddleware checks if the user is authenticated and if the request is protected
@@ -199,7 +211,7 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		// Check if authentication is required for this IP
-		if s.OAuth2Server.IsAuthenticationEnabled(s.RealIP(c)) {
+		if s.OAuth2Server != nil && s.OAuth2Server.IsAuthenticationEnabled(s.RealIP(c)) {
 			// Check if client is in local subnet - in that case, we can bypass auth
 			clientIP := net.ParseIP(s.RealIP(c))
 			if security.IsInLocalSubnet(clientIP) {
@@ -223,11 +235,15 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 				}
 
 				// Handle regular routes with redirect to login
-				redirectPath := url.QueryEscape(c.Request().URL.Path)
-				// Validate redirect path against whitelist
-				if !isValidRedirect(redirectPath) {
+				rawPath := c.Request().URL.Path
+				var redirectPath string
+				// Validate the raw path before escaping
+				if !isValidRedirect(rawPath) {
 					redirectPath = "/"
+				} else {
+					redirectPath = url.QueryEscape(rawPath)
 				}
+
 				if c.Request().Header.Get("HX-Request") == "true" {
 					c.Response().Header().Set("HX-Redirect", "/login?redirect="+redirectPath)
 					return c.String(http.StatusUnauthorized, "")
