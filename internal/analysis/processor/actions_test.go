@@ -24,7 +24,7 @@ func (m *MockMqttClient) Connect(ctx context.Context) error {
 	return args.Error(0)
 }
 
-func (m *MockMqttClient) Publish(ctx context.Context, topic string, payload string) error {
+func (m *MockMqttClient) Publish(ctx context.Context, topic, payload string) error {
 	args := m.Called(ctx, topic, payload)
 	return args.Error(0)
 }
