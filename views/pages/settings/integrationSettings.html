@@ -115,6 +115,7 @@
         username: '{{.Settings.Realtime.MQTT.Username}}',
         password: '{{.Settings.Realtime.MQTT.Password}}',
         retain: {{.Settings.Realtime.MQTT.Retain}},
+        anonymous: {{if and (eq .Settings.Realtime.MQTT.Username "") (eq .Settings.Realtime.MQTT.Password "")}}true{{else}}false{{end}},
         testResults: [],
         isTesting: false,
         currentTestStage: null
@@ -157,6 +158,16 @@
         mqtt.testResults = [];
         mqtt.currentTestStage = null;
     });
+    $watch('mqtt.anonymous', () => {
+        hasChanges = true;
+        mqtt.testResults = [];
+        mqtt.currentTestStage = null;
+        if (mqtt.anonymous) {
+            // Clear username and password when anonymous is selected
+            mqtt.username = '';
+            mqtt.password = '';
+        }
+    });
 ">
 
     <!-- control collapse element open state and label visibility -->
@@ -184,7 +195,7 @@
             "tooltip" "Enable or disable integration with MQTT service."}}
 
         <div x-show="mqtt.enabled"
-             class="grid grid-cols-1 md:grid-cols-2 gap-x-6"
+             class="grid grid-cols-1 gap-4"
              id="mqttSettings"
              role="group" 
              aria-label="MQTT Connection Settings">
@@ -204,29 +215,52 @@
                 "label" "MQTT Topic"
                 "placeholder" "birdnet/detections"
                 "tooltip" "MQTT topic to publish detections to"}}
+            
+            <!-- Authentication Section -->
+            <div class="border-t border-base-300 pt-4 mt-2">
+                <h3 class="text-sm font-medium mb-3">Authentication</h3>
+                
+                {{template "checkbox" dict
+                    "id" "mqttAnonymous"
+                    "model" "mqtt.anonymous"
+                    "name" "realtime.mqtt.anonymous"
+                    "label" "Anonymous Connection"
+                    "tooltip" "Use anonymous connection without username/password."}}
+                
+                <!-- Note about Anonymous Connection when enabled -->
+                {{template "noteField" dict
+                    "condition" "mqtt.anonymous"
+                    "content" "<strong>Anonymous Connection:</strong> Authentication is disabled for this MQTT connection. Ensure your broker is configured to allow anonymous connections for the topics you're publishing to."}}
 
-            {{template "textField" dict
-                "id" "mqttUsername"
-                "model" "mqtt.username"
-                "name" "realtime.mqtt.username"
-                "label" "Username"
-                "tooltip" "The MQTT username."}}
+                <div x-show="!mqtt.anonymous" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    {{template "textField" dict
+                        "id" "mqttUsername"
+                        "model" "mqtt.username"
+                        "name" "realtime.mqtt.username"
+                        "label" "Username"
+                        "tooltip" "The MQTT username."}}
 
-            {{template "passwordField" dict
-                "id" "mqttPassword"
-                "model" "mqtt.password"
-                "name" "realtime.mqtt.password"
-                "label" "Password"
-                "placeholder" ""
-                "tooltip" "The MQTT password."}}
-          
-            {{template "checkbox" dict
-                "id" "mqttRetain"
-                "model" "mqtt.retain"
-                "name" "realtime.mqtt.retain"
-                "label" "Retain Messages"
-                "tooltip" "When enabled, MQTT broker will keep the last message on each topic and deliver to new subscribers."}}
-
+                    {{template "passwordField" dict
+                        "id" "mqttPassword"
+                        "model" "mqtt.password"
+                        "name" "realtime.mqtt.password"
+                        "label" "Password"
+                        "placeholder" ""
+                        "tooltip" "The MQTT password."}}
+                </div>
+            </div>
+            
+            <!-- Message Settings Section -->
+            <div class="border-t border-base-300 pt-4 mt-2">
+                <h3 class="text-sm font-medium mb-3">Message Settings</h3>
+                
+                {{template "checkbox" dict
+                    "id" "mqttRetain"
+                    "model" "mqtt.retain"
+                    "name" "realtime.mqtt.retain"
+                    "label" "Retain Messages"
+                    "tooltip" "When enabled, MQTT broker will keep the last message on each topic and deliver to new subscribers."}}
+            </div>
         </div>
         
         <!-- Note about MQTT Retain for HomeAssistant - full width -->
