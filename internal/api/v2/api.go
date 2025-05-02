@@ -817,18 +817,8 @@ func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings
 							// Create a per-request auth service
 							authService := auth.NewSecurityAdapter(oauth2Server, apiController.apiLogger)
 							c.Set("auth_service", authService)
-						} else {
-							// OAuth2Server is nil, set a placeholder or log? For now, do nothing, getAuthService will handle nil.
-							// Consider setting a specific "no-op" auth service if needed.
-							// apiController.apiLogger.Debug("OAuth2Server is nil, no auth_service set for request", "path", c.Request().URL.Path)
 						}
-					} else {
-						// Server object doesn't have GetOAuth2Server method
-						// apiController.apiLogger.Warn("Server object in context does not provide GetOAuth2Server", "path", c.Request().URL.Path)
 					}
-				} else {
-					// Server object not found in context
-					// apiController.apiLogger.Warn("Server object not found in context", "path", c.Request().URL.Path)
 				}
 			}
 			return next(c)
