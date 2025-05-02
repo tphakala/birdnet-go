@@ -65,17 +65,18 @@ func (c *Controller) Login(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid login request", http.StatusBadRequest)
 	}
 
-	// Get auth service
-	authService, err := c.getAuthService(ctx)
-	if err != nil {
+	// Use the stored auth service instance
+	authService := c.AuthService
+	if authService == nil {
+		// Handle case where auth might not be configured but login endpoint is hit
 		if c.apiLogger != nil {
-			c.apiLogger.Error("Authentication service unavailable during login",
-				"error", err.Error(),
+			c.apiLogger.Error("Login attempt but AuthService is nil (auth not configured?)",
 				"ip", ctx.RealIP(),
 				"path", ctx.Request().URL.Path,
 			)
 		}
-		return c.HandleError(ctx, err,
+		// Return a generic error, perhaps indicating auth isn't enabled
+		return c.HandleError(ctx, errors.New("authentication not configured"),
 			"Authentication service unavailable", http.StatusInternalServerError)
 	}
 
@@ -168,12 +169,11 @@ func (c *Controller) Login(ctx echo.Context) error {
 
 // Logout handles POST /api/v2/auth/logout
 func (c *Controller) Logout(ctx echo.Context) error {
-	// Get auth service
-	authService, err := c.getAuthService(ctx)
-	if err != nil {
+	// Use the stored auth service instance
+	authService := c.AuthService
+	if authService == nil {
 		if c.apiLogger != nil {
-			c.apiLogger.Warn("Logout requested but auth service is not available",
-				"error", err.Error(),
+			c.apiLogger.Warn("Logout requested but AuthService is nil (auth not configured?)",
 				"ip", ctx.RealIP(),
 				"path", ctx.Request().URL.Path,
 			)
