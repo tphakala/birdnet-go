@@ -51,6 +51,10 @@ type Controller struct {
 	apiLoggerClose      func() error       // Function to close the log file
 
 	// Auth related fields
+	// AuthService stores the shared authentication service instance.
+	// NOTE: This instance is shared across all requests handled by this controller.
+	// The underlying implementation (auth.SecurityAdapter embedding security.OAuth2Server)
+	// is designed to be concurrency-safe through internal locking (e.g., RWMutex for token maps).
 	AuthService      auth.Service        // Store the auth service instance
 	authMiddlewareFn echo.MiddlewareFunc // Authentication middleware function (set if auth configured)
 }
@@ -228,7 +232,9 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 
 	// If OAuth2Server is provided, setup authentication service and middleware function
 	if oauth2Server != nil {
-		// Create and store the auth service instance directly
+		// Create and store the auth service instance directly.
+		// This single instance is shared across requests handled by this controller.
+		// Concurrency safety is handled within the auth.Service implementation.
 		c.AuthService = auth.NewSecurityAdapter(oauth2Server, c.apiLogger)
 
 		// Create the middleware provider using the stored service
