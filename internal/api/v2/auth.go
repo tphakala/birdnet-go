@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	. "github.com/tphakala/birdnet-go/internal/api/v2/auth"
+	auth "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 )
 
 // AuthRequest represents the login request structure
@@ -133,8 +133,8 @@ func (c *Controller) Login(ctx echo.Context) error {
 
 		// Use the error message from the sentinel error if appropriate
 		message := "Invalid credentials"
-		if errors.Is(authErr, ErrInvalidCredentials) {
-			message = ErrInvalidCredentials.Error()
+		if errors.Is(authErr, auth.ErrInvalidCredentials) {
+			message = auth.ErrInvalidCredentials.Error()
 		}
 
 		return ctx.JSON(http.StatusUnauthorized, AuthResponse{
@@ -215,7 +215,11 @@ func (c *Controller) GetAuthStatus(ctx echo.Context) error {
 	// Read authentication status details set by the AuthMiddleware in the context.
 	isAuthenticated := boolFromCtx(ctx, "isAuthenticated", false)
 	username := stringFromCtx(ctx, "username", "")
-	authMethod := stringFromCtx(ctx, "authMethod", "unknown")
+	// Read the method as a string from context for now.
+	// Downstream consumers comparing this value might need updates if they
+	// relied on specific string literals. The middleware now sets the context
+	// value using the string representation of the new AuthMethod constants.
+	authMethod := stringFromCtx(ctx, "authMethod", string(auth.AuthMethodUnknown))
 
 	// Construct the response based on context values
 	status := AuthStatus{
