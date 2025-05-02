@@ -654,6 +654,45 @@ func (c *Controller) handleUnauthorized(ctx echo.Context) error {
 	})
 }
 
+// isAuthRequiredWithoutService checks if authentication would be required based on settings
+// and IP bypass rules, even if the AuthService itself is nil. This is used as a fallback
+// check in AuthMiddleware.
+func (c *Controller) isAuthRequiredWithoutService(ctx echo.Context) bool {
+	// Assume auth is required if any provider is enabled
+	authWouldBeRequired := c.Settings.Security.BasicAuth.Enabled || c.Settings.Security.GoogleAuth.Enabled || c.Settings.Security.GithubAuth.Enabled
+
+	// Check for subnet bypass only if auth would otherwise be required
+	if authWouldBeRequired && c.Settings.Security.AllowSubnetBypass.Enabled {
+		ipStr := ctx.RealIP()
+		ip := net.ParseIP(ipStr)
+		if ip != nil {
+			if ip.IsLoopback() {
+				// Loopback always bypasses
+				authWouldBeRequired = false
+			} else {
+				// Check configured subnets
+				allowedSubnetsStr := c.Settings.Security.AllowSubnetBypass.Subnet
+				if allowedSubnetsStr != "" {
+					allowedSubnets := strings.Split(allowedSubnetsStr, ",")
+					for _, cidr := range allowedSubnets {
+						trimmedCIDR := strings.TrimSpace(cidr)
+						if trimmedCIDR == "" {
+							continue
+						}
+						_, subnet, err := net.ParseCIDR(trimmedCIDR)
+						if err == nil && subnet.Contains(ip) {
+							authWouldBeRequired = false // Bypass cancels requirement
+							break                       // Found a match, exit inner loop
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return authWouldBeRequired
+}
+
 // AuthMiddleware is a method that returns the auth middleware function
 // This is now considered the *fallback* middleware if authMiddlewareFn is nil.
 // It uses the Controller's stored AuthService instance.
@@ -664,42 +703,8 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 
 		if authService == nil {
 			// If service is nil (should only happen if auth wasn't configured properly),
-			// deny access if auth *would* have been required based on settings.
-			// Check basic enabled status and subnet bypass
-			authWouldBeRequired := c.Settings.Security.BasicAuth.Enabled || c.Settings.Security.GoogleAuth.Enabled || c.Settings.Security.GithubAuth.Enabled
-			if c.Settings.Security.AllowSubnetBypass.Enabled {
-				// Use the existing IsRequestFromAllowedSubnet helper from the security package
-				// It likely needs the *security.OAuth2Server instance to access settings internally.
-				// However, authService (which embeds OAuth2Server) is nil here.
-				// We need to call the check using the settings directly if possible, or accept this limitation.
-
-				// Replicating the check logic here based on oauth.go's IsRequestFromAllowedSubnet
-				ipStr := ctx.RealIP()
-				ip := net.ParseIP(ipStr)
-				if ip != nil {
-					if ip.IsLoopback() {
-						authWouldBeRequired = false
-					} else {
-						allowedSubnetsStr := c.Settings.Security.AllowSubnetBypass.Subnet
-						if allowedSubnetsStr != "" {
-							allowedSubnets := strings.Split(allowedSubnetsStr, ",")
-							for _, cidr := range allowedSubnets {
-								trimmedCIDR := strings.TrimSpace(cidr)
-								if trimmedCIDR == "" {
-									continue
-								}
-								_, subnet, err := net.ParseCIDR(trimmedCIDR)
-								if err == nil && subnet.Contains(ip) {
-									authWouldBeRequired = false // Bypass cancels requirement
-									break                       // Found a match, exit inner loop
-								}
-							}
-						}
-					}
-				}
-			}
-
-			if authWouldBeRequired {
+			// check if auth *would* have been required based on settings and IP bypass.
+			if c.isAuthRequiredWithoutService(ctx) {
 				if c.apiLogger != nil {
 					c.apiLogger.Error("AuthMiddleware called but AuthService is nil, denying access",
 						"path", ctx.Request().URL.Path,
