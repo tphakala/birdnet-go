@@ -12,9 +12,10 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrInvalidToken       = errors.New("invalid or expired token")
 	ErrSessionNotFound    = errors.New("session not found or expired")
-	ErrAuthNotRequired    = errors.New("authentication not required") // Indicate auth bypassed
 	ErrLogoutFailed       = errors.New("logout operation failed")
 )
+
+//go:generate stringer -type=AuthMethod
 
 // AuthMethod represents the method used for authentication.
 type AuthMethod uint8
@@ -27,23 +28,6 @@ const (
 	AuthMethodSubnet                    // 3
 	AuthMethodNone                      // 4 - Explicitly indicate no auth applied (e.g., bypassed)
 )
-
-// String returns the string representation of the AuthMethod.
-func (m AuthMethod) String() string {
-	switch m {
-	case AuthMethodToken:
-		return "token"
-	case AuthMethodSession:
-		return "session"
-	case AuthMethodSubnet:
-		return "subnet"
-	case AuthMethodNone:
-		return "none"
-	// AuthMethodUnknown is handled by the default case
-	default:
-		return "unknown"
-	}
-}
 
 // Service defines the authentication interface for API endpoints
 type Service interface {
