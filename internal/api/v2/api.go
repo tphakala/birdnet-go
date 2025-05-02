@@ -749,7 +749,7 @@ func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings
 	e.Pre(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			// Check if we're handling an API v2 request
-			if strings.HasPrefix(c.Path(), "/api/v2/") {
+			if strings.HasPrefix(c.Request().URL.Path, "/api/v2/") {
 				// Get server from context, which is set by the Server middleware
 				if server := c.Get("server"); server != nil {
 					// Try to extract OAuth2Server if it implements the right interface
