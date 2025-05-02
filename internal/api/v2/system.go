@@ -269,8 +269,25 @@ func (c *Controller) initSystemRoutes() {
 	// Create system API group
 	systemGroup := c.Group.Group("/system")
 
-	// Create auth-protected group using our middleware
-	protectedGroup := systemGroup.Group("", c.AuthMiddleware)
+	// Determine which middleware to use for authentication
+	var authMiddleware echo.MiddlewareFunc
+
+	// Use the new auth middleware if available
+	if c.AuthMiddlewareFn != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Using new auth middleware for system routes")
+		}
+		authMiddleware = c.AuthMiddlewareFn
+	} else {
+		// Fall back to the legacy middleware
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("New auth middleware not available, using legacy auth middleware")
+		}
+		authMiddleware = c.AuthMiddleware
+	}
+
+	// Create auth-protected group using the appropriate middleware
+	protectedGroup := systemGroup.Group("", authMiddleware)
 
 	// Add system routes (all protected)
 	protectedGroup.GET("/info", c.GetSystemInfo)

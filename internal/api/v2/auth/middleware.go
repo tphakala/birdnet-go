@@ -1,0 +1,154 @@
+// internal/api/v2/auth/middleware.go
+package auth
+
+import (
+	"log/slog"
+	"net/http"
+	"strings"
+
+	"github.com/labstack/echo/v4"
+)
+
+// Middleware provides authentication middleware with the Service
+type Middleware struct {
+	AuthService Service
+	logger      *slog.Logger
+}
+
+// NewMiddleware creates a new auth middleware
+func NewMiddleware(service Service, logger *slog.Logger) *Middleware {
+	return &Middleware{
+		AuthService: service,
+		logger:      logger,
+	}
+}
+
+// Authenticate is the main middleware function for authentication
+func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		ip := c.RealIP()
+		path := c.Request().URL.Path
+
+		// Log middleware execution if logger available
+		if m.logger != nil {
+			m.logger.Debug("Auth middleware executing", "path", path, "ip", ip)
+		}
+
+		// Skip auth check if auth is not required for this client IP
+		if !m.AuthService.IsAuthRequired(c) {
+			if m.logger != nil {
+				m.logger.Debug("Authentication not required for this client", "ip", ip, "path", path)
+			}
+			return next(c)
+		}
+
+		// Try token auth first (from Authorization header)
+		if authHeader := c.Request().Header.Get("Authorization"); authHeader != "" {
+			if m.logger != nil {
+				m.logger.Debug("Attempting token authentication", "path", path, "ip", ip)
+			}
+
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
+				token := parts[1] // Never log the token itself
+
+				if m.AuthService.ValidateToken(token) {
+					if m.logger != nil {
+						m.logger.Debug("Token authentication successful", "path", path, "ip", ip)
+					}
+					return next(c)
+				}
+
+				if m.logger != nil {
+					m.logger.Warn("Token validation failed", "path", path, "ip", ip)
+				}
+				return c.JSON(http.StatusUnauthorized, map[string]string{
+					"error": "Invalid or expired token",
+				})
+			}
+
+			// Malformed Authorization header
+			if m.logger != nil {
+				m.logger.Warn("Malformed Authorization header", "path", path, "ip", ip)
+			}
+			return c.JSON(http.StatusUnauthorized, map[string]string{
+				"error": "Invalid Authorization header format. Use 'Bearer {token}'",
+			})
+		}
+
+		// Fall back to session-based authentication
+		if m.logger != nil {
+			m.logger.Debug("Attempting session authentication", "path", path, "ip", ip)
+		}
+
+		if m.AuthService.CheckAccess(c) {
+			if m.logger != nil {
+				m.logger.Debug("Session authentication successful", "path", path, "ip", ip)
+			}
+			return next(c)
+		}
+
+		// Authentication failed, determine appropriate response
+		return m.handleUnauthenticated(c)
+	}
+}
+
+// handleUnauthenticated determines the appropriate response for unauthenticated requests
+func (m *Middleware) handleUnauthenticated(c echo.Context) error {
+	ip := c.RealIP()
+	path := c.Request().URL.Path
+
+	if m.logger != nil {
+		m.logger.Info("Authentication required but not provided/valid",
+			"path", path,
+			"ip", ip,
+		)
+	}
+
+	// Determine if request is from a browser or an API client
+	acceptHeader := c.Request().Header.Get("Accept")
+	isHXRequest := c.Request().Header.Get("HX-Request") == "true"
+	isBrowserRequest := strings.Contains(acceptHeader, "text/html") || isHXRequest
+
+	if isBrowserRequest {
+		if m.logger != nil {
+			m.logger.Info("Redirecting unauthenticated browser client to login page",
+				"path", path,
+				"ip", ip,
+				"accept_header", acceptHeader,
+				"is_htmx", isHXRequest,
+			)
+		}
+
+		// For browser requests, redirect to login page
+		loginPath := "/login"
+
+		// Optionally store the original URL for post-login redirect
+		originURL := c.Request().URL.String()
+		// Avoid redirect loops to login page itself
+		if !strings.HasPrefix(path, loginPath) {
+			loginPath += "?redirect=" + originURL
+		}
+
+		// Special handling for HTMX requests
+		if isHXRequest {
+			c.Response().Header().Set("HX-Redirect", loginPath)
+			return c.String(http.StatusUnauthorized, "")
+		}
+
+		return c.Redirect(http.StatusFound, loginPath)
+	}
+
+	// For API clients, return JSON error response
+	if m.logger != nil {
+		m.logger.Info("Returning 401 Unauthorized for unauthenticated API client",
+			"path", path,
+			"ip", ip,
+			"accept_header", acceptHeader,
+		)
+	}
+
+	return c.JSON(http.StatusUnauthorized, map[string]string{
+		"error": "Authentication required",
+	})
+}
