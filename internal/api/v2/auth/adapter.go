@@ -2,6 +2,7 @@
 package auth
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"log/slog"
 
@@ -129,9 +130,15 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 		return ErrInvalidCredentials // Basic auth not enabled counts as invalid credentials here
 	}
 
-	// Constant-time comparison for both username (matching ClientID) and password to prevent timing attacks
-	userMatch := subtle.ConstantTimeCompare([]byte(username), []byte(storedClientID)) == 1
-	passMatch := subtle.ConstantTimeCompare([]byte(password), []byte(storedPassword)) == 1
+	// Hash inputs and stored values before comparison to ensure fixed length for ConstantTimeCompare.
+	usernameHash := sha256.Sum256([]byte(username))
+	passwordHash := sha256.Sum256([]byte(password))
+	storedClientIDHash := sha256.Sum256([]byte(storedClientID))
+	storedPasswordHash := sha256.Sum256([]byte(storedPassword))
+
+	// Constant-time comparison on the hashes.
+	userMatch := subtle.ConstantTimeCompare(usernameHash[:], storedClientIDHash[:]) == 1
+	passMatch := subtle.ConstantTimeCompare(passwordHash[:], storedPasswordHash[:]) == 1
 	credentialsValid := userMatch && passMatch
 
 	if credentialsValid {
