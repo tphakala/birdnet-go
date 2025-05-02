@@ -731,7 +731,7 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 				)
 			}
 			ctx.Set("isAuthenticated", false)
-			ctx.Set("authMethod", string(auth.AuthMethodNone))
+			ctx.Set("authMethod", auth.AuthMethodNone) // Store enum directly
 			return next(ctx)
 		}
 
@@ -741,7 +741,7 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 				c.apiLogger.Debug("Authentication not required for this request", "path", ctx.Request().URL.Path, "ip", ctx.RealIP())
 			}
 			ctx.Set("isAuthenticated", false)
-			ctx.Set("authMethod", string(auth.AuthMethodNone))
+			ctx.Set("authMethod", auth.AuthMethodNone) // Store enum directly
 			return next(ctx)
 		}
 
@@ -751,7 +751,7 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			// Token auth successful
 			ctx.Set("isAuthenticated", true)
 			ctx.Set("username", authService.GetUsername(ctx))
-			ctx.Set("authMethod", string(auth.AuthMethodToken)) // Explicitly set Token
+			ctx.Set("authMethod", auth.AuthMethodToken) // Store enum directly
 			return next(ctx)
 		}
 
@@ -782,7 +782,7 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		if c.handleSessionAuth(ctx) {
 			ctx.Set("isAuthenticated", true)
 			ctx.Set("username", authService.GetUsername(ctx))
-			ctx.Set("authMethod", string(auth.AuthMethodSession)) // Explicitly set Session
+			ctx.Set("authMethod", auth.AuthMethodSession) // Store enum directly
 			return next(ctx)
 		}
 
