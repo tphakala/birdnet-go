@@ -98,11 +98,15 @@ func (a *SecurityAdapter) ValidateToken(token string) bool {
 	return a.OAuth2Server.ValidateAccessToken(token)
 }
 
-// AuthenticateBasic handles basic authentication with username/password
+// AuthenticateBasic handles basic authentication with username/password.
+// NOTE: This application does not support multiple user accounts or authorization levels.
+// Basic authentication relies on a single, fixed username/password combination
+// configured in settings (Security.BasicAuth.ClientID and Security.BasicAuth.Password).
+// The provided username MUST match the configured ClientID.
 func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password string) bool {
-	// For basic auth, we'll just check against configured password
-	// This can be expanded as needed
+	// For basic auth, check against configured ClientID and Password
 	storedPassword := a.OAuth2Server.Settings.Security.BasicAuth.Password
+	storedClientID := a.OAuth2Server.Settings.Security.BasicAuth.ClientID // Use ClientID as the username
 
 	// Skip if basic auth is not enabled
 	if !a.OAuth2Server.Settings.Security.BasicAuth.Enabled {
@@ -112,10 +116,12 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 		return false
 	}
 
-	// Constant-time comparison to prevent timing attacks
-	isValidPassword := subtle.ConstantTimeCompare([]byte(password), []byte(storedPassword)) == 1
+	// Constant-time comparison for both username (matching ClientID) and password to prevent timing attacks
+	userMatch := subtle.ConstantTimeCompare([]byte(username), []byte(storedClientID)) == 1
+	passMatch := subtle.ConstantTimeCompare([]byte(password), []byte(storedPassword)) == 1
+	credentialsValid := userMatch && passMatch
 
-	if isValidPassword {
+	if credentialsValid {
 		// Generate auth code and create session on successful authentication
 		authCode, err := a.OAuth2Server.GenerateAuthCode()
 		if err != nil {
