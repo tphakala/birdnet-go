@@ -757,15 +757,15 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 
 		// Handle errors from token authentication attempt
 		if tokenErr != nil {
-			switch tokenErr {
-			case errAuthServiceNil:
+			switch { // Use switch without true (shorthand)
+			case errors.Is(tokenErr, errAuthServiceNil):
 				// Logged in handleTokenAuth already
 				return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal auth configuration error"})
-			case errMalformedAuthHeader:
+			case errors.Is(tokenErr, errMalformedAuthHeader):
 				// Logged in handleTokenAuth already
 				ctx.Response().Header().Set("WWW-Authenticate", `Bearer realm="api"`)
 				return ctx.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid Authorization header"})
-			case errInvalidAuthToken:
+			case errors.Is(tokenErr, errInvalidAuthToken):
 				// Logged in handleTokenAuth already
 				ctx.Response().Header().Set("WWW-Authenticate", `Bearer realm="api", error="invalid_token", error_description="Invalid or expired token"`)
 				return ctx.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid or expired token"})
