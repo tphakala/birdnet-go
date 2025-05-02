@@ -98,6 +98,16 @@ type ActiveAudioDevice struct {
 	Channels   int    `json:"channels"`
 }
 
+// ProcessInfo represents information about a running process
+type ProcessInfo struct {
+	PID    int32   `json:"pid"`
+	Name   string  `json:"name"`
+	Status string  `json:"status"` // e.g., "running", "sleeping", "zombie"
+	CPU    float64 `json:"cpu"`    // CPU usage percentage
+	Memory uint64  `json:"memory"` // Memory usage in bytes (RSS)
+	Uptime int64   `json:"uptime"` // Uptime in seconds
+}
+
 // Use monotonic clock for start time
 var startTime = time.Now()
 var startMonotonicTime = time.Now() // This inherently includes monotonic clock reading
@@ -294,6 +304,7 @@ func (c *Controller) initSystemRoutes() {
 	protectedGroup.GET("/resources", c.GetResourceInfo)
 	protectedGroup.GET("/disks", c.GetDiskInfo)
 	protectedGroup.GET("/jobs", c.GetJobQueueStats)
+	protectedGroup.GET("/processes", c.GetProcessInfo)
 
 	// Audio device routes (all protected)
 	audioGroup := protectedGroup.Group("/audio")
@@ -903,6 +914,144 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 		"verified":    true,
 		"diagnostics": diagnostics,
 	})
+}
+
+// GetProcessInfo returns a list of running processes and their basic information
+// It accepts an optional query parameter `?all=true` to show all processes.
+// By default, it shows only the main application process and its direct children.
+func (c *Controller) GetProcessInfo(ctx echo.Context) error {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting process information",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+			"query", ctx.QueryString(),
+		)
+	}
+
+	showAll := ctx.QueryParam("all") == "true"
+	currentPID := int32(os.Getpid())
+
+	procs, err := process.Processes()
+	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to list processes",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+		return c.HandleError(ctx, err, "Failed to list processes", http.StatusInternalServerError)
+	}
+
+	processInfos := make([]ProcessInfo, 0, len(procs))
+	for _, p := range procs {
+		// Filtering logic
+		if !showAll {
+			parentPID, _ := p.Ppid()
+			if p.Pid != currentPID && parentPID != currentPID {
+				// Skip if not the main process or a direct child
+				continue
+			}
+		}
+
+		name, err := p.Name()
+		if err != nil {
+			// Log error but continue, maybe process terminated?
+			if c.apiLogger != nil {
+				c.apiLogger.Warn("Failed to get process name", "pid", p.Pid, "error", err.Error())
+			}
+			continue
+		}
+
+		statusList, err := p.Status()
+		var status string
+		if err != nil {
+			status = "unknown"
+			if c.apiLogger != nil {
+				c.apiLogger.Warn("Failed to get process status", "pid", p.Pid, "name", name, "error", err.Error())
+			}
+		} else if len(statusList) > 0 {
+			// Use the first status code returned
+			switch statusList[0] {
+			case "R": // Running or Runnable (Linux/macOS)
+				status = "running"
+			case "S": // Sleeping (Linux/macOS)
+				status = "sleeping"
+			case "D": // Disk Sleep (Linux)
+				status = "disk sleep"
+			case "Z": // Zombie (Linux/macOS)
+				status = "zombie"
+			case "T": // Stopped (Linux/macOS)
+				status = "stopped"
+			case "W": // Paging (Linux)
+				status = "paging"
+			case "I": // Idle (macOS/FreeBSD)
+				status = "idle"
+			// Add more specific codes if needed, or default
+			default:
+				status = strings.ToLower(statusList[0]) // Use the code itself if not recognized
+			}
+		} else {
+			status = "unknown"
+		}
+
+		cpuPercent, err := p.CPUPercent()
+		if err != nil {
+			// Log error but default to 0
+			if c.apiLogger != nil {
+				c.apiLogger.Warn("Failed to get process CPU percent", "pid", p.Pid, "name", name, "error", err.Error())
+			}
+			cpuPercent = 0.0
+		}
+
+		memInfo, err := p.MemoryInfo()
+		var memRSS uint64
+		if err != nil {
+			// Log error but default to 0
+			if c.apiLogger != nil {
+				c.apiLogger.Warn("Failed to get process memory info", "pid", p.Pid, "name", name, "error", err.Error())
+			}
+			memRSS = 0
+		} else {
+			memRSS = memInfo.RSS // Resident Set Size
+		}
+
+		createTimeMillis, err := p.CreateTime()
+		var uptimeSeconds int64
+		if err != nil {
+			// Log error but default to 0
+			if c.apiLogger != nil {
+				c.apiLogger.Warn("Failed to get process create time", "pid", p.Pid, "name", name, "error", err.Error())
+			}
+			uptimeSeconds = 0
+		} else {
+			// Calculate uptime relative to now
+			uptimeSeconds = time.Now().Unix() - (createTimeMillis / 1000)
+			if uptimeSeconds < 0 { // Sanity check for clock skew
+				uptimeSeconds = 0
+			}
+		}
+
+		processInfos = append(processInfos, ProcessInfo{
+			PID:    p.Pid,
+			Name:   name,
+			Status: status,
+			CPU:    cpuPercent,
+			Memory: memRSS,
+			Uptime: uptimeSeconds,
+		})
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Process information retrieved successfully",
+			"count", len(processInfos),
+			"filter_applied", !showAll,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
+	return ctx.JSON(http.StatusOK, processInfos)
 }
 
 // Helper functions
