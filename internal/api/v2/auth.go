@@ -2,7 +2,9 @@
 package api
 
 import (
+	"crypto/rand"
 	"errors"
+	"math/big"
 	"net/http"
 	"time"
 
@@ -96,8 +98,8 @@ func (c *Controller) Login(ctx echo.Context) error {
 
 	// Check for empty credentials before calling the auth service
 	if req.Username == "" || req.Password == "" {
-		// Add a short delay to prevent timing attacks on username enumeration
-		time.Sleep(500 * time.Millisecond)
+		// Add a short, randomized delay to mitigate timing attacks on username enumeration
+		randomDelay(50, 150)
 
 		if c.apiLogger != nil {
 			c.apiLogger.Warn("Login attempt with missing credentials",
@@ -119,8 +121,8 @@ func (c *Controller) Login(ctx echo.Context) error {
 	authErr := authService.AuthenticateBasic(ctx, req.Username, req.Password)
 
 	if authErr != nil {
-		// Add a short delay to prevent brute force attacks
-		time.Sleep(500 * time.Millisecond)
+		// Add a short, randomized delay to mitigate brute force/timing attacks
+		randomDelay(50, 150)
 
 		if c.apiLogger != nil {
 			c.apiLogger.Warn("Failed login attempt",
@@ -271,3 +273,20 @@ func stringFromCtx(ctx echo.Context, key, defaultValue string) string {
 }
 
 // --- End Context Helper Functions ---
+
+// randomDelay introduces a random sleep duration within the specified range [minMs, maxMs).
+func randomDelay(minMs, maxMs int64) {
+	if maxMs <= minMs {
+		minMs = 50  // Default min
+		maxMs = 150 // Default max
+	}
+	rangeSize := big.NewInt(maxMs - minMs)
+	n, err := rand.Int(rand.Reader, rangeSize)
+	if err != nil {
+		// Fallback to a fixed delay if random generation fails
+		time.Sleep(time.Duration(minMs) * time.Millisecond)
+		return
+	}
+	delay := n.Int64() + minMs
+	time.Sleep(time.Duration(delay) * time.Millisecond)
+}
