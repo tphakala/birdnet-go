@@ -4,6 +4,7 @@ package auth
 import (
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -161,7 +162,7 @@ func (m *Middleware) handleUnauthenticated(c echo.Context) error {
 		originURL := c.Request().URL.String()
 		// Avoid redirect loops to login page itself
 		if !strings.HasPrefix(path, loginPath) {
-			loginPath += "?redirect=" + originURL
+			loginPath += "?redirect=" + url.QueryEscape(originURL) // Encode the redirect URL
 		}
 
 		// Special handling for HTMX requests
