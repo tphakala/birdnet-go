@@ -595,7 +595,8 @@ func (c *Controller) handleTokenAuth(ctx echo.Context, authService auth.Service)
 		return false, nil // No header, token auth not attempted
 	}
 
-	parts := strings.SplitN(strings.TrimSpace(authHeader), " ", 2) // Trim whitespace before splitting
+	// Use strings.Fields to handle potentially multiple spaces between "Bearer" and token
+	parts := strings.Fields(authHeader)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
 		if c.apiLogger != nil {
 			c.apiLogger.Warn("Invalid Authorization header format",
@@ -611,7 +612,8 @@ func (c *Controller) handleTokenAuth(ctx echo.Context, authService auth.Service)
 		})
 	}
 
-	token := strings.TrimSpace(parts[1]) // Trim whitespace from the token itself
+	// No need to trim the token here as strings.Fields handles surrounding whitespace
+	token := parts[1]
 	// Check token validity using the service, which now returns an error
 	if err := authService.ValidateToken(token); err == nil {
 		// err is nil, token is valid
@@ -676,9 +678,12 @@ func (c *Controller) handleUnauthorized(ctx echo.Context) error {
 	isBrowserRequest := strings.Contains(acceptHeader, "text/html") || isHXRequest
 
 	if isBrowserRequest {
-		loginPath := "/login"
+		loginPath := "/login" // Assuming default login path is /login
+		// Get the actual origin URL of the request
 		originURL := ctx.Request().URL.String()
-		if !strings.HasPrefix(ctx.Path(), loginPath) {
+		// Compare against the actual request path, not the route pattern
+		if !strings.HasPrefix(ctx.Request().URL.Path, loginPath) {
+			// Append redirect parameter only if the current path is not the login path
 			loginPath += "?redirect=" + url.QueryEscape(originURL)
 		}
 
@@ -690,6 +695,8 @@ func (c *Controller) handleUnauthorized(ctx echo.Context) error {
 	}
 
 	// For API clients, return JSON error response
+	// Add WWW-Authenticate header for RFC 6750 compliance, indicating Bearer scheme is expected
+	ctx.Response().Header().Set("WWW-Authenticate", `Bearer realm="api"`)
 	return ctx.JSON(http.StatusUnauthorized, map[string]string{
 		"error": "Authentication required",
 	})
