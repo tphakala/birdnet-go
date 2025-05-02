@@ -4,6 +4,7 @@ package auth
 import (
 	"crypto/sha256"
 	"crypto/subtle"
+	"fmt"
 	"log/slog"
 
 	"github.com/labstack/echo/v4"
@@ -60,45 +61,34 @@ func (a *SecurityAdapter) GetUsername(c echo.Context) string {
 }
 
 // GetAuthMethod returns the authentication method used as a defined constant.
+// It prioritizes context values set by the middleware if available.
 func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
-	// NOTE: This logic assumes that if a token/provider session exists, it was validated
-	// by middleware *before* this method is called, or it relies on IsUserAuthenticated.
-	// If called independently, it might return a method even if the token/session is expired.
-
-	// Check if authenticated by token (assuming gothic session stores it)
-	if token, err := gothic.GetFromSession("access_token", c.Request()); err == nil && token != "" {
-		// We assume the middleware validated the token, or IsUserAuthenticated would be false.
-		if a.OAuth2Server.IsUserAuthenticated(c) { // Double-check auth status
-			return AuthMethodToken
+	// 1. Check context first (set by middleware)
+	if authMethodCtx := c.Get("authMethod"); authMethodCtx != nil {
+		if method, ok := authMethodCtx.(AuthMethod); ok {
+			// Return method determined by middleware (e.g., Token, Session)
+			return method
+		}
+		// If type assertion fails, log it but fall through to other checks
+		if a.logger != nil {
+			a.logger.Warn("Context value 'authMethod' has unexpected type", "type", fmt.Sprintf("%T", authMethodCtx))
 		}
 	}
 
-	// Check specific OAuth provider sessions (simplification)
-	if googleUser, err := gothic.GetFromSession("google", c.Request()); err == nil && googleUser != "" {
-		if a.OAuth2Server.IsUserAuthenticated(c) {
-			return AuthMethodSession // Could refine to AuthMethodGoogle if needed
-		}
-	}
-	if githubUser, err := gothic.GetFromSession("github", c.Request()); err == nil && githubUser != "" {
-		if a.OAuth2Server.IsUserAuthenticated(c) {
-			return AuthMethodSession // Could refine to AuthMethodGitHub if needed
-		}
-	}
-
-	// Check if authenticated by subnet configuration (bypasses user auth)
+	// 2. Check subnet bypass (if context wasn't set or middleware didn't handle)
 	if a.OAuth2Server.IsRequestFromAllowedSubnet(c.RealIP()) {
-		// If request is from an allowed subnet, authentication might not have been required.
-		// If user *is* also authenticated, prioritize that? Or report subnet?
-		// Current behavior: report subnet if applicable, even if also session authenticated.
 		return AuthMethodSubnet
 	}
 
-	// Check generic session authentication (user is authenticated, but not via token/specific provider/subnet)
+	// 3. Check generic authentication status (if context wasn't set)
+	// This might catch session types not explicitly handled by middleware context setting.
 	if a.OAuth2Server.IsUserAuthenticated(c) {
+		// Could attempt more detailed session type detection here if needed,
+		// but for now, return generic Session if middleware didn't specify.
 		return AuthMethodSession
 	}
 
-	// If not authenticated and not bypassed by subnet
+	// 4. If none of the above, assume no authentication
 	return AuthMethodNone
 }
 
