@@ -255,7 +255,7 @@ func boolFromCtx(ctx echo.Context, key string, defaultValue bool) bool {
 
 // stringFromCtx safely retrieves a string value from the Echo context.
 // Returns the defaultValue if the key is not found or the type assertion fails.
-func stringFromCtx(ctx echo.Context, key string, defaultValue string) string {
+func stringFromCtx(ctx echo.Context, key, defaultValue string) string {
 	val := ctx.Get(key)
 	if val == nil {
 		return defaultValue
