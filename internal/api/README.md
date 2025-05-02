@@ -11,14 +11,17 @@ internal/api/
     ├── analytics_test.go  - Tests for analytics endpoints
     ├── api.go             - Main API controller and route initialization
     ├── api_test.go        - Tests for main API functionality
-    ├── auth.go            - Authentication endpoints and middleware
+    ├── auth/              - Authentication package
+    │   ├── adapter.go     - Adapter for security package
+    │   ├── middleware.go  - Authentication middleware  
+    │   └── service.go     - Authentication service interface
+    ├── auth.go            - Authentication endpoints and handlers
     ├── auth_test.go       - Tests for authentication endpoints
     ├── control.go         - System control actions (restart, reload model)
     ├── detections.go      - Bird detection data endpoints
     ├── integration.go     - External integration framework
     ├── integrations.go    - External service integrations
     ├── media.go           - Media (images, audio) management
-    ├── middleware.go      - Custom middleware functions
     ├── settings.go        - Application settings management
     ├── streams.go         - Real-time data streaming
     ├── system.go          - System information and monitoring
@@ -43,14 +46,58 @@ Currently, the package implements version 2 (`v2`) of the API with all endpoints
 
 ## Authentication
 
-The API implements authentication via:
+The API implements a comprehensive service-based authentication system:
 
-- Login/logout functionality
-- Session-based authentication
-- Auth middleware for protected endpoints
-- Bearer token support for programmatic API access
+- **Authentication Service Interface**: Defined in `auth/service.go`, providing a clean abstraction for authentication operations
+- **Security Adapter**: Connects to the existing OAuth2Server implementation through an adapter pattern
+- **Authentication Middleware**: Unified middleware supporting multiple authentication methods:
+  - Bearer token authentication for API clients
+  - Session-based authentication for browser clients
+  - Subnet-based authentication bypass for trusted networks
 
-Protected endpoints require authentication, while some endpoints like health checks and basic detection queries are publicly accessible.
+Protected endpoints use the auth middleware, which determines the appropriate authentication flow based on the client type and available credentials. The system is designed to handle both:
+
+- **Browser Clients**: Redirected to login page with return URL when authentication is required
+- **API Clients**: Receive proper HTTP 401 responses with JSON error messages
+
+### Authentication Service Methods
+
+The authentication service interface provides these key operations:
+
+```go
+// Service defines the authentication interface for API endpoints
+type Service interface {
+    // CheckAccess validates if a request has access to protected resources
+    CheckAccess(c echo.Context) bool
+
+    // IsAuthRequired checks if authentication is required for this request
+    IsAuthRequired(c echo.Context) bool
+
+    // GetUsername retrieves the username of the authenticated user
+    GetUsername(c echo.Context) string
+
+    // GetAuthMethod returns the authentication method used
+    GetAuthMethod(c echo.Context) string
+
+    // ValidateToken checks if a bearer token is valid
+    ValidateToken(token string) bool
+
+    // AuthenticateBasic handles basic authentication with username/password
+    AuthenticateBasic(c echo.Context, username, password string) bool
+
+    // Logout invalidates the current session/token
+    Logout(c echo.Context) error
+}
+```
+
+### Auth Middleware Implementation
+
+The middleware follows this decision flow:
+
+1. Checks for Bearer token and validates if present
+2. Falls back to session authentication for browser clients
+3. Determines appropriate response based on client type 
+4. Allows request to proceed if authentication succeeds
 
 ## Key Features
 
