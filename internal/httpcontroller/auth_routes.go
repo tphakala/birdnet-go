@@ -136,6 +136,14 @@ func handleGothCallback(c echo.Context) error {
 		} else {
 			log.Printf("ERROR: Failed to store provider user ID (%s) in new session: %v", providerKey, err)
 		}
+
+		// --- ROLLBACK SESSION --- //
+		// Since storing provider ID failed after storing provider ID, logout to clear partial state.
+		log.Printf("WARN: Rolling back session due to failure storing providerID after providerKey was stored (Provider: %s, User: %s)",
+			c.Param("provider"), user.Email)
+		gothic.Logout(c.Response(), c.Request()) // Attempt to clear the session
+		// We might also explicitly try to delete the cookie again here if needed, but Logout usually suffices.
+
 		return echo.NewHTTPError(http.StatusInternalServerError, "Session error after social login (storing provider user ID)")
 	}
 	// Standardize on storing email in 'userEmail' key
@@ -151,6 +159,14 @@ func handleGothCallback(c echo.Context) error {
 		} else {
 			log.Printf("ERROR: Failed to store user email in new session: %v", err)
 		}
+
+		// --- ROLLBACK SESSION --- //
+		// Since storing email failed after storing provider ID, logout to clear partial state.
+		log.Printf("WARN: Rolling back session due to failure storing userEmail after providerKey was stored (Provider: %s, User: %s)",
+			c.Param("provider"), user.Email)
+		gothic.Logout(c.Response(), c.Request()) // Attempt to clear the session
+		// We might also explicitly try to delete the cookie again here if needed, but Logout usually suffices.
+
 		return echo.NewHTTPError(http.StatusInternalServerError, "Session error after social login (storing email)")
 	}
 
