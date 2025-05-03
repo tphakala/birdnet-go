@@ -262,14 +262,24 @@ func boolFromCtx(ctx echo.Context, key string, defaultValue bool) bool {
 
 // stringFromCtx safely retrieves a string value from the Echo context.
 // Returns the defaultValue if the key is not found or the type assertion fails.
+// It specifically handles values of type auth.AuthMethod by converting them to string.
 func stringFromCtx(ctx echo.Context, key, defaultValue string) string {
 	val := ctx.Get(key)
 	if val == nil {
 		return defaultValue
 	}
+
+	// Check if it's already a string
 	if stringVal, ok := val.(string); ok {
 		return stringVal
 	}
+
+	// Check if it's an auth.AuthMethod type
+	if authMethodVal, ok := val.(auth.AuthMethod); ok {
+		return string(authMethodVal)
+	}
+
+	// If neither string nor auth.AuthMethod, return default
 	return defaultValue
 }
 
