@@ -9,7 +9,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/markbates/goth/gothic"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/security"
 )
 
@@ -205,7 +204,7 @@ func (s *Server) handleLoginPage(c echo.Context) error {
 		redirect := c.QueryParam("redirect")
 
 		// Validate the redirect parameter
-		if !isValidRedirect(redirect) {
+		if !security.IsValidRedirect(redirect) {
 			redirect = "/"
 		}
 
@@ -230,16 +229,6 @@ func (s *Server) handleLoginPage(c echo.Context) error {
 		Title:    "Dashboard",
 		Settings: s.Settings,
 	})
-}
-
-// isValidRedirect ensures the redirect path is safe and internal
-func isValidRedirect(redirectPath string) bool {
-	isSafe := conf.IsSafePath(redirectPath)
-	if !isSafe {
-		// Log potentially unsafe redirect attempt
-		security.LogWarn("Invalid or potentially unsafe redirect path detected", "path", redirectPath)
-	}
-	return isSafe
 }
 
 // handleBasicAuthLogin handles password login POST request
@@ -271,7 +260,7 @@ func (s *Server) handleBasicAuthLogin(c echo.Context) error {
 		return c.HTML(http.StatusInternalServerError, "<div class='text-red-500'>Unable to complete login at this time (Code: GEN)</div>")
 	}
 	redirect := c.FormValue("redirect")
-	if !isValidRedirect(redirect) {
+	if !security.IsValidRedirect(redirect) {
 		security.LogWarn("Invalid redirect path provided during basic auth login, using default '/'", "provided_redirect", redirect, "username", username)
 		redirect = "/"
 	}

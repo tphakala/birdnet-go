@@ -455,6 +455,7 @@ func moveFile(src, dst string) error {
 	return nil // Move completed successfully
 }
 
+/*
 // IsSafePath ensures the given path is internal
 func IsSafePath(path string) bool {
 	return strings.HasPrefix(path, "/") &&
@@ -465,6 +466,7 @@ func IsSafePath(path string) bool {
 		!strings.Contains(path, "\x00") &&
 		len(path) < 512
 }
+*/
 
 // SanitizeRTSPUrl removes sensitive information from RTSP URL and returns a display-friendly version
 func SanitizeRTSPUrl(source string) string {

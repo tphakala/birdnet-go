@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/security"
 )
 
 // Middleware provides authentication middleware with the Service
@@ -160,19 +161,36 @@ func (m *Middleware) handleUnauthenticated(c echo.Context) error {
 		loginPath := "/login"
 
 		// Optionally store the original URL for post-login redirect
-		originURL := c.Request().URL.String()
-		// Avoid redirect loops to login page itself
-		if !strings.HasPrefix(path, loginPath) {
-			loginPath += "?redirect=" + url.QueryEscape(originURL) // Encode the redirect URL
+		originURL := c.Request().URL      // Get the URL object
+		originPath := originURL.Path      // Get just the path
+		originQuery := originURL.RawQuery // Get the raw query
+
+		// Validate the origin path to prevent open redirects
+		// Use the existing validation logic found in internal/httpcontroller/auth_routes.go
+		// Default to root if path is invalid or points to login page itself
+		safeRedirectPath := "/"
+		if originPath != "" && !strings.HasPrefix(originPath, loginPath) && security.IsValidRedirect(originPath) {
+			safeRedirectPath = originPath
+			if originQuery != "" {
+				safeRedirectPath += "?" + originQuery // Preserve original query if path is safe
+			}
+		} else if !security.IsValidRedirect(originPath) {
+			// Log if the path was invalid but not the login page
+			if m.logger != nil && !strings.HasPrefix(originPath, loginPath) {
+				m.logger.Warn("Invalid redirect path detected during unauthenticated request, defaulting to '/'", "invalid_path", originPath, "ip", ip)
+			}
 		}
+
+		// Construct the final login path with the validated redirect parameter
+		finalLoginPath := loginPath + "?redirect=" + url.QueryEscape(safeRedirectPath)
 
 		// Special handling for HTMX requests
 		if isHXRequest {
-			c.Response().Header().Set("HX-Redirect", loginPath)
+			c.Response().Header().Set("HX-Redirect", finalLoginPath)
 			return c.String(http.StatusUnauthorized, "")
 		}
 
-		return c.Redirect(http.StatusFound, loginPath)
+		return c.Redirect(http.StatusFound, finalLoginPath)
 	}
 
 	// For API clients, return JSON error response
@@ -188,3 +206,12 @@ func (m *Middleware) handleUnauthenticated(c echo.Context) error {
 		"error": "Authentication required",
 	})
 }
+
+/*
+// isValidRedirect ensures the redirect path is safe and internal
+// This helper function needs to be accessible here.
+// Assuming it's moved to a shared location or duplicated if necessary.
+// For now, we assume it's available in scope.
+// If not, it would need to be imported or defined.
+// func isValidRedirect(redirectPath string) bool { ... }
+*/
