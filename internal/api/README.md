@@ -67,28 +67,35 @@ The system is designed to handle both:
 The authentication service interface provides these key operations:
 
 ```go
-// Service defines the authentication interface for API endpoints
+// Service defines the interface for API service implementations.
 type Service interface {
-    // CheckAccess validates if a request has access to protected resources
-    CheckAccess(c echo.Context) bool
+	// RegisterRoutes registers all API routes with the Echo group.
+	RegisterRoutes(group *echo.Group)
 
-    // IsAuthRequired checks if authentication is required for this request
-    IsAuthRequired(c echo.Context) bool
+	// CheckAccess validates if a request has access.
+	// Returns nil on success, or an error on failure.
+	CheckAccess(c echo.Context) error
 
-    // GetUsername retrieves the username of the authenticated user
-    GetUsername(c echo.Context) string
+	// IsAuthRequired checks if authentication is needed.
+	IsAuthRequired(c echo.Context) bool
 
-    // GetAuthMethod returns the authentication method used
-    GetAuthMethod(c echo.Context) string
+	// GetUsername retrieves the authenticated username.
+	GetUsername(c echo.Context) string
 
-    // ValidateToken checks if a bearer token is valid
-    ValidateToken(token string) bool
+	// GetAuthMethod returns the authentication method used.
+	GetAuthMethod(c echo.Context) auth.AuthMethod // Use the enum type
 
-    // AuthenticateBasic handles basic authentication with username/password
-    AuthenticateBasic(c echo.Context, username, password string) bool
+	// ValidateToken checks if a bearer token is valid.
+	// Returns nil on success, or an error on failure.
+	ValidateToken(token string) error
 
-    // Logout invalidates the current session/token
-    Logout(c echo.Context) error
+	// AuthenticateBasic handles basic authentication.
+	// Returns nil on success, or an error on failure.
+	AuthenticateBasic(c echo.Context, username, password string) error
+
+	// Logout invalidates the current session/token.
+	// Returns nil on success, or an error on failure.
+	Logout(c echo.Context) error
 }
 ```
 
