@@ -313,11 +313,23 @@ func (s *OAuth2Server) HandleBasicAuthCallback(c echo.Context) error {
 			strings.HasPrefix(parsedURL.Path, "/") &&
 			!(len(parsedURL.Path) > 1 && (parsedURL.Path[1] == '/' || parsedURL.Path[1] == '\\')) {
 
-			// Use the cleaned path part as the safe redirect target
-			safeRedirect = parsedURL.Path
-			logger.Debug("Validated redirect path", "safe_redirect", safeRedirect)
+			// Additional check for CR/LF injection characters in path and query
+			pathContainsCRLF := strings.ContainsAny(parsedURL.Path, "\r\n") || strings.Contains(strings.ToLower(parsedURL.Path), "%0d") || strings.Contains(strings.ToLower(parsedURL.Path), "%0a")
+			queryContainsCRLF := strings.ContainsAny(parsedURL.RawQuery, "\r\n") || strings.Contains(strings.ToLower(parsedURL.RawQuery), "%0d") || strings.Contains(strings.ToLower(parsedURL.RawQuery), "%0a")
+
+			if pathContainsCRLF || queryContainsCRLF {
+				logger.Warn("Invalid redirect path provided (contains CR/LF characters), using default", "provided_redirect", redirect, "path", parsedURL.Path, "query", parsedURL.RawQuery, "default_redirect", safeRedirect)
+				// Keep safeRedirect = "/"
+			} else {
+				// Passed all checks, construct safe redirect preserving path and query
+				safeRedirect = parsedURL.Path
+				if parsedURL.RawQuery != "" {
+					safeRedirect += "?" + parsedURL.RawQuery
+				}
+				logger.Debug("Validated redirect path and query", "safe_redirect", safeRedirect)
+			}
 		} else {
-			// Log the reason for rejection if parsing failed or validation checks failed
+			// Log the reason for rejection if parsing failed or initial validation checks failed
 			if err != nil {
 				logger.Warn("Invalid redirect path provided (parse error), using default", "provided_redirect", redirect, "error", err, "default_redirect", safeRedirect)
 			} else {
