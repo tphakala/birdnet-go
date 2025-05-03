@@ -1,6 +1,7 @@
 package security
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"time"
@@ -140,7 +141,8 @@ func TestOAuth2Server(t *testing.T) {
 					t.Fatalf("Failed to generate auth code: %v", err)
 				}
 
-				token, err := s.ExchangeAuthCode(code)
+				// Pass context.Background() to ExchangeAuthCode
+				token, err := s.ExchangeAuthCode(context.Background(), code)
 				if err != nil {
 					t.Fatalf("Failed to exchange auth code: %v", err)
 				}
