@@ -1,6 +1,8 @@
 package security
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -211,7 +213,8 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	// Exchange the authorization code for an access token
 	// Do not log the code being exchanged
 	logger.Info("Attempting to exchange authorization code for access token")
-	accessToken, err := s.ExchangeAuthCode(code)
+	// Pass the request context to ExchangeAuthCode
+	accessToken, err := s.ExchangeAuthCode(c.Request().Context(), code)
 	if err != nil {
 		logger.Warn("Failed to exchange authorization code", "error", err)
 		// s.Debug("Failed to exchange auth code: %v", err) // Removed old debug
@@ -255,11 +258,20 @@ func (s *OAuth2Server) HandleBasicAuthCallback(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Missing authorization code")
 	}
 
+	// Create a context with timeout for the token exchange
+	ctx, cancel := context.WithTimeout(c.Request().Context(), 15*time.Second) // Increased timeout slightly
+	defer cancel()
+
 	// Exchange the authorization code for an access token directly on the server
 	// Do not log the code being exchanged
 	logger.Info("Attempting to exchange authorization code for access token server-side")
-	accessToken, err := s.ExchangeAuthCode(code)
+	accessToken, err := s.ExchangeAuthCode(ctx, code) // Pass context
 	if err != nil {
+		// Check if the error is context deadline exceeded
+		if errors.Is(err, context.DeadlineExceeded) {
+			logger.Warn("Timeout exchanging authorization code server-side", "error", err)
+			return c.String(http.StatusGatewayTimeout, "Login timed out. Please try again.")
+		}
 		logger.Warn("Failed to exchange authorization code server-side", "error", err)
 		// Provide a user-friendly error message
 		return c.String(http.StatusInternalServerError, "Unable to complete login at this time. Please try again.")
@@ -267,25 +279,25 @@ func (s *OAuth2Server) HandleBasicAuthCallback(c echo.Context) error {
 	// DO NOT log the accessToken
 	logger.Info("Successfully exchanged authorization code for access token")
 
-	// Store the access token in Gothic session
+	// Regenerate session to prevent session fixation
+	// This clears existing auth state and forces a new session ID on save
+	// Pass the underlying http.ResponseWriter and *http.Request to gothic.Logout
+	if err := gothic.Logout(c.Response().Writer, c.Request()); err != nil {
+		// Log the error but proceed cautiously. Depending on the store,
+		// Logout might fail if cookies are invalid, but StoreInSession might still create a new one.
+		logger.Warn("Error during gothic.Logout (session regeneration step)", "error", err)
+	} else {
+		logger.Info("Successfully logged out old session before storing new token (session fixation mitigation)")
+	}
+
+	// Store the access token in the new Gothic session
 	// Do not log the token here either
 	if err := gothic.StoreInSession("access_token", accessToken, c.Request(), c.Response()); err != nil {
-		logger.Warn("Failed to store access token in session after callback exchange", "error", err)
-		// Attempt to clear any problematic session data and retry storing
-		if clearErr := gothic.StoreInSession("access_token", "", c.Request(), c.Response()); clearErr == nil {
-			if retryErr := gothic.StoreInSession("access_token", accessToken, c.Request(), c.Response()); retryErr == nil {
-				logger.Info("Successfully stored access token in session after retry")
-				// If retry succeeds, continue to redirect
-			} else {
-				logger.Error("Failed to store access token in session after retry", "error", retryErr)
-				return c.String(http.StatusInternalServerError, "Session error during login. Please try again.")
-			}
-		} else {
-			logger.Error("Failed to clear/reset session before retry", "error", clearErr)
-			return c.String(http.StatusInternalServerError, "Session error during login. Please try again.")
-		}
+		// This error is more critical now, as it means we couldn't establish the new session
+		logger.Error("Failed to store access token in new session after logout/regeneration", "error", err)
+		return c.String(http.StatusInternalServerError, "Session error during login. Please try again.")
 	} else {
-		logger.Info("Successfully stored access token in session")
+		logger.Info("Successfully stored access token in new session")
 	}
 
 	// Validate the redirect path

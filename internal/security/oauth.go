@@ -1,6 +1,7 @@
 package security
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -324,15 +325,26 @@ func (s *OAuth2Server) GenerateAuthCode() (string, error) {
 }
 
 // ExchangeAuthCode exchanges an authorization code for an access token
-func (s *OAuth2Server) ExchangeAuthCode(code string) (string, error) {
+// It now accepts a context, although it's not directly used for internal operations yet.
+func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (string, error) {
 	// Do not log the code
-	securityLogger.Debug("Attempting to exchange authorization code")
+	logger := securityLogger.With("operation", "ExchangeAuthCode")
+	logger.Debug("Attempting to exchange authorization code")
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
+	// Check context cancellation first
+	select {
+	case <-ctx.Done():
+		logger.Warn("Context cancelled before exchanging code", "error", ctx.Err())
+		return "", ctx.Err()
+	default:
+		// Continue if context is not cancelled
+	}
+
 	authCode, ok := s.authCodes[code]
 	if !ok {
-		securityLogger.Warn("Authorization code not found")
+		logger.Warn("Authorization code not found")
 		return "", errors.New("authorization code not found")
 	}
 
