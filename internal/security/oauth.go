@@ -93,8 +93,14 @@ func NewOAuth2Server() *OAuth2Server {
 			// Set to nil to ensure checks fail later
 			server.ExpectedBasicRedirectURI = nil
 		} else {
-			server.ExpectedBasicRedirectURI = parsedURI
-			securityLogger.Info("Pre-parsed Basic Auth Redirect URI", "uri", parsedURI.String())
+			// Validate that the configured URI doesn't contain query or fragment
+			if parsedURI.RawQuery != "" || parsedURI.Fragment != "" {
+				securityLogger.Error("CRITICAL CONFIGURATION ERROR: BasicAuth.RedirectURI must not contain query parameters or fragments.", "uri", settings.Security.BasicAuth.RedirectURI)
+				server.ExpectedBasicRedirectURI = nil // Fail validation
+			} else {
+				server.ExpectedBasicRedirectURI = parsedURI
+				securityLogger.Info("Pre-parsed and validated Basic Auth Redirect URI", "uri", parsedURI.String())
+			}
 		}
 	} else {
 		securityLogger.Warn("Basic Auth Redirect URI is not configured. Basic authentication might not function correctly.")
