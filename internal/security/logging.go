@@ -33,6 +33,21 @@ func init() {
 	}
 }
 
+// LogInfo logs an informational message to the security log.
+func LogInfo(msg string, args ...any) {
+	securityLogger.Info(msg, args...)
+}
+
+// LogWarn logs a warning message to the security log.
+func LogWarn(msg string, args ...any) {
+	securityLogger.Warn(msg, args...)
+}
+
+// LogError logs an error message to the security log.
+func LogError(msg string, args ...any) {
+	securityLogger.Error(msg, args...)
+}
+
 // CloseLogger closes the security-specific file logger, if one was successfully initialized.
 // This should be called during graceful shutdown.
 func CloseLogger() error {
