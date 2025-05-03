@@ -158,7 +158,7 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 		if a.logger != nil {
 			a.logger.Debug("Basic auth is not enabled")
 		}
-		return ErrInvalidCredentials // Basic auth not enabled counts as invalid credentials here
+		return ErrBasicAuthDisabled // Return the specific error for disabled basic auth
 	}
 
 	// Hash inputs and stored values before comparison to ensure fixed length for ConstantTimeCompare.
