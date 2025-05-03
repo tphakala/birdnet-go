@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/gorilla/sessions"
@@ -210,9 +209,10 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 		logger.Warn("Failed to parse redirect_uri", "redirect_uri", redirectURI, "error", err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid redirect_uri format"})
 	}
-	if !strings.EqualFold(parsedRedirectURI.Hostname(), s.Settings.Security.Host) {
-		logger.Warn("Invalid redirect URI host", "redirect_uri", redirectURI, "parsed_host", parsedRedirectURI.Hostname(), "expected_host", s.Settings.Security.Host)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid host for redirect URI"})
+	// Verify redirect URI matches the configured one exactly
+	if parsedRedirectURI.String() != s.Settings.Security.BasicAuth.RedirectURI {
+		logger.Warn("Invalid redirect URI provided", "redirect_uri", redirectURI, "parsed_uri", parsedRedirectURI.String(), "expected_uri", s.Settings.Security.BasicAuth.RedirectURI)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid redirect_uri"})
 	}
 
 	// Exchange the authorization code for an access token with timeout
