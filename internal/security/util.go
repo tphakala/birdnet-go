@@ -21,9 +21,15 @@ func ValidateRedirectURI(providedURIString string, expectedURI *url.URL) error {
 		return fmt.Errorf("invalid redirect_uri format: %w", err)
 	}
 
-	// Normalize paths by removing trailing slash for consistent comparison
-	providedPath := strings.TrimSuffix(parsedProvidedURI.Path, "/")
-	expectedPath := strings.TrimSuffix(expectedURI.Path, "/")
+	// Normalize paths: Keep "/" as is, otherwise trim trailing slash for consistent comparison
+	providedPath := parsedProvidedURI.Path
+	if providedPath != "/" {
+		providedPath = strings.TrimSuffix(providedPath, "/")
+	}
+	expectedPath := expectedURI.Path
+	if expectedPath != "/" {
+		expectedPath = strings.TrimSuffix(expectedPath, "/")
+	}
 
 	// Compare Scheme, Host, and Path
 	if parsedProvidedURI.Scheme != expectedURI.Scheme ||
