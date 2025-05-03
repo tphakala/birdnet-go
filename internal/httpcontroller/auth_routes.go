@@ -124,7 +124,7 @@ func handleGothCallback(c echo.Context) error {
 			"user_email", user.Email,
 			"key_failed", providerKey,
 		)
-		err := gothic.Logout(c.Response(), c.Request()) // Attempt to clear the session
+		err := gothic.Logout(c.Response().Writer, c.Request()) // Attempt to clear the session
 		if err != nil {
 			security.LogError("Failed to logout session during rollback after providerUserID failure",
 				"provider", providerName,
@@ -143,7 +143,7 @@ func handleGothCallback(c echo.Context) error {
 			"key_failed", "userEmail",
 			"prior_key_stored", providerKey, // Note which key *was* stored
 		)
-		err := gothic.Logout(c.Response(), c.Request()) // Attempt to clear the session
+		err := gothic.Logout(c.Response().Writer, c.Request()) // Attempt to clear the session
 		if err != nil {
 			security.LogError("Failed to logout session during rollback after userEmail failure",
 				"provider", providerName,
@@ -303,7 +303,7 @@ func (s *Server) handleLogout(c echo.Context) error {
 	_ = gothic.StoreInSession("userEmail", "", c.Request(), c.Response()) // Clear email too
 
 	// Logout from gothic session
-	err := gothic.Logout(c.Response(), c.Request())
+	err := gothic.Logout(c.Response().Writer, c.Request())
 	if err != nil {
 		// Log if the main gothic logout fails
 		security.LogWarn("Error during main gothic.Logout on user logout",
