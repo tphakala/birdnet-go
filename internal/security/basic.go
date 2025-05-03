@@ -170,7 +170,6 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 
 	if clientID != s.Settings.Security.BasicAuth.ClientID || clientSecret != s.Settings.Security.BasicAuth.ClientSecret {
 		logger.Warn("Invalid client credentials provided")
-		// s.Debug("Invalid client credentials: %s", clientID) // Removed old debug
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid client id or secret"})
 	}
 
@@ -178,7 +177,6 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	if clientIP := net.ParseIP(c.RealIP()); IsInLocalSubnet(clientIP) {
 		// For clients in the local subnet, allow non-HTTPS cookies
 		logger.Info("Client is in local subnet, configuring cookie store for non-HTTPS")
-		// s.Debug("Client in local subnet, configuring cookie store accordingly") // Removed old debug
 		s.configureLocalNetworkCookieStore()
 	}
 
@@ -187,26 +185,22 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	redirectURI := c.FormValue("redirect_uri")
 
 	logger.Info("Received token request parameters", "grant_type", grantType, "redirect_uri", redirectURI)
-	// s.Debug("Token request: grant_type=%s, code=%s, redirect_uri=%s", grantType, code, redirectURI) // Removed old debug with code
 
 	// Check for required fields
 	if grantType == "" || code == "" || redirectURI == "" {
 		logger.Warn("Missing required fields in token request")
-		// s.Debug("Missing required fields in token request") // Removed old debug
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Missing required fields"})
 	}
 
 	// Verify grant type
 	if grantType != "authorization_code" {
 		logger.Warn("Unsupported grant type provided", "grant_type", grantType)
-		// s.Debug("Unsupported grant type: %s", grantType) // Removed old debug
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unsupported grant type"})
 	}
 
 	// Verify redirect URI
 	if !strings.Contains(redirectURI, s.Settings.Security.Host) {
 		logger.Warn("Invalid redirect URI host", "redirect_uri", redirectURI, "expected_host", s.Settings.Security.Host)
-		// s.Debug("Invalid redirect URI host: %s, expected %s", redirectURI, s.Settings.Security.Host) // Removed old debug
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid host for redirect URI"})
 	}
 
@@ -217,7 +211,6 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	accessToken, err := s.ExchangeAuthCode(c.Request().Context(), code)
 	if err != nil {
 		logger.Warn("Failed to exchange authorization code", "error", err)
-		// s.Debug("Failed to exchange auth code: %v", err) // Removed old debug
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid authorization code"})
 	}
 	// DO NOT log the accessToken
@@ -242,7 +235,6 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	}
 
 	logger.Info("Returning access token response to client", "expires_in_seconds", expiresInSeconds)
-	// s.Debug("Successfully exchanged token, returning response") // Removed old debug
 	return c.JSON(http.StatusOK, resp)
 }
 
