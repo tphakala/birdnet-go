@@ -156,19 +156,17 @@ func handleGothCallback(c echo.Context) error {
 	// }
 
 	// Log success using server logger or fallback
+	// Construct the message once for potential fallback logging
+	successMsg := fmt.Sprintf("Social login successful, redirecting to %s", redirectURL)
 	if srv := c.Get("server"); srv != nil {
 		if server, ok := srv.(*Server); ok && server.webLogger != nil {
 			server.webLogger.Info("Social login successful, redirecting",
 				"provider", c.Param("provider"), "user_email", user.Email, "redirect_to", redirectURL)
 		} else {
-			// Create msg here for fallback logging
-			successMsg := fmt.Sprintf("Social login successful, redirecting to %s", redirectURL)
 			log.Printf("INFO: [Social Login - %s - %s] %s",
 				c.Param("provider"), user.Email, successMsg)
 		}
 	} else {
-		// Create msg here for fallback logging
-		successMsg := fmt.Sprintf("Social login successful, redirecting to %s", redirectURL)
 		log.Printf("INFO: [Social Login - %s - %s] %s",
 			c.Param("provider"), user.Email, successMsg)
 	}
