@@ -293,10 +293,28 @@ func (s *Server) handleLogout(c echo.Context) error {
 
 	security.LogInfo("Logout initiated", "user_identifier", userIdentifier, "provider", provider)
 
-	// Logout from all providers - suppress individual errors during mass logout
-	_ = gothic.StoreInSession("userId", "", c.Request(), c.Response())
-	_ = gothic.StoreInSession("access_token", "", c.Request(), c.Response())
-	_ = gothic.StoreInSession("userEmail", "", c.Request(), c.Response()) // Clear email too
+	// Logout from all providers - check and log errors for each key cleared
+	if err := gothic.StoreInSession("userId", "", c.Request(), c.Response()); err != nil {
+		security.LogWarn("Failed to clear session key during logout",
+			"key", "userId",
+			"user_identifier", userIdentifier,
+			"provider", provider,
+			"error", err.Error())
+	}
+	if err := gothic.StoreInSession("access_token", "", c.Request(), c.Response()); err != nil {
+		security.LogWarn("Failed to clear session key during logout",
+			"key", "access_token",
+			"user_identifier", userIdentifier,
+			"provider", provider,
+			"error", err.Error())
+	}
+	if err := gothic.StoreInSession("userEmail", "", c.Request(), c.Response()); err != nil { // Clear email too
+		security.LogWarn("Failed to clear session key during logout",
+			"key", "userEmail",
+			"user_identifier", userIdentifier,
+			"provider", provider,
+			"error", err.Error())
+	}
 
 	// Logout from gothic session
 	err := gothic.Logout(c.Response().Writer, c.Request())
