@@ -598,7 +598,8 @@ func (c *Controller) handleTokenAuth(ctx echo.Context) (bool, error) {
 	}
 
 	token := parts[1]
-	if err := c.AuthService.ValidateToken(token); err == nil {
+	validationErr := c.AuthService.ValidateToken(token) // Capture the error
+	if validationErr == nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Debug("Token authentication successful", "path", ctx.Request().URL.Path, "ip", ctx.RealIP())
 		}
@@ -607,7 +608,11 @@ func (c *Controller) handleTokenAuth(ctx echo.Context) (bool, error) {
 
 	// Token validation failed
 	if c.apiLogger != nil {
-		c.apiLogger.Warn("Token validation failed", "path", ctx.Request().URL.Path, "ip", ctx.RealIP())
+		c.apiLogger.Warn("Token validation failed",
+			"error", validationErr.Error(), // Log the specific validation error
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
 	}
 	// Return specific error for invalid token
 	return false, errInvalidAuthToken
