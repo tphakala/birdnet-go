@@ -550,8 +550,6 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 	}
 
 	securityLogger.Info("Attempting to load tokens from file", "file", s.tokensFile)
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
 
 	// Check context before potentially long file read
 	select {
@@ -561,6 +559,7 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 	default:
 	}
 
+	// Read file outside the lock
 	data, err := os.ReadFile(s.tokensFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -576,6 +575,7 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 		return nil // Empty file is fine
 	}
 
+	// Unmarshal data outside the lock
 	var storedData struct {
 		AuthCodes    map[string]AuthCode    `json:"auth_codes"`
 		AccessTokens map[string]AccessToken `json:"access_tokens"`
@@ -585,6 +585,10 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 		securityLogger.Error("Failed to unmarshal token data from file", "file", s.tokensFile, "error", err)
 		return fmt.Errorf("failed to unmarshal token data from %s: %w", s.tokensFile, err)
 	}
+
+	// Acquire lock only to update internal maps
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
 	// Restore non-expired tokens
 	loadedAuthCodes := 0
