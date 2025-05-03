@@ -4,8 +4,8 @@ package auth
 import (
 	"crypto/sha256"
 	"crypto/subtle"
-	"fmt"
 	"log/slog"
+	"reflect"
 
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth/gothic"
@@ -90,7 +90,7 @@ func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 
 		// If type assertion or conversion fails, log it but fall through to other checks
 		if a.logger != nil {
-			a.logger.Warn("Context value 'authMethod' has unexpected type or invalid string value", "type", fmt.Sprintf("%T", authMethodCtx), "value", authMethodCtx)
+			a.logger.Warn("Context value 'authMethod' has unexpected type or invalid string value", slog.Any("type", reflect.TypeOf(authMethodCtx)), "value", authMethodCtx)
 		}
 	}
 
