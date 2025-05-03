@@ -3,6 +3,7 @@ package security
 import (
 	"fmt"
 	"net/url"
+	"path"
 	"strings"
 )
 
@@ -33,25 +34,22 @@ func ValidateRedirectURI(providedURIString string, expectedURI *url.URL) error {
 		return fmt.Errorf("invalid redirect_uri format: %w", err)
 	}
 
-	// Normalize paths: Keep "/" as is, otherwise trim trailing slash for consistent comparison
-	providedPath := parsedProvidedURI.Path
-	if providedPath != "/" {
-		providedPath = strings.TrimSuffix(providedPath, "/") // Reverted: path.Clean not needed here
-	}
-	expectedPath := expectedURI.Path
-	if expectedPath != "/" {
-		expectedPath = strings.TrimSuffix(expectedPath, "/") // Reverted: path.Clean not needed here
-	}
+	// Normalize paths: Use path.Clean and trim trailing slash for consistent comparison
+	// Note: path.Clean removes trailing slashes unless the path is "/"
+	providedPath := path.Clean(parsedProvidedURI.Path)
+	expectedPath := path.Clean(expectedURI.Path)
 
 	// Normalize ports
 	providedPort := normalizePort(parsedProvidedURI.Scheme, parsedProvidedURI.Port())
 	expectedPort := normalizePort(expectedURI.Scheme, expectedURI.Port())
 
-	// Compare Scheme, Hostname, normalized Port, Path, RawQuery, and Fragment
-	if parsedProvidedURI.Scheme != expectedURI.Scheme ||
-		parsedProvidedURI.Hostname() != expectedURI.Hostname() || // Compare Hostname instead of Host
+	// Compare Scheme (case-insensitive), Hostname (case-insensitive), normalized Port, Path
+	// RFC 3986 Section 3.1: Scheme names are case-insensitive.
+	// RFC 3986 Section 3.2.2: Host names are case-insensitive.
+	if strings.ToLower(parsedProvidedURI.Scheme) != strings.ToLower(expectedURI.Scheme) ||
+		strings.ToLower(parsedProvidedURI.Hostname()) != strings.ToLower(expectedURI.Hostname()) || // Compare Hostname case-insensitively
 		providedPort != expectedPort || // Compare normalized ports
-		providedPath != expectedPath ||
+		providedPath != expectedPath || // Compare cleaned paths
 		parsedProvidedURI.RawQuery != "" || // Ensure provided URI has no query parameters
 		parsedProvidedURI.Fragment != "" { // Ensure provided URI has no fragment
 
