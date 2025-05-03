@@ -142,7 +142,9 @@ func TestOAuth2Server(t *testing.T) {
 				}
 
 				// Pass context.Background() to ExchangeAuthCode
-				token, err := s.ExchangeAuthCode(context.Background(), code)
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				token, err := s.ExchangeAuthCode(ctx, code)
 				if err != nil {
 					t.Fatalf("Failed to exchange auth code: %v", err)
 				}
