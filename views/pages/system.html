@@ -306,9 +306,6 @@
             // Toggle state for process list
             showAllProcesses: false,
             
-            // Authentication error state
-            showAuthError: false,
-            
             // Tooltip state management
             showTooltip: null,
             
@@ -351,11 +348,6 @@
                         console.error('Error fetching system info:', error);
                         this.systemInfo.error = `Failed to load system information: ${error.message}`;
                         this.systemInfo.loading = false;
-                        
-                        // Show authentication error notification if needed
-                        if (error.message.includes("Authentication required")) {
-                            this.showAuthError = true;
-                        }
                     });
             },
             
@@ -382,11 +374,6 @@
                         console.error('Error fetching disk usage:', error);
                         this.diskUsage.error = `Failed to load disk usage: ${error.message}`;
                         this.diskUsage.loading = false;
-                        
-                        // Show authentication error notification if needed
-                        if (error.message.includes("Authentication required")) {
-                            this.showAuthError = true;
-                        }
                     });
             },
             
@@ -420,11 +407,6 @@
                         console.error('Error fetching memory usage:', error);
                         this.memoryUsage.error = `Failed to load memory usage: ${error.message}`;
                         this.memoryUsage.loading = false;
-                        
-                        // Show authentication error notification if needed
-                        if (error.message.includes("Authentication required")) {
-                            this.showAuthError = true;
-                        }
                     });
             },
             
@@ -453,11 +435,6 @@
                         console.error('Error fetching processes:', error);
                         this.processes.error = `Failed to load process information: ${error.message}`;
                         this.processes.loading = false;
-                        
-                        // Show authentication error notification if needed
-                        if (error.message.includes("Authentication required")) {
-                            this.showAuthError = true;
-                        }
                     });
             },
             
