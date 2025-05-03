@@ -173,5 +173,5 @@ func (a *SecurityAdapter) Logout(c echo.Context) error {
 	gothic.StoreInSession("github", "", c.Request(), c.Response())       //nolint:errcheck // Error checking not critical during logout
 
 	// Log out from gothic session
-	return gothic.Logout(c.Response(), c.Request())
+	return gothic.Logout(c.Response().Writer, c.Request())
 }
