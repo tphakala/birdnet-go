@@ -276,7 +276,7 @@ func stringFromCtx(ctx echo.Context, key, defaultValue string) string {
 
 	// Check if it's an auth.AuthMethod type
 	if authMethodVal, ok := val.(auth.AuthMethod); ok {
-		return string(authMethodVal)
+		return authMethodVal.String()
 	}
 
 	// If neither string nor auth.AuthMethod, return default
