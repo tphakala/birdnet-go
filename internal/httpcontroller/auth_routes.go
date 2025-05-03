@@ -253,12 +253,14 @@ func (s *Server) handleBasicAuthLogin(c echo.Context) error {
 	// Log successful basic auth attempt
 	security.LogInfo("Basic authentication successful", "username", username)
 
-	authCode, err := s.Handlers.OAuth2Server.GenerateAuthCode()
+	// Generate OAuth2 authorization code after successful basic authentication
+	authCode, err := s.OAuth2Server.GenerateAuthCode()
 	if err != nil {
 		// Log internal error during auth code generation
 		security.LogError("Failed to generate OAuth2 auth code after basic auth success", "username", username, "error", err.Error())
 		return c.HTML(http.StatusInternalServerError, "<div class='text-red-500'>Unable to complete login at this time (Code: GEN)</div>")
 	}
+
 	redirect := c.FormValue("redirect")
 	if !security.IsValidRedirect(redirect) {
 		security.LogWarn("Invalid redirect path provided during basic auth login, using default '/'", "provided_redirect", redirect, "username", username)
