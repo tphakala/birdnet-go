@@ -4,7 +4,7 @@ package security
 type AuthMethod string
 
 const (
-	AuthMethodNone        AuthMethod = ""       // No authentication used
+	AuthMethodNone        AuthMethod = "none"   // No authentication used
 	AuthMethodLocalSubnet AuthMethod = "subnet" // Authentication bypassed via local subnet access
 	AuthMethodOAuth2      AuthMethod = "oauth2" // Authentication via OAuth2 token
 	AuthMethodAPIKey      AuthMethod = "apikey" // Authentication via API Key
