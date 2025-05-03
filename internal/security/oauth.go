@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,6 +52,9 @@ type OAuth2Server struct {
 	tokensFile    string
 	persistTokens bool
 
+	// Expected Redirect URI for Basic Auth (pre-parsed)
+	ExpectedBasicRedirectURI *url.URL
+
 	// Throttling
 	throttledMessages map[string]time.Time
 }
@@ -69,6 +73,22 @@ func NewOAuth2Server() *OAuth2Server {
 		authCodes:    make(map[string]AuthCode),
 		accessTokens: make(map[string]AccessToken),
 		debug:        debug, // Retain debug flag for potential conditional logging
+	}
+
+	// Pre-parse the Basic Auth Redirect URI
+	if settings.Security.BasicAuth.RedirectURI != "" {
+		parsedURI, err := url.Parse(settings.Security.BasicAuth.RedirectURI)
+		if err != nil {
+			// Log a critical error if the configured URI is invalid
+			securityLogger.Error("CRITICAL CONFIGURATION ERROR: Failed to parse BasicAuth.RedirectURI. Basic authentication will likely fail.", "uri", settings.Security.BasicAuth.RedirectURI, "error", err)
+			// Set to nil to ensure checks fail later
+			server.ExpectedBasicRedirectURI = nil
+		} else {
+			server.ExpectedBasicRedirectURI = parsedURI
+			securityLogger.Info("Pre-parsed Basic Auth Redirect URI", "uri", parsedURI.String())
+		}
+	} else {
+		securityLogger.Warn("Basic Auth Redirect URI is not configured. Basic authentication might not function correctly.")
 	}
 
 	// Initialize Gothic with the provided configuration

@@ -136,16 +136,11 @@ func (s *OAuth2Server) HandleBasicAuthorize(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid client_id")
 	}
 
-	// Validate redirect URI using url.Parse for security
-	parsedRedirectURI, err := url.Parse(redirectURI)
-	if err != nil {
-		logger.Warn("Failed to parse redirect_uri", "redirect_uri", redirectURI, "error", err)
-		return c.String(http.StatusBadRequest, "Invalid redirect_uri format")
-	}
-	// Compare parsed URI against expected config value
-	if parsedRedirectURI.String() != s.Settings.Security.BasicAuth.RedirectURI {
-		logger.Warn("Invalid redirect_uri provided", "expected", s.Settings.Security.BasicAuth.RedirectURI)
-		return c.String(http.StatusBadRequest, "Invalid redirect_uri")
+	// Validate redirect URI using the shared function and pre-parsed expected URI
+	if err := ValidateRedirectURI(redirectURI, s.ExpectedBasicRedirectURI); err != nil {
+		logger.Warn("Redirect URI validation failed", "error", err)
+		// Return the specific error message for better client-side debugging
+		return c.String(http.StatusBadRequest, err.Error())
 	}
 
 	// Generate an auth code
@@ -204,16 +199,11 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unsupported grant type"})
 	}
 
-	// Verify redirect URI securely by parsing and comparing hostnames
-	parsedRedirectURI, err := url.Parse(redirectURI)
-	if err != nil {
-		logger.Warn("Failed to parse redirect_uri", "redirect_uri", redirectURI, "error", err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid redirect_uri format"})
-	}
-	// Verify redirect URI matches the configured one exactly
-	if parsedRedirectURI.String() != s.Settings.Security.BasicAuth.RedirectURI {
-		logger.Warn("Invalid redirect URI provided", "redirect_uri", redirectURI, "parsed_uri", parsedRedirectURI.String(), "expected_uri", s.Settings.Security.BasicAuth.RedirectURI)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid redirect_uri"})
+	// Validate redirect URI using the shared function and pre-parsed expected URI
+	if err := ValidateRedirectURI(redirectURI, s.ExpectedBasicRedirectURI); err != nil {
+		logger.Warn("Redirect URI validation failed", "error", err)
+		// Return the specific error message for better client-side debugging
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 
 	// Exchange the authorization code for an access token with timeout
