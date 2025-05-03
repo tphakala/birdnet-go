@@ -973,7 +973,14 @@ func (c *Controller) GetProcessInfo(ctx echo.Context) error {
 	for _, p := range procs {
 		// Filtering logic
 		if !showAll {
-			parentPID, _ := p.Ppid()
+			parentPID, err := p.Ppid()
+			if err != nil {
+				// Log error and skip this process if PPID can't be determined
+				if c.apiLogger != nil {
+					c.apiLogger.Warn("Failed to get parent PID, skipping process", "pid", p.Pid, "error", err.Error())
+				}
+				continue
+			}
 			if p.Pid != currentPID && parentPID != currentPID {
 				// Skip if not the main process or a direct child
 				continue
