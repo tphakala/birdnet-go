@@ -1,15 +1,15 @@
 package httpcontroller
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/markbates/goth/gothic"
-	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/security"
 )
 
 // initAuthRoutes initializes all authentication related routes
@@ -52,36 +52,46 @@ func handleGothProvider(c echo.Context) error {
 	return nil
 }
 
+// storeInGothicSession handles storing a key-value pair in the gothic session,
+// including logging and basic error handling. Returns true on success, false on failure.
+// It logs errors using the security logger.
+func storeInGothicSession(c echo.Context, key, value, userEmail, providerName string) bool {
+	err := gothic.StoreInSession(key, value, c.Request(), c.Response())
+	if err != nil {
+		errMsg := fmt.Sprintf("Failed to store '%s' in new session for user '%s'", key, userEmail)
+		// Log security-sensitive session storage failure
+		security.LogError(errMsg,
+			"provider", providerName,
+			"user_email", userEmail,
+			"session_key", key,
+			"error", err.Error(),
+		)
+		return false // Indicate failure
+	}
+	return true // Indicate success
+}
+
 // handleGothCallback handles callbacks from OAuth2 providers
 func handleGothCallback(c echo.Context) error {
 	request := c.Request()
 	response := c.Response().Writer
+	providerName := c.Param("provider") // Get provider early
 
 	// Complete authentication with the provider
 	user, err := gothic.CompleteUserAuth(response, request)
 	if err != nil {
-		logCompleteUserAuthError(c, err)
+		logCompleteUserAuthError(providerName, err) // Use helper with structured log
 		// Use echo.NewHTTPError for consistent error handling
-		return echo.NewHTTPError(http.StatusBadRequest, "Authentication failed: "+err.Error())
+		return echo.NewHTTPError(http.StatusBadRequest, "Authentication failed. See server logs for details.") // More generic user message
 	}
 
-	// Log session regeneration attempt
-	providerName := c.Param("provider")
+	// Log session regeneration attempt (Security relevant: Session Fixation Mitigation)
 	if err := gothic.Logout(c.Response().Writer, c.Request()); err != nil {
-		// Log warning but continue
-		// Try server's structured logger first, fallback to standard log
-		if srv := c.Get("server"); srv != nil {
-			if server, ok := srv.(*Server); ok && server.webLogger != nil {
-				server.webLogger.Warn("Error during gothic.Logout (session regeneration step 1)",
-					"provider", providerName, "user_email", user.Email, "error", err)
-			} else {
-				log.Printf("WARN: [Social Login - %s - %s] Error during gothic.Logout: %v",
-					providerName, user.Email, err)
-			}
-		} else {
-			log.Printf("WARN: [Social Login - %s - %s] Error during gothic.Logout: %v",
-				providerName, user.Email, err)
-		}
+		// Log warning but continue - Use Security Logger
+		security.LogWarn("Error during gothic.Logout (session regeneration step 1)",
+			"provider", providerName,
+			"user_email", user.Email,
+			"error", err.Error())
 	} else {
 		// Attempt to explicitly save the session immediately after logout to force regeneration
 		// This helps ensure a new session ID is used before storing new data.
@@ -91,130 +101,100 @@ func handleGothCallback(c echo.Context) error {
 			err = session.Save(request, response)
 		}
 
-		// Log success or failure of explicit regeneration step
-		if srv := c.Get("server"); srv != nil {
-			if server, ok := srv.(*Server); ok && server.webLogger != nil {
-				if err != nil {
-					server.webLogger.Warn("Failed to explicitly save session after logout (potential fixation risk)", "provider", providerName, "user_email", user.Email, "error", err)
-				} else {
-					server.webLogger.Info("Successfully logged out old session state (session fixation mitigation)",
-						"provider", providerName, "user_email", user.Email)
-				}
-			} else {
-				if err != nil {
-					log.Printf("WARN: [Social Login - %s - %s] Failed to explicitly save session after logout: %v", providerName, user.Email, err)
-				} else {
-					log.Printf("INFO: [Social Login - %s - %s] Successfully logged out old session state", providerName, user.Email)
-				}
-			}
+		// Log success or failure of explicit regeneration step (Security relevant)
+		if err != nil {
+			security.LogWarn("Failed to explicitly save cleared session after logout (potential fixation risk)",
+				"provider", providerName,
+				"user_email", user.Email,
+				"error", err.Error())
 		} else {
-			if err != nil {
-				log.Printf("WARN: [Social Login - %s - %s] Failed to explicitly save session after logout: %v", providerName, user.Email, err)
-			} else {
-				log.Printf("INFO: [Social Login - %s - %s] Successfully logged out old session state", providerName, user.Email)
-			}
+			security.LogInfo("Successfully cleared old session state (session fixation mitigation)",
+				"provider", providerName,
+				"user_email", user.Email)
 		}
 	}
 
 	// Store provider and user info in the *new* session
 	// Use more specific keys and log potential errors
-	providerKey := fmt.Sprintf("%s_userID", c.Param("provider")) // e.g., google_userID
-	if err := gothic.StoreInSession(providerKey, user.UserID, c.Request(), c.Response()); err != nil {
-		// Log error using server's structured logger or fallback
-		if srv := c.Get("server"); srv != nil {
-			if server, ok := srv.(*Server); ok && server.webLogger != nil {
-				server.webLogger.Error("Failed to store provider user ID in new session",
-					"provider", c.Param("provider"), "key", providerKey, "error", err)
-			} else {
-				log.Printf("ERROR: Failed to store provider user ID (%s) in new session: %v", providerKey, err)
-			}
-		} else {
-			log.Printf("ERROR: Failed to store provider user ID (%s) in new session: %v", providerKey, err)
+	providerKey := fmt.Sprintf("%s_userID", providerName) // e.g., google_userID
+	if !storeInGothicSession(c, providerKey, user.UserID, user.Email, providerName) {
+		// --- ROLLBACK SESSION ---
+		security.LogError("Rolling back session due to failure storing providerUserID",
+			"provider", providerName,
+			"user_email", user.Email,
+			"key_failed", providerKey,
+		)
+		err := gothic.Logout(c.Response().Writer, c.Request()) // Attempt to clear the session
+		if err != nil {
+			security.LogError("Failed to logout session during rollback after providerUserID failure",
+				"provider", providerName,
+				"user_email", user.Email,
+				"rollback_error", err.Error())
 		}
-
-		// --- ROLLBACK SESSION --- //
-		// Since storing provider ID failed after storing provider ID, logout to clear partial state.
-		log.Printf("WARN: Rolling back session due to failure storing providerID after providerKey was stored (Provider: %s, User: %s)",
-			c.Param("provider"), user.Email)
-		gothic.Logout(c.Response(), c.Request()) // Attempt to clear the session
-		// We might also explicitly try to delete the cookie again here if needed, but Logout usually suffices.
-
-		return echo.NewHTTPError(http.StatusInternalServerError, "Session error after social login (storing provider user ID)")
+		return echo.NewHTTPError(http.StatusInternalServerError, "Session error after social login (code: PUID)")
 	}
+
 	// Standardize on storing email in 'userEmail' key
-	if err := gothic.StoreInSession("userEmail", user.Email, c.Request(), c.Response()); err != nil {
-		// Log error using server's structured logger or fallback
-		if srv := c.Get("server"); srv != nil {
-			if server, ok := srv.(*Server); ok && server.webLogger != nil {
-				server.webLogger.Error("Failed to store user email in new session",
-					"provider", c.Param("provider"), "error", err)
-			} else {
-				log.Printf("ERROR: Failed to store user email in new session: %v", err)
-			}
-		} else {
-			log.Printf("ERROR: Failed to store user email in new session: %v", err)
+	if !storeInGothicSession(c, "userEmail", user.Email, user.Email, providerName) {
+		// --- ROLLBACK SESSION ---
+		security.LogError("Rolling back session due to failure storing userEmail",
+			"provider", providerName,
+			"user_email", user.Email,
+			"key_failed", "userEmail",
+			"prior_key_stored", providerKey, // Note which key *was* stored
+		)
+		err := gothic.Logout(c.Response().Writer, c.Request()) // Attempt to clear the session
+		if err != nil {
+			security.LogError("Failed to logout session during rollback after userEmail failure",
+				"provider", providerName,
+				"user_email", user.Email,
+				"rollback_error", err.Error())
 		}
-
-		// --- ROLLBACK SESSION --- //
-		// Since storing email failed after storing provider ID, logout to clear partial state.
-		log.Printf("WARN: Rolling back session due to failure storing userEmail after providerKey was stored (Provider: %s, User: %s)",
-			c.Param("provider"), user.Email)
-		gothic.Logout(c.Response(), c.Request()) // Attempt to clear the session
-		// We might also explicitly try to delete the cookie again here if needed, but Logout usually suffices.
-
-		return echo.NewHTTPError(http.StatusInternalServerError, "Session error after social login (storing email)")
+		return echo.NewHTTPError(http.StatusInternalServerError, "Session error after social login (code: EMAIL)")
 	}
 
-	// Optionally store raw data if needed, but be mindful of session size
-	// rawDataKey := fmt.Sprintf("%s_raw", c.Param("provider"))
-	// if err := gothic.StoreInSession(rawDataKey, user.RawData, c.Request(), c.Response()); err != nil {
-	// 	 securityLogger.Warn("Failed to store provider raw data in session", "provider": c.Param("provider"), "error": err)
-	// 	 // Usually non-fatal if raw data isn't strictly required
+	// Optional: Store raw data (Consider logging this via security.LogInfo if enabled)
+	// rawDataKey := fmt.Sprintf("%s_raw", providerName)
+	// if err := gothic.StoreInSession(rawDataKey, user.RawData, request, response); err != nil {
+	//  security.LogWarn("Failed to store provider raw data in session", "provider", providerName, "user_email", user.Email, "error", err.Error())
+	//  // Usually non-fatal
+	// } else {
+	//  security.LogInfo("Stored provider raw data in session", "provider", providerName, "user_email", user.Email, "key", rawDataKey)
 	// }
 
 	// Get redirect URL from session state or default
 	// Note: Goth's default state handling might need configuration or custom implementation
 	// if you need specific redirect logic after social login.
 	redirectURL := "/" // Default redirect
-	// Example of how you might retrieve state if set during BeginAuthHandler
+	// Example retrieval (ensure validation)
 	// if stateRedirect, err := gothic.GetFromSession("oauth_redirect", request); err == nil && stateRedirect != "" {
-	// 	 if isValidRedirect(stateRedirect) { // Validate!
-	// 		 redirectURL = stateRedirect
-	// 	 }
-	// 	 // Clear the state from session after use
-	// 	 _ = gothic.StoreInSession("oauth_redirect", "", request, c.Response())
+	//  if isValidRedirect(stateRedirect) { // Validate!
+	//      redirectURL = stateRedirect
+	//      security.LogInfo("Using redirect URL from session state", "provider", providerName, "user_email", user.Email, "redirect_url", redirectURL)
+	//  } else {
+	//      security.LogWarn("Invalid redirect URL found in session state, using default", "provider", providerName, "user_email", user.Email, "invalid_url", stateRedirect)
+	//  }
+	//  // Clear the state from session after use
+	//  _ = gothic.StoreInSession("oauth_redirect", "", request, response) // Log error? Maybe security.LogWarn
 	// }
 
-	// Log success using server logger or fallback
-	// Construct the message once for potential fallback logging
-	successMsg := fmt.Sprintf("Social login successful, redirecting to %s", redirectURL)
-	if srv := c.Get("server"); srv != nil {
-		if server, ok := srv.(*Server); ok && server.webLogger != nil {
-			server.webLogger.Info("Social login successful, redirecting",
-				"provider", c.Param("provider"), "user_email", user.Email, "redirect_to", redirectURL)
-		} else {
-			log.Printf("INFO: [Social Login - %s - %s] %s",
-				c.Param("provider"), user.Email, successMsg)
-		}
-	} else {
-		log.Printf("INFO: [Social Login - %s - %s] %s",
-			c.Param("provider"), user.Email, successMsg)
-	}
+	// Log successful social login (Security relevant)
+	security.LogInfo("Social login successful, redirecting",
+		"provider", providerName,
+		"user_email", user.Email,
+		"redirect_to", redirectURL,
+	)
 
 	return c.Redirect(http.StatusTemporaryRedirect, redirectURL)
 }
 
-// logCompleteUserAuthError is a helper to log errors from gothic.CompleteUserAuth
-func logCompleteUserAuthError(c echo.Context, authErr error) {
-	// Try to get the server's structured logger
-	if srv := c.Get("server"); srv != nil {
-		if server, ok := srv.(*Server); ok && server.webLogger != nil {
-			server.LogError(c, authErr, "Social authentication failed during CompleteUserAuth")
-			return // Logged with structured logger
-		}
-	}
-	// Fallback to standard logger if server logger is unavailable
-	log.Printf("ERROR: [Social Login - %s] Failed during CompleteUserAuth: %v", c.Param("provider"), authErr)
+// logCompleteUserAuthError is a helper to log errors from gothic.CompleteUserAuth using security logger
+func logCompleteUserAuthError(providerName string, authErr error) {
+	security.LogError("Social authentication failed during CompleteUserAuth",
+		"provider", providerName,
+		"error", authErr.Error(), // Use Error() method for message
+		// Consider adding more context if available, e.g., parts of the request? IP?
+	)
 }
 
 // handleLoginPage renders the login modal content
@@ -224,7 +204,7 @@ func (s *Server) handleLoginPage(c echo.Context) error {
 		redirect := c.QueryParam("redirect")
 
 		// Validate the redirect parameter
-		if !isValidRedirect(redirect) {
+		if !security.IsValidRedirect(redirect) {
 			redirect = "/"
 		}
 
@@ -251,41 +231,101 @@ func (s *Server) handleLoginPage(c echo.Context) error {
 	})
 }
 
-// isValidRedirect ensures the redirect path is safe and internal
-func isValidRedirect(redirectPath string) bool {
-	return conf.IsSafePath(redirectPath)
-}
-
 // handleBasicAuthLogin handles password login POST request
 func (s *Server) handleBasicAuthLogin(c echo.Context) error {
 	password := c.FormValue("password")
 	storedPassword := s.Settings.Security.BasicAuth.Password
+	username := "basic_auth_user" // Define a username for logging
 
-	if subtle.ConstantTimeCompare([]byte(password), []byte(storedPassword)) != 1 {
+	// Log basic auth attempt
+	security.LogInfo("Basic authentication login attempt", "username", username)
+
+	// Hash passwords before comparison for constant-time behavior
+	passwordHash := sha256.Sum256([]byte(password))
+	storedPasswordHash := sha256.Sum256([]byte(storedPassword))
+
+	if subtle.ConstantTimeCompare(passwordHash[:], storedPasswordHash[:]) != 1 {
+		// Log failed basic auth attempt
+		security.LogWarn("Basic authentication failed: Invalid password", "username", username)
 		return c.HTML(http.StatusUnauthorized, "<div class='text-red-500'>Invalid password</div>")
 	}
 
-	authCode, err := s.Handlers.OAuth2Server.GenerateAuthCode()
+	// Log successful basic auth attempt
+	security.LogInfo("Basic authentication successful", "username", username)
+
+	// Generate OAuth2 authorization code after successful basic authentication
+	authCode, err := s.OAuth2Server.GenerateAuthCode()
 	if err != nil {
-		return c.HTML(http.StatusUnauthorized, "<div class='text-red-500'>Unable to login at this time</div>")
+		// Log internal error during auth code generation
+		security.LogError("Failed to generate OAuth2 auth code after basic auth success", "username", username, "error", err.Error())
+		return c.HTML(http.StatusInternalServerError, "<div class='text-red-500'>Unable to complete login at this time (Code: GEN)</div>")
 	}
+
 	redirect := c.FormValue("redirect")
-	if !isValidRedirect(redirect) {
+	if !security.IsValidRedirect(redirect) {
+		security.LogWarn("Invalid redirect path provided during basic auth login, using default '/'", "provided_redirect", redirect, "username", username)
 		redirect = "/"
 	}
 	redirectURL := fmt.Sprintf("/api/v1/oauth2/callback?code=%s&redirect=%s", authCode, redirect)
 	c.Response().Header().Set("HX-Redirect", redirectURL)
+	security.LogInfo("Redirecting user after successful basic auth", "username", username, "redirect_url", redirectURL)
 	return c.String(http.StatusOK, "")
 }
 
 // handleLogout logs the user out from all providers
 func (s *Server) handleLogout(c echo.Context) error {
-	// Logout from all providers
-	gothic.StoreInSession("userId", "", c.Request(), c.Response())       //nolint:errcheck // session errors during logout can be ignored
-	gothic.StoreInSession("access_token", "", c.Request(), c.Response()) //nolint:errcheck // session errors during logout can be ignored
+	// Attempt to get user identifier from session before clearing it
+	var userIdentifier string
+	var provider string
+
+	// Check common keys - adapt if using different/multiple keys
+	if email, err := gothic.GetFromSession("userEmail", c.Request()); err == nil && email != "" {
+		userIdentifier = email
+		provider = "session(email)"
+	} else if userID, err := gothic.GetFromSession("userId", c.Request()); err == nil && userID != "" {
+		// Fallback or alternative identifier
+		userIdentifier = userID
+		provider = "session(userId)"
+	} else {
+		userIdentifier = "unknown"
+		provider = "unknown"
+	}
+
+	security.LogInfo("Logout initiated", "user_identifier", userIdentifier, "provider", provider)
+
+	// Logout from all providers - check and log errors for each key cleared
+	if err := gothic.StoreInSession("userId", "", c.Request(), c.Response()); err != nil {
+		security.LogWarn("Failed to clear session key during logout",
+			"key", "userId",
+			"user_identifier", userIdentifier,
+			"provider", provider,
+			"error", err.Error())
+	}
+	if err := gothic.StoreInSession("access_token", "", c.Request(), c.Response()); err != nil {
+		security.LogWarn("Failed to clear session key during logout",
+			"key", "access_token",
+			"user_identifier", userIdentifier,
+			"provider", provider,
+			"error", err.Error())
+	}
+	if err := gothic.StoreInSession("userEmail", "", c.Request(), c.Response()); err != nil { // Clear email too
+		security.LogWarn("Failed to clear session key during logout",
+			"key", "userEmail",
+			"user_identifier", userIdentifier,
+			"provider", provider,
+			"error", err.Error())
+	}
 
 	// Logout from gothic session
-	gothic.Logout(c.Response(), c.Request()) //nolint:errcheck // gothic logout errors can be ignored during cleanup
+	err := gothic.Logout(c.Response().Writer, c.Request())
+	if err != nil {
+		// Log if the main gothic logout fails
+		security.LogWarn("Error during main gothic.Logout on user logout",
+			"user_identifier", userIdentifier,
+			"provider", provider,
+			"error", err.Error())
+	}
 
+	security.LogInfo("Logout completed, redirecting", "user_identifier", userIdentifier, "provider", provider)
 	return c.Redirect(http.StatusFound, "/")
 }

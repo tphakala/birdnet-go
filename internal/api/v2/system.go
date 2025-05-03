@@ -39,6 +39,7 @@ type SystemInfo struct {
 	AppUptime     int64     `json:"app_uptime_seconds"`
 	NumCPU        int       `json:"num_cpu"`
 	GoVersion     string    `json:"go_version"`
+	SystemModel   string    `json:"system_model,omitempty"`
 }
 
 // ResourceInfo represents system resource usage data
@@ -96,6 +97,16 @@ type ActiveAudioDevice struct {
 	SampleRate int    `json:"sample_rate"`
 	BitDepth   int    `json:"bit_depth"`
 	Channels   int    `json:"channels"`
+}
+
+// ProcessInfo represents information about a running process
+type ProcessInfo struct {
+	PID    int32   `json:"pid"`
+	Name   string  `json:"name"`
+	Status string  `json:"status"` // e.g., "running", "sleeping", "zombie"
+	CPU    float64 `json:"cpu"`    // CPU usage percentage
+	Memory uint64  `json:"memory"` // Memory usage in bytes (RSS)
+	Uptime int64   `json:"uptime"` // Uptime in seconds
 }
 
 // Use monotonic clock for start time
@@ -269,14 +280,18 @@ func (c *Controller) initSystemRoutes() {
 	// Create system API group
 	systemGroup := c.Group.Group("/system")
 
-	// Create auth-protected group using our middleware
-	protectedGroup := systemGroup.Group("", c.AuthMiddleware)
+	// Get the appropriate auth middleware using the helper method
+	authMiddleware := c.getEffectiveAuthMiddleware()
+
+	// Create auth-protected group using the appropriate middleware
+	protectedGroup := systemGroup.Group("", authMiddleware)
 
 	// Add system routes (all protected)
 	protectedGroup.GET("/info", c.GetSystemInfo)
 	protectedGroup.GET("/resources", c.GetResourceInfo)
 	protectedGroup.GET("/disks", c.GetDiskInfo)
 	protectedGroup.GET("/jobs", c.GetJobQueueStats)
+	protectedGroup.GET("/processes", c.GetProcessInfo)
 
 	// Audio device routes (all protected)
 	audioGroup := protectedGroup.Group("/audio")
@@ -326,6 +341,18 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 	// Calculate app uptime using monotonic clock to avoid system time changes
 	appUptime := int64(time.Since(startMonotonicTime).Seconds())
 
+	// Get System Model on Linux
+	var systemModel string
+	if runtime.GOOS == "linux" {
+		systemModel = getSystemModelFromProc()
+		if systemModel == "" && c.apiLogger != nil {
+			c.apiLogger.Debug("Could not determine system model from /proc/cpuinfo",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+	}
+
 	// Create response
 	info := SystemInfo{
 		OS:            runtime.GOOS,
@@ -340,6 +367,7 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 		AppUptime:     appUptime,
 		NumCPU:        runtime.NumCPU(),
 		GoVersion:     runtime.Version(),
+		SystemModel:   systemModel,
 	}
 
 	if c.apiLogger != nil {
@@ -356,6 +384,32 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 	}
 
 	return ctx.JSON(http.StatusOK, info)
+}
+
+// Helper function to read system model from /proc/cpuinfo on Linux
+// It assumes the relevant "Model" line is the last one found.
+func getSystemModelFromProc() string {
+	data, err := os.ReadFile("/proc/cpuinfo")
+	if err != nil {
+		log.Printf("Warning: Could not read /proc/cpuinfo: %v", err)
+		return ""
+	}
+
+	systemModel := ""
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		// Look specifically for lines starting with "Model" (case-sensitive)
+		if strings.HasPrefix(line, "Model") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				model := strings.TrimSpace(parts[1])
+				if model != "" {
+					systemModel = model // Keep overwriting, last one wins
+				}
+			}
+		}
+	}
+	return systemModel
 }
 
 // GetResourceInfo handles GET /api/v2/system/resources
@@ -886,6 +940,174 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 		"verified":    true,
 		"diagnostics": diagnostics,
 	})
+}
+
+// getSingleProcessInfo retrieves detailed information for a single process.
+// It handles errors gracefully and returns a ProcessInfo struct.
+func (c *Controller) getSingleProcessInfo(p *process.Process) (ProcessInfo, error) {
+	name, err := p.Name()
+	if err != nil {
+		// Log error but continue, maybe process terminated?
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to get process name", "pid", p.Pid, "error", err.Error())
+		}
+		// Return an error to indicate this process couldn't be fully processed
+		return ProcessInfo{}, fmt.Errorf("failed to get process name for pid %d: %w", p.Pid, err)
+	}
+
+	statusList, err := p.Status()
+	var status string
+	switch {
+	case err != nil:
+		status = "unknown"
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to get process status", "pid", p.Pid, "name", name, "error", err.Error())
+		}
+	case len(statusList) > 0:
+		// Use the first status code returned
+		status = mapProcessStatus(statusList[0])
+	default:
+		status = "unknown"
+	}
+
+	cpuPercent, err := p.CPUPercent()
+	if err != nil {
+		// Log error but default to 0
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to get process CPU percent", "pid", p.Pid, "name", name, "error", err.Error())
+		}
+		cpuPercent = 0.0
+	}
+
+	memInfo, err := p.MemoryInfo()
+	var memRSS uint64
+	if err != nil {
+		// Log error but default to 0
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to get process memory info", "pid", p.Pid, "name", name, "error", err.Error())
+		}
+		memRSS = 0
+	} else {
+		memRSS = memInfo.RSS // Resident Set Size
+	}
+
+	createTimeMillis, err := p.CreateTime()
+	var uptimeSeconds int64
+	if err != nil {
+		// Log error but default to 0
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to get process create time", "pid", p.Pid, "name", name, "error", err.Error())
+		}
+		uptimeSeconds = 0
+	} else {
+		// Calculate uptime relative to now
+		uptimeSeconds = time.Now().Unix() - (createTimeMillis / 1000)
+		if uptimeSeconds < 0 { // Sanity check for clock skew
+			uptimeSeconds = 0
+		}
+	}
+
+	return ProcessInfo{
+		PID:    p.Pid,
+		Name:   name,
+		Status: status,
+		CPU:    cpuPercent,
+		Memory: memRSS,
+		Uptime: uptimeSeconds,
+	}, nil
+}
+
+// mapProcessStatus converts OS-specific process status codes to readable strings.
+func mapProcessStatus(statusCode string) string {
+	switch statusCode {
+	case "R": // Running or Runnable (Linux/macOS)
+		return "running"
+	case "S": // Sleeping (Linux/macOS)
+		return "sleeping"
+	case "D": // Disk Sleep (Linux)
+		return "disk sleep"
+	case "Z": // Zombie (Linux/macOS)
+		return "zombie"
+	case "T": // Stopped (Linux/macOS)
+		return "stopped"
+	case "W": // Paging (Linux)
+		return "paging"
+	case "I": // Idle (macOS/FreeBSD)
+		return "idle"
+	// Add more specific codes if needed, or default
+	default:
+		return strings.ToLower(statusCode) // Use the code itself if not recognized
+	}
+}
+
+// GetProcessInfo returns a list of running processes and their basic information
+// It accepts an optional query parameter `?all=true` to show all processes.
+// By default, it shows only the main application process and its direct children.
+func (c *Controller) GetProcessInfo(ctx echo.Context) error {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting process information",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+			"query", ctx.QueryString(),
+		)
+	}
+
+	showAll := ctx.QueryParam("all") == "true"
+	currentPID := int32(os.Getpid())
+
+	procs, err := process.Processes()
+	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to list processes",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+		return c.HandleError(ctx, err, "Failed to list processes", http.StatusInternalServerError)
+	}
+
+	processInfos := make([]ProcessInfo, 0, len(procs))
+	for _, p := range procs {
+		// Filtering logic
+		if !showAll {
+			parentPID, err := p.Ppid()
+			if err != nil {
+				// Log error and skip this process if PPID can't be determined
+				if c.apiLogger != nil {
+					c.apiLogger.Warn("Failed to get parent PID, skipping process", "pid", p.Pid, "error", err.Error())
+				}
+				continue
+			}
+			if p.Pid != currentPID && parentPID != currentPID {
+				// Skip if not the main process or a direct child
+				continue
+			}
+		}
+
+		// Get info for this process using the helper
+		info, err := c.getSingleProcessInfo(p)
+		if err != nil {
+			// Log the error from getSingleProcessInfo (already logged specifics inside)
+			if c.apiLogger != nil {
+				c.apiLogger.Warn("Skipping process due to error retrieving details", "pid", p.Pid, "error", err.Error())
+			}
+			continue // Skip this process if we couldn't get full details
+		}
+
+		processInfos = append(processInfos, info)
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Process information retrieved successfully",
+			"count", len(processInfos),
+			"filter_applied", !showAll,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
+	return ctx.JSON(http.StatusOK, processInfos)
 }
 
 // Helper functions
