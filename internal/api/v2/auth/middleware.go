@@ -57,7 +57,7 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 			}
 			// Set context to indicate bypass
 			c.Set("isAuthenticated", false)
-			c.Set("authMethod", AuthMethodUnknown)
+			c.Set("authMethod", AuthMethodNone)
 			return next(c)
 		}
 
