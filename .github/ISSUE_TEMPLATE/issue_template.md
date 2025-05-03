@@ -6,6 +6,7 @@ labels: ''
 assignees: ''
 
 ---
+Please fill in this issue template, any issue ticket filed without basic information required in this template will be closed without response. I cannot help if I don't have basic details like application version etc.
 
 ## Issue Type
 - [ ] Bug report
