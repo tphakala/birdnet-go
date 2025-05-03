@@ -181,7 +181,8 @@ func isProtectedRoute(path string) bool {
 		strings.HasPrefix(path, "/api/v1/birdweather/") ||
 		strings.HasPrefix(path, "/api/v2/") || // All v2 API routes require auth check (IP-based or login)
 		strings.HasPrefix(path, "/api/v1/audio-stream-hls") || // Protect HLS streams
-		strings.HasPrefix(path, "/logout")
+		strings.HasPrefix(path, "/logout") ||
+		strings.HasPrefix(path, "/system") // Protect system dashboard
 }
 
 // isPublicApiRoute returns true for API routes that should be publicly accessible without authentication
