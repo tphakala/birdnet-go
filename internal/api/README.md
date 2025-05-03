@@ -129,6 +129,14 @@ The middleware follows this decision flow:
 - Reload detection models
 - Rebuild detection filters
 
+### System Monitoring
+
+- `GET /api/v2/system/info` - Retrieves basic system information (OS, Arch, Uptime, etc.)
+- `GET /api/v2/system/resources` - Retrieves system resource usage (CPU, Memory, Swap)
+- `GET /api/v2/system/disks` - Retrieves information about disk partitions and usage
+- `GET /api/v2/system/jobs` - Retrieves statistics about the analysis job queue
+- `GET /api/v2/system/processes` - Retrieves information about running processes (application and children by default, or all with `?all=true`)
+
 ### Settings Management
 
 - View and update application configuration
