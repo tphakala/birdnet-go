@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/security"
 )
 
 // Embed the assets and views directories.
@@ -72,6 +73,8 @@ func (s *Server) initRoutes() {
 		"/analytics": {Path: "/analytics", TemplateName: "analytics", Title: "Analytics"},
 		"/search":    {Path: "/search", TemplateName: "search", Title: "Search Detections"},
 		"/about":     {Path: "/about", TemplateName: "about", Title: "About BirdNET-Go"},
+		// System route is protected by auth middleware
+		"/system": {Path: "/system", TemplateName: "system", Title: "System Dashboard", Authorized: true},
 		// Settings Routes are managed by settingsBase template
 		"/settings/main":             {Path: "/settings/main", TemplateName: "settingsBase", Title: "Main Settings", Authorized: true},
 		"/settings/audio":            {Path: "/settings/audio", TemplateName: "settingsBase", Title: "Audio Settings", Authorized: true},
@@ -311,7 +314,7 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 	}
 
 	fragmentPath := c.Request().RequestURI
-	if isFragment && conf.IsSafePath(fragmentPath) {
+	if isFragment && security.IsSafePath(fragmentPath) {
 		// If the route is for a fragment, render it with the dashboard template
 		data.Page = "dashboard"
 		data.Title = partialRoute.Title

@@ -201,9 +201,9 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 
 	// Validate redirect URI using the shared function and pre-parsed expected URI
 	if err := ValidateRedirectURI(redirectURI, s.ExpectedBasicRedirectURI); err != nil {
-		logger.Warn("Redirect URI validation failed", "error", err)
-		// Return the specific error message for better client-side debugging
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		logger.Warn("Redirect URI validation failed", "provided_uri", redirectURI, "error", err)
+		// Return a generic error to the client, log the specific one internally
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid redirect_uri"})
 	}
 
 	// Exchange the authorization code for an access token with timeout

@@ -1,0 +1,480 @@
+{{define "system"}}
+
+{{/* 
+  IMPORTANT IMPLEMENTATION NOTES:
+  - DO NOT USE HTMX for any data requests on this page
+  - Use ONLY JSON API endpoints with fetch/Alpine.js for all data operations
+  - This page is part of migration away from HTMX to pure JSON API architecture
+  - All system dashboard functionality must use JSON API endpoints with proper fetch requests
+*/}}
+
+<div class="col-span-12 space-y-4" x-data="systemDashboard" x-init="loadAllData()" role="region" aria-label="System Dashboard">
+      
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- System Information Card -->
+        <div class="card bg-base-100 shadow-sm" x-cloak>
+            <div class="card-body card-padding">
+                <h2 class="card-title" id="system-info-heading">System Information</h2>
+                <div class="divider"></div>
+                
+                <!-- Loading state -->
+                <div x-show="systemInfo.loading" class="py-4" x-cloak>
+                    <div class="flex flex-col gap-2">
+                        <div class="skeleton h-4 w-full mb-2"></div>
+                        <div class="skeleton h-4 w-3/4 mb-2"></div>
+                        <div class="skeleton h-4 w-5/6"></div>
+                    </div>
+                </div>
+                
+                <!-- Error state -->
+                <div x-show="systemInfo.error && !systemInfo.loading" class="alert alert-error" x-text="systemInfo.error" x-cloak role="alert"></div>
+                
+                <!-- Data loaded state -->
+                <div x-show="!systemInfo.loading && !systemInfo.error" class="space-y-2" aria-labelledby="system-info-heading" x-cloak>
+                    <div class="flex justify-between">
+                        <span class="text-base-content/70">Operating System:</span>
+                        <span class="font-medium" x-text="systemInfo.data.os || 'N/A'"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-base-content/70">Hostname:</span>
+                        <span class="font-medium" x-text="systemInfo.data.hostname || 'N/A'"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-base-content/70">Platform:</span>
+                        <span class="font-medium" x-text="systemInfo.data.platform || 'N/A'"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-base-content/70">Uptime:</span>
+                        <span class="font-medium" x-text="formatUptime(systemInfo.data.uptime_seconds) || 'N/A'"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-base-content/70">CPUs:</span>
+                        <span class="font-medium" x-text="systemInfo.data.num_cpu || 'N/A'"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-base-content/70">Go Version:</span>
+                        <span class="font-medium" x-text="systemInfo.data.go_version || 'N/A'"></span>
+                    </div>
+                    <!-- Added CPU Model Row -->
+                    <div class="flex justify-between" x-show="systemInfo.data.system_model"> 
+                        <span class="text-base-content/70">System:</span>
+                        <span class="font-medium" x-text="systemInfo.data.system_model || 'N/A'"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Disk Usage Card -->
+        <div class="card bg-base-100 shadow-sm" x-cloak>
+            <div class="card-body card-padding">
+                <h2 class="card-title" id="disk-usage-heading">Disk Usage</h2>
+                <div class="divider"></div>
+                
+                <!-- Loading state -->
+                <div x-show="diskUsage.loading" class="py-4" x-cloak>
+                    <div class="flex flex-col gap-2">
+                        <div class="skeleton h-4 w-full mb-2"></div>
+                        <div class="skeleton h-4 w-4/5 mb-2"></div>
+                        <div class="skeleton h-4 w-3/4"></div>
+                    </div>
+                </div>
+                
+                <!-- Error state -->
+                <div x-show="diskUsage.error && !diskUsage.loading" class="alert alert-error" x-text="diskUsage.error" x-cloak role="alert"></div>
+                
+                <!-- Data loaded state -->
+                <div x-show="!diskUsage.loading && !diskUsage.error && diskUsage.data.length > 0" class="space-y-4" aria-labelledby="disk-usage-heading">
+                    <template x-for="disk in diskUsage.data" :key="disk.mountpoint">
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span class="font-medium" x-text="disk.mountpoint"></span>
+                                <span x-text="formatStorage(disk.used) + ' / ' + formatStorage(disk.total)"></span>
+                            </div>
+                            <div class="w-full bg-base-200 rounded-full h-2" role="progressbar" 
+                                 :aria-valuenow="disk.usage_percent" aria-valuemin="0" aria-valuemax="100" 
+                                 :aria-valuetext="Math.round(disk.usage_percent) + '% used'">
+                                <div class="h-2 rounded-full" 
+                                     :class="disk.usage_percent > 90 ? 'bg-error' : disk.usage_percent > 70 ? 'bg-warning' : 'bg-success'"
+                                     :style="`width: ${disk.usage_percent}%`"></div>
+                            </div>
+                            <div class="text-xs text-right mt-1" x-text="Math.round(disk.usage_percent) + '% used'"></div>
+                        </div>
+                    </template>
+                </div>
+                
+                <!-- No data state -->
+                <div x-show="!diskUsage.loading && !diskUsage.error && diskUsage.data.length === 0" class="text-center py-4 text-base-content/70">
+                    No disk information available
+                </div>
+            </div>
+        </div>
+
+        <!-- Memory Usage Card -->
+        <div class="card bg-base-100 shadow-sm" x-cloak>
+            <div class="card-body card-padding">
+                <h2 class="card-title" id="memory-usage-heading">Memory Usage</h2>
+                <div class="divider"></div>
+                
+                <!-- Loading state -->
+                <div x-show="memoryUsage.loading" class="py-4" x-cloak>
+                    <div class="flex flex-col gap-2">
+                        <div class="skeleton h-4 w-full mb-2"></div>
+                        <div class="skeleton h-4 w-1/2 mb-2"></div>
+                        <div class="skeleton h-4 w-4/5"></div>
+                    </div>
+                </div>
+                
+                <!-- Error state -->
+                <div x-show="memoryUsage.error && !memoryUsage.loading" class="alert alert-error" x-text="memoryUsage.error" x-cloak role="alert"></div>
+                
+                <!-- Data loaded state -->
+                <div x-show="!memoryUsage.loading && !memoryUsage.error" class="space-y-3" aria-labelledby="memory-usage-heading">
+                    <!-- RAM Usage -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="font-medium">RAM Usage</span>
+                            <span x-text="formatStorage(memoryUsage.data.used) + ' / ' + formatStorage(memoryUsage.data.total)"></span>
+                        </div>
+                        <div class="w-full bg-base-200 rounded-full h-2" role="progressbar" 
+                             :aria-valuenow="memoryUsage.data.usedPercent" aria-valuemin="0" aria-valuemax="100" 
+                             :aria-valuetext="Math.round(memoryUsage.data.usedPercent) + '% used'">
+                            <div class="h-2 rounded-full" 
+                                 :class="memoryUsage.data.usedPercent > 90 ? 'bg-error' : memoryUsage.data.usedPercent > 70 ? 'bg-warning' : 'bg-success'"
+                                 :style="`width: ${memoryUsage.data.usedPercent}%`"></div>
+                        </div>
+                        <div class="text-xs text-right mt-1" x-text="Math.round(memoryUsage.data.usedPercent) + '% used'"></div>
+                    </div>
+                    
+                    <!-- Memory Details -->
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-base-content/70">Free:</span>
+                            <span x-text="formatStorage(memoryUsage.data.free)"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-base-content/70">Available:</span>
+                            <span x-text="formatStorage(memoryUsage.data.available)"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Process Information Card -->
+    <div class="card bg-base-100 shadow-sm mt-6" x-cloak>
+        <div class="card-body card-padding">
+            <div class="flex justify-between items-center mb-2">
+                <h2 class="card-title" id="process-info-heading">Process Information</h2>
+                
+                <!-- Enhanced toggle for showing all processes -->
+                <div class="flex items-center gap-2 bg-base-200 px-3 py-1.5 rounded-lg shadow-sm">
+                    <span class="text-sm font-medium">Show all processes</span>
+                    <input type="checkbox" class="toggle toggle-sm toggle-primary" 
+                           x-model="showAllProcesses" 
+                           @change="loadProcesses()" 
+                           aria-label="Toggle to show all system processes"/>
+                </div>
+            </div>
+            <div class="divider mt-0"></div>
+            
+            <!-- Loading state -->
+            <div x-show="processes.loading" class="py-4" x-cloak>
+                <div class="flex justify-center">
+                    <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
+                    <span class="sr-only">Loading process information...</span>
+                </div>
+            </div>
+            
+            <!-- Error state -->
+            <div x-show="processes.error && !processes.loading" class="alert alert-error" x-text="processes.error" x-cloak role="alert"></div>
+            
+            <!-- Data loaded state -->
+            <div x-show="!processes.loading && !processes.error" class="overflow-x-auto" aria-labelledby="process-info-heading" x-cloak>
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr class="bg-base-200">
+                            <th scope="col">Process</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">CPU</th>
+                            <th scope="col">Memory</th>
+                            <th scope="col">Uptime</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-if="processes.data.length === 0">
+                            <tr>
+                                <td colspan="5" class="text-center py-6 text-base-content/70">No process information available</td>
+                            </tr>
+                        </template>
+                        <template x-for="process in processes.data" :key="process.pid">
+                            <tr class="hover:bg-base-200/50 transition-colors duration-150">
+                                <td>
+                                    <div class="flex items-start gap-2">
+                                        <div class="p-1.5 bg-primary/10 rounded-md text-primary">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                                <path fill-rule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L7.586 10 5.293 7.707a1 1 0 010-1.414zM11 12a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <div class="font-medium" x-text="process.name === 'main' ? 'BirdNET-Go' : process.name"></div>
+                                            <div class="text-xs text-base-content/60" x-text="'PID: ' + process.pid"></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge badge-sm" 
+                                          :class="{
+                                              'badge-success': process.status === 'running',
+                                              'badge-warning': process.status === 'sleeping' || process.status === 'sleep',
+                                              'badge-error': process.status === 'zombie',
+                                              'badge-info': process.status === 'idle',
+                                              'badge-secondary': !['running', 'sleeping', 'sleep', 'zombie', 'idle'].includes(process.status)
+                                          }"
+                                          x-text="process.status"></span>
+                                </td>
+                                <td>
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-16 h-2 bg-base-200 rounded-full overflow-hidden" role="progressbar"
+                                             :aria-valuenow="Math.min(Math.round(process.cpu), 100)" aria-valuemin="0" aria-valuemax="100"
+                                             :aria-valuetext="Math.round(process.cpu) + '% CPU usage'">
+                                            <div class="h-full rounded-full bg-primary" 
+                                                :style="`width: ${Math.min(Math.round(process.cpu), 100)}%`"></div>
+                                        </div>
+                                        <span class="text-sm" x-text="Math.round(process.cpu) + '%'"></span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="text-sm font-medium" x-text="formatStorage(process.memory)"></span>
+                                </td>
+                                <td>
+                                    <span class="text-sm" x-text="formatUptime(process.uptime)"></span>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Refresh button -->
+    <div class="flex justify-center mt-6" x-cloak>
+        <button class="btn btn-primary" @click="loadAllData()" :disabled="isAnyLoading" aria-label="Refresh system data">
+            <template x-if="isAnyLoading">
+                <span class="loading loading-spinner loading-sm mr-2" aria-hidden="true"></span>
+            </template>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" x-show="!isAnyLoading">
+                <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+            </svg>
+            Refresh Data
+        </button>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('systemDashboard', () => ({
+            // System information state
+            systemInfo: {
+                loading: true,
+                error: null,
+                data: {}
+            },
+            
+            // Disk usage state
+            diskUsage: {
+                loading: true,
+                error: null,
+                data: []
+            },
+            
+            // Memory usage state
+            memoryUsage: {
+                loading: true,
+                error: null,
+                data: {}
+            },
+            
+            // Process information state
+            processes: {
+                loading: true,
+                error: null,
+                data: []
+            },
+            
+            // Toggle state for process list
+            showAllProcesses: false,
+            
+            // Tooltip state management
+            showTooltip: null,
+            
+            // Computed property to check if any data is loading
+            get isAnyLoading() {
+                return this.systemInfo.loading || 
+                       this.diskUsage.loading || 
+                       this.memoryUsage.loading || 
+                       this.processes.loading;
+            },
+            
+            // Load all data at once
+            loadAllData() {
+                this.loadSystemInfo();
+                this.loadDiskUsage();
+                this.loadMemoryUsage();
+                this.loadProcesses();
+            },
+            
+            // Load system information
+            loadSystemInfo() {
+                this.systemInfo.loading = true;
+                this.systemInfo.error = null;
+                
+                fetch('/api/v2/system/info')
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.status === 401) {
+                                throw new Error("Authentication required. Please log in.");
+                            }
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        this.systemInfo.data = data;
+                        this.systemInfo.loading = false;
+                    })
+                    .catch(error => {
+                        console.error('Error fetching system info:', error);
+                        this.systemInfo.error = `Failed to load system information: ${error.message}`;
+                        this.systemInfo.loading = false;
+                    });
+            },
+            
+            // Load disk usage
+            loadDiskUsage() {
+                this.diskUsage.loading = true;
+                this.diskUsage.error = null;
+                
+                fetch('/api/v2/system/disks')
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.status === 401) {
+                                throw new Error("Authentication required. Please log in.");
+                            }
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        this.diskUsage.data = data;
+                        this.diskUsage.loading = false;
+                    })
+                    .catch(error => {
+                        console.error('Error fetching disk usage:', error);
+                        this.diskUsage.error = `Failed to load disk usage: ${error.message}`;
+                        this.diskUsage.loading = false;
+                    });
+            },
+            
+            // Load memory usage
+            loadMemoryUsage() {
+                this.memoryUsage.loading = true;
+                this.memoryUsage.error = null;
+                
+                fetch('/api/v2/system/resources')
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.status === 401) {
+                                throw new Error("Authentication required. Please log in.");
+                            }
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        // Map the API response to our UI data model
+                        this.memoryUsage.data = {
+                            total: data.memory_total,
+                            used: data.memory_used,
+                            free: data.memory_free,
+                            available: data.memory_free,
+                            usedPercent: data.memory_usage_percent
+                        };
+                        this.memoryUsage.loading = false;
+                    })
+                    .catch(error => {
+                        console.error('Error fetching memory usage:', error);
+                        this.memoryUsage.error = `Failed to load memory usage: ${error.message}`;
+                        this.memoryUsage.loading = false;
+                    });
+            },
+            
+            // Load process information
+            loadProcesses() {
+                this.processes.loading = true;
+                this.processes.error = null;
+                
+                const url = this.showAllProcesses ? '/api/v2/system/processes?all=true' : '/api/v2/system/processes';
+
+                fetch(url)
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.status === 401) {
+                                throw new Error("Authentication required. Please log in.");
+                            }
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        this.processes.data = data || [];
+                        this.processes.loading = false;
+                    })
+                    .catch(error => {
+                        console.error('Error fetching processes:', error);
+                        this.processes.error = `Failed to load process information: ${error.message}`;
+                        this.processes.loading = false;
+                    });
+            },
+            
+            // Helper function to format uptime
+            formatUptime(seconds) {
+                if (seconds === undefined || seconds === null) return 'N/A';
+                
+                const days = Math.floor(seconds / 86400);
+                seconds %= 86400;
+                const hours = Math.floor(seconds / 3600);
+                seconds %= 3600;
+                const minutes = Math.floor(seconds / 60);
+                seconds = Math.floor(seconds % 60);
+                
+                let result = '';
+                if (days > 0) result += `${days}d `;
+                if (hours > 0 || days > 0) result += `${hours}h `;
+                if (minutes > 0 || hours > 0 || days > 0) result += `${minutes}m `;
+                result += `${seconds}s`;
+                
+                return result;
+            },
+            
+            // Helper function to format storage sizes
+            formatStorage(bytes) {
+                if (bytes === undefined || bytes === null) return 'N/A';
+                
+                const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                let size = bytes;
+                let unitIndex = 0;
+                
+                while (size >= 1024 && unitIndex < units.length - 1) {
+                    size /= 1024;
+                    unitIndex++;
+                }
+                
+                return `${Math.round(size)} ${units[unitIndex]}`;
+            }
+        }));
+    });
+</script>
+
+{{end}} 

@@ -11,14 +11,17 @@ internal/api/
     ├── analytics_test.go  - Tests for analytics endpoints
     ├── api.go             - Main API controller and route initialization
     ├── api_test.go        - Tests for main API functionality
-    ├── auth.go            - Authentication endpoints and middleware
+    ├── auth/              - Authentication package
+    │   ├── adapter.go     - Adapter for security package
+    │   ├── middleware.go  - Authentication middleware  
+    │   └── service.go     - Authentication service interface
+    ├── auth.go            - Authentication endpoints and handlers
     ├── auth_test.go       - Tests for authentication endpoints
     ├── control.go         - System control actions (restart, reload model)
     ├── detections.go      - Bird detection data endpoints
     ├── integration.go     - External integration framework
     ├── integrations.go    - External service integrations
     ├── media.go           - Media (images, audio) management
-    ├── middleware.go      - Custom middleware functions
     ├── settings.go        - Application settings management
     ├── streams.go         - Real-time data streaming
     ├── system.go          - System information and monitoring
@@ -43,14 +46,71 @@ Currently, the package implements version 2 (`v2`) of the API with all endpoints
 
 ## Authentication
 
-The API implements authentication via:
+The API implements a comprehensive, service-based authentication system managed by the `internal/api/v2/auth` sub-package. This package decouples authentication logic from API handlers and supports multiple authentication methods.
 
-- Login/logout functionality
-- Session-based authentication
-- Auth middleware for protected endpoints
-- Bearer token support for programmatic API access
+Key components of the `auth` package:
 
-Protected endpoints require authentication, while some endpoints like health checks and basic detection queries are publicly accessible.
+-   **`Service` Interface (`auth/service.go`)**: Defines the contract for authentication operations (checking access, validating tokens, basic auth, logout, etc.) and standard sentinel errors.
+-   **`AuthMethod` Enum (`auth/service.go`)**: Represents different authentication methods (`Token`, `BrowserSession`, `BasicAuth`, `LocalSubnet`, `None`). Uses `go generate` with `stringer`.
+-   **`SecurityAdapter` (`auth/adapter.go`)**: Implements the `Service` interface, adapting the `internal/security` package's `OAuth2Server` for core logic like session checks, token validation, and basic auth credential verification.
+-   **`Middleware` (`auth/middleware.go`)**: An Echo middleware that uses the `AuthService` to enforce authentication. It checks if auth is required, attempts token and session authentication, sets context values (`isAuthenticated`, `username`, `authMethod`) on success, and handles unauthenticated requests appropriately (redirect for browsers, 401 for API clients).
+
+**Authentication Flow:**
+
+1.  The `Middleware` intercepts requests.
+2.  It checks `AuthService.IsAuthRequired`. If not required (e.g., local subnet), proceeds with `AuthMethodNone`.
+3.  If required, it checks for a `Bearer` token via `AuthService.ValidateToken`.
+4.  If no valid token, it checks for a session via `AuthService.CheckAccess`.
+5.  On success (token or session), it sets context and proceeds.
+6.  On failure, it redirects browsers or returns a 401 error for API clients.
+
+Protected endpoints use this auth middleware. The system handles browser clients (redirecting to login) and API clients (returning 401 JSON errors) appropriately.
+
+### Authentication Service Interface (Deprecated - See `auth/service.go`)
+
+The authentication service interface provides these key operations:
+
+```go
+// Service defines the interface for API service implementations.
+type Service interface {
+	// RegisterRoutes registers all API routes with the Echo group.
+	RegisterRoutes(group *echo.Group)
+
+	// CheckAccess validates if a request has access.
+	// Returns nil on success, or an error on failure.
+	CheckAccess(c echo.Context) error
+
+	// IsAuthRequired checks if authentication is needed.
+	IsAuthRequired(c echo.Context) bool
+
+	// GetUsername retrieves the authenticated username.
+	GetUsername(c echo.Context) string
+
+	// GetAuthMethod returns the authentication method used.
+	GetAuthMethod(c echo.Context) auth.AuthMethod // Use the enum type
+
+	// ValidateToken checks if a bearer token is valid.
+	// Returns nil on success, or an error on failure.
+	ValidateToken(token string) error
+
+	// AuthenticateBasic handles basic authentication.
+	// Returns nil on success, or an error on failure.
+	AuthenticateBasic(c echo.Context, username, password string) error
+
+	// Logout invalidates the current session/token.
+	// Returns nil on success, or an error on failure.
+	Logout(c echo.Context) error
+}
+```
+
+### Auth Middleware Implementation (Deprecated - See `auth/middleware.go`)
+
+The middleware follows this decision flow:
+
+1. Checks for Bearer token and validates if present
+2. Falls back to session authentication for browser clients
+3. Determines appropriate response based on client type 
+4. Allows request to proceed if authentication succeeds, setting authentication details in the context
 
 ## Key Features
 
@@ -72,6 +132,14 @@ Protected endpoints require authentication, while some endpoints like health che
 - Restart analysis processes
 - Reload detection models
 - Rebuild detection filters
+
+### System Monitoring
+
+- `GET /api/v2/system/info` - Retrieves basic system information (OS, Arch, Uptime, etc.)
+- `GET /api/v2/system/resources` - Retrieves system resource usage (CPU, Memory, Swap)
+- `GET /api/v2/system/disks` - Retrieves information about disk partitions and usage
+- `GET /api/v2/system/jobs` - Retrieves statistics about the analysis job queue
+- `GET /api/v2/system/processes` - Retrieves information about running processes (application and children by default, or all with `?all=true`)
 
 ### Settings Management
 
