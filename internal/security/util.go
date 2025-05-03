@@ -2,6 +2,7 @@ package security
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 	"path"
 	"strings"
@@ -78,4 +79,37 @@ func ValidateRedirectURI(providedURIString string, expectedURI *url.URL) error {
 	}
 
 	return nil // URIs match
+}
+
+// IsSafePath ensures the given path is internal and doesn't contain potentially harmful sequences.
+// It checks for:
+// - Path starting with '/'
+// - No double slashes '//' or backslashes '\\'
+// - No protocol specifiers '://'
+// - No directory traversal '..'
+// - No null bytes '\x00'
+// - Reasonable length limit
+func IsSafePath(path string) bool {
+	return strings.HasPrefix(path, "/") &&
+		!strings.Contains(path, "//") &&
+		!strings.Contains(path, "\\") &&
+		!strings.Contains(path, "://") &&
+		!strings.Contains(path, "..") &&
+		!strings.Contains(path, "\x00") &&
+		len(path) < 512 // Prevent excessively long paths
+}
+
+// IsValidRedirect ensures the redirect path is safe and internal by checking IsSafePath.
+// It logs a warning if the path is deemed unsafe.
+// Note: Consider where the logger should come from if needed outside httpcontroller.
+// For now, it logs using the standard log package if unsafe.
+func IsValidRedirect(redirectPath string) bool {
+	isSafe := IsSafePath(redirectPath) // Use the exported function
+	if !isSafe {
+		// Log potentially unsafe redirect attempt using standard log
+		// Replace with a proper logger if available/passed in
+		log.Printf("WARN: Invalid or potentially unsafe redirect path detected: %s", redirectPath)
+		// security.LogWarn("Invalid or potentially unsafe redirect path detected", "path", redirectPath)
+	}
+	return isSafe
 }

@@ -247,7 +247,7 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 				rawPath := c.Request().URL.Path
 				var redirectPath string
 				// Validate the raw path before escaping
-				if !isValidRedirect(rawPath) {
+				if !security.IsValidRedirect(rawPath) {
 					redirectPath = "/"
 				} else {
 					redirectPath = url.QueryEscape(rawPath)
