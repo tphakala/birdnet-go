@@ -334,18 +334,16 @@ func (s *OAuth2Server) GenerateAuthCode() (string, error) {
 func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (string, error) {
 	// Do not log the code
 	logger := securityLogger.With("operation", "ExchangeAuthCode")
+
+	// Fast-fail if the client already gave up
+	if err := ctx.Err(); err != nil {
+		logger.Warn("Context cancelled before acquiring lock", "error", err)
+		return "", err
+	}
+
 	logger.Debug("Attempting to exchange authorization code")
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-
-	// Check context cancellation first
-	select {
-	case <-ctx.Done():
-		logger.Warn("Context cancelled before exchanging code", "error", ctx.Err())
-		return "", ctx.Err()
-	default:
-		// Continue if context is not cancelled
-	}
 
 	authCode, ok := s.authCodes[code]
 	if !ok {
