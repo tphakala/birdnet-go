@@ -187,8 +187,18 @@ func isProtectedRoute(path string) bool {
 		strings.HasPrefix(path, "/system") // Protect system dashboard
 }
 
-// isPublicApiRoute returns true for API routes that should be publicly accessible without authentication
-func isPublicApiRoute(path string) bool {
+// isPublicApiRoute returns true for API routes that should be publicly accessible
+// without authentication, but ONLY for safe methods (GET, HEAD, OPTIONS).
+func isPublicApiRoute(c echo.Context) bool {
+	path := c.Request().URL.Path
+	method := c.Request().Method
+
+	// Only allow safe methods for public routes
+	isSafeMethod := method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
+	if !isSafeMethod {
+		return false
+	}
+
 	// Check against the defined map of public V2 prefixes.
 	for prefix := range publicV2ApiPrefixes {
 		if strings.HasPrefix(path, prefix) {
@@ -208,15 +218,22 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return next(c)
 		}
 
-		// Allow public API routes without authentication
-		if isPublicApiRoute(path) {
+		// Allow public API routes without authentication *only* if the method is safe (GET, HEAD, OPTIONS).
+		// isPublicApiRoute checks both the path prefix and the HTTP method.
+		// Therefore, even for paths matching public prefixes, mutating methods (POST, PUT, DELETE etc.)
+		// will NOT bypass the main authentication check below if authentication is enabled.
+		if isPublicApiRoute(c) {
 			return next(c)
 		}
 
 		// Get client IP once to avoid redundant calls
 		clientIPString := s.RealIP(c)
 
-		// Check if authentication is required for this IP
+		// Check if authentication is required for this IP.
+		// If authentication IS enabled (via OAuth2Server settings), requests reaching this point
+		// must pass further authentication checks (local subnet bypass or valid user session).
+		// This includes non-GET/HEAD/OPTIONS requests to public API prefixes, as they would fail
+		// the isPublicApiRoute check above.
 		if s.OAuth2Server != nil && s.OAuth2Server.IsAuthenticationEnabled(clientIPString) {
 			// Check if client is in local subnet - in that case, we can bypass auth
 			clientIP := net.ParseIP(clientIPString)
