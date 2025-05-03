@@ -350,8 +350,6 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 				"path", ctx.Request().URL.Path,
 				"ip", ctx.RealIP(),
 			)
-		} else if c.apiLogger != nil {
-			c.apiLogger.Debug("Determined system model", "model", systemModel)
 		}
 	}
 
