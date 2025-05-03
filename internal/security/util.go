@@ -31,14 +31,19 @@ func ValidateRedirectURI(providedURIString string, expectedURI *url.URL) error {
 		expectedPath = strings.TrimSuffix(expectedPath, "/")
 	}
 
-	// Compare Scheme, Host, and Path
+	// Compare Scheme, Host, Path, RawQuery, and Fragment
 	if parsedProvidedURI.Scheme != expectedURI.Scheme ||
 		parsedProvidedURI.Host != expectedURI.Host ||
-		providedPath != expectedPath {
+		providedPath != expectedPath ||
+		parsedProvidedURI.RawQuery != "" || // Ensure provided URI has no query parameters
+		parsedProvidedURI.Fragment != "" { // Ensure provided URI has no fragment
+
 		// Construct a clearer error message showing the difference
-		return fmt.Errorf("invalid redirect_uri: provided '%s' (parsed as Scheme=%s, Host=%s, Path=%s) does not match expected (Scheme=%s, Host=%s, Path=%s)",
+		// Include RawQuery and Fragment in the error message for clarity
+		return fmt.Errorf("invalid redirect_uri: provided '%s' (parsed as Scheme=%s, Host=%s, Path=%s, Query=%s, Fragment=%s)"+
+			" does not match expected base URI (Scheme=%s, Host=%s, Path=%s) or contains disallowed query/fragment components",
 			providedURIString,
-			parsedProvidedURI.Scheme, parsedProvidedURI.Host, providedPath,
+			parsedProvidedURI.Scheme, parsedProvidedURI.Host, providedPath, parsedProvidedURI.RawQuery, parsedProvidedURI.Fragment,
 			expectedURI.Scheme, expectedURI.Host, expectedPath)
 	}
 
