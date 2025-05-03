@@ -256,13 +256,57 @@ func (s *OAuth2Server) HandleBasicAuthCallback(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Missing authorization code")
 	}
 
-	// Instead of exchanging the code here, we'll pass it to the client
-	// Do not log the code
-	logger.Info("Rendering callback page with authorization code")
-	return c.Render(http.StatusOK, "callback", map[string]interface{}{
-		"Code":        code, // Sent to client, unavoidable
-		"RedirectURL": redirect,
-		"ClientID":    s.Settings.Security.BasicAuth.ClientID,
-		"Secret":      "***MASKED***", // Mask secret before sending to template
-	})
+	// Exchange the authorization code for an access token directly on the server
+	// Do not log the code being exchanged
+	logger.Info("Attempting to exchange authorization code for access token server-side")
+	accessToken, err := s.ExchangeAuthCode(code)
+	if err != nil {
+		logger.Warn("Failed to exchange authorization code server-side", "error", err)
+		// Provide a user-friendly error message
+		return c.String(http.StatusInternalServerError, "Unable to complete login at this time. Please try again.")
+	}
+	// DO NOT log the accessToken
+	logger.Info("Successfully exchanged authorization code for access token")
+
+	// Store the access token in Gothic session
+	// Do not log the token here either
+	if err := gothic.StoreInSession("access_token", accessToken, c.Request(), c.Response()); err != nil {
+		logger.Warn("Failed to store access token in session after callback exchange", "error", err)
+		// Even if storing fails, try to redirect, but log the issue.
+		// Depending on application logic, a stricter error might be needed here.
+		// return c.String(http.StatusInternalServerError, "Session error during login. Please try again.")
+	} else {
+		logger.Info("Successfully stored access token in session")
+	}
+
+	// Validate the redirect path
+	safeRedirect := "/" // Default redirect
+	if redirect != "" {
+		// Use IsSafePath from the conf package to validate the redirect
+		if conf.IsSafePath(redirect) {
+			safeRedirect = redirect
+			logger.Debug("Validated redirect path", "safe_redirect", safeRedirect)
+		} else {
+			logger.Warn("Invalid or unsafe redirect path provided, using default", "provided_redirect", redirect, "default_redirect", safeRedirect)
+		}
+	} else {
+		logger.Debug("No redirect path provided, using default", "default_redirect", safeRedirect)
+	}
+
+	// Redirect the user to the final destination
+	logger.Info("Redirecting user to final destination", "destination", safeRedirect)
+	return c.Redirect(http.StatusFound, safeRedirect)
+
+	/*
+		// Old code that rendered the callback page:
+		// Instead of exchanging the code here, we'll pass it to the client
+		// Do not log the code
+		logger.Info("Rendering callback page with authorization code")
+		return c.Render(http.StatusOK, "callback", map[string]interface{}{
+			"Code":        code, // Sent to client, unavoidable
+			"RedirectURL": redirect,
+			"ClientID":    s.Settings.Security.BasicAuth.ClientID,
+			"Secret":      "***MASKED***", // Mask secret before sending to template
+		})
+	*/
 }
