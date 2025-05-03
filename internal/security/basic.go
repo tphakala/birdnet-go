@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gorilla/sessions"
@@ -313,12 +314,25 @@ func (s *OAuth2Server) HandleBasicAuthCallback(c echo.Context) error {
 	// Validate the redirect path
 	safeRedirect := "/" // Default redirect
 	if redirect != "" {
-		// Use IsSafePath from the conf package to validate the redirect
-		if conf.IsSafePath(redirect) {
-			safeRedirect = redirect
+		// Replace backslashes for consistency and parse the URL
+		cleanedRedirect := strings.ReplaceAll(redirect, "\\\\", "/")
+		parsedURL, err := url.Parse(cleanedRedirect)
+
+		// Validate: No error, No scheme, No host, Path starts with '/', Path does NOT start with '//' or '/\\'
+		if err == nil && parsedURL.Scheme == "" && parsedURL.Host == "" &&
+			strings.HasPrefix(parsedURL.Path, "/") &&
+			!(len(parsedURL.Path) > 1 && (parsedURL.Path[1] == '/' || parsedURL.Path[1] == '\\')) {
+
+			// Use the cleaned path part as the safe redirect target
+			safeRedirect = parsedURL.Path
 			logger.Debug("Validated redirect path", "safe_redirect", safeRedirect)
 		} else {
-			logger.Warn("Invalid or unsafe redirect path provided, using default", "provided_redirect", redirect, "default_redirect", safeRedirect)
+			// Log the reason for rejection if parsing failed or validation checks failed
+			if err != nil {
+				logger.Warn("Invalid redirect path provided (parse error), using default", "provided_redirect", redirect, "error", err, "default_redirect", safeRedirect)
+			} else {
+				logger.Warn("Invalid or unsafe redirect path provided (validation failed), using default", "provided_redirect", redirect, "parsed_scheme", parsedURL.Scheme, "parsed_host", parsedURL.Host, "parsed_path", parsedURL.Path, "default_redirect", safeRedirect)
+			}
 		}
 	} else {
 		logger.Debug("No redirect path provided, using default", "default_redirect", safeRedirect)
