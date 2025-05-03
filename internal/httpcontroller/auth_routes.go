@@ -69,7 +69,6 @@ func handleGothCallback(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Authentication failed: "+err.Error())
 	}
 
-	// ---> START ADDITION: Regenerate session to prevent fixation <---
 	// Log session regeneration attempt
 	if err := gothic.Logout(c.Response().Writer, c.Request()); err != nil {
 		// Log warning but continue
@@ -101,7 +100,6 @@ func handleGothCallback(c echo.Context) error {
 				c.Param("provider"), user.Email)
 		}
 	}
-	// ---> END ADDITION <---
 
 	// Store provider and user info in the *new* session
 	// Use more specific keys and log potential errors
