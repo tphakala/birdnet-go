@@ -222,7 +222,7 @@ func (c *Controller) GetAuthStatus(ctx echo.Context) error {
 	// Downstream consumers comparing this value might need updates if they
 	// relied on specific string literals. The middleware now sets the context
 	// value using the string representation of the new AuthMethod constants.
-	authMethod := stringFromCtx(ctx, "authMethod", string(auth.AuthMethodUnknown))
+	authMethod := stringFromCtx(ctx, "authMethod", auth.AuthMethodUnknown.String())
 
 	// Construct the response based on context values
 	status := AuthStatus{

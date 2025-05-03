@@ -750,7 +750,7 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 				)
 			}
 			ctx.Set("isAuthenticated", false)
-			ctx.Set("authMethod", auth.AuthMethodNone) // Store enum directly
+			ctx.Set("authMethod", auth.AuthMethodUnknown) // Use defined enum for 'none'
 			return next(ctx)
 		}
 
@@ -760,7 +760,7 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 				c.apiLogger.Debug("Authentication not required for this request", "path", ctx.Request().URL.Path, "ip", ctx.RealIP())
 			}
 			ctx.Set("isAuthenticated", false)
-			ctx.Set("authMethod", auth.AuthMethodNone) // Store enum directly
+			ctx.Set("authMethod", auth.AuthMethodUnknown) // Use defined enum for 'none'
 			return next(ctx)
 		}
 
@@ -801,7 +801,7 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		if c.handleSessionAuth(ctx) {
 			ctx.Set("isAuthenticated", true)
 			ctx.Set("username", authService.GetUsername(ctx))
-			ctx.Set("authMethod", auth.AuthMethodSession) // Store enum directly
+			ctx.Set("authMethod", auth.AuthMethodBrowserSession) // Use defined enum for session
 			return next(ctx)
 		}
 

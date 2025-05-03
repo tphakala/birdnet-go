@@ -9,18 +9,19 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[AuthMethodUnknown-0]
-	_ = x[AuthMethodToken-1]
-	_ = x[AuthMethodSession-2]
-	_ = x[AuthMethodSubnet-3]
-	_ = x[AuthMethodNone-4]
+	_ = x[AuthMethodBasicAuth-1]
+	_ = x[AuthMethodToken-2]
+	_ = x[AuthMethodOAuth2-3]
+	_ = x[AuthMethodBrowserSession-4]
+	_ = x[AuthMethodAPIKey-5]
 }
 
-const _AuthMethod_name = "AuthMethodUnknownAuthMethodTokenAuthMethodSessionAuthMethodSubnetAuthMethodNone"
+const _AuthMethod_name = "AuthMethodUnknownAuthMethodBasicAuthAuthMethodTokenAuthMethodOAuth2AuthMethodBrowserSessionAuthMethodAPIKey"
 
-var _AuthMethod_index = [...]uint8{0, 17, 32, 49, 65, 79}
+var _AuthMethod_index = [...]uint8{0, 17, 36, 51, 67, 91, 107}
 
 func (i AuthMethod) String() string {
-	if i >= AuthMethod(len(_AuthMethod_index)-1) {
+	if i < 0 || i >= AuthMethod(len(_AuthMethod_index)-1) {
 		return "AuthMethod(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 	return _AuthMethod_name[_AuthMethod_index[i]:_AuthMethod_index[i+1]]
