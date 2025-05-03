@@ -75,6 +75,15 @@ func NewOAuth2Server() *OAuth2Server {
 		debug:        debug, // Retain debug flag for potential conditional logging
 	}
 
+	// Check Session Secret strength early, regardless of persistence settings
+	if settings.Security.SessionSecret == "" {
+		securityLogger.Error("CRITICAL SECURITY WARNING: SessionSecret is empty. Set a strong, unique secret in configuration for production environments.")
+		// Consider adding a stricter check for production environments, e.g., panic.
+	} else if len(settings.Security.SessionSecret) < 32 {
+		// Check length as a proxy for entropy, 32 bytes is common for session keys
+		securityLogger.Warn("Security Recommendation: SessionSecret is potentially weak (less than 32 bytes). Consider using a longer, randomly generated secret.")
+	}
+
 	// Pre-parse the Basic Auth Redirect URI
 	if settings.Security.BasicAuth.RedirectURI != "" {
 		parsedURI, err := url.Parse(settings.Security.BasicAuth.RedirectURI)
@@ -102,15 +111,6 @@ func NewOAuth2Server() *OAuth2Server {
 		server.tokensFile = filepath.Join(configPaths[0], "tokens.json")
 		server.persistTokens = true
 		securityLogger.Info("Token persistence configured", "file", server.tokensFile)
-
-		// Check for Session Secret
-		if settings.Security.SessionSecret == "" {
-			securityLogger.Error("CRITICAL SECURITY WARNING: SessionSecret is empty. Set a strong, unique secret in configuration for production environments.")
-			// Consider adding a stricter check for production environments, e.g., panic.
-		} else if len(settings.Security.SessionSecret) < 32 {
-			// Check length as a proxy for entropy, 32 bytes is common for session keys
-			securityLogger.Warn("Security Recommendation: SessionSecret is potentially weak (less than 32 bytes). Consider using a longer, randomly generated secret.")
-		}
 
 		// Ensure the directory exists
 		if err := os.MkdirAll(filepath.Dir(server.tokensFile), 0o755); err != nil {
