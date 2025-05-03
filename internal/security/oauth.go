@@ -287,10 +287,16 @@ func isValidUserId(configuredIds, providedId string) bool {
 		return false
 	}
 
-	// Split configured IDs and trim spaces
+	// Trim whitespace from the ID we are checking
+	trimmedProvidedId := strings.TrimSpace(providedId)
+	if trimmedProvidedId == "" {
+		return false // Don't match empty string after trimming
+	}
+
+	// Split configured IDs and trim spaces from each
 	allowedIds := strings.Split(configuredIds, ",")
-	for i := range allowedIds {
-		if strings.TrimSpace(allowedIds[i]) == providedId {
+	for _, allowedId := range allowedIds {
+		if strings.TrimSpace(allowedId) == trimmedProvidedId {
 			return true
 		}
 	}
