@@ -27,7 +27,7 @@
                 </div>
                 
                 <!-- Error state -->
-                <div x-show="systemInfo.error && !systemInfo.loading" class="alert alert-error" x-text="systemInfo.error" x-cloak role="alert" x-cloak></div>
+                <div x-show="systemInfo.error && !systemInfo.loading" class="alert alert-error" x-text="systemInfo.error" x-cloak role="alert">
                 
                 <!-- Data loaded state -->
                 <div x-show="!systemInfo.loading && !systemInfo.error" class="space-y-2" aria-labelledby="system-info-heading" x-cloak>
@@ -80,7 +80,7 @@
                 </div>
                 
                 <!-- Error state -->
-                <div x-show="diskUsage.error && !diskUsage.loading" class="alert alert-error" x-text="diskUsage.error" x-cloak role="alert" x-cloak></div>
+                <div x-show="diskUsage.error && !diskUsage.loading" class="alert alert-error" x-text="diskUsage.error" x-cloak role="alert">
                 
                 <!-- Data loaded state -->
                 <div x-show="!diskUsage.loading && !diskUsage.error && diskUsage.data.length > 0" class="space-y-4" aria-labelledby="disk-usage-heading">
@@ -125,7 +125,7 @@
                 </div>
                 
                 <!-- Error state -->
-                <div x-show="memoryUsage.error && !memoryUsage.loading" class="alert alert-error" x-text="memoryUsage.error" x-cloak role="alert" x-cloak></div>
+                <div x-show="memoryUsage.error && !memoryUsage.loading" class="alert alert-error" x-text="memoryUsage.error" x-cloak role="alert">
                 
                 <!-- Data loaded state -->
                 <div x-show="!memoryUsage.loading && !memoryUsage.error" class="space-y-3" aria-labelledby="memory-usage-heading">
@@ -187,7 +187,7 @@
             </div>
             
             <!-- Error state -->
-            <div x-show="processes.error && !processes.loading" class="alert alert-error" x-text="processes.error" x-cloak role="alert" x-cloak></div>
+            <div x-show="processes.error && !processes.loading" class="alert alert-error" x-text="processes.error" x-cloak role="alert">
             
             <!-- Data loaded state -->
             <div x-show="!processes.loading && !processes.error" class="overflow-x-auto" aria-labelledby="process-info-heading" x-cloak>
@@ -304,10 +304,7 @@
             },
             
             // Toggle state for process list
-            showAllProcesses: false,
-            
-            // Authentication error state
-            showAuthError: false,
+            showAllProcesses: false,         
             
             // Tooltip state management
             showTooltip: null,
