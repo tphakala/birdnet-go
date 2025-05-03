@@ -71,34 +71,53 @@ func handleGothCallback(c echo.Context) error {
 	}
 
 	// Log session regeneration attempt
+	providerName := c.Param("provider")
 	if err := gothic.Logout(c.Response().Writer, c.Request()); err != nil {
 		// Log warning but continue
 		// Try server's structured logger first, fallback to standard log
 		if srv := c.Get("server"); srv != nil {
 			if server, ok := srv.(*Server); ok && server.webLogger != nil {
-				server.webLogger.Warn("Error regenerating session after social login (potential fixation risk)",
-					"provider", c.Param("provider"), "user_email", user.Email, "error", err)
+				server.webLogger.Warn("Error during gothic.Logout (session regeneration step 1)",
+					"provider", providerName, "user_email", user.Email, "error", err)
 			} else {
-				log.Printf("WARN: [Social Login - %s - %s] Error regenerating session: %v",
-					c.Param("provider"), user.Email, err)
+				log.Printf("WARN: [Social Login - %s - %s] Error during gothic.Logout: %v",
+					providerName, user.Email, err)
 			}
 		} else {
-			log.Printf("WARN: [Social Login - %s - %s] Error regenerating session: %v",
-				c.Param("provider"), user.Email, err)
+			log.Printf("WARN: [Social Login - %s - %s] Error during gothic.Logout: %v",
+				providerName, user.Email, err)
 		}
 	} else {
-		// Log success using server's structured logger or fallback
+		// Attempt to explicitly save the session immediately after logout to force regeneration
+		// This helps ensure a new session ID is used before storing new data.
+		session, err := gothic.Store.Get(request, gothic.SessionName)
+		if err == nil {
+			session.Options.MaxAge = -1 // Ensure cookie deletion on client
+			err = session.Save(request, response)
+		}
+
+		// Log success or failure of explicit regeneration step
 		if srv := c.Get("server"); srv != nil {
 			if server, ok := srv.(*Server); ok && server.webLogger != nil {
-				server.webLogger.Info("Successfully regenerated session after social login (fixation prevention)",
-					"provider", c.Param("provider"), "user_email", user.Email)
+				if err != nil {
+					server.webLogger.Warn("Failed to explicitly save session after logout (potential fixation risk)", "provider", providerName, "user_email", user.Email, "error", err)
+				} else {
+					server.webLogger.Info("Successfully logged out old session state (session fixation mitigation)",
+						"provider", providerName, "user_email", user.Email)
+				}
 			} else {
-				log.Printf("INFO: [Social Login - %s - %s] Successfully regenerated session",
-					c.Param("provider"), user.Email)
+				if err != nil {
+					log.Printf("WARN: [Social Login - %s - %s] Failed to explicitly save session after logout: %v", providerName, user.Email, err)
+				} else {
+					log.Printf("INFO: [Social Login - %s - %s] Successfully logged out old session state", providerName, user.Email)
+				}
 			}
 		} else {
-			log.Printf("INFO: [Social Login - %s - %s] Successfully regenerated session",
-				c.Param("provider"), user.Email)
+			if err != nil {
+				log.Printf("WARN: [Social Login - %s - %s] Failed to explicitly save session after logout: %v", providerName, user.Email, err)
+			} else {
+				log.Printf("INFO: [Social Login - %s - %s] Successfully logged out old session state", providerName, user.Email)
+			}
 		}
 	}
 
