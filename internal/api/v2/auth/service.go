@@ -29,6 +29,7 @@ const (
 	AuthMethodOAuth2
 	AuthMethodBrowserSession // Added for explicit browser session identification
 	AuthMethodAPIKey         // Added for API key authentication
+	AuthMethodLocalSubnet    // Added for local subnet bypass authentication
 	// NOTE: Remember to run `go generate` in this directory after adding new methods.
 )
 
