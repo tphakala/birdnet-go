@@ -1,6 +1,7 @@
 package security
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -67,15 +68,18 @@ func ValidateRedirectURI(providedURIString string, expectedURI *url.URL) error {
 		parsedProvidedURI.Fragment != "" { // Ensure provided URI has no fragment
 
 		// Construct a clearer error message showing the difference
-		// Include Hostname, Port, RawQuery and Fragment in the error message for clarity
 		// Redacted the full providedURIString from the main error message to prevent potential info leak.
 		// Details are still available if needed for debugging from the parsed components.
 		mismatchDetail := fmt.Sprintf("provided URI parsed components (Scheme=%s, Hostname=%s, Port=%s, Path=%s, Query=%s, Fragment=%s)"+
 			" do not match expected base URI (Scheme=%s, Hostname=%s, Port=%s, Path=%s) or contain disallowed query/fragment components",
 			parsedProvidedURI.Scheme, parsedProvidedURI.Hostname(), providedPort, providedPath, parsedProvidedURI.RawQuery, parsedProvidedURI.Fragment,
 			expectedURI.Scheme, expectedURI.Hostname(), expectedPort, expectedPath)
-		// Wrap the detailed error message for better error handling upstream, avoiding direct leak of full provided URI string.
-		return fmt.Errorf("invalid redirect_uri: %w", fmt.Errorf(mismatchDetail))
+
+		// Construct the detailed error message first
+		mismatchErr := errors.New(mismatchDetail) // Use errors.New for a simple error string
+
+		// Wrap the detailed error using a constant format string
+		return fmt.Errorf("invalid redirect_uri: %w", mismatchErr)
 	}
 
 	return nil // URIs match
