@@ -3,7 +3,6 @@ package security
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net/url"
 	"path"
 	"strings"
@@ -110,10 +109,8 @@ func IsSafePath(path string) bool {
 func IsValidRedirect(redirectPath string) bool {
 	isSafe := IsSafePath(redirectPath) // Use the exported function
 	if !isSafe {
-		// Log potentially unsafe redirect attempt using standard log
-		// Replace with a proper logger if available/passed in
-		log.Printf("WARN: Invalid or potentially unsafe redirect path detected: %s", redirectPath)
-		// security.LogWarn("Invalid or potentially unsafe redirect path detected", "path", redirectPath)
+		// Log potentially unsafe redirect attempt using the security logger
+		LogWarn("Invalid or potentially unsafe redirect path detected", "path", redirectPath)
 	}
 	return isSafe
 }
