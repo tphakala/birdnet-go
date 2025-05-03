@@ -224,7 +224,6 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	// Do not log the token here either
 	if err := gothic.StoreInSession("access_token", accessToken, c.Request(), c.Response()); err != nil {
 		logger.Warn("Failed to store access token in session", "error", err)
-		// s.Debug("Failed to store access token in session: %v", err) // Removed old debug
 		// Continue anyway since we'll return the token to the client
 	}
 
@@ -272,9 +271,19 @@ func (s *OAuth2Server) HandleBasicAuthCallback(c echo.Context) error {
 	// Do not log the token here either
 	if err := gothic.StoreInSession("access_token", accessToken, c.Request(), c.Response()); err != nil {
 		logger.Warn("Failed to store access token in session after callback exchange", "error", err)
-		// Even if storing fails, try to redirect, but log the issue.
-		// Depending on application logic, a stricter error might be needed here.
-		// return c.String(http.StatusInternalServerError, "Session error during login. Please try again.")
+		// Attempt to clear any problematic session data and retry storing
+		if clearErr := gothic.StoreInSession("access_token", "", c.Request(), c.Response()); clearErr == nil {
+			if retryErr := gothic.StoreInSession("access_token", accessToken, c.Request(), c.Response()); retryErr == nil {
+				logger.Info("Successfully stored access token in session after retry")
+				// If retry succeeds, continue to redirect
+			} else {
+				logger.Error("Failed to store access token in session after retry", "error", retryErr)
+				return c.String(http.StatusInternalServerError, "Session error during login. Please try again.")
+			}
+		} else {
+			logger.Error("Failed to clear/reset session before retry", "error", clearErr)
+			return c.String(http.StatusInternalServerError, "Session error during login. Please try again.")
+		}
 	} else {
 		logger.Info("Successfully stored access token in session")
 	}
@@ -296,17 +305,4 @@ func (s *OAuth2Server) HandleBasicAuthCallback(c echo.Context) error {
 	// Redirect the user to the final destination
 	logger.Info("Redirecting user to final destination", "destination", safeRedirect)
 	return c.Redirect(http.StatusFound, safeRedirect)
-
-	/*
-		// Old code that rendered the callback page:
-		// Instead of exchanging the code here, we'll pass it to the client
-		// Do not log the code
-		logger.Info("Rendering callback page with authorization code")
-		return c.Render(http.StatusOK, "callback", map[string]interface{}{
-			"Code":        code, // Sent to client, unavoidable
-			"RedirectURL": redirect,
-			"ClientID":    s.Settings.Security.BasicAuth.ClientID,
-			"Secret":      "***MASKED***", // Mask secret before sending to template
-		})
-	*/
 }
