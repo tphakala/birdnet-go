@@ -27,7 +27,7 @@
                 </div>
                 
                 <!-- Error state -->
-                <div x-show="systemInfo.error && !systemInfo.loading" class="alert alert-error" x-text="systemInfo.error" x-cloak role="alert">
+                <div x-show="systemInfo.error && !systemInfo.loading" class="alert alert-error" x-text="systemInfo.error" x-cloak role="alert" x-cloak></div>
                 
                 <!-- Data loaded state -->
                 <div x-show="!systemInfo.loading && !systemInfo.error" class="space-y-2" aria-labelledby="system-info-heading" x-cloak>
@@ -80,7 +80,7 @@
                 </div>
                 
                 <!-- Error state -->
-                <div x-show="diskUsage.error && !diskUsage.loading" class="alert alert-error" x-text="diskUsage.error" x-cloak role="alert">
+                <div x-show="diskUsage.error && !diskUsage.loading" class="alert alert-error" x-text="diskUsage.error" x-cloak role="alert" x-cloak></div>
                 
                 <!-- Data loaded state -->
                 <div x-show="!diskUsage.loading && !diskUsage.error && diskUsage.data.length > 0" class="space-y-4" aria-labelledby="disk-usage-heading">
@@ -125,7 +125,7 @@
                 </div>
                 
                 <!-- Error state -->
-                <div x-show="memoryUsage.error && !memoryUsage.loading" class="alert alert-error" x-text="memoryUsage.error" x-cloak role="alert">
+                <div x-show="memoryUsage.error && !memoryUsage.loading" class="alert alert-error" x-text="memoryUsage.error" x-cloak role="alert" x-cloak></div>
                 
                 <!-- Data loaded state -->
                 <div x-show="!memoryUsage.loading && !memoryUsage.error" class="space-y-3" aria-labelledby="memory-usage-heading">
@@ -187,7 +187,7 @@
             </div>
             
             <!-- Error state -->
-            <div x-show="processes.error && !processes.loading" class="alert alert-error" x-text="processes.error" x-cloak role="alert">
+            <div x-show="processes.error && !processes.loading" class="alert alert-error" x-text="processes.error" x-cloak role="alert" x-cloak></div>
             
             <!-- Data loaded state -->
             <div x-show="!processes.loading && !processes.error" class="overflow-x-auto" aria-labelledby="process-info-heading" x-cloak>
@@ -304,7 +304,10 @@
             },
             
             // Toggle state for process list
-            showAllProcesses: false,         
+            showAllProcesses: false,
+            
+            // Authentication error state
+            showAuthError: false,
             
             // Tooltip state management
             showTooltip: null,
@@ -347,7 +350,12 @@
                     .catch(error => {
                         console.error('Error fetching system info:', error);
                         this.systemInfo.error = `Failed to load system information: ${error.message}`;
-                        this.systemInfo.loading = false;                        
+                        this.systemInfo.loading = false;
+                        
+                        // Show authentication error notification if needed
+                        if (error.message.includes("Authentication required")) {
+                            this.showAuthError = true;
+                        }
                     });
             },
             
@@ -374,6 +382,11 @@
                         console.error('Error fetching disk usage:', error);
                         this.diskUsage.error = `Failed to load disk usage: ${error.message}`;
                         this.diskUsage.loading = false;
+                        
+                        // Show authentication error notification if needed
+                        if (error.message.includes("Authentication required")) {
+                            this.showAuthError = true;
+                        }
                     });
             },
             
@@ -407,6 +420,11 @@
                         console.error('Error fetching memory usage:', error);
                         this.memoryUsage.error = `Failed to load memory usage: ${error.message}`;
                         this.memoryUsage.loading = false;
+                        
+                        // Show authentication error notification if needed
+                        if (error.message.includes("Authentication required")) {
+                            this.showAuthError = true;
+                        }
                     });
             },
             
@@ -435,6 +453,11 @@
                         console.error('Error fetching processes:', error);
                         this.processes.error = `Failed to load process information: ${error.message}`;
                         this.processes.loading = false;
+                        
+                        // Show authentication error notification if needed
+                        if (error.message.includes("Authentication required")) {
+                            this.showAuthError = true;
+                        }
                     });
             },
             
