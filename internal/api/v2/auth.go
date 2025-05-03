@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"math/big"
@@ -100,7 +101,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 	// Check for empty credentials before calling the auth service
 	if req.Username == "" || req.Password == "" {
 		// Add a short, randomized delay to mitigate timing attacks on username enumeration
-		randomDelay(50, 150)
+		randomDelay(ctx.Request().Context(), 50, 150)
 
 		if c.apiLogger != nil {
 			c.apiLogger.Warn("Login attempt with missing credentials",
@@ -123,7 +124,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 
 	if authErr != nil {
 		// Add a short, randomized delay to mitigate brute force/timing attacks
-		randomDelay(50, 150)
+		randomDelay(ctx.Request().Context(), 50, 150)
 
 		if c.apiLogger != nil {
 			c.apiLogger.Warn("Failed login attempt",
@@ -275,18 +276,37 @@ func stringFromCtx(ctx echo.Context, key, defaultValue string) string {
 // --- End Context Helper Functions ---
 
 // randomDelay introduces a random sleep duration within the specified range [minMs, maxMs).
-func randomDelay(minMs, maxMs int64) {
+// It accepts a context to allow cancellation of the delay.
+func randomDelay(ctx context.Context, minMs, maxMs int64) {
 	if maxMs <= minMs {
 		minMs = 50  // Default min
 		maxMs = 150 // Default max
 	}
 	rangeSize := big.NewInt(maxMs - minMs)
 	n, err := rand.Int(rand.Reader, rangeSize)
+	var delayMs int64
 	if err != nil {
-		// Fallback to a fixed delay if random generation fails
-		time.Sleep(time.Duration(minMs) * time.Millisecond)
-		return
+		// Fallback to min delay if random generation fails
+		delayMs = minMs
+		// Optionally log the error
+		// log.Printf("Error generating random delay: %v, using fallback %dms", err, delayMs)
+	} else {
+		delayMs = n.Int64() + minMs
 	}
-	delay := n.Int64() + minMs
-	time.Sleep(time.Duration(delay) * time.Millisecond)
+
+	delayDuration := time.Duration(delayMs) * time.Millisecond
+
+	// Create a timer for the delay
+	timer := time.NewTimer(delayDuration)
+	defer timer.Stop() // Ensure timer resources are released
+
+	// Wait for the timer or context cancellation
+	select {
+	case <-timer.C:
+		// Delay completed normally
+	case <-ctx.Done():
+		// Context was cancelled, delay aborted
+		// Optionally log context cancellation
+		// log.Printf("Random delay cancelled by context: %v", ctx.Err())
+	}
 }
