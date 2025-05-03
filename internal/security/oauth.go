@@ -62,6 +62,12 @@ type OAuth2Server struct {
 // For testing purposes
 var testConfigPath string
 
+// Pre-defined errors for token validation
+var (
+	ErrTokenNotFound = errors.New("token not found")
+	ErrTokenExpired  = errors.New("token expired")
+)
+
 func NewOAuth2Server() *OAuth2Server {
 	// Use the security logger from the start
 	securityLogger.Info("Initializing OAuth2 server")
@@ -267,7 +273,7 @@ func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 	// Check for basic auth token first
 	if token, err := gothic.GetFromSession("access_token", c.Request()); err == nil && token != "" {
 		logger.Debug("Found access_token in session, validating...")
-		if s.ValidateAccessToken(token) {
+		if s.ValidateAccessToken(token) == nil {
 			logger.Info("User authenticated: valid access_token found in session")
 			return true
 		}
@@ -423,8 +429,8 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 	return accessToken, nil
 }
 
-// ValidateAccessToken checks if an access token is valid
-func (s *OAuth2Server) ValidateAccessToken(token string) bool {
+// ValidateAccessToken checks if an access token is valid and returns an error if not.
+func (s *OAuth2Server) ValidateAccessToken(token string) error {
 	// Do not log the token
 	securityLogger.Debug("Validating access token")
 	s.mutex.RLock()
@@ -433,17 +439,17 @@ func (s *OAuth2Server) ValidateAccessToken(token string) bool {
 	accessToken, ok := s.accessTokens[token]
 	if !ok {
 		securityLogger.Debug("Access token not found")
-		return false
+		return ErrTokenNotFound // Return specific error
 	}
 
 	if time.Now().After(accessToken.ExpiresAt) {
 		securityLogger.Debug("Access token expired", "expired_at", accessToken.ExpiresAt)
 		// No need to delete here, cleanup routine handles it
-		return false
+		return ErrTokenExpired // Return specific error
 	}
 
 	securityLogger.Debug("Access token is valid")
-	return true
+	return nil // Return nil on success
 }
 
 // IsAuthenticationEnabled checks if any authentication method is enabled
