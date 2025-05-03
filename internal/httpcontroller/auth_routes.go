@@ -66,7 +66,8 @@ func handleGothCallback(c echo.Context) error {
 				server.LogError(c, err, "Social authentication failed during CompleteUserAuth")
 			}
 		}
-		return c.String(http.StatusBadRequest, "Authentication failed: "+err.Error())
+		// Use echo.NewHTTPError for consistent error handling
+		return echo.NewHTTPError(http.StatusBadRequest, "Authentication failed: "+err.Error())
 	}
 
 	// Log session regeneration attempt
