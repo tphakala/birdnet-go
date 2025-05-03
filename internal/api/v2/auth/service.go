@@ -17,11 +17,13 @@ var (
 
 //go:generate go run golang.org/x/tools/cmd/stringer -type=AuthMethod
 
-// AuthMethod defines the types of authentication methods supported.
+// AuthMethod represents the type of authentication used
 type AuthMethod int
 
+//go:generate stringer -type=AuthMethod -trimprefix=AuthMethod
 const (
 	AuthMethodUnknown AuthMethod = iota
+	AuthMethodNone               // Added to explicitly indicate no auth was applied (bypass)
 	AuthMethodBasicAuth
 	AuthMethodToken
 	AuthMethodOAuth2
