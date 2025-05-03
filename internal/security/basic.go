@@ -304,11 +304,11 @@ func (s *OAuth2Server) HandleBasicAuthCallback(c echo.Context) error {
 	// Validate the redirect path
 	safeRedirect := "/" // Default redirect
 	if redirect != "" {
-		// Replace backslashes for consistency and parse the URL
-		cleanedRedirect := strings.ReplaceAll(redirect, "\\\\", "/")
+		// Replace ALL backslashes with forward slashes for robust normalization
+		cleanedRedirect := strings.ReplaceAll(redirect, "\\", "/")
 		parsedURL, err := url.Parse(cleanedRedirect)
 
-		// Validate: No error, No scheme, No host, Path starts with '/', Path does NOT start with '//' or '/\\'
+		// Validate: No error, No scheme, No host, Path starts with '/', Path does NOT start with '//' or '/\'
 		if err == nil && parsedURL.Scheme == "" && parsedURL.Host == "" &&
 			strings.HasPrefix(parsedURL.Path, "/") &&
 			!(len(parsedURL.Path) > 1 && (parsedURL.Path[1] == '/' || parsedURL.Path[1] == '\\')) {
