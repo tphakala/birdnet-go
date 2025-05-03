@@ -183,6 +183,14 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 			return ErrInvalidCredentials
 		}
 
+		// Store user identifier in session upon successful basic auth
+		if err := gothic.StoreInSession("userId", username, c.Request(), c.Response()); err != nil {
+			if a.logger != nil {
+				a.logger.Error("Failed to store userId in session during basic auth", "error", err.Error(), "username", username)
+			}
+			return ErrInvalidCredentials // Treat internal errors as invalid credentials
+		}
+
 		// Store the auth code for callback
 		if err := gothic.StoreInSession("auth_code", authCode, c.Request(), c.Response()); err != nil {
 			if a.logger != nil {
