@@ -365,6 +365,12 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
+	// Re-check context after acquiring the lock
+	if err := ctx.Err(); err != nil {
+		logger.Warn("Context cancelled after acquiring lock", "error", err)
+		return "", err // Mutex is released by defer
+	}
+
 	authCode, ok := s.authCodes[code]
 	if !ok {
 		logger.Warn("Authorization code not found")
