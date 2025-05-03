@@ -85,7 +85,7 @@ func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 
 	// 2. Check subnet bypass (if context wasn't set or middleware didn't handle)
 	if a.OAuth2Server.IsRequestFromAllowedSubnet(c.RealIP()) {
-		return AuthMethodSubnet
+		return AuthMethodUnknown // Use Unknown for subnet bypass
 	}
 
 	// 3. Check generic authentication status (if context wasn't set)
@@ -93,11 +93,11 @@ func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 	if a.OAuth2Server.IsUserAuthenticated(c) {
 		// Could attempt more detailed session type detection here if needed,
 		// but for now, return generic Session if middleware didn't specify.
-		return AuthMethodSession
+		return AuthMethodBrowserSession // Use BrowserSession for generic session
 	}
 
 	// 4. If none of the above, assume no authentication
-	return AuthMethodNone
+	return AuthMethodUnknown // Use Unknown for no authentication
 }
 
 // ValidateToken checks if a bearer token is valid
