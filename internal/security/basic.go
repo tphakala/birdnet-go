@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -137,7 +138,14 @@ func (s *OAuth2Server) HandleBasicAuthorize(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid client_id")
 	}
 
-	if redirectURI != s.Settings.Security.BasicAuth.RedirectURI {
+	// Validate redirect URI using url.Parse for security
+	parsedRedirectURI, err := url.Parse(redirectURI)
+	if err != nil {
+		logger.Warn("Failed to parse redirect_uri", "redirect_uri", redirectURI, "error", err)
+		return c.String(http.StatusBadRequest, "Invalid redirect_uri format")
+	}
+	// Compare parsed URI against expected config value
+	if parsedRedirectURI.String() != s.Settings.Security.BasicAuth.RedirectURI {
 		logger.Warn("Invalid redirect_uri provided", "expected", s.Settings.Security.BasicAuth.RedirectURI)
 		return c.String(http.StatusBadRequest, "Invalid redirect_uri")
 	}
@@ -198,18 +206,30 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unsupported grant type"})
 	}
 
-	// Verify redirect URI
-	if !strings.Contains(redirectURI, s.Settings.Security.Host) {
-		logger.Warn("Invalid redirect URI host", "redirect_uri", redirectURI, "expected_host", s.Settings.Security.Host)
+	// Verify redirect URI securely by parsing and comparing hostnames
+	parsedRedirectURI, err := url.Parse(redirectURI)
+	if err != nil {
+		logger.Warn("Failed to parse redirect_uri", "redirect_uri", redirectURI, "error", err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid redirect_uri format"})
+	}
+	if !strings.EqualFold(parsedRedirectURI.Hostname(), s.Settings.Security.Host) {
+		logger.Warn("Invalid redirect URI host", "redirect_uri", redirectURI, "parsed_host", parsedRedirectURI.Hostname(), "expected_host", s.Settings.Security.Host)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid host for redirect URI"})
 	}
 
-	// Exchange the authorization code for an access token
+	// Exchange the authorization code for an access token with timeout
 	// Do not log the code being exchanged
 	logger.Info("Attempting to exchange authorization code for access token")
 	// Pass the request context to ExchangeAuthCode
-	accessToken, err := s.ExchangeAuthCode(c.Request().Context(), code)
+	tokenCtx, tokenCancel := context.WithTimeout(c.Request().Context(), 15*time.Second) // Apply timeout
+	defer tokenCancel()
+	accessToken, err := s.ExchangeAuthCode(tokenCtx, code)
 	if err != nil {
+		// Check for context deadline exceeded specifically
+		if errors.Is(err, context.DeadlineExceeded) {
+			logger.Warn("Timeout exchanging authorization code", "error", err)
+			return c.JSON(http.StatusGatewayTimeout, map[string]string{"error": "Timeout during token exchange"})
+		}
 		logger.Warn("Failed to exchange authorization code", "error", err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid authorization code"})
 	}
