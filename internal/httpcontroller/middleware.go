@@ -11,7 +11,6 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	auth "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 	"github.com/tphakala/birdnet-go/internal/security"
 )
 
@@ -242,7 +241,7 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 				// Set context values to indicate authenticated state via subnet bypass
 				c.Set("server", s)
 				c.Set("isAuthenticated", true)
-				c.Set("authMethod", auth.AuthMethodLocalSubnet)
+				c.Set("authMethod", security.AuthMethodLocalSubnet)
 				c.Set("username", security.SubnetUsername) // Subnet bypass username
 				c.Set("userClaims", nil)                   // Explicitly nil as no claims from token
 				s.Debug("Client %s is in local subnet, allowing access to %s", clientIP.String(), path)
