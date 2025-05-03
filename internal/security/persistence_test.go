@@ -2,6 +2,7 @@ package security
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log"
 	"os"
@@ -49,7 +50,7 @@ func TestTokenPersistence(t *testing.T) {
 	}
 
 	// Save tokens
-	err = server.saveTokens()
+	err = server.saveTokens(context.Background())
 	if err != nil {
 		t.Fatalf("Failed to save tokens: %v", err)
 	}
@@ -64,7 +65,7 @@ func TestTokenPersistence(t *testing.T) {
 	}
 
 	// Load tokens
-	err = newServer.loadTokens()
+	err = newServer.loadTokens(context.Background())
 	if err != nil {
 		t.Fatalf("Failed to load tokens: %v", err)
 	}
@@ -277,7 +278,7 @@ func TestLoadCorruptedTokensFile(t *testing.T) {
 	}
 
 	// Should handle error gracefully
-	err = server.loadTokens()
+	err = server.loadTokens(context.Background())
 	assert.Error(t, err, "Loading corrupted file should return error")
 	assert.Contains(t, err.Error(), "failed to parse token file")
 }
@@ -323,7 +324,7 @@ func TestUnwritableTokensDirectory(t *testing.T) {
 	}
 
 	// Should handle error gracefully
-	err = server.saveTokens()
+	err = server.saveTokens(context.Background())
 	assert.Error(t, err, "Saving tokens to unwritable directory should return error")
 	assert.Contains(t, err.Error(), "failed to write tokens file")
 }
@@ -351,7 +352,7 @@ func TestAtomicTokenSaving(t *testing.T) {
 	}
 
 	// Save tokens
-	err := server.saveTokens()
+	err := server.saveTokens(context.Background())
 	assert.NoError(t, err, "Should save tokens without errors")
 
 	// Verify the main file exists
