@@ -96,7 +96,7 @@ func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 
 	// 2. Check subnet bypass (if context wasn't set or middleware didn't handle)
 	if a.OAuth2Server.IsRequestFromAllowedSubnet(c.RealIP()) {
-		return AuthMethodUnknown // Use Unknown for subnet bypass
+		return AuthMethodLocalSubnet // Changed from AuthMethodUnknown
 	}
 
 	// 3. Check generic authentication status (if context wasn't set)
