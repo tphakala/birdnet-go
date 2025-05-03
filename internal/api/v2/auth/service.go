@@ -15,18 +15,19 @@ var (
 	ErrLogoutFailed       = errors.New("logout operation failed")
 )
 
-//go:generate stringer -type=AuthMethod
+//go:generate go run golang.org/x/tools/cmd/stringer -type=AuthMethod
 
-// AuthMethod represents the method used for authentication.
-type AuthMethod uint8
+// AuthMethod defines the types of authentication methods supported.
+type AuthMethod int
 
-// Constants defining the possible authentication methods.
 const (
-	AuthMethodUnknown AuthMethod = iota // 0
-	AuthMethodToken                     // 1
-	AuthMethodSession                   // 2
-	AuthMethodSubnet                    // 3
-	AuthMethodNone                      // 4 - Explicitly indicate no auth applied (e.g., bypassed)
+	AuthMethodUnknown AuthMethod = iota
+	AuthMethodBasicAuth
+	AuthMethodToken
+	AuthMethodOAuth2
+	AuthMethodBrowserSession // Added for explicit browser session identification
+	AuthMethodAPIKey         // Added for API key authentication
+	// NOTE: Remember to run `go generate` in this directory after adding new methods.
 )
 
 // Service defines the authentication interface for API endpoints
