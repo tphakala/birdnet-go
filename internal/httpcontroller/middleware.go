@@ -221,8 +221,12 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			clientIP := net.ParseIP(clientIPString)
 			if security.IsInLocalSubnet(clientIP) {
 				// Local network clients can access protected API endpoints
-				// Add server to context for authorization checks
+				// Set context values to indicate authenticated state via subnet bypass
 				c.Set("server", s)
+				c.Set("isAuthenticated", true)
+				c.Set("authMethod", "localSubnet")
+				c.Set("username", "localSubnetUser") // Placeholder username
+				c.Set("userClaims", nil)             // Explicitly nil as no claims from token
 				s.Debug("Client %s is in local subnet, allowing access to %s", clientIP.String(), path)
 				return next(c)
 			}
