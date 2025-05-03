@@ -108,7 +108,7 @@ func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 	}
 
 	// 4. If none of the above, assume no authentication
-	return AuthMethodUnknown // Use Unknown for no authentication
+	return AuthMethodNone // Use None for explicitly no authentication
 }
 
 // AuthMethodFromString converts a string representation to its AuthMethod constant.
