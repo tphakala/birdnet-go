@@ -1,6 +1,7 @@
 package security
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,6 +52,9 @@ type OAuth2Server struct {
 	tokensFile    string
 	persistTokens bool
 
+	// Expected Redirect URI for Basic Auth (pre-parsed)
+	ExpectedBasicRedirectURI *url.URL
+
 	// Throttling
 	throttledMessages map[string]time.Time
 }
@@ -70,6 +75,37 @@ func NewOAuth2Server() *OAuth2Server {
 		debug:        debug, // Retain debug flag for potential conditional logging
 	}
 
+	// Check Session Secret strength early, regardless of persistence settings
+	if settings.Security.SessionSecret == "" {
+		securityLogger.Error("CRITICAL SECURITY WARNING: SessionSecret is empty. Set a strong, unique secret in configuration for production environments.")
+		// Consider adding a stricter check for production environments, e.g., panic.
+	} else if len(settings.Security.SessionSecret) < 32 {
+		// Check length as a proxy for entropy, 32 bytes is common for session keys
+		securityLogger.Warn("Security Recommendation: SessionSecret is potentially weak (less than 32 bytes). Consider using a longer, randomly generated secret.")
+	}
+
+	// Pre-parse the Basic Auth Redirect URI
+	if settings.Security.BasicAuth.RedirectURI != "" {
+		parsedURI, err := url.Parse(settings.Security.BasicAuth.RedirectURI)
+		if err != nil {
+			// Log a critical error if the configured URI is invalid
+			securityLogger.Error("CRITICAL CONFIGURATION ERROR: Failed to parse BasicAuth.RedirectURI. Basic authentication will likely fail.", "uri", settings.Security.BasicAuth.RedirectURI, "error", err)
+			// Set to nil to ensure checks fail later
+			server.ExpectedBasicRedirectURI = nil
+		} else {
+			// Validate that the configured URI doesn't contain query or fragment
+			if parsedURI.RawQuery != "" || parsedURI.Fragment != "" {
+				securityLogger.Error("CRITICAL CONFIGURATION ERROR: BasicAuth.RedirectURI must not contain query parameters or fragments.", "uri", settings.Security.BasicAuth.RedirectURI)
+				server.ExpectedBasicRedirectURI = nil // Fail validation
+			} else {
+				server.ExpectedBasicRedirectURI = parsedURI
+				securityLogger.Info("Pre-parsed and validated Basic Auth Redirect URI", "uri", parsedURI.String())
+			}
+		}
+	} else {
+		securityLogger.Warn("Basic Auth Redirect URI is not configured. Basic authentication might not function correctly.")
+	}
+
 	// Initialize Gothic with the provided configuration
 	InitializeGoth(settings)
 
@@ -77,8 +113,6 @@ func NewOAuth2Server() *OAuth2Server {
 	configPaths, err := conf.GetDefaultConfigPaths()
 	if err != nil {
 		securityLogger.Warn("Failed to get config paths for token persistence, persistence disabled", "error", err)
-		// log.Printf("Warning: Failed to get config paths for token persistence: %v", err)
-		// log.Printf("Token persistence will be disabled - sessions will not survive restarts")
 	} else {
 		server.tokensFile = filepath.Join(configPaths[0], "tokens.json")
 		server.persistTokens = true
@@ -87,14 +121,12 @@ func NewOAuth2Server() *OAuth2Server {
 		// Ensure the directory exists
 		if err := os.MkdirAll(filepath.Dir(server.tokensFile), 0o755); err != nil {
 			securityLogger.Error("Failed to create directory for token persistence, persistence disabled", "path", filepath.Dir(server.tokensFile), "error", err)
-			// log.Printf("Warning: Failed to create directory for token persistence: %v", err)
 			server.persistTokens = false
 		} else {
 			// Load any existing tokens
-			if err := server.loadTokens(); err != nil {
+			if err := server.loadTokens(context.Background()); err != nil {
 				// Log as Warn, as failure to load old tokens isn't fatal
 				securityLogger.Warn("Failed to load persisted tokens", "file", server.tokensFile, "error", err)
-				// log.Printf("Warning: Failed to load persisted tokens: %v", err)
 			}
 		}
 	}
@@ -121,7 +153,6 @@ func InitializeGoth(settings *conf.Settings) {
 		configPaths, err := conf.GetDefaultConfigPaths()
 		if err != nil {
 			securityLogger.Warn("Failed to get config paths for session store, using in-memory cookie store", "error", err)
-			// log.Printf("Warning: Failed to get config paths for session store: %v", err)
 			// Fallback to in-memory store if config paths can't be retrieved
 			gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
 			goto initProviders // Skip filesystem store setup
@@ -133,7 +164,6 @@ func InitializeGoth(settings *conf.Settings) {
 	// Ensure directory exists
 	if err := os.MkdirAll(sessionPath, 0o755); err != nil {
 		securityLogger.Error("Failed to create session directory, falling back to in-memory cookie store", "path", sessionPath, "error", err)
-		// log.Printf("Warning: Failed to create session directory: %v", err)
 		gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
 	} else {
 		// Create persistent session store with properly sized keys
@@ -231,7 +261,6 @@ func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 	if IsInLocalSubnet(clientIP) {
 		// For clients in the local subnet, consider them authenticated
 		logger.Info("User authenticated: request from local subnet")
-		// s.Debug("User authenticated from local subnet") // Removed old debug
 		return true
 	}
 
@@ -240,7 +269,6 @@ func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 		logger.Debug("Found access_token in session, validating...")
 		if s.ValidateAccessToken(token) {
 			logger.Info("User authenticated: valid access_token found in session")
-			// s.Debug("User was authenticated with valid access_token") // Removed old debug
 			return true
 		}
 		logger.Warn("Invalid or expired access_token found in session")
@@ -260,7 +288,6 @@ func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 			logger.Debug("Found 'google' key in session")
 			if isValidUserId(s.Settings.Security.GoogleAuth.UserId, userId) {
 				logger.Info("User authenticated: valid Google session found for allowed user ID")
-				// s.Debug("User was authenticated with valid Google user") // Removed old debug
 				return true
 			}
 			logger.Warn("Google session found, but userId does not match allowed IDs", "allowed_ids", s.Settings.Security.GoogleAuth.UserId)
@@ -271,7 +298,6 @@ func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 			logger.Debug("Found 'github' key in session")
 			if isValidUserId(s.Settings.Security.GithubAuth.UserId, userId) {
 				logger.Info("User authenticated: valid GitHub session found for allowed user ID")
-				// s.Debug("User was authenticated with valid GitHub user") // Removed old debug
 				return true
 			}
 			logger.Warn("GitHub session found, but userId does not match allowed IDs", "allowed_ids", s.Settings.Security.GithubAuth.UserId)
@@ -287,10 +313,25 @@ func isValidUserId(configuredIds, providedId string) bool {
 		return false
 	}
 
-	// Split configured IDs and trim spaces
-	allowedIds := strings.Split(configuredIds, ",")
-	for i := range allowedIds {
-		if strings.TrimSpace(allowedIds[i]) == providedId {
+	// Trim whitespace from the ID we are checking
+	trimmedProvidedId := strings.TrimSpace(providedId)
+	if trimmedProvidedId == "" {
+		return false // Don't match empty string after trimming
+	}
+
+	// Split configured IDs and trim spaces from each allowed ID once upfront
+	allowedIdsRaw := strings.Split(configuredIds, ",")
+	allowedIdsTrimmed := make([]string, 0, len(allowedIdsRaw))
+	for _, allowedId := range allowedIdsRaw {
+		trimmed := strings.TrimSpace(allowedId)
+		if trimmed != "" { // Avoid adding empty strings to the comparison list
+			allowedIdsTrimmed = append(allowedIdsTrimmed, trimmed)
+		}
+	}
+
+	// Compare the provided ID against the pre-trimmed list using case-insensitive comparison
+	for _, allowedId := range allowedIdsTrimmed {
+		if strings.EqualFold(allowedId, trimmedProvidedId) {
 			return true
 		}
 	}
@@ -324,15 +365,30 @@ func (s *OAuth2Server) GenerateAuthCode() (string, error) {
 }
 
 // ExchangeAuthCode exchanges an authorization code for an access token
-func (s *OAuth2Server) ExchangeAuthCode(code string) (string, error) {
+// It now accepts a context, although it's not directly used for internal operations yet.
+func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (string, error) {
 	// Do not log the code
-	securityLogger.Debug("Attempting to exchange authorization code")
+	logger := securityLogger.With("operation", "ExchangeAuthCode")
+
+	// Fast-fail if the client already gave up
+	if err := ctx.Err(); err != nil {
+		logger.Warn("Context cancelled before acquiring lock", "error", err)
+		return "", err
+	}
+
+	logger.Debug("Attempting to exchange authorization code")
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
+	// Re-check context after acquiring the lock
+	if err := ctx.Err(); err != nil {
+		logger.Warn("Context cancelled after acquiring lock", "error", err)
+		return "", err // Mutex is released by defer
+	}
+
 	authCode, ok := s.authCodes[code]
 	if !ok {
-		securityLogger.Warn("Authorization code not found")
+		logger.Warn("Authorization code not found")
 		return "", errors.New("authorization code not found")
 	}
 
@@ -476,7 +532,10 @@ func (s *OAuth2Server) IsRequestFromAllowedSubnet(ipStr string) bool {
 // persistTokensIfEnabled saves tokens if persistence is enabled
 func (s *OAuth2Server) persistTokensIfEnabled() {
 	if s.persistTokens {
-		if err := s.saveTokens(); err != nil {
+		// Use a short background context for saving, as it runs in a goroutine
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := s.saveTokens(ctx); err != nil {
 			// Throttle logging for repeated save errors
 			s.logThrottledError("save_tokens_error", "Failed to save tokens", err, 5*time.Minute)
 		}
@@ -484,7 +543,7 @@ func (s *OAuth2Server) persistTokensIfEnabled() {
 }
 
 // loadTokens loads tokens from the persistence file
-func (s *OAuth2Server) loadTokens() error {
+func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 	if !s.persistTokens {
 		securityLogger.Debug("Token persistence is disabled, skipping load")
 		return nil
@@ -493,6 +552,14 @@ func (s *OAuth2Server) loadTokens() error {
 	securityLogger.Info("Attempting to load tokens from file", "file", s.tokensFile)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+
+	// Check context before potentially long file read
+	select {
+	case <-ctx.Done():
+		securityLogger.Warn("Context cancelled before loading tokens", "error", ctx.Err())
+		return ctx.Err()
+	default:
+	}
 
 	data, err := os.ReadFile(s.tokensFile)
 	if err != nil {
@@ -550,7 +617,7 @@ func (s *OAuth2Server) loadTokens() error {
 }
 
 // saveTokens saves the current tokens to the persistence file
-func (s *OAuth2Server) saveTokens() error {
+func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 	if !s.persistTokens {
 		securityLogger.Debug("Token persistence is disabled, skipping save")
 		return nil
@@ -568,6 +635,14 @@ func (s *OAuth2Server) saveTokens() error {
 	accessTokensCopy := make(map[string]AccessToken, len(s.accessTokens))
 	for k, v := range s.accessTokens {
 		accessTokensCopy[k] = v
+	}
+
+	// Check context before marshaling/writing
+	select {
+	case <-ctx.Done():
+		securityLogger.Warn("Context cancelled before saving tokens", "error", ctx.Err())
+		return ctx.Err()
+	default:
 	}
 
 	storedData := struct {
@@ -663,10 +738,7 @@ func (s *OAuth2Server) cleanupExpired() {
 // Deprecated: Use securityLogger.Debug directly
 func (s *OAuth2Server) Debug(format string, v ...interface{}) {
 	if s.debug {
-		// Convert to slog call - Note: This loses structured context
-		// It's better to replace calls to this with direct securityLogger.Debug calls
 		securityLogger.Debug(fmt.Sprintf(format, v...))
-		// log.Printf("[debug] "+format, v...)
 	}
 }
 
