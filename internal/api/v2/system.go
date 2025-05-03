@@ -942,6 +942,104 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 	})
 }
 
+// getSingleProcessInfo retrieves detailed information for a single process.
+// It handles errors gracefully and returns a ProcessInfo struct.
+func (c *Controller) getSingleProcessInfo(p *process.Process) (ProcessInfo, error) {
+	name, err := p.Name()
+	if err != nil {
+		// Log error but continue, maybe process terminated?
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to get process name", "pid", p.Pid, "error", err.Error())
+		}
+		// Return an error to indicate this process couldn't be fully processed
+		return ProcessInfo{}, fmt.Errorf("failed to get process name for pid %d: %w", p.Pid, err)
+	}
+
+	statusList, err := p.Status()
+	var status string
+	switch {
+	case err != nil:
+		status = "unknown"
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to get process status", "pid", p.Pid, "name", name, "error", err.Error())
+		}
+	case len(statusList) > 0:
+		// Use the first status code returned
+		status = mapProcessStatus(statusList[0])
+	default:
+		status = "unknown"
+	}
+
+	cpuPercent, err := p.CPUPercent()
+	if err != nil {
+		// Log error but default to 0
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to get process CPU percent", "pid", p.Pid, "name", name, "error", err.Error())
+		}
+		cpuPercent = 0.0
+	}
+
+	memInfo, err := p.MemoryInfo()
+	var memRSS uint64
+	if err != nil {
+		// Log error but default to 0
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to get process memory info", "pid", p.Pid, "name", name, "error", err.Error())
+		}
+		memRSS = 0
+	} else {
+		memRSS = memInfo.RSS // Resident Set Size
+	}
+
+	createTimeMillis, err := p.CreateTime()
+	var uptimeSeconds int64
+	if err != nil {
+		// Log error but default to 0
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to get process create time", "pid", p.Pid, "name", name, "error", err.Error())
+		}
+		uptimeSeconds = 0
+	} else {
+		// Calculate uptime relative to now
+		uptimeSeconds = time.Now().Unix() - (createTimeMillis / 1000)
+		if uptimeSeconds < 0 { // Sanity check for clock skew
+			uptimeSeconds = 0
+		}
+	}
+
+	return ProcessInfo{
+		PID:    p.Pid,
+		Name:   name,
+		Status: status,
+		CPU:    cpuPercent,
+		Memory: memRSS,
+		Uptime: uptimeSeconds,
+	}, nil
+}
+
+// mapProcessStatus converts OS-specific process status codes to readable strings.
+func mapProcessStatus(statusCode string) string {
+	switch statusCode {
+	case "R": // Running or Runnable (Linux/macOS)
+		return "running"
+	case "S": // Sleeping (Linux/macOS)
+		return "sleeping"
+	case "D": // Disk Sleep (Linux)
+		return "disk sleep"
+	case "Z": // Zombie (Linux/macOS)
+		return "zombie"
+	case "T": // Stopped (Linux/macOS)
+		return "stopped"
+	case "W": // Paging (Linux)
+		return "paging"
+	case "I": // Idle (macOS/FreeBSD)
+		return "idle"
+	// Add more specific codes if needed, or default
+	default:
+		return strings.ToLower(statusCode) // Use the code itself if not recognized
+	}
+}
+
 // GetProcessInfo returns a list of running processes and their basic information
 // It accepts an optional query parameter `?all=true` to show all processes.
 // By default, it shows only the main application process and its direct children.
@@ -987,95 +1085,17 @@ func (c *Controller) GetProcessInfo(ctx echo.Context) error {
 			}
 		}
 
-		name, err := p.Name()
+		// Get info for this process using the helper
+		info, err := c.getSingleProcessInfo(p)
 		if err != nil {
-			// Log error but continue, maybe process terminated?
+			// Log the error from getSingleProcessInfo (already logged specifics inside)
 			if c.apiLogger != nil {
-				c.apiLogger.Warn("Failed to get process name", "pid", p.Pid, "error", err.Error())
+				c.apiLogger.Warn("Skipping process due to error retrieving details", "pid", p.Pid, "error", err.Error())
 			}
-			continue
+			continue // Skip this process if we couldn't get full details
 		}
 
-		statusList, err := p.Status()
-		var status string
-
-		// Convert if-else chain to switch
-		switch {
-		case err != nil:
-			status = "unknown"
-			if c.apiLogger != nil {
-				c.apiLogger.Warn("Failed to get process status", "pid", p.Pid, "name", name, "error", err.Error())
-			}
-		case len(statusList) > 0:
-			// Use the first status code returned
-			switch statusList[0] {
-			case "R": // Running or Runnable (Linux/macOS)
-				status = "running"
-			case "S": // Sleeping (Linux/macOS)
-				status = "sleeping"
-			case "D": // Disk Sleep (Linux)
-				status = "disk sleep"
-			case "Z": // Zombie (Linux/macOS)
-				status = "zombie"
-			case "T": // Stopped (Linux/macOS)
-				status = "stopped"
-			case "W": // Paging (Linux)
-				status = "paging"
-			case "I": // Idle (macOS/FreeBSD)
-				status = "idle"
-			// Add more specific codes if needed, or default
-			default:
-				status = strings.ToLower(statusList[0]) // Use the code itself if not recognized
-			}
-		default:
-			status = "unknown"
-		}
-
-		cpuPercent, err := p.CPUPercent()
-		if err != nil {
-			// Log error but default to 0
-			if c.apiLogger != nil {
-				c.apiLogger.Warn("Failed to get process CPU percent", "pid", p.Pid, "name", name, "error", err.Error())
-			}
-			cpuPercent = 0.0
-		}
-
-		memInfo, err := p.MemoryInfo()
-		var memRSS uint64
-		if err != nil {
-			// Log error but default to 0
-			if c.apiLogger != nil {
-				c.apiLogger.Warn("Failed to get process memory info", "pid", p.Pid, "name", name, "error", err.Error())
-			}
-			memRSS = 0
-		} else {
-			memRSS = memInfo.RSS // Resident Set Size
-		}
-
-		createTimeMillis, err := p.CreateTime()
-		var uptimeSeconds int64
-		if err != nil {
-			// Log error but default to 0
-			if c.apiLogger != nil {
-				c.apiLogger.Warn("Failed to get process create time", "pid", p.Pid, "name", name, "error", err.Error())
-			}
-			uptimeSeconds = 0
-		} else {
-			// Calculate uptime relative to now
-			uptimeSeconds = time.Now().Unix() - (createTimeMillis / 1000)
-			if uptimeSeconds < 0 { // Sanity check for clock skew
-				uptimeSeconds = 0
-			}
-		}
-
-		processInfos = append(processInfos, ProcessInfo{
-			PID:    p.Pid,
-			Name:   name,
-			Status: status,
-			CPU:    cpuPercent,
-			Memory: memRSS,
-			Uptime: uptimeSeconds,
-		})
+		processInfos = append(processInfos, info)
 	}
 
 	if c.apiLogger != nil {
