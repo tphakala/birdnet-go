@@ -106,7 +106,6 @@ func (s *OAuth2Server) configureLocalNetworkCookieStore() {
 	default:
 		// Log the warning using structured logger
 		securityLogger.Warn("Unknown session store type, using default cookie store options", "store_type", fmt.Sprintf("%T", store))
-		// log.Printf("Warning: Unknown session store type %T, using default cookie store options", store)
 		// Create a default cookie store as fallback - only for reference, not actually used
 		// Use the configured session secret instead of a hardcoded value
 		sessionSecret := s.Settings.Security.SessionSecret
@@ -116,7 +115,6 @@ func (s *OAuth2Server) configureLocalNetworkCookieStore() {
 			sessionSecret = fmt.Sprintf("birdnet-go-%d", time.Now().UnixNano())
 			// Log the warning using structured logger
 			securityLogger.Warn("No session secret configured, using temporary value")
-			// log.Printf("Warning: No session secret configured, using temporary value")
 		}
 
 		// Note: This store is not actually used, it's only created as a reference
