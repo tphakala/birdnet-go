@@ -315,7 +315,7 @@ func randomDelay(ctx context.Context, minMs, maxMs int64) {
 	case <-timer.C:
 		// Delay completed normally
 	case <-ctx.Done():
-		timer.Stop() // Stop the timer explicitly if context is cancelled
+		// No need to call timer.Stop() here, defer handles it.
 		// Context was cancelled, delay aborted
 		// Optionally log context cancellation
 		// log.Printf("Random delay cancelled by context: %v", ctx.Err())
