@@ -34,10 +34,22 @@ func ValidateRedirectURI(providedURIString string, expectedURI *url.URL) error {
 		return fmt.Errorf("invalid redirect_uri format: %w", err)
 	}
 
-	// Normalize paths: Use path.Clean and trim trailing slash for consistent comparison
+	// Unescape paths before cleaning to handle potential percent-encoding differences
+	providedPathUnescaped, err := url.PathUnescape(parsedProvidedURI.Path)
+	if err != nil {
+		// Should be unlikely if url.Parse succeeded, but handle defensively
+		return fmt.Errorf("failed to unescape provided redirect path '%s': %w", parsedProvidedURI.Path, err)
+	}
+	expectedPathUnescaped, err := url.PathUnescape(expectedURI.Path)
+	if err != nil {
+		// This indicates an issue with the pre-parsed expected URI
+		return fmt.Errorf("internal configuration error: failed to unescape expected redirect path '%s': %w", expectedURI.Path, err)
+	}
+
+	// Normalize paths: Use path.Clean on unescaped paths and trim trailing slash for consistent comparison
 	// Note: path.Clean removes trailing slashes unless the path is "/"
-	providedPath := path.Clean(parsedProvidedURI.Path)
-	expectedPath := path.Clean(expectedURI.Path)
+	providedPath := path.Clean(providedPathUnescaped)
+	expectedPath := path.Clean(expectedPathUnescaped)
 
 	// Normalize ports
 	providedPort := normalizePort(parsedProvidedURI.Scheme, parsedProvidedURI.Port())
