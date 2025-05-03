@@ -1,6 +1,7 @@
 package httpcontroller
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"fmt"
 	"net/http"
@@ -250,7 +251,11 @@ func (s *Server) handleBasicAuthLogin(c echo.Context) error {
 	// Log basic auth attempt
 	security.LogInfo("Basic authentication login attempt", "username", username)
 
-	if subtle.ConstantTimeCompare([]byte(password), []byte(storedPassword)) != 1 {
+	// Hash passwords before comparison for constant-time behavior
+	passwordHash := sha256.Sum256([]byte(password))
+	storedPasswordHash := sha256.Sum256([]byte(storedPassword))
+
+	if subtle.ConstantTimeCompare(passwordHash[:], storedPasswordHash[:]) != 1 {
 		// Log failed basic auth attempt
 		security.LogWarn("Basic authentication failed: Invalid password", "username", username)
 		return c.HTML(http.StatusUnauthorized, "<div class='text-red-500'>Invalid password</div>")
