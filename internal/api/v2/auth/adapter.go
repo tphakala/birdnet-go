@@ -73,13 +73,24 @@ func (a *SecurityAdapter) GetUsername(c echo.Context) string {
 func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 	// 1. Check context first (set by middleware)
 	if authMethodCtx := c.Get("authMethod"); authMethodCtx != nil {
+		// Check if it's the expected AuthMethod type
 		if method, ok := authMethodCtx.(AuthMethod); ok {
 			// Return method determined by middleware (e.g., Token, Session)
 			return method
 		}
-		// If type assertion fails, log it but fall through to other checks
+
+		// Check if it's a string representation
+		if methodStr, ok := authMethodCtx.(string); ok {
+			// Convert string to AuthMethod if possible
+			convertedMethod := AuthMethodFromString(methodStr)
+			if convertedMethod != AuthMethodUnknown {
+				return convertedMethod
+			}
+		}
+
+		// If type assertion or conversion fails, log it but fall through to other checks
 		if a.logger != nil {
-			a.logger.Warn("Context value 'authMethod' has unexpected type", "type", fmt.Sprintf("%T", authMethodCtx))
+			a.logger.Warn("Context value 'authMethod' has unexpected type or invalid string value", "type", fmt.Sprintf("%T", authMethodCtx), "value", authMethodCtx)
 		}
 	}
 
@@ -98,6 +109,29 @@ func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 
 	// 4. If none of the above, assume no authentication
 	return AuthMethodUnknown // Use Unknown for no authentication
+}
+
+// AuthMethodFromString converts a string representation to its AuthMethod constant.
+// Returns AuthMethodUnknown if the string does not match any known method.
+func AuthMethodFromString(s string) AuthMethod {
+	switch s {
+	case AuthMethodBrowserSession.String():
+		return AuthMethodBrowserSession
+	case AuthMethodAPIKey.String():
+		return AuthMethodAPIKey
+	case AuthMethodLocalSubnet.String():
+		return AuthMethodLocalSubnet
+	case AuthMethodBasicAuth.String():
+		return AuthMethodBasicAuth
+	case AuthMethodToken.String():
+		return AuthMethodToken
+	case AuthMethodOAuth2.String():
+		return AuthMethodOAuth2
+	case AuthMethodNone.String():
+		return AuthMethodNone
+	default:
+		return AuthMethodUnknown
+	}
 }
 
 // ValidateToken checks if a bearer token is valid by calling the underlying OAuth2Server.
