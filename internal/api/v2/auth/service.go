@@ -13,6 +13,7 @@ var (
 	ErrInvalidToken       = errors.New("invalid or expired token")
 	ErrSessionNotFound    = errors.New("session not found or expired")
 	ErrLogoutFailed       = errors.New("logout operation failed")
+	ErrBasicAuthDisabled  = errors.New("basic authentication is disabled")
 )
 
 //go:generate go run golang.org/x/tools/cmd/stringer -type=AuthMethod
