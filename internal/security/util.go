@@ -46,8 +46,8 @@ func ValidateRedirectURI(providedURIString string, expectedURI *url.URL) error {
 	// Compare Scheme (case-insensitive), Hostname (case-insensitive), normalized Port, Path
 	// RFC 3986 Section 3.1: Scheme names are case-insensitive.
 	// RFC 3986 Section 3.2.2: Host names are case-insensitive.
-	if strings.ToLower(parsedProvidedURI.Scheme) != strings.ToLower(expectedURI.Scheme) ||
-		strings.ToLower(parsedProvidedURI.Hostname()) != strings.ToLower(expectedURI.Hostname()) || // Compare Hostname case-insensitively
+	if !strings.EqualFold(parsedProvidedURI.Scheme, expectedURI.Scheme) ||
+		!strings.EqualFold(parsedProvidedURI.Hostname(), expectedURI.Hostname()) || // Compare Hostname case-insensitively
 		providedPort != expectedPort || // Compare normalized ports
 		providedPath != expectedPath || // Compare cleaned paths
 		parsedProvidedURI.RawQuery != "" || // Ensure provided URI has no query parameters
