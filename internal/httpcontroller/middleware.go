@@ -226,8 +226,8 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 				c.Set("server", s)
 				c.Set("isAuthenticated", true)
 				c.Set("authMethod", auth.AuthMethodLocalSubnet)
-				c.Set("username", "localSubnetUser") // Placeholder username
-				c.Set("userClaims", nil)             // Explicitly nil as no claims from token
+				c.Set("username", security.SubnetUsername) // Subnet bypass username
+				c.Set("userClaims", nil)                   // Explicitly nil as no claims from token
 				s.Debug("Client %s is in local subnet, allowing access to %s", clientIP.String(), path)
 				return next(c)
 			}
