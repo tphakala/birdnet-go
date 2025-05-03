@@ -46,23 +46,27 @@ Currently, the package implements version 2 (`v2`) of the API with all endpoints
 
 ## Authentication
 
-The API implements a comprehensive service-based authentication system:
+The API implements a comprehensive, service-based authentication system managed by the `internal/api/v2/auth` sub-package. This package decouples authentication logic from API handlers and supports multiple authentication methods.
 
-- **Authentication Service Interface**: Defined in `auth/service.go`, providing a clean abstraction for authentication operations
-- **Security Adapter**: Connects to the existing OAuth2Server implementation through an adapter pattern
-- **Authentication Middleware**: Unified middleware supporting multiple authentication methods:
-  - Bearer token authentication for API clients
-  - Session-based authentication for browser clients
-  - Subnet-based authentication bypass for trusted networks
+Key components of the `auth` package:
 
-Protected endpoints use the auth middleware, which determines the appropriate authentication flow based on the client type and available credentials. Upon successful authentication, the middleware sets specific values in the `echo.Context` (`isAuthenticated`, `username`, `authMethod`) to communicate the authentication status and details to downstream handlers. This ensures that handlers like `GetAuthStatus` can accurately report the state determined by the middleware.
+-   **`Service` Interface (`auth/service.go`)**: Defines the contract for authentication operations (checking access, validating tokens, basic auth, logout, etc.) and standard sentinel errors.
+-   **`AuthMethod` Enum (`auth/service.go`)**: Represents different authentication methods (`Token`, `BrowserSession`, `BasicAuth`, `LocalSubnet`, `None`). Uses `go generate` with `stringer`.
+-   **`SecurityAdapter` (`auth/adapter.go`)**: Implements the `Service` interface, adapting the `internal/security` package's `OAuth2Server` for core logic like session checks, token validation, and basic auth credential verification.
+-   **`Middleware` (`auth/middleware.go`)**: An Echo middleware that uses the `AuthService` to enforce authentication. It checks if auth is required, attempts token and session authentication, sets context values (`isAuthenticated`, `username`, `authMethod`) on success, and handles unauthenticated requests appropriately (redirect for browsers, 401 for API clients).
 
-The system is designed to handle both:
+**Authentication Flow:**
 
-- **Browser Clients**: Redirected to login page with return URL when authentication is required
-- **API Clients**: Receive proper HTTP 401 responses with JSON error messages
+1.  The `Middleware` intercepts requests.
+2.  It checks `AuthService.IsAuthRequired`. If not required (e.g., local subnet), proceeds with `AuthMethodNone`.
+3.  If required, it checks for a `Bearer` token via `AuthService.ValidateToken`.
+4.  If no valid token, it checks for a session via `AuthService.CheckAccess`.
+5.  On success (token or session), it sets context and proceeds.
+6.  On failure, it redirects browsers or returns a 401 error for API clients.
 
-### Authentication Service Methods
+Protected endpoints use this auth middleware. The system handles browser clients (redirecting to login) and API clients (returning 401 JSON errors) appropriately.
+
+### Authentication Service Interface (Deprecated - See `auth/service.go`)
 
 The authentication service interface provides these key operations:
 
@@ -99,7 +103,7 @@ type Service interface {
 }
 ```
 
-### Auth Middleware Implementation
+### Auth Middleware Implementation (Deprecated - See `auth/middleware.go`)
 
 The middleware follows this decision flow:
 
