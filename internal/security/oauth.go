@@ -83,6 +83,15 @@ func NewOAuth2Server() *OAuth2Server {
 		server.persistTokens = true
 		securityLogger.Info("Token persistence configured", "file", server.tokensFile)
 
+		// Check for Session Secret
+		if settings.Security.SessionSecret == "" {
+			securityLogger.Error("CRITICAL SECURITY WARNING: SessionSecret is empty. Set a strong, unique secret in configuration for production environments.")
+			// Consider adding a stricter check for production environments, e.g., panic.
+		} else if len(settings.Security.SessionSecret) < 32 {
+			// Check length as a proxy for entropy, 32 bytes is common for session keys
+			securityLogger.Warn("Security Recommendation: SessionSecret is potentially weak (less than 32 bytes). Consider using a longer, randomly generated secret.")
+		}
+
 		// Ensure the directory exists
 		if err := os.MkdirAll(filepath.Dir(server.tokensFile), 0o755); err != nil {
 			securityLogger.Error("Failed to create directory for token persistence, persistence disabled", "path", filepath.Dir(server.tokensFile), "error", err)
