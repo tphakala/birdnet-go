@@ -23,6 +23,7 @@ var publicV2ApiPrefixes = map[string]struct{}{
 	"/api/v2/detections":          {},
 	"/api/v2/analytics":           {},
 	"/api/v2/media/species-image": {},
+	"/api/v2/media/audio":         {},
 	"/api/v2/spectrogram":         {},
 	"/api/v2/audio":               {},
 	"/api/v2/health":              {}, // Health check should always be public
