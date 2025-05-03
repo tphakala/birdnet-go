@@ -98,7 +98,7 @@ func NewOAuth2Server() *OAuth2Server {
 			server.persistTokens = false
 		} else {
 			// Load any existing tokens
-			if err := server.loadTokens(); err != nil {
+			if err := server.loadTokens(context.Background()); err != nil {
 				// Log as Warn, as failure to load old tokens isn't fatal
 				securityLogger.Warn("Failed to load persisted tokens", "file", server.tokensFile, "error", err)
 			}
@@ -487,7 +487,10 @@ func (s *OAuth2Server) IsRequestFromAllowedSubnet(ipStr string) bool {
 // persistTokensIfEnabled saves tokens if persistence is enabled
 func (s *OAuth2Server) persistTokensIfEnabled() {
 	if s.persistTokens {
-		if err := s.saveTokens(); err != nil {
+		// Use a short background context for saving, as it runs in a goroutine
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := s.saveTokens(ctx); err != nil {
 			// Throttle logging for repeated save errors
 			s.logThrottledError("save_tokens_error", "Failed to save tokens", err, 5*time.Minute)
 		}
@@ -495,7 +498,7 @@ func (s *OAuth2Server) persistTokensIfEnabled() {
 }
 
 // loadTokens loads tokens from the persistence file
-func (s *OAuth2Server) loadTokens() error {
+func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 	if !s.persistTokens {
 		securityLogger.Debug("Token persistence is disabled, skipping load")
 		return nil
@@ -504,6 +507,14 @@ func (s *OAuth2Server) loadTokens() error {
 	securityLogger.Info("Attempting to load tokens from file", "file", s.tokensFile)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+
+	// Check context before potentially long file read
+	select {
+	case <-ctx.Done():
+		securityLogger.Warn("Context cancelled before loading tokens", "error", ctx.Err())
+		return ctx.Err()
+	default:
+	}
 
 	data, err := os.ReadFile(s.tokensFile)
 	if err != nil {
@@ -561,7 +572,7 @@ func (s *OAuth2Server) loadTokens() error {
 }
 
 // saveTokens saves the current tokens to the persistence file
-func (s *OAuth2Server) saveTokens() error {
+func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 	if !s.persistTokens {
 		securityLogger.Debug("Token persistence is disabled, skipping save")
 		return nil
@@ -579,6 +590,15 @@ func (s *OAuth2Server) saveTokens() error {
 	accessTokensCopy := make(map[string]AccessToken, len(s.accessTokens))
 	for k, v := range s.accessTokens {
 		accessTokensCopy[k] = v
+	}
+	s.mutex.RUnlock() // Release read lock before potentially long operations
+
+	// Check context before marshaling/writing
+	select {
+	case <-ctx.Done():
+		securityLogger.Warn("Context cancelled before saving tokens", "error", ctx.Err())
+		return ctx.Err()
+	default:
 	}
 
 	storedData := struct {
