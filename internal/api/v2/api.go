@@ -769,7 +769,9 @@ func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		if authenticated {
 			// Token auth successful
 			ctx.Set("isAuthenticated", true)
-			ctx.Set("username", authService.GetUsername(ctx))
+			// NOTE: Cannot reliably get username from opaque token via current AuthService.
+			// Username will be empty unless the session also exists and contains it.
+			// ctx.Set("username", authService.GetUsername(ctx)) // Removed this line
 			ctx.Set("authMethod", auth.AuthMethodToken) // Store enum directly
 			return next(ctx)
 		}
