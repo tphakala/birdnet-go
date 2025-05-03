@@ -74,8 +74,8 @@ func TestTokenPersistence(t *testing.T) {
 	}
 
 	// Verify only valid tokens were loaded
-	assert.True(t, newServer.ValidateAccessToken("valid_token"), "Valid token should be loaded and validated")
-	assert.False(t, newServer.ValidateAccessToken("expired_token"), "Expired token should not be loaded or should be invalid")
+	assert.NoError(t, newServer.ValidateAccessToken("valid_token"), "Valid token should be loaded and validated")
+	assert.ErrorIs(t, newServer.ValidateAccessToken("expired_token"), ErrTokenExpired, "Expired token should not be loaded or should be invalid")
 
 	// Check token file contents directly
 	data, err := os.ReadFile(filepath.Join(tempDir, "tokens.json"))
