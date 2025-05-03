@@ -149,8 +149,8 @@ func TestOAuth2Server(t *testing.T) {
 					t.Fatalf("Failed to exchange auth code: %v", err)
 				}
 
-				if !s.ValidateAccessToken(token) {
-					t.Error("Token validation failed")
+				if err := s.ValidateAccessToken(token); err != nil {
+					t.Errorf("Token validation failed: %v", err)
 				}
 			},
 		},
