@@ -100,13 +100,12 @@ func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 	return AuthMethodUnknown // Use Unknown for no authentication
 }
 
-// ValidateToken checks if a bearer token is valid
-// Returns nil if valid, ErrInvalidToken otherwise.
+// ValidateToken checks if a bearer token is valid by calling the underlying OAuth2Server.
+// Returns the specific error from OAuth2Server.ValidateAccessToken if validation fails,
+// or nil if the token is valid.
 func (a *SecurityAdapter) ValidateToken(token string) error {
-	if a.OAuth2Server.ValidateAccessToken(token) {
-		return nil // Success
-	}
-	return ErrInvalidToken // Failure
+	// Directly return the error from the underlying validation method.
+	return a.OAuth2Server.ValidateAccessToken(token)
 }
 
 // AuthenticateBasic handles basic authentication with username/password.
