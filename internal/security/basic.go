@@ -1,9 +1,12 @@
 package security
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -103,7 +106,6 @@ func (s *OAuth2Server) configureLocalNetworkCookieStore() {
 	default:
 		// Log the warning using structured logger
 		securityLogger.Warn("Unknown session store type, using default cookie store options", "store_type", fmt.Sprintf("%T", store))
-		// log.Printf("Warning: Unknown session store type %T, using default cookie store options", store)
 		// Create a default cookie store as fallback - only for reference, not actually used
 		// Use the configured session secret instead of a hardcoded value
 		sessionSecret := s.Settings.Security.SessionSecret
@@ -113,7 +115,6 @@ func (s *OAuth2Server) configureLocalNetworkCookieStore() {
 			sessionSecret = fmt.Sprintf("birdnet-go-%d", time.Now().UnixNano())
 			// Log the warning using structured logger
 			securityLogger.Warn("No session secret configured, using temporary value")
-			// log.Printf("Warning: No session secret configured, using temporary value")
 		}
 
 		// Note: This store is not actually used, it's only created as a reference
@@ -135,9 +136,11 @@ func (s *OAuth2Server) HandleBasicAuthorize(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid client_id")
 	}
 
-	if redirectURI != s.Settings.Security.BasicAuth.RedirectURI {
-		logger.Warn("Invalid redirect_uri provided", "expected", s.Settings.Security.BasicAuth.RedirectURI)
-		return c.String(http.StatusBadRequest, "Invalid redirect_uri")
+	// Validate redirect URI using the shared function and pre-parsed expected URI
+	if err := ValidateRedirectURI(redirectURI, s.ExpectedBasicRedirectURI); err != nil {
+		logger.Warn("Redirect URI validation failed", "error", err)
+		// Return the specific error message for better client-side debugging
+		return c.String(http.StatusBadRequest, err.Error())
 	}
 
 	// Generate an auth code
@@ -168,7 +171,6 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 
 	if clientID != s.Settings.Security.BasicAuth.ClientID || clientSecret != s.Settings.Security.BasicAuth.ClientSecret {
 		logger.Warn("Invalid client credentials provided")
-		// s.Debug("Invalid client credentials: %s", clientID) // Removed old debug
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid client id or secret"})
 	}
 
@@ -176,7 +178,6 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	if clientIP := net.ParseIP(c.RealIP()); IsInLocalSubnet(clientIP) {
 		// For clients in the local subnet, allow non-HTTPS cookies
 		logger.Info("Client is in local subnet, configuring cookie store for non-HTTPS")
-		// s.Debug("Client in local subnet, configuring cookie store accordingly") // Removed old debug
 		s.configureLocalNetworkCookieStore()
 	}
 
@@ -185,36 +186,40 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	redirectURI := c.FormValue("redirect_uri")
 
 	logger.Info("Received token request parameters", "grant_type", grantType, "redirect_uri", redirectURI)
-	// s.Debug("Token request: grant_type=%s, code=%s, redirect_uri=%s", grantType, code, redirectURI) // Removed old debug with code
 
 	// Check for required fields
 	if grantType == "" || code == "" || redirectURI == "" {
 		logger.Warn("Missing required fields in token request")
-		// s.Debug("Missing required fields in token request") // Removed old debug
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Missing required fields"})
 	}
 
 	// Verify grant type
 	if grantType != "authorization_code" {
 		logger.Warn("Unsupported grant type provided", "grant_type", grantType)
-		// s.Debug("Unsupported grant type: %s", grantType) // Removed old debug
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unsupported grant type"})
 	}
 
-	// Verify redirect URI
-	if !strings.Contains(redirectURI, s.Settings.Security.Host) {
-		logger.Warn("Invalid redirect URI host", "redirect_uri", redirectURI, "expected_host", s.Settings.Security.Host)
-		// s.Debug("Invalid redirect URI host: %s, expected %s", redirectURI, s.Settings.Security.Host) // Removed old debug
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid host for redirect URI"})
+	// Validate redirect URI using the shared function and pre-parsed expected URI
+	if err := ValidateRedirectURI(redirectURI, s.ExpectedBasicRedirectURI); err != nil {
+		logger.Warn("Redirect URI validation failed", "error", err)
+		// Return the specific error message for better client-side debugging
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 
-	// Exchange the authorization code for an access token
+	// Exchange the authorization code for an access token with timeout
 	// Do not log the code being exchanged
 	logger.Info("Attempting to exchange authorization code for access token")
-	accessToken, err := s.ExchangeAuthCode(code)
+	// Pass the request context to ExchangeAuthCode
+	tokenCtx, tokenCancel := context.WithTimeout(c.Request().Context(), 15*time.Second) // Apply timeout
+	defer tokenCancel()
+	accessToken, err := s.ExchangeAuthCode(tokenCtx, code)
 	if err != nil {
+		// Check for context deadline exceeded specifically
+		if errors.Is(err, context.DeadlineExceeded) {
+			logger.Warn("Timeout exchanging authorization code", "error", err)
+			return c.JSON(http.StatusGatewayTimeout, map[string]string{"error": "Timeout during token exchange"})
+		}
 		logger.Warn("Failed to exchange authorization code", "error", err)
-		// s.Debug("Failed to exchange auth code: %v", err) // Removed old debug
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid authorization code"})
 	}
 	// DO NOT log the accessToken
@@ -224,7 +229,6 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	// Do not log the token here either
 	if err := gothic.StoreInSession("access_token", accessToken, c.Request(), c.Response()); err != nil {
 		logger.Warn("Failed to store access token in session", "error", err)
-		// s.Debug("Failed to store access token in session: %v", err) // Removed old debug
 		// Continue anyway since we'll return the token to the client
 	}
 
@@ -240,7 +244,6 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	}
 
 	logger.Info("Returning access token response to client", "expires_in_seconds", expiresInSeconds)
-	// s.Debug("Successfully exchanged token, returning response") // Removed old debug
 	return c.JSON(http.StatusOK, resp)
 }
 
@@ -256,13 +259,88 @@ func (s *OAuth2Server) HandleBasicAuthCallback(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Missing authorization code")
 	}
 
-	// Instead of exchanging the code here, we'll pass it to the client
-	// Do not log the code
-	logger.Info("Rendering callback page with authorization code")
-	return c.Render(http.StatusOK, "callback", map[string]interface{}{
-		"Code":        code, // Sent to client, unavoidable
-		"RedirectURL": redirect,
-		"ClientID":    s.Settings.Security.BasicAuth.ClientID,
-		"Secret":      "***MASKED***", // Mask secret before sending to template
-	})
+	// Create a context with timeout for the token exchange
+	ctx, cancel := context.WithTimeout(c.Request().Context(), 15*time.Second) // Increased timeout slightly
+	defer cancel()
+
+	// Exchange the authorization code for an access token directly on the server
+	// Do not log the code being exchanged
+	logger.Info("Attempting to exchange authorization code for access token server-side")
+	accessToken, err := s.ExchangeAuthCode(ctx, code) // Pass context
+	if err != nil {
+		// Check if the error is context deadline exceeded
+		if errors.Is(err, context.DeadlineExceeded) {
+			logger.Warn("Timeout exchanging authorization code server-side", "error", err)
+			return c.String(http.StatusGatewayTimeout, "Login timed out. Please try again.")
+		}
+		logger.Warn("Failed to exchange authorization code server-side", "error", err)
+		// Provide a user-friendly error message
+		return c.String(http.StatusInternalServerError, "Unable to complete login at this time. Please try again.")
+	}
+	// DO NOT log the accessToken
+	logger.Info("Successfully exchanged authorization code for access token")
+
+	// Regenerate session to prevent session fixation
+	// This clears existing auth state and forces a new session ID on save
+	// Pass the underlying http.ResponseWriter and *http.Request to gothic.Logout
+	if err := gothic.Logout(c.Response().Writer, c.Request()); err != nil {
+		// Log the error but proceed cautiously. Depending on the store,
+		// Logout might fail if cookies are invalid, but StoreInSession might still create a new one.
+		logger.Warn("Error during gothic.Logout (session regeneration step)", "error", err)
+	} else {
+		logger.Info("Successfully logged out old session before storing new token (session fixation mitigation)")
+	}
+
+	// Store the access token in the new Gothic session
+	// Do not log the token here either
+	if err := gothic.StoreInSession("access_token", accessToken, c.Request(), c.Response()); err != nil {
+		// This error is more critical now, as it means we couldn't establish the new session
+		logger.Error("Failed to store access token in new session after logout/regeneration", "error", err)
+		return c.String(http.StatusInternalServerError, "Session error during login. Please try again.")
+	} else {
+		logger.Info("Successfully stored access token in new session")
+	}
+
+	// Validate the redirect path
+	safeRedirect := "/" // Default redirect
+	if redirect != "" {
+		// Replace ALL backslashes with forward slashes for robust normalization
+		cleanedRedirect := strings.ReplaceAll(redirect, "\\", "/")
+		parsedURL, err := url.Parse(cleanedRedirect)
+
+		// Validate: No error, No scheme, No host, Path starts with '/', Path does NOT start with '//' or '/\'
+		if err == nil && parsedURL.Scheme == "" && parsedURL.Host == "" &&
+			strings.HasPrefix(parsedURL.Path, "/") &&
+			!(len(parsedURL.Path) > 1 && (parsedURL.Path[1] == '/' || parsedURL.Path[1] == '\\')) {
+
+			// Additional check for CR/LF injection characters in path and query
+			pathContainsCRLF := strings.ContainsAny(parsedURL.Path, "\r\n") || strings.Contains(strings.ToLower(parsedURL.Path), "%0d") || strings.Contains(strings.ToLower(parsedURL.Path), "%0a")
+			queryContainsCRLF := strings.ContainsAny(parsedURL.RawQuery, "\r\n") || strings.Contains(strings.ToLower(parsedURL.RawQuery), "%0d") || strings.Contains(strings.ToLower(parsedURL.RawQuery), "%0a")
+
+			if pathContainsCRLF || queryContainsCRLF {
+				logger.Warn("Invalid redirect path provided (contains CR/LF characters), using default", "provided_redirect", redirect, "path", parsedURL.Path, "query", parsedURL.RawQuery, "default_redirect", safeRedirect)
+				// Keep safeRedirect = "/"
+			} else {
+				// Passed all checks, construct safe redirect preserving path and query
+				safeRedirect = parsedURL.Path
+				if parsedURL.RawQuery != "" {
+					safeRedirect += "?" + parsedURL.RawQuery
+				}
+				logger.Debug("Validated redirect path and query", "safe_redirect", safeRedirect)
+			}
+		} else {
+			// Log the reason for rejection if parsing failed or initial validation checks failed
+			if err != nil {
+				logger.Warn("Invalid redirect path provided (parse error), using default", "provided_redirect", redirect, "error", err, "default_redirect", safeRedirect)
+			} else {
+				logger.Warn("Invalid or unsafe redirect path provided (validation failed), using default", "provided_redirect", redirect, "parsed_scheme", parsedURL.Scheme, "parsed_host", parsedURL.Host, "parsed_path", parsedURL.Path, "default_redirect", safeRedirect)
+			}
+		}
+	} else {
+		logger.Debug("No redirect path provided, using default", "default_redirect", safeRedirect)
+	}
+
+	// Redirect the user to the final destination
+	logger.Info("Redirecting user to final destination", "destination", safeRedirect)
+	return c.Redirect(http.StatusFound, safeRedirect)
 }

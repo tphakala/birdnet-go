@@ -2,6 +2,7 @@ package security
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log"
 	"os"
@@ -14,6 +15,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
+
+// Shared context for tests in this file
+var ctx = context.Background()
 
 // TestTokenPersistence tests saving and loading of access tokens
 func TestTokenPersistence(t *testing.T) {
@@ -49,7 +53,7 @@ func TestTokenPersistence(t *testing.T) {
 	}
 
 	// Save tokens
-	err = server.saveTokens()
+	err = server.saveTokens(ctx)
 	if err != nil {
 		t.Fatalf("Failed to save tokens: %v", err)
 	}
@@ -64,7 +68,7 @@ func TestTokenPersistence(t *testing.T) {
 	}
 
 	// Load tokens
-	err = newServer.loadTokens()
+	err = newServer.loadTokens(ctx)
 	if err != nil {
 		t.Fatalf("Failed to load tokens: %v", err)
 	}
@@ -277,7 +281,7 @@ func TestLoadCorruptedTokensFile(t *testing.T) {
 	}
 
 	// Should handle error gracefully
-	err = server.loadTokens()
+	err = server.loadTokens(ctx)
 	assert.Error(t, err, "Loading corrupted file should return error")
 	assert.Contains(t, err.Error(), "failed to parse token file")
 }
@@ -323,7 +327,7 @@ func TestUnwritableTokensDirectory(t *testing.T) {
 	}
 
 	// Should handle error gracefully
-	err = server.saveTokens()
+	err = server.saveTokens(ctx)
 	assert.Error(t, err, "Saving tokens to unwritable directory should return error")
 	assert.Contains(t, err.Error(), "failed to write tokens file")
 }
@@ -351,7 +355,7 @@ func TestAtomicTokenSaving(t *testing.T) {
 	}
 
 	// Save tokens
-	err := server.saveTokens()
+	err := server.saveTokens(ctx)
 	assert.NoError(t, err, "Should save tokens without errors")
 
 	// Verify the main file exists
