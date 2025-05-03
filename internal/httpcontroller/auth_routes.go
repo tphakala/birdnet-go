@@ -60,12 +60,7 @@ func handleGothCallback(c echo.Context) error {
 	// Complete authentication with the provider
 	user, err := gothic.CompleteUserAuth(response, request)
 	if err != nil {
-		// Log the error using the server's logger if available
-		if srv := c.Get("server"); srv != nil {
-			if server, ok := srv.(*Server); ok {
-				server.LogError(c, err, "Social authentication failed during CompleteUserAuth")
-			}
-		}
+		logCompleteUserAuthError(c, err)
 		// Use echo.NewHTTPError for consistent error handling
 		return echo.NewHTTPError(http.StatusBadRequest, "Authentication failed: "+err.Error())
 	}
@@ -207,6 +202,19 @@ func handleGothCallback(c echo.Context) error {
 	}
 
 	return c.Redirect(http.StatusTemporaryRedirect, redirectURL)
+}
+
+// logCompleteUserAuthError is a helper to log errors from gothic.CompleteUserAuth
+func logCompleteUserAuthError(c echo.Context, authErr error) {
+	// Try to get the server's structured logger
+	if srv := c.Get("server"); srv != nil {
+		if server, ok := srv.(*Server); ok && server.webLogger != nil {
+			server.LogError(c, authErr, "Social authentication failed during CompleteUserAuth")
+			return // Logged with structured logger
+		}
+	}
+	// Fallback to standard logger if server logger is unavailable
+	log.Printf("ERROR: [Social Login - %s] Failed during CompleteUserAuth: %v", c.Param("provider"), authErr)
 }
 
 // handleLoginPage renders the login modal content
