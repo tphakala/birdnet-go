@@ -597,7 +597,6 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 	for k, v := range s.accessTokens {
 		accessTokensCopy[k] = v
 	}
-	s.mutex.RUnlock() // Release read lock before potentially long operations
 
 	// Check context before marshaling/writing
 	select {
