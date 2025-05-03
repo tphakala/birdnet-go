@@ -78,8 +78,6 @@ func NewOAuth2Server() *OAuth2Server {
 	configPaths, err := conf.GetDefaultConfigPaths()
 	if err != nil {
 		securityLogger.Warn("Failed to get config paths for token persistence, persistence disabled", "error", err)
-		// log.Printf("Warning: Failed to get config paths for token persistence: %v", err)
-		// log.Printf("Token persistence will be disabled - sessions will not survive restarts")
 	} else {
 		server.tokensFile = filepath.Join(configPaths[0], "tokens.json")
 		server.persistTokens = true
@@ -88,14 +86,12 @@ func NewOAuth2Server() *OAuth2Server {
 		// Ensure the directory exists
 		if err := os.MkdirAll(filepath.Dir(server.tokensFile), 0o755); err != nil {
 			securityLogger.Error("Failed to create directory for token persistence, persistence disabled", "path", filepath.Dir(server.tokensFile), "error", err)
-			// log.Printf("Warning: Failed to create directory for token persistence: %v", err)
 			server.persistTokens = false
 		} else {
 			// Load any existing tokens
 			if err := server.loadTokens(); err != nil {
 				// Log as Warn, as failure to load old tokens isn't fatal
 				securityLogger.Warn("Failed to load persisted tokens", "file", server.tokensFile, "error", err)
-				// log.Printf("Warning: Failed to load persisted tokens: %v", err)
 			}
 		}
 	}
@@ -122,7 +118,6 @@ func InitializeGoth(settings *conf.Settings) {
 		configPaths, err := conf.GetDefaultConfigPaths()
 		if err != nil {
 			securityLogger.Warn("Failed to get config paths for session store, using in-memory cookie store", "error", err)
-			// log.Printf("Warning: Failed to get config paths for session store: %v", err)
 			// Fallback to in-memory store if config paths can't be retrieved
 			gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
 			goto initProviders // Skip filesystem store setup
@@ -134,7 +129,6 @@ func InitializeGoth(settings *conf.Settings) {
 	// Ensure directory exists
 	if err := os.MkdirAll(sessionPath, 0o755); err != nil {
 		securityLogger.Error("Failed to create session directory, falling back to in-memory cookie store", "path", sessionPath, "error", err)
-		// log.Printf("Warning: Failed to create session directory: %v", err)
 		gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
 	} else {
 		// Create persistent session store with properly sized keys
@@ -232,7 +226,6 @@ func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 	if IsInLocalSubnet(clientIP) {
 		// For clients in the local subnet, consider them authenticated
 		logger.Info("User authenticated: request from local subnet")
-		// s.Debug("User authenticated from local subnet") // Removed old debug
 		return true
 	}
 
@@ -241,7 +234,6 @@ func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 		logger.Debug("Found access_token in session, validating...")
 		if s.ValidateAccessToken(token) {
 			logger.Info("User authenticated: valid access_token found in session")
-			// s.Debug("User was authenticated with valid access_token") // Removed old debug
 			return true
 		}
 		logger.Warn("Invalid or expired access_token found in session")
@@ -261,7 +253,6 @@ func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 			logger.Debug("Found 'google' key in session")
 			if isValidUserId(s.Settings.Security.GoogleAuth.UserId, userId) {
 				logger.Info("User authenticated: valid Google session found for allowed user ID")
-				// s.Debug("User was authenticated with valid Google user") // Removed old debug
 				return true
 			}
 			logger.Warn("Google session found, but userId does not match allowed IDs", "allowed_ids", s.Settings.Security.GoogleAuth.UserId)
@@ -272,7 +263,6 @@ func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 			logger.Debug("Found 'github' key in session")
 			if isValidUserId(s.Settings.Security.GithubAuth.UserId, userId) {
 				logger.Info("User authenticated: valid GitHub session found for allowed user ID")
-				// s.Debug("User was authenticated with valid GitHub user") // Removed old debug
 				return true
 			}
 			logger.Warn("GitHub session found, but userId does not match allowed IDs", "allowed_ids", s.Settings.Security.GithubAuth.UserId)
@@ -675,10 +665,7 @@ func (s *OAuth2Server) cleanupExpired() {
 // Deprecated: Use securityLogger.Debug directly
 func (s *OAuth2Server) Debug(format string, v ...interface{}) {
 	if s.debug {
-		// Convert to slog call - Note: This loses structured context
-		// It's better to replace calls to this with direct securityLogger.Debug calls
 		securityLogger.Debug(fmt.Sprintf(format, v...))
-		// log.Printf("[debug] "+format, v...)
 	}
 }
 
