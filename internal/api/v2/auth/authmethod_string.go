@@ -15,11 +15,12 @@ func _() {
 	_ = x[AuthMethodOAuth2-4]
 	_ = x[AuthMethodBrowserSession-5]
 	_ = x[AuthMethodAPIKey-6]
+	_ = x[AuthMethodLocalSubnet-7]
 }
 
-const _AuthMethod_name = "UnknownNoneBasicAuthTokenOAuth2BrowserSessionAPIKey"
+const _AuthMethod_name = "UnknownNoneBasicAuthTokenOAuth2BrowserSessionAPIKeyLocalSubnet"
 
-var _AuthMethod_index = [...]uint8{0, 7, 11, 20, 25, 31, 45, 51}
+var _AuthMethod_index = [...]uint8{0, 7, 11, 20, 25, 31, 45, 51, 62}
 
 func (i AuthMethod) String() string {
 	if i < 0 || i >= AuthMethod(len(_AuthMethod_index)-1) {
