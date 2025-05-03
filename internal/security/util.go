@@ -11,8 +11,9 @@ import (
 // It returns an error if the URIs do not match or if parsing fails.
 func ValidateRedirectURI(providedURIString string, expectedURI *url.URL) error {
 	if expectedURI == nil {
-		// This should ideally not happen if initialization is correct
-		return fmt.Errorf("internal error: expected redirect URI is nil")
+		// This indicates a configuration error occurred during startup where the expected
+		// URI could not be parsed. Fail validation immediately.
+		return fmt.Errorf("internal configuration error: expected redirect URI was not successfully parsed at startup")
 	}
 
 	parsedProvidedURI, err := url.Parse(providedURIString)
