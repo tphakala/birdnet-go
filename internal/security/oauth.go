@@ -313,10 +313,19 @@ func isValidUserId(configuredIds, providedId string) bool {
 		return false // Don't match empty string after trimming
 	}
 
-	// Split configured IDs and trim spaces from each
-	allowedIds := strings.Split(configuredIds, ",")
-	for _, allowedId := range allowedIds {
-		if strings.TrimSpace(allowedId) == trimmedProvidedId {
+	// Split configured IDs and trim spaces from each allowed ID once upfront
+	allowedIdsRaw := strings.Split(configuredIds, ",")
+	allowedIdsTrimmed := make([]string, 0, len(allowedIdsRaw))
+	for _, allowedId := range allowedIdsRaw {
+		trimmed := strings.TrimSpace(allowedId)
+		if trimmed != "" { // Avoid adding empty strings to the comparison list
+			allowedIdsTrimmed = append(allowedIdsTrimmed, trimmed)
+		}
+	}
+
+	// Compare the provided ID against the pre-trimmed list
+	for _, allowedId := range allowedIdsTrimmed {
+		if allowedId == trimmedProvidedId {
 			return true
 		}
 	}
