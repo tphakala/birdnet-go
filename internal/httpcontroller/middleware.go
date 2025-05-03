@@ -60,7 +60,7 @@ func (s *Server) CSRFMiddleware() echo.MiddlewareFunc {
 		TokenLength:  32,
 		ContextKey:   CSRFContextKey,
 		Skipper: func(c echo.Context) bool {
-			path := c.Path()
+			path := c.Request().URL.Path
 			// Skip CSRF for static assets and auth endpoints only
 			return strings.HasPrefix(path, "/assets/") ||
 				strings.HasPrefix(path, "/api/v1/media/") ||
@@ -201,7 +201,7 @@ func isPublicApiRoute(path string) bool {
 // AuthMiddleware checks if the user is authenticated and if the request is protected
 func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		path := c.Path()
+		path := c.Request().URL.Path
 
 		// Skip check for non-protected routes
 		if !isProtectedRoute(path) {
