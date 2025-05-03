@@ -11,4 +11,4 @@ const (
 )
 
 // SubnetUsername is a placeholder username for requests authenticated via subnet bypass.
-const SubnetUsername = "<subnet>"
+const SubnetUsername = "subnet-bypass"
