@@ -323,9 +323,9 @@ func isValidUserId(configuredIds, providedId string) bool {
 		}
 	}
 
-	// Compare the provided ID against the pre-trimmed list
+	// Compare the provided ID against the pre-trimmed list using case-insensitive comparison
 	for _, allowedId := range allowedIdsTrimmed {
-		if allowedId == trimmedProvidedId {
+		if strings.EqualFold(allowedId, trimmedProvidedId) {
 			return true
 		}
 	}
