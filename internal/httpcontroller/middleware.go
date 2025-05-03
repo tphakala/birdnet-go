@@ -212,10 +212,13 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return next(c)
 		}
 
+		// Get client IP once to avoid redundant calls
+		clientIPString := s.RealIP(c)
+
 		// Check if authentication is required for this IP
-		if s.OAuth2Server != nil && s.OAuth2Server.IsAuthenticationEnabled(s.RealIP(c)) {
+		if s.OAuth2Server != nil && s.OAuth2Server.IsAuthenticationEnabled(clientIPString) {
 			// Check if client is in local subnet - in that case, we can bypass auth
-			clientIP := net.ParseIP(s.RealIP(c))
+			clientIP := net.ParseIP(clientIPString)
 			if security.IsInLocalSubnet(clientIP) {
 				// Local network clients can access protected API endpoints
 				// Add server to context for authorization checks
@@ -226,7 +229,7 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 
 			// Not on local subnet, check if authenticated
 			if !s.IsAccessAllowed(c) {
-				s.Debug("Client %s not authenticated, denying access to %s", s.RealIP(c), path)
+				s.Debug("Client %s not authenticated, denying access to %s", clientIPString, path)
 
 				// Handle API routes with JSON response for unauthorized errors
 				if strings.HasPrefix(path, "/api/") {
