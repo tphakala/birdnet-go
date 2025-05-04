@@ -100,24 +100,35 @@ func SetLogLevel(level slog.Level) {
 
 	log.Printf("Re-initializing MQTT logger to set level to %s", level)
 
-	// Close the existing logger first, if it's closable
-	if mqttLogCloser != nil {
-		err := mqttLogCloser()
-		if err != nil {
-			log.Printf("WARN: Failed to close existing MQTT logger: %v", err)
+	// Store the old closer to ensure it's called
+	oldCloser := mqttLogCloser
+
+	// Attempt to re-initialize the logger with the new level
+	var err error
+	var newLogger *slog.Logger
+	var newCloser func() error
+	newLogger, newCloser, err = logging.NewFileLogger(mqttLogFilePath, "mqtt", level)
+
+	// Close the old logger *after* attempting to create the new one.
+	if oldCloser != nil {
+		closeErr := oldCloser()
+		if closeErr != nil {
+			// Log this error, but don't necessarily fail the whole operation
+			log.Printf("WARN: Failed to close previous MQTT logger: %v", closeErr)
 		}
 	}
 
-	// Re-initialize the logger with the new level
-	var err error
-	mqttLogger, mqttLogCloser, err = logging.NewFileLogger(mqttLogFilePath, "mqtt", level)
+	// Handle the result of the re-initialization
 	if err != nil {
 		log.Printf("ERROR: Failed to re-initialize MQTT file logger at %s with level %s: %v. Service logging disabled.", mqttLogFilePath, level, err)
-		// Fallback to a disabled logger
+		// Fallback to a disabled logger, but keep the intended level
 		mqttLogger = slog.New(slog.NewJSONHandler(io.Discard, nil))
-		mqttLogCloser = func() error { return nil }
-		mqttLogLevel = level // Still update the intended level
+		mqttLogCloser = func() error { return nil } // No-op closer for fallback
+		mqttLogLevel = level
 	} else {
+		// Update logger and closer only on success
+		mqttLogger = newLogger
+		mqttLogCloser = newCloser
 		mqttLogLevel = level
 		mqttLogger.Info("MQTT logger re-initialized successfully", "new_level", level.String())
 	}
