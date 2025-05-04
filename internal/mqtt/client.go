@@ -88,10 +88,23 @@ func (c *client) IsDebug() bool {
 }
 
 // SetDebug updates the debug setting in a thread-safe manner.
+// NOTE: This also changes the global MQTT logger level for the entire service.
 func (c *client) SetDebug(debug bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	// Check if the value is actually changing to avoid unnecessary work
+	isChanging := c.config.Debug != debug
 	c.config.Debug = debug
+	c.mu.Unlock() // Unlock before calling SetLogLevel
+
+	if isChanging {
+		if debug {
+			mqttLogger.Debug("Client debug mode enabled, setting global MQTT log level to DEBUG")
+			SetLogLevel(slog.LevelDebug)
+		} else {
+			mqttLogger.Debug("Client debug mode disabled, setting global MQTT log level to INFO") // Log at debug level *before* changing it
+			SetLogLevel(slog.LevelInfo)
+		}
+	}
 }
 
 // Connect attempts to establish a connection to the MQTT broker.
