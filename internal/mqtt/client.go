@@ -279,6 +279,7 @@ func (c *client) Publish(ctx context.Context, topic, payload string) error {
 		return fmt.Errorf("publish error: %w", publishErr)
 	}
 
+	// Only increment success metrics if the publish call did not return an error
 	logger.Debug("Publish completed successfully")
 	c.metrics.IncrementMessagesDelivered()
 	c.metrics.ObserveMessageSize(float64(len(payload)))
