@@ -117,11 +117,21 @@ func (c *client) Connect(ctx context.Context) error {
 	c.lastConnAttempt = time.Now()
 
 	// Disconnect existing client if needed - requires lock
+	var oldClientToDisconnect mqtt.Client
 	if c.internalClient != nil && c.internalClient.IsConnected() {
-		logger.Info("Disconnecting existing client before reconnecting")
-		// Use a short timeout for this internal disconnect
-		c.internalClient.Disconnect(250)
+		logger.Info("Marking existing client for disconnection before reconnecting")
+		oldClientToDisconnect = c.internalClient // Copy pointer under lock
 	}
+	c.mu.Unlock() // Release lock BEFORE potentially blocking disconnect call
+
+	// Perform disconnection outside the lock
+	if oldClientToDisconnect != nil {
+		logger.Debug("Disconnecting old client instance", "timeout_ms", 250)
+		oldClientToDisconnect.Disconnect(250) // Use a short timeout
+	}
+
+	// --- Re-acquire lock to modify shared state ---
+	c.mu.Lock() // Re-acquire lock for client options and creation
 
 	// Create connection options - can be outside lock, but simpler here
 	opts := mqtt.NewClientOptions()
