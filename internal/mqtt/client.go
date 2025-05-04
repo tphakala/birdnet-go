@@ -114,7 +114,6 @@ func (c *client) Connect(ctx context.Context) error {
 		logger.Warn("Connection attempt too recent", "last_attempt_ago", lastAttemptAgo, "cooldown", c.config.ReconnectCooldown)
 		return fmt.Errorf("connection attempt too recent, last attempt was %v ago", lastAttemptAgo)
 	}
-	c.lastConnAttempt = time.Now()
 
 	// Disconnect existing client if needed - requires lock
 	var oldClientToDisconnect mqtt.Client
@@ -183,13 +182,22 @@ func (c *client) Connect(ctx context.Context) error {
 			// Check if context expired during DNS lookup
 			if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == context.DeadlineExceeded {
 				logger.Error("Context deadline exceeded during DNS resolution", "host", host, "error", ctx.Err())
+				c.mu.Lock()
+				c.lastConnAttempt = time.Now()
+				c.mu.Unlock()
 				return ctx.Err() // Return the original context error
 			}
 			logger.Error("Failed to resolve broker hostname", "host", host, "error", err)
 			var dnsErr *net.DNSError
 			if errors.As(err, &dnsErr) {
+				c.mu.Lock()
+				c.lastConnAttempt = time.Now()
+				c.mu.Unlock()
 				return dnsErr
 			}
+			c.mu.Lock()
+			c.lastConnAttempt = time.Now()
+			c.mu.Unlock()
 			return fmt.Errorf("failed to resolve hostname %s: %w", host, err)
 		}
 		logger.Debug("Broker hostname resolved successfully", "host", host)
@@ -204,6 +212,9 @@ func (c *client) Connect(ctx context.Context) error {
 		// Connection timed out
 		logger.Error("MQTT connection attempt timed out", "timeout", c.config.ConnectTimeout)
 		// Check if the *original* context was cancelled, potentially causing the timeout
+		c.mu.Lock()
+		c.lastConnAttempt = time.Now()
+		c.mu.Unlock()
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			logger.Error("Context was cancelled during connection attempt", "error", ctxErr)
 			return ctxErr
@@ -213,6 +224,9 @@ func (c *client) Connect(ctx context.Context) error {
 	}
 
 	// Check token for errors after waiting
+	c.mu.Lock()
+	c.lastConnAttempt = time.Now()
+	c.mu.Unlock()
 	if connectErr := token.Error(); connectErr != nil {
 		logger.Error("MQTT connection failed", "error", connectErr)
 		// Ensure metrics reflect failure if onConnect wasn't called.
