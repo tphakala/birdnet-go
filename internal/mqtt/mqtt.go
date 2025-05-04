@@ -84,7 +84,7 @@ func init() {
 	} else {
 		// mqttLogWriter = writer // No longer needed
 		// Use standard log for initial confirmation message
-		mqttLogger.Info("MQTT file logger initialised", "path", mqttLogFilePath, "level", initialLevel.String())
+		mqttLogger.Info("MQTT file logger initialised", "path", mqttLogFilePath)
 	}
 }
 
