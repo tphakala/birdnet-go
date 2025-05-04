@@ -80,18 +80,18 @@ func (c *client) SetControlChannel(ch chan string) {
 	c.controlChan = ch
 }
 
-// SetDebug atomically enables or disables the debug flag in the client's configuration.
+// IsDebug returns the current debug setting in a thread-safe manner.
+func (c *client) IsDebug() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.config.Debug
+}
+
+// SetDebug updates the debug setting in a thread-safe manner.
 func (c *client) SetDebug(debug bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.config.Debug != debug {
-		c.config.Debug = debug
-		// Note: This only changes the flag. If logging level or other
-		// behavior depends on this flag *at initialization*, changing
-		// it here might not have the desired effect without re-init.
-		// However, for the testing scenario, this is sufficient.
-		mqttLogger.Info("Debug flag toggled", "enabled", debug)
-	}
+	c.config.Debug = debug
 }
 
 // Connect attempts to establish a connection to the MQTT broker.
