@@ -240,7 +240,7 @@ func Trace(msg string, args ...any) {
 // to the specified file path using lumberjack for rotation based on global config.
 // It includes a 'service' attribute in all logs.
 // It returns the logger, a function to close the underlying log writer, and an error if setup fails.
-func NewFileLogger(filePath, serviceName string, level slog.Level) (*slog.Logger, func() error, error) {
+func NewFileLogger(filePath, serviceName string, levelVar *slog.LevelVar) (*slog.Logger, func() error, error) {
 	// Ensure the directory exists (lumberjack doesn't create directories)
 	logDir := filepath.Dir(filePath)
 	if logDir != "." { // Avoid trying to create the current directory if filePath is just a filename
@@ -249,22 +249,21 @@ func NewFileLogger(filePath, serviceName string, level slog.Level) (*slog.Logger
 		}
 	}
 
-	// Fetch main log configuration for rotation settings
+	// Configure lumberjack logger based on global config settings
 	// Using Main.Log settings as the default for all file loggers created via this func
 	mainLogConf := conf.Setting().Main.Log
 
-	// Configure lumberjack based on config
-	logWriter := &lumberjack.Logger{
+	lj := &lumberjack.Logger{
 		Filename: filePath,
-		Compress: false, // Compression can be added to LogConfig if needed later
+		Compress: false, // Compression can be added later if needed
 	}
 
-	// Default values, overridden by config below
+	// Apply rotation settings from config
+	// Default values
 	maxSizeMB := 100
 	maxBackups := 3
 	maxAge := 28 // days
 
-	// Apply rotation settings from config
 	configMaxSizeMB := int(mainLogConf.MaxSize / (1024 * 1024))
 	if configMaxSizeMB > 0 {
 		maxSizeMB = configMaxSizeMB
@@ -273,31 +272,29 @@ func NewFileLogger(filePath, serviceName string, level slog.Level) (*slog.Logger
 	switch mainLogConf.Rotation {
 	case conf.RotationDaily:
 		maxAge = 1
-		maxBackups = 30 // Keep up to 30 daily log files
+		maxBackups = 30
 	case conf.RotationWeekly:
 		maxAge = 7
-		maxBackups = 4 // Keep up to 4 weekly log files
+		maxBackups = 4
 	case conf.RotationSize:
-		// Use maxSizeMB derived from config (or default if config value was invalid)
-		// Use default maxAge and maxBackups unless overridden by future config options
+		// Size-based rotation uses maxSizeMB derived from config (or default)
 	default:
-		// Unknown rotation type, use defaults for size-based rotation
 		slog.Warn("Unknown log rotation type in config, using size-based defaults", "configuredType", mainLogConf.Rotation)
 	}
 
-	logWriter.MaxSize = maxSizeMB
-	logWriter.MaxBackups = maxBackups
-	logWriter.MaxAge = maxAge
+	lj.MaxSize = maxSizeMB
+	lj.MaxBackups = maxBackups
+	lj.MaxAge = maxAge
 
-	// Create a handler writing to the lumberjack writer
-	fileHandler := slog.NewJSONHandler(logWriter, &slog.HandlerOptions{
-		Level:       level,
+	// Create the slog handler using the lumberjack writer
+	handler := slog.NewJSONHandler(lj, &slog.HandlerOptions{
+		AddSource:   false, // Keep this false unless specifically needed for debugging
+		Level:       levelVar,
 		ReplaceAttr: defaultReplaceAttr,
-		// AddSource: true, // Optional: Uncomment to include source file/line
 	})
 
 	// Create the logger and add the service attribute
-	logger := slog.New(fileHandler).With("service", serviceName)
+	logger := slog.New(handler).With("service", serviceName)
 
 	// Return the logger and the lumberjack closer function
 	// Note: lumberjack.Logger.Close() doesn't actually close the file handle
@@ -305,7 +302,7 @@ func NewFileLogger(filePath, serviceName string, level slog.Level) (*slog.Logger
 	// to its internal state if needed. The actual file handle management
 	// happens internally based on rotation.
 	closeFunc := func() error {
-		return logWriter.Close() // Call lumberjack's Close method
+		return lj.Close() // Call lumberjack's Close method
 	}
 
 	return logger, closeFunc, nil
