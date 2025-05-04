@@ -30,23 +30,27 @@ import (
 
 // Package-level logger specific to birdweather service
 var (
-	serviceLogger *slog.Logger
-	closeLogger   func() error
+	serviceLogger   *slog.Logger
+	serviceLevelVar = new(slog.LevelVar) // Dynamic level control
+	closeLogger     func() error
 )
 
 func init() {
 	var err error
 	// Define log file path relative to working directory
 	logFilePath := filepath.Join("logs", "birdweather.log")
+	initialLevel := slog.LevelDebug // Set desired initial level
+	serviceLevelVar.Set(initialLevel)
 
 	// Initialize the service-specific file logger
 	// Using Debug level for file logging to capture more detail
-	serviceLogger, closeLogger, err = logging.NewFileLogger(logFilePath, "birdweather", slog.LevelDebug)
+	serviceLogger, closeLogger, err = logging.NewFileLogger(logFilePath, "birdweather", serviceLevelVar)
 	if err != nil {
 		// Fallback: Log error to standard log and potentially disable service logging
 		log.Printf("FATAL: Failed to initialize birdweather file logger at %s: %v. Service logging disabled.", logFilePath, err)
-		// Set logger to a disabled handler to prevent nil panics
-		serviceLogger = slog.New(slog.NewJSONHandler(io.Discard, nil))
+		// Set logger to a disabled handler to prevent nil panics, but respects level var
+		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: serviceLevelVar})
+		serviceLogger = slog.New(fbHandler).With("service", "birdweather")
 		closeLogger = func() error { return nil } // No-op closer
 		// Consider whether to panic or continue without file logging
 		// panic(fmt.Sprintf("Failed to initialize birdweather file logger: %v", err))

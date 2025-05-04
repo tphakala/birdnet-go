@@ -81,9 +81,8 @@ func init() {
 		// mqttLogWriter = io.Discard // No longer needed
 		mqttLogCloser = func() error { return nil } // No-op closer for fallback
 	} else {
-		// mqttLogWriter = writer // No longer needed
-		// Use standard log for initial confirmation message (now uses slog)
-		mqttLogger.Info("MQTT file logger initialised", "path", mqttLogFilePath, "level", initialLevel.String())
+		// Use standard log for initial confirmation message
+		mqttLogger.Info("MQTT file logger initialised", "path", mqttLogFilePath)
 	}
 }
 
@@ -91,11 +90,9 @@ func init() {
 func SetLogLevel(level slog.Level) {
 	oldLevel := mqttLevelVar.Level()
 	if level == oldLevel {
-		mqttLogger.Debug("MQTT logger level already set", "level", level.String())
 		return
 	}
 
-	mqttLogger.Info("Setting MQTT logger level", "old_level", oldLevel.String(), "new_level", level.String())
 	mqttLevelVar.Set(level)
 }
 
