@@ -139,7 +139,7 @@ func DefaultConfig() Config {
 		ReconnectCooldown: 5 * time.Second,
 		ReconnectDelay:    1 * time.Second,
 		ConnectTimeout:    30 * time.Second,
-		ReconnectTimeout:  5 * time.Second, // Note: ReconnectTimeout seems unused, ConnectTimeout is used for reconnects
+		ReconnectTimeout:  5 * time.Second,
 		PublishTimeout:    10 * time.Second,
 		DisconnectTimeout: 250 * time.Millisecond,
 	}

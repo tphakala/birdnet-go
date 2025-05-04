@@ -277,12 +277,16 @@ func (c *client) testPublishStage(ctx context.Context) TestResult {
 
 // TestConnection performs a multi-stage test of the MQTT connection and functionality
 func (c *client) TestConnection(ctx context.Context, resultChan chan<- TestResult) {
-	// Force debug logging during the test, restoring original value afterwards
+	// Force debug logging during the test using the thread-safe method
+	// Need to read the original value safely first.
+	// Temporarily acquire read lock to get original value. Not ideal, but safer than direct read.
+	// A GetDebug() method would be cleaner if needed elsewhere.
+	c.mu.RLock()
 	originalDebug := c.config.Debug
-	c.config.Debug = true
-	defer func() {
-		c.config.Debug = originalDebug
-	}()
+	c.mu.RUnlock()
+
+	c.SetDebug(true)                // Enable debug via the thread-safe method
+	defer c.SetDebug(originalDebug) // Restore original value via the thread-safe method
 
 	// Helper function to send a result
 	sendResult := func(result TestResult) {
