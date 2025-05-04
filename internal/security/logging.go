@@ -12,20 +12,24 @@ import (
 // Package-level logger for security related events
 var (
 	securityLogger    *slog.Logger
-	securityLogCloser func() error // Stores the closer function
+	securityLogCloser func() error         // Stores the closer function
+	securityLevelVar  = new(slog.LevelVar) // Dynamic level control
 )
 
 func init() {
 	var err error
 	logFilePath := filepath.Join("logs", "security.log") // Use filepath.Join
 
+	initialLevel := slog.LevelInfo
+	securityLevelVar.Set(initialLevel)
+
 	// Initialize the service-specific file logger, capturing the closer
-	securityLogger, securityLogCloser, err = logging.NewFileLogger(logFilePath, "security", slog.LevelInfo)
+	securityLogger, securityLogCloser, err = logging.NewFileLogger(logFilePath, "security", securityLevelVar)
 	if err != nil {
 		// Use standard log for this critical setup error
 		log.Printf("ERROR: Failed to initialize security file logger at %s: %v. Service logging disabled.", logFilePath, err)
 		// Fallback to a disabled logger to prevent nil panics
-		securityLogger = slog.New(slog.NewJSONHandler(io.Discard, nil))
+		securityLogger = slog.New(slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: securityLevelVar}))
 		securityLogCloser = func() error { return nil } // No-op closer for fallback
 	} else {
 		// Use standard log for initial confirmation message

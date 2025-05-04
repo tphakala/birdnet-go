@@ -2,6 +2,7 @@ package weather
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"time"
 
@@ -12,22 +13,29 @@ import (
 
 // Package-level logger for weather service
 var (
-	weatherLogger *slog.Logger
+	weatherLogger   *slog.Logger
+	weatherLevelVar = new(slog.LevelVar) // Dynamic level control
 	// weatherLogCloser func() error // Closer function for the file logger
 	// TODO: Call weatherLogCloser during graceful shutdown
 )
 
 func init() {
 	var err error
+	initialLevel := slog.LevelDebug // Set desired initial level here
+	weatherLevelVar.Set(initialLevel)
+
 	// Default level is Info, adjust if needed or read from config
-	weatherLogger, _, err = logging.NewFileLogger("logs/weather.log", "weather", slog.LevelDebug)
+	weatherLogger, _, err = logging.NewFileLogger("logs/weather.log", "weather", weatherLevelVar)
 	if err != nil {
 		// Fallback or handle error appropriately
 		// Using the global logger for this critical setup error
 		logging.Error("Failed to initialize weather file logger", "error", err)
-		// Fallback to the default structured logger if file logger fails
-		weatherLogger = logging.Structured().With("service", "weather")
-		if weatherLogger == nil {
+		// Fallback to a disabled logger (writes to io.Discard) but respects the level var
+		logging.Warn("Weather service falling back to a disabled logger due to initialization error.")
+		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: weatherLevelVar})
+		weatherLogger = slog.New(fbHandler).With("service", "weather")
+
+		if weatherLogger == nil { // This check is likely redundant now, but harmless
 			// If even the default logger isn't initialized, panic is reasonable
 			// as logging is fundamental.
 			panic(fmt.Sprintf("Failed to initialize any logger for weather service: %v", err))

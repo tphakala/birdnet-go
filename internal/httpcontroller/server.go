@@ -231,10 +231,18 @@ func (s *Server) initLogger() {
 
 	// Initialize structured logger for web requests (using slog)
 	webLogPath := "logs/web.log"
-	webLogger, closeFunc, err := logging.NewFileLogger(webLogPath, "web", slog.LevelInfo)
+	webLevelVar := new(slog.LevelVar) // Create LevelVar
+	initialLevel := slog.LevelInfo    // Set desired initial level
+	webLevelVar.Set(initialLevel)
+
+	webLogger, closeFunc, err := logging.NewFileLogger(webLogPath, "web", webLevelVar)
 	if err != nil {
 		log.Printf("Warning: Failed to initialize web structured logger: %v", err)
-		// Continue without structured logging rather than failing completely
+		// Fallback to a disabled logger (writes to io.Discard) but respects the level var
+		log.Printf("Web server falling back to a disabled logger due to initialization error.")
+		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: webLevelVar})
+		s.webLogger = slog.New(fbHandler).With("service", "web") // Assign to s.webLogger
+		s.webLoggerClose = func() error { return nil }           // Provide a no-op closer for fallback
 	} else {
 		s.webLogger = webLogger
 		s.webLoggerClose = closeFunc
