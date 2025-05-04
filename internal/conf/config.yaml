@@ -108,6 +108,7 @@ realtime:
 
   mqtt:
     enabled: false        # true to enable MQTT
+    debug: false          # true to enable MQTT debug
     broker: tcp://localhost:1883 # MQTT (tcp://host:port)
     topic: birdnet        # MQTT topic
     username: birdnet     # MQTT username

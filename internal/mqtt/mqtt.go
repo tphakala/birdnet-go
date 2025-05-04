@@ -40,6 +40,7 @@ type Client interface {
 // Config holds the configuration for the MQTT client.
 type Config struct {
 	Broker            string
+	Debug             bool
 	ClientID          string
 	Username          string
 	Password          string
@@ -56,26 +57,43 @@ type Config struct {
 
 // Package-level logger for MQTT related events
 var (
-	mqttLogger    *slog.Logger
-	mqttLogCloser func() error // Stores the closer function
+	mqttLogger *slog.Logger
+	// mqttLogWriter   io.Writer     // No longer needed directly
+	mqttLogCloser   func() error         // Stores the closer function
+	mqttLogFilePath string               // Stores the log file path
+	mqttLevelVar    = new(slog.LevelVar) // Dynamic level control
+	// mqttLogMutex    sync.RWMutex // No longer needed for level changes
 )
 
 func init() {
-	var err error
-	logFilePath := filepath.Join("logs", "mqtt.log") // Use filepath.Join for safety
+	mqttLogFilePath = filepath.Join("logs", "mqtt.log") // Use filepath.Join for safety
+	initialLevel := slog.LevelInfo                      // Default level
+	mqttLevelVar.Set(initialLevel)                      // Set initial level
 
-	// Initialize the service-specific file logger
-	mqttLogger, mqttLogCloser, err = logging.NewFileLogger(logFilePath, "mqtt", slog.LevelInfo) // Capture the closer
+	var err error
+	// Initialize the service-specific file logger using the LevelVar
+	mqttLogger, mqttLogCloser, err = logging.NewFileLogger(mqttLogFilePath, "mqtt", mqttLevelVar)
 	if err != nil {
 		// Use standard log for this critical setup error, as logging might not be fully functional
-		log.Printf("ERROR: Failed to initialize MQTT file logger at %s: %v. Service logging disabled.", logFilePath, err)
+		log.Printf("ERROR: Failed to initialize MQTT file logger at %s: %v. Service logging disabled.", mqttLogFilePath, err)
 		// Fallback to a disabled logger to prevent nil panics
-		mqttLogger = slog.New(slog.NewJSONHandler(io.Discard, nil))
+		mqttLogger = slog.New(slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: mqttLevelVar}))
+		// mqttLogWriter = io.Discard // No longer needed
 		mqttLogCloser = func() error { return nil } // No-op closer for fallback
 	} else {
 		// Use standard log for initial confirmation message
-		log.Printf("MQTT file logger initialized successfully to %s", logFilePath)
+		mqttLogger.Info("MQTT file logger initialised", "path", mqttLogFilePath)
 	}
+}
+
+// SetLogLevel dynamically changes the logging level for the MQTT logger.
+func SetLogLevel(level slog.Level) {
+	oldLevel := mqttLevelVar.Level()
+	if level == oldLevel {
+		return
+	}
+
+	mqttLevelVar.Set(level)
 }
 
 // CloseLogger closes the MQTT-specific file logger, if one was successfully initialized.

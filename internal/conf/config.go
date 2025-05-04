@@ -150,6 +150,7 @@ type RTSPSettings struct {
 // MQTTSettings contains settings for MQTT integration.
 type MQTTSettings struct {
 	Enabled       bool          // true to enable MQTT
+	Debug         bool          // true to enable MQTT debug
 	Broker        string        // MQTT broker URL
 	Topic         string        // MQTT topic
 	Username      string        // MQTT username
