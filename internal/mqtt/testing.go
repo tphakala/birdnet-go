@@ -146,7 +146,7 @@ const (
 	dnsTimeout  = 5 * time.Second
 	tcpTimeout  = 5 * time.Second
 	mqttTimeout = 10 * time.Second
-	pubTimeout  = 5 * time.Second
+	pubTimeout  = 12 * time.Second
 )
 
 // networkTest represents a generic network test function
@@ -277,6 +277,13 @@ func (c *client) testPublishStage(ctx context.Context) TestResult {
 
 // TestConnection performs a multi-stage test of the MQTT connection and functionality
 func (c *client) TestConnection(ctx context.Context, resultChan chan<- TestResult) {
+	// Force debug logging during the test, restoring original value afterwards
+	originalDebug := c.config.Debug
+	c.config.Debug = true
+	defer func() {
+		c.config.Debug = originalDebug
+	}()
+
 	// Helper function to send a result
 	sendResult := func(result TestResult) {
 		// Mark progress messages
