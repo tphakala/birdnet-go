@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -48,6 +49,7 @@ type Controller struct {
 	startTime           *time.Time
 	SFS                 *securefs.SecureFS // Add SecureFS instance
 	apiLogger           *slog.Logger       // Structured logger for API operations
+	apiLevelVar         *slog.LevelVar     // Dynamic level control (type declaration)
 	apiLoggerClose      func() error       // Function to close the log file
 
 	// Auth related fields
@@ -220,10 +222,18 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 
 	// Initialize structured logger for API requests
 	apiLogPath := "logs/web.log"
-	apiLogger, closeFunc, err := logging.NewFileLogger(apiLogPath, "api", slog.LevelInfo)
+	initialLevel := slog.LevelInfo
+	c.apiLevelVar = new(slog.LevelVar) // Initialize here
+	c.apiLevelVar.Set(initialLevel)
+
+	apiLogger, closeFunc, err := logging.NewFileLogger(apiLogPath, "api", c.apiLevelVar)
 	if err != nil {
 		logger.Printf("Warning: Failed to initialize API structured logger: %v", err)
-		// Continue without structured logging rather than failing completely
+		// Fallback to a disabled logger (writes to io.Discard) but respects the level var
+		logger.Printf("API falling back to a disabled logger due to initialization error.")
+		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: c.apiLevelVar})
+		c.apiLogger = slog.New(fbHandler).With("service", "api")
+		c.apiLoggerClose = func() error { return nil } // No-op closer
 	} else {
 		c.apiLogger = apiLogger
 		c.apiLoggerClose = closeFunc

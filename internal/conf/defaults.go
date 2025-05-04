@@ -138,6 +138,7 @@ func setDefaultConfig() {
 
 	// MQTT configuration
 	viper.SetDefault("realtime.mqtt.enabled", false)
+	viper.SetDefault("realtime.mqtt.debug", false)
 	viper.SetDefault("realtime.mqtt.broker", "tcp://localhost:1883")
 	viper.SetDefault("realtime.mqtt.topic", "birdnet")
 	viper.SetDefault("realtime.mqtt.username", "")

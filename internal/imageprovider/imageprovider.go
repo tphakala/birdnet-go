@@ -4,6 +4,7 @@ package imageprovider
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"sync"
@@ -53,23 +54,29 @@ type BirdImageCache struct {
 
 // Package-level logger for image provider related events
 var (
-	imageProviderLogger *slog.Logger
+	imageProviderLogger   *slog.Logger
+	imageProviderLevelVar = new(slog.LevelVar) // Dynamic level control
 	// imageProviderLogCloser func() error // Optional closer func
 	// TODO: Call imageProviderLogCloser during graceful shutdown if needed
 )
 
 func init() {
 	var err error
+	initialLevel := slog.LevelInfo // Set desired initial level
+	imageProviderLevelVar.Set(initialLevel)
+
 	// Default level is Info. Set to Debug for more detailed cache/provider info.
-	imageProviderLogger, _, err = logging.NewFileLogger("logs/imageprovider.log", "imageprovider", slog.LevelInfo)
+	imageProviderLogger, _, err = logging.NewFileLogger("logs/imageprovider.log", "imageprovider", imageProviderLevelVar)
 	if err != nil {
 		logging.Error("Failed to initialize imageprovider file logger", "error", err)
-		// Fallback to the default structured logger
-		imageProviderLogger = logging.Structured().With("service", "imageprovider")
-		if imageProviderLogger == nil {
+		// Fallback to a disabled logger (writes to io.Discard) but respects the level var
+		logging.Warn("Imageprovider service falling back to a disabled logger due to initialization error.")
+		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: imageProviderLevelVar})
+		imageProviderLogger = slog.New(fbHandler).With("service", "imageprovider")
+
+		if imageProviderLogger == nil { // This check is likely redundant now, but harmless
 			panic(fmt.Sprintf("Failed to initialize any logger for imageprovider service: %v", err))
 		}
-		logging.Warn("Imageprovider service falling back to default logger due to file logger initialization error.")
 	} else {
 		logging.Info("Imageprovider file logger initialized successfully", "path", "logs/imageprovider.log")
 	}
