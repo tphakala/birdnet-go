@@ -334,7 +334,7 @@ Source: MIT
 
 ### go.uber.org/mock/gomock
 
-License: https://github.com/uber/mock/blob/v0.5.1/LICENSE
+License: https://github.com/uber/mock/blob/v0.5.2/LICENSE
 Source: Apache-2.0
 
 ### golang.org/x/crypto/acme
@@ -352,7 +352,7 @@ Source: BSD-3-Clause
 License: https://cs.opensource.google/go/x/oauth2/+/v0.29.0:LICENSE
 Source: BSD-3-Clause
 
-### golang.org/x/sync/semaphore
+### golang.org/x/sync
 
 License: https://cs.opensource.google/go/x/sync/+/v0.13.0:LICENSE
 Source: BSD-3-Clause
@@ -381,6 +381,11 @@ Source: BSD-3-Clause
 
 License: https://github.com/protocolbuffers/protobuf-go/blob/v1.36.6/LICENSE
 Source: BSD-3-Clause
+
+### gopkg.in/natefinch/lumberjack.v2
+
+License: https://github.com/natefinch/lumberjack/blob/v2.2.1/LICENSE
+Source: MIT
 
 ### gopkg.in/yaml.v3
 
