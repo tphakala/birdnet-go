@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -30,7 +31,7 @@ func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 	filePattern := fmt.Sprintf("%s_Labels_%s.txt", BirdNET_GLOBAL_6K_V2_4, normalizedLocale)
 
 	// Try to find the exact match
-	data, err := v24LabelFiles.ReadFile(filepath.Join("data", "labels", "V2.4", filePattern))
+	data, err := v24LabelFiles.ReadFile(path.Join("data", "labels", "V2.4", filePattern))
 	if err == nil {
 		return data, nil
 	}
@@ -43,7 +44,7 @@ func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 			altLocale = altLocale[:3] + strings.ToUpper(altLocale[3:])
 		}
 		filePattern = fmt.Sprintf("%s_Labels_%s.txt", BirdNET_GLOBAL_6K_V2_4, altLocale)
-		data, err = v24LabelFiles.ReadFile(filepath.Join("data", "labels", "V2.4", filePattern))
+		data, err = v24LabelFiles.ReadFile(path.Join("data", "labels", "V2.4", filePattern))
 		if err == nil {
 			return data, nil
 		}
@@ -52,7 +53,7 @@ func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 	// Fall back to English if requested locale isn't found
 	if normalizedLocale != "en" && normalizedLocale != "en-uk" {
 		filePattern = fmt.Sprintf("%s_Labels_en_uk.txt", BirdNET_GLOBAL_6K_V2_4)
-		data, err = v24LabelFiles.ReadFile(filepath.Join("data", "labels", "V2.4", filePattern))
+		data, err = v24LabelFiles.ReadFile(path.Join("data", "labels", "V2.4", filePattern))
 		if err == nil {
 			return data, nil
 		}
