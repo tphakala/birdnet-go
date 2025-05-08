@@ -166,6 +166,11 @@ func validateSecuritySettings(settings *Security) error {
 		}
 	}
 
+	// Validate session duration
+	if settings.SessionDuration <= 0 {
+		return fmt.Errorf("security.sessionduration must be a positive duration")
+	}
+
 	return nil
 }
 

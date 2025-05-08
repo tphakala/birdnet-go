@@ -291,6 +291,7 @@ type Security struct {
 	GoogleAuth        SocialProvider    // Google OAuth2 configuration
 	GithubAuth        SocialProvider    // Github OAuth2 configuration
 	SessionSecret     string            // secret for session cookie
+	SessionDuration   time.Duration     // duration for browser session cookies
 }
 
 type WebServerSettings struct {
