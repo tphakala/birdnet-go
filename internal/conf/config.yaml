@@ -139,14 +139,6 @@ realtime:
     include: []           # Always include these species regardless of confidence
     exclude: []           # Always exclude these species regardless of confidence
     config:
-      # Example configuration for a specific species
-      "eurasian blackbird":
-        threshold: 0.6    # Custom confidence threshold for this species
-        actions:
-          - type: ExecuteCommand
-            command: "/path/to/script.sh"
-            parameters: ["commonName", "confidence", "scientificName"]
-            executeDefaults: true  # Set to true to also execute default actions
 
 webserver:
   enabled: true           # true to enable web server
