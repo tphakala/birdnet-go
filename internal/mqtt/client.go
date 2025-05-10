@@ -250,13 +250,19 @@ func (c *client) Connect(ctx context.Context) error {
 	case <-time.After(c.config.ConnectTimeout + 500*time.Millisecond): // Add a small grace period over Paho's configured timeout
 		connectErr = fmt.Errorf("mqtt connection attempt actively timed out by client wrapper after %v", c.config.ConnectTimeout+500*time.Millisecond)
 		logger.Error("MQTT connection attempt timed out by client.go select", "timeout", c.config.ConnectTimeout+500*time.Millisecond)
-		// Note: The goroutine waiting on token.WaitTimeout might still be running.
-		// Paho client's Disconnect might be needed if we want to aggressively stop its attempts.
-		// However, simply returning an error and letting Paho's internal state resolve is usually acceptable.
+		// Cancel the connection attempt to prevent the goroutine from leaking
+		if clientToConnect != nil {
+			logger.Debug("Calling Disconnect(0) to cancel connection attempt and prevent goroutine leak")
+			clientToConnect.Disconnect(0) // Use 0 for immediate disconnection
+		}
 	case <-ctx.Done():
 		connectErr = ctx.Err()
 		logger.Error("Context cancelled during MQTT connection wait", "error", connectErr)
-		// Similar to above, Paho's internal connection attempt might still be in progress.
+		// Cancel the connection attempt to prevent the goroutine from leaking
+		if clientToConnect != nil {
+			logger.Debug("Calling Disconnect(0) to cancel connection attempt and prevent goroutine leak")
+			clientToConnect.Disconnect(0) // Use 0 for immediate disconnection
+		}
 	}
 
 	c.mu.Lock()
