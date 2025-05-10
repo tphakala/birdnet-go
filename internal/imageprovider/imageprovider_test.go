@@ -658,26 +658,30 @@ func TestInitializationTimeout(t *testing.T) {
 	// Wait a moment for the first request to start
 	time.Sleep(100 * time.Millisecond)
 
-	// Try to get the same species - should timeout and proceed with new fetch
+	// Try to get the same species - should effectively wait for the ongoing fetch
 	start := time.Now()
-	cache.Get("Turdus merula")
+	_, err = cache.Get("Turdus merula") // Second Get call
+	if err != nil {
+		t.Fatalf("Second cache.Get failed: %v", err)
+	}
 	duration := time.Since(start)
 
-	// We expect:
-	// - 3 initialization attempts (300ms each)
-	// - Context timeout
-	// - Final direct fetch (2s)
-	// Plus some overhead for processing
-	maxExpectedDuration := 4*time.Second + 500*time.Millisecond
+	// The first Get call (in background) initiates one fetch.
+	// The second Get call (this one) should wait for the first to complete
+	// and use the cached result if the cache implements a wait mechanism
+	// for concurrent requests for the same key (as suggested by TestConcurrentInitialization).
+	// Thus, only one actual fetch should occur.
+
+	// Check duration: main Get should wait for approx. 1.9s for the 2s background fetch.
+	// Max expected duration can be a bit more than that for overhead.
+	maxExpectedDuration := 3 * time.Second // Adjusted based on expected wait + small overhead
 	if duration > maxExpectedDuration {
-		t.Errorf("Request waited too long: %v (max expected: %v)", duration, maxExpectedDuration)
+		t.Errorf("Request waited too long: %v (expected around ~1.9s, max set to %v)", duration, maxExpectedDuration)
 	}
 
-	// The fetch counter should be 3:
-	// 1. Initial background fetch
-	// 2. After context timeout
-	// 3. Final direct fetch
-	expectedFetches := 3
+	// The fetch counter should be 1, due to the initial background fetch.
+	// The second Get call should not trigger a new fetch if it waits for the first.
+	expectedFetches := 1 // Changed from 3
 	if mockProvider.fetchCounter != expectedFetches {
 		t.Errorf("Expected %d fetches, got %d fetches", expectedFetches, mockProvider.fetchCounter)
 	}
