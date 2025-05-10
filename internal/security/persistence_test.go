@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -75,7 +75,7 @@ func TestTokenPersistence(t *testing.T) {
 
 	// Verify only valid tokens were loaded
 	assert.NoError(t, newServer.ValidateAccessToken("valid_token"), "Valid token should be loaded and validated")
-	assert.ErrorIs(t, newServer.ValidateAccessToken("expired_token"), ErrTokenExpired, "Expired token should not be loaded or should be invalid")
+	assert.ErrorIs(t, newServer.ValidateAccessToken("expired_token"), ErrTokenNotFound, "Expired token should not be loaded, thus not found")
 
 	// Check token file contents directly
 	data, err := os.ReadFile(filepath.Join(tempDir, "tokens.json"))
@@ -195,13 +195,20 @@ func TestConfigureLocalNetworkWithUnknownStore(t *testing.T) {
 		debug: true,
 	}
 
-	// Save original log output to restore it later
-	originalOutput := log.Writer()
-	defer log.SetOutput(originalOutput)
-
-	// Capture logs to verify warning message
+	// Capture slog output
 	var logBuffer bytes.Buffer
-	log.SetOutput(&logBuffer)
+	// Store original logger and defer restoration
+	originalLogger := securityLogger // Assuming securityLogger is accessible; if not, need to use a setter or other mechanism
+	originalLevel := securityLevelVar.Level()
+
+	testHandler := slog.NewTextHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug})
+	securityLogger = slog.New(testHandler) // Temporarily replace package logger
+	securityLevelVar.Set(slog.LevelDebug)  // Ensure debug logs are captured
+
+	defer func() {
+		securityLogger = originalLogger // Restore original logger
+		securityLevelVar.Set(originalLevel)
+	}()
 
 	// Set the mock store
 	gothic.Store = &mockStore{}
@@ -211,8 +218,8 @@ func TestConfigureLocalNetworkWithUnknownStore(t *testing.T) {
 
 	// Verify that appropriate warning was logged
 	logOutput := logBuffer.String()
-	assert.Contains(t, logOutput, "Warning: Unknown session store type")
-	assert.Contains(t, logOutput, "mockStore")
+	assert.Contains(t, logOutput, "Unknown session store type")
+	assert.Contains(t, logOutput, "mockStore") // The string representation of the type might be "*security.mockStore" or similar
 }
 
 // TestConfigureLocalNetworkWithMissingSessionSecret tests handling of missing session secret
@@ -232,13 +239,19 @@ func TestConfigureLocalNetworkWithMissingSessionSecret(t *testing.T) {
 		sessions.Store
 	}
 
-	// Save original log output to restore it later
-	originalOutput := log.Writer()
-	defer log.SetOutput(originalOutput)
-
-	// Capture logs to verify warning message
+	// Capture slog output
 	var logBuffer bytes.Buffer
-	log.SetOutput(&logBuffer)
+	originalLogger := securityLogger
+	originalLevel := securityLevelVar.Level()
+
+	testHandler := slog.NewTextHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug})
+	securityLogger = slog.New(testHandler)
+	securityLevelVar.Set(slog.LevelDebug)
+
+	defer func() {
+		securityLogger = originalLogger
+		securityLevelVar.Set(originalLevel)
+	}()
 
 	// Set the mock store
 	gothic.Store = &mockStore{}
@@ -248,8 +261,10 @@ func TestConfigureLocalNetworkWithMissingSessionSecret(t *testing.T) {
 
 	// Verify that appropriate warning was logged
 	logOutput := logBuffer.String()
-	assert.Contains(t, logOutput, "Warning: Unknown session store type")
-	assert.Contains(t, logOutput, "Warning: No session secret configured")
+	// securityLogger.Warn("Unknown session store type, using default cookie store options", "store_type", fmt.Sprintf("%T", store))
+	// securityLogger.Warn("No session secret configured, using temporary value")
+	assert.Contains(t, logOutput, "Unknown session store type")
+	assert.Contains(t, logOutput, "No session secret configured")
 }
 
 // TestLoadCorruptedTokensFile tests handling of corrupted tokens file
@@ -283,7 +298,8 @@ func TestLoadCorruptedTokensFile(t *testing.T) {
 	// Should handle error gracefully
 	err = server.loadTokens(ctx)
 	assert.Error(t, err, "Loading corrupted file should return error")
-	assert.Contains(t, err.Error(), "failed to parse token file")
+	// Check for a more specific part of the error
+	assert.Contains(t, err.Error(), "failed to unmarshal token data", "Error message should indicate unmarshal failure")
 }
 
 // Let's also add a test for unwritable directories
@@ -329,7 +345,8 @@ func TestUnwritableTokensDirectory(t *testing.T) {
 	// Should handle error gracefully
 	err = server.saveTokens(ctx)
 	assert.Error(t, err, "Saving tokens to unwritable directory should return error")
-	assert.Contains(t, err.Error(), "failed to write tokens file")
+	// Check for a more specific part of the error related to file writing/renaming
+	assert.Contains(t, err.Error(), "failed to write tokens to temp file", "Error message should indicate temp file write failure or rename failure")
 }
 
 // TestAtomicTokenSaving tests that tokens are saved using atomic file operations
@@ -367,11 +384,19 @@ func TestAtomicTokenSaving(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "Temp file should not exist after successful save")
 
 	// Now test that contents are correct
-	var tokens map[string]AccessToken
+	// Define a struct to match the persisted structure
+	type StoredTokenData struct {
+		AuthCodes    map[string]AuthCode    `json:"auth_codes"`
+		AccessTokens map[string]AccessToken `json:"access_tokens"`
+	}
+	var storedData StoredTokenData
+
 	data, err := os.ReadFile(tokensFile)
 	assert.NoError(t, err, "Should be able to read token file")
 
-	err = json.Unmarshal(data, &tokens)
-	assert.NoError(t, err, "Token file should contain valid JSON")
-	assert.Contains(t, tokens, "test_token", "Tokens file should contain the test token")
+	err = json.Unmarshal(data, &storedData)
+	assert.NoError(t, err, "Token file should contain valid JSON matching StoredTokenData struct")
+	assert.NotNil(t, storedData.AccessTokens, "AccessTokens map should not be nil")
+	_, ok := storedData.AccessTokens["test_token"]
+	assert.True(t, ok, "Tokens file should contain the test_token in the access_tokens map")
 }
