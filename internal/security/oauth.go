@@ -185,6 +185,9 @@ func InitializeGoth(settings *conf.Settings) {
 		// Configure session store options
 		store := gothic.Store.(*sessions.FilesystemStore)
 		maxAge := 86400 * 7 // 7 days
+		if settings.Security.SessionDuration > 0 {
+			maxAge = int(settings.Security.SessionDuration.Seconds())
+		}
 		secureCookie := settings.Security.RedirectToHTTPS
 		store.Options = &sessions.Options{
 			Path:     "/",
