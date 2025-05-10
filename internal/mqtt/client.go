@@ -232,6 +232,7 @@ func (c *client) Connect(ctx context.Context) error {
 			// This branch is taken if Paho's ConnectTimeout expires.
 			// The select below will likely also hit its own timeout case almost simultaneously or shortly after.
 			// Error from token.Error() should reflect the Paho timeout.
+			mqttLogger.Debug("paho.token.WaitTimeout returned false, indicating its internal timeout likely expired; actual error/timeout is handled by the main select block")
 		}
 		close(opDone)
 	}()
