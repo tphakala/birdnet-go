@@ -536,18 +536,21 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get refreshed cache entry: %v", err)
 	}
+
 	if refreshed == nil {
 		t.Fatal("Refreshed image cache entry is nil")
-	} else {
-		if refreshed.CachedAt.Equal(oldEntry.CachedAt) {
-			t.Errorf("Expected CachedAt to be updated after refresh. Old: %v, New: %v",
-				oldEntry.CachedAt, refreshed.CachedAt)
-		}
+	}
 
-		if refreshed.URL == oldEntry.URL {
-			t.Errorf("Expected URL to be different after refresh. Old: %s, New: %s",
-				oldEntry.URL, refreshed.URL)
-		}
+	// Check timestamp was updated
+	if refreshed.CachedAt.Equal(oldEntry.CachedAt) {
+		t.Errorf("Expected CachedAt to be updated after refresh. Old: %v, New: %v",
+			oldEntry.CachedAt, refreshed.CachedAt)
+	}
+
+	// Check URL was changed
+	if refreshed.URL == oldEntry.URL {
+		t.Errorf("Expected URL to be different after refresh. Old: %s, New: %s",
+			oldEntry.URL, refreshed.URL)
 	}
 
 	// Clean up
@@ -673,10 +676,17 @@ func TestInitializationTimeout(t *testing.T) {
 	// Thus, only one actual fetch should occur.
 
 	// Check duration: main Get should wait for approx. 1.9s for the 2s background fetch.
-	// Max expected duration can be a bit more than that for overhead.
-	maxExpectedDuration := 3 * time.Second // Adjusted based on expected wait + small overhead
-	if duration > maxExpectedDuration {
-		t.Errorf("Request waited too long: %v (expected around ~1.9s, max set to %v)", duration, maxExpectedDuration)
+	// Set a minimum expected duration to ensure the second call actually waits for the first fetch
+	minExpectedWait := mockProvider.fetchDelay - (200 * time.Millisecond) // Allow some leeway
+	if minExpectedWait < 0 {
+		minExpectedWait = 0
+	}
+	// Max expected duration can be a bit more than fetch delay for overhead.
+	maxExpectedDuration := mockProvider.fetchDelay + (1 * time.Second)
+
+	if duration < minExpectedWait || duration > maxExpectedDuration {
+		t.Errorf("Second Get call duration outside expected range: %v, expected between %v and %v",
+			duration, minExpectedWait, maxExpectedDuration)
 	}
 
 	// The fetch counter should be 1, due to the initial background fetch.
