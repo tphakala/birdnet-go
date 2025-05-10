@@ -41,7 +41,6 @@ func TestNew(t *testing.T) {
 	if client == nil {
 		t.Fatal("New returned nil client")
 	}
-
 	// Verify client properties
 	if client.BirdweatherID != settings.Realtime.Birdweather.ID {
 		t.Errorf("Expected BirdweatherID to be %s, got %s",
@@ -65,9 +64,7 @@ func TestNew(t *testing.T) {
 
 	if client.HTTPClient == nil {
 		t.Error("HTTPClient should not be nil")
-	}
-
-	if client.HTTPClient.Timeout != 45*time.Second {
+	} else if client.HTTPClient.Timeout != 45*time.Second {
 		t.Errorf("Expected timeout to be 45s, got %v", client.HTTPClient.Timeout)
 	}
 }
