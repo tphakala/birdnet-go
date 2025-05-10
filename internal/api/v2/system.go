@@ -23,6 +23,8 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // SystemInfo represents basic system information
@@ -374,7 +376,8 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 
 	// Construct OSDisplay string
 	var osDisplay string
-	platformName := strings.Title(hostInfo.Platform) // Capitalize platform name
+	tcaser := cases.Title(language.Und, cases.NoLower)
+	platformName := tcaser.String(hostInfo.Platform)
 
 	switch runtime.GOOS {
 	case "linux":
@@ -391,7 +394,7 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 		if platformName != "" {
 			osDisplay = fmt.Sprintf("%s (%s)", platformName, runtime.GOOS)
 		} else {
-			osDisplay = strings.Title(runtime.GOOS)
+			osDisplay = tcaser.String(runtime.GOOS)
 		}
 	}
 
