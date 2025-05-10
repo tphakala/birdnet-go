@@ -220,39 +220,66 @@ func (c *client) Connect(ctx context.Context) error {
 	logger.Debug("Starting blocking connection attempt")
 	token := clientToConnect.Connect() // Use the local variable
 
-	// Wait directly on the token with timeout
-	if !token.WaitTimeout(c.config.ConnectTimeout) {
-		// Connection timed out
-		logger.Error("MQTT connection attempt timed out", "timeout", c.config.ConnectTimeout)
-		// Check if the *original* context was cancelled, potentially causing the timeout
-		c.mu.Lock()
-		c.lastConnAttempt = time.Now()
-		c.mu.Unlock()
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			logger.Error("Context was cancelled during connection attempt", "error", ctxErr)
-			return ctxErr
+	var connectErr error
+	opDone := make(chan struct{})
+
+	go func() {
+		// token.Wait() can block indefinitely if ConnectTimeout in Paho is not effective for all cases.
+		// We are primarily relying on the select below for timeout.
+		// However, WaitTimeout is still useful if Paho's timeout *is* shorter for some reason.
+		// Using WaitTimeout here also allows Paho to set its internal error state correctly on its timeout.
+		if !token.WaitTimeout(c.config.ConnectTimeout) {
+			// This branch is taken if Paho's ConnectTimeout expires.
+			// The select below will likely also hit its own timeout case almost simultaneously or shortly after.
+			// Error from token.Error() should reflect the Paho timeout.
 		}
-		// If context is okay, return a specific timeout error
-		return fmt.Errorf("connection timeout after %v", c.config.ConnectTimeout)
+		close(opDone)
+	}()
+
+	select {
+	case <-opDone:
+		connectErr = token.Error()
+		if connectErr == nil && !clientToConnect.IsConnected() {
+			// If token.Error() is nil but not connected, it implies Paho's WaitTimeout might have returned true
+			// because the "wait" finished, but the connection itself failed without an error on the token.
+			// This can happen if the timeout was very short.
+			connectErr = errors.New("mqtt connection failed post-wait, client not connected")
+			logger.Warn("Paho token wait completed but client not connected, no explicit token error.")
+		}
+	case <-time.After(c.config.ConnectTimeout + 500*time.Millisecond): // Add a small grace period over Paho's configured timeout
+		connectErr = fmt.Errorf("mqtt connection attempt actively timed out by client wrapper after %v", c.config.ConnectTimeout+500*time.Millisecond)
+		logger.Error("MQTT connection attempt timed out by client.go select", "timeout", c.config.ConnectTimeout+500*time.Millisecond)
+		// Note: The goroutine waiting on token.WaitTimeout might still be running.
+		// Paho client's Disconnect might be needed if we want to aggressively stop its attempts.
+		// However, simply returning an error and letting Paho's internal state resolve is usually acceptable.
+	case <-ctx.Done():
+		connectErr = ctx.Err()
+		logger.Error("Context cancelled during MQTT connection wait", "error", connectErr)
+		// Similar to above, Paho's internal connection attempt might still be in progress.
 	}
 
-	// Check token for errors after waiting
 	c.mu.Lock()
 	c.lastConnAttempt = time.Now()
 	c.mu.Unlock()
-	if connectErr := token.Error(); connectErr != nil {
+
+	if connectErr != nil {
 		logger.Error("MQTT connection failed", "error", connectErr)
 		// Ensure metrics reflect failure if onConnect wasn't called.
 		c.mu.Lock()
+		// Check if c.internalClient is still the one we attempted to connect.
+		// It might have been changed by a concurrent Disconnect/Connect sequence, though unlikely with current locking.
 		if c.internalClient == clientToConnect && !c.internalClient.IsConnected() {
 			c.metrics.UpdateConnectionStatus(false)
 		}
 		c.mu.Unlock()
-		return fmt.Errorf("connection failed: %w", connectErr)
+		return connectErr
 	}
 
-	// Success! onConnect handler should have been called by Paho.
-	logger.Info("Connection attempt successful (onConnect handler should confirm)")
+	// If we reach here, connectErr was nil from the select block
+	logger.Info("Successfully connected to MQTT broker")
+	// onConnect handler should be called by Paho, which updates metrics.
+	// If onConnect was somehow not called despite a successful connection,
+	// metrics might be out of sync. This state is unlikely with Paho.
 	return nil
 }
 
