@@ -33,15 +33,11 @@
                 <div x-show="!systemInfo.loading && !systemInfo.error" class="space-y-2" aria-labelledby="system-info-heading" x-cloak>
                     <div class="flex justify-between">
                         <span class="text-base-content/70">Operating System:</span>
-                        <span class="font-medium" x-text="systemInfo.data.os || 'N/A'"></span>
+                        <span class="font-medium" x-text="systemInfo.data.os_display || 'N/A'"></span>
                     </div>
                     <div class="flex justify-between">
                         <span class="text-base-content/70">Hostname:</span>
                         <span class="font-medium" x-text="systemInfo.data.hostname || 'N/A'"></span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-base-content/70">Platform:</span>
-                        <span class="font-medium" x-text="systemInfo.data.platform || 'N/A'"></span>
                     </div>
                     <div class="flex justify-between">
                         <span class="text-base-content/70">Uptime:</span>
@@ -51,14 +47,15 @@
                         <span class="text-base-content/70">CPUs:</span>
                         <span class="font-medium" x-text="systemInfo.data.num_cpu || 'N/A'"></span>
                     </div>
-                    <div class="flex justify-between">
-                        <span class="text-base-content/70">Go Version:</span>
-                        <span class="font-medium" x-text="systemInfo.data.go_version || 'N/A'"></span>
-                    </div>
                     <!-- Added CPU Model Row -->
                     <div class="flex justify-between" x-show="systemInfo.data.system_model"> 
-                        <span class="text-base-content/70">System:</span>
+                        <span class="text-base-content/70">System Model:</span>
                         <span class="font-medium" x-text="systemInfo.data.system_model || 'N/A'"></span>
+                    </div>
+                    <!-- Added Time Zone Row -->
+                    <div class="flex justify-between" x-show="systemInfo.data.time_zone"> 
+                        <span class="text-base-content/70">Time Zone:</span>
+                        <span class="font-medium" x-text="systemInfo.data.time_zone || 'N/A'"></span>
                     </div>
                 </div>
             </div>

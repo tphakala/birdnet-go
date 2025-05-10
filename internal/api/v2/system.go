@@ -27,10 +27,7 @@ import (
 
 // SystemInfo represents basic system information
 type SystemInfo struct {
-	OS            string    `json:"os"`
-	Architecture  string    `json:"architecture"`
 	Hostname      string    `json:"hostname"`
-	Platform      string    `json:"platform"`
 	PlatformVer   string    `json:"platform_version"`
 	KernelVersion string    `json:"kernel_version"`
 	UpTime        uint64    `json:"uptime_seconds"`
@@ -38,8 +35,10 @@ type SystemInfo struct {
 	AppStart      time.Time `json:"app_start_time"`
 	AppUptime     int64     `json:"app_uptime_seconds"`
 	NumCPU        int       `json:"num_cpu"`
-	GoVersion     string    `json:"go_version"`
 	SystemModel   string    `json:"system_model,omitempty"`
+	TimeZone      string    `json:"time_zone,omitempty"`
+	OSDisplay     string    `json:"os_display"`
+	Architecture  string    `json:"architecture"`
 }
 
 // ResourceInfo represents system resource usage data
@@ -353,12 +352,53 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 		}
 	}
 
+	// Get system time zone
+	loc := time.Now().Location()
+	timeZoneStr := loc.String()
+
+	if timeZoneStr == "Local" || timeZoneStr == "" {
+		// Fallback if Olson name is "Local" or empty
+		name, offset := time.Now().Zone() // Get abbreviation and offset in seconds
+		offsetHours := offset / 3600
+		offsetMinutes := (offset % 3600) / 60
+		if offsetMinutes < 0 { // Ensure minutes are positive for formatting
+			offsetMinutes = -offsetMinutes
+		}
+		// If name is "Local" or empty, just use UTC offset. Otherwise, include the name.
+		if name == "Local" || name == "" || name == "UTC" { // Also handle plain "UTC" from Zone()
+			timeZoneStr = fmt.Sprintf("UTC%+03d:%02d", offsetHours, offsetMinutes)
+		} else {
+			timeZoneStr = fmt.Sprintf("%s (UTC%+03d:%02d)", name, offsetHours, offsetMinutes)
+		}
+	}
+
+	// Construct OSDisplay string
+	var osDisplay string
+	platformName := strings.Title(hostInfo.Platform) // Capitalize platform name
+
+	switch runtime.GOOS {
+	case "linux":
+		if platformName != "" {
+			osDisplay = fmt.Sprintf("%s Linux", platformName)
+		} else {
+			osDisplay = "Linux"
+		}
+	case "windows":
+		osDisplay = "Microsoft Windows"
+	case "darwin":
+		osDisplay = "Apple macOS" // More user-friendly than Darwin
+	default:
+		if platformName != "" {
+			osDisplay = fmt.Sprintf("%s (%s)", platformName, runtime.GOOS)
+		} else {
+			osDisplay = strings.Title(runtime.GOOS)
+		}
+	}
+
 	// Create response
 	info := SystemInfo{
-		OS:            runtime.GOOS,
 		Architecture:  runtime.GOARCH,
 		Hostname:      hostname,
-		Platform:      hostInfo.Platform,
 		PlatformVer:   hostInfo.PlatformVersion,
 		KernelVersion: hostInfo.KernelVersion,
 		UpTime:        hostInfo.Uptime,
@@ -366,18 +406,19 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 		AppStart:      startTime,
 		AppUptime:     appUptime,
 		NumCPU:        runtime.NumCPU(),
-		GoVersion:     runtime.Version(),
 		SystemModel:   systemModel,
+		TimeZone:      timeZoneStr,
+		OSDisplay:     osDisplay,
 	}
 
 	if c.apiLogger != nil {
 		c.apiLogger.Info("System information retrieved successfully",
-			"os", info.OS,
+			"os_display", info.OSDisplay,
 			"arch", info.Architecture,
 			"hostname", info.Hostname,
-			"platform", info.Platform,
 			"uptime", info.UpTime,
 			"app_uptime", info.AppUptime,
+			"timezone", info.TimeZone,
 			"path", ctx.Request().URL.Path,
 			"ip", ctx.RealIP(),
 		)
