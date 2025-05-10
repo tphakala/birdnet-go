@@ -537,18 +537,17 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 		t.Fatalf("Failed to get refreshed cache entry: %v", err)
 	}
 	if refreshed == nil {
-		t.Fatal("Cache entry was not found")
-	}
+		t.Fatal("Refreshed image cache entry is nil")
+	} else {
+		if refreshed.CachedAt.Equal(oldEntry.CachedAt) {
+			t.Errorf("Expected CachedAt to be updated after refresh. Old: %v, New: %v",
+				oldEntry.CachedAt, refreshed.CachedAt)
+		}
 
-	// Compare timestamps
-	if refreshed.CachedAt.Equal(oldEntry.CachedAt) {
-		t.Error("Cache entry was not refreshed")
-		t.Logf("Mock provider fetch count: %d", mockProvider.fetchCounter)
-	}
-
-	// Compare URLs
-	if refreshed.URL == oldEntry.URL {
-		t.Error("Cache entry URL was not updated")
+		if refreshed.URL == oldEntry.URL {
+			t.Errorf("Expected URL to be different after refresh. Old: %s, New: %s",
+				oldEntry.URL, refreshed.URL)
+		}
 	}
 
 	// Clean up

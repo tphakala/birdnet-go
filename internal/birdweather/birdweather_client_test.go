@@ -40,35 +40,33 @@ func TestNew(t *testing.T) {
 
 	if client == nil {
 		t.Fatal("New returned nil client")
-	}
+	} else {
+		// Verify client properties
+		if client.BirdweatherID != settings.Realtime.Birdweather.ID {
+			t.Errorf("Expected BirdweatherID to be %s, got %s",
+				settings.Realtime.Birdweather.ID, client.BirdweatherID)
+		}
 
-	// Verify client properties
-	if client.BirdweatherID != settings.Realtime.Birdweather.ID {
-		t.Errorf("Expected BirdweatherID to be %s, got %s",
-			settings.Realtime.Birdweather.ID, client.BirdweatherID)
-	}
+		if client.Accuracy != settings.Realtime.Birdweather.LocationAccuracy {
+			t.Errorf("Expected Accuracy to be %f, got %f",
+				settings.Realtime.Birdweather.LocationAccuracy, client.Accuracy)
+		}
 
-	if client.Accuracy != settings.Realtime.Birdweather.LocationAccuracy {
-		t.Errorf("Expected Accuracy to be %f, got %f",
-			settings.Realtime.Birdweather.LocationAccuracy, client.Accuracy)
-	}
+		if client.Latitude != settings.BirdNET.Latitude {
+			t.Errorf("Expected Latitude to be %f, got %f",
+				settings.BirdNET.Latitude, client.Latitude)
+		}
 
-	if client.Latitude != settings.BirdNET.Latitude {
-		t.Errorf("Expected Latitude to be %f, got %f",
-			settings.BirdNET.Latitude, client.Latitude)
-	}
+		if client.Longitude != settings.BirdNET.Longitude {
+			t.Errorf("Expected Longitude to be %f, got %f",
+				settings.BirdNET.Longitude, client.Longitude)
+		}
 
-	if client.Longitude != settings.BirdNET.Longitude {
-		t.Errorf("Expected Longitude to be %f, got %f",
-			settings.BirdNET.Longitude, client.Longitude)
-	}
-
-	if client.HTTPClient == nil {
-		t.Error("HTTPClient should not be nil")
-	}
-
-	if client.HTTPClient.Timeout != 45*time.Second {
-		t.Errorf("Expected timeout to be 45s, got %v", client.HTTPClient.Timeout)
+		if client.HTTPClient == nil {
+			t.Error("HTTPClient should not be nil")
+		} else if client.HTTPClient.Timeout != 45*time.Second {
+			t.Errorf("Expected timeout to be 45s, got %v", client.HTTPClient.Timeout)
+		}
 	}
 }
 
