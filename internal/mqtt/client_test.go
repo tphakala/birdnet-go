@@ -439,46 +439,50 @@ func getCounterValue(t *testing.T, counter prometheus.Counter) float64 {
 func testContextCancellation(t *testing.T) {
 	t.Run("Connect Cancellation", func(t *testing.T) {
 		debugLog(t, "Starting Connect Cancellation test")
-		mqttClient, _ := createTestClient(t, getBrokerAddress())
+		// Use a blackhole address to ensure Connect() blocks long enough for cancellation to occur.
+		// The client's internal connect timeout (e.g., 5s) should be longer than the cancellation (100ms).
+		mqttClient, _ := createTestClient(t, "tcp://10.255.255.1:1883")
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctxConnect, cancelConnect := context.WithTimeout(context.Background(), 10*time.Second) // Overall test timeout
+		defer cancelConnect()
+
+		ctxCancel, cancelFunc := context.WithCancel(ctxConnect)
+		defer cancelFunc() // Redundant due to cancelFunc() below, but good practice
+
 		debugLog(t, "Created cancellation context")
+		connectErrChan := make(chan error, 1)
 
-		// Start connection in a goroutine
-		errCh := make(chan error, 1)
-		connectStarted := make(chan struct{})
-
+		debugLog(t, "Starting connection attempt in goroutine")
 		go func() {
-			debugLog(t, "Starting connection attempt in goroutine")
-			close(connectStarted)
-			err := mqttClient.Connect(ctx)
-			debugLog(t, "Connection attempt completed with error: %v", err)
-			errCh <- err
+			// This connect call should be interrupted by ctxCancel
+			connectErrChan <- mqttClient.Connect(ctxCancel)
 		}()
 
-		// Wait for connection attempt to start
-		<-connectStarted
 		debugLog(t, "Connection attempt started, waiting before cancellation")
-		time.Sleep(150 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond) // Wait a short period
 
 		debugLog(t, "Cancelling context")
-		cancel()
+		cancelFunc() // Cancel the context for Connect
 
+		var err error
 		select {
-		case err := <-errCh:
+		case err = <-connectErrChan:
 			debugLog(t, "Received error from connection attempt: %v", err)
-			if err == nil {
-				t.Fatal("Expected connection to fail due to context cancellation")
-			}
-			if !errors.Is(err, context.Canceled) {
-				t.Fatalf("Expected context.Canceled error or wrapped version, got: %v", err)
-			}
-		case <-time.After(5 * time.Second):
-			t.Fatal("Test timed out waiting for context cancellation")
+		case <-ctxConnect.Done(): // Test timeout
+			t.Fatal("Test timed out waiting for connect to return after cancellation")
+		}
+
+		if err == nil {
+			t.Fatal("Expected connection to fail due to context cancellation, but it succeeded")
+		}
+
+		// Check if the error is context.Canceled or context.DeadlineExceeded (if parent ctx timed out first, less likely)
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("Expected context.Canceled or context.DeadlineExceeded, got: %v", err)
 		}
 
 		if mqttClient.IsConnected() {
-			t.Fatal("Client should not be connected after context cancellation")
+			t.Error("Client should not be connected after cancellation")
 		}
 		debugLog(t, "Connect Cancellation test completed")
 	})

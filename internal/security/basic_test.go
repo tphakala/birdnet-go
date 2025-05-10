@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -17,12 +18,24 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
+// parseURLOrFail parses a URL string and fails the test if parsing fails
+func parseURLOrFail(t *testing.T, rawURL string) *url.URL {
+	t.Helper()
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatalf("Failed to parse URL '%s': %v", rawURL, err)
+	}
+	return parsedURL
+}
+
 // Correct client_id and redirect_uri result in redirection with auth code
 func TestHandleBasicAuthorizeSuccess(t *testing.T) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/?client_id=validClientID&redirect_uri=http://valid.redirect", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+
+	parsedExpectedURI := parseURLOrFail(t, "http://valid.redirect")
 
 	server := &OAuth2Server{
 		Settings: &conf.Settings{
@@ -33,8 +46,9 @@ func TestHandleBasicAuthorizeSuccess(t *testing.T) {
 				},
 			},
 		},
-		authCodes:    make(map[string]AuthCode),
-		accessTokens: make(map[string]AccessToken),
+		authCodes:                make(map[string]AuthCode),
+		accessTokens:             make(map[string]AccessToken),
+		ExpectedBasicRedirectURI: parsedExpectedURI,
 	}
 
 	err := server.HandleBasicAuthorize(c)
@@ -60,6 +74,8 @@ func TestHandleBasicAuthorizeInvalidClientID(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
+	parsedExpectedURI := parseURLOrFail(t, "http://valid.redirect")
+
 	server := &OAuth2Server{
 		Settings: &conf.Settings{
 			Security: conf.Security{
@@ -69,8 +85,9 @@ func TestHandleBasicAuthorizeInvalidClientID(t *testing.T) {
 				},
 			},
 		},
-		authCodes:    make(map[string]AuthCode),
-		accessTokens: make(map[string]AccessToken),
+		authCodes:                make(map[string]AuthCode),
+		accessTokens:             make(map[string]AccessToken),
+		ExpectedBasicRedirectURI: parsedExpectedURI,
 	}
 
 	server.HandleBasicAuthorize(c)
@@ -97,6 +114,8 @@ func TestHandleBasicAuthorizeAuthCodeGeneration(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
+	parsedExpectedURI := parseURLOrFail(t, "http://valid.redirect")
+
 	server := &OAuth2Server{
 		Settings: &conf.Settings{
 			Security: conf.Security{
@@ -106,8 +125,9 @@ func TestHandleBasicAuthorizeAuthCodeGeneration(t *testing.T) {
 				},
 			},
 		},
-		authCodes:    make(map[string]AuthCode),
-		accessTokens: make(map[string]AccessToken),
+		authCodes:                make(map[string]AuthCode),
+		accessTokens:             make(map[string]AccessToken),
+		ExpectedBasicRedirectURI: parsedExpectedURI,
 	}
 
 	err := server.HandleBasicAuthorize(c)
@@ -132,6 +152,8 @@ func TestHandleBasicAuthorizeValidParameters(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
+	parsedExpectedURI := parseURLOrFail(t, "http://valid.redirect")
+
 	server := &OAuth2Server{
 		Settings: &conf.Settings{
 			Security: conf.Security{
@@ -141,8 +163,9 @@ func TestHandleBasicAuthorizeValidParameters(t *testing.T) {
 				},
 			},
 		},
-		authCodes:    make(map[string]AuthCode),
-		accessTokens: make(map[string]AccessToken),
+		authCodes:                make(map[string]AuthCode),
+		accessTokens:             make(map[string]AccessToken),
+		ExpectedBasicRedirectURI: parsedExpectedURI,
 	}
 
 	err := server.HandleBasicAuthorize(c)
@@ -173,6 +196,8 @@ func TestHandleBasicAuthTokenSuccess(t *testing.T) {
 	// Initialize Gothic session
 	gothic.Store = sessions.NewFilesystemStore(os.TempDir(), []byte("secret-key"))
 
+	parsedExpectedCallbackURI := parseURLOrFail(t, "http://example.com/callback")
+
 	s := &OAuth2Server{
 		Settings: &conf.Settings{
 			Security: conf.Security{
@@ -184,8 +209,9 @@ func TestHandleBasicAuthTokenSuccess(t *testing.T) {
 				Host: "example.com",
 			},
 		},
-		authCodes:    make(map[string]AuthCode),
-		accessTokens: make(map[string]AccessToken),
+		authCodes:                make(map[string]AuthCode),
+		accessTokens:             make(map[string]AccessToken),
+		ExpectedBasicRedirectURI: parsedExpectedCallbackURI,
 	}
 
 	// Pre-populate a valid auth code
@@ -203,7 +229,7 @@ func TestHandleBasicAuthTokenSuccess(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
 	}
 
-	var response map[string]string
+	var response map[string]interface{}
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}

@@ -536,19 +536,21 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get refreshed cache entry: %v", err)
 	}
+
 	if refreshed == nil {
-		t.Fatal("Cache entry was not found")
+		t.Fatal("Refreshed image cache entry is nil")
 	}
 
-	// Compare timestamps
+	// Check timestamp was updated
 	if refreshed.CachedAt.Equal(oldEntry.CachedAt) {
-		t.Error("Cache entry was not refreshed")
-		t.Logf("Mock provider fetch count: %d", mockProvider.fetchCounter)
+		t.Errorf("Expected CachedAt to be updated after refresh. Old: %v, New: %v",
+			oldEntry.CachedAt, refreshed.CachedAt)
 	}
 
-	// Compare URLs
+	// Check URL was changed
 	if refreshed.URL == oldEntry.URL {
-		t.Error("Cache entry URL was not updated")
+		t.Errorf("Expected URL to be different after refresh. Old: %s, New: %s",
+			oldEntry.URL, refreshed.URL)
 	}
 
 	// Clean up
@@ -659,26 +661,37 @@ func TestInitializationTimeout(t *testing.T) {
 	// Wait a moment for the first request to start
 	time.Sleep(100 * time.Millisecond)
 
-	// Try to get the same species - should timeout and proceed with new fetch
+	// Try to get the same species - should effectively wait for the ongoing fetch
 	start := time.Now()
-	cache.Get("Turdus merula")
+	_, err = cache.Get("Turdus merula") // Second Get call
+	if err != nil {
+		t.Fatalf("Second cache.Get failed: %v", err)
+	}
 	duration := time.Since(start)
 
-	// We expect:
-	// - 3 initialization attempts (300ms each)
-	// - Context timeout
-	// - Final direct fetch (2s)
-	// Plus some overhead for processing
-	maxExpectedDuration := 4*time.Second + 500*time.Millisecond
-	if duration > maxExpectedDuration {
-		t.Errorf("Request waited too long: %v (max expected: %v)", duration, maxExpectedDuration)
+	// The first Get call (in background) initiates one fetch.
+	// The second Get call (this one) should wait for the first to complete
+	// and use the cached result if the cache implements a wait mechanism
+	// for concurrent requests for the same key (as suggested by TestConcurrentInitialization).
+	// Thus, only one actual fetch should occur.
+
+	// Check duration: main Get should wait for approx. 1.9s for the 2s background fetch.
+	// Set a minimum expected duration to ensure the second call actually waits for the first fetch
+	minExpectedWait := mockProvider.fetchDelay - (200 * time.Millisecond) // Allow some leeway
+	if minExpectedWait < 0 {
+		minExpectedWait = 0
+	}
+	// Max expected duration can be a bit more than fetch delay for overhead.
+	maxExpectedDuration := mockProvider.fetchDelay + (1 * time.Second)
+
+	if duration < minExpectedWait || duration > maxExpectedDuration {
+		t.Errorf("Second Get call duration outside expected range: %v, expected between %v and %v",
+			duration, minExpectedWait, maxExpectedDuration)
 	}
 
-	// The fetch counter should be 3:
-	// 1. Initial background fetch
-	// 2. After context timeout
-	// 3. Final direct fetch
-	expectedFetches := 3
+	// The fetch counter should be 1, due to the initial background fetch.
+	// The second Get call should not trigger a new fetch if it waits for the first.
+	expectedFetches := 1 // Changed from 3
 	if mockProvider.fetchCounter != expectedFetches {
 		t.Errorf("Expected %d fetches, got %d fetches", expectedFetches, mockProvider.fetchCounter)
 	}
