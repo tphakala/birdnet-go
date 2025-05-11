@@ -646,6 +646,13 @@ func (p *Processor) DisconnectBwClient() {
 	}
 }
 
+// SetEventTracker safely replaces the current EventTracker
+func (p *Processor) SetEventTracker(tracker *EventTracker) {
+	// Simple setter since EventTracker is not behind a mutex lock
+	// It's safe to replace the EventTracker as it handles its own concurrency
+	p.EventTracker = tracker
+}
+
 // GetJobQueueStats returns statistics about the job queue
 // This method is thread-safe as it delegates to JobQueue.GetStats() which handles locking internally
 func (p *Processor) GetJobQueueStats() jobqueue.JobStatsSnapshot {
