@@ -33,6 +33,7 @@ type Processor struct {
 	mqttMutex           sync.RWMutex // Mutex to protect MQTT client access
 	BirdImageCache      *imageprovider.BirdImageCache
 	EventTracker        *EventTracker
+	eventTrackerMu      sync.RWMutex         // Mutex to protect EventTracker access
 	LastDogDetection    map[string]time.Time // keep track of dog barks per audio source
 	LastHumanDetection  map[string]time.Time // keep track of human vocal per audio source
 	Metrics             *telemetry.Metrics
@@ -82,11 +83,14 @@ var mutex sync.Mutex
 // func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *telemetry.Metrics) *Processor {
 func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics, birdImageCache *imageprovider.BirdImageCache) *Processor {
 	p := &Processor{
-		Settings:            settings,
-		Ds:                  ds,
-		Bn:                  bn,
-		BirdImageCache:      birdImageCache,
-		EventTracker:        NewEventTracker(time.Duration(settings.Realtime.Interval) * time.Second),
+		Settings:       settings,
+		Ds:             ds,
+		Bn:             bn,
+		BirdImageCache: birdImageCache,
+		EventTracker: NewEventTrackerWithConfig(
+			time.Duration(settings.Realtime.Interval)*time.Second,
+			settings.Realtime.Species.Config,
+		),
 		Metrics:             metrics,
 		LastDogDetection:    make(map[string]time.Time),
 		LastHumanDetection:  make(map[string]time.Time),
@@ -544,13 +548,13 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 
 	// Append various default actions based on the application settings
 	if p.Settings.Realtime.Log.Enabled {
-		actions = append(actions, &LogAction{Settings: p.Settings, EventTracker: p.EventTracker, Note: detection.Note})
+		actions = append(actions, &LogAction{Settings: p.Settings, EventTracker: p.GetEventTracker(), Note: detection.Note})
 	}
 
 	if p.Settings.Output.SQLite.Enabled || p.Settings.Output.MySQL.Enabled {
 		actions = append(actions, &DatabaseAction{
 			Settings:     p.Settings,
-			EventTracker: p.EventTracker,
+			EventTracker: p.GetEventTracker(),
 			Note:         detection.Note,
 			Results:      detection.Results,
 			Ds:           p.Ds})
@@ -571,7 +575,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 
 			actions = append(actions, &BirdWeatherAction{
 				Settings:     p.Settings,
-				EventTracker: p.EventTracker,
+				EventTracker: p.GetEventTracker(),
 				BwClient:     bwClient,
 				Note:         detection.Note,
 				pcmData:      detection.pcmData3s,
@@ -596,7 +600,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			actions = append(actions, &MqttAction{
 				Settings:       p.Settings,
 				MqttClient:     mqttClient,
-				EventTracker:   p.EventTracker,
+				EventTracker:   p.GetEventTracker(),
 				Note:           detection.Note,
 				BirdImageCache: p.BirdImageCache,
 				RetryConfig:    mqttRetryConfig,
@@ -643,10 +647,35 @@ func (p *Processor) DisconnectBwClient() {
 	}
 }
 
+// SetEventTracker safely replaces the current EventTracker
+func (p *Processor) SetEventTracker(tracker *EventTracker) {
+	p.eventTrackerMu.Lock()
+	defer p.eventTrackerMu.Unlock()
+	p.EventTracker = tracker
+}
+
+// GetEventTracker safely returns the current EventTracker
+func (p *Processor) GetEventTracker() *EventTracker {
+	p.eventTrackerMu.RLock()
+	defer p.eventTrackerMu.RUnlock()
+	return p.EventTracker
+}
+
 // GetJobQueueStats returns statistics about the job queue
 // This method is thread-safe as it delegates to JobQueue.GetStats() which handles locking internally
 func (p *Processor) GetJobQueueStats() jobqueue.JobStatsSnapshot {
 	return p.JobQueue.GetStats()
+}
+
+// GetBn returns the BirdNET instance
+// Deprecated: Use GetBirdNET instead
+func (p *Processor) GetBn() *birdnet.BirdNET {
+	return p.Bn
+}
+
+// GetBirdNET returns the BirdNET instance
+func (p *Processor) GetBirdNET() *birdnet.BirdNET {
+	return p.Bn
 }
 
 // Shutdown gracefully stops all processor components

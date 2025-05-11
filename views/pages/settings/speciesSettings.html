@@ -141,7 +141,8 @@
                     "onEdit" "startEdit($event)"
                     "onSave" "saveEdit"
                     "onCancel" "cancelEdit"
-                    "actionTemplate" "speciesListActionMenu"}}
+                    "actionTemplate" "speciesListActionMenu"
+                    "emptyMessage" "No species added to include list"}}
             </div>
 
             <!-- Include species input -->
@@ -152,7 +153,8 @@
                 "onAdd" "$event.preventDefault(); addSpecies('Include')"
                 "placeholder" "Add species to include"
                 "inputId" "include-species-input"
-                "responsive" true}}
+                "responsive" true
+                "label" "Add New Species to Include"}}
         </div>
         <input type="hidden" name="realtime.species.include" :value="JSON.stringify(speciesSettings.Include)">
     </div>
@@ -258,7 +260,8 @@
                     "onEdit" "startEdit($event)" 
                     "onSave" "saveEdit"
                     "onCancel" "cancelEdit"
-                    "actionTemplate" "speciesListActionMenu"}}
+                    "actionTemplate" "speciesListActionMenu"
+                    "emptyMessage" "No species added to exclude list"}}
             </div>
 
             <!-- Exclude species input -->
@@ -269,7 +272,8 @@
                 "onAdd" "$event.preventDefault(); addSpecies('Exclude')"
                 "placeholder" "Add species to exclude"
                 "inputId" "exclude-species-input"
-                "responsive" false}}
+                "responsive" false
+                "label" "Add New Species to Exclude"}}
         </div>
         <input type="hidden" name="realtime.species.exclude" :value="JSON.stringify(speciesSettings.Exclude)">
     </div>
@@ -285,6 +289,7 @@
         },
         newSpeciesConfig: '',
         newThreshold: 0.5,
+        newInterval: 0,
         showTooltip: null,
         hasChanges: false,
         predictions: [],
@@ -302,6 +307,7 @@
         editConfigSpecies: null,
         editConfigNewName: '',
         editConfigThreshold: 0.5,
+        editConfigInterval: 0,
         
         async init() {
             this.allSpecies = [];
@@ -362,16 +368,20 @@
             if (threshold < 0 || threshold > 1) {
                 return; // Threshold must be between 0 and 1
             }
+
+            const interval = parseInt(this.newInterval) || 0;
             
             // Add new config
             this.speciesSettings.Config[newSpecies] = {
                 Threshold: threshold,
+                Interval: interval,
                 Actions: []
             };
             
             // Clear input fields
             this.newSpeciesConfig = '';
             this.newThreshold = 0.5;
+            this.newInterval = 0;
             
             // Mark changes and clear predictions
             this.hasChanges = true;
@@ -389,6 +399,7 @@
             this.editConfigSpecies = species;
             this.editConfigNewName = species;
             this.editConfigThreshold = this.speciesSettings.Config[species].Threshold;
+            this.editConfigInterval = this.speciesSettings.Config[species].Interval || 0;
         },
         
         saveEditConfig() {
@@ -397,20 +408,23 @@
             const originalSpecies = this.editConfigSpecies;
             const newSpecies = this.editConfigNewName;
             const threshold = this.editConfigThreshold;
+            const interval = this.editConfigInterval || 0;
             
             // If name changed, create new entry and delete old one
             if (originalSpecies !== newSpecies) {
                 // Create new entry with updated data
                 this.speciesSettings.Config[newSpecies] = {
                     Threshold: threshold,
+                    Interval: interval,
                     Actions: this.speciesSettings.Config[originalSpecies].Actions || []
                 };
                 
                 // Remove old entry
                 delete this.speciesSettings.Config[originalSpecies];
             } else {
-                // Just update threshold
+                // Just update threshold and interval
                 this.speciesSettings.Config[originalSpecies].Threshold = threshold;
+                this.speciesSettings.Config[originalSpecies].Interval = interval;
             }
             
             this.hasChanges = true;
@@ -422,6 +436,7 @@
             this.editConfigSpecies = null;
             this.editConfigNewName = '';
             this.editConfigThreshold = 0.5;
+            this.editConfigInterval = 0;
         },
         
         openActionsModal(species) {
@@ -519,85 +534,125 @@
     {{template "sectionHeader" dict
         "id" "speciesConfig"
         "title" "Custom Species Configuration"
-        "description" "Species specific threshold values and actions"}}
+        "description" "Species specific threshold values, detection intervals, and actions"}}
 
     <div class="collapse-content">
         <!-- Custom Species Configuration section -->                
         <div class="settings-form-group">
+            <!-- Help text for interval setting -->
+            <div class="text-sm text-base-content mb-4">
+                <p>Configure species-specific settings:</p>
+                <ul class="list-disc list-inside pl-4 text-xs">
+                    <li><b>Threshold</b>: Minimum confidence score (0-1) required for detection</li>
+                    <li><b>Interval</b>: Minimum time in seconds between detections of the same species (0 = use global default)</li>
+                    <li><b>Actions</b>: Custom commands to execute when this species is detected</li>
+                </ul>
+            </div>
 
             <!-- Custom configuration list -->
             <div class="space-y-2" role="list" aria-label="Custom species configurations">
+                <!-- Column headers for the list - only show if there are items -->
+                <div class="grid grid-cols-12 gap-2 mb-1 mt-3" x-show="Object.keys(speciesSettings.Config).length > 0">
+                    <div class="col-span-5 md:col-span-5 text-xs font-medium text-base-content/70 px-2">Species</div>
+                    <div class="col-span-6 md:col-span-6 text-xs font-medium text-base-content/70 px-2">Settings</div>
+                    <div class="col-span-1 md:col-span-1 text-xs font-medium text-base-content/70 px-2 text-right">Actions</div>
+                </div>
+                
                 <!-- Edit mode for config -->
                 <div x-show="editingConfig" class="settings-list-item flex items-center justify-between p-2 rounded-md bg-base-300" x-cloak>
-                    <div class="flex-grow flex flex-col md:flex-row gap-2">
-                        <div class="relative flex-grow">
+                    <div class="flex-grow grid grid-cols-12 gap-2">
+                        <div class="col-span-6 md:col-span-6">
                             <input type="text" 
                                 x-model="editConfigNewName" 
                                 placeholder="Species name" 
                                 class="input input-sm input-bordered w-full" 
                                 aria-label="Edit species name" />
                         </div>
-                        <div class="w-36">
+                        <div class="col-span-3 md:col-span-2">
                             <input type="number" 
                                 x-model.number="editConfigThreshold" 
                                 class="input input-sm input-bordered w-full" 
                                 min="0" 
                                 max="1" 
                                 step="0.01" 
-                                placeholder="Threshold"
+                                placeholder="0.5"
                                 aria-label="Edit threshold value" />
                         </div>
-                    </div>
-                    <div class="flex space-x-2">
-                        <button @click="saveEditConfig()" 
-                                type="button"
-                                class="btn btn-primary btn-sm">
-                            Save
-                        </button>
-                        <button @click="cancelEditConfig()" 
-                                type="button"
-                                class="btn btn-outline btn-warning btn-sm">
-                            Cancel
-                        </button>
+                        <div class="col-span-3 md:col-span-2">
+                            <input type="number" 
+                                x-model.number="editConfigInterval" 
+                                class="input input-sm input-bordered w-full" 
+                                min="0" 
+                                max="3600" 
+                                step="1" 
+                                placeholder="0"
+                                aria-label="Edit interval in seconds" />
+                        </div>
+                        <div class="col-span-6 md:col-span-2">
+                            <div class="flex space-x-1">
+                                <button type="button" @click="saveEditConfig()" class="btn btn-primary btn-sm flex-1">Save</button>
+                                <button type="button" @click="cancelEditConfig()" class="btn btn-ghost btn-sm flex-1">Cancel</button>
+                            </div>
+                        </div>
+                        <div class="col-span-6 md:col-span-0 md:hidden"></div> <!-- Spacer for mobile layout -->
                     </div>
                 </div>
 
                 <!-- List items -->
                 <template x-for="(config, species) in speciesSettings.Config" :key="species">
                     <div x-show="!editingConfig || editConfigSpecies !== species" class="settings-list-item flex items-center justify-between p-2 rounded-md bg-base-200">
-                        <div class="flex-grow flex items-center">
-                            <span class="text-sm pl-2 flex-grow" x-text="species"></span>
-                            <div class="w-28 flex justify-center mr-2">
+                        <div class="flex-grow grid grid-cols-12 gap-2 items-center">
+                            <!-- Species name -->
+                            <div class="col-span-5 md:col-span-5 text-sm pl-2" x-text="species"></div>
+                            
+                            <!-- Settings badges -->
+                            <div class="col-span-6 md:col-span-6 flex flex-wrap gap-1">
                                 <span class="badge badge-sm badge-neutral" x-text="'Threshold: ' + config.Threshold.toFixed(2)"></span>
-                            </div>
-                            <template x-if="config.Actions?.length > 0">
-                                <div class="flex gap-1 mr-2">
+                                <span class="badge badge-sm badge-secondary" x-show="config.Interval > 0" x-text="'Interval: ' + config.Interval + 's'"></span>
+                                <template x-if="config.Actions?.length > 0">
                                     <span class="badge badge-sm badge-accent">Custom Action</span>
-                                    <span x-show="config.Actions[0]?.ExecuteDefaults" class="badge badge-sm badge-info">+Defaults</span>
+                                </template>
+                                <span x-show="config.Actions?.[0]?.ExecuteDefaults" class="badge badge-sm badge-info">+Defaults</span>
+                            </div>
+                            
+                            <!-- Action button -->
+                            <div class="col-span-1 md:col-span-1 text-right">
+                                <div x-data="{ 
+                                    index: species, 
+                                    item: species, 
+                                    customMenuItems: ['editConfig', 'addAction'], 
+                                    listType: 'Config'
+                                  }"
+                                     @remove-species.window="if($event.detail.species === item) { removeConfig(item); }">
+                                    {{template "speciesListActionMenu" dict}}
                                 </div>
-                            </template>
-                        </div>
-                        
-                        <div class="flex-shrink-0">
-                            <div x-data="{ 
-                                index: species, 
-                                item: species, 
-                                customMenuItems: ['editConfig', 'addAction'], 
-                                listType: 'Config'
-                              }"
-                                 @remove-species.window="if($event.detail.species === item) { removeConfig(item); }">
-                                {{template "speciesListActionMenu" dict}}
                             </div>
                         </div>
                     </div>
                 </template>
+                
+                <!-- Empty state message -->
+                <div x-show="Object.keys(speciesSettings.Config).length === 0" 
+                     x-cloak
+                     class="text-sm text-base-content/60 italic p-2 text-center">
+                    No custom species configurations added
+                </div>
             </div>
 
             <!-- Custom configuration input using the speciesInput template with threshold -->
             <div class="mt-4">
-                <div class="flex flex-col md:flex-row gap-2">
+                <!-- Column headers for input fields -->
+                <div class="grid grid-cols-12 gap-2 mb-1">
+                    <div class="col-span-6 md:col-span-6 text-xs font-medium text-base-content/70 px-2">Species Name</div>
+                    <div class="col-span-3 md:col-span-2 text-xs font-medium text-base-content/70 px-2">Threshold</div>
+                    <div class="col-span-3 md:col-span-2 text-xs font-medium text-base-content/70 px-2">Interval (sec)</div>
+                    <div class="col-span-12 md:col-span-2"></div>
+                </div>
+                
+                <!-- Input fields with grid layout -->
+                <div class="grid grid-cols-12 gap-2">
                     <!-- Species input field -->
-                    <div class="relative flex-grow">
+                    <div class="relative col-span-6 md:col-span-6">
                         <input type="text" 
                             id="species-config-input"
                             x-model="newSpeciesConfig" 
@@ -616,7 +671,7 @@
                     </div>
                     
                     <!-- Threshold input -->
-                    <div class="w-28">
+                    <div class="col-span-3 md:col-span-2">
                         <input type="number" 
                             id="thresholdInput"
                             x-model.number="newThreshold" 
@@ -624,16 +679,32 @@
                             min="0" 
                             max="1" 
                             step="0.01" 
-                            placeholder="Threshold"
+                            placeholder="0.5"
                             @keyup.enter="if(newSpeciesConfig && newThreshold >= 0 && newThreshold <= 1) { addConfig(); }"
                             aria-label="Enter threshold value" />
                     </div>
                     
+                    <!-- Interval input -->
+                    <div class="col-span-3 md:col-span-2">
+                        <input type="number" 
+                            id="intervalInput"
+                            x-model.number="newInterval" 
+                            class="input input-sm input-bordered w-full" 
+                            min="0" 
+                            max="3600" 
+                            step="1" 
+                            placeholder="0"
+                            @keyup.enter="if(newSpeciesConfig && newThreshold >= 0 && newThreshold <= 1) { addConfig(); }"
+                            aria-label="Enter interval in seconds" />
+                    </div>
+                    
                     <!-- Add button -->
-                    <button type="button" 
-                        @click="addConfig()" 
-                        class="btn btn-primary btn-sm w-36"
-                        aria-label="Add new species configuration">Add</button>
+                    <div class="col-span-12 md:col-span-2">
+                        <button type="button" 
+                            @click="addConfig()" 
+                            class="btn btn-primary btn-sm w-full"
+                            aria-label="Add new species configuration">Add</button>
+                    </div>
                 </div>
             </div>
         </div>

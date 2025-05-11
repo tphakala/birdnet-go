@@ -74,6 +74,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureRTSP()
 	case "reconfigure_birdweather":
 		cm.handleReconfigureBirdWeather()
+	case "update_detection_intervals":
+		cm.handleUpdateDetectionIntervals()
 	default:
 		log.Printf("Received unknown control signal: %v", signal)
 	}
@@ -211,6 +213,44 @@ func (cm *ControlMonitor) handleReconfigureBirdWeather() {
 		log.Printf("\033[32m✅ BirdWeather integration disabled\033[0m")
 		cm.notifySuccess("BirdWeather integration disabled")
 	}
+}
+
+// handleUpdateDetectionIntervals updates event tracking intervals for species
+func (cm *ControlMonitor) handleUpdateDetectionIntervals() {
+	log.Printf("\033[32m🔄 Updating detection rate limits...\033[0m")
+	settings := conf.Setting()
+
+	if cm.proc == nil {
+		log.Printf("\033[31m❌ Error: Processor not available\033[0m")
+		cm.notifyError("Failed to update detection intervals", fmt.Errorf("processor not available"))
+		return
+	}
+
+	// Validate global interval setting
+	globalInterval := time.Duration(settings.Realtime.Interval) * time.Second
+	if globalInterval <= 0 {
+		log.Printf("\033[33m⚠️ Warning: Invalid global interval value (%v), using default\033[0m", globalInterval)
+		globalInterval = 5 * time.Second // Fallback to a reasonable default
+	}
+
+	// Note: If EventTracker cleanup becomes necessary in the future,
+	// get the current tracker here and perform cleanup before replacement
+
+	// Create a new EventTracker with updated settings
+	newTracker := processor.NewEventTrackerWithConfig(
+		globalInterval,
+		settings.Realtime.Species.Config,
+	)
+
+	// Clean up the old EventTracker if possible
+	// Note: If cleanup becomes necessary in the future, consider adding a Close()
+	// method to the EventTracker type and call it here
+
+	// Replace the existing EventTracker with the new one
+	cm.proc.SetEventTracker(newTracker)
+
+	log.Printf("\033[32m✅ Detection rate limits updated successfully\033[0m")
+	cm.notifySuccess("Detection rate limits updated successfully")
 }
 
 // notifySuccess sends a success notification

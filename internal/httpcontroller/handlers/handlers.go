@@ -10,11 +10,13 @@ import (
 	"sync"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/security"
+	"github.com/tphakala/birdnet-go/internal/serviceapi"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -34,7 +36,7 @@ type Handlers struct {
 	controlChan       chan string
 	notificationChan  chan Notification
 	debug             bool
-	Server            interface{ IsAccessAllowed(c echo.Context) bool }
+	Server            serviceapi.ServerFacade // Server facade providing security and processor access
 }
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.
@@ -77,7 +79,7 @@ func (bh *baseHandler) logInfo(message string) {
 }
 
 // New creates a new Handlers instance with the given dependencies.
-func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server, controlChan chan string, notificationChan chan Notification, server interface{ IsAccessAllowed(c echo.Context) bool }) *Handlers {
+func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server, controlChan chan string, notificationChan chan Notification, server serviceapi.ServerFacade) *Handlers {
 	if logger == nil {
 		logger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
@@ -205,6 +207,28 @@ func (h *Handlers) GetLabels() []string {
 	return h.Settings.BirdNET.Labels
 }
 
+// GetBirdNET returns the BirdNET instance from the processor
+func (h *Handlers) GetBirdNET() *birdnet.BirdNET {
+	if h.Server == nil {
+		if h.debug {
+			h.baseHandler.logInfo("GetBirdNET: Server reference is nil - cannot access processor")
+		}
+		return nil
+	}
+
+	// Get the processor using the Server interface
+	processor := h.Server.GetProcessor()
+	if processor == nil {
+		if h.debug {
+			h.baseHandler.logInfo("GetBirdNET: Processor reference is nil - cannot access BirdNET instance")
+		}
+		return nil
+	}
+
+	// Get BirdNET using the processor
+	return processor.GetBirdNET()
+}
+
 // Security represents the authentication and access control state
 type Security struct {
 	Enabled       bool
@@ -213,8 +237,15 @@ type Security struct {
 
 // GetSecurity returns the current security state for the context
 func (h *Handlers) GetSecurity(c echo.Context) *Security {
+	var accessAllowed bool
+	if h.Server != nil {
+		accessAllowed = h.Server.IsAccessAllowed(c)
+	} else if h.debug {
+		h.baseHandler.logInfo("GetSecurity: Server reference is nil - defaulting to access denied")
+	}
+
 	return &Security{
 		Enabled:       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
-		AccessAllowed: h.Server.IsAccessAllowed(c),
+		AccessAllowed: accessAllowed,
 	}
 }

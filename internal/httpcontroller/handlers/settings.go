@@ -53,8 +53,8 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		return h.NewHandlerError(fmt.Errorf("settings is nil"), "Settings not initialized", http.StatusInternalServerError)
 	}
 
-	// Store old settings for comparison
-	oldSettings := *settings
+	// Create a deep copy of settings for comparison
+	oldSettings := deepCopySettings(settings)
 
 	formParams, err := c.FormParams()
 	if err != nil {
@@ -84,6 +84,15 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 			Type:    "info",
 		})
 		h.controlChan <- "rebuild_range_filter"
+	}
+
+	// Check if species interval settings have changed
+	if speciesIntervalSettingsChanged(&oldSettings, settings) || oldSettings.Realtime.Interval != settings.Realtime.Interval {
+		h.SSE.SendNotification(Notification{
+			Message: "Updating detection rate limits...",
+			Type:    "info",
+		})
+		h.controlChan <- "update_detection_intervals"
 	}
 
 	// Check if MQTT settings have changed
@@ -741,4 +750,118 @@ func birdWeatherSettingsChanged(oldSettings, currentSettings *conf.Settings) boo
 	}
 
 	return false
+}
+
+// speciesIntervalSettingsChanged checks if any species-specific interval settings have changed
+// Note: Changes to global settings.Realtime.Interval are detected and handled elsewhere
+func speciesIntervalSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Get the old and new species configs
+	oldSpeciesConfigs := oldSettings.Realtime.Species.Config
+	newSpeciesConfigs := currentSettings.Realtime.Species.Config
+
+	// Create a set of all species keys from both old and new configs for efficient iteration
+	allSpecies := make(map[string]bool)
+	for species := range oldSpeciesConfigs {
+		allSpecies[species] = true
+	}
+	for species := range newSpeciesConfigs {
+		allSpecies[species] = true
+	}
+
+	// Single loop to check all species in both old and new configs
+	for species := range allSpecies {
+		oldConfig, existedInOld := oldSpeciesConfigs[species]
+		newConfig, existsInNew := newSpeciesConfigs[species]
+
+		// Case 1: Species exists in both configs but interval changed
+		if existedInOld && existsInNew && oldConfig.Interval != newConfig.Interval {
+			if currentSettings.Debug {
+				log.Printf("Species interval changed for %s: %d → %d",
+					species, oldConfig.Interval, newConfig.Interval)
+			}
+			return true
+		}
+
+		// Case 2: Species was removed and had a custom interval
+		if existedInOld && !existsInNew && oldConfig.Interval > 0 {
+			if currentSettings.Debug {
+				log.Printf("Species with custom interval removed: %s (interval was %d)",
+					species, oldConfig.Interval)
+			}
+			return true
+		}
+
+		// Case 3: New species was added with a custom interval
+		if !existedInOld && existsInNew && newConfig.Interval > 0 {
+			if currentSettings.Debug {
+				log.Printf("New species with custom interval added: %s (interval: %d)",
+					species, newConfig.Interval)
+			}
+			return true
+		}
+	}
+
+	// No relevant changes detected
+	return false
+}
+
+// deepCopySettings creates a deep copy of the settings object including all nested maps and slices
+func deepCopySettings(settings *conf.Settings) conf.Settings {
+	// Create a copy of the main settings struct
+	settingsCopy := *settings
+
+	// Deep copy nested maps and slices
+
+	// Copy Species configs
+	if settings.Realtime.Species.Config != nil {
+		settingsCopy.Realtime.Species.Config = make(map[string]conf.SpeciesConfig)
+		for k, v := range settings.Realtime.Species.Config {
+			// Deep copy of SpeciesConfig (including Actions slice if present)
+			speciesConfig := v
+			if v.Actions != nil {
+				speciesConfig.Actions = make([]conf.SpeciesAction, len(v.Actions))
+				for i, action := range v.Actions {
+					actionCopy := action
+					if action.Parameters != nil {
+						actionCopy.Parameters = make([]string, len(action.Parameters))
+						// Use built-in copy function to copy slice
+						copy(actionCopy.Parameters, action.Parameters)
+					}
+					speciesConfig.Actions[i] = actionCopy
+				}
+			}
+			settingsCopy.Realtime.Species.Config[k] = speciesConfig
+		}
+	}
+
+	// Deep copy Include and Exclude species lists
+	if settings.Realtime.Species.Include != nil {
+		settingsCopy.Realtime.Species.Include = make([]string, len(settings.Realtime.Species.Include))
+		copy(settingsCopy.Realtime.Species.Include, settings.Realtime.Species.Include)
+	}
+
+	if settings.Realtime.Species.Exclude != nil {
+		settingsCopy.Realtime.Species.Exclude = make([]string, len(settings.Realtime.Species.Exclude))
+		copy(settingsCopy.Realtime.Species.Exclude, settings.Realtime.Species.Exclude)
+	}
+
+	// Deep copy RTSP URLs
+	if settings.Realtime.RTSP.URLs != nil {
+		settingsCopy.Realtime.RTSP.URLs = make([]string, len(settings.Realtime.RTSP.URLs))
+		copy(settingsCopy.Realtime.RTSP.URLs, settings.Realtime.RTSP.URLs)
+	}
+
+	// Deep copy Audio Equalizer Filters
+	if settings.Realtime.Audio.Equalizer.Filters != nil {
+		settingsCopy.Realtime.Audio.Equalizer.Filters = make([]conf.EqualizerFilter, len(settings.Realtime.Audio.Equalizer.Filters))
+		copy(settingsCopy.Realtime.Audio.Equalizer.Filters, settings.Realtime.Audio.Equalizer.Filters)
+	}
+
+	// Deep copy BirdNET labels
+	if settings.BirdNET.Labels != nil {
+		settingsCopy.BirdNET.Labels = make([]string, len(settings.BirdNET.Labels))
+		copy(settingsCopy.BirdNET.Labels, settings.BirdNET.Labels)
+	}
+
+	return settingsCopy
 }
