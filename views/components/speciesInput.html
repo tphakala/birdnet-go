@@ -9,29 +9,36 @@ Usage:
 - inputId: "custom-id" (optional - custom ID for the input)
 - buttonText: "Add" (optional - custom button text)
 - responsive: true (optional - whether to use responsive layout)
+- label: "Species Name" (optional - label to display above input)
 */}}
-<div class="mt-4 flex {{if .responsive}}flex-col md:flex-row{{else}}flex-row{{end}} gap-2">
-    <div class="relative w-full">
-        <input type="text" 
-               id="{{if .inputId}}{{.inputId}}{{else}}species-input{{end}}"
-               x-model="{{.inputModel}}" 
-               @input="{{.onInput}}"
-               @keyup.enter="{{.onAdd}}"
-               list="{{if .inputId}}{{.inputId}}-suggestions{{else}}species-suggestions{{end}}"
-               placeholder="{{if .placeholder}}{{.placeholder}}{{else}}Add new species{{end}}"
-               class="input input-sm input-bordered w-full">
-        
-        <datalist id="{{if .inputId}}{{.inputId}}-suggestions{{else}}species-suggestions{{end}}">
-            <template x-for="species in {{.predictions}}" :key="species">
-                <option :value="species"></option>
-            </template>
-        </datalist>
-    </div>
+<div class="mt-4 flex flex-col gap-2">
+    {{if .label}}
+    <div class="text-xs font-medium text-base-content/70 px-2">{{.label}}</div>
+    {{end}}
     
-    <button type="button" 
-            @click.prevent="{{.onAdd}}" 
-            class="btn btn-primary btn-sm {{if .responsive}}w-full md:w-36{{else}}w-36{{end}}">
-        {{if .buttonText}}{{.buttonText}}{{else}}Add{{end}}
-    </button>
+    <div class="flex {{if .responsive}}flex-col md:flex-row{{else}}flex-row{{end}} gap-2">
+        <div class="relative w-full">
+            <input type="text" 
+                   id="{{if .inputId}}{{.inputId}}{{else}}species-input{{end}}"
+                   x-model="{{.inputModel}}" 
+                   @input="{{.onInput}}"
+                   @keyup.enter="{{.onAdd}}"
+                   list="{{if .inputId}}{{.inputId}}-suggestions{{else}}species-suggestions{{end}}"
+                   placeholder="{{if .placeholder}}{{.placeholder}}{{else}}Add new species{{end}}"
+                   class="input input-sm input-bordered w-full">
+            
+            <datalist id="{{if .inputId}}{{.inputId}}-suggestions{{else}}species-suggestions{{end}}">
+                <template x-for="species in {{.predictions}}" :key="species">
+                    <option :value="species"></option>
+                </template>
+            </datalist>
+        </div>
+        
+        <button type="button" 
+                @click.prevent="{{.onAdd}}" 
+                class="btn btn-primary btn-sm {{if .responsive}}w-full md:w-36{{else}}w-36{{end}}">
+            {{if .buttonText}}{{.buttonText}}{{else}}Add{{end}}
+        </button>
+    </div>
 </div>
 {{end}} 
