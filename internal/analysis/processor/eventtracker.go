@@ -27,7 +27,7 @@ type EventBehaviorFunc func(lastEventTime time.Time, timeout time.Duration) bool
 // EventHandler holds the state and behavior for a specific event type.
 type EventHandler struct {
 	LastEventTime map[string]time.Time // Tracks the last event time for each species
-	Timeout       time.Duration        // The minimum time interval between events
+	Timeout       time.Duration        // The default time interval between events - should not be modified after initialization
 	BehaviorFunc  EventBehaviorFunc    // Function that defines the event handling behavior
 	Mutex         sync.Mutex           // Mutex to ensure thread-safe access
 }
@@ -164,9 +164,8 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 	//    This ensures thread-safety for the specific handler while allowing other event types
 	//    to be processed concurrently
 	handler.Mutex.Lock()
-	// Update the handler's Timeout field to maintain consistency (within the mutex lock)
-	handler.Timeout = effectiveTimeout
 	// Use the shared helper method to evaluate whether the event should be handled
+	// Pass the effective timeout as a parameter rather than modifying handler.Timeout
 	allowEvent := handler.shouldHandleEventLocked(normalizedSpecies, effectiveTimeout)
 	handler.Mutex.Unlock()
 
