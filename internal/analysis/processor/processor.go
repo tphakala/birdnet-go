@@ -82,11 +82,14 @@ var mutex sync.Mutex
 // func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *telemetry.Metrics) *Processor {
 func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics, birdImageCache *imageprovider.BirdImageCache) *Processor {
 	p := &Processor{
-		Settings:            settings,
-		Ds:                  ds,
-		Bn:                  bn,
-		BirdImageCache:      birdImageCache,
-		EventTracker:        NewEventTracker(time.Duration(settings.Realtime.Interval) * time.Second),
+		Settings:       settings,
+		Ds:             ds,
+		Bn:             bn,
+		BirdImageCache: birdImageCache,
+		EventTracker: NewEventTrackerWithConfig(
+			time.Duration(settings.Realtime.Interval)*time.Second,
+			settings.Realtime.Species.Config,
+		),
 		Metrics:             metrics,
 		LastDogDetection:    make(map[string]time.Time),
 		LastHumanDetection:  make(map[string]time.Time),
