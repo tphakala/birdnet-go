@@ -205,6 +205,31 @@ func (h *Handlers) GetLabels() []string {
 	return h.Settings.BirdNET.Labels
 }
 
+// GetBirdNET returns the BirdNET instance from the processor
+func (h *Handlers) GetBirdNET() interface{} {
+	// Try to get processor from context
+	processorObj := h.Server.(interface{ GetProcessor() interface{} })
+	if processorObj == nil {
+		return nil
+	}
+
+	processor := processorObj.GetProcessor()
+	if processor == nil {
+		return nil
+	}
+
+	// Access the BirdNET instance from the processor using type switch
+	// The processor type is expected to have a GetBirdNET() method or a Bn field
+	switch p := processor.(type) {
+	case interface{ GetBirdNET() interface{} }:
+		return p.GetBirdNET()
+	case interface{ GetBn() interface{} }:
+		return p.GetBn()
+	default:
+		return nil
+	}
+}
+
 // Security represents the authentication and access control state
 type Security struct {
 	Enabled       bool
