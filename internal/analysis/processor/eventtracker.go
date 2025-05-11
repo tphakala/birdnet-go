@@ -88,23 +88,8 @@ type EventTrackerConfig struct {
 	MQTTPublishInterval       time.Duration
 }
 
-// Modify NewEventTracker to accept configuration
-func NewEventTracker(interval time.Duration) *EventTracker {
-	return &EventTracker{
-		DefaultInterval: interval, // Store the default interval
-		Handlers: map[EventType]*EventHandler{
-			DatabaseSave:      NewEventHandler(interval, StandardEventBehavior),
-			LogToFile:         NewEventHandler(interval, StandardEventBehavior),
-			SendNotification:  NewEventHandler(interval, StandardEventBehavior),
-			BirdWeatherSubmit: NewEventHandler(interval, StandardEventBehavior),
-			MQTTPublish:       NewEventHandler(interval, StandardEventBehavior),
-		},
-		SpeciesConfigs: make(map[string]conf.SpeciesConfig), // Initialize the map
-	}
-}
-
-// NewEventTrackerWithConfig creates a new EventTracker with a default interval and species-specific configurations.
-func NewEventTrackerWithConfig(defaultInterval time.Duration, speciesConfigs map[string]conf.SpeciesConfig) *EventTracker {
+// initEventTracker is a helper function that initializes an EventTracker with common setup
+func initEventTracker(interval time.Duration, speciesConfigs map[string]conf.SpeciesConfig) *EventTracker {
 	// Create normalized species configs map
 	normalizedSpeciesConfigs := make(map[string]conf.SpeciesConfig)
 	if speciesConfigs != nil {
@@ -113,20 +98,27 @@ func NewEventTrackerWithConfig(defaultInterval time.Duration, speciesConfigs map
 		}
 	}
 
-	et := &EventTracker{
-		DefaultInterval: defaultInterval,
+	return &EventTracker{
+		DefaultInterval: interval,
 		Handlers: map[EventType]*EventHandler{
-			// Initialize handlers with the default interval.
-			// TrackEvent will use specific intervals if configured.
-			DatabaseSave:      NewEventHandler(defaultInterval, StandardEventBehavior),
-			LogToFile:         NewEventHandler(defaultInterval, StandardEventBehavior),
-			SendNotification:  NewEventHandler(defaultInterval, StandardEventBehavior),
-			BirdWeatherSubmit: NewEventHandler(defaultInterval, StandardEventBehavior),
-			MQTTPublish:       NewEventHandler(defaultInterval, StandardEventBehavior),
+			DatabaseSave:      NewEventHandler(interval, StandardEventBehavior),
+			LogToFile:         NewEventHandler(interval, StandardEventBehavior),
+			SendNotification:  NewEventHandler(interval, StandardEventBehavior),
+			BirdWeatherSubmit: NewEventHandler(interval, StandardEventBehavior),
+			MQTTPublish:       NewEventHandler(interval, StandardEventBehavior),
 		},
-		SpeciesConfigs: normalizedSpeciesConfigs, // Store normalized species-specific configs
+		SpeciesConfigs: normalizedSpeciesConfigs, // Always initialized, even if empty
 	}
-	return et
+}
+
+// NewEventTracker creates a new EventTracker with the default interval
+func NewEventTracker(interval time.Duration) *EventTracker {
+	return initEventTracker(interval, nil)
+}
+
+// NewEventTrackerWithConfig creates a new EventTracker with a default interval and species-specific configurations.
+func NewEventTrackerWithConfig(defaultInterval time.Duration, speciesConfigs map[string]conf.SpeciesConfig) *EventTracker {
+	return initEventTracker(defaultInterval, speciesConfigs)
 }
 
 // TrackEvent checks if an event for a given species and event type should be processed.
@@ -178,10 +170,17 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 
 // ResetEvent resets the state for a specific species and event type, clearing any tracked event timing.
 func (et *EventTracker) ResetEvent(species string, eventType EventType) {
-	et.Mutex.Lock()
-	defer et.Mutex.Unlock()
+	// Normalize species key consistently
+	normalizedSpecies := strings.ToLower(species)
 
-	if handler, exists := et.Handlers[eventType]; exists {
-		handler.ResetEvent(strings.ToLower(species))
+	// First lock EventTracker mutex to safely access handler map
+	et.Mutex.Lock()
+	handler, exists := et.Handlers[eventType]
+	// Release EventTracker mutex before acquiring handler mutex to match lock ordering in TrackEvent
+	et.Mutex.Unlock()
+
+	if exists {
+		// Now lock handler mutex to update its state
+		handler.ResetEvent(normalizedSpecies)
 	}
 }
