@@ -125,10 +125,10 @@ func NewEventTrackerWithConfig(defaultInterval time.Duration, speciesConfigs map
 // It utilizes the respective event handler to make this determination, considering species-specific intervals.
 func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 	et.Mutex.Lock() // Lock for reading SpeciesConfigs and accessing Handlers
-	defer et.Mutex.Unlock()
 
 	handler, exists := et.Handlers[eventType]
 	if !exists {
+		et.Mutex.Unlock()
 		return false // Should not happen if EventTracker is initialized correctly
 	}
 
@@ -141,30 +141,17 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 		}
 	}
 
-	// The ShouldHandleEvent method of the handler will use its own configured timeout.
-	// We need to pass the effectiveTimeout to the behavior function or adjust the handler's timeout.
-	// For simplicity, let's adjust the handler's timeout temporarily if it's different.
-	// This requires a change in EventHandler or how ShouldHandleEvent works.
+	// Release the EventTracker lock before acquiring the handler lock to prevent deadlocks
+	et.Mutex.Unlock()
 
-	// Option 1: Pass timeout to ShouldHandleEvent (requires changing EventHandler.ShouldHandleEvent)
-	// return handler.ShouldHandleEvent(species, effectiveTimeout)
-
-	// Option 2: Temporarily modify handler's timeout (could be tricky with concurrency on EventHandler itself)
-	// originalTimeout := handler.Timeout
-	// handler.Timeout = effectiveTimeout
-	// allow := handler.ShouldHandleEvent(species)
-	// handler.Timeout = originalTimeout // Restore
-	// return allow
-
-	// Option 3: Create a one-off check using the behavior function directly.
-	// This avoids modifying EventHandler deeply for now and keeps its internal timeout for other potential uses.
-	handler.Mutex.Lock() // Lock the specific handler for its LastEventTime map
+	// Check if we should handle this event with the effective timeout
+	handler.Mutex.Lock()
 	lastTime, lastEventExists := handler.LastEventTime[species]
 	allowEvent := !lastEventExists || handler.BehaviorFunc(lastTime, effectiveTimeout)
 	if allowEvent {
 		handler.LastEventTime[species] = time.Now()
 	}
-	handler.Mutex.Unlock() // Unlock the specific handler
+	handler.Mutex.Unlock()
 
 	return allowEvent
 }
