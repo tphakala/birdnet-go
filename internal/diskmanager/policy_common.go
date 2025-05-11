@@ -39,9 +39,6 @@ func init() {
 		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: serviceLevelVar})
 		serviceLogger = slog.New(fbHandler).With("service", "diskmanager")
 		closeLogger = func() error { return nil } // No-op closer
-	} else {
-		// Use standard log for initial confirmation message
-		log.Printf("Diskmanager service logging initialized to file: %s", logFilePath)
 	}
 }
 

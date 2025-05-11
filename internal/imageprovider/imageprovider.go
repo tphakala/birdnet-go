@@ -73,14 +73,7 @@ func init() {
 		logging.Warn("Imageprovider service falling back to a disabled logger due to initialization error.")
 		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: imageProviderLevelVar})
 		imageProviderLogger = slog.New(fbHandler).With("service", "imageprovider")
-
-		if imageProviderLogger == nil { // This check is likely redundant now, but harmless
-			panic(fmt.Sprintf("Failed to initialize any logger for imageprovider service: %v", err))
-		}
-	} else {
-		logging.Info("Imageprovider file logger initialized successfully", "path", "logs/imageprovider.log")
 	}
-	// imageProviderLogCloser = closer
 }
 
 // emptyImageProvider is an ImageProvider that always returns an empty BirdImage.

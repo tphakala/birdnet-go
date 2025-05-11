@@ -34,19 +34,8 @@ func init() {
 		logging.Warn("Weather service falling back to a disabled logger due to initialization error.")
 		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: weatherLevelVar})
 		weatherLogger = slog.New(fbHandler).With("service", "weather")
-
-		if weatherLogger == nil { // This check is likely redundant now, but harmless
-			// If even the default logger isn't initialized, panic is reasonable
-			// as logging is fundamental.
-			panic(fmt.Sprintf("Failed to initialize any logger for weather service: %v", err))
-		}
 		logging.Warn("Weather service falling back to default logger due to file logger initialization error.")
-	} else {
-		logging.Info("Weather file logger initialized successfully", "path", "logs/weather.log")
 	}
-
-	// Store the closer function if you have a mechanism to call it on shutdown
-	// weatherLogCloser = closer
 }
 
 // Provider represents a weather data provider interface
