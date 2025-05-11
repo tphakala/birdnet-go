@@ -208,13 +208,26 @@ func (h *Handlers) GetLabels() []string {
 // GetBirdNET returns the BirdNET instance from the processor
 func (h *Handlers) GetBirdNET() interface{} {
 	// Try to get processor from context
-	processorObj := h.Server.(interface{ GetProcessor() interface{} })
+	processorObj, ok := h.Server.(interface{ GetProcessor() interface{} })
+	if !ok {
+		if h.debug {
+			h.baseHandler.logInfo("GetBirdNET: Server does not implement GetProcessor interface")
+		}
+		return nil
+	}
+
 	if processorObj == nil {
+		if h.debug {
+			h.baseHandler.logInfo("GetBirdNET: processorObj is nil")
+		}
 		return nil
 	}
 
 	processor := processorObj.GetProcessor()
 	if processor == nil {
+		if h.debug {
+			h.baseHandler.logInfo("GetBirdNET: processor is nil")
+		}
 		return nil
 	}
 
@@ -226,6 +239,9 @@ func (h *Handlers) GetBirdNET() interface{} {
 	case interface{ GetBn() interface{} }:
 		return p.GetBn()
 	default:
+		if h.debug {
+			h.baseHandler.logInfo("GetBirdNET: processor does not implement GetBirdNET or GetBn interface")
+		}
 		return nil
 	}
 }
