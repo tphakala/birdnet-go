@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/observation"
@@ -343,14 +344,75 @@ func (s *Server) GetAllSpecies() []string {
 	// Create a map to track unique species
 	uniqueSpecies := make(map[string]bool)
 
-	// Get all labels from the handlers which has access to BirdNET labels through settings
-	for _, label := range s.Handlers.GetLabels() {
-		// Parse the species string to get both scientific and common names
-		scientificName, commonName, _ := observation.ParseSpeciesString(label)
+	// Get BirdNET instance from handlers
+	bnInterface := s.Handlers.GetBirdNET()
 
-		// Add both names to the unique map
-		uniqueSpecies[scientificName] = true
-		uniqueSpecies[commonName] = true
+	// Process labels based on whether we have BirdNET instance or not
+	if bnInterface == nil {
+		// Fallback to using raw labels if BirdNET instance is not available
+		for _, label := range s.Handlers.GetLabels() {
+			scientificName, commonName, _ := observation.ParseSpeciesString(label)
+			if scientificName != "" {
+				uniqueSpecies[scientificName] = true
+			}
+			if commonName != "" {
+				uniqueSpecies[commonName] = true
+			}
+		}
+	} else {
+		// Cast to the BirdNET type if we have an implementation-specific knowledge
+		if bn, ok := bnInterface.(*birdnet.BirdNET); ok {
+			// Get current locale - we'll exclude raw English labels if not using English locale
+			isEnglishLocale := strings.HasPrefix(s.Settings.BirdNET.Locale, "en")
+
+			// First, process with localization
+			for _, label := range s.Handlers.GetLabels() {
+				// Use BirdNET's enrichment function which handles localization
+				scientificName, localizedCommonName, _ := bn.EnrichResultWithTaxonomy(label)
+
+				// Add scientific name (same across all locales)
+				if scientificName != "" {
+					uniqueSpecies[scientificName] = true
+				}
+
+				// Add localized common name
+				if localizedCommonName != "" {
+					uniqueSpecies[localizedCommonName] = true
+				}
+			}
+
+			// If not using English locale, we need to remove any raw English common names
+			// that might have been added from the raw labels
+			if !isEnglishLocale {
+				for _, label := range s.Handlers.GetLabels() {
+					_, englishCommonName, _ := observation.ParseSpeciesString(label)
+					if englishCommonName != "" {
+						// Remove the English common name if it's different from the localized one
+						// This needs to be checked by looking up both again to compare
+						_, localizedName, _ := bn.EnrichResultWithTaxonomy(label)
+						if englishCommonName != localizedName && uniqueSpecies[englishCommonName] {
+							delete(uniqueSpecies, englishCommonName)
+						}
+					}
+				}
+			}
+		} else {
+			// Fallback using the interface methods if type assertion fails
+			for _, label := range s.Handlers.GetLabels() {
+				parts := strings.Split(label, "_")
+				if len(parts) >= 2 {
+					scientificName := strings.TrimSpace(parts[0])
+					commonName := strings.TrimSpace(parts[1])
+
+					if scientificName != "" {
+						uniqueSpecies[scientificName] = true
+					}
+					if commonName != "" {
+						uniqueSpecies[commonName] = true
+					}
+				}
+			}
+		}
 	}
 
 	// Convert map keys to sorted slice

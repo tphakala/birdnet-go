@@ -659,6 +659,16 @@ func (p *Processor) GetJobQueueStats() jobqueue.JobStatsSnapshot {
 	return p.JobQueue.GetStats()
 }
 
+// GetBn returns the BirdNET instance
+func (p *Processor) GetBn() *birdnet.BirdNET {
+	return p.Bn
+}
+
+// GetBirdNET returns the BirdNET instance (alternative name)
+func (p *Processor) GetBirdNET() *birdnet.BirdNET {
+	return p.Bn
+}
+
 // Shutdown gracefully stops all processor components
 func (p *Processor) Shutdown() error {
 	// Cancel all worker goroutines
