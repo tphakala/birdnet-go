@@ -86,6 +86,15 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		h.controlChan <- "rebuild_range_filter"
 	}
 
+	// Check if species interval settings have changed
+	if speciesIntervalSettingsChanged(&oldSettings, settings) || oldSettings.Realtime.Interval != settings.Realtime.Interval {
+		h.SSE.SendNotification(Notification{
+			Message: "Updating detection rate limits...",
+			Type:    "info",
+		})
+		h.controlChan <- "update_detection_intervals"
+	}
+
 	// Check if MQTT settings have changed
 	if mqttSettingsChanged(&oldSettings, settings) {
 		h.SSE.SendNotification(Notification{
@@ -740,5 +749,38 @@ func birdWeatherSettingsChanged(oldSettings, currentSettings *conf.Settings) boo
 		return true
 	}
 
+	return false
+}
+
+// speciesIntervalSettingsChanged checks if any species-specific interval settings have changed
+func speciesIntervalSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Get the old and new species configs
+	oldSpeciesConfigs := oldSettings.Realtime.Species.Config
+	newSpeciesConfigs := currentSettings.Realtime.Species.Config
+
+	// Check if any species has been added or removed
+	for species, config := range newSpeciesConfigs {
+		// Check if this species existed in old configs
+		oldConfig, existed := oldSpeciesConfigs[species]
+		if !existed {
+			// New species with interval setting was added
+			if config.Interval > 0 {
+				return true
+			}
+		} else if oldConfig.Interval != config.Interval {
+			// Species interval has changed
+			return true
+		}
+	}
+
+	// Check if any species with interval settings was removed
+	for species, oldConfig := range oldSpeciesConfigs {
+		if _, exists := newSpeciesConfigs[species]; !exists && oldConfig.Interval > 0 {
+			// A species with interval settings was removed
+			return true
+		}
+	}
+
+	// No relevant changes
 	return false
 }

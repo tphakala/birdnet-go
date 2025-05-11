@@ -285,6 +285,7 @@
         },
         newSpeciesConfig: '',
         newThreshold: 0.5,
+        newInterval: 0,
         showTooltip: null,
         hasChanges: false,
         predictions: [],
@@ -302,6 +303,7 @@
         editConfigSpecies: null,
         editConfigNewName: '',
         editConfigThreshold: 0.5,
+        editConfigInterval: 0,
         
         async init() {
             this.allSpecies = [];
@@ -362,16 +364,20 @@
             if (threshold < 0 || threshold > 1) {
                 return; // Threshold must be between 0 and 1
             }
+
+            const interval = parseInt(this.newInterval) || 0;
             
             // Add new config
             this.speciesSettings.Config[newSpecies] = {
                 Threshold: threshold,
+                Interval: interval,
                 Actions: []
             };
             
             // Clear input fields
             this.newSpeciesConfig = '';
             this.newThreshold = 0.5;
+            this.newInterval = 0;
             
             // Mark changes and clear predictions
             this.hasChanges = true;
@@ -389,6 +395,7 @@
             this.editConfigSpecies = species;
             this.editConfigNewName = species;
             this.editConfigThreshold = this.speciesSettings.Config[species].Threshold;
+            this.editConfigInterval = this.speciesSettings.Config[species].Interval || 0;
         },
         
         saveEditConfig() {
@@ -397,20 +404,23 @@
             const originalSpecies = this.editConfigSpecies;
             const newSpecies = this.editConfigNewName;
             const threshold = this.editConfigThreshold;
+            const interval = this.editConfigInterval || 0;
             
             // If name changed, create new entry and delete old one
             if (originalSpecies !== newSpecies) {
                 // Create new entry with updated data
                 this.speciesSettings.Config[newSpecies] = {
                     Threshold: threshold,
+                    Interval: interval,
                     Actions: this.speciesSettings.Config[originalSpecies].Actions || []
                 };
                 
                 // Remove old entry
                 delete this.speciesSettings.Config[originalSpecies];
             } else {
-                // Just update threshold
+                // Just update threshold and interval
                 this.speciesSettings.Config[originalSpecies].Threshold = threshold;
+                this.speciesSettings.Config[originalSpecies].Interval = interval;
             }
             
             this.hasChanges = true;
@@ -422,6 +432,7 @@
             this.editConfigSpecies = null;
             this.editConfigNewName = '';
             this.editConfigThreshold = 0.5;
+            this.editConfigInterval = 0;
         },
         
         openActionsModal(species) {
@@ -519,11 +530,20 @@
     {{template "sectionHeader" dict
         "id" "speciesConfig"
         "title" "Custom Species Configuration"
-        "description" "Species specific threshold values and actions"}}
+        "description" "Species specific threshold values, detection intervals, and actions"}}
 
     <div class="collapse-content">
         <!-- Custom Species Configuration section -->                
         <div class="settings-form-group">
+            <!-- Help text for interval setting -->
+            <div class="text-sm text-base-content mb-4">
+                <p>Configure species-specific settings:</p>
+                <ul class="list-disc list-inside pl-4 text-xs">
+                    <li><b>Threshold</b>: Minimum confidence score (0-1) required for detection</li>
+                    <li><b>Interval</b>: Minimum time in seconds between detections of the same species (0 = use global default)</li>
+                    <li><b>Actions</b>: Custom commands to execute when this species is detected</li>
+                </ul>
+            </div>
 
             <!-- Custom configuration list -->
             <div class="space-y-2" role="list" aria-label="Custom species configurations">
@@ -547,6 +567,16 @@
                                 placeholder="Threshold"
                                 aria-label="Edit threshold value" />
                         </div>
+                        <div class="w-36">
+                            <input type="number" 
+                                x-model.number="editConfigInterval" 
+                                class="input input-sm input-bordered w-full" 
+                                min="0" 
+                                max="3600" 
+                                step="1" 
+                                placeholder="Interval (seconds)"
+                                aria-label="Edit interval value" />
+                        </div>
                     </div>
                     <div class="flex space-x-2">
                         <button @click="saveEditConfig()" 
@@ -569,6 +599,9 @@
                             <span class="text-sm pl-2 flex-grow" x-text="species"></span>
                             <div class="w-28 flex justify-center mr-2">
                                 <span class="badge badge-sm badge-neutral" x-text="'Threshold: ' + config.Threshold.toFixed(2)"></span>
+                            </div>
+                            <div class="w-28 flex justify-center mr-2" x-show="config.Interval > 0">
+                                <span class="badge badge-sm badge-secondary" x-text="'Interval: ' + config.Interval + 's'"></span>
                             </div>
                             <template x-if="config.Actions?.length > 0">
                                 <div class="flex gap-1 mr-2">
@@ -627,6 +660,20 @@
                             placeholder="Threshold"
                             @keyup.enter="if(newSpeciesConfig && newThreshold >= 0 && newThreshold <= 1) { addConfig(); }"
                             aria-label="Enter threshold value" />
+                    </div>
+                    
+                    <!-- Interval input -->
+                    <div class="w-36">
+                        <input type="number" 
+                            id="intervalInput"
+                            x-model.number="newInterval" 
+                            class="input input-sm input-bordered w-full" 
+                            min="0" 
+                            max="3600" 
+                            step="1" 
+                            placeholder="Interval (seconds)"
+                            @keyup.enter="if(newSpeciesConfig && newThreshold >= 0 && newThreshold <= 1) { addConfig(); }"
+                            aria-label="Enter interval in seconds" />
                     </div>
                     
                     <!-- Add button -->
