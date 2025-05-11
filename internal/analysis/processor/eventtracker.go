@@ -124,7 +124,10 @@ func NewEventTrackerWithConfig(defaultInterval time.Duration, speciesConfigs map
 // TrackEvent checks if an event for a given species and event type should be processed.
 // It utilizes the respective event handler to make this determination, considering species-specific intervals.
 func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
-	et.Mutex.Lock() // Lock for reading SpeciesConfigs and accessing Handlers
+	// LOCKING STRATEGY:
+	// 1. First, we lock the EventTracker mutex to safely access shared maps (Handlers and SpeciesConfigs)
+	//    This protects against concurrent access to these maps by multiple goroutines
+	et.Mutex.Lock()
 
 	handler, exists := et.Handlers[eventType]
 	if !exists {
@@ -141,10 +144,16 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 		}
 	}
 
-	// Release the EventTracker lock before acquiring the handler lock to prevent deadlocks
+	// 2. We unlock the EventTracker mutex BEFORE acquiring the handler's mutex
+	//    This is critical to prevent deadlocks that could occur if:
+	//    - Thread A: Holds EventTracker lock, waiting for Handler lock
+	//    - Thread B: Holds Handler lock, waiting for EventTracker lock
+	//    By releasing the outer lock first, we establish a consistent lock ordering
 	et.Mutex.Unlock()
 
-	// Check if we should handle this event with the effective timeout
+	// 3. Now we lock the handler's mutex to safely access and update its LastEventTime map
+	//    This ensures thread-safety for the specific handler while allowing other event types
+	//    to be processed concurrently
 	handler.Mutex.Lock()
 	lastTime, lastEventExists := handler.LastEventTime[species]
 	allowEvent := !lastEventExists || handler.BehaviorFunc(lastTime, effectiveTimeout)
