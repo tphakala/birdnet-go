@@ -197,8 +197,9 @@ type SpeciesAction struct {
 
 // SpeciesConfig represents configuration for a specific species
 type SpeciesConfig struct {
-	Threshold float64         `yaml:"threshold"` // Confidence threshold
-	Actions   []SpeciesAction `yaml:"actions"`   // List of actions to execute
+	Threshold float64         `yaml:"threshold"`          // Confidence threshold
+	Interval  int             `yaml:"interval,omitempty"` // New field: Custom interval in seconds
+	Actions   []SpeciesAction `yaml:"actions"`            // List of actions to execute
 }
 
 // RealtimeSpeciesSettings contains all species-specific settings
