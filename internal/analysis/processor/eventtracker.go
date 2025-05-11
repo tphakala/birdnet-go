@@ -47,9 +47,12 @@ func (h *EventHandler) ShouldHandleEvent(species string) bool {
 	h.Mutex.Lock()
 	defer h.Mutex.Unlock()
 
-	lastTime, exists := h.LastEventTime[species]
+	// Normalize species name to lowercase for consistent key usage
+	normalizedSpecies := strings.ToLower(species)
+
+	lastTime, exists := h.LastEventTime[normalizedSpecies]
 	if !exists || h.BehaviorFunc(lastTime, h.Timeout) {
-		h.LastEventTime[species] = time.Now()
+		h.LastEventTime[normalizedSpecies] = time.Now()
 		return true
 	}
 	return false
@@ -59,7 +62,7 @@ func (h *EventHandler) ShouldHandleEvent(species string) bool {
 func (h *EventHandler) ResetEvent(species string) {
 	h.Mutex.Lock()
 	defer h.Mutex.Unlock()
-	delete(h.LastEventTime, species)
+	delete(h.LastEventTime, strings.ToLower(species))
 }
 
 // StandardEventBehavior is a default behavior function that allows an event to be handled
@@ -102,6 +105,14 @@ func NewEventTracker(interval time.Duration) *EventTracker {
 
 // NewEventTrackerWithConfig creates a new EventTracker with a default interval and species-specific configurations.
 func NewEventTrackerWithConfig(defaultInterval time.Duration, speciesConfigs map[string]conf.SpeciesConfig) *EventTracker {
+	// Create normalized species configs map
+	normalizedSpeciesConfigs := make(map[string]conf.SpeciesConfig)
+	if speciesConfigs != nil {
+		for species, config := range speciesConfigs {
+			normalizedSpeciesConfigs[strings.ToLower(species)] = config
+		}
+	}
+
 	et := &EventTracker{
 		DefaultInterval: defaultInterval,
 		Handlers: map[EventType]*EventHandler{
@@ -113,10 +124,7 @@ func NewEventTrackerWithConfig(defaultInterval time.Duration, speciesConfigs map
 			BirdWeatherSubmit: NewEventHandler(defaultInterval, StandardEventBehavior),
 			MQTTPublish:       NewEventHandler(defaultInterval, StandardEventBehavior),
 		},
-		SpeciesConfigs: speciesConfigs, // Store species-specific configs
-	}
-	if et.SpeciesConfigs == nil { // Ensure the map is not nil
-		et.SpeciesConfigs = make(map[string]conf.SpeciesConfig)
+		SpeciesConfigs: normalizedSpeciesConfigs, // Store normalized species-specific configs
 	}
 	return et
 }
@@ -171,6 +179,6 @@ func (et *EventTracker) ResetEvent(species string, eventType EventType) {
 	defer et.Mutex.Unlock()
 
 	if handler, exists := et.Handlers[eventType]; exists {
-		handler.ResetEvent(species)
+		handler.ResetEvent(strings.ToLower(species))
 	}
 }
