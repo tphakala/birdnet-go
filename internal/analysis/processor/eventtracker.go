@@ -127,7 +127,7 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 	normalizedSpecies := strings.ToLower(species)
 
 	// LOCKING STRATEGY:
-	// 1. First, we lock the EventTracker mutex to safely access shared maps (Handlers and SpeciesConfigs)
+	// 1. First, we acquire a read lock on the EventTracker mutex to safely access shared maps (Handlers and SpeciesConfigs)
 	//    This protects against concurrent access to these maps by multiple goroutines
 	et.Mutex.RLock()
 
@@ -146,9 +146,6 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 		}
 	}
 
-	// Update the handler's Timeout field to maintain consistency
-	handler.Timeout = effectiveTimeout
-
 	// 2. We unlock the EventTracker mutex BEFORE acquiring the handler's mutex
 	//    This is critical to prevent deadlocks that could occur if:
 	//    - Thread A: Holds EventTracker lock, waiting for Handler lock
@@ -160,6 +157,8 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 	//    This ensures thread-safety for the specific handler while allowing other event types
 	//    to be processed concurrently
 	handler.Mutex.Lock()
+	// Update the handler's Timeout field to maintain consistency (moved inside handler mutex lock)
+	handler.Timeout = effectiveTimeout
 	lastTime, lastEventExists := handler.LastEventTime[normalizedSpecies]
 	allowEvent := !lastEventExists || handler.BehaviorFunc(lastTime, effectiveTimeout)
 	if allowEvent {
