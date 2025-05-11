@@ -2,6 +2,7 @@
 package processor
 
 import (
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -27,7 +28,6 @@ type EventBehaviorFunc func(lastEventTime time.Time, timeout time.Duration) bool
 // EventHandler holds the state and behavior for a specific event type.
 type EventHandler struct {
 	LastEventTime map[string]time.Time // Tracks the last event time for each species
-	Timeout       time.Duration        // The default time interval between events - should not be modified after initialization
 	BehaviorFunc  EventBehaviorFunc    // Function that defines the event handling behavior
 	Mutex         sync.Mutex           // Mutex to ensure thread-safe access
 }
@@ -36,7 +36,6 @@ type EventHandler struct {
 func NewEventHandler(timeout time.Duration, behaviorFunc EventBehaviorFunc) *EventHandler {
 	return &EventHandler{
 		LastEventTime: make(map[string]time.Time),
-		Timeout:       timeout,
 		BehaviorFunc:  behaviorFunc,
 	}
 }
@@ -148,9 +147,16 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 	effectiveTimeout := et.DefaultInterval // Start with the global default
 
 	if speciesConfig, ok := et.SpeciesConfigs[normalizedSpecies]; ok {
-		if speciesConfig.Interval > 0 { // Check if a custom interval is set and valid
+		if speciesConfig.Interval > 0 {
+			// Custom interval is set and valid (positive value)
 			effectiveTimeout = time.Duration(speciesConfig.Interval) * time.Second
+		} else if speciesConfig.Interval < 0 {
+			// Log a warning for negative interval values
+			log.Printf("Warning: Negative interval (%d) configured for species '%s'. Using default interval instead.",
+				speciesConfig.Interval, species)
+			// Continue using the default interval
 		}
+		// For zero interval, silently use the default interval (existing behavior)
 	}
 
 	// 2. We unlock the EventTracker mutex BEFORE acquiring the handler's mutex
