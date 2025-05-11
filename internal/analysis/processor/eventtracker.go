@@ -92,10 +92,9 @@ type EventTrackerConfig struct {
 func initEventTracker(interval time.Duration, speciesConfigs map[string]conf.SpeciesConfig) *EventTracker {
 	// Create normalized species configs map
 	normalizedSpeciesConfigs := make(map[string]conf.SpeciesConfig)
-	if speciesConfigs != nil {
-		for species, config := range speciesConfigs {
-			normalizedSpeciesConfigs[strings.ToLower(species)] = config
-		}
+	// Range is safe on nil maps, will iterate 0 times
+	for species, config := range speciesConfigs {
+		normalizedSpeciesConfigs[strings.ToLower(species)] = config
 	}
 
 	return &EventTracker{
