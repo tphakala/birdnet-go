@@ -655,6 +655,7 @@ BirdNET-Go allows for fine-grained control over how individual species are handl
 *   **Exclude List (`exclude`):** A list of species names that should *always* be ignored, regardless of their detection confidence. This is useful for filtering out consistently problematic species or non-bird sounds that might be misidentified.
 *   **Custom Configuration (`config`):** This section allows you to define specific settings for individual species:
     *   **Custom Threshold:** You can set a unique `threshold` for a species, overriding the global `birdnet.threshold`. This is useful if you want to be more or less strict for specific birds.
+    *   **Custom Interval:** You can set a species-specific `interval` (in seconds) to control how frequently detections for that particular species are allowed. Useful for limiting overly vocal species without affecting detection rates for other birds. When set to 0 or omitted, the global `realtime.interval` value is used.
     *   **Custom Actions (`actions`):** You can define a custom action to be triggered when a specific species is detected above its threshold. Currently, only one action per species is supported.
         *   **Type:** The only supported type is `ExecuteCommand`.
         *   **Command:** The full path to the script or executable to run.
@@ -672,12 +673,17 @@ Example `config` entry:
 
 ```yaml
 realtime:
+  interval: 15  # Default interval for most birds (15 seconds)
   species:
     config:
       "Great Tit":
         threshold: 0.65
+        interval: 30  # 30 seconds between detections for this species
+      "California Towhee":
+        interval: 300  # Limit detections to once every 5 minutes
       "Eurasian Magpie":
         threshold: 0.80
+        interval: 120  # 2 minutes between detections
         actions:
           - type: ExecuteCommand
             command: "/home/user/scripts/magpie_alert.sh"
