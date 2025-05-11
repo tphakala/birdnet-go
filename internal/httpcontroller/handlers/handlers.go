@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/security"
+	"github.com/tphakala/birdnet-go/internal/serviceapi"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -34,7 +35,10 @@ type Handlers struct {
 	controlChan       chan string
 	notificationChan  chan Notification
 	debug             bool
-	Server            interface{ IsAccessAllowed(c echo.Context) bool }
+	Server            interface {
+		IsAccessAllowed(c echo.Context) bool
+		GetProcessor() serviceapi.BirdNETProvider
+	}
 }
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.
@@ -77,7 +81,10 @@ func (bh *baseHandler) logInfo(message string) {
 }
 
 // New creates a new Handlers instance with the given dependencies.
-func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server, controlChan chan string, notificationChan chan Notification, server interface{ IsAccessAllowed(c echo.Context) bool }) *Handlers {
+func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server, controlChan chan string, notificationChan chan Notification, server interface {
+	IsAccessAllowed(c echo.Context) bool
+	GetProcessor() serviceapi.BirdNETProvider
+}) *Handlers {
 	if logger == nil {
 		logger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
@@ -207,23 +214,15 @@ func (h *Handlers) GetLabels() []string {
 
 // GetBirdNET returns the BirdNET instance from the processor
 func (h *Handlers) GetBirdNET() interface{} {
-	// Try to get processor from context
-	processorObj, ok := h.Server.(interface{ GetProcessor() interface{} })
-	if !ok {
+	if h.Server == nil {
 		if h.debug {
-			h.baseHandler.logInfo("GetBirdNET: Server does not implement GetProcessor interface")
+			h.baseHandler.logInfo("GetBirdNET: Server is nil")
 		}
 		return nil
 	}
 
-	if processorObj == nil {
-		if h.debug {
-			h.baseHandler.logInfo("GetBirdNET: processorObj is nil")
-		}
-		return nil
-	}
-
-	processor := processorObj.GetProcessor()
+	// Get the processor using the Server interface
+	processor := h.Server.GetProcessor()
 	if processor == nil {
 		if h.debug {
 			h.baseHandler.logInfo("GetBirdNET: processor is nil")
@@ -231,19 +230,8 @@ func (h *Handlers) GetBirdNET() interface{} {
 		return nil
 	}
 
-	// Access the BirdNET instance from the processor using type switch
-	// The processor type is expected to have a GetBirdNET() method or a Bn field
-	switch p := processor.(type) {
-	case interface{ GetBirdNET() interface{} }:
-		return p.GetBirdNET()
-	case interface{ GetBn() interface{} }:
-		return p.GetBn()
-	default:
-		if h.debug {
-			h.baseHandler.logInfo("GetBirdNET: processor does not implement GetBirdNET or GetBn interface")
-		}
-		return nil
-	}
+	// Get BirdNET using the processor
+	return processor.GetBirdNET()
 }
 
 // Security represents the authentication and access control state

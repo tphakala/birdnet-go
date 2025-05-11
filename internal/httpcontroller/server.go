@@ -22,6 +22,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/security"
+	"github.com/tphakala/birdnet-go/internal/serviceapi"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -428,6 +429,6 @@ func (s *Server) LoggingMiddleware() echo.MiddlewareFunc {
 }
 
 // GetProcessor returns the processor instance
-func (s *Server) GetProcessor() interface{} {
+func (s *Server) GetProcessor() serviceapi.BirdNETProvider {
 	return s.Processor
 }
