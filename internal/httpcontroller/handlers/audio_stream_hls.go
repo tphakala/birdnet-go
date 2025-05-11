@@ -1581,9 +1581,7 @@ func init() {
 	// Create HLS directory if needed
 	hlsDir, err := conf.GetHLSDirectory()
 	if err != nil {
-		log.Printf("⚠️ Warning: Failed to create HLS directory: %v", err)
-	} else {
-		log.Printf("✅ HLS streaming directory initialized at: %s", hlsDir)
+		log.Printf("⚠️ Warning: Failed to create HLS directory: %s %v", hlsDir, err)
 	}
 }
 

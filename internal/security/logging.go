@@ -31,9 +31,6 @@ func init() {
 		// Fallback to a disabled logger to prevent nil panics
 		securityLogger = slog.New(slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: securityLevelVar}))
 		securityLogCloser = func() error { return nil } // No-op closer for fallback
-	} else {
-		// Use standard log for initial confirmation message
-		log.Printf("Security file logger initialized successfully to %s", logFilePath)
 	}
 }
 

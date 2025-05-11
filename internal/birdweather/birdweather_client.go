@@ -54,9 +54,6 @@ func init() {
 		closeLogger = func() error { return nil } // No-op closer
 		// Consider whether to panic or continue without file logging
 		// panic(fmt.Sprintf("Failed to initialize birdweather file logger: %v", err))
-	} else {
-		// Use standard log for initial confirmation message
-		log.Printf("Birdweather service logging initialized to file: %s", logFilePath)
 	}
 }
 
