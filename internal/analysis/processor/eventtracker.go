@@ -76,7 +76,7 @@ type EventTracker struct {
 	Handlers        map[EventType]*EventHandler
 	SpeciesConfigs  map[string]conf.SpeciesConfig // Add this: Store species-specific configurations
 	DefaultInterval time.Duration                 // Add this: Store the global default interval
-	Mutex           sync.Mutex                    // Mutex to ensure thread-safe access
+	Mutex           sync.RWMutex                  // Mutex to ensure thread-safe access
 }
 
 // Add this new struct to hold configuration
@@ -129,11 +129,11 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 	// LOCKING STRATEGY:
 	// 1. First, we lock the EventTracker mutex to safely access shared maps (Handlers and SpeciesConfigs)
 	//    This protects against concurrent access to these maps by multiple goroutines
-	et.Mutex.Lock()
+	et.Mutex.RLock()
 
 	handler, exists := et.Handlers[eventType]
 	if !exists {
-		et.Mutex.Unlock()
+		et.Mutex.RUnlock()
 		return false // Should not happen if EventTracker is initialized correctly
 	}
 
@@ -154,7 +154,7 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 	//    - Thread A: Holds EventTracker lock, waiting for Handler lock
 	//    - Thread B: Holds Handler lock, waiting for EventTracker lock
 	//    By releasing the outer lock first, we establish a consistent lock ordering
-	et.Mutex.Unlock()
+	et.Mutex.RUnlock()
 
 	// 3. Now we lock the handler's mutex to safely access and update its LastEventTime map
 	//    This ensures thread-safety for the specific handler while allowing other event types
@@ -176,10 +176,10 @@ func (et *EventTracker) ResetEvent(species string, eventType EventType) {
 	normalizedSpecies := strings.ToLower(species)
 
 	// First lock EventTracker mutex to safely access handler map
-	et.Mutex.Lock()
+	et.Mutex.RLock()
 	handler, exists := et.Handlers[eventType]
 	// Release EventTracker mutex before acquiring handler mutex to match lock ordering in TrackEvent
-	et.Mutex.Unlock()
+	et.Mutex.RUnlock()
 
 	if exists {
 		// Now lock handler mutex to update its state
