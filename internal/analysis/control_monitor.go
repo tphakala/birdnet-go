@@ -233,11 +233,18 @@ func (cm *ControlMonitor) handleUpdateDetectionIntervals() {
 		globalInterval = 5 * time.Second // Fallback to a reasonable default
 	}
 
-	// Get the processor and create a new EventTracker with updated settings
+	// Note: If EventTracker cleanup becomes necessary in the future,
+	// get the current tracker here and perform cleanup before replacement
+
+	// Create a new EventTracker with updated settings
 	newTracker := processor.NewEventTrackerWithConfig(
 		globalInterval,
 		settings.Realtime.Species.Config,
 	)
+
+	// Clean up the old EventTracker if possible
+	// Note: If cleanup becomes necessary in the future, consider adding a Close()
+	// method to the EventTracker type and call it here
 
 	// Replace the existing EventTracker with the new one
 	cm.proc.SetEventTracker(newTracker)
