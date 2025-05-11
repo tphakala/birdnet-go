@@ -6,28 +6,33 @@ Usage:
 - onInput: "updatePredictionsFunction" (function to call when input changes)
 - onAdd: "addSpeciesFunction" (function to call when adding)
 - placeholder: "Add new species" (optional - custom placeholder)
-- inputId: "custom-id" (optional - custom ID for the input)
+- inputId: "custom-id" (REQUIRED - unique ID for this input when using multiple instances)
 - buttonText: "Add" (optional - custom button text)
 - responsive: true (optional - whether to use responsive layout)
 - label: "Species Name" (optional - label to display above input)
 */}}
+{{/* Define reusable variables to avoid duplication */}}
+{{$inputId := or .inputId "species-input"}}
+{{$placeholder := or .placeholder "Add new species"}}
+
 <div class="mt-4 flex flex-col gap-2">
     {{if .label}}
-    <label for="{{if .inputId}}{{.inputId}}{{else}}species-input{{end}}" class="text-xs font-medium text-base-content/70 px-2">{{.label}}</label>
+    <label for="{{$inputId}}" class="text-xs font-medium text-base-content/70 px-2">{{.label}}</label>
     {{end}}
     
     <div class="flex {{if .responsive}}flex-col md:flex-row{{else}}flex-row{{end}} gap-2">
         <div class="relative w-full">
             <input type="text" 
-                   id="{{if .inputId}}{{.inputId}}{{else}}species-input{{end}}"
+                   id="{{$inputId}}"
                    x-model="{{.inputModel}}" 
                    @input="{{.onInput}}"
                    @keyup.enter="{{.onAdd}}"
-                   list="{{if .inputId}}{{.inputId}}-suggestions{{else}}species-suggestions{{end}}"
-                   placeholder="{{if .placeholder}}{{.placeholder}}{{else}}Add new species{{end}}"
+                   list="{{$inputId}}-suggestions"
+                   placeholder="{{$placeholder}}"
+                   aria-label="{{if .label}}{{.label}}{{else}}{{$placeholder}}{{end}}"
                    class="input input-sm input-bordered w-full">
             
-            <datalist id="{{if .inputId}}{{.inputId}}-suggestions{{else}}species-suggestions{{end}}">
+            <datalist id="{{$inputId}}-suggestions">
                 <template x-for="species in {{.predictions}}" :key="species">
                     <option :value="species"></option>
                 </template>
