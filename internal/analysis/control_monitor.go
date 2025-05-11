@@ -226,9 +226,16 @@ func (cm *ControlMonitor) handleUpdateDetectionIntervals() {
 		return
 	}
 
+	// Validate global interval setting
+	globalInterval := time.Duration(settings.Realtime.Interval) * time.Second
+	if globalInterval <= 0 {
+		log.Printf("\033[33m⚠️ Warning: Invalid global interval value (%v), using default\033[0m", globalInterval)
+		globalInterval = 5 * time.Second // Fallback to a reasonable default
+	}
+
 	// Get the processor and create a new EventTracker with updated settings
 	newTracker := processor.NewEventTrackerWithConfig(
-		time.Duration(settings.Realtime.Interval)*time.Second,
+		globalInterval,
 		settings.Realtime.Species.Config,
 	)
 
