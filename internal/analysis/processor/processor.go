@@ -33,6 +33,7 @@ type Processor struct {
 	mqttMutex           sync.RWMutex // Mutex to protect MQTT client access
 	BirdImageCache      *imageprovider.BirdImageCache
 	EventTracker        *EventTracker
+	eventTrackerMu      sync.RWMutex         // Mutex to protect EventTracker access
 	LastDogDetection    map[string]time.Time // keep track of dog barks per audio source
 	LastHumanDetection  map[string]time.Time // keep track of human vocal per audio source
 	Metrics             *telemetry.Metrics
@@ -547,13 +548,13 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 
 	// Append various default actions based on the application settings
 	if p.Settings.Realtime.Log.Enabled {
-		actions = append(actions, &LogAction{Settings: p.Settings, EventTracker: p.EventTracker, Note: detection.Note})
+		actions = append(actions, &LogAction{Settings: p.Settings, EventTracker: p.GetEventTracker(), Note: detection.Note})
 	}
 
 	if p.Settings.Output.SQLite.Enabled || p.Settings.Output.MySQL.Enabled {
 		actions = append(actions, &DatabaseAction{
 			Settings:     p.Settings,
-			EventTracker: p.EventTracker,
+			EventTracker: p.GetEventTracker(),
 			Note:         detection.Note,
 			Results:      detection.Results,
 			Ds:           p.Ds})
@@ -574,7 +575,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 
 			actions = append(actions, &BirdWeatherAction{
 				Settings:     p.Settings,
-				EventTracker: p.EventTracker,
+				EventTracker: p.GetEventTracker(),
 				BwClient:     bwClient,
 				Note:         detection.Note,
 				pcmData:      detection.pcmData3s,
@@ -599,7 +600,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			actions = append(actions, &MqttAction{
 				Settings:       p.Settings,
 				MqttClient:     mqttClient,
-				EventTracker:   p.EventTracker,
+				EventTracker:   p.GetEventTracker(),
 				Note:           detection.Note,
 				BirdImageCache: p.BirdImageCache,
 				RetryConfig:    mqttRetryConfig,
@@ -648,9 +649,16 @@ func (p *Processor) DisconnectBwClient() {
 
 // SetEventTracker safely replaces the current EventTracker
 func (p *Processor) SetEventTracker(tracker *EventTracker) {
-	// Simple setter since EventTracker is not behind a mutex lock
-	// It's safe to replace the EventTracker as it handles its own concurrency
+	p.eventTrackerMu.Lock()
+	defer p.eventTrackerMu.Unlock()
 	p.EventTracker = tracker
+}
+
+// GetEventTracker safely returns the current EventTracker
+func (p *Processor) GetEventTracker() *EventTracker {
+	p.eventTrackerMu.RLock()
+	defer p.eventTrackerMu.RUnlock()
+	return p.EventTracker
 }
 
 // GetJobQueueStats returns statistics about the job queue
@@ -660,11 +668,12 @@ func (p *Processor) GetJobQueueStats() jobqueue.JobStatsSnapshot {
 }
 
 // GetBn returns the BirdNET instance
+// Deprecated: Use GetBirdNET instead
 func (p *Processor) GetBn() *birdnet.BirdNET {
 	return p.Bn
 }
 
-// GetBirdNET returns the BirdNET instance (alternative name)
+// GetBirdNET returns the BirdNET instance
 func (p *Processor) GetBirdNET() *birdnet.BirdNET {
 	return p.Bn
 }
