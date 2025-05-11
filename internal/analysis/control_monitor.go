@@ -74,6 +74,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureRTSP()
 	case "reconfigure_birdweather":
 		cm.handleReconfigureBirdWeather()
+	case "update_detection_intervals":
+		cm.handleUpdateDetectionIntervals()
 	default:
 		log.Printf("Received unknown control signal: %v", signal)
 	}
@@ -211,6 +213,30 @@ func (cm *ControlMonitor) handleReconfigureBirdWeather() {
 		log.Printf("\033[32m✅ BirdWeather integration disabled\033[0m")
 		cm.notifySuccess("BirdWeather integration disabled")
 	}
+}
+
+// handleUpdateDetectionIntervals updates event tracking intervals for species
+func (cm *ControlMonitor) handleUpdateDetectionIntervals() {
+	log.Printf("\033[32m🔄 Updating detection rate limits...\033[0m")
+	settings := conf.Setting()
+
+	if cm.proc == nil {
+		log.Printf("\033[31m❌ Error: Processor not available\033[0m")
+		cm.notifyError("Failed to update detection intervals", fmt.Errorf("processor not available"))
+		return
+	}
+
+	// Get the processor and create a new EventTracker with updated settings
+	newTracker := processor.NewEventTrackerWithConfig(
+		time.Duration(settings.Realtime.Interval)*time.Second,
+		settings.Realtime.Species.Config,
+	)
+
+	// Replace the existing EventTracker with the new one
+	cm.proc.SetEventTracker(newTracker)
+
+	log.Printf("\033[32m✅ Detection rate limits updated successfully\033[0m")
+	cm.notifySuccess("Detection rate limits updated successfully")
 }
 
 // notifySuccess sends a success notification
