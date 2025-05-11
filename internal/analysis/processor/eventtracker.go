@@ -41,12 +41,10 @@ func NewEventHandler(timeout time.Duration, behaviorFunc EventBehaviorFunc) *Eve
 	}
 }
 
-// ShouldHandleEvent determines whether an event for a given species should be handled,
-// based on the last event time and the specified timeout.
-func (h *EventHandler) ShouldHandleEvent(species string, timeout time.Duration) bool {
-	h.Mutex.Lock()
-	defer h.Mutex.Unlock()
-
+// shouldHandleEventLocked is a helper method that performs the event handling logic
+// without locking. It assumes the caller already holds the Mutex lock.
+// This eliminates duplication between ShouldHandleEvent and TrackEvent.
+func (h *EventHandler) shouldHandleEventLocked(species string, timeout time.Duration) bool {
 	// Normalize species name to lowercase for consistent key usage
 	normalizedSpecies := strings.ToLower(species)
 
@@ -56,6 +54,15 @@ func (h *EventHandler) ShouldHandleEvent(species string, timeout time.Duration) 
 		return true
 	}
 	return false
+}
+
+// ShouldHandleEvent determines whether an event for a given species should be handled,
+// based on the last event time and the specified timeout.
+func (h *EventHandler) ShouldHandleEvent(species string, timeout time.Duration) bool {
+	h.Mutex.Lock()
+	defer h.Mutex.Unlock()
+
+	return h.shouldHandleEventLocked(species, timeout)
 }
 
 // ResetEvent clears the last event time for a given species, effectively resetting its state.
@@ -157,13 +164,10 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 	//    This ensures thread-safety for the specific handler while allowing other event types
 	//    to be processed concurrently
 	handler.Mutex.Lock()
-	// Update the handler's Timeout field to maintain consistency (moved inside handler mutex lock)
+	// Update the handler's Timeout field to maintain consistency (within the mutex lock)
 	handler.Timeout = effectiveTimeout
-	lastTime, lastEventExists := handler.LastEventTime[normalizedSpecies]
-	allowEvent := !lastEventExists || handler.BehaviorFunc(lastTime, effectiveTimeout)
-	if allowEvent {
-		handler.LastEventTime[normalizedSpecies] = time.Now()
-	}
+	// Use the shared helper method to evaluate whether the event should be handled
+	allowEvent := handler.shouldHandleEventLocked(normalizedSpecies, effectiveTimeout)
 	handler.Mutex.Unlock()
 
 	return allowEvent
