@@ -21,3 +21,12 @@ type SecurityProvider interface {
 	// IsAccessAllowed determines if the current context has access
 	IsAccessAllowed(ctx interface{}) bool
 }
+
+// ServerFacade combines security and processor interfaces
+// This interface is used by HTTP controllers to interact with the server
+type ServerFacade interface {
+	// IsAccessAllowed determines if the given context has access
+	IsAccessAllowed(c interface{}) bool
+	// GetProcessor returns the analysis processor
+	GetProcessor() BirdNETProvider
+}
