@@ -43,7 +43,7 @@ func NewEventHandler(timeout time.Duration, behaviorFunc EventBehaviorFunc) *Eve
 
 // ShouldHandleEvent determines whether an event for a given species should be handled,
 // based on the last event time and the specified timeout.
-func (h *EventHandler) ShouldHandleEvent(species string) bool {
+func (h *EventHandler) ShouldHandleEvent(species string, timeout time.Duration) bool {
 	h.Mutex.Lock()
 	defer h.Mutex.Unlock()
 
@@ -51,7 +51,7 @@ func (h *EventHandler) ShouldHandleEvent(species string) bool {
 	normalizedSpecies := strings.ToLower(species)
 
 	lastTime, exists := h.LastEventTime[normalizedSpecies]
-	if !exists || h.BehaviorFunc(lastTime, h.Timeout) {
+	if !exists || h.BehaviorFunc(lastTime, timeout) {
 		h.LastEventTime[normalizedSpecies] = time.Now()
 		return true
 	}
@@ -145,6 +145,9 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 			effectiveTimeout = time.Duration(speciesConfig.Interval) * time.Second
 		}
 	}
+
+	// Update the handler's Timeout field to maintain consistency
+	handler.Timeout = effectiveTimeout
 
 	// 2. We unlock the EventTracker mutex BEFORE acquiring the handler's mutex
 	//    This is critical to prevent deadlocks that could occur if:
