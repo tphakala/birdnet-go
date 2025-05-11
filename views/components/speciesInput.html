@@ -13,7 +13,7 @@ Usage:
 */}}
 <div class="mt-4 flex flex-col gap-2">
     {{if .label}}
-    <div class="text-xs font-medium text-base-content/70 px-2">{{.label}}</div>
+    <label for="{{if .inputId}}{{.inputId}}{{else}}species-input{{end}}" class="text-xs font-medium text-base-content/70 px-2">{{.label}}</label>
     {{end}}
     
     <div class="flex {{if .responsive}}flex-col md:flex-row{{else}}flex-row{{end}} gap-2">
