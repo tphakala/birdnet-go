@@ -22,6 +22,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/security"
+	"github.com/tphakala/birdnet-go/internal/serviceapi"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -126,6 +127,7 @@ func (s *Server) isAuthenticationEnabled(c echo.Context) bool {
 	return s.Handlers.OAuth2Server.IsAuthenticationEnabled(s.RealIP(c))
 }
 
+// IsAccessAllowed checks if a user is authenticated based on the context
 func (s *Server) IsAccessAllowed(c echo.Context) bool {
 	return s.OAuth2Server.IsUserAuthenticated(c)
 }
@@ -424,4 +426,9 @@ func (s *Server) LoggingMiddleware() echo.MiddlewareFunc {
 			return err
 		}
 	}
+}
+
+// GetProcessor returns the processor instance
+func (s *Server) GetProcessor() serviceapi.BirdNETProvider {
+	return s.Processor
 }

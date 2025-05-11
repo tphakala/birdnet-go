@@ -12,8 +12,16 @@ Usage:
 - onCancel: "cancelFunction" (optional - function for canceling edits)
 - actionTemplate: "templateName" (optional - custom action template)
 - itemClass: "custom-class" (optional - additional class for items)
+- emptyMessage: "No items added" (optional - message to display when list is empty)
 */}}
 <div class="space-y-2">
+    <!-- Empty state message -->
+    <div x-show="{{.species}}.length === 0" 
+         x-cloak
+         class="text-sm text-base-content/60 italic p-2 text-center">
+        {{if .emptyMessage}}{{.emptyMessage}}{{else}}No items in this list{{end}}
+    </div>
+
     <template x-for="(item, index) in {{.species}}" :key="index">
         <div class="settings-list-item flex items-center justify-between p-2 rounded-md bg-base-200 {{.itemClass}}"
              x-data="{ 
