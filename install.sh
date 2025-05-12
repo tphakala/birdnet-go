@@ -317,6 +317,16 @@ check_systemd() {
     fi
 }
 
+# Function to check if a directory exists
+check_directory_exists() {
+    local dir="$1"
+    if [ -d "$dir" ]; then
+        return 0 # Directory exists
+    else
+        return 1 # Directory does not exist
+    fi
+}
+
 # Function to check if directories can be created
 check_directory() {
     local dir="$1"
@@ -1263,6 +1273,18 @@ generate_systemd_service_content() {
     local HOST_UID=${SUDO_UID:-$(id -u)}
     local HOST_GID=${SUDO_GID:-$(id -g)}
 
+    # Check for /dev/snd/
+    local audio_env_line=""
+    if check_directory_exists "/dev/snd/"; then
+        audio_env_line="    ${AUDIO_ENV} \\\\"
+    fi
+
+    # Check for /sys/class/thermal, used for Raspberry Pi temperature reporting in system dashboard
+    local thermal_volume_line=""
+    if check_directory_exists "/sys/class/thermal"; then
+        thermal_volume_line="    -v /sys/class/thermal:/sys/class/thermal \\\\"
+    fi
+
     cat << EOF
 [Unit]
 Description=BirdNET-Go
@@ -1285,9 +1307,10 @@ ExecStart=/usr/bin/docker run --rm \\
     --env BIRDNET_UID=${HOST_UID} \\
     --env BIRDNET_GID=${HOST_GID} \\
     --add-host="host.docker.internal:host-gateway" \\
-    ${AUDIO_ENV} \\
+    ${audio_env_line}
     -v ${CONFIG_DIR}:/config \\
     -v ${DATA_DIR}:/data \\
+    ${thermal_volume_line}
     ${BIRDNET_GO_IMAGE}
 # Cleanup tasks on stop
 ExecStopPost=/bin/sh -c 'umount -f ${CONFIG_DIR}/hls || true'
