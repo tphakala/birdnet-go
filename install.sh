@@ -1276,13 +1276,13 @@ generate_systemd_service_content() {
     # Check for /dev/snd/
     local audio_env_line=""
     if check_directory_exists "/dev/snd/"; then
-        audio_env_line="    ${AUDIO_ENV} \\\\"
+        audio_env_line="--device /dev/snd \\"
     fi
 
     # Check for /sys/class/thermal, used for Raspberry Pi temperature reporting in system dashboard
     local thermal_volume_line=""
     if check_directory_exists "/sys/class/thermal"; then
-        thermal_volume_line="    -v /sys/class/thermal:/sys/class/thermal \\\\"
+        thermal_volume_line="-v /sys/class/thermal:/sys/class/thermal \\"
     fi
 
     cat << EOF
@@ -1306,7 +1306,6 @@ ExecStart=/usr/bin/docker run --rm \\
     --env TZ="${TZ}" \\
     --env BIRDNET_UID=${HOST_UID} \\
     --env BIRDNET_GID=${HOST_GID} \\
-    --add-host="host.docker.internal:host-gateway" \\
     ${audio_env_line}
     -v ${CONFIG_DIR}:/config \\
     -v ${DATA_DIR}:/data \\
