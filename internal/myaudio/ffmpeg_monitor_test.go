@@ -371,21 +371,6 @@ func (p *MockFFmpegProcess) AddStateChange(state string) {
 	p.stateChanges = append(p.stateChanges, state)
 }
 
-// MockCmd mocks an exec.Cmd
-type MockCmd struct {
-	pid     int
-	process *MockProcess
-}
-
-// MockProcess mocks os.Process
-type MockProcess struct {
-	pid int
-}
-
-func (p *MockProcess) Kill() error {
-	return nil
-}
-
 // ForEachCallbackMatcher is a custom matcher for ForEach callback functions
 type ForEachCallbackMatcher struct {
 	ExpectedURLs map[string]bool
@@ -729,6 +714,7 @@ func TestSettingsBasedConfigProvider(t *testing.T) {
 	assert.Equal(t, 5*time.Minute, settings.Timeout, "Default cleanup timeout should be 5 minutes")
 }
 
+// TestBoundedBuffer tests the bounded buffer implementation
 func TestBoundedBuffer(t *testing.T) {
 	// Create a buffer with a small size
 	bufSize := 10
@@ -766,6 +752,7 @@ func TestBoundedBuffer(t *testing.T) {
 	assert.Equal(t, anotherSmall, buf.String(), "Buffer should only contain the new data")
 }
 
+// TestBackoffStrategy tests the exponential backoff strategy
 func TestBackoffStrategy(t *testing.T) {
 	// Create a backoff strategy with 3 max attempts, 1s initial delay, and 5s max delay
 	maxAttempts := 3
