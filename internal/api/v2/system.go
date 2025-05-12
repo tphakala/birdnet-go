@@ -1164,6 +1164,65 @@ func (c *Controller) GetProcessInfo(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, processInfos)
 }
 
+// checkThermalZone attempts to read and validate the temperature from a specific thermal zone.
+// It returns the Celsius temperature, details about the sensor/error, whether it was valid, and any critical error.
+func (c *Controller) checkThermalZone(zonePath string, targetTypes map[string]bool) (celsius float64, details string, isValid bool, err error) {
+	zoneName := filepath.Base(zonePath)
+	typePath := filepath.Join(zonePath, "type")
+
+	typeData, err := os.ReadFile(typePath)
+	if err != nil {
+		// Not a critical error for the overall request, just skip this zone.
+		if c.apiLogger != nil {
+			c.apiLogger.Debug("Failed to read type file for zone", "zone", zoneName, "type_path", typePath, "error", err.Error())
+		}
+		return 0, fmt.Sprintf("Failed to read type for %s", zoneName), false, nil
+	}
+
+	sensorType := strings.ToLower(strings.TrimSpace(string(typeData)))
+
+	if _, isTarget := targetTypes[sensorType]; !isTarget {
+		// Not a target sensor type, skip silently.
+		return 0, "", false, nil
+	}
+
+	// It's a target type, now try to read and validate the temperature.
+	tempFilePath := filepath.Join(zonePath, "temp")
+	tempData, err := os.ReadFile(tempFilePath)
+	if err != nil {
+		details = fmt.Sprintf("Error reading temp from %s (type: %s)", zoneName, sensorType)
+		if c.apiLogger != nil {
+			c.apiLogger.Warn(details, "temp_path", tempFilePath, "error", err.Error())
+		}
+		return 0, details, false, nil // Error reading temp, but might find another valid zone.
+	}
+
+	tempStr := strings.TrimSpace(string(tempData))
+	tempMillCelsius, err := strconv.Atoi(tempStr)
+	if err != nil {
+		details = fmt.Sprintf("Error parsing temp from %s (type: %s, value: '%s')", zoneName, sensorType, tempStr)
+		if c.apiLogger != nil {
+			c.apiLogger.Warn(details, "error", err.Error())
+		}
+		return 0, details, false, nil // Error parsing temp.
+	}
+
+	celsius = float64(tempMillCelsius) / 1000.0
+
+	// Validate temperature range (0 to 100 °C inclusive)
+	if celsius < 0.0 || celsius > 100.0 {
+		details = fmt.Sprintf("Invalid temp from %s (type: %s, value: %.1f°C, expected 0-100°C)", zoneName, sensorType, celsius)
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Temperature reading out of valid range", "details", details)
+		}
+		return 0, details, false, nil // Temp out of range.
+	}
+
+	// Valid temperature found
+	details = fmt.Sprintf("Source: %s, Type: %s", zoneName, sensorType)
+	return celsius, details, true, nil
+}
+
 // GetSystemCPUTemperature handles GET /api/v2/system/temperature/cpu
 // It attempts to read the CPU temperature by scanning /sys/class/thermal/thermal_zone*
 // for specific types like 'cpu-thermal' or 'x86_pkg_temp'.
@@ -1233,89 +1292,60 @@ func (c *Controller) GetSystemCPUTemperature(ctx echo.Context) error {
 		return ctx.JSON(http.StatusOK, response)
 	}
 
+	var lastAttemptDetails string
+	foundValid := false
+
 	for _, zonePath := range zones {
-		zoneName := filepath.Base(zonePath)
-		typePath := filepath.Join(zonePath, "type")
-		typeData, err := os.ReadFile(typePath)
+		celsius, details, isValid, err := c.checkThermalZone(zonePath, targetTypes)
+		// We don't expect critical errors from checkThermalZone currently, but check just in case.
 		if err != nil {
+			// Log unexpected critical error from helper
 			if c.apiLogger != nil {
-				c.apiLogger.Debug("Failed to read type file for zone",
-					"zone", zoneName, "type_path", typePath, "error", err.Error())
+				c.apiLogger.Error("Unexpected error checking thermal zone", "zone", zonePath, "error", err.Error())
 			}
-			continue // Skip this zone if type file is unreadable
+			continue // Skip this zone on critical error
 		}
-		// Convert to lowercase for case-insensitive matching
-		sensorType := strings.ToLower(strings.TrimSpace(string(typeData)))
 
-		if _, isTarget := targetTypes[sensorType]; isTarget {
-			tempFilePath := filepath.Join(zonePath, "temp")
-			tempData, err := os.ReadFile(tempFilePath)
-			if err != nil {
-				if c.apiLogger != nil {
-					c.apiLogger.Warn("Failed to read temp file for target sensor type",
-						"zone", zoneName, "sensor_type", sensorType, "temp_path", tempFilePath, "error", err.Error())
-				}
-				response.SensorDetails = fmt.Sprintf("Error reading temp from %s (type: %s)", zoneName, sensorType)
-				continue // Skip this sensor, try next if any
-			}
-
-			tempStr := strings.TrimSpace(string(tempData))
-			tempMillCelsius, err := strconv.Atoi(tempStr)
-			if err != nil {
-				if c.apiLogger != nil {
-					c.apiLogger.Warn("Failed to parse temperature value from sensor file",
-						"zone", zoneName, "sensor_type", sensorType, "raw_value", tempStr, "error", err.Error())
-				}
-				response.SensorDetails = fmt.Sprintf("Error parsing temp from %s (type: %s, value: '%s')", zoneName, sensorType, tempStr)
-				continue // Skip this sensor, try next if any
-			}
-
-			celsius := float64(tempMillCelsius) / 1000.0
-
-			// Validate temperature range (0 to 100 °C inclusive)
-			if celsius < 0.0 || celsius > 100.0 {
-				if c.apiLogger != nil {
-					c.apiLogger.Warn("Temperature reading out of valid range (0-100°C)",
-						"zone", zoneName, "sensor_type", sensorType, "value_celsius", celsius)
-				}
-				response.SensorDetails = fmt.Sprintf("Invalid temp from %s (type: %s, value: %.1f°C, expected 0-100°C)", zoneName, sensorType, celsius)
-				// Do not return yet, another zone might provide a valid temperature.
-				// We want the first *valid* temperature. If all targeted sensors are out of range,
-				// the default IsAvailable=false and message will be used.
-				continue
-			}
-
-			// Valid temperature found
+		if isValid {
 			response.Celsius = celsius
 			response.IsAvailable = true
-			response.SensorDetails = fmt.Sprintf("Source: %s, Type: %s", zoneName, sensorType)
+			response.SensorDetails = details
 			response.Message = "CPU temperature retrieved successfully."
+			foundValid = true
 			if c.apiLogger != nil {
 				c.apiLogger.Info("CPU temperature retrieved successfully",
 					"temperature_celsius", response.Celsius,
 					"sensor_details", response.SensorDetails,
 					"request_path", ctx.Request().URL.Path, "ip", ctx.RealIP())
 			}
-			return ctx.JSON(http.StatusOK, response) // Found a valid sensor, return immediately
+			break // Found the first valid sensor, stop searching.
+		}
+
+		// If it wasn't valid, but details were returned (meaning it was a target sensor with an issue),
+		// store the details of the last failed attempt on a target sensor.
+		if details != "" {
+			lastAttemptDetails = details
 		}
 	}
 
-	// If loop completes, no suitable and valid sensor was found.
-	// response.Message will be the default or the last SensorDetails error if one was set for a target type.
-	// Ensure a clear message if no target types were found at all.
-	if !response.IsAvailable && response.SensorDetails == "" { // If no target sensors even attempted to read fully.
-		response.Message = "No targeted CPU temperature sensor types (e.g., cpu-thermal, x86_pkg_temp) found in available thermal zones."
-	} else if !response.IsAvailable && response.SensorDetails != "" {
-		// A target sensor was found but had issues (read error, parse error, out of range)
-		// Prepend to the existing SensorDetails message for more clarity.
-		response.Message = fmt.Sprintf("A targeted CPU sensor was found but could not be read successfully or value was invalid. Last attempt details: %s", response.SensorDetails)
+	// If loop completes and no valid sensor was found.
+	if !foundValid {
+		response.SensorDetails = lastAttemptDetails // Show details of the last failed attempt if any
+		if lastAttemptDetails != "" {
+			// A target sensor was found but had issues (read error, parse error, out of range)
+			response.Message = fmt.Sprintf("A targeted CPU sensor was found but could not be read successfully or value was invalid. Last attempt details: %s", lastAttemptDetails)
+		} else {
+			// No target sensors were found at all, or they were skipped due to non-critical errors before validation.
+			response.Message = "No targeted CPU temperature sensor types (e.g., cpu-thermal, x86_pkg_temp) found or readable in available thermal zones."
+		}
+
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Could not retrieve a valid CPU temperature after checking all zones.",
+				"final_message", response.Message, "sensor_details_attempted", response.SensorDetails,
+				"request_path", ctx.Request().URL.Path, "ip", ctx.RealIP())
+		}
 	}
 
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Could not retrieve a valid CPU temperature after checking all zones.",
-			"final_message", response.Message, "sensor_details_attempted", response.SensorDetails,
-			"request_path", ctx.Request().URL.Path, "ip", ctx.RealIP())
-	}
 	return ctx.JSON(http.StatusOK, response)
 }
 
