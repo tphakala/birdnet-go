@@ -1185,30 +1185,42 @@ func (c *Controller) GetSystemCPUTemperature(ctx echo.Context) error {
 	const thermalBasePath = "/sys/class/thermal/"
 	// Target sensor types for CPU temperature
 	targetTypes := map[string]bool{
-		"cpu-thermal":  true, // Common on Raspberry Pi
-		"x86_pkg_temp": true, // Common on Intel x86 systems (like NUC)
+		"cpu-thermal":     true, // Common on Raspberry Pi
+		"x86_pkg_temp":    true, // Common on Intel x86 systems (like NUC)
+		"soc_thermal":     true, // Common on some ARM SoCs
+		"cpu_thermal":     true, // Alternative name
+		"thermal-fan-est": true, // Seen on some systems
 	}
 
 	// Check if the base thermal directory exists (quick check for non-Linux/unsupported)
-	if _, err := os.Stat(thermalBasePath); os.IsNotExist(err) {
-		response.Message = "Thermal zone directory not found. This feature is typically available on Linux systems."
-		if c.apiLogger != nil {
-			c.apiLogger.Info("Thermal zone directory not found, CPU temperature feature unavailable.",
-				"path", thermalBasePath, "os", runtime.GOOS,
-				"request_path", ctx.Request().URL.Path, "ip", ctx.RealIP())
+	if _, err := os.Stat(thermalBasePath); err != nil {
+		if os.IsNotExist(err) {
+			response.Message = "Thermal zone directory not found. This feature is typically available on Linux systems."
+			if c.apiLogger != nil {
+				c.apiLogger.Info("Thermal zone directory not found, CPU temperature feature unavailable.",
+					"path", thermalBasePath, "os", runtime.GOOS,
+					"request_path", ctx.Request().URL.Path, "ip", ctx.RealIP())
+			}
+			return ctx.JSON(http.StatusOK, response)
+		} else {
+			// Other filesystem error (e.g., permissions)
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Failed to stat thermal base path",
+					"path", thermalBasePath, "error", err.Error(),
+					"request_path", ctx.Request().URL.Path, "ip", ctx.RealIP())
+			}
+			return c.HandleError(ctx, err, "Failed to access thermal information due to filesystem error", http.StatusInternalServerError)
 		}
-		return ctx.JSON(http.StatusOK, response)
 	}
 
 	zones, err := filepath.Glob(filepath.Join(thermalBasePath, "thermal_zone*"))
 	if err != nil {
-		response.Message = "Error scanning for thermal zones. Check logs for details."
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to glob for thermal zones",
 				"base_path", thermalBasePath, "error", err.Error(),
 				"request_path", ctx.Request().URL.Path, "ip", ctx.RealIP())
 		}
-		return ctx.JSON(http.StatusOK, response) // Potentially return 500 if Glob fails unexpectedly
+		return c.HandleError(ctx, err, "Error scanning for thermal zones", http.StatusInternalServerError)
 	}
 
 	if len(zones) == 0 {
@@ -1232,7 +1244,8 @@ func (c *Controller) GetSystemCPUTemperature(ctx echo.Context) error {
 			}
 			continue // Skip this zone if type file is unreadable
 		}
-		sensorType := strings.TrimSpace(string(typeData))
+		// Convert to lowercase for case-insensitive matching
+		sensorType := strings.ToLower(strings.TrimSpace(string(typeData)))
 
 		if _, isTarget := targetTypes[sensorType]; isTarget {
 			tempFilePath := filepath.Join(zonePath, "temp")

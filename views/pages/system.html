@@ -463,17 +463,45 @@
                 fetch('/api/v2/system/temperature/cpu')
                     .then(response => {
                         if (!response.ok) {
+                            const contentType = response.headers.get('Content-Type');
                             if (response.status === 401) {
                                 throw new Error("Authentication required. Please log in.");
                             }
                             // Don't throw error for 404-like scenarios handled by is_available
                             if (response.status >= 500) { 
+                                if (contentType && contentType.includes('application/json')) {
+                                    // If it's a 500 and JSON, try to parse for a server message
+                                    return response.json().then(errData => {
+                                        throw new Error(errData.message || `HTTP error! Status: ${response.status}`);
+                                    });
+                                }
                                 throw new Error(`HTTP error! Status: ${response.status}`);
                             }
                         }
-                        return response.json();
+                        // Check content type before parsing
+                        const contentType = response.headers.get('Content-Type');
+                        if (contentType && contentType.includes('application/json')) {
+                            return response.json();
+                        }
+                        // If not JSON, or if response.ok was false and not handled above as JSON error
+                        // (e.g. 200 OK with wrong content type, or non-500 error with non-JSON body)
+                        throw new Error(`Unexpected content type: ${contentType || 'none'}. Expected application/json.`);
                     })
                     .then(data => {
+                        if (typeof data === 'undefined') {
+                            // This can happen if a non-JSON response (like an HTML error page for a 500)
+                            // was not caught by the HTTP status check but also wasn't JSON.
+                            // Or if response.ok was false, but it didn't throw an error above.
+                            // Ensure we treat this as an error or unavailable state.
+                            if (this.systemTemperature.error) { // If an error was already set (e.g. by HTTP status)
+                                // Keep that error
+                            } else {
+                                this.systemTemperature.error = 'Received an empty or non-JSON response from server.';
+                            }
+                            this.systemTemperature.data = { is_available: false };
+                            this.systemTemperature.loading = false;
+                            return; 
+                        }
                         this.systemTemperature.data = data; // contains is_available, celsius, message
                         if (!data.is_available && data.message) {
                             console.info('System temperature not available:', data.message);
