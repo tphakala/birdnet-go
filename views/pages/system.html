@@ -44,9 +44,20 @@
                         <span class="font-medium" x-text="formatUptime(systemInfo.data.uptime_seconds) || 'N/A'"></span>
                     </div>
                     <div class="flex justify-between">
-                        <span class="text-base-content/70">CPUs:</span>
+                        <span class="text-base-content/70">CPU Count:</span>
                         <span class="font-medium" x-text="systemInfo.data.num_cpu || 'N/A'"></span>
                     </div>
+                    <!-- Added CPU Temperature Row (conditional) -->
+                    <div x-show="systemTemperature.data.is_available && !systemTemperature.loading && !systemTemperature.error" class="flex justify-between" x-cloak>
+                        <span class="text-base-content/70">CPU Temperature:</span>
+                        <span class="font-medium" x-text="systemTemperature.data.celsius ? systemTemperature.data.celsius.toFixed(1) + '°C' : 'N/A'"></span>
+                    </div>
+                    <!-- Loading state for temperature -->
+                    <div x-show="systemTemperature.loading" class="py-1" x-cloak>
+                        <div class="skeleton h-4 w-1/2"></div>
+                    </div>
+                    <!-- Error state for temperature -->
+                    <div x-show="systemTemperature.error && !systemTemperature.loading" class="text-error text-sm" x-text="systemTemperature.error" x-cloak role="alert"></div>
                     <!-- Added CPU Model Row -->
                     <div class="flex justify-between" x-show="systemInfo.data.system_model"> 
                         <span class="text-base-content/70">System Model:</span>
@@ -262,7 +273,7 @@
                 <span class="loading loading-spinner loading-sm mr-2" aria-hidden="true"></span>
             </template>
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" x-show="!isAnyLoading">
-                <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 100-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
             </svg>
             Refresh Data
         </button>
@@ -300,6 +311,13 @@
                 data: []
             },
             
+            // System temperature state
+            systemTemperature: {
+                loading: true,
+                error: null,
+                data: { is_available: false } // Default to not available
+            },
+            
             // Toggle state for process list
             showAllProcesses: false,
             
@@ -311,6 +329,7 @@
                 return this.systemInfo.loading || 
                        this.diskUsage.loading || 
                        this.memoryUsage.loading || 
+                       this.systemTemperature.loading ||
                        this.processes.loading;
             },
             
@@ -320,6 +339,7 @@
                 this.loadDiskUsage();
                 this.loadMemoryUsage();
                 this.loadProcesses();
+                this.loadSystemTemperature();
             },
             
             // Load system information
@@ -432,6 +452,39 @@
                         console.error('Error fetching processes:', error);
                         this.processes.error = `Failed to load process information: ${error.message}`;
                         this.processes.loading = false;
+                    });
+            },
+            
+            // Load system temperature
+            loadSystemTemperature() {
+                this.systemTemperature.loading = true;
+                this.systemTemperature.error = null;
+                
+                fetch('/api/v2/system/temperature/cpu')
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.status === 401) {
+                                throw new Error("Authentication required. Please log in.");
+                            }
+                            // Don't throw error for 404-like scenarios handled by is_available
+                            if (response.status >= 500) { 
+                                throw new Error(`HTTP error! Status: ${response.status}`);
+                            }
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        this.systemTemperature.data = data; // contains is_available, celsius, message
+                        if (!data.is_available && data.message) {
+                            console.info('System temperature not available:', data.message);
+                        }
+                        this.systemTemperature.loading = false;
+                    })
+                    .catch(error => {
+                        console.error('Error fetching system temperature:', error);
+                        this.systemTemperature.error = `Failed to load temperature: ${error.message}`;
+                        this.systemTemperature.data = { is_available: false }; // Ensure it shows as unavailable on error
+                        this.systemTemperature.loading = false;
                     });
             },
             
