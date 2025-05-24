@@ -403,8 +403,13 @@ func (ds *DataStore) SpeciesDetections(species, date, hour string, duration int,
 		return db.Order("created_at DESC") // Order comments by creation time, newest first
 	}).Where("common_name = ? AND date = ?", species, date)
 	if hour != "" {
-		startTime, endTime := getHourRange(hour, duration)
-		query = query.Where("time >= ? AND time < ?", startTime, endTime)
+		startTime, endTime, crossesMidnight := getHourRange(hour, duration)
+		if crossesMidnight {
+			// For the last hour(s) of the day, use <= instead of < to include the end time
+			query = query.Where("time >= ? AND time <= ?", startTime, endTime)
+		} else {
+			query = query.Where("time >= ? AND time < ?", startTime, endTime)
+		}
 	}
 
 	query = query.Order("id " + sortOrder).
@@ -566,10 +571,19 @@ func (ds *DataStore) LatestHourlyWeather() (*HourlyWeather, error) {
 func (ds *DataStore) GetHourlyDetections(date, hour string, duration, limit, offset int) ([]Note, error) {
 	var detections []Note
 
-	startTime, endTime := getHourRange(hour, duration)
-	err := ds.DB.Preload("Review").Preload("Lock").Preload("Comments", func(db *gorm.DB) *gorm.DB {
+	startTime, endTime, crossesMidnight := getHourRange(hour, duration)
+	query := ds.DB.Preload("Review").Preload("Lock").Preload("Comments", func(db *gorm.DB) *gorm.DB {
 		return db.Order("created_at DESC") // Order comments by creation time, newest first
-	}).Where("date = ? AND time >= ? AND time < ?", date, startTime, endTime).
+	})
+
+	if crossesMidnight {
+		// For the last hour(s) of the day, use <= instead of < to include the end time
+		query = query.Where("date = ? AND time >= ? AND time <= ?", date, startTime, endTime)
+	} else {
+		query = query.Where("date = ? AND time >= ? AND time < ?", date, startTime, endTime)
+	}
+
+	err := query.
 		Order("time ASC").
 		Limit(limit).
 		Offset(offset).
@@ -592,8 +606,13 @@ func (ds *DataStore) CountSpeciesDetections(species, date, hour string, duration
 	query := ds.DB.Model(&Note{}).Where("common_name = ? AND date = ?", species, date)
 
 	if hour != "" {
-		startTime, endTime := getHourRange(hour, duration)
-		query = query.Where("time >= ? AND time < ?", startTime, endTime)
+		startTime, endTime, crossesMidnight := getHourRange(hour, duration)
+		if crossesMidnight {
+			// For the last hour(s) of the day, use <= instead of < to include the end time
+			query = query.Where("time >= ? AND time <= ?", startTime, endTime)
+		} else {
+			query = query.Where("time >= ? AND time < ?", startTime, endTime)
+		}
 	}
 
 	err := query.Count(&count).Error
@@ -749,12 +768,22 @@ func (ds *DataStore) UpdateNoteComment(commentID, entry string) error {
 }
 
 // getHourRange returns the start and end times for a given hour and duration.
-func getHourRange(hour string, duration int) (startTime, endTime string) {
+// Returns a boolean indicating whether the range crosses midnight within the same date.
+func getHourRange(hour string, duration int) (startTime, endTime string, crossesMidnight bool) {
 	startHour, _ := strconv.Atoi(hour)
-	endHour := (startHour + duration) % 24
+	endHour := startHour + duration
+
 	startTime = fmt.Sprintf("%02d:00:00", startHour)
-	endTime = fmt.Sprintf("%02d:00:00", endHour)
-	return startTime, endTime
+	crossesMidnight = endHour >= 24
+
+	if crossesMidnight {
+		// For the last hour(s) of the day, set endTime to end of day
+		endTime = "23:59:59"
+	} else {
+		endTime = fmt.Sprintf("%02d:00:00", endHour)
+	}
+
+	return startTime, endTime, crossesMidnight
 }
 
 // sortOrderAscendingString returns "ASC" or "DESC" based on the boolean input.
@@ -976,10 +1005,17 @@ func (ds *DataStore) GetLockedNotesClipPaths() ([]string, error) {
 // CountHourlyDetections counts the number of detections for a specific date and hour.
 func (ds *DataStore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
 	var count int64
-	startTime, endTime := getHourRange(hour, duration)
-	err := ds.DB.Model(&Note{}).
-		Where("date = ? AND time >= ? AND time < ?", date, startTime, endTime).
-		Count(&count).Error
+	startTime, endTime, crossesMidnight := getHourRange(hour, duration)
+	query := ds.DB.Model(&Note{})
+
+	if crossesMidnight {
+		// For the last hour(s) of the day, use <= instead of < to include the end time
+		query = query.Where("date = ? AND time >= ? AND time <= ?", date, startTime, endTime)
+	} else {
+		query = query.Where("date = ? AND time >= ? AND time < ?", date, startTime, endTime)
+	}
+
+	err := query.Count(&count).Error
 
 	if err != nil {
 		return 0, fmt.Errorf("error counting hourly detections: %w", err)
