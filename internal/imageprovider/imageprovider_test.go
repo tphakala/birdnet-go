@@ -536,7 +536,6 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get refreshed cache entry: %v", err)
 	}
-
 	if refreshed == nil {
 		t.Fatal("Refreshed image cache entry is nil")
 	}
