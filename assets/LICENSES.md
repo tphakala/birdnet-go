@@ -344,7 +344,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.39.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.40.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
