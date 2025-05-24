@@ -34,13 +34,13 @@ func TestNew(t *testing.T) {
 	settings := MockSettings()
 
 	client, err := New(settings)
-	if err != nil {
-		t.Fatalf("Failed to create new BwClient: %v", err)
-	}
-
-	if client == nil {
+	if err != nil || client == nil {
+		if err != nil {
+			t.Fatalf("Failed to create new BwClient: %v", err)
+		}
 		t.Fatal("New returned nil client")
 	}
+
 	// Verify client properties
 	if client.BirdweatherID != settings.Realtime.Birdweather.ID {
 		t.Errorf("Expected BirdweatherID to be %s, got %s",
