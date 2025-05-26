@@ -144,7 +144,7 @@ Source: MIT
 
 ### github.com/labstack/echo/v4
 
-License: https://github.com/labstack/echo/blob/v4.13.3/LICENSE
+License: https://github.com/labstack/echo/blob/v4.13.4/LICENSE
 Source: MIT
 
 ### github.com/labstack/gommon
@@ -159,7 +159,7 @@ Source: MIT
 
 ### github.com/mattn/go-colorable
 
-License: https://github.com/mattn/go-colorable/blob/v0.1.13/LICENSE
+License: https://github.com/mattn/go-colorable/blob/v0.1.14/LICENSE
 Source: MIT
 
 ### github.com/mattn/go-isatty
@@ -344,7 +344,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.39.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.40.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
