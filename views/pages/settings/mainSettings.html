@@ -190,7 +190,7 @@
         clearTimeout(this.debounceTimer);
         this.debounceTimer = setTimeout(() => {
             this.testCurrentRangeFilter();
-        }, 1000);
+        }, 500);
     },
     
     // Load full species list for modal using current form values
@@ -524,9 +524,23 @@
                     </div>
                     <div class="flex items-center space-x-2">
                         <div class="flex items-center space-x-2">
-                            <div class="text-lg font-bold text-primary" 
+                            <!-- Show count or initial loading message, with smooth transitions -->
+                            <div class="text-lg font-bold text-primary transition-opacity duration-200" 
+                                 :class="{ 'opacity-60': testingRangeFilter && !loadingInitialCount }"
                                  x-text="loadingInitialCount ? 'Loading...' : (rangeFilter.speciesCount !== null ? rangeFilter.speciesCount : 'Loading...')"></div>
-                            <div x-show="loadingInitialCount || testingRangeFilter" class="loading loading-spinner loading-sm"></div>
+                            
+                            <!-- Subtle loading indicator that only shows during updates (not initial load) -->
+                            <div x-show="testingRangeFilter && !loadingInitialCount" 
+                                 x-transition:enter="transition ease-out duration-200"
+                                 x-transition:enter-start="opacity-0 scale-75"
+                                 x-transition:enter-end="opacity-100 scale-100"
+                                 x-transition:leave="transition ease-in duration-150"
+                                 x-transition:leave-start="opacity-100 scale-100"
+                                 x-transition:leave-end="opacity-0 scale-75"
+                                 class="loading loading-spinner loading-xs text-primary opacity-60"></div>
+                            
+                            <!-- Standard loading spinner for initial load only -->
+                            <div x-show="loadingInitialCount" class="loading loading-spinner loading-sm"></div>
                         </div>
                         <button type="button" 
                                 @click="showRangeFilterModal = true; loadRangeFilterSpecies()"
@@ -539,16 +553,28 @@
                             </span>
                         </button>
                     </div>
-                    <div class="text-sm text-base-content/60 mt-1">
-                        <span x-show="loadingInitialCount" class="text-info">
+                    <!-- Simplified status message that's less distracting -->
+                    <div class="text-sm text-base-content/60 mt-1 min-h-[1.25rem]">
+                        <span x-show="loadingInitialCount" 
+                              x-transition:enter="transition ease-out duration-200"
+                              x-transition:enter-start="opacity-0"
+                              x-transition:enter-end="opacity-100"
+                              x-transition:leave="transition ease-in duration-150"
+                              x-transition:leave-start="opacity-100"
+                              x-transition:leave-end="opacity-0"
+                              class="text-info">
                             Loading initial species count...
                         </span>
-                        <span x-show="!loadingInitialCount && testingRangeFilter" class="text-info">
-                            Updating species count...
-                        </span>
-                        <span x-show="!loadingInitialCount && !testingRangeFilter && !rangeFilter.speciesCount">
+                        <span x-show="!loadingInitialCount && !rangeFilter.speciesCount"
+                              x-transition:enter="transition ease-out duration-200"
+                              x-transition:enter-start="opacity-0"
+                              x-transition:enter-end="opacity-100"
+                              x-transition:leave="transition ease-in duration-150"
+                              x-transition:leave-start="opacity-100"
+                              x-transition:leave-end="opacity-0">
                             Change settings above to see species count
                         </span>
+                        <!-- Removed the "Updating species count..." message as the subtle spinner is sufficient -->
                     </div>
                     
                     <!-- Error Message Display -->
