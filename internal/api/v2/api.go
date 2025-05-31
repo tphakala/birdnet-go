@@ -345,6 +345,7 @@ func (c *Controller) initRoutes() {
 		{"control routes", c.initControlRoutes},
 		{"auth routes", c.initAuthRoutes},
 		{"media routes", c.initMediaRoutes},
+		{"range routes", c.initRangeRoutes},
 	}
 
 	for _, initializer := range routeInitializers {
