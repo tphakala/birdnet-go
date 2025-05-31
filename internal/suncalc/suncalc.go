@@ -1,5 +1,9 @@
 // internal/suncalc/suncalc.go
 
+// Package suncalc provides solar event calculations with support for high-latitude locations.
+// For locations experiencing polar day conditions (like midsummer in Finland), where civil
+// twilight cannot be calculated, the package gracefully falls back to sunrise/sunset times
+// to prevent calculation errors from breaking application functionality.
 package suncalc
 
 import (
@@ -72,12 +76,6 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 
 // calculateSunEventTimes calculates the sun event times for a given date
 func (sc *SunCalc) calculateSunEventTimes(date time.Time) (SunEventTimes, error) {
-	// Calculate civil dawn
-	civilDawn, err := astral.Dawn(sc.observer, date, astral.DepressionCivil)
-	if err != nil {
-		return SunEventTimes{}, fmt.Errorf("failed to calculate civil dawn: %w", err)
-	}
-
 	// Calculate sunrise
 	sunrise, err := astral.Sunrise(sc.observer, date)
 	if err != nil {
@@ -88,18 +86,6 @@ func (sc *SunCalc) calculateSunEventTimes(date time.Time) (SunEventTimes, error)
 	sunset, err := astral.Sunset(sc.observer, date)
 	if err != nil {
 		return SunEventTimes{}, fmt.Errorf("failed to calculate sunset: %w", err)
-	}
-
-	// Calculate civil dusk
-	civilDusk, err := astral.Dusk(sc.observer, date, astral.DepressionCivil)
-	if err != nil {
-		return SunEventTimes{}, fmt.Errorf("failed to calculate civil dusk: %w", err)
-	}
-
-	// Convert civil dawn UTC to local time
-	localCivilDawn, err := conf.ConvertUTCToLocal(civilDawn)
-	if err != nil {
-		return SunEventTimes{}, fmt.Errorf("failed to convert civil dawn to local time: %w", err)
 	}
 
 	// Convert sunrise UTC to local time
@@ -114,10 +100,38 @@ func (sc *SunCalc) calculateSunEventTimes(date time.Time) (SunEventTimes, error)
 		return SunEventTimes{}, fmt.Errorf("failed to convert sunset to local time: %w", err)
 	}
 
-	// Convert civil dusk UTC to local time
-	localCivilDusk, err := conf.ConvertUTCToLocal(civilDusk)
+	// Try to calculate civil dawn, but fall back to sunrise if it fails
+	// (this handles polar day conditions like midsummer in high latitudes)
+	civilDawn, err := astral.Dawn(sc.observer, date, astral.DepressionCivil)
+	var localCivilDawn time.Time
 	if err != nil {
-		return SunEventTimes{}, fmt.Errorf("failed to convert civil dusk to local time: %w", err)
+		// Civil dawn calculation failed (likely due to polar day conditions)
+		// Fall back to using sunrise time
+		localCivilDawn = localSunrise
+	} else {
+		// Convert civil dawn UTC to local time
+		localCivilDawn, err = conf.ConvertUTCToLocal(civilDawn)
+		if err != nil {
+			// If conversion fails, fall back to sunrise
+			localCivilDawn = localSunrise
+		}
+	}
+
+	// Try to calculate civil dusk, but fall back to sunset if it fails
+	// (this handles polar day conditions like midsummer in high latitudes)
+	civilDusk, err := astral.Dusk(sc.observer, date, astral.DepressionCivil)
+	var localCivilDusk time.Time
+	if err != nil {
+		// Civil dusk calculation failed (likely due to polar day conditions)
+		// Fall back to using sunset time
+		localCivilDusk = localSunset
+	} else {
+		// Convert civil dusk UTC to local time
+		localCivilDusk, err = conf.ConvertUTCToLocal(civilDusk)
+		if err != nil {
+			// If conversion fails, fall back to sunset
+			localCivilDusk = localSunset
+		}
 	}
 
 	// Return the calculated sun event times
