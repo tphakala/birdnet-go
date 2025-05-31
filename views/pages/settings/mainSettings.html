@@ -56,6 +56,7 @@
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
     role="region" 
     aria-label="BirdNET Settings Section"
+    x-ref="birdnetSettingsContainer"
     x-data="{ 
     birdnet: {
         sensitivity: {{.Settings.BirdNET.Sensitivity}},
@@ -217,7 +218,25 @@
         
         this.loadingRangeFilter = true;
         try {
-            const data = await this.performRangeFilterTest(values);
+            // Use GET request to fetch species list
+            const params = new URLSearchParams({
+                latitude: values.latitude.toString(),
+                longitude: values.longitude.toString(),
+                threshold: values.threshold.toString()
+            });
+            
+            const response = await fetch(`/api/v2/range/species/list?${params}`, {
+                method: 'GET',
+                headers: {
+                    'X-CSRF-Token': CSRF_TOKEN
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Server error: ${response.status} ${response.statusText}`);
+            }
+            
+            const data = await response.json();
             this.rangeFilter.species = data.species;
             this.rangeFilter.speciesCount = data.count;
             
@@ -706,9 +725,6 @@
         const lngInput = document.getElementById('birdnetLongitude');
         
         // Manual event listeners replaced by Alpine.js reactive watchers for automatic range filter testing
-        // $watch('birdnet.latitude', () => { debouncedTestRangeFilter(); });
-        // $watch('birdnet.longitude', () => { debouncedTestRangeFilter(); });  
-        // $watch('rangeFilter.threshold', () => { debouncedTestRangeFilter(); });
         
         const initialLat = parseFloat(latInput.value) || 0;
         const initialLng = parseFloat(lngInput.value) || 0;
@@ -731,8 +747,9 @@
             lngInput.value = roundedLng;
 
             // Find the Alpine.js component and update its data
-            const birdnetComponent = Alpine.$data(document.querySelector('[x-data*="birdnet"]'));
-            if (birdnetComponent) {
+            const birdnetSettingsContainer = document.querySelector('[x-ref="birdnetSettingsContainer"]');
+            if (birdnetSettingsContainer) {
+                const birdnetComponent = Alpine.$data(birdnetSettingsContainer);
                 birdnetComponent.birdnet.latitude = parseFloat(roundedLat);
                 birdnetComponent.birdnet.longitude = parseFloat(roundedLng);
                 // Trigger the range filter test with updated coordinates
