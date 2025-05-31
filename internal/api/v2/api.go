@@ -345,6 +345,7 @@ func (c *Controller) initRoutes() {
 		{"control routes", c.initControlRoutes},
 		{"auth routes", c.initAuthRoutes},
 		{"media routes", c.initMediaRoutes},
+		{"range routes", c.initRangeRoutes},
 	}
 
 	for _, initializer := range routeInitializers {
@@ -467,8 +468,15 @@ func NewErrorResponse(err error, message string, code int) *ErrorResponse {
 	// Generate a random correlation ID (8 characters should be sufficient)
 	correlationID := generateCorrelationID()
 
+	var errorStr string
+	if err != nil {
+		errorStr = err.Error()
+	} else {
+		errorStr = message // Use message as error if no error object is provided
+	}
+
 	return &ErrorResponse{
-		Error:         err.Error(),
+		Error:         errorStr,
 		Message:       message,
 		Code:          code,
 		CorrelationID: correlationID,
@@ -511,10 +519,17 @@ func (c *Controller) HandleError(ctx echo.Context, err error, message string, co
 
 	// Also log to structured logger if available
 	if c.apiLogger != nil {
+		var errorStr string
+		if err != nil {
+			errorStr = err.Error()
+		} else {
+			errorStr = message
+		}
+
 		c.apiLogger.Error("API Error",
 			"correlation_id", errorResp.CorrelationID,
 			"message", message,
-			"error", err.Error(),
+			"error", errorStr,
 			"code", code,
 			"path", ctx.Request().URL.Path,
 			"method", ctx.Request().Method,

@@ -22,6 +22,7 @@ internal/api/
     ├── integration.go     - External integration framework
     ├── integrations.go    - External service integrations
     ├── media.go           - Media (images, audio) management
+    ├── range.go           - Range filter management and testing
     ├── settings.go        - Application settings management
     ├── streams.go         - Real-time data streaming
     ├── system.go          - System information and monitoring
@@ -163,6 +164,12 @@ The middleware follows this decision flow:
 - WebSocket connections for live detection updates
 - Event-based notification system
 
+### Range Filter Management
+
+- View current range filter species count and list
+- Test range filter with custom parameters (location, threshold, date)
+- Rebuild range filter with current settings
+
 ## API Design Principles
 
 ### Route Organization
@@ -209,6 +216,68 @@ The API provides several endpoints for accessing media related to bird detection
    - The width parameter is optional and defaults to 800px
 
 All media endpoints use secure file access through the SecureFS implementation which prevents path traversal attacks.
+
+### Range Filter API Endpoints
+
+The API provides endpoints for managing and testing the BirdNET range filter, which filters species predictions based on geographic location and seasonal occurrence:
+
+1. **Species Count**:
+   - `GET /api/v2/range/species/count` - Returns the count of species currently included in the range filter
+   - Response includes count, last updated timestamp, threshold, and location coordinates
+
+2. **Species List**:
+   - `GET /api/v2/range/species/list` - Returns the complete list of species in the current range filter
+   - Each species includes label, scientific name, common name, and score
+   - Response includes metadata about the filter (count, last updated, threshold, location)
+
+3. **Range Filter Testing**:
+   - `POST /api/v2/range/species/test` - Tests the range filter with custom parameters
+   - Request body includes latitude, longitude, threshold, and optional date/week
+   - Returns species that would be included with the test parameters
+   - Useful for previewing filter results before changing settings
+
+4. **Range Filter Rebuild**:
+   - `POST /api/v2/range/rebuild` - Rebuilds the range filter using current location and threshold settings
+   - Updates the species list based on current configuration
+   - Returns success status and updated species count
+
+Example test request:
+```json
+{
+  "latitude": 60.1699,
+  "longitude": 24.9384,
+  "threshold": 0.01,
+  "date": "2024-06-15"
+}
+```
+
+Example response:
+```json
+{
+  "species": [
+    {
+      "label": "Turdus merula_Eurasian Blackbird",
+      "scientificName": "Turdus merula",
+      "commonName": "Eurasian Blackbird",
+      "score": 0.85
+    }
+  ],
+  "count": 1,
+  "threshold": 0.01,
+  "location": {
+    "latitude": 60.1699,
+    "longitude": 24.9384
+  },
+  "testDate": "2024-06-15T00:00:00Z",
+  "week": 24,
+  "parameters": {
+    "inputLatitude": 60.1699,
+    "inputLongitude": 24.9384,
+    "inputThreshold": 0.01,
+    "inputDate": "2024-06-15"
+  }
+}
+```
 
 ### Middleware Implementation
 
