@@ -13,6 +13,7 @@
            id="{{.id}}" 
            name="{{.name}}" 
            x-model="{{.model}}" 
+           {{if .xref}}x-ref="{{.xref}}"{{end}}
            class="input input-bordered input-sm w-full"
            {{if .step}}step="{{.step}}"{{else}}step="1"{{end}}
            {{if .min}}min="{{.min}}"{{end}}
