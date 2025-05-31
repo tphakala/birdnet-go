@@ -473,8 +473,12 @@
                         <button type="button" 
                                 @click="showRangeFilterModal = true; loadRangeFilterSpecies()"
                                 class="btn btn-sm btn-outline"
-                                :disabled="!rangeFilter.speciesCount">
-                            View Species
+                                :disabled="!rangeFilter.speciesCount || loadingRangeFilter">
+                            <span x-show="!loadingRangeFilter">View Species</span>
+                            <span x-show="loadingRangeFilter" class="flex items-center">
+                                <div class="loading loading-spinner loading-xs mr-1"></div>
+                                Loading...
+                            </span>
                         </button>
                     </div>
                     <div class="text-sm text-base-content/60 mt-1">
