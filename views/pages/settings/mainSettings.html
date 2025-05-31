@@ -557,7 +557,8 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                         </svg>
                         <span x-text="errorMessage"></span>
-                        <button @click="errorMessage = null" 
+                        <button type="button"
+                                @click="errorMessage = null" 
                                 class="btn btn-sm btn-ghost ml-auto">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -585,7 +586,8 @@
              @click.stop>
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-lg font-bold">Range Filter Species</h3>
-                <button @click="showRangeFilterModal = false" 
+                <button type="button"
+                        @click="showRangeFilterModal = false" 
                         class="btn btn-sm btn-circle btn-ghost">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -624,7 +626,8 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>
                 <span x-text="errorMessage"></span>
-                <button @click="errorMessage = null" 
+                <button type="button"
+                        @click="errorMessage = null" 
                         class="btn btn-sm btn-ghost ml-auto">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -654,7 +657,8 @@
             </div>
             
             <div class="flex justify-end items-center mt-4 pt-4 border-t">
-                <button @click="showRangeFilterModal = false" 
+                <button type="button"
+                        @click="showRangeFilterModal = false" 
                         class="btn btn-outline">
                     Close
                 </button>
