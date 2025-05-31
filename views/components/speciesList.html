@@ -13,6 +13,8 @@ Usage:
 - actionTemplate: "templateName" (optional - custom action template)
 - itemClass: "custom-class" (optional - additional class for items)
 - emptyMessage: "No items added" (optional - message to display when list is empty)
+- readOnly: true (optional - display only mode, no actions)
+- showScientificName: true (optional - show scientific name from parsed species objects)
 */}}
 <div class="space-y-2">
     <!-- Empty state message -->
@@ -23,7 +25,8 @@ Usage:
     </div>
 
     <template x-for="(item, index) in {{.species}}" :key="index">
-        <div class="settings-list-item flex items-center justify-between p-2 rounded-md bg-base-200 {{.itemClass}}"
+        <div class="settings-list-item flex items-center justify-between p-2 rounded-md {{if .readOnly}}bg-base-100 border{{else}}bg-base-200{{end}} {{.itemClass}}"
+             {{if not .readOnly}}
              x-data="{ 
                  isEditing: false, 
                  checkEditState() { 
@@ -35,15 +38,26 @@ Usage:
                  }
              }"
              x-init="checkEditState()"
-             {{if .editIndex}}@edit-update.window="checkEditState()"{{end}}>
+             {{if .editIndex}}@edit-update.window="checkEditState()"{{end}}
+             {{end}}>
             <div class="flex-grow">
                 <!-- Display mode -->
-                <span x-show="!isEditing" 
+                {{if .showScientificName}}
+                <div x-show="{{if not .readOnly}}!isEditing{{else}}true{{end}}">
+                    <div class="text-sm font-medium" x-text="item.commonName || item.label || item"></div>
+                    <div class="text-xs text-base-content/60" x-text="item.scientificName"></div>
+                    <div x-show="item.score !== undefined" class="text-xs text-base-content/40">
+                        Score: <span x-text="(item.score || 0).toFixed(3)"></span>
+                    </div>
+                </div>
+                {{else}}
+                <span x-show="{{if not .readOnly}}!isEditing{{else}}true{{end}}" 
                       x-text="{{if .customDisplay}}{{.customDisplay}}(item){{else}}item{{end}}"
                       class="text-sm"></span>
+                {{end}}
                 
-                <!-- Edit mode -->
-                {{if and .editMode .editValue .onSave}}
+                <!-- Edit mode (only for non-readonly) -->
+                {{if and (not .readOnly) .editMode .editValue .onSave}}
                 <input x-show="isEditing" 
                        x-model="{{.editValue}}" 
                        @keyup.enter="{{.onSave}}"
@@ -52,6 +66,7 @@ Usage:
                        class="input input-sm input-bordered w-full" />
                 {{end}}
             </div>
+            {{if not .readOnly}}
             <div class="flex-shrink-0">
                 <!-- Actions -->
                 {{if .actionTemplate}}
@@ -74,6 +89,7 @@ Usage:
                         aria-label="Remove item">Remove</button>
                 {{end}}
             </div>
+            {{end}}
         </div>
     </template>
 </div>
