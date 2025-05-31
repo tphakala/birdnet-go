@@ -252,10 +252,10 @@ realtime:
   
   dogbarkfilter:
     debug: false  # Enable debug mode for dog bark filter
-    enabled: false  # Enable dog bark filter
+    enabled: false  # Enable dog bark filter to prevent misdetections during dog barking
     confidence: 0.8  # Confidence threshold for dog bark detection
     remember: 60  # How long to remember barks for filtering (in seconds)
-    species: []  # Species list for filtering
+    species: ["Eurasian Eagle-Owl", "Hooded Crow"]  # Species prone to dog bark confusion
   
   # RTSP streaming settings
   rtsp:
@@ -625,27 +625,45 @@ After the range filter allows a species, individual detections must meet confide
 
 ### Stage 3: Deep Detection Filter
 
-[Deep Detection](BirdNET‐Go-Guide#deep-detection) uses the `overlap` setting to require multiple consecutive matches before accepting a detection, reducing false positives.
+[Deep Detection](BirdNET‐Go-Guide#deep-detection) uses the `overlap` setting to require multiple detections of the same species within a 15-second window before accepting it, significantly reducing false positives.
 
 #### How It Works:
-- Standard mode (`overlap: 0.0`): Analyzes 3-second chunks with 1.5-second steps
-- Deep Detection (`overlap: 2.7`): Analyzes with much smaller steps (e.g., 300ms)
-- Requires multiple matches within a short time window
+
+1. **Detection Holding**: All detections are held in a pending state for **exactly 15 seconds** from first detection
+2. **Counting Mechanism**: During this window, if the same species is detected again, a counter increments
+3. **Threshold Calculation**: The minimum required detections scales inversely with overlap:
 
 ```yaml
 birdnet:
   overlap: 2.7  # Enable deep detection (requires more CPU power)
 ```
 
-**Minimum Detections Calculation:**
+**Exact Minimum Detections Calculation:**
 ```
 segmentLength = max(0.1, 3.0 - overlap)
 minDetections = max(1, 3 / segmentLength)
 
 Examples:
-- overlap: 0.0 → minDetections: 1 (standard mode)
-- overlap: 2.7 → minDetections: 10 (deep detection)
+- overlap: 0.0  → segmentLength: 3.0  → minDetections: 1  (standard mode)
+- overlap: 1.5  → segmentLength: 1.5  → minDetections: 2
+- overlap: 2.7  → segmentLength: 0.3  → minDetections: 10 (deep detection)  
+- overlap: 2.9  → segmentLength: 0.1  → minDetections: 30 (very strict)
 ```
+
+#### Processing Timeline:
+
+1. **0 seconds**: Species detected for first time, 15-second timer starts
+2. **0-15 seconds**: Additional detections increment the counter
+3. **15 seconds**: Decision point reached:
+   - **If count ≥ minDetections**: Detection approved and processed
+   - **If count < minDetections**: Detection discarded as "false positive"
+
+#### Key Behavior Notes:
+
+- **Hard 15-second timeout**: Detections are **always** decided after exactly 15 seconds
+- **No early approval**: Even if minimum detections are met before 15 seconds, the system waits for the full window
+- **Quality improvement**: Higher confidence detections within the window replace lower ones
+- **Memory efficient**: Only one pending detection per species is held at a time
 
 ### Stage 4: Privacy and Behavioral Filters
 
@@ -668,10 +686,12 @@ realtime:
     enabled: true
     confidence: 0.8
     remember: 60  # Seconds to remember bark
-    species: ["European Robin", "Common Blackbird"]  # Species to filter
+    species: ["Eurasian Eagle-Owl", "Hooded Crow"]  # Species prone to confusion with barks
 ```
-- Discards detections of specified species if dog barks are detected recently
-- Reduces false positives caused by excited dogs reacting to birds
+- **Problem Solved**: The BirdNET AI model frequently confuses dog barks with certain bird calls, especially owl vocalizations (very common: dog bark → Eurasian Eagle-Owl)
+- **How It Works**: When BirdNET detects dog barking above the confidence threshold, it temporarily disables detection of species listed in the filter for the specified duration
+- **Use Cases**: Prevents false detections during periods of constant dog barking, particularly for species that have acoustic similarities to canine vocalizations
+- **Species Selection**: Focus on owl species (especially larger owls) and corvids (crows/ravens) which are most commonly confused with dog barks
 
 ### Setting Precedence Summary
 
@@ -694,7 +714,7 @@ realtime:
 - Increase `birdnet.threshold` (e.g., 0.9)
 - Enable deep detection with `overlap: 2.7`
 - Use stricter range filter threshold (e.g., 0.05)
-- Enable privacy and dog bark filters
+- Enable privacy and dog bark filters (especially for owl/crow confusion)
 
 #### For Higher Sensitivity (Catch More Species):
 - Lower `birdnet.threshold` (e.g., 0.6)
@@ -945,21 +965,61 @@ The application includes several security options:
 
 BirdNET-Go includes intelligent filtering mechanisms:
 - Privacy filter to ignore human voices
-- Dog bark filter to reduce false positives from canine sounds
+- Dog bark filter to prevent misdetections when BirdNET confuses barking with owl/crow calls
 - Species-specific inclusion and exclusion lists
 - Dynamic threshold adjustment based on detection patterns
 
 ### Deep Detection
 
-BirdNET-Go includes a "Deep Detection" feature designed to improve detection reliability and reduce false positives, especially when using lower confidence thresholds.
+BirdNET-Go includes a "Deep Detection" feature designed to improve detection reliability and reduce false positives by requiring multiple detections of the same species within a time window.
 
-*   **How it works:** Instead of analyzing standard 3-second chunks with a 1.5-second step, Deep Detection significantly increases the analysis frequency by reducing the step size (e.g., to 300ms when overlap is 2.7). BirdNET-Go then requires multiple consecutive positive results (e.g., 4 or more) for the same species within a short time window before confirming a detection.
-*   **Benefits:** This method acts as an additional filter, making it less likely that a single spurious result triggers a detection. It can allow for using lower `birdnet.threshold` values (e.g., 0.3) while maintaining good accuracy.
-*   **Requirements:** This feature significantly increases CPU load as the AI model runs more frequently. It is recommended for Raspberry Pi 4/5 or more powerful systems. If the system cannot keep up, you will see `WARNING: BirdNET processing time exceeded buffer length` messages in the log (see Troubleshooting).
-*   **Enabling/Disabling:**
-    *   When using the recommended `install.sh` script for Docker installations, Deep Detection is **enabled by default**. The script automatically benchmarks your hardware and sets an appropriate high `birdnet.overlap` value.
-    *   For manual installations or to manually adjust, set the `birdnet.overlap` value in your `config.yaml`. High values (e.g., 2.7) enable the feature, while lower values (e.g., 0.0) disable it.
-*   **Reference:** [[GitHub Discussion #302](https://github.com/tphakala/birdnet-go/discussions/302)]
+#### How Deep Detection Works
+
+1. **Increased Analysis Frequency**: Higher `overlap` values reduce the step size between audio analysis windows (e.g., from 1.5 seconds to 300ms), causing the BirdNET AI model to run more frequently
+
+2. **Pending Detection System**: All detections are held in memory for exactly **15 seconds** from the first detection
+
+3. **Counting Mechanism**: During the 15-second window, each additional detection of the same species increments a counter
+
+4. **Variable Threshold**: The number of required detections scales with the overlap setting:
+   ```
+   Required Detections = max(1, 3 / max(0.1, 3.0 - overlap))
+   
+   Examples:
+   - overlap: 0.0 → 1 detection required (standard mode)
+   - overlap: 2.4 → 5 detections required  
+   - overlap: 2.7 → 10 detections required (typical deep detection)
+   - overlap: 2.9 → 30 detections required (very strict)
+   ```
+
+5. **Decision Point**: After exactly 15 seconds, the detection is either approved (if minimum count reached) or discarded as a false positive
+
+#### Benefits and Use Cases
+
+*   **False Positive Reduction**: Eliminates single spurious detections that don't repeat
+*   **Lower Threshold Tolerance**: Allows using lower `birdnet.threshold` values (e.g., 0.3-0.6) while maintaining accuracy
+*   **Quality Selection**: Keeps the highest confidence detection from the 15-second window
+*   **Consistent Behavior**: All detections are held for exactly 15 seconds, providing predictable timing
+
+#### System Requirements
+
+*   **CPU Load**: Significantly increases processing requirements due to higher analysis frequency
+*   **Recommended Hardware**: Raspberry Pi 4/5 or more powerful systems
+*   **Performance Monitoring**: Watch for `WARNING: BirdNET processing time exceeded buffer length` messages indicating the system cannot keep up
+
+#### Configuration
+
+*   **Docker Installation**: Deep Detection is **enabled by default** with the `install.sh` script, which benchmarks your hardware and sets appropriate overlap values
+*   **Manual Configuration**: Set `birdnet.overlap` in your `config.yaml`:
+    ```yaml
+    birdnet:
+      overlap: 2.7  # Enable deep detection (10 detections required)
+      threshold: 0.5  # Can use lower thresholds with deep detection
+    ```
+*   **Disabling**: Set `overlap: 0.0` for standard single-detection mode
+
+#### Reference
+[[GitHub Discussion #302](https://github.com/tphakala/birdnet-go/discussions/302)]
 
 ### Live Audio Streaming
 
