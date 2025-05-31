@@ -85,22 +85,31 @@
     showRangeFilterModal: false,
     loadingRangeFilter: false,
     testingRangeFilter: false,
+    loadingInitialCount: true,
     birdnetSettingsOpen: false,
     showTooltip: null,
     hasChanges: false,
     debounceTimer: null,
     errorMessage: null,
     
-    // Helper function to get current form values
+    // Helper function to get current form values with validation
     getCurrentFormValues() {
         const latitudeInput = document.getElementById('birdnetLatitude');
         const longitudeInput = document.getElementById('birdnetLongitude');
         const thresholdInput = document.getElementById('birdnetRangeFilterThreshold');
         
+        // Parse values with validation
+        const latitude = parseFloat(latitudeInput?.value || this.birdnet.latitude);
+        const longitude = parseFloat(longitudeInput?.value || this.birdnet.longitude);
+        const threshold = parseFloat(thresholdInput?.value || this.rangeFilter.threshold);
+        
+        // Validate parsed values and return defaults for invalid inputs
         return {
-            latitude: parseFloat(latitudeInput?.value || this.birdnet.latitude),
-            longitude: parseFloat(longitudeInput?.value || this.birdnet.longitude),
-            threshold: parseFloat(thresholdInput?.value || this.rangeFilter.threshold)
+            latitude: isNaN(latitude) ? this.birdnet.latitude : latitude,
+            longitude: isNaN(longitude) ? this.birdnet.longitude : longitude,
+            threshold: isNaN(threshold) ? this.rangeFilter.threshold : threshold,
+            // Include validation status for user feedback
+            isValid: !isNaN(latitude) && !isNaN(longitude) && !isNaN(threshold)
         };
     },
     
@@ -144,6 +153,17 @@
     
     // Load current range filter species count
     async loadRangeFilterCount() {
+        // Clear any previous errors at the start of operation
+        this.clearError();
+        
+        // Set loading state for visual feedback - use dedicated flag for initial load
+        const isInitialLoad = this.rangeFilter.speciesCount === null;
+        if (isInitialLoad) {
+            this.loadingInitialCount = true;
+        } else {
+            this.testingRangeFilter = true;
+        }
+        
         try {
             const response = await fetch('/api/v2/range/species/count');
             if (!response.ok) {
@@ -152,10 +172,16 @@
             const data = await response.json();
             this.rangeFilter.speciesCount = data.count;
             this.rangeFilter.lastUpdated = new Date(data.lastUpdated).toLocaleString();
-            this.clearError();
         } catch (error) {
             console.error('Failed to load range filter count:', error);
             this.setError('Failed to load range filter species count. Please check your connection and try again.');
+        } finally {
+            // Reset loading state in both success and error cases
+            if (isInitialLoad) {
+                this.loadingInitialCount = false;
+            } else {
+                this.testingRangeFilter = false;
+            }
         }
     },
     
@@ -171,10 +197,21 @@
     async loadRangeFilterSpecies() {
         if (this.loadingRangeFilter) return;
         
+        // Clear any previous errors at the start of operation
+        this.clearError();
+        
         const values = this.getCurrentFormValues();
+        
+        // Check validation status
+        if (!values.isValid) {
+            this.setError('Please enter valid numeric values for latitude, longitude, and threshold.');
+            this.showRangeFilterModal = false; // Close modal when input values are invalid
+            return;
+        }
         
         if (!values.latitude || !values.longitude) {
             this.setError('Please set both latitude and longitude coordinates before loading species list.');
+            this.showRangeFilterModal = false; // Close modal when coordinates are missing
             return;
         }
         
@@ -188,7 +225,6 @@
             this.birdnet.latitude = values.latitude;
             this.birdnet.longitude = values.longitude;
             this.rangeFilter.threshold = values.threshold;
-            this.clearError();
         } catch (error) {
             console.error('Failed to load range filter species:', error);
             this.setError('Failed to load species list. Please check your coordinates and threshold settings, then try again.');
@@ -199,7 +235,16 @@
     
     // Test range filter with current form values
     async testCurrentRangeFilter() {
+        // Clear any previous errors at the start of operation
+        this.clearError();
+        
         const values = this.getCurrentFormValues();
+        
+        // Check validation status
+        if (!values.isValid) {
+            this.setError('Please enter valid numeric values for latitude, longitude, and threshold.');
+            return;
+        }
         
         if (this.testingRangeFilter || !values.latitude || !values.longitude) return;
         
@@ -216,7 +261,6 @@
             this.birdnet.latitude = values.latitude;
             this.birdnet.longitude = values.longitude;
             this.rangeFilter.threshold = values.threshold;
-            this.clearError();
         } catch (error) {
             console.error('Failed to test range filter:', error);
             this.setError('Failed to test range filter settings. Please check your coordinates and threshold, then try again.');
@@ -229,6 +273,11 @@
     $watch('birdnet', () => { hasChanges = true }, { deep: true });
     $watch('dynamicThreshold', () => { hasChanges = true }, { deep: true });
     $watch('rangeFilter', () => { hasChanges = true }, { deep: true });
+    
+    // Add reactive watchers for debounced range filter updates
+    $watch('birdnet.latitude', () => { debouncedLoadRangeFilterCount(); });
+    $watch('birdnet.longitude', () => { debouncedLoadRangeFilterCount(); });
+    $watch('rangeFilter.threshold', () => { debouncedLoadRangeFilterCount(); });
 ">
 
     <!-- control collapse element open state and label visibility -->
@@ -352,6 +401,9 @@
                 "model" "dynamicThreshold.trigger"
                 "name" "realtime.dynamicthreshold.trigger"
                 "label" "Trigger Threshold"
+                "min" "0.0"
+                "max" "1.0"
+                "step" "0.01"
                 "tooltip" "The confidence level at which the dynamic threshold is activated. If a bird call is detected with confidence over this value, the threshold for positive matches of that species will be lowered for subsequent calls."}}
 
      
@@ -419,7 +471,7 @@
                     "label" "Latitude"
                     "min" "-90.0"
                     "max" "90.0"
-                    "step" "0.01"
+                    "step" "0.001"
                     "tooltip" "Station location latitude, used to limit bird species to those probable in the region."}}
  
                 <!-- Longitude -->
@@ -430,7 +482,7 @@
                     "label" "Longitude"
                     "min" "-180.0"
                     "max" "180.0"
-                    "step" "0.01"
+                    "step" "0.001"
                     "tooltip" "Station location longitude, used to limit bird species to those probable in the region."}}
 
                 <!-- Range Filter Model -->
@@ -457,7 +509,9 @@
                     "tooltip" "Controls which species are included based on their occurrence probability for your location and time of year. Default (0.01) is recommended for most users. Higher values (0.05-0.3) include fewer species with higher occurrence probability. Very high values (0.5+) include only the most common species."}}
 
                 <!-- Range Filter Species Count Display -->
-                <div class="form-control relative">
+                <div class="form-control relative" 
+                     role="region" 
+                     aria-label="Range Filter Species Count Display">
                     <label class="label justify-start">
                         <span class="label-text">Current Species Count</span>
                         <span class="help-icon" @mouseenter="showTooltip = 'speciesCount'" @mouseleave="showTooltip = null">ⓘ</span>
@@ -467,13 +521,14 @@
                     </div>
                     <div class="flex items-center space-x-2">
                         <div class="flex items-center space-x-2">
-                            <div class="text-lg font-bold text-primary" x-text="rangeFilter.speciesCount || 'Loading...'"></div>
-                            <div x-show="testingRangeFilter" class="loading loading-spinner loading-sm"></div>
+                            <div class="text-lg font-bold text-primary" 
+                                 x-text="loadingInitialCount ? 'Loading...' : (rangeFilter.speciesCount !== null ? rangeFilter.speciesCount : 'Loading...')"></div>
+                            <div x-show="loadingInitialCount || testingRangeFilter" class="loading loading-spinner loading-sm"></div>
                         </div>
                         <button type="button" 
                                 @click="showRangeFilterModal = true; loadRangeFilterSpecies()"
                                 class="btn btn-sm btn-outline"
-                                :disabled="!rangeFilter.speciesCount || loadingRangeFilter">
+                                :disabled="loadingInitialCount || !rangeFilter.speciesCount || loadingRangeFilter">
                             <span x-show="!loadingRangeFilter">View Species</span>
                             <span x-show="loadingRangeFilter" class="flex items-center">
                                 <div class="loading loading-spinner loading-xs mr-1"></div>
@@ -482,10 +537,13 @@
                         </button>
                     </div>
                     <div class="text-sm text-base-content/60 mt-1">
-                        <span x-show="testingRangeFilter" class="text-info">
+                        <span x-show="loadingInitialCount" class="text-info">
+                            Loading initial species count...
+                        </span>
+                        <span x-show="!loadingInitialCount && testingRangeFilter" class="text-info">
                             Updating species count...
                         </span>
-                        <span x-show="!testingRangeFilter && !rangeFilter.speciesCount">
+                        <span x-show="!loadingInitialCount && !testingRangeFilter && !rangeFilter.speciesCount">
                             Change settings above to see species count
                         </span>
                     </div>
@@ -613,15 +671,11 @@
     document.addEventListener('DOMContentLoaded', function () {
         const latInput = document.getElementById('birdnetLatitude');
         const lngInput = document.getElementById('birdnetLongitude');
-        const thresholdInput = document.getElementById('birdnetRangeFilterThreshold');
         
-        // Add input event listeners for automatic range filter testing
-        const birdnetComponent = Alpine.$data(document.querySelector('[x-data*="birdnet"]'));
-        if (birdnetComponent && latInput && lngInput && thresholdInput) {
-            latInput.addEventListener('input', () => birdnetComponent.debouncedLoadRangeFilterCount());
-            lngInput.addEventListener('input', () => birdnetComponent.debouncedLoadRangeFilterCount());
-            thresholdInput.addEventListener('input', () => birdnetComponent.debouncedLoadRangeFilterCount());
-        }
+        // Manual event listeners replaced by Alpine.js reactive watchers for automatic range filter testing
+        // $watch('birdnet.latitude', () => { debouncedLoadRangeFilterCount(); });
+        // $watch('birdnet.longitude', () => { debouncedLoadRangeFilterCount(); });  
+        // $watch('rangeFilter.threshold', () => { debouncedLoadRangeFilterCount(); });
         
         const initialLat = parseFloat(latInput.value) || 0;
         const initialLng = parseFloat(lngInput.value) || 0;
