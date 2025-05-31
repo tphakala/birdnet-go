@@ -4,6 +4,10 @@
  / /_/ / / /  / /_/ / /|  / /___  / /_____/ /_/ / /_/ /
 /_____/_/_/   \__,_/_/ |_/_____/ /_/      \____/\____/
 
+This document is severly outdated, please see https://github.com/tphakala/birdnet-go/wiki
+for up to date documentation,
+
+
 Quick Start
 
 File analysis
