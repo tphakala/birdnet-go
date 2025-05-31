@@ -977,40 +977,31 @@ BirdNET-Go includes a "Deep Detection" feature designed to improve detection rel
 
 ```mermaid
 graph TD
-    A[BirdNET Analysis Result] --> B{Passes Initial Filters?}
-    B -->|No| Z[❌ Discard]
-    B -->|Yes| C{Species Already<br/>in Pending Map?}
+    A[Species Detected<br/>by BirdNET] --> B{First Detection<br/>of This Species?}
     
-    C -->|No| D[Create New Pending Detection]
-    C -->|Yes| E{New Confidence ><br/>Existing Confidence?}
+    B -->|Yes| C[⏱️ Start 15-Second<br/>Counting Window<br/>Count = 1]
+    B -->|No| D[📈 Increment Counter<br/>Count = Count + 1]
     
-    D --> F[Set Count = 1<br/>Start 15s Timer<br/>Set Flush Deadline]
-    E -->|Yes| G[Replace Detection<br/>with Higher Confidence]
-    E -->|No| H[Keep Existing Detection]
+    C --> E[🎧 Continue Listening<br/>for More Audio]
+    D --> E
     
-    G --> I[Increment Count]
-    H --> I
-    F --> J[Add to Pending Map]
-    I --> J
+    E --> F{Same Species<br/>Detected Again?}
+    F -->|Yes| G[⬆️ Add to Count]
+    F -->|No| H{15 Seconds<br/>Elapsed?}
     
-    J --> K[Continue Processing<br/>Other Audio...]
-    K --> L{15 Second Timer<br/>Expired?}
+    G --> H
+    H -->|No| E
+    H -->|Yes| I{Count ≥ Required<br/>Minimum?}
     
-    L -->|No| M[Wait for Timer]
-    L -->|Yes| N{Count >= Required<br/>Min Detections?}
+    I -->|No| J[❌ Rejected<br/>False Positive]
+    I -->|Yes| K{Final Safety<br/>Checks Pass?}
     
-    M --> O[More Audio Results] 
-    O --> C
+    K -->|No| L[❌ Blocked by<br/>Privacy/Dog Filter]
+    K -->|Yes| M[✅ Detection Approved<br/>Saved to Database]
     
-    N -->|No| P[❌ Discard as<br/>False Positive]
-    N -->|Yes| Q{Passes Final Filters?<br/>Privacy/Dog Bark}
-    
-    Q -->|No| R[❌ Discard by Filter]
-    Q -->|Yes| S[✅ Approve Detection<br/>Send to Actions]
-    
-    P --> T[Log: Discarding detection<br/>matched X/Y times]
-    R --> U[Log: Discarding detection<br/>due to filter]
-    S --> V[Log: Approving detection<br/>matched X times]
+    J --> N[🗂️ Log: Not enough matches]
+    L --> O[🗂️ Log: Blocked by filter] 
+    M --> P[🗂️ Log: Species confirmed]
 ```
 
 #### How Deep Detection Works
