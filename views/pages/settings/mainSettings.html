@@ -94,9 +94,9 @@
     
     // Helper function to get current form values with validation
     getCurrentFormValues() {
-        const latitudeInput = document.getElementById('birdnetLatitude');
-        const longitudeInput = document.getElementById('birdnetLongitude');
-        const thresholdInput = document.getElementById('birdnetRangeFilterThreshold');
+        const latitudeInput = this.$refs.birdnetLatitudeInput;
+        const longitudeInput = this.$refs.birdnetLongitudeInput;
+        const thresholdInput = this.$refs.birdnetRangeFilterThresholdInput;
         
         // Parse values with validation
         const latitude = parseFloat(latitudeInput?.value || this.birdnet.latitude);
@@ -186,7 +186,7 @@
     },
     
     // Debounced version to avoid too many API calls
-    debouncedLoadRangeFilterCount() {
+    debouncedTestRangeFilter() {
         clearTimeout(this.debounceTimer);
         this.debounceTimer = setTimeout(() => {
             this.testCurrentRangeFilter();
@@ -275,9 +275,9 @@
     $watch('rangeFilter', () => { hasChanges = true }, { deep: true });
     
     // Add reactive watchers for debounced range filter updates
-    $watch('birdnet.latitude', () => { debouncedLoadRangeFilterCount(); });
-    $watch('birdnet.longitude', () => { debouncedLoadRangeFilterCount(); });
-    $watch('rangeFilter.threshold', () => { debouncedLoadRangeFilterCount(); });
+    $watch('birdnet.latitude', () => { debouncedTestRangeFilter(); });
+    $watch('birdnet.longitude', () => { debouncedTestRangeFilter(); });
+    $watch('rangeFilter.threshold', () => { debouncedTestRangeFilter(); });
 ">
 
     <!-- control collapse element open state and label visibility -->
@@ -472,6 +472,7 @@
                     "min" "-90.0"
                     "max" "90.0"
                     "step" "0.001"
+                    "xref" "birdnetLatitudeInput"
                     "tooltip" "Station location latitude, used to limit bird species to those probable in the region."}}
  
                 <!-- Longitude -->
@@ -483,6 +484,7 @@
                     "min" "-180.0"
                     "max" "180.0"
                     "step" "0.001"
+                    "xref" "birdnetLongitudeInput"
                     "tooltip" "Station location longitude, used to limit bird species to those probable in the region."}}
 
                 <!-- Range Filter Model -->
@@ -506,6 +508,7 @@
                     "min" "0.0"
                     "max" "0.99"
                     "step" "0.01"
+                    "xref" "birdnetRangeFilterThresholdInput"
                     "tooltip" "Controls which species are included based on their occurrence probability for your location and time of year. Default (0.01) is recommended for most users. Higher values (0.05-0.3) include fewer species with higher occurrence probability. Very high values (0.5+) include only the most common species."}}
 
                 <!-- Range Filter Species Count Display -->
@@ -677,9 +680,9 @@
         const lngInput = document.getElementById('birdnetLongitude');
         
         // Manual event listeners replaced by Alpine.js reactive watchers for automatic range filter testing
-        // $watch('birdnet.latitude', () => { debouncedLoadRangeFilterCount(); });
-        // $watch('birdnet.longitude', () => { debouncedLoadRangeFilterCount(); });  
-        // $watch('rangeFilter.threshold', () => { debouncedLoadRangeFilterCount(); });
+        // $watch('birdnet.latitude', () => { debouncedTestRangeFilter(); });
+        // $watch('birdnet.longitude', () => { debouncedTestRangeFilter(); });  
+        // $watch('rangeFilter.threshold', () => { debouncedTestRangeFilter(); });
         
         const initialLat = parseFloat(latInput.value) || 0;
         const initialLng = parseFloat(lngInput.value) || 0;
@@ -707,7 +710,7 @@
                 birdnetComponent.birdnet.latitude = parseFloat(roundedLat);
                 birdnetComponent.birdnet.longitude = parseFloat(roundedLng);
                 // Trigger the range filter test with updated coordinates
-                birdnetComponent.debouncedLoadRangeFilterCount();
+                birdnetComponent.debouncedTestRangeFilter();
             }
 
             if (marker) {
