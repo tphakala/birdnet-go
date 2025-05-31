@@ -89,18 +89,73 @@
     showTooltip: null,
     hasChanges: false,
     debounceTimer: null,
+    errorMessage: null,
+    
+    // Helper function to get current form values
+    getCurrentFormValues() {
+        const latitudeInput = document.getElementById('birdnetLatitude');
+        const longitudeInput = document.getElementById('birdnetLongitude');
+        const thresholdInput = document.getElementById('birdnetRangeFilterThreshold');
+        
+        return {
+            latitude: parseFloat(latitudeInput?.value || this.birdnet.latitude),
+            longitude: parseFloat(longitudeInput?.value || this.birdnet.longitude),
+            threshold: parseFloat(thresholdInput?.value || this.rangeFilter.threshold)
+        };
+    },
+    
+    // Helper function to perform range filter test API call
+    async performRangeFilterTest(values) {
+        const response = await fetch('/api/v2/range/species/test', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': CSRF_TOKEN
+            },
+            body: JSON.stringify({
+                latitude: values.latitude,
+                longitude: values.longitude,
+                threshold: values.threshold
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Server error: ${response.status} ${response.statusText}`);
+        }
+        
+        return response.json();
+    },
+    
+    // Helper function to clear error message after successful operations
+    clearError() {
+        this.errorMessage = null;
+    },
+    
+    // Helper function to set user-friendly error message
+    setError(message) {
+        this.errorMessage = message;
+        // Auto-clear error after 10 seconds
+        setTimeout(() => {
+            if (this.errorMessage === message) {
+                this.errorMessage = null;
+            }
+        }, 10000);
+    },
     
     // Load current range filter species count
     async loadRangeFilterCount() {
         try {
             const response = await fetch('/api/v2/range/species/count');
-            if (response.ok) {
-                const data = await response.json();
-                this.rangeFilter.speciesCount = data.count;
-                this.rangeFilter.lastUpdated = new Date(data.lastUpdated).toLocaleString();
+            if (!response.ok) {
+                throw new Error(`Server error: ${response.status} ${response.statusText}`);
             }
+            const data = await response.json();
+            this.rangeFilter.speciesCount = data.count;
+            this.rangeFilter.lastUpdated = new Date(data.lastUpdated).toLocaleString();
+            this.clearError();
         } catch (error) {
             console.error('Failed to load range filter count:', error);
+            this.setError('Failed to load range filter species count. Please check your connection and try again.');
         }
     },
     
@@ -116,44 +171,27 @@
     async loadRangeFilterSpecies() {
         if (this.loadingRangeFilter) return;
         
-        // Get current form values directly from inputs
-        const latitudeInput = document.getElementById('birdnetLatitude');
-        const longitudeInput = document.getElementById('birdnetLongitude');
-        const thresholdInput = document.getElementById('birdnetRangeFilterThreshold');
+        const values = this.getCurrentFormValues();
         
-        const currentLat = parseFloat(latitudeInput?.value || this.birdnet.latitude);
-        const currentLng = parseFloat(longitudeInput?.value || this.birdnet.longitude);
-        const currentThreshold = parseFloat(thresholdInput?.value || this.rangeFilter.threshold);
-        
-        if (!currentLat || !currentLng) return;
+        if (!values.latitude || !values.longitude) {
+            this.setError('Please set both latitude and longitude coordinates before loading species list.');
+            return;
+        }
         
         this.loadingRangeFilter = true;
         try {
-            const response = await fetch('/api/v2/range/species/test', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': CSRF_TOKEN
-                },
-                body: JSON.stringify({
-                    latitude: currentLat,
-                    longitude: currentLng,
-                    threshold: currentThreshold
-                })
-            });
+            const data = await this.performRangeFilterTest(values);
+            this.rangeFilter.species = data.species;
+            this.rangeFilter.speciesCount = data.count;
             
-            if (response.ok) {
-                const data = await response.json();
-                this.rangeFilter.species = data.species;
-                this.rangeFilter.speciesCount = data.count;
-                
-                // Update the Alpine.js data to match tested values
-                this.birdnet.latitude = currentLat;
-                this.birdnet.longitude = currentLng;
-                this.rangeFilter.threshold = currentThreshold;
-            }
+            // Update the Alpine.js data to match tested values
+            this.birdnet.latitude = values.latitude;
+            this.birdnet.longitude = values.longitude;
+            this.rangeFilter.threshold = values.threshold;
+            this.clearError();
         } catch (error) {
             console.error('Failed to load range filter species:', error);
+            this.setError('Failed to load species list. Please check your coordinates and threshold settings, then try again.');
         } finally {
             this.loadingRangeFilter = false;
         }
@@ -161,47 +199,27 @@
     
     // Test range filter with current form values
     async testCurrentRangeFilter() {
-        // Get current form values directly from inputs
-        const latitudeInput = document.getElementById('birdnetLatitude');
-        const longitudeInput = document.getElementById('birdnetLongitude');
-        const thresholdInput = document.getElementById('birdnetRangeFilterThreshold');
+        const values = this.getCurrentFormValues();
         
-        const currentLat = parseFloat(latitudeInput?.value || this.birdnet.latitude);
-        const currentLng = parseFloat(longitudeInput?.value || this.birdnet.longitude);
-        const currentThreshold = parseFloat(thresholdInput?.value || this.rangeFilter.threshold);
-        
-        if (this.testingRangeFilter || !currentLat || !currentLng) return;
+        if (this.testingRangeFilter || !values.latitude || !values.longitude) return;
         
         this.testingRangeFilter = true;
         try {
-            const response = await fetch('/api/v2/range/species/test', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': CSRF_TOKEN
-                },
-                body: JSON.stringify({
-                    latitude: currentLat,
-                    longitude: currentLng,
-                    threshold: currentThreshold
-                })
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                this.rangeFilter.speciesCount = data.count;
-                // If modal is open, update the species list too
-                if (this.showRangeFilterModal) {
-                    this.rangeFilter.species = data.species;
-                }
-                
-                // Update the Alpine.js data to match tested values
-                this.birdnet.latitude = currentLat;
-                this.birdnet.longitude = currentLng;
-                this.rangeFilter.threshold = currentThreshold;
+            const data = await this.performRangeFilterTest(values);
+            this.rangeFilter.speciesCount = data.count;
+            // If modal is open, update the species list too
+            if (this.showRangeFilterModal) {
+                this.rangeFilter.species = data.species;
             }
+            
+            // Update the Alpine.js data to match tested values
+            this.birdnet.latitude = values.latitude;
+            this.birdnet.longitude = values.longitude;
+            this.rangeFilter.threshold = values.threshold;
+            this.clearError();
         } catch (error) {
             console.error('Failed to test range filter:', error);
+            this.setError('Failed to test range filter settings. Please check your coordinates and threshold, then try again.');
         } finally {
             this.testingRangeFilter = false;
         }
@@ -467,6 +485,23 @@
                             Change settings above to see species count
                         </span>
                     </div>
+                    
+                    <!-- Error Message Display -->
+                    <div x-show="errorMessage" 
+                         x-cloak
+                         class="alert alert-error mt-2" 
+                         role="alert">
+                        <svg class="stroke-current shrink-0 w-6 h-6" fill="none" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span x-text="errorMessage"></span>
+                        <button @click="errorMessage = null" 
+                                class="btn btn-sm btn-ghost ml-auto">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
             </div>
@@ -516,6 +551,23 @@
                     </div>
                 </div>
 
+            </div>
+            
+            <!-- Error Message Display in Modal -->
+            <div x-show="errorMessage" 
+                 x-cloak
+                 class="alert alert-error mb-4" 
+                 role="alert">
+                <svg class="stroke-current shrink-0 w-6 h-6" fill="none" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span x-text="errorMessage"></span>
+                <button @click="errorMessage = null" 
+                        class="btn btn-sm btn-ghost ml-auto">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
             </div>
             
             <div class="flex-1 overflow-auto">

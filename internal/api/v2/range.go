@@ -3,31 +3,37 @@ package api
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/observation"
 )
+
+// rangeFilterMutex protects against concurrent modifications to global settings during testing
+var rangeFilterMutex sync.Mutex
+
+// Location represents geographic coordinates
+type Location struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+}
 
 // RangeFilterSpeciesCount represents the count response for range filter species
 type RangeFilterSpeciesCount struct {
 	Count       int       `json:"count"`
 	LastUpdated time.Time `json:"lastUpdated"`
 	Threshold   float32   `json:"threshold"`
-	Location    struct {
-		Latitude  float64 `json:"latitude"`
-		Longitude float64 `json:"longitude"`
-	} `json:"location"`
+	Location    Location  `json:"location"`
 }
 
 // RangeFilterSpecies represents a single species in the range filter
 type RangeFilterSpecies struct {
-	Label          string  `json:"label"`
-	ScientificName string  `json:"scientificName"`
-	CommonName     string  `json:"commonName"`
-	Score          float64 `json:"score"`
+	Label          string   `json:"label"`
+	ScientificName string   `json:"scientificName"`
+	CommonName     string   `json:"commonName"`
+	Score          *float64 `json:"score,omitempty"` // Nullable - only present when individual scores are available
 }
 
 // RangeFilterSpeciesList represents the full list response for range filter species
@@ -36,10 +42,7 @@ type RangeFilterSpeciesList struct {
 	Count       int                  `json:"count"`
 	LastUpdated time.Time            `json:"lastUpdated"`
 	Threshold   float32              `json:"threshold"`
-	Location    struct {
-		Latitude  float64 `json:"latitude"`
-		Longitude float64 `json:"longitude"`
-	} `json:"location"`
+	Location    Location             `json:"location"`
 }
 
 // RangeFilterTestRequest represents the request for testing range filter
@@ -53,15 +56,12 @@ type RangeFilterTestRequest struct {
 
 // RangeFilterTestResponse represents the response for range filter testing
 type RangeFilterTestResponse struct {
-	Species   []RangeFilterSpecies `json:"species"`
-	Count     int                  `json:"count"`
-	Threshold float32              `json:"threshold"`
-	Location  struct {
-		Latitude  float64 `json:"latitude"`
-		Longitude float64 `json:"longitude"`
-	} `json:"location"`
-	TestDate   time.Time `json:"testDate"`
-	Week       int       `json:"week"`
+	Species    []RangeFilterSpecies `json:"species"`
+	Count      int                  `json:"count"`
+	Threshold  float32              `json:"threshold"`
+	Location   Location             `json:"location"`
+	TestDate   time.Time            `json:"testDate"`
+	Week       int                  `json:"week"`
 	Parameters struct {
 		InputLatitude  float64 `json:"inputLatitude"`
 		InputLongitude float64 `json:"inputLongitude"`
@@ -89,19 +89,18 @@ func (c *Controller) initRangeRoutes() {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/count [get]
 func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
-	settings := conf.Setting()
-
 	// Get current included species
-	includedSpecies := settings.GetIncludedSpecies()
+	includedSpecies := c.Settings.GetIncludedSpecies()
 
 	response := RangeFilterSpeciesCount{
 		Count:       len(includedSpecies),
-		LastUpdated: settings.BirdNET.RangeFilter.LastUpdated,
-		Threshold:   settings.BirdNET.RangeFilter.Threshold,
+		LastUpdated: c.Settings.BirdNET.RangeFilter.LastUpdated,
+		Threshold:   c.Settings.BirdNET.RangeFilter.Threshold,
+		Location: Location{
+			Latitude:  c.Settings.BirdNET.Latitude,
+			Longitude: c.Settings.BirdNET.Longitude,
+		},
 	}
-
-	response.Location.Latitude = settings.BirdNET.Latitude
-	response.Location.Longitude = settings.BirdNET.Longitude
 
 	return ctx.JSON(http.StatusOK, response)
 }
@@ -115,10 +114,8 @@ func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/list [get]
 func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
-	settings := conf.Setting()
-
 	// Get current included species
-	includedSpecies := settings.GetIncludedSpecies()
+	includedSpecies := c.Settings.GetIncludedSpecies()
 
 	// Convert to response format with parsed names
 	var speciesList []RangeFilterSpecies
@@ -129,7 +126,7 @@ func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
 			Label:          label,
 			ScientificName: scientificName,
 			CommonName:     commonName,
-			Score:          1.0, // Current range filter species don't store individual scores
+			Score:          nil, // No individual scores available for current range filter species
 		}
 
 		speciesList = append(speciesList, species)
@@ -138,12 +135,13 @@ func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
 	response := RangeFilterSpeciesList{
 		Species:     speciesList,
 		Count:       len(speciesList),
-		LastUpdated: settings.BirdNET.RangeFilter.LastUpdated,
-		Threshold:   settings.BirdNET.RangeFilter.Threshold,
+		LastUpdated: c.Settings.BirdNET.RangeFilter.LastUpdated,
+		Threshold:   c.Settings.BirdNET.RangeFilter.Threshold,
+		Location: Location{
+			Latitude:  c.Settings.BirdNET.Latitude,
+			Longitude: c.Settings.BirdNET.Longitude,
+		},
 	}
-
-	response.Location.Latitude = settings.BirdNET.Latitude
-	response.Location.Longitude = settings.BirdNET.Longitude
 
 	return ctx.JSON(http.StatusOK, response)
 }
@@ -198,29 +196,33 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "BirdNET instance not available", http.StatusInternalServerError)
 	}
 
-	// Get current settings
-	settings := conf.Setting()
+	// Use mutex to protect against concurrent modifications to global settings
+	rangeFilterMutex.Lock()
+	defer rangeFilterMutex.Unlock()
 
-	// Store original values
-	originalLat := settings.BirdNET.Latitude
-	originalLon := settings.BirdNET.Longitude
-	originalThreshold := settings.BirdNET.RangeFilter.Threshold
+	// Store original values from controller settings
+	originalLat := c.Settings.BirdNET.Latitude
+	originalLon := c.Settings.BirdNET.Longitude
+	originalThreshold := c.Settings.BirdNET.RangeFilter.Threshold
 
-	// Temporarily set test values
-	settings.BirdNET.Latitude = req.Latitude
-	settings.BirdNET.Longitude = req.Longitude
-	settings.BirdNET.RangeFilter.Threshold = req.Threshold
+	// Temporarily set test values in controller settings
+	c.Settings.BirdNET.Latitude = req.Latitude
+	c.Settings.BirdNET.Longitude = req.Longitude
+	c.Settings.BirdNET.RangeFilter.Threshold = req.Threshold
 
 	// Restore original settings after testing
 	defer func() {
-		settings.BirdNET.Latitude = originalLat
-		settings.BirdNET.Longitude = originalLon
-		settings.BirdNET.RangeFilter.Threshold = originalThreshold
+		c.Settings.BirdNET.Latitude = originalLat
+		c.Settings.BirdNET.Longitude = originalLon
+		c.Settings.BirdNET.RangeFilter.Threshold = originalThreshold
 	}()
 
 	// Calculate week if not provided
 	week := req.Week
 	if week == 0 {
+		// BirdNET range filter model expects a custom week numbering system where each month
+		// has exactly 4 weeks, totaling 48 weeks per year instead of the standard 52 weeks.
+		// This is the expected format for the ML model and must be used consistently.
 		// Use the same calculation as in range_filter.go
 		month := int(testDate.Month())
 		day := testDate.Day()
@@ -240,11 +242,13 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 	for _, speciesScore := range speciesScores {
 		scientificName, commonName, _ := observation.ParseSpeciesString(speciesScore.Label)
 
+		// Create score pointer for non-nil value
+		score := speciesScore.Score
 		species := RangeFilterSpecies{
 			Label:          speciesScore.Label,
 			ScientificName: scientificName,
 			CommonName:     commonName,
-			Score:          speciesScore.Score,
+			Score:          &score, // Individual scores are available from GetProbableSpecies
 		}
 
 		speciesList = append(speciesList, species)
@@ -256,10 +260,11 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 		Threshold: req.Threshold,
 		TestDate:  testDate,
 		Week:      int(week),
+		Location: Location{
+			Latitude:  req.Latitude,
+			Longitude: req.Longitude,
+		},
 	}
-
-	response.Location.Latitude = req.Latitude
-	response.Location.Longitude = req.Longitude
 
 	// Store original input parameters for reference
 	response.Parameters.InputLatitude = req.Latitude
@@ -298,14 +303,13 @@ func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
 	}
 
 	// Get the updated count
-	settings := conf.Setting()
-	includedSpecies := settings.GetIncludedSpecies()
+	includedSpecies := c.Settings.GetIncludedSpecies()
 
 	response := map[string]interface{}{
 		"success":     true,
 		"message":     "Range filter rebuilt successfully",
 		"count":       len(includedSpecies),
-		"lastUpdated": settings.BirdNET.RangeFilter.LastUpdated,
+		"lastUpdated": c.Settings.BirdNET.RangeFilter.LastUpdated,
 	}
 
 	c.logAPIRequest(ctx, 1, "Range filter rebuilt successfully", "species_count", len(includedSpecies))

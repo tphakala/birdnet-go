@@ -125,7 +125,8 @@ func TestGetRangeFilterSpeciesList(t *testing.T) {
 		assert.Equal(t, "Turdus merula_Eurasian Blackbird", firstSpecies.Label)
 		assert.Equal(t, "Turdus merula", firstSpecies.ScientificName)
 		assert.Equal(t, "Eurasian Blackbird", firstSpecies.CommonName)
-		assert.Equal(t, 1.0, firstSpecies.Score)
+		// Score should be nil for current range filter species since individual scores are not available
+		assert.Nil(t, firstSpecies.Score)
 	}
 }
 
