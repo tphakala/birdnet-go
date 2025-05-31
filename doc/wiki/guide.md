@@ -535,11 +535,200 @@ If you encounter problems that you can't resolve, please open an issue on the Gi
 
 Providing detailed information in your issue report will help the developers understand and resolve your problem more quickly.
 
+## BirdNET Detection Pipeline
+
+Understanding how BirdNET-Go processes audio and applies various filters is crucial for optimizing your detection accuracy. The detection process follows a multi-stage pipeline where settings are applied in a specific order of precedence.
+
+### Detection Flow Overview
+
+The detection process follows a multi-stage pipeline where settings are applied in a specific order of precedence:
+
+```mermaid
+graph TD
+    A[Audio Input] --> B[BirdNET AI Analysis]
+    B --> C{Range Filter Check}
+    C -->|Species Not Allowed| D[🚫 Discard Detection]
+    C -->|Species Allowed| E{Confidence Threshold}
+    E -->|Below Threshold| D
+    E -->|Above Threshold| F{Deep Detection Check}
+    F -->|Insufficient Matches| G[⏳ Hold in Memory]
+    F -->|Sufficient Matches| H{Privacy Filter}
+    H -->|Human Detected| D
+    H -->|No Human| I{Dog Bark Filter}
+    I -->|Recent Bark| D
+    I -->|No Recent Bark| J[✅ Accept Detection]
+    G --> K{Timeout Reached?}
+    K -->|No| G
+    K -->|Yes| L{Min Detections Met?}
+    L -->|No| D
+    L -->|Yes| H
+```
+
+### Stage 1: Range Filter (Highest Precedence)
+
+The **Range Filter** acts as the primary gatekeeper, determining which species are even possible to detect based on location and time. This stage has the highest precedence and cannot be overridden by confidence settings.
+
+#### Components (in order of precedence):
+
+1. **Always Exclude Species** (Absolute Override)
+   - Species in this list are **never** detected, regardless of any other settings
+   - Useful for filtering out non-bird sounds (Dog, Siren, Gun) or problematic species
+   - Configured via: Settings → Species → "Always Exclude Species"
+
+2. **Always Include Species** (Absolute Override)
+   - Species in this list are **always** allowed, bypassing location-based filtering
+   - Automatically assigned maximum probability score (1.0)
+   - Configured via: Settings → Species → "Always Include Species"
+
+3. **Custom Action Species** (Automatic Include)
+   - Species with configured custom actions are automatically included
+   - Also assigned maximum probability score (1.0)
+
+4. **Location-Based Filtering** 
+   - Uses AI model trained on eBird data to determine species probability
+   - Considers latitude, longitude, and week of year
+   - Filtered by `birdnet.rangefilter.threshold` (default: 0.01)
+
+```yaml
+# Range filter configuration
+birdnet:
+  latitude: 60.1699
+  longitude: 24.9384
+  rangefilter:
+    threshold: 0.01  # Lower = more permissive, higher = more strict
+```
+
+### Stage 2: Confidence Threshold
+
+After the range filter allows a species, individual detections must meet confidence requirements.
+
+#### Confidence Sources (in order of precedence):
+
+1. **Custom Species Threshold** (Highest)
+   ```yaml
+   realtime:
+     species:
+       config:
+         "European Robin":
+           threshold: 0.75  # Overrides global threshold
+   ```
+
+2. **Dynamic Threshold** (If enabled)
+   - Automatically adjusts thresholds based on detection patterns
+   - Can lower thresholds for frequently detected species
+   
+3. **Global BirdNET Threshold** (Default)
+   ```yaml
+   birdnet:
+     threshold: 0.8  # Default confidence requirement
+   ```
+
+### Stage 3: Deep Detection Filter
+
+[Deep Detection](BirdNET‐Go-Guide#deep-detection) uses the `overlap` setting to require multiple consecutive matches before accepting a detection, reducing false positives.
+
+#### How It Works:
+- Standard mode (`overlap: 0.0`): Analyzes 3-second chunks with 1.5-second steps
+- Deep Detection (`overlap: 2.7`): Analyzes with much smaller steps (e.g., 300ms)
+- Requires multiple matches within a short time window
+
+```yaml
+birdnet:
+  overlap: 2.7  # Enable deep detection (requires more CPU power)
+```
+
+**Minimum Detections Calculation:**
+```
+segmentLength = max(0.1, 3.0 - overlap)
+minDetections = max(1, 3 / segmentLength)
+
+Examples:
+- overlap: 0.0 → minDetections: 1 (standard mode)
+- overlap: 2.7 → minDetections: 10 (deep detection)
+```
+
+### Stage 4: Privacy and Behavioral Filters
+
+Final stage filters that can discard detections based on environmental conditions:
+
+#### Privacy Filter
+```yaml
+realtime:
+  privacyfilter:
+    enabled: true
+    confidence: 0.05  # Sensitivity to human voices
+```
+- Discards bird detections if human speech is detected after the initial detection
+- Protects privacy by preventing recordings during conversations
+
+#### Dog Bark Filter  
+```yaml
+realtime:
+  dogbarkfilter:
+    enabled: true
+    confidence: 0.8
+    remember: 60  # Seconds to remember bark
+    species: ["European Robin", "Common Blackbird"]  # Species to filter
+```
+- Discards detections of specified species if dog barks are detected recently
+- Reduces false positives caused by excited dogs reacting to birds
+
+### Setting Precedence Summary
+
+**Highest to Lowest Precedence:**
+
+1. **Always Exclude Species** - Absolute veto power
+2. **Always Include Species** - Bypasses all location filtering  
+3. **Custom Action Species** - Automatically included
+4. **Range Filter Threshold** - Location-based species filtering
+5. **Custom Species Confidence** - Overrides global threshold
+6. **Dynamic Threshold** - Automatic adjustment (if enabled)
+7. **Global Confidence Threshold** - Default requirement
+8. **Deep Detection Filter** - Requires multiple matches
+9. **Privacy Filter** - Environmental safety
+10. **Dog Bark Filter** - Behavioral filtering
+
+### Optimization Tips
+
+#### For Higher Accuracy (Fewer False Positives):
+- Increase `birdnet.threshold` (e.g., 0.9)
+- Enable deep detection with `overlap: 2.7`
+- Use stricter range filter threshold (e.g., 0.05)
+- Enable privacy and dog bark filters
+
+#### For Higher Sensitivity (Catch More Species):
+- Lower `birdnet.threshold` (e.g., 0.6)
+- Use permissive range filter threshold (0.01)
+- Add rare species to "Always Include" list
+- Disable behavioral filters in quiet environments
+
+#### For Specific Species:
+- Use custom thresholds for problematic species
+- Add reliable local species to "Always Include"
+- Add problematic non-bird sounds to "Always Exclude"
+
+### Viewing Your Current Configuration
+
+Use these commands to inspect your current detection settings:
+
+```bash
+# View species included by range filter
+./birdnet-go range print
+
+# View all CLI options
+./birdnet-go help
+
+# View range filter specific options  
+./birdnet-go help range
+```
+
 ## BirdNET Range Filter
 
 The BirdNET Range Filter is an intelligent location and time-based filtering system that helps improve detection accuracy by limiting species predictions to those likely to occur in your specific location during the current time of year.
 
-### How the Range Filter Works
+### How It Works
+
+#### Model Overview
 
 The range filter uses a secondary AI model trained on [eBird checklist frequency data](https://support.ebird.org/en/support/solutions/articles/48000948655-ebird-glossary#:~:text=frequency%3A%20as%20of%20a%20species,purple%20grid%20on%20species%20maps) to estimate the probability of bird species occurrence based on three factors:
 
@@ -549,9 +738,9 @@ The range filter uses a secondary AI model trained on [eBird checklist frequency
 
 The model analyzes these inputs and assigns each species a probability score from 0.0 to 1.0, representing how likely that species is to occur in your location during that time period.
 
-### eBird Data Coverage
+#### eBird Data Coverage
 
-The range filter model is built using citizen science data from eBird, which means coverage varies by region:
+The range filter model is built using citizen science data from [eBird](https://ebird.org), which means coverage varies by region:
 
 - **Well-represented regions**: North America, South America, Europe, India, Australia
 - **Underrepresented regions**: Large parts of Africa and Asia
@@ -560,7 +749,9 @@ In areas with limited eBird data, the model uses expert-curated filter data to p
 
 ### Configuration
 
-The range filter is configured in the `birdnet.rangefilter` section of your configuration:
+#### Basic Setup
+
+The range filter is configured in the `birdnet.rangefilter` section of your configuration file:
 
 ```yaml
 birdnet:
@@ -572,7 +763,9 @@ birdnet:
     threshold: 0.01   # Species occurrence threshold (0.0-1.0)
 ```
 
-### Understanding the Threshold Parameter
+> **Note**: The configuration uses `birdnet.rangefilter` in YAML, while CLI commands use the `range` group (e.g., `birdnet-go range print`). These refer to the same functionality.
+
+#### Understanding the Threshold Parameter
 
 The `threshold` parameter controls which species are included in analysis based on their occurrence probability. **The default value of 0.01 is recommended for most users and rarely needs to be changed** unless you have very specific requirements.
 
@@ -581,31 +774,39 @@ The `threshold` parameter controls which species are included in analysis based 
 - **Strict values (0.1-0.3)**: Include only species with strong occurrence probability
 - **Very strict values (0.5+)**: Include only the most common species for your area
 
-**Note**: If the range filter results don't match your expectations for specific species, you can override them using the **Species Settings** in the web interface (Settings → Species) rather than adjusting the global threshold.
+**Tip**: If the range filter results don't match your expectations for specific species, you can override them using the **Species Settings** in the web interface (Settings → Species) rather than adjusting the global threshold.
 
-### Practical Examples
+### Configuration Examples
 
-**Example 1: Conservative Filtering (threshold: 0.1)**
+#### Example 1: Default Permissive Filtering
+```yaml
+rangefilter:
+  threshold: 0.01  # Default - good for most users
+```
+- Includes species with ≥1% occurrence probability
+- Captures most potential species including occasional visitors
+- Balanced approach suitable for most locations
+
+#### Example 2: Conservative Filtering
+```yaml
+rangefilter:
+  threshold: 0.05
+```
+- Includes species with ≥5% occurrence probability
+- Reduces potential false positives from very unlikely species
+- Good balance between coverage and accuracy
+
+#### Example 3: Strict Filtering
 ```yaml
 rangefilter:
   threshold: 0.1
 ```
 - Includes only species with ≥10% occurrence probability
 - Reduces false positives from unlikely species
-- Good for areas with good eBird coverage
+- Good for areas with excellent eBird coverage
 - May miss rare but possible species
 
-**Example 2: Conservative Filtering (threshold: 0.05)**
-```yaml
-rangefilter:
-  threshold: 0.05  
-```
-- Includes species with ≥5% occurrence probability
-- Reduces potential false positives from very unlikely species
-- Good balance between coverage and accuracy
-- Useful when you want slightly stricter filtering than default
-
-**Example 3: Very Strict Filtering (threshold: 0.3)**
+#### Example 4: Very Strict Filtering
 ```yaml
 rangefilter:
   threshold: 0.3
@@ -615,23 +816,32 @@ rangefilter:
 - Minimizes false positives
 - May miss genuine detections of less common species
 
-### Species Override Behavior
+### Species Override Management
 
-The range filter works alongside your manual species configuration, which can be managed through the web interface:
+#### Override Behavior
+
+The range filter works alongside your manual species configuration:
 
 1. **Always Include Species**: Species in this list are **always** included regardless of range filter scores
 2. **Always Exclude Species**: Species in this list are **always** excluded regardless of range filter scores  
 3. **Custom Actions**: Species with configured actions are automatically included with maximum score
 
-**Managing Species Lists**: You can easily add or remove species from the include/exclude lists using the web interface:
-- Navigate to **Settings → Species** in the web dashboard
-- Use the "Always Include Species" section to add species that should never be filtered out
-- Use the "Always Exclude Species" section to add species that should never be detected (useful for non-bird sounds like "Dog", "Siren", or problematic species)
+#### Managing Species Lists via Web Interface
+
+You can easily manage species overrides through the web dashboard:
+
+- Navigate to **Settings → Species** in the web interface
+- **"Always Include Species"** section: Add species that should never be filtered out
+- **"Always Exclude Species"** section: Add species that should never be detected
+  - Useful for non-bird sounds like "Dog", "Siren", "Gun", "Fireworks"
+  - Helpful for consistently problematic species in your area
 - Changes are applied immediately without restarting the application
 
-### Viewing Range Filter Results
+### Inspection and Debugging
 
-You can inspect what species are included for your location using the CLI command:
+#### Viewing Current Filter Results
+
+You can inspect what species are included for your location using the CLI command (run `birdnet-go help range` for more options):
 
 ```bash
 ./birdnet-go range print
@@ -639,10 +849,21 @@ You can inspect what species are included for your location using the CLI comman
 
 This displays all species that pass the threshold for your current location and date, showing their probability scores.
 
-### Troubleshooting Range Filter Issues
+#### Range Filter Models
+
+BirdNET-Go supports two range filter model versions:
+
+- **V2 (Default)**: Latest model with improved accuracy
+- **V1 (Legacy)**: Original model, use `model: "legacy"` if needed for compatibility
+
+The V2 model generally provides better predictions and should be used unless you have specific compatibility requirements.
+
+### Troubleshooting
+
+#### Common Issues and Solutions
 
 **Problem**: Too many false positives
-- **Solution**: Increase the `threshold` value (try 0.1 or higher)
+- **Solution**: Increase the `threshold` value (try 0.05 or 0.1)
 
 **Problem**: Missing obvious local species  
 - **Solution**: Add the species to the "Always Include Species" list via **Settings → Species** in the web interface, or lower the `threshold` value if many species are missing
@@ -651,16 +872,10 @@ This displays all species that pass the threshold for your current location and 
 - **Solution**: Verify `latitude` and `longitude` are set correctly (non-zero values)
 
 **Problem**: Seasonal migrants not detected during migration
-- **Solution**: Lower the `threshold` temporarily during migration periods
+- **Solution**: Lower the `threshold` temporarily during migration periods, or add specific migrants to the "Always Include Species" list
 
-### Range Filter Models
-
-BirdNET-Go supports two range filter model versions:
-
-- **V2 (Default)**: Latest model with improved accuracy
-- **V1 (Legacy)**: Original model, use `model: "legacy"` if needed for compatibility
-
-The V2 model generally provides better predictions and should be used unless you have specific compatibility requirements.
+**Problem**: Non-bird sounds being detected (dogs, sirens, etc.)
+- **Solution**: Add these to the "Always Exclude Species" list via **Settings → Species**
 
 ## Advanced Features
 
