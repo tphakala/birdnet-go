@@ -973,6 +973,46 @@ BirdNET-Go includes intelligent filtering mechanisms:
 
 BirdNET-Go includes a "Deep Detection" feature designed to improve detection reliability and reduce false positives by requiring multiple detections of the same species within a time window.
 
+#### Deep Detection Flow Chart
+
+```mermaid
+graph TD
+    A[BirdNET Analysis Result] --> B{Passes Initial Filters?}
+    B -->|No| Z[❌ Discard]
+    B -->|Yes| C{Species Already<br/>in Pending Map?}
+    
+    C -->|No| D[Create New Pending Detection]
+    C -->|Yes| E{New Confidence ><br/>Existing Confidence?}
+    
+    D --> F[Set Count = 1<br/>Start 15s Timer<br/>Set Flush Deadline]
+    E -->|Yes| G[Replace Detection<br/>with Higher Confidence]
+    E -->|No| H[Keep Existing Detection]
+    
+    G --> I[Increment Count]
+    H --> I
+    F --> J[Add to Pending Map]
+    I --> J
+    
+    J --> K[Continue Processing<br/>Other Audio...]
+    K --> L{15 Second Timer<br/>Expired?}
+    
+    L -->|No| M[Wait for Timer]
+    L -->|Yes| N{Count >= Required<br/>Min Detections?}
+    
+    M --> O[More Audio Results] 
+    O --> C
+    
+    N -->|No| P[❌ Discard as<br/>False Positive]
+    N -->|Yes| Q{Passes Final Filters?<br/>Privacy/Dog Bark}
+    
+    Q -->|No| R[❌ Discard by Filter]
+    Q -->|Yes| S[✅ Approve Detection<br/>Send to Actions]
+    
+    P --> T[Log: "Discarding detection of X<br/>matched Y/Z times"]
+    R --> U[Log: "Discarding detection<br/>due to filter"]
+    S --> V[Log: "Approving detection of X<br/>matched Y times"]
+```
+
 #### How Deep Detection Works
 
 1. **Increased Analysis Frequency**: Higher `overlap` values reduce the step size between audio analysis windows (e.g., from 1.5 seconds to 300ms), causing the BirdNET AI model to run more frequently
