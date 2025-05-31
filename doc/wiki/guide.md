@@ -1008,9 +1008,9 @@ graph TD
     Q -->|No| R[❌ Discard by Filter]
     Q -->|Yes| S[✅ Approve Detection<br/>Send to Actions]
     
-    P --> T[Log: "Discarding detection of X<br/>matched Y/Z times"]
-    R --> U[Log: "Discarding detection<br/>due to filter"]
-    S --> V[Log: "Approving detection of X<br/>matched Y times"]
+    P --> T[Log: Discarding detection<br/>matched X/Y times]
+    R --> U[Log: Discarding detection<br/>due to filter]
+    S --> V[Log: Approving detection<br/>matched X times]
 ```
 
 #### How Deep Detection Works
