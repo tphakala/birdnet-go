@@ -17,10 +17,9 @@ import (
 // SSEDetectionData represents the detection data sent via SSE
 type SSEDetectionData struct {
 	datastore.Note
-	BirdImage    imageprovider.BirdImage `json:"birdImage"`
-	Timestamp    time.Time               `json:"timestamp"`
-	EventType    string                  `json:"eventType"`
-	ThumbnailURL string                  `json:"thumbnailUrl"`
+	BirdImage imageprovider.BirdImage `json:"birdImage"`
+	Timestamp time.Time               `json:"timestamp"`
+	EventType string                  `json:"eventType"`
 }
 
 // SSEClient represents a connected SSE client
@@ -258,21 +257,11 @@ func (c *Controller) BroadcastDetection(note *datastore.Note, birdImage *imagepr
 		return
 	}
 
-	// Generate thumbnail URL
-	thumbnailURL := ""
-	if c.Settings != nil {
-		baseURL := fmt.Sprintf("http://localhost:%s", c.Settings.WebServer.Port)
-		if note.ScientificName != "" {
-			thumbnailURL = fmt.Sprintf("%s/api/v2/media/species-image?name=%s", baseURL, note.ScientificName)
-		}
-	}
-
 	detection := SSEDetectionData{
-		Note:         *note,
-		BirdImage:    *birdImage,
-		Timestamp:    time.Now(),
-		EventType:    "new_detection",
-		ThumbnailURL: thumbnailURL,
+		Note:      *note,
+		BirdImage: *birdImage,
+		Timestamp: time.Now(),
+		EventType: "new_detection",
 	}
 
 	c.sseManager.BroadcastDetection(&detection)
