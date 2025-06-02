@@ -1,0 +1,197 @@
+---
+description: 
+globs: views/*.html, *.js
+---
+# Frontend Rules
+
+## Browser compatibility
+
+- Maintain compatibility with
+    - Google Chrome
+    - Microsoft Edge (Chromium based)
+    - Mozilla Firefox
+    - Apple Safari
+    - Desktop and small screen touch devices
+
+## Assets
+- Some javascript related assets
+    - Audio player used in HTML templates
+        - assets/audioplayer.js
+    - Javascript snippets
+        - assets/utils.js
+
+## Frameworks
+
+### HTMX
+- **Attributes:**
+  - `hx-get`
+  - `hx-post`
+  - `hx-trigger`
+- **Patterns:**
+  - Use `hx-boost` for progressive enhancement
+  - Implement partial updates
+
+### Alpine.js
+- **Patterns:**
+  - Use `x-data` for component state
+  - Implement reactive updates
+
+## Libraries
+- Leaflet for interactive map
+
+## Styling
+
+### Tailwind CSS
+- **Required:** Yes
+- **Extensions:**
+  - `daisyUI`
+- **Patterns:**
+  - Use utility classes
+  - Implement responsive design
+  - Follow component patterns
+
+- Custom CSS
+  - assets/custom.css
+
+## Snippets
+
+### Feature Detection
+```javascript
+function isFeatureSupported(feature) {
+    const features = {
+        intersectionObserver: () => 'IntersectionObserver' in window,
+        customElements: () => 'customElements' in window,
+        pointer: () => 'PointerEvent' in window,
+        touch: () => 'ontouchstart' in window
+    };
+    return features[feature] ? features[feature]() : false;
+}
+```
+
+### Polyfill Loader
+```javascript
+async function loadPolyfills() {
+    const polyfills = [];
+
+    if (!window.IntersectionObserver) {
+        polyfills.push(import('intersection-observer'));
+    }
+
+    if (!window.fetch) {
+        polyfills.push(import('whatwg-fetch'));
+    }
+
+    if (polyfills.length > 0) {
+        await Promise.all(polyfills);
+    }
+}
+```
+
+### Cross-Browser Event Handling
+```javascript
+function addCrossBrowserEvent(element, eventName, handler, options = {}) {
+    const eventMap = {
+        click: ['click', 'touchend'],
+        mouseenter: ['mouseenter', 'touchstart'],
+        mouseleave: ['mouseleave', 'touchend']
+    };
+
+    const events = eventMap[eventName] || [eventName];
+    const { passive = true, ...otherOptions } = options;
+
+    events.forEach(event => {
+        element.addEventListener(event, handler, { passive, ...otherOptions });
+    });
+
+    return () => {
+        events.forEach(event => {
+            element.removeEventListener(event, handler);
+        });
+    };
+}
+```
+
+### Safe Animation
+```javascript
+function animate(element, properties, duration) {
+    if ('animate' in element) {
+        return element.animate(properties, duration).finished;
+    } else {
+        return new Promise(resolve => {
+            Object.assign(element.style, {
+                transition: `all ${duration}ms`,
+                ...properties
+            });
+            setTimeout(resolve, duration);
+        });
+    }
+}
+```
+
+### Safe Fetch
+```javascript
+async function safeFetch(url, options = {}) {
+    const controller = new AbortController();
+    const timeout = options.timeout || 5000;
+
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal,
+            headers: {
+                'Accept': 'application/json',
+                ...options.headers
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            throw new Error('Request timed out');
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+```
+
+### Safe Storage
+```javascript
+const safeStorage = {
+    get(key) {
+        try {
+            const item = localStorage.getItem(key);
+            return item ? JSON.parse(item) : null;
+        } catch (e) {
+            console.warn(`Error reading ${key} from storage:`, e);
+            return null;
+        }
+    },
+    set(key, value) {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+            return true;
+        } catch (e) {
+            console.warn(`Error writing ${key} to storage:`, e);
+            return false;
+        }
+    },
+    remove(key) {
+        try {
+            localStorage.removeItem(key);
+            return true;
+        } catch (e) {
+            console.warn(`Error removing ${key} from storage:`, e);
+            return false;
+        }
+    }
+};
+```
+

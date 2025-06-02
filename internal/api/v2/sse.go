@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
@@ -118,9 +119,29 @@ func (c *Controller) initSSERoutes() {
 		c.sseManager = NewSSEManager(c.logger)
 	}
 
-	// SSE endpoint for detection stream - publicly accessible for now
-	// In production, you might want to add authentication
-	c.Group.GET("/detections/stream", c.StreamDetections)
+	// Create rate limiter for SSE connections (10 requests per minute per IP)
+	rateLimiterConfig := middleware.RateLimiterConfig{
+		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
+			middleware.RateLimiterMemoryStoreConfig{
+				Rate:      10,              // 10 requests
+				ExpiresIn: 1 * time.Minute, // per minute
+			},
+		),
+		IdentifierExtractor: middleware.DefaultRateLimiterConfig.IdentifierExtractor,
+		ErrorHandler: func(context echo.Context, err error) error {
+			return context.JSON(http.StatusTooManyRequests, map[string]string{
+				"error": "Rate limit exceeded for SSE connections",
+			})
+		},
+		DenyHandler: func(context echo.Context, identifier string, err error) error {
+			return context.JSON(http.StatusTooManyRequests, map[string]string{
+				"error": "Too many SSE connection attempts, please wait before trying again",
+			})
+		},
+	}
+
+	// SSE endpoint for detection stream with rate limiting
+	c.Group.GET("/detections/stream", c.StreamDetections, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
 	// SSE status endpoint - shows connected client count
 	c.Group.GET("/sse/status", c.GetSSEStatus)
@@ -141,7 +162,7 @@ func (c *Controller) StreamDetections(ctx echo.Context) error {
 	// Create client
 	client := &SSEClient{
 		ID:       clientID,
-		Channel:  make(chan SSEDetectionData, 10), // Buffered channel
+		Channel:  make(chan SSEDetectionData, 100), // Increased buffer for high detection periods
 		Request:  ctx.Request(),
 		Response: ctx.Response(),
 		Done:     make(chan bool),
@@ -274,9 +295,9 @@ func (c *Controller) GetSSEStatus(ctx echo.Context) error {
 }
 
 // BroadcastDetection is a helper method to broadcast detection from the controller
-func (c *Controller) BroadcastDetection(note *datastore.Note, birdImage *imageprovider.BirdImage) {
+func (c *Controller) BroadcastDetection(note *datastore.Note, birdImage *imageprovider.BirdImage) error {
 	if c.sseManager == nil {
-		return
+		return fmt.Errorf("SSE manager not initialized")
 	}
 
 	// Add nil checks to prevent panic
@@ -284,13 +305,13 @@ func (c *Controller) BroadcastDetection(note *datastore.Note, birdImage *imagepr
 		if c.apiLogger != nil {
 			c.apiLogger.Error("SSE broadcast skipped: note is nil")
 		}
-		return
+		return fmt.Errorf("note is nil")
 	}
 	if birdImage == nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("SSE broadcast skipped: birdImage is nil")
 		}
-		return
+		return fmt.Errorf("birdImage is nil")
 	}
 
 	detection := SSEDetectionData{
@@ -301,4 +322,5 @@ func (c *Controller) BroadcastDetection(note *datastore.Note, birdImage *imagepr
 	}
 
 	c.sseManager.BroadcastDetection(&detection)
+	return nil
 }

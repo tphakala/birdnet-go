@@ -90,11 +90,12 @@ type SSEAction struct {
 	Note           datastore.Note
 	BirdImageCache *imageprovider.BirdImageCache
 	EventTracker   *EventTracker
+	RetryConfig    jobqueue.RetryConfig // Configuration for retry behavior
 	Description    string
 	mu             sync.Mutex // Protect concurrent access to Note
 	// SSEBroadcaster is a function that broadcasts detection data
 	// This allows the action to be independent of the specific API implementation
-	SSEBroadcaster func(note *datastore.Note, birdImage *imageprovider.BirdImage)
+	SSEBroadcaster func(note *datastore.Note, birdImage *imageprovider.BirdImage) error
 }
 
 // GetDescription returns a human-readable description of the LogAction
@@ -455,8 +456,20 @@ func (a *SSEAction) Execute(data interface{}) error {
 	noteCopy := a.Note
 	noteCopy.Source = conf.SanitizeRTSPUrl(noteCopy.Source)
 
-	// Broadcast the detection
-	a.SSEBroadcaster(&noteCopy, &birdImage)
+	// Broadcast the detection with error handling
+	if err := a.SSEBroadcaster(&noteCopy, &birdImage); err != nil {
+		// Log the error with retry information if retries are enabled
+		// Sanitize error before logging
+		sanitizedErr := sanitizeError(err)
+		if a.RetryConfig.Enabled {
+			log.Printf("❌ Error broadcasting %s (%s) via SSE (confidence: %.2f, clip: %s) (will retry): %v\n",
+				a.Note.CommonName, a.Note.ScientificName, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
+		} else {
+			log.Printf("❌ Error broadcasting %s (%s) via SSE (confidence: %.2f, clip: %s): %v\n",
+				a.Note.CommonName, a.Note.ScientificName, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
+		}
+		return fmt.Errorf("failed to broadcast %s via SSE: %w", a.Note.CommonName, err)
+	}
 
 	if a.Settings.Debug {
 		log.Printf("✅ Successfully broadcasted %s via SSE\n", a.Note.CommonName)
