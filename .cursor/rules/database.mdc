@@ -1,0 +1,68 @@
+---
+description: Database related design rules
+globs: internal/datastore/*.go
+---
+# Database code rules
+
+- Libraries
+    - Database related tasks should use GORM ORM library
+
+- Dialect support
+    - SQLite and MySQL dialects must be supported
+
+- Source file locations
+    - Database related code is in datastore package located at internal/datastore
+        - database model
+            - internal/model.go
+        - sqlite dependend code
+            - internal/datastore/sqlite.go
+        - mysql depended code
+            - internal/datastore/mysql.go
+        - common database interactions
+            - internal/datastore/interfaces.go
+        - GORM auto migration related code
+            - internal/datastore/manage.go
+
+- Database session
+    - Database session is initialized in
+        - internal/analysis/realtime.go
+
+- Lock Management
+    - Required: Yes
+    - Transaction Handling
+        - Required: Yes
+            - Best Practices:
+            - Wrap lock operations in transactions
+            - Use context with timeout for transactions
+            - Implement proper rollback on errors
+    - Retry Mechanism
+        - Required: Yes
+            - Configuration:
+                - Max Retries: 5
+                - Base Delay: 500ms
+                - Strategy: Exponential Backoff
+    - Best Practices:
+        - Implement exponential backoff
+        - Log retry attempts
+        - Handle database-specific lock errors
+
+- Query Optimization
+    - Required: Yes
+    - Indexes
+        - Requirements:
+            - Index frequently queried columns
+            - Index foreign key columns
+            - Consider composite indexes for common query patterns
+    - Joins
+        - Best Practices:
+            - Use preload for related data loading
+            - Optimize join conditions
+            - Limit joined data sets
+
+- Error Handling
+    - Required: Yes
+    - Best Practices:
+        - Wrap database errors with context
+        - Distinguish between lock and other errors
+        - Provide clear error messages
+

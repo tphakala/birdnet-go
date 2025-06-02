@@ -163,6 +163,8 @@ The middleware follows this decision flow:
 
 - WebSocket connections for live detection updates
 - Event-based notification system
+- Server-Sent Events (SSE) for real-time detection streaming
+- Structured detection data with species images and metadata
 
 ### Range Filter Management
 
@@ -278,6 +280,99 @@ Example response:
   }
 }
 ```
+
+### Server-Sent Events (SSE) API Endpoints
+
+The API provides real-time bird detection streaming via Server-Sent Events, allowing clients to receive detection data as it occurs:
+
+1. **Detection Stream**:
+   - `GET /api/v2/detections/stream` - Opens an SSE connection for real-time detection streaming
+   - Sends all new bird detections as they are processed
+   - Each detection includes complete note data, bird image information, and thumbnail URL
+   - Connection includes periodic heartbeat messages to maintain the stream
+
+2. **SSE Status**:
+   - `GET /api/v2/sse/status` - Returns information about active SSE connections
+   - Shows the number of connected clients and stream status
+
+**SSE Event Types:**
+
+- `connected` - Initial connection confirmation with client ID
+- `detection` - New bird detection data
+- `heartbeat` - Periodic keep-alive messages with timestamp and client count
+
+**Detection Event Data Structure:**
+
+Each detection event contains all the same data as a database entry plus additional metadata:
+
+```json
+{
+  "id": 12345,
+  "date": "2024-06-15",
+  "time": "14:30:22",
+  "source": "rtsp://camera.example.com/stream",
+  "beginTime": "2024-06-15T14:30:20Z",
+  "endTime": "2024-06-15T14:30:23Z",
+  "speciesCode": "turdus_merula",
+  "scientificName": "Turdus merula",
+  "commonName": "Eurasian Blackbird",
+  "confidence": 0.85,
+  "verified": "unverified",
+  "locked": false,
+  "birdImage": {
+    "url": "https://avicommons.org/...",
+    "attribution": "...",
+    "license": "..."
+  },
+  "timestamp": "2024-06-15T14:30:25Z",
+  "eventType": "new_detection",
+  "thumbnailUrl": "http://localhost:8080/api/v2/media/species-image?name=Turdus merula"
+}
+```
+
+**Client Implementation Example:**
+
+```javascript
+const eventSource = new EventSource('/api/v2/detections/stream');
+
+eventSource.addEventListener('connected', function(event) {
+    const data = JSON.parse(event.data);
+    console.log('Connected to detection stream:', data.clientId);
+});
+
+eventSource.addEventListener('detection', function(event) {
+    const detection = JSON.parse(event.data);
+    console.log('New detection:', detection.commonName, detection.confidence);
+    // Process the detection data
+    displayDetection(detection);
+});
+
+eventSource.addEventListener('heartbeat', function(event) {
+    const data = JSON.parse(event.data);
+    console.log('Heartbeat - clients:', data.clients);
+});
+
+eventSource.onerror = function(event) {
+    console.error('SSE connection error:', event);
+};
+```
+
+**Features:**
+
+- **Real-time streaming**: Detections are broadcast immediately as they occur
+- **Automatic reconnection**: Clients can implement reconnection logic on connection loss
+- **Concurrent clients**: Multiple clients can connect simultaneously
+- **Efficient delivery**: Uses event frequency tracking to prevent spam
+- **Rich metadata**: Each detection includes species images and thumbnail URLs
+- **Cross-origin support**: Includes CORS headers for web browser clients
+
+**Notes:**
+
+- The SSE endpoint is currently publicly accessible (no authentication required)
+- In production environments, consider adding authentication for security
+- The stream automatically handles client disconnections and cleanup
+- Heartbeat messages are sent every 30 seconds to maintain connections
+- Event frequency is controlled by the same event tracker used for other actions
 
 ### Middleware Implementation
 
