@@ -1070,6 +1070,12 @@ BirdNET-Go allows you to listen to the live audio feed directly from the web int
 ### Integration Options
 
 The application offers several integration points:
+  * **Server-Sent Events (SSE) API** for real-time detection streaming.
+    * Provides live bird detection data as it happens
+    * Compatible with any programming language or platform that supports SSE
+    * Includes species metadata, confidence scores, and thumbnail images
+    * No authentication required for read-only access
+    * Perfect for building custom dashboards, mobile apps, or integration with other systems
 - MQTT support for IoT ecosystems.
   - The `retain` flag in MQTT settings is recommended for Home Assistant integration to ensure sensor states are preserved across restarts.
 - Telemetry endpoint compatible with Prometheus.
@@ -1084,6 +1090,413 @@ The application offers several integration points:
 - Custom actions that can be triggered on species detection.
 - Built-in connection testers (via Web UI) for BirdWeather and MQTT to verify configuration.
   - The testers perform multi-stage checks (connectivity, authentication, test uploads/publishes) and provide feedback, including troubleshooting hints and rate limit information (for BirdWeather).
+
+## Real-time Detection API (Server-Sent Events)
+
+BirdNET-Go provides a Server-Sent Events (SSE) API that streams bird detections in real-time as they happen. This allows you to build custom applications, dashboards, or integrations that react immediately to new bird detections.
+
+### Authentication Policy
+
+**The SSE API endpoints are intentionally designed as public APIs with no authentication requirement.** This design choice enables:
+
+- Easy integration with third-party applications and services
+- Simple development and testing of custom clients
+- Compatibility with embedded systems and IoT devices
+- Reduced complexity for read-only access to detection data
+
+The endpoints include built-in rate limiting (10 requests per minute per IP) to prevent abuse while maintaining open access.
+
+> **🔒 Need Authentication?** If you require password protection for the detection stream API, please file a feature request by creating a GitHub issue at [https://github.com/tphakala/birdnet-go/issues](https://github.com/tphakala/birdnet-go/issues). Include your specific use case and security requirements to help guide the implementation.
+
+### API Endpoints
+
+#### Detection Stream Endpoint
+
+**URL:** `GET /api/v2/detections/stream`  
+**Authentication:** None required (public endpoint)  
+**Rate Limiting:** 10 connections per minute per IP address
+
+The SSE stream sends different types of events:
+
+#### 1. Connection Event
+Sent immediately when a client connects to confirm the connection is established.
+
+```json
+{
+  "clientId": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "Connected to detection stream"
+}
+```
+
+#### 2. Detection Event
+Sent when a new bird detection occurs and passes all filters.
+
+```json
+{
+  "id": 12345,
+  "date": "2024-01-15",
+  "time": "08:30:45",
+  "source": "USB Audio Device",
+  "beginTime": "2024-01-15T08:30:45Z",
+  "endTime": "2024-01-15T08:31:00Z",
+  "speciesCode": "EABL1",
+  "scientificName": "Turdus merula",
+  "commonName": "Eurasian Blackbird",
+  "confidence": 0.87,
+  "verified": "unverified",
+  "locked": false,
+  "latitude": 60.1699,
+  "longitude": 24.9384,
+  "clipName": "eurasian_blackbird_87p_20240115T083045Z.wav",
+  "birdImage": {
+    "url": "https://example.com/bird-image.jpg",
+    "attribution": "Image by Photographer Name",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+  },
+  "timestamp": "2024-01-15T08:30:45.123Z",
+  "eventType": "new_detection"
+}
+```
+
+#### 3. Heartbeat Event
+Sent every 30 seconds to keep the connection alive and provide connection status.
+
+```json
+{
+  "timestamp": 1705312245,
+  "clients": 3
+}
+```
+
+#### Connection Status Endpoint
+
+**URL:** `GET /api/v2/sse/status`  
+**Authentication:** None required (public endpoint)  
+**Rate Limiting:** Standard API rate limits apply
+
+Returns information about the current SSE connection status:
+
+```json
+{
+  "connected_clients": 3,
+  "status": "active"
+}
+```
+
+### Integration Examples
+
+#### JavaScript/HTML
+Perfect for web dashboards or browser-based applications:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>BirdNET-Go Live Detections</title>
+</head>
+<body>
+    <div id="detections"></div>
+    
+    <script>
+        const eventSource = new EventSource('http://localhost:8080/api/v2/detections/stream');
+        const detectionsDiv = document.getElementById('detections');
+        
+        eventSource.addEventListener('connected', function(event) {
+            const data = JSON.parse(event.data);
+            console.log('Connected:', data.message);
+        });
+        
+        eventSource.addEventListener('detection', function(event) {
+            const detection = JSON.parse(event.data);
+            
+            // Create detection element
+            const detectionElement = document.createElement('div');
+            detectionElement.className = 'detection';
+                         detectionElement.innerHTML = `
+                 <h3>${detection.commonName}</h3>
+                 <p><em>${detection.scientificName}</em></p>
+                 <p>Confidence: ${(detection.confidence * 100).toFixed(1)}%</p>
+                 <p>Time: ${detection.time}</p>
+                 <p>Source: ${detection.source}</p>
+                 ${detection.birdImage?.url ? `<img src="${detection.birdImage.url}" alt="${detection.commonName}" style="max-width: 200px;">` : ''}
+             `;
+            
+            // Add to top of list
+            detectionsDiv.insertBefore(detectionElement, detectionsDiv.firstChild);
+            
+            // Keep only last 10 detections
+            while (detectionsDiv.children.length > 10) {
+                detectionsDiv.removeChild(detectionsDiv.lastChild);
+            }
+        });
+        
+        eventSource.addEventListener('heartbeat', function(event) {
+            const data = JSON.parse(event.data);
+            console.log(`Heartbeat - ${data.clients} clients connected`);
+        });
+        
+        eventSource.onerror = function(event) {
+            console.error('SSE connection error:', event);
+        };
+    </script>
+</body>
+</html>
+```
+
+#### Python
+Great for data processing, logging, or integration with other Python applications:
+
+```python
+#!/usr/bin/env python3
+import sseclient
+import json
+import requests
+
+def listen_to_detections(base_url="http://localhost:8080"):
+    """
+    Listen to BirdNET-Go detection stream and process detections.
+    
+    Requires: pip install sseclient-py requests
+    """
+    url = f"{base_url}/api/v2/detections/stream"
+    
+    try:
+        response = requests.get(url, stream=True, headers={'Accept': 'text/event-stream'})
+        client = sseclient.SSEClient(response)
+        
+        print("Connected to BirdNET-Go detection stream...")
+        
+        for event in client.events():
+            if event.event == 'connected':
+                data = json.loads(event.data)
+                print(f"✅ Connected: {data['message']}")
+                
+            elif event.event == 'detection':
+                detection = json.loads(event.data)
+                
+                # Process the detection
+                print(f"🐦 {detection['commonName']} detected!")
+                print(f"   Scientific: {detection['scientificName']}")
+                print(f"   Confidence: {detection['confidence']:.2f}")
+                print(f"   Time: {detection['time']}")
+                print(f"   Source: {detection['source']}")
+                
+                # Your custom processing here
+                process_detection(detection)
+                
+            elif event.event == 'heartbeat':
+                data = json.loads(event.data)
+                print(f"💓 Heartbeat - {data['clients']} clients connected")
+                
+    except KeyboardInterrupt:
+        print("\n👋 Disconnecting from stream...")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+
+def process_detection(detection):
+    """
+    Custom processing function for detections.
+    Add your own logic here.
+    """
+    # Example: Save to file
+    with open('detections.log', 'a') as f:
+        f.write(f"{detection['time']},{detection['commonName']},{detection['confidence']}\n")
+    
+    # Example: Send notification for high confidence detections
+    if detection['confidence'] > 0.9:
+        send_notification(f"High confidence detection: {detection['commonName']}")
+    
+    # Example: Store in database
+    # store_in_database(detection)
+
+def send_notification(message):
+    """Example notification function"""
+    print(f"🔔 Notification: {message}")
+
+if __name__ == "__main__":
+    listen_to_detections()
+```
+
+#### Node.js
+Ideal for server-side applications or building APIs on top of BirdNET-Go:
+
+```javascript
+const EventSource = require('eventsource');
+
+class BirdNetGoClient {
+    constructor(baseUrl = 'http://localhost:8080') {
+        this.baseUrl = baseUrl;
+        this.eventSource = null;
+    }
+    
+    connect() {
+        const url = `${this.baseUrl}/api/v2/detections/stream`;
+        this.eventSource = new EventSource(url);
+        
+        this.eventSource.addEventListener('connected', (event) => {
+            const data = JSON.parse(event.data);
+            console.log('✅ Connected:', data.message);
+        });
+        
+        this.eventSource.addEventListener('detection', (event) => {
+            const detection = JSON.parse(event.data);
+            this.onDetection(detection);
+        });
+        
+        this.eventSource.addEventListener('heartbeat', (event) => {
+            const data = JSON.parse(event.data);
+            console.log(`💓 Heartbeat - ${data.clients} clients connected`);
+        });
+        
+        this.eventSource.onerror = (error) => {
+            console.error('❌ SSE Error:', error);
+        };
+        
+        console.log('🔗 Connecting to BirdNET-Go detection stream...');
+    }
+    
+    onDetection(detection) {
+        console.log(`🐦 ${detection.commonName} detected!`);
+        console.log(`   Confidence: ${(detection.confidence * 100).toFixed(1)}%`);
+        console.log(`   Time: ${detection.time}`);
+        
+        // Your custom logic here
+        this.processDetection(detection);
+    }
+    
+    processDetection(detection) {
+        // Example: Send to webhook
+        // this.sendWebhook(detection);
+        
+        // Example: Store in external database
+        // this.storeInDatabase(detection);
+        
+        // Example: Send push notification
+        // this.sendPushNotification(detection);
+    }
+    
+    disconnect() {
+        if (this.eventSource) {
+            this.eventSource.close();
+            console.log('👋 Disconnected from stream');
+        }
+    }
+}
+
+// Usage
+const client = new BirdNetGoClient();
+client.connect();
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+    client.disconnect();
+    process.exit(0);
+});
+```
+
+#### curl (Command Line)
+For testing or simple scripting:
+
+```bash
+#!/bin/bash
+
+# Simple detection monitor using curl
+curl -N -H "Accept: text/event-stream" \
+     "http://localhost:8080/api/v2/detections/stream" | \
+while IFS= read -r line; do
+    if [[ $line == data:* ]]; then
+        # Extract JSON data
+        json_data="${line#data: }"
+        
+        # Parse with jq if available
+        if command -v jq &> /dev/null; then
+            # Check if it's a detection event
+            if echo "$json_data" | jq -e '.commonName' &> /dev/null; then
+                species=$(echo "$json_data" | jq -r '.commonName')
+                confidence=$(echo "$json_data" | jq -r '.confidence')
+                time=$(echo "$json_data" | jq -r '.time')
+                
+                echo "🐦 $time: $species (${confidence})"
+                
+                # Example: Log to file
+                echo "$time,$species,$confidence" >> detections.csv
+                
+                # Example: Send desktop notification (Linux)
+                # notify-send "Bird Detected" "$species detected with ${confidence} confidence"
+            fi
+        else
+            echo "Raw data: $json_data"
+        fi
+    fi
+done
+```
+
+### Connection Management
+
+#### Automatic Reconnection
+The SSE connection can be lost due to network issues or server restarts. Most SSE clients automatically handle reconnection, but you can implement custom reconnection logic:
+
+```javascript
+function connectWithRetry(baseUrl, maxRetries = 5) {
+    let retryCount = 0;
+    
+    function connect() {
+        const eventSource = new EventSource(`${baseUrl}/api/v2/detections/stream`);
+        
+        eventSource.onopen = function() {
+            console.log('✅ Connected to detection stream');
+            retryCount = 0; // Reset retry count on successful connection
+        };
+        
+        eventSource.onerror = function(event) {
+            if (retryCount < maxRetries) {
+                retryCount++;
+                const delay = Math.min(1000 * Math.pow(2, retryCount), 30000); // Exponential backoff, max 30s
+                console.log(`❌ Connection lost. Retrying in ${delay}ms... (attempt ${retryCount}/${maxRetries})`);
+                
+                setTimeout(() => {
+                    eventSource.close();
+                    connect();
+                }, delay);
+            } else {
+                console.error('❌ Max retries reached. Please check your connection.');
+            }
+        };
+        
+        return eventSource;
+    }
+    
+    return connect();
+}
+```
+
+### Performance Considerations
+
+   * **Connection Limits**: The server can handle multiple concurrent SSE connections, but each connection consumes server resources
+   * **Network Bandwidth**: Each connected client receives all detection events, so bandwidth usage scales with the number of clients  
+   * **Client Processing**: Ensure your client application can process events fast enough to avoid missing detections
+   * **Heartbeat Monitoring**: Use heartbeat events to detect connection issues and implement automatic reconnection
+
+### Use Cases
+
+#### Real-time Dashboards
+Create web-based dashboards that display live bird activity, species counts, and detection trends in real-time.
+
+#### Mobile Applications
+Build mobile apps that notify users immediately when interesting species are detected in their area.
+
+#### Data Integration
+Stream detection data into time-series databases, data lakes, or analytics platforms for advanced analysis.
+
+#### Automation Systems
+Trigger actions in home automation systems, cameras, or other IoT devices based on specific bird detections.
+
+#### Research Applications
+Collect real-time data for ornithological research, citizen science projects, or ecological monitoring.
+
+#### Alert Systems
+Send notifications via email, SMS, push notifications, or other channels when rare or specific species are detected.
 
 ## Species-Specific Settings
 

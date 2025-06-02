@@ -19,6 +19,7 @@ const (
 	SendNotification                   // Represents a send notification event
 	BirdWeatherSubmit                  // Represents a bird weather submit event
 	MQTTPublish                        // Represents an MQTT publish event
+	SSEBroadcast                       // Represents a Server-Sent Events broadcast
 )
 
 // EventBehaviorFunc defines the signature for functions that determine the behavior of an event.
@@ -92,6 +93,7 @@ type EventTrackerConfig struct {
 	NotificationInterval      time.Duration
 	BirdWeatherSubmitInterval time.Duration
 	MQTTPublishInterval       time.Duration
+	SSEBroadcastInterval      time.Duration
 }
 
 // initEventTracker is a helper function that initializes an EventTracker with common setup
@@ -111,6 +113,7 @@ func initEventTracker(interval time.Duration, speciesConfigs map[string]conf.Spe
 			SendNotification:  NewEventHandler(interval, StandardEventBehavior),
 			BirdWeatherSubmit: NewEventHandler(interval, StandardEventBehavior),
 			MQTTPublish:       NewEventHandler(interval, StandardEventBehavior),
+			SSEBroadcast:      NewEventHandler(interval, StandardEventBehavior),
 		},
 		SpeciesConfigs: normalizedSpeciesConfigs, // Always initialized, even if empty
 	}

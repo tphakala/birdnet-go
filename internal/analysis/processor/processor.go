@@ -47,6 +47,9 @@ type Processor struct {
 	controlChan         chan string
 	JobQueue            *jobqueue.JobQueue // Queue for managing job retries
 	workerCancel        context.CancelFunc // Function to cancel worker goroutines
+	// SSE related fields
+	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
+	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
 }
 
 // DynamicThreshold represents the dynamic threshold configuration for a species.
@@ -608,6 +611,27 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 		}
 	}
 
+	// Add SSE action if broadcaster is available (enabled when SSE API is configured)
+	if sseBroadcaster := p.GetSSEBroadcaster(); sseBroadcaster != nil {
+		// Create SSE retry config - use sensible defaults since SSE should be reliable
+		sseRetryConfig := jobqueue.RetryConfig{
+			Enabled:      true, // Enable retries for SSE to improve reliability
+			MaxRetries:   3,    // Conservative retry count for real-time streaming
+			InitialDelay: 1 * time.Second,
+			MaxDelay:     5 * time.Second,
+			Multiplier:   2.0,
+		}
+
+		actions = append(actions, &SSEAction{
+			Settings:       p.Settings,
+			Note:           detection.Note,
+			BirdImageCache: p.BirdImageCache,
+			EventTracker:   p.GetEventTracker(),
+			RetryConfig:    sseRetryConfig,
+			SSEBroadcaster: sseBroadcaster,
+		})
+	}
+
 	// Check if UpdateRangeFilterAction needs to be executed for the day
 	today := time.Now().Truncate(24 * time.Hour) // Current date with time set to midnight
 	if p.Settings.BirdNET.RangeFilter.LastUpdated.Before(today) {
@@ -676,6 +700,20 @@ func (p *Processor) GetBn() *birdnet.BirdNET {
 // GetBirdNET returns the BirdNET instance
 func (p *Processor) GetBirdNET() *birdnet.BirdNET {
 	return p.Bn
+}
+
+// SetSSEBroadcaster safely sets the SSE broadcaster function
+func (p *Processor) SetSSEBroadcaster(broadcaster func(note *datastore.Note, birdImage *imageprovider.BirdImage) error) {
+	p.sseBroadcasterMutex.Lock()
+	defer p.sseBroadcasterMutex.Unlock()
+	p.SSEBroadcaster = broadcaster
+}
+
+// GetSSEBroadcaster safely returns the current SSE broadcaster function
+func (p *Processor) GetSSEBroadcaster() func(note *datastore.Note, birdImage *imageprovider.BirdImage) error {
+	p.sseBroadcasterMutex.RLock()
+	defer p.sseBroadcasterMutex.RUnlock()
+	return p.SSEBroadcaster
 }
 
 // Shutdown gracefully stops all processor components

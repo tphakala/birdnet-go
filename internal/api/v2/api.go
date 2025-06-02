@@ -59,6 +59,9 @@ type Controller struct {
 	// is designed to be concurrency-safe through internal locking (e.g., RWMutex for token maps).
 	AuthService      auth.Service        // Store the auth service instance
 	authMiddlewareFn echo.MiddlewareFunc // Authentication middleware function (set if auth configured)
+
+	// SSE related fields
+	sseManager *SSEManager // Manager for Server-Sent Events connections
 }
 
 // Define specific errors for token handling failures
@@ -272,6 +275,9 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	now := time.Now()
 	c.startTime = &now
 
+	// Initialize SSE manager
+	c.sseManager = NewSSEManager(logger)
+
 	// Initialize routes
 	c.initRoutes()
 
@@ -346,6 +352,7 @@ func (c *Controller) initRoutes() {
 		{"auth routes", c.initAuthRoutes},
 		{"media routes", c.initMediaRoutes},
 		{"range routes", c.initRangeRoutes},
+		{"sse routes", c.initSSERoutes},
 	}
 
 	for _, initializer := range routeInitializers {

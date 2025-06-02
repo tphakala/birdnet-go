@@ -85,6 +85,19 @@ type UpdateRangeFilterAction struct {
 	mu          sync.Mutex // Protect concurrent access to Settings
 }
 
+type SSEAction struct {
+	Settings       *conf.Settings
+	Note           datastore.Note
+	BirdImageCache *imageprovider.BirdImageCache
+	EventTracker   *EventTracker
+	RetryConfig    jobqueue.RetryConfig // Configuration for retry behavior
+	Description    string
+	mu             sync.Mutex // Protect concurrent access to Note
+	// SSEBroadcaster is a function that broadcasts detection data
+	// This allows the action to be independent of the specific API implementation
+	SSEBroadcaster func(note *datastore.Note, birdImage *imageprovider.BirdImage) error
+}
+
 // GetDescription returns a human-readable description of the LogAction
 func (a *LogAction) GetDescription() string {
 	if a.Description != "" {
@@ -131,6 +144,14 @@ func (a *UpdateRangeFilterAction) GetDescription() string {
 		return a.Description
 	}
 	return "Update BirdNET range filter"
+}
+
+// GetDescription returns a human-readable description of the SSEAction
+func (a *SSEAction) GetDescription() string {
+	if a.Description != "" {
+		return a.Description
+	}
+	return "Broadcast detection via Server-Sent Events"
 }
 
 // Execute logs the note to the chag log file
@@ -396,5 +417,63 @@ func (a *UpdateRangeFilterAction) Execute(data interface{}) error {
 
 		a.Settings.UpdateIncludedSpecies(includedSpecies)
 	}
+	return nil
+}
+
+// Execute broadcasts the detection via Server-Sent Events
+func (a *SSEAction) Execute(data interface{}) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	// Check if SSE broadcaster is available
+	if a.SSEBroadcaster == nil {
+		return nil // Silently skip if no broadcaster is configured
+	}
+
+	species := strings.ToLower(a.Note.CommonName)
+
+	// Check event frequency
+	if !a.EventTracker.TrackEvent(species, SSEBroadcast) {
+		return nil
+	}
+
+	// Get bird image of detected bird
+	birdImage := imageprovider.BirdImage{} // Default to empty image
+	// Add nil check for BirdImageCache before calling Get
+	if a.BirdImageCache != nil {
+		var err error
+		birdImage, err = a.BirdImageCache.Get(a.Note.ScientificName)
+		if err != nil {
+			log.Printf("⚠️ Error getting bird image from cache for %s: %v", a.Note.ScientificName, err)
+			// Continue with the default empty image
+		}
+	} else {
+		// Log if the cache is nil, maybe helpful for debugging setup issues
+		log.Printf("🟡 BirdImageCache is nil, cannot fetch image for %s", a.Note.ScientificName)
+	}
+
+	// Create a copy of the Note with sanitized RTSP URL
+	noteCopy := a.Note
+	noteCopy.Source = conf.SanitizeRTSPUrl(noteCopy.Source)
+
+	// Broadcast the detection with error handling
+	if err := a.SSEBroadcaster(&noteCopy, &birdImage); err != nil {
+		// Log the error with retry information if retries are enabled
+		// Sanitize error before logging
+		sanitizedErr := sanitizeError(err)
+		if a.RetryConfig.Enabled {
+			log.Printf("❌ Error broadcasting %s (%s) via SSE (confidence: %.2f, clip: %s) (will retry): %v\n",
+				a.Note.CommonName, a.Note.ScientificName, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
+		} else {
+			log.Printf("❌ Error broadcasting %s (%s) via SSE (confidence: %.2f, clip: %s): %v\n",
+				a.Note.CommonName, a.Note.ScientificName, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
+		}
+		return fmt.Errorf("failed to broadcast %s via SSE: %w", a.Note.CommonName, err)
+	}
+
+	if a.Settings.Debug {
+		log.Printf("✅ Successfully broadcasted %s via SSE\n", a.Note.CommonName)
+	}
+
 	return nil
 }
