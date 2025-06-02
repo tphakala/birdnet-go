@@ -1098,20 +1098,7 @@ BirdNET-Go provides a Server-Sent Events (SSE) API that streams bird detections 
 ### API Endpoints
 
 #### Detection Stream Endpoint
-```
-GET /api/v2/detections/stream
-```
 
-This endpoint provides a continuous stream of bird detections as Server-Sent Events.
-
-#### SSE Status Endpoint
-```
-GET /api/v2/sse/status
-```
-
-Returns information about the SSE service and the number of connected clients.
-
-### Event Types
 
 The SSE stream sends different types of events:
 
