@@ -611,7 +611,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 		}
 	}
 
-	// Add SSE action if broadcaster is available (always enabled for real-time streaming)
+	// Add SSE action if broadcaster is available (enabled when SSE API is configured)
 	if sseBroadcaster := p.GetSSEBroadcaster(); sseBroadcaster != nil {
 		// Create SSE retry config - use sensible defaults since SSE should be reliable
 		sseRetryConfig := jobqueue.RetryConfig{
