@@ -1152,8 +1152,7 @@ Sent when a new bird detection occurs and passes all filters.
     "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
   },
   "timestamp": "2024-01-15T08:30:45.123Z",
-  "eventType": "new_detection",
-  "thumbnailUrl": "http://localhost:8080/api/v2/media/species-image?name=Turdus%20merula"
+  "eventType": "new_detection"
 }
 ```
 
@@ -1196,14 +1195,14 @@ Perfect for web dashboards or browser-based applications:
             // Create detection element
             const detectionElement = document.createElement('div');
             detectionElement.className = 'detection';
-            detectionElement.innerHTML = `
-                <h3>${detection.commonName}</h3>
-                <p><em>${detection.scientificName}</em></p>
-                <p>Confidence: ${(detection.confidence * 100).toFixed(1)}%</p>
-                <p>Time: ${detection.time}</p>
-                <p>Source: ${detection.source}</p>
-                ${detection.thumbnailUrl ? `<img src="${detection.thumbnailUrl}" alt="${detection.commonName}" style="max-width: 200px;">` : ''}
-            `;
+                         detectionElement.innerHTML = `
+                 <h3>${detection.commonName}</h3>
+                 <p><em>${detection.scientificName}</em></p>
+                 <p>Confidence: ${(detection.confidence * 100).toFixed(1)}%</p>
+                 <p>Time: ${detection.time}</p>
+                 <p>Source: ${detection.source}</p>
+                 ${detection.birdImage?.url ? `<img src="${detection.birdImage.url}" alt="${detection.commonName}" style="max-width: 200px;">` : ''}
+             `;
             
             // Add to top of list
             detectionsDiv.insertBefore(detectionElement, detectionsDiv.firstChild);
