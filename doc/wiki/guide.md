@@ -1455,10 +1455,10 @@ function connectWithRetry(baseUrl, maxRetries = 5) {
 
 ### Performance Considerations
 
-- **Connection Limits**: The server can handle multiple concurrent SSE connections, but each connection consumes server resources
-- **Network Bandwidth**: Each connected client receives all detection events, so bandwidth usage scales with the number of clients
-- **Client Processing**: Ensure your client application can process events fast enough to avoid missing detections
-- **Heartbeat Monitoring**: Use heartbeat events to detect connection issues and implement automatic reconnection
+   * **Connection Limits**: The server can handle multiple concurrent SSE connections, but each connection consumes server resources
+   * **Network Bandwidth**: Each connected client receives all detection events, so bandwidth usage scales with the number of clients  
+   * **Client Processing**: Ensure your client application can process events fast enough to avoid missing detections
+   * **Heartbeat Monitoring**: Use heartbeat events to detect connection issues and implement automatic reconnection
 
 ### Use Cases
 
