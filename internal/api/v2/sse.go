@@ -73,23 +73,34 @@ func (m *SSEManager) RemoveClient(clientID string) {
 // BroadcastDetection sends detection data to all connected clients
 func (m *SSEManager) BroadcastDetection(detection *SSEDetectionData) {
 	m.mutex.RLock()
-	defer m.mutex.RUnlock()
 
 	if len(m.clients) == 0 {
+		m.mutex.RUnlock()
 		return // No clients to broadcast to
 	}
+
+	// Collect blocked client IDs to remove them after releasing the lock
+	var blockedClients []string
 
 	for clientID, client := range m.clients {
 		select {
 		case client.Channel <- *detection:
 			// Successfully sent to client
-		case <-time.After(1 * time.Second):
-			// Client channel is blocked, remove client
+		case <-time.After(3 * time.Second): // Increased timeout for slow connections
+			// Client channel is blocked, collect ID for removal
 			if m.logger != nil {
-				m.logger.Printf("SSE client %s appears blocked, removing", clientID)
+				m.logger.Printf("SSE client %s appears blocked, will remove", clientID)
 			}
-			go m.RemoveClient(clientID)
+			blockedClients = append(blockedClients, clientID)
 		}
+	}
+
+	// Release the read lock before removing clients
+	m.mutex.RUnlock()
+
+	// Remove blocked clients without holding the lock to avoid deadlock
+	for _, clientID := range blockedClients {
+		go m.RemoveClient(clientID)
 	}
 }
 
@@ -223,6 +234,17 @@ func (c *Controller) sendSSEMessage(ctx echo.Context, event string, data interfa
 	// Format SSE message
 	message := fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(jsonData))
 
+	// Set write deadline to prevent hanging on slow/disconnected clients
+	if conn, ok := ctx.Response().Writer.(interface{ SetWriteDeadline(time.Time) error }); ok {
+		deadline := time.Now().Add(10 * time.Second) // 10 second timeout
+		if err := conn.SetWriteDeadline(deadline); err != nil {
+			// If we can't set deadline, log but continue - not all response writers support this
+			if c.apiLogger != nil {
+				c.apiLogger.Debug("Failed to set write deadline for SSE message", "error", err.Error())
+			}
+		}
+	}
+
 	// Write to response
 	if _, err := ctx.Response().Write([]byte(message)); err != nil {
 		return fmt.Errorf("failed to write SSE message: %w", err)
@@ -254,6 +276,20 @@ func (c *Controller) GetSSEStatus(ctx echo.Context) error {
 // BroadcastDetection is a helper method to broadcast detection from the controller
 func (c *Controller) BroadcastDetection(note *datastore.Note, birdImage *imageprovider.BirdImage) {
 	if c.sseManager == nil {
+		return
+	}
+
+	// Add nil checks to prevent panic
+	if note == nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("SSE broadcast skipped: note is nil")
+		}
+		return
+	}
+	if birdImage == nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("SSE broadcast skipped: birdImage is nil")
+		}
 		return
 	}
 
