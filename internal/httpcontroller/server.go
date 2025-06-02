@@ -181,6 +181,13 @@ func (s *Server) initializeServer() {
 		s.Processor,
 		s.OAuth2Server, // Pass OAuth2Server instance
 	)
+
+	// Connect the processor's SSE broadcaster to the API controller's SSE manager
+	s.Debug("Setting up SSE broadcaster connection")
+	if s.Processor != nil && s.APIV2 != nil {
+		s.Processor.SetSSEBroadcaster(s.APIV2.BroadcastDetection)
+		s.Debug("SSE broadcaster connected to processor")
+	}
 }
 
 // initHLSCleanupTask initializes a background task to clean up idle HLS streams
