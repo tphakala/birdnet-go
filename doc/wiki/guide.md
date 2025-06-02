@@ -1070,12 +1070,12 @@ BirdNET-Go allows you to listen to the live audio feed directly from the web int
 ### Integration Options
 
 The application offers several integration points:
-- **Server-Sent Events (SSE) API** for real-time detection streaming.
-  - Provides live bird detection data as it happens
-  - Compatible with any programming language or platform that supports SSE
-  - Includes species metadata, confidence scores, and thumbnail images
-  - No authentication required for read-only access
-  - Perfect for building custom dashboards, mobile apps, or integration with other systems
+  * **Server-Sent Events (SSE) API** for real-time detection streaming.
+    * Provides live bird detection data as it happens
+    * Compatible with any programming language or platform that supports SSE
+    * Includes species metadata, confidence scores, and thumbnail images
+    * No authentication required for read-only access
+    * Perfect for building custom dashboards, mobile apps, or integration with other systems
 - MQTT support for IoT ecosystems.
   - The `retain` flag in MQTT settings is recommended for Home Assistant integration to ensure sensor states are preserved across restarts.
 - Telemetry endpoint compatible with Prometheus.
