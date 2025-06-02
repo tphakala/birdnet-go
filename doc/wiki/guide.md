@@ -1095,10 +1095,26 @@ The application offers several integration points:
 
 BirdNET-Go provides a Server-Sent Events (SSE) API that streams bird detections in real-time as they happen. This allows you to build custom applications, dashboards, or integrations that react immediately to new bird detections.
 
+### Authentication Policy
+
+**The SSE API endpoints are intentionally designed as public APIs with no authentication requirement.** This design choice enables:
+
+- Easy integration with third-party applications and services
+- Simple development and testing of custom clients
+- Compatibility with embedded systems and IoT devices
+- Reduced complexity for read-only access to detection data
+
+The endpoints include built-in rate limiting (10 requests per minute per IP) to prevent abuse while maintaining open access.
+
+> **🔒 Need Authentication?** If you require password protection for the detection stream API, please file a feature request by creating a GitHub issue at [https://github.com/tphakala/birdnet-go/issues](https://github.com/tphakala/birdnet-go/issues). Include your specific use case and security requirements to help guide the implementation.
+
 ### API Endpoints
 
 #### Detection Stream Endpoint
 
+**URL:** `GET /api/v2/detections/stream`  
+**Authentication:** None required (public endpoint)  
+**Rate Limiting:** 10 connections per minute per IP address
 
 The SSE stream sends different types of events:
 
@@ -1150,6 +1166,21 @@ Sent every 30 seconds to keep the connection alive and provide connection status
 {
   "timestamp": 1705312245,
   "clients": 3
+}
+```
+
+#### Connection Status Endpoint
+
+**URL:** `GET /api/v2/sse/status`  
+**Authentication:** None required (public endpoint)  
+**Rate Limiting:** Standard API rate limits apply
+
+Returns information about the current SSE connection status:
+
+```json
+{
+  "connected_clients": 3,
+  "status": "active"
 }
 ```
 
