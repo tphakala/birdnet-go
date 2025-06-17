@@ -82,8 +82,10 @@ func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 
 // GetLabelFileDataWithLogger loads a label file with optional logging support
 func GetLabelFileDataWithLogger(modelVersion, localeCode string, logger Logger) ([]byte, error) {
-	if modelVersion != BirdNET_GLOBAL_6K_V2_4 {
-		return nil, fmt.Errorf("unsupported model version: %s", modelVersion)
+	// Get the appropriate filesystem for this model version (validates model version)
+	fileSystem, err := getModelFileSystem(modelVersion)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get filesystem for model %s: %w", modelVersion, err)
 	}
 
 	// Use the proper locale mapping from conf package
@@ -108,12 +110,6 @@ func GetLabelFileDataWithLogger(modelVersion, localeCode string, logger Logger) 
 		}
 
 		return data, nil
-	}
-
-	// Get the appropriate filesystem for this model version
-	fileSystem, err := getModelFileSystem(modelVersion)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get filesystem for model %s: %w", modelVersion, err)
 	}
 
 	// Try to read the file
