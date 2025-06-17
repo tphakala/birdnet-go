@@ -20,6 +20,21 @@ const (
 //go:embed data/labels/V2.4/*.txt
 var v24LabelFiles embed.FS
 
+// tryReadFallbackFile attempts to read the English fallback label file
+func tryReadFallbackFile(modelVersion string) ([]byte, error) {
+	fallbackFilename, err := conf.GetLabelFilename(modelVersion, "en-uk")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get fallback filename: %w", err)
+	}
+
+	data, err := v24LabelFiles.ReadFile(path.Join("data", "labels", fallbackFilename))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read fallback file '%s': %w", fallbackFilename, err)
+	}
+
+	return data, nil
+}
+
 // GetLabelFileData loads a label file by model version and locale code
 func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 	if !strings.HasPrefix(modelVersion, BirdNET_GLOBAL_6K_V2_4) {
@@ -27,34 +42,35 @@ func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 	}
 
 	// Use the proper locale mapping from conf package
-	filename, err := conf.GetLabelFilename(modelVersion, localeCode)
-	if err != nil {
-		// If the locale mapping fails, fall back to English
-		fallbackFilename, fallbackErr := conf.GetLabelFilename(modelVersion, "en-uk")
+	filename, originalMappingErr := conf.GetLabelFilename(modelVersion, localeCode)
+	if originalMappingErr != nil {
+		// If the locale mapping fails, try fallback to English
+		data, fallbackErr := tryReadFallbackFile(modelVersion)
 		if fallbackErr != nil {
-			return nil, fmt.Errorf("failed to get filename for locale '%s' and fallback failed: %w", localeCode, fallbackErr)
+			return nil, fmt.Errorf("failed to get filename for locale '%s' (original error: %v) and fallback failed: %w",
+				localeCode, originalMappingErr, fallbackErr)
 		}
-		filename = fallbackFilename
+		return data, nil
 	}
 
 	// Try to read the file
-	data, err := v24LabelFiles.ReadFile(path.Join("data", "labels", filename))
-	if err == nil {
+	data, originalReadErr := v24LabelFiles.ReadFile(path.Join("data", "labels", filename))
+	if originalReadErr == nil {
 		return data, nil
 	}
 
-	// If the mapped file doesn't exist, fall back to English
-	fallbackFilename, fallbackErr := conf.GetLabelFilename(modelVersion, "en-uk")
+	// If the mapped file doesn't exist, try fallback to English
+	data, fallbackErr := tryReadFallbackFile(modelVersion)
 	if fallbackErr != nil {
-		return nil, fmt.Errorf("failed to load locale '%s' and fallback configuration failed: %w", localeCode, fallbackErr)
+		return nil, fmt.Errorf("failed to load locale '%s' (original read error: %v) and fallback failed: %w",
+			localeCode, originalReadErr, fallbackErr)
 	}
 
-	data, err = v24LabelFiles.ReadFile(path.Join("data", "labels", fallbackFilename))
-	if err == nil {
-		return data, nil
-	}
+	return data, nil
+}
 
-	// List available files for debugging
+// listAvailableFiles returns a list of available label files for debugging
+func listAvailableFiles() ([]string, error) {
 	availableFiles := []string{}
 	walkErr := fs.WalkDir(v24LabelFiles, "data/labels/V2.4", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -70,6 +86,5 @@ func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 		return nil, fmt.Errorf("error listing available label files: %w", walkErr)
 	}
 
-	return nil, fmt.Errorf("label file for locale '%s' not found. Available files: %v",
-		localeCode, availableFiles)
+	return availableFiles, nil
 }
