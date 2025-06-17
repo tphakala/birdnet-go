@@ -43,6 +43,7 @@ func TestLoadAllV24LabelFiles(t *testing.T) {
 	// Test each locale code in the mapping
 	for localeCode, fileLocale := range conf.LocaleCodeMapping {
 		t.Run(localeCode, func(t *testing.T) {
+			t.Parallel()
 			logger := &testLogger{}
 
 			// Test loading the label file
@@ -80,12 +81,16 @@ func TestValidateV24LabelFileLineCount(t *testing.T) {
 
 	for localeCode := range conf.LocaleCodeMapping {
 		t.Run(localeCode, func(t *testing.T) {
+			t.Parallel()
 			data, err := GetLabelFileData(modelVersion, localeCode)
 			if err != nil {
 				t.Fatalf("Failed to load label file for locale %s: %v", localeCode, err)
 			}
 
 			lines := countNonEmptyLines(data)
+			if lines == -1 {
+				t.Fatalf("Error scanning label file for locale %s", localeCode)
+			}
 			expectedLines := GetExpectedLinesV24()
 			if lines != expectedLines {
 				t.Errorf("Label file for locale %s has %d lines, expected %d",
@@ -100,6 +105,7 @@ func TestValidateV24LabelFileFormat(t *testing.T) {
 
 	for localeCode := range conf.LocaleCodeMapping {
 		t.Run(localeCode, func(t *testing.T) {
+			t.Parallel()
 			data, err := GetLabelFileData(modelVersion, localeCode)
 			if err != nil {
 				t.Fatalf("Failed to load label file for locale %s: %v", localeCode, err)
@@ -116,26 +122,24 @@ func TestValidateV24LabelFileFormat(t *testing.T) {
 
 				nonEmptyLines++
 
-				// Validate line format: should contain an underscore separator
-				if !strings.Contains(line, "_") {
-					t.Errorf("Line %d in %s locale file is malformed (missing underscore): %s",
-						i+1, localeCode, line)
-				}
-
 				// Validate that line is not too short
 				if len(line) < 5 {
 					t.Errorf("Line %d in %s locale file is too short: %s",
 						i+1, localeCode, line)
 				}
 
-				// Check for proper scientific name format (should start with capital letter)
+				// Check for proper scientific name format (should split into exactly two parts)
 				parts := strings.SplitN(line, "_", 2)
-				if len(parts) == 2 {
-					scientificName := parts[0]
-					if scientificName != "" && !isFirstRuneUpperCase(scientificName) {
-						t.Errorf("Line %d in %s locale file has invalid scientific name format: %s",
-							i+1, localeCode, scientificName)
-					}
+				if len(parts) != 2 {
+					t.Errorf("Line %d in %s locale file is malformed (should have exactly one underscore): %s",
+						i+1, localeCode, line)
+					continue
+				}
+
+				scientificName := parts[0]
+				if scientificName != "" && !isFirstRuneUpperCase(scientificName) {
+					t.Errorf("Line %d in %s locale file has invalid scientific name format: %s",
+						i+1, localeCode, scientificName)
 				}
 			}
 
@@ -305,18 +309,21 @@ func countNonEmptyLines(data []byte) int {
 			count++
 		}
 	}
+
+	// Check for scanning errors
+	if err := scanner.Err(); err != nil {
+		// In a test context, we could panic or return a special value
+		// For now, we'll return -1 to indicate an error occurred
+		return -1
+	}
+
 	return count
 }
 
-// isValidTextContent checks if the data contains valid text content
+// isValidTextContent checks if the data contains valid UTF-8 text content
 func isValidTextContent(data []byte) bool {
-	// Check for null bytes which would indicate binary content
-	for _, b := range data {
-		if b == 0 {
-			return false
-		}
-	}
-	return true
+	// Use utf8.Valid for proper UTF-8 validation
+	return utf8.Valid(data)
 }
 
 // isFirstRuneUpperCase checks if the first rune of a string is uppercase using Unicode rules
