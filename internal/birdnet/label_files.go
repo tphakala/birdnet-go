@@ -16,10 +16,14 @@ import (
 // Model version constants
 const (
 	BirdNET_GLOBAL_6K_V2_4 = "BirdNET_GLOBAL_6K_V2.4"
-
-	// Expected line count for V2.4 label files
-	ExpectedLinesV24 = 6522
 )
+
+// V2.4 model-specific constants
+var ModelV24 = struct {
+	ExpectedLines int
+}{
+	ExpectedLines: 6522,
+}
 
 //go:embed data/labels/V2.4/*.txt
 var v24LabelFiles embed.FS
