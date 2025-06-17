@@ -8,6 +8,7 @@ import (
 )
 
 // DefaultFallbackLocale is the default locale used when the requested locale is not supported
+// This should match the original configuration default that was "en-uk"
 const DefaultFallbackLocale = "en-uk"
 
 // Label file configurations for different model versions
