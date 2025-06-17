@@ -128,7 +128,7 @@ func TestValidateV24LabelFileFormat(t *testing.T) {
 				parts := strings.SplitN(line, "_", 2)
 				if len(parts) == 2 {
 					scientificName := parts[0]
-					if len(scientificName) > 0 && !isUpperCase(scientificName[0]) {
+					if scientificName != "" && !isUpperCase(scientificName[0]) {
 						t.Errorf("Line %d in %s locale file has invalid scientific name format: %s",
 							i+1, localeCode, scientificName)
 					}
