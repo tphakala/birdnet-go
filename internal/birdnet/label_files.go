@@ -16,7 +16,6 @@ import (
 // Model version constants
 const (
 	BirdNET_GLOBAL_6K_V2_4 = "BirdNET_GLOBAL_6K_V2.4"
-	fallbackLocale         = "en-uk"
 )
 
 //go:embed data/labels/V2.4/*.txt
@@ -24,7 +23,7 @@ var v24LabelFiles embed.FS
 
 // tryReadFallbackFile attempts to read the English fallback label file
 func tryReadFallbackFile(modelVersion string) ([]byte, error) {
-	fallbackFilename, err := conf.GetLabelFilename(modelVersion, fallbackLocale)
+	fallbackFilename, err := conf.GetLabelFilename(modelVersion, conf.DefaultFallbackLocale)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get fallback filename: %w", err)
 	}
