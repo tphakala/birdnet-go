@@ -8,6 +8,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // Model version constants
@@ -24,39 +26,32 @@ func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 		return nil, fmt.Errorf("unsupported model version: %s", modelVersion)
 	}
 
-	// Normalize locale code for consistent handling
-	normalizedLocale := strings.ToLower(localeCode)
+	// Use the proper locale mapping from conf package
+	filename, err := conf.GetLabelFilename(modelVersion, localeCode)
+	if err != nil {
+		// If the locale mapping fails, fall back to English
+		fallbackFilename, fallbackErr := conf.GetLabelFilename(modelVersion, "en-uk")
+		if fallbackErr != nil {
+			return nil, fmt.Errorf("failed to get filename for locale '%s' and fallback failed: %w", localeCode, fallbackErr)
+		}
+		filename = fallbackFilename
+	}
 
-	// Get the file name pattern based on the locale code
-	filePattern := fmt.Sprintf("%s_Labels_%s.txt", BirdNET_GLOBAL_6K_V2_4, normalizedLocale)
-
-	// Try to find the exact match
-	data, err := v24LabelFiles.ReadFile(path.Join("data", "labels", "V2.4", filePattern))
+	// Try to read the file
+	data, err := v24LabelFiles.ReadFile(path.Join("data", "labels", filename))
 	if err == nil {
 		return data, nil
 	}
 
-	// If the locale has a hyphen (like pt-br), try the underscore version
-	if strings.Contains(normalizedLocale, "-") {
-		altLocale := strings.ReplaceAll(normalizedLocale, "-", "_")
-		if strings.ToUpper(altLocale[3:]) == altLocale[3:] {
-			// Adjust format from "pt-br" to "pt_BR"
-			altLocale = altLocale[:3] + strings.ToUpper(altLocale[3:])
-		}
-		filePattern = fmt.Sprintf("%s_Labels_%s.txt", BirdNET_GLOBAL_6K_V2_4, altLocale)
-		data, err = v24LabelFiles.ReadFile(path.Join("data", "labels", "V2.4", filePattern))
-		if err == nil {
-			return data, nil
-		}
+	// If the mapped file doesn't exist, fall back to English
+	fallbackFilename, fallbackErr := conf.GetLabelFilename(modelVersion, "en-uk")
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("failed to load locale '%s' and fallback configuration failed: %w", localeCode, fallbackErr)
 	}
 
-	// Fall back to English if requested locale isn't found
-	if normalizedLocale != "en" && normalizedLocale != "en-uk" {
-		filePattern = fmt.Sprintf("%s_Labels_en_uk.txt", BirdNET_GLOBAL_6K_V2_4)
-		data, err = v24LabelFiles.ReadFile(path.Join("data", "labels", "V2.4", filePattern))
-		if err == nil {
-			return data, nil
-		}
+	data, err = v24LabelFiles.ReadFile(path.Join("data", "labels", fallbackFilename))
+	if err == nil {
+		return data, nil
 	}
 
 	// List available files for debugging
