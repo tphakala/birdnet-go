@@ -21,16 +21,44 @@ const (
 //go:embed data/labels/V2.4/*.txt
 var v24LabelFiles embed.FS
 
-// tryReadFallbackFile attempts to read the English fallback label file
-func tryReadFallbackFile(modelVersion string) ([]byte, error) {
+// Logger interface for dependency injection in tests
+type Logger interface {
+	Debug(format string, v ...interface{})
+}
+
+// getModelFileSystem returns the appropriate embedded filesystem for the given model version
+func getModelFileSystem(modelVersion string) (fs.FS, error) {
+	switch {
+	case strings.HasPrefix(modelVersion, BirdNET_GLOBAL_6K_V2_4):
+		return v24LabelFiles, nil
+	default:
+		return nil, fmt.Errorf("no embedded filesystem available for model version: %s", modelVersion)
+	}
+}
+
+// tryReadFallbackFile attempts to read the English fallback label file for any model version
+func tryReadFallbackFile(modelVersion string, logger Logger) ([]byte, error) {
 	fallbackFilename, err := conf.GetLabelFilename(modelVersion, conf.DefaultFallbackLocale)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get fallback filename: %w", err)
 	}
 
-	data, err := v24LabelFiles.ReadFile(path.Join("data", "labels", fallbackFilename))
+	// Get the appropriate filesystem for this model version
+	fileSystem, err := getModelFileSystem(modelVersion)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read fallback file '%s': %w", fallbackFilename, err)
+		return nil, fmt.Errorf("failed to get filesystem for model %s: %w", modelVersion, err)
+	}
+
+	// Construct the full path within the embedded filesystem
+	fullPath := path.Join("data", "labels", fallbackFilename)
+
+	data, err := fs.ReadFile(fileSystem, fullPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read fallback file '%s': %w", fullPath, err)
+	}
+
+	if logger != nil {
+		logger.Debug("Successfully loaded fallback locale file: %s", fullPath)
 	}
 
 	return data, nil
@@ -38,6 +66,11 @@ func tryReadFallbackFile(modelVersion string) ([]byte, error) {
 
 // GetLabelFileData loads a label file by model version and locale code
 func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
+	return GetLabelFileDataWithLogger(modelVersion, localeCode, nil)
+}
+
+// GetLabelFileDataWithLogger loads a label file with optional logging support
+func GetLabelFileDataWithLogger(modelVersion, localeCode string, logger Logger) ([]byte, error) {
 	if !strings.HasPrefix(modelVersion, BirdNET_GLOBAL_6K_V2_4) {
 		return nil, fmt.Errorf("unsupported model version: %s", modelVersion)
 	}
@@ -46,25 +79,54 @@ func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 	filename, originalMappingErr := conf.GetLabelFilename(modelVersion, localeCode)
 	if originalMappingErr != nil {
 		// If the locale mapping fails, try fallback to English
-		data, fallbackErr := tryReadFallbackFile(modelVersion)
+		if logger != nil {
+			logger.Debug("Locale mapping failed for '%s', attempting fallback to %s: %v",
+				localeCode, conf.DefaultFallbackLocale, originalMappingErr)
+		}
+
+		data, fallbackErr := tryReadFallbackFile(modelVersion, logger)
 		if fallbackErr != nil {
 			combinedErr := errors.Join(originalMappingErr, fallbackErr)
 			return nil, fmt.Errorf("failed to get filename for locale '%s': %w", localeCode, combinedErr)
 		}
+
+		// Log warning about fallback usage
+		if logger != nil {
+			logger.Debug("Warning: Requested locale '%s' not available, using fallback locale %s",
+				localeCode, conf.DefaultFallbackLocale)
+		}
+
 		return data, nil
 	}
 
+	// Get the appropriate filesystem for this model version
+	fileSystem, err := getModelFileSystem(modelVersion)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get filesystem for model %s: %w", modelVersion, err)
+	}
+
 	// Try to read the file
-	data, originalReadErr := v24LabelFiles.ReadFile(path.Join("data", "labels", filename))
+	data, originalReadErr := fs.ReadFile(fileSystem, path.Join("data", "labels", filename))
 	if originalReadErr == nil {
 		return data, nil
 	}
 
 	// If the mapped file doesn't exist, try fallback to English
-	data, fallbackErr := tryReadFallbackFile(modelVersion)
+	if logger != nil {
+		logger.Debug("Failed to read locale file '%s', attempting fallback to %s: %v",
+			filename, conf.DefaultFallbackLocale, originalReadErr)
+	}
+
+	data, fallbackErr := tryReadFallbackFile(modelVersion, logger)
 	if fallbackErr != nil {
 		combinedErr := errors.Join(originalReadErr, fallbackErr)
 		return nil, fmt.Errorf("failed to load locale '%s': %w", localeCode, combinedErr)
+	}
+
+	// Log warning about fallback usage
+	if logger != nil {
+		logger.Debug("Warning: Locale file '%s' not found, using fallback locale %s",
+			filename, conf.DefaultFallbackLocale)
 	}
 
 	return data, nil
