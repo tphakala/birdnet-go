@@ -7,6 +7,9 @@ import (
 	"strings"
 )
 
+// DefaultFallbackLocale is the default locale used when the requested locale is not supported
+const DefaultFallbackLocale = "en-uk"
+
 // Label file configurations for different model versions
 type LabelConfig struct {
 	FilePattern string // Pattern for label files, e.g. "BirdNET_GLOBAL_6K_V2.4_Labels_%s.txt"
@@ -135,7 +138,7 @@ func GetLabelFilename(modelVersion, localeCode string) (string, error) {
 }
 
 // NormalizeLocale normalizes the input locale string and matches it to a known locale code or full name.
-// If the locale is not supported, it falls back to "en-uk".
+// If the locale is not supported, it falls back to DefaultFallbackLocale.
 func NormalizeLocale(inputLocale string) (string, error) {
 	inputLocale = strings.ToLower(inputLocale)
 
@@ -151,7 +154,7 @@ func NormalizeLocale(inputLocale string) (string, error) {
 		}
 	}
 
-	// Fall back to English (UK) if the locale is not supported
+	// Fall back to DefaultFallbackLocale if the locale is not supported
 	// Return no error but log that we're using a fallback
-	return "en-uk", fmt.Errorf("locale %s not supported, falling back to English (UK)", inputLocale)
+	return DefaultFallbackLocale, fmt.Errorf("locale %s not supported, falling back to English (UK)", inputLocale)
 }
