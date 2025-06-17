@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"path"
 	"path/filepath"
-	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -19,10 +18,15 @@ const (
 )
 
 // V2.4 model-specific constants
-var ModelV24 = struct {
-	ExpectedLines int
+var modelV24 = struct {
+	expectedLines int
 }{
-	ExpectedLines: 6522,
+	expectedLines: 6522,
+}
+
+// GetExpectedLinesV24 returns the expected number of lines for V2.4 label files
+func GetExpectedLinesV24() int {
+	return modelV24.expectedLines
 }
 
 //go:embed data/labels/V2.4/*.txt
@@ -36,7 +40,7 @@ type Logger interface {
 // getModelFileSystem returns the appropriate embedded filesystem for the given model version
 func getModelFileSystem(modelVersion string) (fs.FS, error) {
 	switch {
-	case strings.HasPrefix(modelVersion, BirdNET_GLOBAL_6K_V2_4):
+	case modelVersion == BirdNET_GLOBAL_6K_V2_4:
 		return v24LabelFiles, nil
 	default:
 		return nil, fmt.Errorf("no embedded filesystem available for model version: %s", modelVersion)
@@ -78,7 +82,7 @@ func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 
 // GetLabelFileDataWithLogger loads a label file with optional logging support
 func GetLabelFileDataWithLogger(modelVersion, localeCode string, logger Logger) ([]byte, error) {
-	if !strings.HasPrefix(modelVersion, BirdNET_GLOBAL_6K_V2_4) {
+	if modelVersion != BirdNET_GLOBAL_6K_V2_4 {
 		return nil, fmt.Errorf("unsupported model version: %s", modelVersion)
 	}
 
@@ -142,12 +146,12 @@ func GetLabelFileDataWithLogger(modelVersion, localeCode string, logger Logger) 
 // listAvailableFiles returns a list of available label files for debugging
 func listAvailableFiles() ([]string, error) {
 	availableFiles := []string{}
-	walkErr := fs.WalkDir(v24LabelFiles, "data/labels/V2.4", func(path string, d fs.DirEntry, err error) error {
+	walkErr := fs.WalkDir(v24LabelFiles, "data/labels/V2.4", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if !d.IsDir() {
-			availableFiles = append(availableFiles, filepath.Base(path))
+			availableFiles = append(availableFiles, filepath.Base(p))
 		}
 		return nil
 	})

@@ -2,7 +2,7 @@
 //
 // These tests validate:
 // 1. Loading of all label files in the V2.4 directory for each supported locale
-// 2. Line count validation - ensuring each file has exactly ModelV24.ExpectedLines (6522) lines
+// 2. Line count validation - ensuring each file has exactly GetExpectedLinesV24() (6522) lines
 // 3. Format validation - checking proper scientific_name_common_name format
 // 4. Consistency validation - comparing scientific names across locales (with reporting)
 // 5. Error handling for unsupported models/locales
@@ -19,11 +19,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// Note: ModelV24.ExpectedLines constant is defined in label_files.go
+// Note: GetExpectedLinesV24() function is defined in label_files.go
 
 // Mock logger for testing
 type testLogger struct {
@@ -84,9 +86,10 @@ func TestValidateV24LabelFileLineCount(t *testing.T) {
 			}
 
 			lines := countNonEmptyLines(data)
-			if lines != ModelV24.ExpectedLines {
+			expectedLines := GetExpectedLinesV24()
+			if lines != expectedLines {
 				t.Errorf("Label file for locale %s has %d lines, expected %d",
-					localeCode, lines, ModelV24.ExpectedLines)
+					localeCode, lines, expectedLines)
 			}
 		})
 	}
@@ -129,7 +132,7 @@ func TestValidateV24LabelFileFormat(t *testing.T) {
 				parts := strings.SplitN(line, "_", 2)
 				if len(parts) == 2 {
 					scientificName := parts[0]
-					if scientificName != "" && !isUpperCase(scientificName[0]) {
+					if scientificName != "" && !isFirstRuneUpperCase(scientificName) {
 						t.Errorf("Line %d in %s locale file has invalid scientific name format: %s",
 							i+1, localeCode, scientificName)
 					}
@@ -137,9 +140,10 @@ func TestValidateV24LabelFileFormat(t *testing.T) {
 			}
 
 			// Validate total line count matches expected
-			if nonEmptyLines != ModelV24.ExpectedLines {
+			expectedLines := GetExpectedLinesV24()
+			if nonEmptyLines != expectedLines {
 				t.Errorf("Locale %s has %d non-empty lines, expected %d",
-					localeCode, nonEmptyLines, ModelV24.ExpectedLines)
+					localeCode, nonEmptyLines, expectedLines)
 			}
 		})
 	}
@@ -315,9 +319,13 @@ func isValidTextContent(data []byte) bool {
 	return true
 }
 
-// isUpperCase checks if a byte represents an uppercase letter
-func isUpperCase(b byte) bool {
-	return b >= 'A' && b <= 'Z'
+// isFirstRuneUpperCase checks if the first rune of a string is uppercase using Unicode rules
+func isFirstRuneUpperCase(s string) bool {
+	if s == "" {
+		return false
+	}
+	firstRune, _ := utf8.DecodeRuneInString(s)
+	return unicode.IsUpper(firstRune)
 }
 
 // extractNonEmptyLines extracts all non-empty lines from data
