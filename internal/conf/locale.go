@@ -155,6 +155,11 @@ func NormalizeLocale(inputLocale string) (string, error) {
 	}
 
 	// Fall back to DefaultFallbackLocale if the locale is not supported
-	// Return no error but log that we're using a fallback
-	return DefaultFallbackLocale, fmt.Errorf("locale %s not supported, falling back to English (UK)", inputLocale)
+	// Get the human-readable name for the fallback locale
+	fallbackName, exists := LocaleCodes[DefaultFallbackLocale]
+	if !exists {
+		fallbackName = DefaultFallbackLocale // fallback to code if name not found
+	}
+
+	return DefaultFallbackLocale, fmt.Errorf("locale %s not supported, falling back to %s", inputLocale, fallbackName)
 }
