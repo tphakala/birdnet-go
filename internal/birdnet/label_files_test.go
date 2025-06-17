@@ -2,7 +2,7 @@
 //
 // These tests validate:
 // 1. Loading of all label files in the V2.4 directory for each supported locale
-// 2. Line count validation - ensuring each file has exactly ExpectedLinesV24 (6522) lines
+// 2. Line count validation - ensuring each file has exactly ModelV24.ExpectedLines (6522) lines
 // 3. Format validation - checking proper scientific_name_common_name format
 // 4. Consistency validation - comparing scientific names across locales (with reporting)
 // 5. Error handling for unsupported models/locales
@@ -16,13 +16,14 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// Note: ExpectedLinesV24 constant is defined in label_files.go
+// Note: ModelV24.ExpectedLines constant is defined in label_files.go
 
 // Mock logger for testing
 type testLogger struct {
@@ -62,7 +63,7 @@ func TestLoadAllV24LabelFiles(t *testing.T) {
 			if err != nil {
 				t.Errorf("Failed to get filename for locale %s: %v", localeCode, err)
 			} else {
-				expectedPattern := "V2.4/BirdNET_GLOBAL_6K_V2.4_Labels_" + fileLocale + ".txt"
+				expectedPattern := filepath.Join("V2.4", "BirdNET_GLOBAL_6K_V2.4_Labels_"+fileLocale+".txt")
 				if filename != expectedPattern {
 					t.Errorf("Unexpected filename for locale %s: got %s, expected %s",
 						localeCode, filename, expectedPattern)
@@ -83,9 +84,9 @@ func TestValidateV24LabelFileLineCount(t *testing.T) {
 			}
 
 			lines := countNonEmptyLines(data)
-			if lines != ExpectedLinesV24 {
+			if lines != ModelV24.ExpectedLines {
 				t.Errorf("Label file for locale %s has %d lines, expected %d",
-					localeCode, lines, ExpectedLinesV24)
+					localeCode, lines, ModelV24.ExpectedLines)
 			}
 		})
 	}
@@ -133,6 +134,12 @@ func TestValidateV24LabelFileFormat(t *testing.T) {
 							i+1, localeCode, scientificName)
 					}
 				}
+			}
+
+			// Validate total line count matches expected
+			if nonEmptyLines != ModelV24.ExpectedLines {
+				t.Errorf("Locale %s has %d non-empty lines, expected %d",
+					localeCode, nonEmptyLines, ModelV24.ExpectedLines)
 			}
 		})
 	}
@@ -239,13 +246,13 @@ func TestGetLabelFilename(t *testing.T) {
 		{
 			modelVersion: BirdNET_GLOBAL_6K_V2_4,
 			localeCode:   "en-us",
-			expected:     "V2.4/BirdNET_GLOBAL_6K_V2.4_Labels_en_us.txt",
+			expected:     filepath.Join("V2.4", "BirdNET_GLOBAL_6K_V2.4_Labels_en_us.txt"),
 			expectError:  false,
 		},
 		{
 			modelVersion: BirdNET_GLOBAL_6K_V2_4,
 			localeCode:   "de",
-			expected:     "V2.4/BirdNET_GLOBAL_6K_V2.4_Labels_de.txt",
+			expected:     filepath.Join("V2.4", "BirdNET_GLOBAL_6K_V2.4_Labels_de.txt"),
 			expectError:  false,
 		},
 		{
@@ -331,9 +338,7 @@ func extractScientificNames(lines []string) []string {
 	var scientificNames []string
 	for _, line := range lines {
 		parts := strings.SplitN(line, "_", 2)
-		if len(parts) >= 1 {
-			scientificNames = append(scientificNames, parts[0])
-		}
+		scientificNames = append(scientificNames, parts[0])
 	}
 	return scientificNames
 }
