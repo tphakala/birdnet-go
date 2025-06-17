@@ -3,6 +3,7 @@ package birdnet
 
 import (
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path"
@@ -15,6 +16,7 @@ import (
 // Model version constants
 const (
 	BirdNET_GLOBAL_6K_V2_4 = "BirdNET_GLOBAL_6K_V2.4"
+	fallbackLocale         = "en-uk"
 )
 
 //go:embed data/labels/V2.4/*.txt
@@ -22,7 +24,7 @@ var v24LabelFiles embed.FS
 
 // tryReadFallbackFile attempts to read the English fallback label file
 func tryReadFallbackFile(modelVersion string) ([]byte, error) {
-	fallbackFilename, err := conf.GetLabelFilename(modelVersion, "en-uk")
+	fallbackFilename, err := conf.GetLabelFilename(modelVersion, fallbackLocale)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get fallback filename: %w", err)
 	}
@@ -47,8 +49,8 @@ func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 		// If the locale mapping fails, try fallback to English
 		data, fallbackErr := tryReadFallbackFile(modelVersion)
 		if fallbackErr != nil {
-			return nil, fmt.Errorf("failed to get filename for locale '%s' (original error: %v) and fallback failed: %w",
-				localeCode, originalMappingErr, fallbackErr)
+			combinedErr := errors.Join(originalMappingErr, fallbackErr)
+			return nil, fmt.Errorf("failed to get filename for locale '%s': %w", localeCode, combinedErr)
 		}
 		return data, nil
 	}
@@ -62,8 +64,8 @@ func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 	// If the mapped file doesn't exist, try fallback to English
 	data, fallbackErr := tryReadFallbackFile(modelVersion)
 	if fallbackErr != nil {
-		return nil, fmt.Errorf("failed to load locale '%s' (original read error: %v) and fallback failed: %w",
-			localeCode, originalReadErr, fallbackErr)
+		combinedErr := errors.Join(originalReadErr, fallbackErr)
+		return nil, fmt.Errorf("failed to load locale '%s': %w", localeCode, combinedErr)
 	}
 
 	return data, nil
