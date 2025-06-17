@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // ModelInfo represents metadata about a BirdNET model
@@ -27,7 +29,7 @@ var supportedModels = map[string]ModelInfo{
 		SupportedLocales: []string{"af", "ar", "bg", "ca", "cs", "da", "de", "el", "en-uk", "en-us", "es",
 			"et", "fi", "fr", "he", "hr", "hu", "id", "is", "it", "ja", "ko", "lt", "lv", "ml", "nl",
 			"no", "pl", "pt", "pt-br", "pt-pt", "ro", "ru", "sk", "sl", "sr", "sv", "th", "tr", "uk", "zh"},
-		DefaultLocale: "en-us",
+		DefaultLocale: conf.DefaultFallbackLocale,
 		NumSpecies:    6523,
 	},
 }
