@@ -268,21 +268,21 @@ func (bn *BirdNET) loadLabels() error {
 func (bn *BirdNET) loadEmbeddedLabels() error {
 	// if locale is not set use english as default
 	if bn.Settings.BirdNET.Locale == "" {
-		fmt.Println("BirdNET locale not set, using English (US) as default")
-		bn.Settings.BirdNET.Locale = "en-us"
+		fmt.Printf("BirdNET locale not set, using %s as default\n", conf.DefaultFallbackLocale)
+		bn.Settings.BirdNET.Locale = conf.DefaultFallbackLocale
 	}
 
 	// Get the appropriate locale code for the model version
 	localeCode := bn.Settings.BirdNET.Locale
 
-	// Use the helper function to get the label file data
-	data, err := GetLabelFileData(bn.ModelInfo.ID, localeCode)
+	// Use the helper function to get the label file data with logging
+	data, err := GetLabelFileDataWithLogger(bn.ModelInfo.ID, localeCode, bn)
 	if err != nil {
-		bn.Debug("Error loading V2.4 label file: %v", err)
+		bn.Debug("Error loading label file: %v", err)
 		// Fall back to English if the requested locale isn't available
-		if localeCode != "en" && localeCode != "en-us" {
-			bn.Debug("Falling back to English (US) labels")
-			data, err = GetLabelFileData(bn.ModelInfo.ID, "en-us")
+		if localeCode != "en" && localeCode != conf.DefaultFallbackLocale {
+			bn.Debug("Falling back to %s labels", conf.DefaultFallbackLocale)
+			data, err = GetLabelFileDataWithLogger(bn.ModelInfo.ID, conf.DefaultFallbackLocale, bn)
 			if err != nil {
 				return fmt.Errorf("failed to load fallback English labels: %w", err)
 			}
