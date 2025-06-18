@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
-	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -382,73 +381,72 @@ func (m *FFmpegMonitor) checkProcesses() error {
 	return nil
 }
 
-// cleanupOrphanedProcesses finds and terminates orphaned FFmpeg processes
 func (m *FFmpegMonitor) cleanupOrphanedProcesses() error {
-	// Get list of all FFmpeg processes
+	// Get system processes
 	processes, err := m.processManager.FindProcesses()
 	if err != nil {
 		return fmt.Errorf("error finding FFmpeg processes: %w", err)
 	}
 
-	// Build a map of PIDs found in the system
+	// Map system PIDs
 	systemPIDs := make(map[int]bool)
 	for _, proc := range processes {
 		systemPIDs[proc.PID] = true
 	}
 
-	// Get list of known process IDs and build a map of PID to URL
-	knownPIDs := make(map[int]bool)
-	pidToURL := make(map[int]string)
-	pidToProcess := make(map[int]any) // Store the actual process object
+	// Process our managed processes
+	knownPIDs := make(map[int]string)           // Map PID to URL
+	invalidProcessURLs := make(map[string]bool) // Track URLs of invalid processes
 
 	m.processRepo.ForEach(func(key, value any) bool {
-		url := key.(string)
+		url, ok := key.(string)
+		if !ok {
+			return true // Skip invalid key
+		}
 
-		// Track which PID belongs to which URL and store process
-		if process, ok := value.(*FFmpegProcess); ok && process.cmd != nil && process.cmd.Process != nil {
-			pid := process.cmd.Process.Pid
-			knownPIDs[pid] = true
-			pidToURL[pid] = url
-			pidToProcess[pid] = value // Store the process
-		} else if reflect.TypeOf(value).Kind() == reflect.Ptr {
-			// Handle mock processes for testing
-			val := reflect.ValueOf(value).Elem()
-			cmdField := val.FieldByName("cmd")
-			if cmdField.IsValid() && !cmdField.IsNil() {
-				pidField := cmdField.Elem().FieldByName("pid")
-				if pidField.IsValid() {
-					pid := int(pidField.Int())
-					knownPIDs[pid] = true
-					pidToURL[pid] = url
-					pidToProcess[pid] = value // Store the process
-				}
-			}
+		process, ok := value.(*FFmpegProcess)
+		if !ok || process == nil {
+			invalidProcessURLs[url] = true
+			return true
+		}
+
+		// Check if process reference is valid
+		if process.cmd == nil || process.cmd.Process == nil {
+			invalidProcessURLs[url] = true
+			return true
+		}
+
+		pid := process.cmd.Process.Pid
+		knownPIDs[pid] = url
+
+		// Check if process is actually running in the system
+		if !systemPIDs[pid] || !m.processManager.IsProcessRunning(pid) {
+			log.Printf("🧹 Process for %s (PID %d) not running, marking for cleanup", url, pid)
+			invalidProcessURLs[url] = true
 		}
 
 		return true
 	})
 
-	// Check for processes that have been killed externally
-	for pid, url := range pidToURL {
-		if systemPIDs[pid] && !m.processManager.IsProcessRunning(pid) {
-			// Process exists in the system but is not running (zombie or killed)
-			log.Printf("🧹 Found externally killed FFmpeg process for URL %s, cleaning up", url)
-
-			// Important: Use the stored process reference directly
-			if process, ok := pidToProcess[pid]; ok {
-				if cleaner, ok := process.(ProcessCleaner); ok {
-					cleaner.Cleanup(url)
-				}
+	// Clean up invalid processes
+	for url := range invalidProcessURLs {
+		if process, exists := ffmpegProcesses.Load(url); exists {
+			if cleaner, ok := process.(ProcessCleaner); ok {
+				log.Printf("🧹 Cleaning up process for %s", url)
+				cleaner.Cleanup(url)
+			} else {
+				log.Printf("⚠️ Process for %s doesn't implement ProcessCleaner", url)
+				ffmpegProcesses.Delete(url)
 			}
 		}
 	}
 
-	// Clean up any processes not in our known list
+	// Clean up orphaned system processes
 	for _, proc := range processes {
-		if !knownPIDs[proc.PID] {
+		if _, exists := knownPIDs[proc.PID]; !exists {
 			log.Printf("🧹 Found orphaned FFmpeg process with PID %d, terminating", proc.PID)
 			if err := m.processManager.TerminateProcess(proc.PID); err != nil {
-				log.Printf("⚠️ Error terminating FFmpeg process %d: %v", proc.PID, err)
+				log.Printf("⚠️ Error terminating process %d: %v", proc.PID, err)
 			}
 		}
 	}
