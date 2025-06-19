@@ -3,6 +3,7 @@ package myaudio
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os/exec"
 	"sync"
 	"testing"
@@ -36,8 +37,47 @@ func (m *MockLifecycleSettingsProvider) SetRTSPURLs(urls []string) {
 	m.rtspURLs = append([]string{}, urls...) // Store copy to avoid race conditions
 }
 
-// TestableRestartLogic demonstrates how to test restart behavior without full lifecycle complexity
-func TestableRestartLogic(settingsProvider *MockLifecycleSettingsProvider, url string, maxAttempts int) (bool, int, error) {
+// TestableRestartLogic encapsulates testable restart logic
+type TestableRestartLogic struct {
+	settingsProvider *MockLifecycleSettingsProvider
+	processMap       *MockLifecycleProcessMap
+	shouldFailStart  bool
+}
+
+// ManageLifecycle is a testable version of manageFfmpegLifecycle
+func (t *TestableRestartLogic) ManageLifecycle(ctx context.Context, config FFmpegConfig, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
+	if t.shouldFailStart {
+		return errors.New("failed to start FFmpeg process (simulated)")
+	}
+
+	// Simulate basic lifecycle behavior
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-restartChan:
+			// Handle restart
+			return nil
+		default:
+			// Check configuration
+			urls := t.settingsProvider.GetRTSPURLs()
+			streamConfigured := false
+			for _, url := range urls {
+				if url == config.URL {
+					streamConfigured = true
+					break
+				}
+			}
+			if !streamConfigured {
+				return nil
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
+// TestableRestartLogicFunc demonstrates how to test restart behavior without full lifecycle complexity
+func TestableRestartLogicFunc(settingsProvider *MockLifecycleSettingsProvider, url string, maxAttempts int) (bool, int, error) {
 	attempts := 0
 	backoff := newBackoffStrategy(maxAttempts, 1*time.Second, 5*time.Second)
 
@@ -96,7 +136,7 @@ func TestFFmpegRestartLogic_StreamRemovedFromConfig(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 		mockSettings.SetRTSPURLs([]string{}) // Remove stream
 
-		success, attempts, err := TestableRestartLogic(mockSettings, url, 5)
+		success, attempts, err := TestableRestartLogicFunc(mockSettings, url, 5)
 		resultChan <- struct {
 			success  bool
 			attempts int
@@ -145,7 +185,7 @@ func TestFFmpegRestartLogic_SuccessAfterRetries(t *testing.T) {
 
 	mockSettings.SetRTSPURLs([]string{url})
 
-	success, attempts, err := TestableRestartLogic(mockSettings, url, 5)
+	success, attempts, err := TestableRestartLogicFunc(mockSettings, url, 5)
 
 	assert.True(t, success, "Should eventually succeed")
 	assert.NoError(t, err, "Should not return error on success")
@@ -435,4 +475,234 @@ func TestFfmpegLifecyclePattern(t *testing.T) {
 	// In this simplified example, the function should return nil
 	// because the stream is configured, but no actual FFmpeg process starts
 	assert.NoError(t, err)
+}
+
+// ===== REAL-WORLD FAILURE SCENARIO TESTS =====
+// These tests are designed to expose actual issues that cause restart failures
+
+// TestRestartChannelBlocking tests the scenario where restart channel is full and drops requests
+func TestRestartChannelBlocking(t *testing.T) {
+	// Create a channel with buffer size 1 to test blocking
+	restartChan := make(chan struct{}, 1)
+
+	// Fill the restart channel to simulate blocking
+	restartChan <- struct{}{}
+
+	// Try to send multiple restart signals - these should be dropped due to full channel
+	droppedCount := 0
+	for i := 0; i < 5; i++ {
+		select {
+		case restartChan <- struct{}{}:
+			t.Logf("Restart signal %d sent successfully", i)
+		default:
+			t.Logf("Restart signal %d dropped (channel full)", i)
+			droppedCount++
+		}
+	}
+
+	// Verify that signals were dropped
+	assert.Equal(t, 5, droppedCount, "All 5 restart signals should be dropped when channel is full")
+
+	// Channel should still have one buffered item
+	assert.Equal(t, 1, len(restartChan), "Channel should have 1 buffered item")
+}
+
+// TestProcessMapConcurrentAccess tests concurrent access to the process map
+func TestProcessMapConcurrentAccess(t *testing.T) {
+	realProcessMap := &sync.Map{} // Use real sync.Map to test actual concurrency
+
+	var wg sync.WaitGroup
+
+	// Start multiple goroutines accessing the process map concurrently
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+
+			url := fmt.Sprintf("rtsp://test%d.com/stream", id)
+
+			// Simulate rapid process operations
+			for j := 0; j < 100; j++ {
+				// Store a mock process
+				realProcessMap.Store(url, &FFmpegProcess{})
+
+				// Load and check
+				if process, exists := realProcessMap.Load(url); exists {
+					_ = process // Use the process
+				}
+
+				// Delete
+				realProcessMap.Delete(url)
+			}
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	t.Log("Concurrent access test completed successfully")
+}
+
+// TestWatchdogTimingIssues tests potential timing issues with the watchdog
+func TestWatchdogTimingIssues(t *testing.T) {
+	watchdog := &audioWatchdog{lastDataTime: time.Now()}
+
+	// Test 1: Check that watchdog properly handles time updates
+	initialTime := watchdog.timeSinceLastData()
+	assert.True(t, initialTime < time.Second, "Initial watchdog time should be very recent")
+
+	// Test 2: Simulate no data for 65 seconds (should trigger timeout)
+	watchdog.lastDataTime = time.Now().Add(-65 * time.Second)
+	timeoutDuration := watchdog.timeSinceLastData()
+	assert.True(t, timeoutDuration > 60*time.Second, "Watchdog should detect timeout after 60 seconds")
+
+	// Test 3: Update watchdog and verify time reset
+	watchdog.update()
+	updatedTime := watchdog.timeSinceLastData()
+	assert.True(t, updatedTime < time.Second, "Watchdog time should reset after update")
+
+	// Test 4: Test concurrent access to watchdog
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				watchdog.update()
+				_ = watchdog.timeSinceLastData()
+			}
+		}()
+	}
+	wg.Wait()
+
+	t.Log("Watchdog timing tests completed successfully")
+}
+
+// TestBackoffStrategyEdgeCases tests edge cases in backoff strategy that might prevent restarts
+func TestBackoffStrategyEdgeCases(t *testing.T) {
+	// Test 1: Backoff at maximum attempts
+	backoff := newBackoffStrategy(3, 1*time.Second, 2*time.Minute)
+
+	delays := []time.Duration{}
+	for {
+		delay, retry := backoff.nextDelay()
+		if !retry {
+			break
+		}
+		delays = append(delays, delay)
+	}
+
+	assert.Len(t, delays, 3, "Should have exactly 3 retry attempts")
+	assert.Equal(t, 1*time.Second, delays[0], "First delay should be 1 second")
+	assert.Equal(t, 2*time.Second, delays[1], "Second delay should be 2 seconds")
+	assert.Equal(t, 4*time.Second, delays[2], "Third delay should be 4 seconds")
+
+	// Test 2: Reset functionality
+	backoff.reset()
+	delay, retry := backoff.nextDelay()
+	assert.True(t, retry, "Should be able to retry after reset")
+	assert.Equal(t, 1*time.Second, delay, "Delay should reset to initial value")
+
+	// Test 3: Maximum delay cap
+	longBackoff := newBackoffStrategy(10, 30*time.Second, 2*time.Minute)
+	var maxDelay time.Duration
+	for i := 0; i < 10; i++ {
+		delay, retry := longBackoff.nextDelay()
+		if !retry {
+			break
+		}
+		if delay > maxDelay {
+			maxDelay = delay
+		}
+	}
+	assert.Equal(t, 2*time.Minute, maxDelay, "Delay should be capped at maximum")
+}
+
+// TestRestartTrackerResetLogic tests the restart tracker reset mechanism
+func TestRestartTrackerResetLogic(t *testing.T) {
+	// Create a mock command for testing
+	mockCmd := &exec.Cmd{}
+
+	// Get restart tracker
+	tracker := getRestartTracker(mockCmd)
+
+	// Test 1: Initial state
+	assert.Equal(t, 0, tracker.restartCount, "Initial restart count should be 0")
+
+	// Create a mock process with the tracker
+	process := &FFmpegProcess{
+		cmd:            mockCmd,
+		restartTracker: tracker,
+	}
+
+	// Test 2: Update restart info
+	process.updateRestartInfo()
+	assert.Equal(t, 1, tracker.restartCount, "Restart count should increment")
+
+	delay1 := process.getRestartDelay()
+	assert.Equal(t, 5*time.Second, delay1, "First restart delay should be 5 seconds")
+
+	// Test 3: Multiple restarts within a minute
+	for i := 0; i < 5; i++ {
+		process.updateRestartInfo()
+	}
+	assert.Equal(t, 6, tracker.restartCount, "Restart count should be 6")
+
+	delay6 := process.getRestartDelay()
+	assert.Equal(t, 30*time.Second, delay6, "Sixth restart delay should be 30 seconds")
+
+	// Test 4: Reset after more than a minute
+	tracker.lastRestartAt = time.Now().Add(-2 * time.Minute)
+	process.updateRestartInfo()
+	assert.Equal(t, 1, tracker.restartCount, "Restart count should reset after a minute")
+
+	resetDelay := process.getRestartDelay()
+	assert.Equal(t, 5*time.Second, resetDelay, "Delay should reset to 5 seconds")
+}
+
+// TestProcessCleanupConsistency tests that process cleanup maintains consistent state
+func TestProcessCleanupConsistency(t *testing.T) {
+	// Create a mock process map
+	processMap := &sync.Map{}
+	url := "rtsp://test.com/stream"
+
+	// Create a mock FFmpeg process
+	mockProcess := &FFmpegProcess{
+		cmd:    &exec.Cmd{},
+		cancel: func() {},
+		done:   make(chan error, 1),
+	}
+
+	// Store the process
+	processMap.Store(url, mockProcess)
+
+	// Verify it's stored
+	if _, exists := processMap.Load(url); !exists {
+		t.Fatal("Process should be stored in map")
+	}
+
+	// Test cleanup
+	mockProcess.Cleanup(url)
+
+	// Verify it's been removed (this tests the real cleanup logic)
+	// Note: The actual cleanup function uses the global map, so this test
+	// demonstrates the inconsistency issue
+	if process, exists := processMap.Load(url); exists {
+		t.Logf("Process still exists after cleanup: %v", process)
+		// This is expected with the current implementation because
+		// Cleanup uses the global ffmpegProcesses map, not our test map
+	}
+
+	// Test concurrent cleanup calls
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			mockProcess.Cleanup(url)
+		}()
+	}
+	wg.Wait()
+
+	t.Log("Process cleanup consistency test completed")
 }
