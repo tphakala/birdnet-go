@@ -125,7 +125,9 @@ func (b *backoffStrategy) reset() {
 
 // getRestartTracker retrieves or creates a restart tracker for a given FFmpeg command
 func getRestartTracker(cmd *exec.Cmd) *FFmpegRestartTracker {
-	key := fmt.Sprintf("%s", cmd.Args)
+	// Create a more unique key by including the command path, args, and process address
+	// This prevents different RTSP streams from sharing restart trackers
+	key := fmt.Sprintf("%s_%v_%p", cmd.Path, cmd.Args, cmd)
 	tracker, ok := restartTrackers.Load(key)
 	if !ok {
 		tracker = &FFmpegRestartTracker{
@@ -264,11 +266,17 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 
 			if streamConfigured {
 				// Trigger restart by sending signal to restartChan
+				// Use blocking send with timeout to avoid dropping critical restart requests
 				select {
 				case restartChan <- struct{}{}:
 					log.Printf("🔄 Watchdog triggered restart for RTSP source %s", url)
-				default:
-					log.Printf("❌ Restart channel full, dropping restart request for %s", url)
+				case <-time.After(5 * time.Second):
+					log.Printf("⚠️ Restart channel blocked for 5s, forcing restart for %s", url)
+					// Clear the channel and send restart signal
+					for len(restartChan) > 0 {
+						<-restartChan
+					}
+					restartChan <- struct{}{}
 				}
 				return fmt.Errorf("watchdog detected no data for RTSP source %s", url)
 			} else {
