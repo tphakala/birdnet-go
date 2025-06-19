@@ -198,6 +198,12 @@ func (p *FFmpegProcess) Cleanup(url string) {
 		}
 	}
 
+	// Clean up restart tracker to prevent memory leak
+	if p.cmd != nil {
+		key := fmt.Sprintf("%s_%v_%p", p.cmd.Path, p.cmd.Args, p.cmd)
+		restartTrackers.Delete(key)
+	}
+
 	ffmpegProcesses.Delete(url)
 }
 
@@ -242,6 +248,11 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 	// Create a buffer to store audio data
 	buf := make([]byte, 32768)
 	watchdog := &audioWatchdog{lastDataTime: time.Now()}
+
+	// Track buffer write errors to detect persistent failures
+	var bufferErrorCount int
+	const maxBufferErrors = 10 // Trigger restart after 10 consecutive buffer errors
+	var lastBufferErrorTime time.Time
 
 	// Start watchdog goroutine
 	watchdogDone := p.startWatchdog(ctx, url, watchdog)
@@ -298,20 +309,51 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 			// Ensure we don't process more data than we've read
 			if n > 0 {
 				watchdog.update() // Update the watchdog timestamp
+
+				// Track buffer write errors
+				hasBufferError := false
+
 				// Write the audio data to the analysis buffer
 				err = WriteToAnalysisBuffer(url, buf[:n])
 				if err != nil {
 					log.Printf("❌ Error writing to analysis buffer for RTSP source %s: %v", url, err)
-					time.Sleep(1 * time.Second)
-					continue
+					hasBufferError = true
 				}
 
 				// Write the audio data to the capture buffer
 				err = WriteToCaptureBuffer(url, buf[:n])
 				if err != nil {
 					log.Printf("❌ Error writing to capture buffer for RTSP source %s: %v", url, err)
+					hasBufferError = true
+				}
+
+				// Handle buffer error accumulation
+				if hasBufferError {
+					bufferErrorCount++
+					lastBufferErrorTime = time.Now()
+
+					if bufferErrorCount >= maxBufferErrors {
+						log.Printf("⚠️ Too many buffer write errors (%d) for RTSP source %s since %v, triggering restart", bufferErrorCount, url, lastBufferErrorTime.Format("15:04:05"))
+						// Trigger restart by sending signal to restartChan
+						select {
+						case restartChan <- struct{}{}:
+							log.Printf("🔄 Buffer error threshold triggered restart for RTSP source %s", url)
+						case <-time.After(5 * time.Second):
+							log.Printf("⚠️ Restart channel blocked for 5s during buffer error restart for %s", url)
+							// Clear the channel and send restart signal
+							for len(restartChan) > 0 {
+								<-restartChan
+							}
+							restartChan <- struct{}{}
+						}
+						return fmt.Errorf("too many buffer write errors for RTSP source %s", url)
+					}
+
 					time.Sleep(1 * time.Second)
 					continue
+				} else {
+					// Reset error count on successful buffer writes
+					bufferErrorCount = 0
 				}
 
 				// Broadcast audio data to WebSocket clients
@@ -484,6 +526,9 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 			processDone <- process.processAudio(ctx, config.URL, restartChan, audioLevelChan)
 		}()
 
+		// Track whether this was a manual restart to avoid double-updating restart info
+		wasManualRestart := false
+
 		select {
 		case <-ctx.Done():
 			// Context cancelled, stop the FFmpeg process
@@ -516,6 +561,9 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 		case <-restartChan:
 			// Restart signal received
 			log.Printf("🔄 Restart signal received, restarting FFmpeg for RTSP source %s.", config.URL)
+			// Update restart information BEFORE cleanup to ensure valid process state
+			process.updateRestartInfo()
+			wasManualRestart = true
 			process.Cleanup(config.URL)
 			backoff.reset()
 		}
@@ -536,8 +584,10 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 			return nil
 		}
 
-		// Update restart information and wait before attempting to restart
-		process.updateRestartInfo()
+		// Update restart information and get delay (only if not already updated for manual restart)
+		if !wasManualRestart {
+			process.updateRestartInfo()
+		}
 		delay := process.getRestartDelay()
 
 		// wait for either the context to be cancelled (user requested quit) or the delay to pass

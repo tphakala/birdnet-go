@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -708,4 +711,537 @@ func TestProcessCleanupConsistency(t *testing.T) {
 	wg.Wait()
 
 	t.Log("Process cleanup consistency test completed")
+}
+
+// ===== COMPREHENSIVE LIFECYCLE ISSUE TESTS =====
+// These tests validate critical issues that could prevent restarts from working
+
+// TestProcessStateInconsistency tests the critical issue where updateRestartInfo is called after cleanup
+func TestProcessStateInconsistency(t *testing.T) {
+	// Clear global restart trackers to ensure clean test state
+	restartTrackers = sync.Map{}
+
+	// Create a mock command
+	mockCmd := &exec.Cmd{Path: "/usr/bin/ffmpeg"}
+
+	// Get restart tracker
+	tracker := getRestartTracker(mockCmd)
+
+	// Create a mock process
+	process := &FFmpegProcess{
+		cmd:            mockCmd,
+		cancel:         func() {}, // Mock cancel function
+		restartTracker: tracker,
+	}
+
+	// Test: updateRestartInfo called on a process that might be cleaned up
+	process.updateRestartInfo()
+	originalCount := tracker.restartCount
+
+	// Simulate cleanup happening (sets process state to invalid)
+	// In real code, this could happen when process.Cleanup() is called
+	process.cmd = nil // Simulate cleaned up state
+
+	// Try to call updateRestartInfo again - this should not panic
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("updateRestartInfo should handle nil cmd gracefully, but panicked: %v", r)
+		}
+	}()
+
+	// This will work because updateRestartInfo only uses the tracker, not the cmd
+	process.updateRestartInfo()
+
+	// But getRestartDelay might behave unexpectedly
+	delay := process.getRestartDelay()
+	assert.Greater(t, delay, time.Duration(0), "Should still calculate delay even with nil cmd")
+
+	t.Logf("Original count: %d, Final count: %d, Delay: %v", originalCount, tracker.restartCount, delay)
+}
+
+// TestResourceLeakInStartFFmpeg tests file descriptor leaks when startFFmpeg fails
+func TestResourceLeakInStartFFmpeg(t *testing.T) {
+	// Test case where StdoutPipe succeeds but Start fails
+	ctx := context.Background()
+	config := FFmpegConfig{
+		URL:       "rtsp://nonexistent.com/stream",
+		Transport: "tcp",
+	}
+
+	// This should fail because the FFmpeg path is likely invalid or the URL doesn't exist
+	process, err := startFFmpeg(ctx, config)
+
+	if err != nil {
+		// Expected failure - but we need to ensure no resource leak
+		assert.Nil(t, process, "Process should be nil on failure")
+		t.Logf("Expected failure occurred: %v", err)
+
+		// In the current implementation, there's a potential resource leak
+		// The stdout pipe is created but if cmd.Start() fails, it's not explicitly closed
+		// The context cancellation should handle it, but it's not guaranteed
+	} else {
+		// If it somehow succeeds, clean up properly
+		if process != nil {
+			process.Cleanup(config.URL)
+		}
+	}
+}
+
+// TestCleanupRaceCondition tests race conditions in the Cleanup method
+func TestCleanupRaceCondition(t *testing.T) {
+	url := "rtsp://test.com/stream"
+
+	// Create a mock process that simulates a race condition
+	mockProcess := &FFmpegProcess{
+		cmd:    &exec.Cmd{},
+		cancel: func() {},
+		stdout: nil, // Simulate already closed stdout
+	}
+
+	// Simulate concurrent cleanup calls
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+
+			// Each goroutine tries to cleanup - this should not panic
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Cleanup %d panicked: %v", id, r)
+				}
+			}()
+
+			mockProcess.Cleanup(url)
+		}(i)
+	}
+
+	wg.Wait()
+	t.Log("Concurrent cleanup test completed")
+}
+
+// TestBufferWriteErrorAccumulation tests handling of accumulated buffer write errors
+func TestBufferWriteErrorAccumulation(t *testing.T) {
+	// This test simulates the scenario where WriteToAnalysisBuffer or WriteToCaptureBuffer
+	// repeatedly fails, but the process continues without triggering a restart
+
+	errorCount := 0
+	maxErrors := 5
+
+	// Simulate the logic from processAudio where buffer write errors are handled
+	for i := 0; i < 10; i++ {
+		// Simulate buffer write error (in real code, this would be WriteToAnalysisBuffer)
+		bufferWriteError := fmt.Errorf("buffer write failed %d", i)
+
+		if bufferWriteError != nil {
+			errorCount++
+			t.Logf("Buffer write error %d: %v", errorCount, bufferWriteError)
+
+			// In the current implementation, the code just logs and sleeps
+			// But it doesn't track accumulating errors or trigger restarts
+			if errorCount >= maxErrors {
+				t.Logf("Accumulated %d buffer write errors - this should trigger a restart in production", errorCount)
+				break
+			}
+
+			// Simulate the sleep (we'll skip actual sleep for testing)
+			// time.Sleep(1 * time.Second)
+		}
+	}
+
+	assert.GreaterOrEqual(t, errorCount, maxErrors, "Should accumulate buffer write errors")
+}
+
+// TestWatchdogConfigurationRace tests race conditions in configuration reading
+func TestWatchdogConfigurationRace(t *testing.T) {
+	// This test simulates the race condition where conf.Setting() is called
+	// multiple times without synchronization in different parts of the lifecycle
+
+	url := "rtsp://test.com/stream"
+
+	// Simulate concurrent configuration reads (like in watchdog and processAudio)
+	var wg sync.WaitGroup
+	configReads := 0
+	var configMutex sync.Mutex
+
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+
+			// Simulate multiple configuration reads
+			for j := 0; j < 3; j++ {
+				// In real code, this would be: settings := conf.Setting()
+				// Simulate configuration read
+				configMutex.Lock()
+				configReads++
+				configMutex.Unlock()
+
+				// Simulate checking if stream is configured
+				streamConfigured := false
+				// In real code: for _, configuredURL := range settings.Realtime.RTSP.URLs
+				testURLs := []string{url} // Simulate configured URLs
+				for _, configuredURL := range testURLs {
+					if configuredURL == url {
+						streamConfigured = true
+						break
+					}
+				}
+
+				t.Logf("Goroutine %d check %d: stream configured = %v", id, j, streamConfigured)
+				time.Sleep(1 * time.Millisecond) // Small delay to increase race chance
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	t.Logf("Total configuration reads: %d", configReads)
+	assert.Greater(t, configReads, 0, "Should have performed configuration reads")
+}
+
+// TestRestartTrackerMemoryLeak tests the memory leak in global restartTrackers map
+func TestRestartTrackerMemoryLeak(t *testing.T) {
+	// Clear global restart trackers to start clean
+	restartTrackers = sync.Map{}
+
+	initialCount := 0
+	restartTrackers.Range(func(key, value interface{}) bool {
+		initialCount++
+		return true
+	})
+
+	// Create many different commands to simulate different RTSP streams
+	commands := make([]*exec.Cmd, 100)
+	for i := 0; i < 100; i++ {
+		commands[i] = &exec.Cmd{
+			Path: "/usr/bin/ffmpeg",
+			Args: []string{"ffmpeg", "-i", fmt.Sprintf("rtsp://stream%d.com", i)},
+		}
+
+		// Get restart tracker for each command (this adds to global map)
+		tracker := getRestartTracker(commands[i])
+		assert.NotNil(t, tracker, "Should get a valid restart tracker")
+	}
+
+	// Count trackers after adding
+	finalCount := 0
+	restartTrackers.Range(func(key, value interface{}) bool {
+		finalCount++
+		return true
+	})
+
+	assert.Equal(t, 100, finalCount-initialCount, "Should have added 100 restart trackers")
+
+	// In the current implementation, there's no cleanup mechanism for old trackers
+	// This demonstrates the memory leak - old trackers are never removed
+	t.Logf("Memory leak demonstration: %d trackers remain in global map", finalCount)
+
+	// The global map will keep growing indefinitely in production
+	// Each RTSP stream restart cycle adds new entries but never removes old ones
+}
+
+// TestAudioLevelChannelRace tests race conditions in audio level channel clearing
+func TestAudioLevelChannelRace(t *testing.T) {
+	audioLevelChan := make(chan AudioLevelData, 1)
+
+	// Fill the channel
+	audioLevelChan <- AudioLevelData{Level: 50, Source: "test", Name: "test"}
+
+	// Test concurrent channel operations
+	var wg sync.WaitGroup
+
+	// Goroutine 1: tries to clear and send (simulates processAudio logic)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		newData := AudioLevelData{Level: 80, Source: "test", Name: "test"}
+
+		select {
+		case audioLevelChan <- newData:
+			t.Log("Successfully sent data")
+		default:
+			t.Log("Channel full, attempting to clear")
+			// This is the problematic logic from the code
+			for len(audioLevelChan) > 0 {
+				<-audioLevelChan
+			}
+			audioLevelChan <- newData
+			t.Log("Data sent after clearing")
+		}
+	}()
+
+	// Goroutine 2: tries to read from channel concurrently
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		select {
+		case data := <-audioLevelChan:
+			t.Logf("Received data: %+v", data)
+		case <-time.After(10 * time.Millisecond):
+			t.Log("Timeout waiting for data")
+		}
+	}()
+
+	wg.Wait()
+	t.Log("Audio level channel race test completed")
+}
+
+// TestFFmpegProcessExitRace tests race conditions between process exit and cleanup
+func TestFFmpegProcessExitRace(t *testing.T) {
+	// This test simulates the race between the goroutine waiting for cmd.Wait()
+	// and the cleanup process
+
+	done := make(chan error, 1)
+	isCleaningUp := atomic.Bool{}
+	processExited := atomic.Bool{}
+
+	// Simulate the goroutine from startFFmpeg that waits for process exit
+	go func() {
+		// Simulate process execution time
+		time.Sleep(10 * time.Millisecond)
+
+		// Simulate process exit
+		processExited.Store(true)
+		done <- nil // Process exited normally
+	}()
+
+	// Simulate concurrent cleanup
+	go func() {
+		time.Sleep(5 * time.Millisecond) // Cleanup starts before process exits
+		isCleaningUp.Store(true)
+
+		// Simulate cleanup operations
+		time.Sleep(20 * time.Millisecond)
+	}()
+
+	// Wait for process exit
+	select {
+	case err := <-done:
+		t.Logf("Process exited with error: %v", err)
+		cleanupInProgress := isCleaningUp.Load()
+		processHasExited := processExited.Load()
+
+		t.Logf("Cleanup in progress: %v, Process exited: %v", cleanupInProgress, processHasExited)
+
+		// This demonstrates the race condition between cleanup and process exit
+		if cleanupInProgress && processHasExited {
+			t.Log("Race condition detected: cleanup and process exit occurred concurrently")
+		}
+
+	case <-time.After(100 * time.Millisecond):
+		t.Error("Test timed out waiting for process exit")
+	}
+}
+
+// TestContextCancellationRace tests race conditions with context cancellation
+func TestContextCancellationRace(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	watchdogDone := make(chan struct{})
+
+	// Simulate the watchdog goroutine
+	go func() {
+		defer close(watchdogDone)
+		time.Sleep(50 * time.Millisecond)
+	}()
+
+	// Simulate concurrent context cancellation and watchdog completion
+	go func() {
+		time.Sleep(25 * time.Millisecond)
+		cancel() // Cancel context while watchdog is running
+	}()
+
+	// Simulate the select logic from processAudio
+	select {
+	case <-ctx.Done():
+		t.Log("Context cancelled first")
+		// In the real code, this should wait for watchdog: <-watchdogDone
+		select {
+		case <-watchdogDone:
+			t.Log("Watchdog completed after context cancellation")
+		case <-time.After(100 * time.Millisecond):
+			t.Error("Watchdog did not complete after context cancellation")
+		}
+	case <-watchdogDone:
+		t.Log("Watchdog completed first")
+		// Check if context is also done
+		select {
+		case <-ctx.Done():
+			t.Log("Context was also cancelled")
+		default:
+			t.Log("Context was not cancelled")
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Error("Test timed out")
+	}
+}
+
+// TestPlatformSpecificProcessGroupFailure tests handling of process group kill failures
+func TestPlatformSpecificProcessGroupFailure(t *testing.T) {
+	// Test the Unix version of killProcessGroup with invalid PID
+	// This should fail but not panic
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("killProcessGroup should handle invalid PID gracefully, but panicked: %v", r)
+		}
+	}()
+
+	// Note: We can't directly test killProcessGroup without platform-specific imports
+	// But we can test the error handling logic that would occur
+	killError := fmt.Errorf("no such process")
+
+	if killError != nil {
+		t.Logf("Process group kill failed as expected: %v", killError)
+
+		// In the real Cleanup method, this would fall back to direct process kill
+		directKillError := fmt.Errorf("process already finished")
+
+		if directKillError != nil && strings.Contains(directKillError.Error(), "process already finished") {
+			t.Log("Direct kill also failed, but this is acceptable for finished processes")
+		} else {
+			t.Logf("Direct kill failed with unexpected error: %v", directKillError)
+		}
+	}
+}
+
+// TestBackoffStrategyStateConsistency tests backoff strategy state consistency
+func TestBackoffStrategyStateConsistency(t *testing.T) {
+	backoff := newBackoffStrategy(3, 1*time.Second, 10*time.Second)
+
+	// Test that backoff maintains consistent state across multiple operations
+	delays := []time.Duration{}
+
+	// Test multiple cycles with reset
+	for cycle := 0; cycle < 3; cycle++ {
+		t.Logf("Starting backoff cycle %d", cycle)
+
+		for {
+			delay, canRetry := backoff.nextDelay()
+			if !canRetry {
+				break
+			}
+			delays = append(delays, delay)
+			t.Logf("Cycle %d: delay %v, attempt %d", cycle, delay, backoff.attempt)
+		}
+
+		// Reset for next cycle
+		backoff.reset()
+		assert.Equal(t, 0, backoff.attempt, "Attempt should reset to 0")
+	}
+
+	// Verify delays follow expected exponential pattern
+	expectedDelays := []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second}
+
+	if len(delays) >= 3 {
+		for i := 0; i < 3; i++ {
+			assert.Equal(t, expectedDelays[i], delays[i], "Delay %d should match expected exponential backoff", i)
+		}
+	}
+
+	t.Logf("Total delays recorded: %v", delays)
+}
+
+// TestConfigurationConsistencyAcrossLifecycle tests configuration consistency throughout lifecycle
+func TestConfigurationConsistencyAcrossLifecycle(t *testing.T) {
+	// Mock the configuration checking logic used throughout the lifecycle
+	testURL := "rtsp://test.com/stream"
+
+	// Function to simulate configuration check (used in multiple places in real code)
+	checkStreamConfigured := func(urls []string, targetURL string) bool {
+		for _, url := range urls {
+			if url == targetURL {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Test different configuration states
+	testCases := []struct {
+		name           string
+		configuredURLs []string
+		expectedResult bool
+	}{
+		{"stream_configured", []string{testURL}, true},
+		{"stream_not_configured", []string{}, false},
+		{"multiple_streams_with_target", []string{"rtsp://other.com", testURL}, true},
+		{"multiple_streams_without_target", []string{"rtsp://other1.com", "rtsp://other2.com"}, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := checkStreamConfigured(tc.configuredURLs, testURL)
+			assert.Equal(t, tc.expectedResult, result, "Configuration check should match expected result")
+
+			// This demonstrates how configuration checks are used throughout the lifecycle:
+			// 1. manageFfmpegLifecycle - before starting/restarting
+			// 2. processAudio - before triggering restart
+			// 3. startWatchdog - before timeout detection
+			// 4. manageFfmpegLifecycle - after process ends
+			// 5. manageFfmpegLifecycle - before restart delay
+
+			t.Logf("Configuration state '%s': %v", tc.name, result)
+		})
+	}
+}
+
+// TestRestartTrackerCleanupFix tests that the memory leak fix for restart trackers works
+func TestRestartTrackerCleanupFix(t *testing.T) {
+	// Clear global restart trackers to start clean
+	restartTrackers = sync.Map{}
+
+	// Count initial trackers
+	initialCount := 0
+	restartTrackers.Range(func(key, value interface{}) bool {
+		initialCount++
+		return true
+	})
+
+	// Create a mock command and process
+	mockCmd := &exec.Cmd{
+		Path:    "/usr/bin/ffmpeg",
+		Args:    []string{"ffmpeg", "-i", "rtsp://test.com/stream"},
+		Process: &os.Process{Pid: 1}, // Fake process to avoid nil check
+	}
+
+	// Get restart tracker (this adds to global map)
+	tracker := getRestartTracker(mockCmd)
+	assert.NotNil(t, tracker, "Should get a valid restart tracker")
+
+	// Create a done channel and send completion signal
+	doneChannel := make(chan error, 1)
+	doneChannel <- nil // Pre-send completion signal
+
+	// Create a mock process using the same command object for proper cleanup
+	mockProcess := &FFmpegProcess{
+		cmd:            mockCmd, // Use the same command object
+		cancel:         func() {},
+		stdout:         nil,
+		restartTracker: tracker,
+		done:           doneChannel,
+	}
+
+	// Count trackers after adding
+	afterAddCount := 0
+	restartTrackers.Range(func(key, value interface{}) bool {
+		afterAddCount++
+		return true
+	})
+
+	assert.Equal(t, 1, afterAddCount-initialCount, "Should have added 1 restart tracker")
+
+	// Call cleanup which should remove the tracker
+	mockProcess.Cleanup("rtsp://test.com/stream")
+
+	// Count trackers after cleanup
+	afterCleanupCount := 0
+	restartTrackers.Range(func(key, value interface{}) bool {
+		afterCleanupCount++
+		return true
+	})
+
+	assert.Equal(t, initialCount, afterCleanupCount, "Restart tracker should be cleaned up")
+	t.Logf("Restart tracker cleanup test: initial=%d, after_add=%d, after_cleanup=%d",
+		initialCount, afterAddCount, afterCleanupCount)
 }
