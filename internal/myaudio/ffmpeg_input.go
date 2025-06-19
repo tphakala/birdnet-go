@@ -255,7 +255,7 @@ func (p *FFmpegProcess) isStreamConfigured(url string) bool {
 }
 
 // sendRestartSignal sends restart signal with timeout and channel clearing
-func (p *FFmpegProcess) sendRestartSignal(restartChan chan struct{}, url string, reason string) {
+func (p *FFmpegProcess) sendRestartSignal(restartChan chan struct{}, url, reason string) {
 	select {
 	case restartChan <- struct{}{}:
 		log.Printf("🔄 %s triggered restart for RTSP source %s", reason, url)
