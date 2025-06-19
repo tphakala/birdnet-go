@@ -80,8 +80,8 @@ func (t *TestableRestartLogic) ManageLifecycle(ctx context.Context, config FFmpe
 }
 
 // TestableRestartLogicFunc demonstrates how to test restart behavior without full lifecycle complexity
-func TestableRestartLogicFunc(settingsProvider *MockLifecycleSettingsProvider, url string, maxAttempts int) (bool, int, error) {
-	attempts := 0
+func TestableRestartLogicFunc(settingsProvider *MockLifecycleSettingsProvider, url string, maxAttempts int) (success bool, attempts int, err error) {
+	attempts = 0
 	backoff := newBackoffStrategy(maxAttempts, 1*time.Second, 5*time.Second)
 
 	for {
@@ -779,11 +779,9 @@ func TestResourceLeakInStartFFmpeg(t *testing.T) {
 		// In the current implementation, there's a potential resource leak
 		// The stdout pipe is created but if cmd.Start() fails, it's not explicitly closed
 		// The context cancellation should handle it, but it's not guaranteed
-	} else {
+	} else if process != nil {
 		// If it somehow succeeds, clean up properly
-		if process != nil {
-			process.Cleanup(config.URL)
-		}
+		process.Cleanup(config.URL)
 	}
 }
 

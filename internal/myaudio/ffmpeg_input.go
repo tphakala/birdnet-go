@@ -243,6 +243,96 @@ func (p *FFmpegProcess) startWatchdog(ctx context.Context, url string, watchdog 
 	return watchdogDone
 }
 
+// isStreamConfigured checks if the stream URL is still in configuration
+func (p *FFmpegProcess) isStreamConfigured(url string) bool {
+	settings := conf.Setting()
+	for _, configuredURL := range settings.Realtime.RTSP.URLs {
+		if configuredURL == url {
+			return true
+		}
+	}
+	return false
+}
+
+// sendRestartSignal sends restart signal with timeout and channel clearing
+func (p *FFmpegProcess) sendRestartSignal(restartChan chan struct{}, url string, reason string) {
+	select {
+	case restartChan <- struct{}{}:
+		log.Printf("🔄 %s triggered restart for RTSP source %s", reason, url)
+	case <-time.After(5 * time.Second):
+		log.Printf("⚠️ Restart channel blocked for 5s during %s restart for %s", reason, url)
+		// Clear the channel and send restart signal
+		for len(restartChan) > 0 {
+			<-restartChan
+		}
+		restartChan <- struct{}{}
+	}
+}
+
+// handleWatchdogTimeout handles timeout from watchdog
+func (p *FFmpegProcess) handleWatchdogTimeout(url string, restartChan chan struct{}) error {
+	if !p.isStreamConfigured(url) {
+		return nil
+	}
+
+	p.sendRestartSignal(restartChan, url, "Watchdog")
+	return fmt.Errorf("watchdog detected no data for RTSP source %s", url)
+}
+
+// processAudioData processes a chunk of audio data and handles buffer errors
+func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCount *int, lastBufferErrorTime *time.Time, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
+	const maxBufferErrors = 10
+	hasBufferError := false
+
+	// Write the audio data to the analysis buffer
+	if err := WriteToAnalysisBuffer(url, data); err != nil {
+		log.Printf("❌ Error writing to analysis buffer for RTSP source %s: %v", url, err)
+		hasBufferError = true
+	}
+
+	// Write the audio data to the capture buffer
+	if err := WriteToCaptureBuffer(url, data); err != nil {
+		log.Printf("❌ Error writing to capture buffer for RTSP source %s: %v", url, err)
+		hasBufferError = true
+	}
+
+	// Handle buffer error accumulation
+	if hasBufferError {
+		*bufferErrorCount++
+		*lastBufferErrorTime = time.Now()
+
+		if *bufferErrorCount >= maxBufferErrors {
+			log.Printf("⚠️ Too many buffer write errors (%d) for RTSP source %s since %v, triggering restart", *bufferErrorCount, url, lastBufferErrorTime.Format("15:04:05"))
+			p.sendRestartSignal(restartChan, url, "Buffer error threshold")
+			return fmt.Errorf("too many buffer write errors for RTSP source %s", url)
+		}
+
+		time.Sleep(1 * time.Second)
+		return errors.New("buffer_error_continue") // Special error to signal continue
+	}
+
+	// Reset error count on successful buffer writes
+	*bufferErrorCount = 0
+
+	// Broadcast audio data to WebSocket clients
+	broadcastAudioData(url, data)
+
+	// Calculate and send audio level
+	audioLevelData := calculateAudioLevel(data, url, "")
+	select {
+	case audioLevelChan <- audioLevelData:
+		// Successfully sent data
+	default:
+		// Channel is full, clear it and send new data
+		for len(audioLevelChan) > 0 {
+			<-audioLevelChan
+		}
+		audioLevelChan <- audioLevelData
+	}
+
+	return nil
+}
+
 // processAudio reads audio data from FFmpeg's stdout and writes it to buffers
 func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
 	// Create a buffer to store audio data
@@ -251,7 +341,6 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 
 	// Track buffer write errors to detect persistent failures
 	var bufferErrorCount int
-	const maxBufferErrors = 10 // Trigger restart after 10 consecutive buffer errors
 	var lastBufferErrorTime time.Time
 
 	// Start watchdog goroutine
@@ -265,34 +354,7 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 			<-watchdogDone // Wait for watchdog to finish
 			return nil     // Return nil on normal shutdown
 		case <-watchdogDone:
-			// Check if the stream is still configured before triggering restart
-			settings := conf.Setting()
-			streamConfigured := false
-			for _, configuredURL := range settings.Realtime.RTSP.URLs {
-				if configuredURL == url {
-					streamConfigured = true
-					break
-				}
-			}
-
-			if streamConfigured {
-				// Trigger restart by sending signal to restartChan
-				// Use blocking send with timeout to avoid dropping critical restart requests
-				select {
-				case restartChan <- struct{}{}:
-					log.Printf("🔄 Watchdog triggered restart for RTSP source %s", url)
-				case <-time.After(5 * time.Second):
-					log.Printf("⚠️ Restart channel blocked for 5s, forcing restart for %s", url)
-					// Clear the channel and send restart signal
-					for len(restartChan) > 0 {
-						<-restartChan
-					}
-					restartChan <- struct{}{}
-				}
-				return fmt.Errorf("watchdog detected no data for RTSP source %s", url)
-			} else {
-				return nil
-			}
+			return p.handleWatchdogTimeout(url, restartChan)
 		default:
 			// Read audio data from FFmpeg's stdout
 			n, err := p.stdout.Read(buf)
@@ -310,68 +372,11 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 			if n > 0 {
 				watchdog.update() // Update the watchdog timestamp
 
-				// Track buffer write errors
-				hasBufferError := false
-
-				// Write the audio data to the analysis buffer
-				err = WriteToAnalysisBuffer(url, buf[:n])
-				if err != nil {
-					log.Printf("❌ Error writing to analysis buffer for RTSP source %s: %v", url, err)
-					hasBufferError = true
-				}
-
-				// Write the audio data to the capture buffer
-				err = WriteToCaptureBuffer(url, buf[:n])
-				if err != nil {
-					log.Printf("❌ Error writing to capture buffer for RTSP source %s: %v", url, err)
-					hasBufferError = true
-				}
-
-				// Handle buffer error accumulation
-				if hasBufferError {
-					bufferErrorCount++
-					lastBufferErrorTime = time.Now()
-
-					if bufferErrorCount >= maxBufferErrors {
-						log.Printf("⚠️ Too many buffer write errors (%d) for RTSP source %s since %v, triggering restart", bufferErrorCount, url, lastBufferErrorTime.Format("15:04:05"))
-						// Trigger restart by sending signal to restartChan
-						select {
-						case restartChan <- struct{}{}:
-							log.Printf("🔄 Buffer error threshold triggered restart for RTSP source %s", url)
-						case <-time.After(5 * time.Second):
-							log.Printf("⚠️ Restart channel blocked for 5s during buffer error restart for %s", url)
-							// Clear the channel and send restart signal
-							for len(restartChan) > 0 {
-								<-restartChan
-							}
-							restartChan <- struct{}{}
-						}
-						return fmt.Errorf("too many buffer write errors for RTSP source %s", url)
+				if err := p.processAudioData(url, buf[:n], &bufferErrorCount, &lastBufferErrorTime, restartChan, audioLevelChan); err != nil {
+					if err.Error() == "buffer_error_continue" {
+						continue
 					}
-
-					time.Sleep(1 * time.Second)
-					continue
-				} else {
-					// Reset error count on successful buffer writes
-					bufferErrorCount = 0
-				}
-
-				// Broadcast audio data to WebSocket clients
-				broadcastAudioData(url, buf[:n])
-
-				// Calculate audio level with source information
-				audioLevelData := calculateAudioLevel(buf[:n], url, "")
-
-				// Send level to channel (non-blocking)
-				select {
-				case audioLevelChan <- audioLevelData:
-					// Successfully sent data
-				default:
-					// Channel is full, clear it and send new data
-					for len(audioLevelChan) > 0 {
-						<-audioLevelChan
-					}
-					audioLevelChan <- audioLevelData
+					return err
 				}
 			}
 		}
