@@ -620,6 +620,9 @@ func TestBackoffStrategyEdgeCases(t *testing.T) {
 
 // TestRestartTrackerResetLogic tests the restart tracker reset mechanism
 func TestRestartTrackerResetLogic(t *testing.T) {
+	// Clear global restart trackers to ensure clean test state
+	restartTrackers = sync.Map{}
+
 	// Create a mock command for testing
 	mockCmd := &exec.Cmd{}
 
