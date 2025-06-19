@@ -355,7 +355,7 @@ func NewMockLifecycleProcessMap() *MockLifecycleProcessMap {
 	}
 }
 
-func (m *MockLifecycleProcessMap) Load(key string) (interface{}, bool) {
+func (m *MockLifecycleProcessMap) Load(key string) (value interface{}, exists bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	val, ok := m.processes[key]
