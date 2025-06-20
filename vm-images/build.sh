@@ -366,6 +366,7 @@ packer validate \
     -var "output_dir=$OUTPUT_DIR" \
     -var "ssh_public_key=$SSH_PUBLIC_KEY" \
     -var "ssh_private_key_file=build_key" \
+    -var "use_kvm=true" \
     birdnet-go-vm.pkr.hcl
 
 # Build the image
@@ -379,6 +380,7 @@ packer build \
     -var "output_dir=$OUTPUT_DIR" \
     -var "ssh_public_key=$SSH_PUBLIC_KEY" \
     -var "ssh_private_key_file=build_key" \
+    -var "use_kvm=true" \
     birdnet-go-vm.pkr.hcl
 
 # Show results
