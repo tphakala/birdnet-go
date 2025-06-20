@@ -159,13 +159,15 @@ source "qemu" "birdnet-go" {
   cd_label = "cidata"
   
   # SSH settings
-  ssh_username         = "birdnet"
+  ssh_username         = "birdnet-build"  # Use build user during construction
   ssh_private_key_file = var.ssh_private_key_file != "" ? var.ssh_private_key_file : null
   ssh_password         = var.ssh_private_key_file == "" ? "birdnet-build-temp" : null
   ssh_timeout         = var.use_kvm ? "20m" : "45m"  # TCG builds need more time
+  ssh_handshake_attempts = 10
+  ssh_wait_timeout      = "900s"  # 15 minutes for slow TCG boots
   
   # Boot settings
-  boot_wait = var.use_kvm ? "10s" : "30s"  # TCG needs more boot time
+  boot_wait = var.use_kvm ? "10s" : "60s"  # TCG needs much more boot time
   
   # Shutdown settings
   shutdown_command = "sudo shutdown -P now"
@@ -183,6 +185,28 @@ build {
       "echo 'Waiting for cloud-init to complete...'",
       "sudo cloud-init status --wait",
       "echo 'Cloud-init completed'"
+    ]
+  }
+  
+  # Debug SSH setup
+  provisioner "shell" {
+    inline = [
+      "echo 'Debugging SSH setup...'",
+      "echo 'Current user: $(whoami)'",
+      "echo 'Build user exists: $(id birdnet-build 2>/dev/null && echo YES || echo NO)'",
+      "echo 'End user exists: $(id birdnet 2>/dev/null && echo YES || echo NO)'",
+      "echo 'SSH service status:'",
+      "sudo systemctl status ssh --no-pager",
+      "echo 'SSH authorized keys for build user:'",
+      "ls -la /home/birdnet-build/.ssh/ || echo 'No .ssh directory'",
+      "cat /home/birdnet-build/.ssh/authorized_keys 2>/dev/null || echo 'No authorized_keys file'",
+      "echo 'SSH config:'",
+      "sudo grep -E '(PasswordAuthentication|PubkeyAuthentication|AllowUsers)' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/* 2>/dev/null || echo 'No relevant SSH config found'",
+      "echo 'Testing password auth for build user:'",
+      "echo 'birdnet-build-temp' | sudo -S -u birdnet-build whoami 2>/dev/null && echo 'Build password works' || echo 'Build password failed'",
+      "echo 'Testing password auth for end user:'",
+      "echo 'birdnetgo' | sudo -S -u birdnet whoami 2>/dev/null && echo 'End user password works' || echo 'End user password failed'",
+      "echo 'SSH debugging completed'"
     ]
   }
   
@@ -245,6 +269,26 @@ build {
   # Optimize and cleanup
   provisioner "shell" {
     script = "scripts/cleanup.sh"
+  }
+  
+  # Remove build user and secure for end users
+  provisioner "shell" {
+    inline = [
+      "echo 'Securing system for end users...'",
+      "# Remove build user and home directory",
+      "sudo userdel -r birdnet-build || echo 'Build user already removed'",
+      "# Update SSH config to only allow end user",
+      "sudo sed -i 's/AllowUsers birdnet birdnet-build/AllowUsers birdnet/' /etc/ssh/sshd_config.d/99-birdnet-go.conf",
+      "# Remove build SSH keys from authorized_keys if any",
+      "sudo rm -f /home/birdnet/.ssh/authorized_keys.build",
+      "# Set proper permissions on end user home",
+      "sudo chown -R birdnet:birdnet /home/birdnet",
+      "sudo chmod 700 /home/birdnet/.ssh 2>/dev/null || true",
+      "sudo chmod 600 /home/birdnet/.ssh/authorized_keys 2>/dev/null || true",
+      "# Restart SSH service",
+      "sudo systemctl restart ssh",
+      "echo 'System secured for end users'"
+    ]
   }
   
   # Generate final configuration

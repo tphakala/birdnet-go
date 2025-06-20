@@ -577,3 +577,312 @@ Perfect for:
 - **Docker**: Latest stable
 - **BirdNET-Go**: Latest nightly build
 - **Architecture**: AMD64 and ARM64 supported 
+
+## 🔐 Security & User Accounts
+
+### Default User Account
+- **Username**: `birdnet`
+- **Default Password**: `birdnetgo`
+- **⚠️ IMPORTANT**: Change the default password immediately after first login!
+
+### Security Features
+- **Password Authentication**: Enabled for convenience
+- **SSH Key Authentication**: Supported and recommended
+- **Sudo Access**: Requires password (no passwordless sudo for security)
+- **Password Change Reminder**: Shows warning until default password is changed
+- **SSH Security**: Limited to specific users, connection limits enforced
+
+### First Login Security Steps
+
+1. **Change Default Password**:
+   ```bash
+   passwd
+   # Follow prompts to set a strong password
+   ```
+
+2. **Set Up SSH Keys** (Recommended):
+   ```bash
+   # On your local machine, generate SSH key if you don't have one
+   ssh-keygen -t ed25519 -C "your-email@example.com"
+   
+   # Copy public key to VM
+   ssh-copy-id birdnet@your-vm-ip
+   
+   # Test key-based login
+   ssh birdnet@your-vm-ip
+   ```
+
+3. **Optional: Disable Password Authentication** (After SSH keys are set up):
+   ```bash
+   sudo nano /etc/ssh/sshd_config.d/99-birdnet-go.conf
+   # Change: PasswordAuthentication no
+   sudo systemctl restart ssh
+   ```
+
+### Security Recommendations
+
+- **Change Default Password**: Always change from `birdnetgo` to a strong password
+- **Use SSH Keys**: More secure than password authentication
+- **Enable Firewall**: Consider enabling `ufw` for additional protection
+- **Regular Updates**: Keep system updated with `sudo apt update && sudo apt upgrade`
+- **Monitor Access**: Check SSH logs with `sudo journalctl -u ssh`
+
+## 🎯 Quick Start
+
+### Prerequisites
+- Virtualization platform (Proxmox, libvirt, VMware, VirtualBox, etc.)
+- Minimum 4GB RAM, 8GB disk space for OS + separate data disk
+- Network connectivity for BirdNET-Go web interface
+
+### Download and Setup
+
+1. **Download VM Image**:
+   ```bash
+   # Download for your architecture
+   wget https://github.com/tphakala/birdnet-go/releases/latest/download/birdnet-go-vm-amd64-VERSION.qcow2.zst
+   
+   # Verify checksum
+   wget https://github.com/tphakala/birdnet-go/releases/latest/download/birdnet-go-vm-amd64-VERSION.qcow2.zst.sha256
+   sha256sum -c birdnet-go-vm-amd64-VERSION.qcov2.zst.sha256
+   
+   # Decompress
+   zstd -d birdnet-go-vm-amd64-VERSION.qcov2.zst
+   ```
+
+2. **Create Data Disk**:
+   ```bash
+   # Create separate disk for persistent data (adjust size as needed)
+   qemu-img create -f qcow2 birdnet-go-data.qcov2 50G
+   ```
+
+3. **Launch VM** (example with QEMU/KVM):
+   ```bash
+   qemu-system-x86_64 \
+     -hda birdnet-go-vm-amd64-VERSION.qcov2 \
+     -hdb birdnet-go-data.qcov2 \
+     -m 4096 \
+     -smp 2 \
+     -netdev user,id=net0,hostfwd=tcp::8080-:8080,hostfwd=tcp::2222-:22 \
+     -device virtio-net,netdev=net0
+   ```
+
+4. **First Login**:
+   ```bash
+   # SSH to VM (adjust port if needed)
+   ssh -p 2222 birdnet@localhost
+   # Default password: birdnetgo (CHANGE THIS!)
+   ```
+
+5. **Access Web Interface**:
+   - Open browser to `http://localhost:8080` (or VM's IP address)
+   - Default credentials will be shown on first access
+
+## 🖥️ Platform-Specific Setup
+
+### Proxmox VE
+
+1. Upload the qcov2 file to Proxmox storage
+2. Create new VM with uploaded disk
+3. Add second disk for data storage
+4. Configure network and start VM
+
+### libvirt/KVM
+
+```bash
+# Import VM
+virt-install \
+  --name birdnet-go \
+  --memory 4096 \
+  --vcpus 2 \
+  --disk path=/path/to/birdnet-go-vm.qcov2,format=qcov2 \
+  --disk path=/path/to/birdnet-go-data.qcov2,format=qcov2 \
+  --network network=default \
+  --import \
+  --os-variant ubuntu24.04
+```
+
+### VMware
+
+1. Convert qcov2 to VMDK:
+   ```bash
+   qemu-img convert -f qcov2 -O vmdk birdnet-go-vm.qcov2 birdnet-go-vm.vmdk
+   ```
+2. Create new VM in VMware
+3. Use converted VMDK as disk
+4. Add second disk for data storage
+
+### VirtualBox
+
+1. Convert qcov2 to VDI:
+   ```bash
+   qemu-img convert -f qcov2 -O vdi birdnet-go-vm.qcov2 birdnet-go-vm.vdi
+   ```
+2. Create new VM in VirtualBox
+3. Use converted VDI as disk
+4. Add second disk for data storage
+
+## 📦 What's Included
+
+- **Base OS**: Ubuntu 24.10 (Oracular Oriole) Server
+- **Docker**: Latest version with BirdNET-Go container ready
+- **System Tools**: htop, nano, vim, curl, wget, git
+- **Audio Support**: ALSA utilities for audio device access
+- **Network Tools**: avahi for mDNS, network diagnostics
+- **Security**: Automatic security updates, firewall ready
+- **Monitoring**: systemd service management, log access
+
+## 🔧 Configuration
+
+### Data Persistence Architecture
+
+The VM uses a two-disk architecture:
+
+- **OS Disk** (8GB): Contains Ubuntu, Docker, and BirdNET-Go application
+- **Data Disk** (User-defined): Contains SQLite database, audio clips, logs, backups
+
+### Key Directories
+
+- `/opt/birdnet-go/config/`: Configuration files (read-only mount from OS disk)
+- `/data/birdnet-go/`: Persistent data (mounted from data disk)
+  - `clips/`: Audio recordings
+  - `database/`: SQLite database files
+  - `logs/`: Application logs
+  - `backups/`: Automated database backups
+
+### Service Management
+
+```bash
+# Check BirdNET-Go status
+sudo systemctl status birdnet-go
+
+# Start/stop/restart service
+sudo systemctl start birdnet-go
+sudo systemctl stop birdnet-go
+sudo systemctl restart birdnet-go
+
+# View logs
+sudo journalctl -u birdnet-go -f
+
+# View Docker container logs
+sudo docker logs birdnet-go -f
+```
+
+### Backup and Restore
+
+```bash
+# Manual database backup
+sudo systemctl stop birdnet-go
+sudo cp /data/birdnet-go/database/*.db /data/birdnet-go/backups/
+sudo systemctl start birdnet-go
+
+# Restore from backup
+sudo systemctl stop birdnet-go
+sudo cp /data/birdnet-go/backups/your-backup.db /data/birdnet-go/database/
+sudo systemctl start birdnet-go
+```
+
+## 🔄 Updates
+
+### System Updates
+```bash
+# Update Ubuntu packages
+sudo apt update && sudo apt upgrade
+
+# Update BirdNET-Go container
+sudo docker pull ghcr.io/tphakala/birdnet-go:latest
+sudo systemctl restart birdnet-go
+```
+
+### VM Image Updates
+For major updates, download new VM image and migrate data:
+
+1. Stop BirdNET-Go service on old VM
+2. Backup data disk or copy `/data/birdnet-go/` contents
+3. Deploy new VM image
+4. Attach existing data disk or restore data
+5. Start services on new VM
+
+## 🌐 Network Configuration
+
+### Port Usage
+- **8080**: BirdNET-Go web interface (HTTP)
+- **22**: SSH access
+- **5353**: mDNS (if using Avahi discovery)
+
+### Firewall Configuration
+```bash
+# Enable UFW firewall
+sudo ufw enable
+
+# Allow SSH
+sudo ufw allow 22
+
+# Allow BirdNET-Go web interface
+sudo ufw allow 8080
+
+# Check status
+sudo ufw status
+```
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**Cannot SSH to VM**:
+- Check VM network configuration
+- Verify SSH service: `sudo systemctl status ssh`
+- Check firewall: `sudo ufw status`
+
+**BirdNET-Go not starting**:
+- Check service status: `sudo systemctl status birdnet-go`
+- View logs: `sudo journalctl -u birdnet-go -f`
+- Check Docker: `sudo docker ps -a`
+
+**No audio devices detected**:
+- Ensure audio hardware is passed through to VM
+- Check ALSA: `aplay -l`
+- Verify Docker audio access in service configuration
+
+**Web interface not accessible**:
+- Check if service is running: `sudo systemctl status birdnet-go`
+- Verify port forwarding in VM network configuration
+- Check local firewall settings
+
+### Log Locations
+- **System logs**: `/var/log/syslog`
+- **BirdNET-Go service**: `sudo journalctl -u birdnet-go`
+- **Docker logs**: `sudo docker logs birdnet-go`
+- **SSH logs**: `sudo journalctl -u ssh`
+
+### Getting Help
+- **GitHub Issues**: https://github.com/tphakala/birdnet-go/issues
+- **Documentation**: https://github.com/tphakala/birdnet-go
+- **Community**: Check GitHub discussions
+
+## 📋 Technical Specifications
+
+### System Requirements
+- **CPU**: 2+ cores (x86_64 or ARM64)
+- **RAM**: 4GB minimum, 8GB recommended
+- **Storage**: 8GB for OS + additional space for data disk
+- **Network**: Internet connectivity for initial setup and updates
+
+### Supported Platforms
+- **Proxmox VE**: Native qcov2 support
+- **libvirt/KVM**: Native qcov2 support
+- **VMware**: Requires conversion to VMDK
+- **VirtualBox**: Requires conversion to VDI
+- **QEMU**: Native qcov2 support
+
+### Architecture Support
+- **amd64**: Intel/AMD 64-bit processors
+- **arm64**: ARM 64-bit processors (Apple M1/M2, ARM servers)
+
+## 📄 License
+
+This VM image contains:
+- Ubuntu 24.10: Licensed under various open source licenses
+- BirdNET-Go: Licensed under AGPL-3.0
+- Additional packages: Various open source licenses
+
+See individual component licenses for details. 
