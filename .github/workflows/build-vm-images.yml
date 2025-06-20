@@ -63,6 +63,11 @@ jobs:
           sudo apt-get install -y qemu-kvm qemu-utils qemu-system-x86 qemu-system-arm \
             libvirt-daemon-system libvirt-clients bridge-utils virt-manager \
             ovmf qemu-efi-aarch64 zstd
+          
+          # Debug: Check available QEMU components
+          echo "🔍 Available QEMU components:"
+          echo "  AMD64: $(qemu-system-x86_64 --version | head -1)"
+          echo "  ARM64: $(qemu-system-aarch64 --version | head -1)"
 
       - name: Setup Packer
         uses: hashicorp/setup-packer@main
@@ -201,10 +206,17 @@ jobs:
 
       - name: Build VM image
         working-directory: vm-images
-        timeout-minutes: 90  # TCG builds are slower than KVM
+        timeout-minutes: ${{ matrix.arch == 'arm64' && 120 || 90 }}  # ARM64 TCG builds need more time
+        env:
+          PACKER_LOG: 1
         run: |
           echo "🏗️ Building VM image for ${{ matrix.arch }}..."
           echo "ℹ️  Using TCG acceleration (no KVM in GitHub Actions)"
+          
+          # Debug environment
+          echo "🔍 QEMU version: $(qemu-system-${{ matrix.arch == 'amd64' && 'x86_64' || 'aarch64' }} --version | head -1)"
+          echo "🔍 Using TCG acceleration for ${{ matrix.arch }} architecture"
+          
           SSH_PUBLIC_KEY=$(cat build_key.pub)
           packer build \
             -var "version=${{ steps.version.outputs.version }}" \
