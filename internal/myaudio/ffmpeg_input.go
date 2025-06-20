@@ -167,8 +167,14 @@ func (p *FFmpegProcess) getRestartDelay() time.Duration {
 // Cleanup cleans up the FFmpeg process and removes it from the map
 // This method is thread-safe and prevents race conditions during concurrent cleanup calls
 func (p *FFmpegProcess) Cleanup(url string) {
+	p.CleanupWithDelete(url, true)
+}
+
+func (p *FFmpegProcess) CleanupWithDelete(url string, shouldDelete bool) {
 	if p == nil {
-		ffmpegProcesses.Delete(url)
+		if shouldDelete {
+			ffmpegProcesses.Delete(url)
+		}
 		return
 	}
 
@@ -186,7 +192,9 @@ func (p *FFmpegProcess) Cleanup(url string) {
 
 	// Check if process exists before attempting cleanup
 	if p.cmd == nil || p.cmd.Process == nil {
-		ffmpegProcesses.Delete(url)
+		if shouldDelete {
+			ffmpegProcesses.Delete(url)
+		}
 		return
 	}
 
@@ -230,7 +238,10 @@ func (p *FFmpegProcess) Cleanup(url string) {
 		restartTrackers.Delete(key)
 	}
 
-	ffmpegProcesses.Delete(url)
+	// Only delete from process map if requested
+	if shouldDelete {
+		ffmpegProcesses.Delete(url)
+	}
 }
 
 // startWatchdog starts a goroutine that monitors the audio stream for inactivity
@@ -284,33 +295,39 @@ func (p *FFmpegProcess) isStreamConfigured(url string) bool {
 // This function is thread-safe and handles race conditions when multiple goroutines
 // attempt to send restart signals simultaneously
 func (p *FFmpegProcess) sendRestartSignal(restartChan chan struct{}, url, reason string) {
+	// First attempt: try non-blocking send
 	select {
 	case restartChan <- struct{}{}:
 		log.Printf("🔄 %s triggered restart for RTSP source %s", reason, url)
-	case <-time.After(5 * time.Second):
-		log.Printf("⚠️ Restart channel blocked for 5s during %s restart for %s", reason, url)
+		return
+	default:
+		// Channel is full, proceed to drain and retry
+	}
 
-		// Atomically clear the channel and send restart signal
-		// This prevents race conditions where multiple goroutines try to clear the channel
-		cleared := false
-		for !cleared {
-			select {
-			case <-restartChan:
-				// Successfully drained one item, continue draining
-			default:
-				// Channel is empty, we can now send our signal
-				cleared = true
-			}
-		}
-
-		// Send the restart signal
+	// Second attempt: drain old signals and count them
+	drainedCount := 0
+	for {
 		select {
-		case restartChan <- struct{}{}:
-			log.Printf("🔄 %s triggered restart for RTSP source %s (after clearing)", reason, url)
+		case <-restartChan:
+			drainedCount++
 		default:
-			// If still blocked, log and continue - avoid infinite blocking
-			log.Printf("⚠️ Unable to send restart signal for %s after clearing channel", url)
+			// Channel is now empty, break out of drain loop
+			goto sendAttempt
 		}
+	}
+
+sendAttempt:
+	if drainedCount > 0 {
+		log.Printf("🔄 Drained %d old restart signals for RTSP source %s", drainedCount, url)
+	}
+
+	// Third attempt: try to send after draining
+	select {
+	case restartChan <- struct{}{}:
+		log.Printf("🔄 %s triggered restart for RTSP source %s (after draining %d signals)", reason, url, drainedCount)
+	default:
+		// Another goroutine filled the channel between draining and sending
+		log.Printf("⚠️ Another restart signal was just sent for %s, skipping duplicate", url)
 	}
 }
 
@@ -560,7 +577,8 @@ func (lm *lifecycleManager) isStreamConfigured() bool {
 func (lm *lifecycleManager) cleanupProcessFromMap() {
 	if process, loaded := ffmpegProcesses.LoadAndDelete(lm.config.URL); loaded {
 		if p, ok := process.(*FFmpegProcess); ok {
-			p.Cleanup(lm.config.URL)
+			// Use CleanupWithDelete(false) since we already removed it with LoadAndDelete
+			p.CleanupWithDelete(lm.config.URL, false)
 		}
 	}
 }
