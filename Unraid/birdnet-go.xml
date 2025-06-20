@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>BirdNET-Go</Name>
+  <Repository>tphakala/birdnet-go:nightly</Repository>
+  <Registry>https://hub.docker.com/r/tphakala/birdnet-go</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/tphakala/birdnet-go/discussions</Support>
+  <Project>https://github.com/tphakala/birdnet-go</Project>
+  <Overview>Real-time bird species identification from audio using BirdNET deep learning models. BirdNET-Go captures and analyzes live audio from your microphone or RTSP streams, providing instant bird species identification with confidence scores. Perfect for backyard birding enthusiasts, researchers, and wildlife monitoring setups. Features a beautiful web dashboard with spectrograms, audio clips, species filtering, and comprehensive detection statistics.</Overview>
+  <Category>Tools: MediaApp:Music MediaApp:Video</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/tphakala/birdnet-go/main/unraid/birdnet-go.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/tphakala/birdnet-go/main/assets/images/BirdNET-Go-logo.webp</Icon>
+  <ExtraParams>--device /dev/snd --add-host="host.docker.internal:host-gateway"</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText>If you appreciate this work, consider supporting the developer</DonateText>
+  <DonateLink>https://github.com/sponsors/tphakala</DonateLink>
+  <Requires>Audio capture device (microphone, USB audio interface, or RTSP camera with audio)</Requires>
+  <Config Name="WebUI Port" Target="8080" Default="8080" Mode="tcp" Description="Web interface port for accessing BirdNET-Go dashboard" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="Config Directory" Target="/config" Default="/mnt/user/appdata/birdnet-go/config" Mode="rw" Description="Configuration files storage" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/birdnet-go/config</Config>
+  <Config Name="Data Directory" Target="/data" Default="/mnt/user/appdata/birdnet-go/data" Mode="rw" Description="Database and audio clips storage" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/birdnet-go/data</Config>
+  <Config Name="Timezone" Target="TZ" Default="America/New_York" Mode="" Description="Container timezone (e.g., America/New_York, Europe/London, Asia/Tokyo)" Type="Variable" Display="always" Required="true" Mask="false">America/New_York</Config>
+  <Config Name="User ID" Target="BIRDNET_UID" Default="99" Mode="" Description="User ID for file permissions (99 = nobody user)" Type="Variable" Display="advanced" Required="true" Mask="false">99</Config>
+  <Config Name="Group ID" Target="BIRDNET_GID" Default="100" Mode="" Description="Group ID for file permissions (100 = users group)" Type="Variable" Display="advanced" Required="true" Mask="false">100</Config>
+</Container> 
