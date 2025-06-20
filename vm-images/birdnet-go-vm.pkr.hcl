@@ -56,17 +56,17 @@ locals {
   
   qemu_cpus = {
     amd64 = "host"
-    arm64 = "cortex-a72"
+    arm64 = "host"
   }
   
   qemu_cpus_tcg = {
     amd64 = "qemu64"
-    arm64 = "cortex-a72"
+    arm64 = "cortex-a57"
   }
   
   accelerators = {
     amd64 = "kvm"
-    arm64 = "tcg"
+    arm64 = "kvm"
   }
   
   accelerators_no_kvm = {
@@ -106,7 +106,7 @@ source "qemu" "birdnet-go" {
   vm_name         = "birdnet-go-vm-${var.arch}-${var.version}.qcow2"
   
   # System settings
-  memory          = 2048
+  memory          = var.arch == "arm64" && !var.use_kvm ? 3072 : 2048  # More memory for ARM64 TCG
   cpus            = 2
   disk_size       = "8G"
   disk_cache      = "writeback"
@@ -120,6 +120,12 @@ source "qemu" "birdnet-go" {
   cpu_model       = var.use_kvm ? local.qemu_cpus[var.arch] : local.qemu_cpus_tcg[var.arch]
   accelerator     = var.use_kvm ? local.accelerators[var.arch] : local.accelerators_no_kvm[var.arch]
   
+  # Headless mode for CI environments
+  headless        = !var.use_kvm  # Use headless mode when not using KVM (CI environments)
+  vnc_bind_address = var.use_kvm ? "127.0.0.1" : ""  # Disable VNC in CI
+  vnc_port_min    = var.use_kvm ? 5900 : 0
+  vnc_port_max    = var.use_kvm ? 6000 : 0
+  
   # Additional QEMU arguments
   qemuargs = var.arch == "amd64" ? (
     var.use_kvm ? [
@@ -127,11 +133,16 @@ source "qemu" "birdnet-go" {
       ["-device", "virtio-rng-pci"]
     ] : [
       ["-device", "virtio-rng-pci"],
-      ["-machine", "accel=tcg"]
+      ["-machine", "accel=tcg"],
+      ["-display", "none"],
+      ["-serial", "stdio"]
     ]
-  ) : [
+  ) : var.use_kvm ? [
+    ["-device", "virtio-rng-pci"]
+  ] : [
     ["-device", "virtio-rng-pci"],
-    ["-bios", "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd"]
+    ["-display", "none"],
+    ["-serial", "stdio"]
   ]
   
   # Cloud-init settings
