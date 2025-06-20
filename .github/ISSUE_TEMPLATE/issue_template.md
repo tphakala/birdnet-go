@@ -6,7 +6,7 @@ labels: ''
 assignees: ''
 
 ---
-Please fill in this issue template, any issue ticket filed without basic information required in this template will be closed without response. I cannot help if I don't have basic details like application version etc.
+Please fill in this issue template, I cannot help if I don't have basic details like application version etc.
 
 ## Issue Type
 - [ ] Bug report
@@ -63,6 +63,7 @@ Have you tested with the latest dev branch container image?
 If not, first test with the latest dev branch container image and see if the issue is already fixed.
 ```
 $ docker pull ghcr.io/tphakala/birdnet-go:dev
+# Alternative: docker pull tphakala/birdnet-go:dev
 ```
 
 ## Additional context
