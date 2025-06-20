@@ -1,0 +1,2 @@
+instance-id: birdnet-go-vm
+local-hostname: ${hostname} 

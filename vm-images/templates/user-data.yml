@@ -1,0 +1,62 @@
+#cloud-config
+users:
+  - name: birdnet
+    groups: sudo, docker, audio, adm
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    passwd: $6$rounds=4096$saltstring$UW6/F2d0U.Ufbq.C/j8lJeJnG$Ks7Q7gLgq4k.VjL8rP9Q.1.SN7t8xD
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+# Enable password authentication temporarily for build
+ssh_pwauth: true
+
+# Set timezone
+timezone: UTC
+
+# Network configuration
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: true
+
+# Resize root filesystem
+growpart:
+  mode: auto
+  devices: ['/']
+
+# Package updates
+package_update: true
+package_upgrade: true
+
+# Install essential packages
+packages:
+  - curl
+  - wget
+  - git
+  - htop
+  - nano
+  - vim
+  - unattended-upgrades
+
+# Write files
+write_files:
+  - path: /etc/birdnet-go/version
+    content: |
+      Version: ${version}
+      Architecture: ${arch}
+      Build Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+    owner: root:root
+    permissions: '0644'
+
+# Enable automatic security updates
+runcmd:
+  - systemctl enable unattended-upgrades
+  - systemctl start unattended-upgrades
+  - mkdir -p /etc/birdnet-go
+  - mkdir -p /opt/birdnet-go/{config,data}
+  - chown -R birdnet:birdnet /opt/birdnet-go
+
+# Final message
+final_message: "BirdNET-Go VM is ready! Version: ${version}, Architecture: ${arch}" 
