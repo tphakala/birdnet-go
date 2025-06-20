@@ -22,6 +22,11 @@ Source: BSD-3-Clause
 License: https://github.com/googleapis/google-cloud-go/blob/compute/metadata/v0.6.0/compute/metadata/LICENSE
 Source: Apache-2.0
 
+### filippo.io/edwards25519
+
+License: https://github.com/FiloSottile/edwards25519/blob/v1.1.0/LICENSE
+Source: BSD-3-Clause
+
 ### github.com/antonholmquist/jason
 
 License: https://github.com/antonholmquist/jason/blob/v1.0.0/LICENSE
@@ -89,7 +94,7 @@ Source: MIT
 
 ### github.com/go-sql-driver/mysql
 
-License: https://github.com/go-sql-driver/mysql/blob/v1.7.0/LICENSE
+License: https://github.com/go-sql-driver/mysql/blob/v1.8.1/LICENSE
 Source: MPL-2.0
 
 ### github.com/go-viper/mapstructure/v2
@@ -339,12 +344,12 @@ Source: Apache-2.0
 
 ### golang.org/x/crypto/acme
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.38.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.39.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.40.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.41.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -354,7 +359,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/sync
 
-License: https://cs.opensource.google/go/x/sync/+/v0.14.0:LICENSE
+License: https://cs.opensource.google/go/x/sync/+/v0.15.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sys/unix
@@ -369,7 +374,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.25.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.26.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
@@ -394,16 +399,16 @@ Source: MIT
 
 ### gorm.io/driver/mysql
 
-License: https://github.com/go-gorm/mysql/blob/v1.5.6/License
+License: https://github.com/go-gorm/mysql/blob/v1.6.0/License
 Source: MIT
 
 ### gorm.io/driver/sqlite
 
-License: https://github.com/go-gorm/sqlite/blob/v1.5.7/License
+License: https://github.com/go-gorm/sqlite/blob/v1.6.0/License
 Source: MIT
 
 ### gorm.io/gorm
 
-License: https://github.com/go-gorm/gorm/blob/v1.25.10/LICENSE
+License: https://github.com/go-gorm/gorm/blob/v1.30.0/LICENSE
 Source: MIT
 
