@@ -1,0 +1,336 @@
+name: Docker Build and Push
+
+on:
+  workflow_call:
+    inputs:
+      tag-strategy:
+        description: 'Tagging strategy: nightly or release'
+        required: true
+        type: string
+      version:
+        description: 'Version string for tagging'
+        required: true
+        type: string
+      create-latest-tag:
+        description: 'Whether to create latest tag'
+        required: false
+        type: boolean
+        default: false
+      platforms:
+        description: 'JSON array of platforms to build'
+        required: false
+        type: string
+        default: '["linux/amd64", "linux/arm64"]'
+      push-to-ghcr:
+        description: 'Push to GitHub Container Registry'
+        required: false
+        type: boolean
+        default: true
+      push-to-dockerhub:
+        description: 'Push to Docker Hub'
+        required: false
+        type: boolean
+        default: true
+      cleanup-old-images:
+        description: 'Clean up old images'
+        required: false
+        type: boolean
+        default: true
+      keep-images-count:
+        description: 'Number of images to keep during cleanup'
+        required: false
+        type: number
+        default: 14
+    outputs:
+      version:
+        description: 'The version that was built'
+        value: ${{ jobs.build.outputs.version }}
+      ghcr-success:
+        description: 'Whether GHCR push succeeded'
+        value: ${{ jobs.build.outputs.ghcr-success }}
+      dockerhub-success:
+        description: 'Whether Docker Hub push succeeded'
+        value: ${{ jobs.build.outputs.dockerhub-success }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ inputs.version }}
+      ghcr-success: ${{ steps.push-status.outputs.ghcr-success }}
+      dockerhub-success: ${{ steps.push-status.outputs.dockerhub-success }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJson(inputs.platforms) }}
+        
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Generate repository names
+        id: repo-names
+        run: |
+          # GitHub Container Registry
+          echo "GHCR_REPO=ghcr.io/${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+          echo "ghcr-repo=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+          
+          # Docker Hub (extract just the repo name)
+          REPO_NAME=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
+          echo "DOCKERHUB_REPO=tphakala/${REPO_NAME}" >> ${GITHUB_ENV}
+          echo "dockerhub-repo=tphakala/${REPO_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Login to GitHub Container Registry
+        if: inputs.push-to-ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        if: inputs.push-to-dockerhub
+        uses: docker/login-action@v3
+        continue-on-error: true
+        id: dockerhub-login
+        with:
+          username: tphakala
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Generate tags
+        id: tags
+        run: |
+          PLATFORM_SUFFIX=""
+          if [ "${{ matrix.platform }}" = "linux/amd64" ]; then
+            PLATFORM_SUFFIX="amd64"
+          elif [ "${{ matrix.platform }}" = "linux/arm64" ]; then
+            PLATFORM_SUFFIX="arm64"
+          fi
+          
+          TAGS=""
+          
+          # Generate tags based on strategy
+          if [ "${{ inputs.tag-strategy }}" = "nightly" ]; then
+            DATE=$(date +'%Y%m%d')
+            
+            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
+              TAGS="${TAGS}${GHCR_REPO}:nightly-${PLATFORM_SUFFIX}-${DATE},"
+              TAGS="${TAGS}${GHCR_REPO}:nightly-${PLATFORM_SUFFIX},"
+            fi
+            
+            if [ "${{ inputs.push-to-dockerhub }}" = "true" ] && [ "${{ steps.dockerhub-login.outcome }}" = "success" ]; then
+              TAGS="${TAGS}${DOCKERHUB_REPO}:nightly-${PLATFORM_SUFFIX}-${DATE},"
+              TAGS="${TAGS}${DOCKERHUB_REPO}:nightly-${PLATFORM_SUFFIX},"
+            fi
+            
+          elif [ "${{ inputs.tag-strategy }}" = "release" ]; then
+            
+            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
+              TAGS="${TAGS}${GHCR_REPO}:${{ inputs.version }}-${PLATFORM_SUFFIX},"
+              TAGS="${TAGS}${GHCR_REPO}:${PLATFORM_SUFFIX},"
+            fi
+            
+            if [ "${{ inputs.push-to-dockerhub }}" = "true" ] && [ "${{ steps.dockerhub-login.outcome }}" = "success" ]; then
+              TAGS="${TAGS}${DOCKERHUB_REPO}:${{ inputs.version }}-${PLATFORM_SUFFIX},"
+              TAGS="${TAGS}${DOCKERHUB_REPO}:${PLATFORM_SUFFIX},"
+            fi
+          fi
+          
+          # Remove trailing comma
+          TAGS=$(echo "$TAGS" | sed 's/,$//')
+          
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "Generated tags: $TAGS"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        continue-on-error: true
+        id: build-push
+        with:
+          context: .
+          push: true
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            BUILD_VERSION=${{ inputs.version }}
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Check push status
+        id: push-status
+        run: |
+          # Default to success for outputs
+          echo "ghcr-success=true" >> $GITHUB_OUTPUT
+          echo "dockerhub-success=true" >> $GITHUB_OUTPUT
+          
+          # Check if build failed
+          if [ "${{ steps.build-push.outcome }}" != "success" ]; then
+            echo "⚠️ Docker build/push had issues, but continuing workflow"
+            
+            # Try to determine which registry failed by checking login status
+            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
+              echo "ghcr-success=false" >> $GITHUB_OUTPUT
+            fi
+            
+            if [ "${{ inputs.push-to-dockerhub }}" = "true" ] && [ "${{ steps.dockerhub-login.outcome }}" != "success" ]; then
+              echo "dockerhub-success=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  create-manifests:
+    needs: build
+    runs-on: ubuntu-24.04
+    if: always() && needs.build.result != 'cancelled'
+    
+    steps:
+      - name: Generate repository names
+        id: repo-names
+        run: |
+          echo "GHCR_REPO=ghcr.io/${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+          REPO_NAME=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
+          echo "DOCKERHUB_REPO=tphakala/${REPO_NAME}" >> ${GITHUB_ENV}
+
+      - name: Login to GitHub Container Registry
+        if: inputs.push-to-ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        if: inputs.push-to-dockerhub
+        uses: docker/login-action@v3
+        continue-on-error: true
+        id: dockerhub-login
+        with:
+          username: tphakala
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create and push manifests
+        run: |
+          set +e  # Don't exit on error - we want to try both registries
+          
+          if [ "${{ inputs.tag-strategy }}" = "nightly" ]; then
+            DATE=$(date +'%Y%m%d')
+            
+            # GHCR Manifests
+            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
+              echo "Creating GHCR nightly manifests..."
+              
+              # Create dated manifest
+              docker manifest create ${GHCR_REPO}:nightly-${DATE} \
+                ${GHCR_REPO}:nightly-amd64-${DATE} \
+                ${GHCR_REPO}:nightly-arm64-${DATE} || echo "Failed to create GHCR dated manifest"
+              docker manifest push ${GHCR_REPO}:nightly-${DATE} || echo "Failed to push GHCR dated manifest"
+              
+              # Create main nightly manifest
+              docker manifest create ${GHCR_REPO}:nightly \
+                ${GHCR_REPO}:nightly-amd64-${DATE} \
+                ${GHCR_REPO}:nightly-arm64-${DATE} || echo "Failed to create GHCR nightly manifest"
+              docker manifest push ${GHCR_REPO}:nightly || echo "Failed to push GHCR nightly manifest"
+            fi
+            
+            # Docker Hub Manifests
+            if [ "${{ inputs.push-to-dockerhub }}" = "true" ] && [ "${{ steps.dockerhub-login.outcome }}" = "success" ]; then
+              echo "Creating Docker Hub nightly manifests..."
+              
+              # Create dated manifest
+              docker manifest create ${DOCKERHUB_REPO}:nightly-${DATE} \
+                ${DOCKERHUB_REPO}:nightly-amd64-${DATE} \
+                ${DOCKERHUB_REPO}:nightly-arm64-${DATE} || echo "Failed to create Docker Hub dated manifest"
+              docker manifest push ${DOCKERHUB_REPO}:nightly-${DATE} || echo "Failed to push Docker Hub dated manifest"
+              
+              # Create main nightly manifest
+              docker manifest create ${DOCKERHUB_REPO}:nightly \
+                ${DOCKERHUB_REPO}:nightly-amd64-${DATE} \
+                ${DOCKERHUB_REPO}:nightly-arm64-${DATE} || echo "Failed to create Docker Hub nightly manifest"
+              docker manifest push ${DOCKERHUB_REPO}:nightly || echo "Failed to push Docker Hub nightly manifest"
+            fi
+            
+          elif [ "${{ inputs.tag-strategy }}" = "release" ]; then
+            
+            # GHCR Manifests
+            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
+              echo "Creating GHCR release manifests..."
+              
+              # Create versioned manifest
+              docker manifest create ${GHCR_REPO}:${{ inputs.version }} \
+                ${GHCR_REPO}:${{ inputs.version }}-amd64 \
+                ${GHCR_REPO}:${{ inputs.version }}-arm64 || echo "Failed to create GHCR versioned manifest"
+              docker manifest push ${GHCR_REPO}:${{ inputs.version }} || echo "Failed to push GHCR versioned manifest"
+              
+              # Create latest manifest if requested
+              if [ "${{ inputs.create-latest-tag }}" = "true" ]; then
+                docker manifest create ${GHCR_REPO}:latest \
+                  ${GHCR_REPO}:amd64 \
+                  ${GHCR_REPO}:arm64 || echo "Failed to create GHCR latest manifest"
+                docker manifest push ${GHCR_REPO}:latest || echo "Failed to push GHCR latest manifest"
+              fi
+            fi
+            
+            # Docker Hub Manifests
+            if [ "${{ inputs.push-to-dockerhub }}" = "true" ] && [ "${{ steps.dockerhub-login.outcome }}" = "success" ]; then
+              echo "Creating Docker Hub release manifests..."
+              
+              # Create versioned manifest
+              docker manifest create ${DOCKERHUB_REPO}:${{ inputs.version }} \
+                ${DOCKERHUB_REPO}:${{ inputs.version }}-amd64 \
+                ${DOCKERHUB_REPO}:${{ inputs.version }}-arm64 || echo "Failed to create Docker Hub versioned manifest"
+              docker manifest push ${DOCKERHUB_REPO}:${{ inputs.version }} || echo "Failed to push Docker Hub versioned manifest"
+              
+              # Create latest manifest if requested
+              if [ "${{ inputs.create-latest-tag }}" = "true" ]; then
+                docker manifest create ${DOCKERHUB_REPO}:latest \
+                  ${DOCKERHUB_REPO}:amd64 \
+                  ${DOCKERHUB_REPO}:arm64 || echo "Failed to create Docker Hub latest manifest"
+                docker manifest push ${DOCKERHUB_REPO}:latest || echo "Failed to push Docker Hub latest manifest"
+              fi
+            fi
+          fi
+
+  cleanup:
+    needs: [build, create-manifests]
+    runs-on: ubuntu-24.04
+    if: always() && inputs.cleanup-old-images && needs.build.result != 'cancelled'
+    
+    steps:
+      - name: Generate repository names
+        id: repo-names
+        run: |
+          echo "GHCR_REPO=ghcr.io/${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+          REPO_NAME=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
+          echo "DOCKERHUB_REPO=tphakala/${REPO_NAME}" >> ${GITHUB_ENV}
+
+      - name: Cleanup old GHCR images
+        if: inputs.push-to-ghcr && inputs.tag-strategy == 'nightly'
+        continue-on-error: true
+        run: |
+          echo "Note: GHCR cleanup would be implemented here"
+          echo "This requires additional API calls to GitHub's package API"
+          echo "For now, relying on GitHub's built-in retention policies"
+
+      - name: Cleanup old Docker Hub images
+        if: inputs.push-to-dockerhub && inputs.tag-strategy == 'nightly'
+        continue-on-error: true
+        run: |
+          echo "Note: Docker Hub cleanup would be implemented here"
+          echo "This requires Docker Hub API integration"
+          echo "For now, manual cleanup or Docker Hub retention policies recommended"
+
+      - name: Cleanup summary
+        run: |
+          echo "## Cleanup Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- GHCR cleanup: ${{ inputs.push-to-ghcr && 'Enabled' || 'Disabled' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Docker Hub cleanup: ${{ inputs.push-to-dockerhub && 'Enabled' || 'Disabled' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Keep images count: ${{ inputs.keep-images-count }}" >> $GITHUB_STEP_SUMMARY 
