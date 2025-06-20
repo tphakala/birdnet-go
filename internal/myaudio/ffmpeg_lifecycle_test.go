@@ -1271,3 +1271,246 @@ func TestBackoffStrategyUnlimitedRetries(t *testing.T) {
 	assert.True(t, retry, "Should allow retry after reset")
 	assert.Equal(t, 1*time.Second, delay, "Delay should reset to initial value")
 }
+
+func TestConcurrentCleanupRaceConditions(t *testing.T) {
+	// Test concurrent cleanup calls to ensure no race conditions
+	url := "rtsp://test-race.com/stream"
+
+	// Create a mock process with proper initialization
+	mockProcess := &FFmpegProcess{
+		cmd:    &exec.Cmd{},
+		cancel: func() {},
+		stdout: nil,
+		// cleanupMutex and cleanupDone are zero-initialized
+	}
+
+	// Store process in the map
+	ffmpegProcesses.Store(url, mockProcess)
+
+	// Launch multiple goroutines to cleanup simultaneously
+	var wg sync.WaitGroup
+	numGoroutines := 20
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Cleanup goroutine %d panicked: %v", id, r)
+				}
+			}()
+
+			// Each goroutine attempts cleanup
+			mockProcess.Cleanup(url)
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	// Verify cleanup was performed (process should be removed from map)
+	if _, exists := ffmpegProcesses.Load(url); exists {
+		t.Error("Process should have been removed from map after cleanup")
+	}
+}
+
+func TestConcurrentRestartSignalRaceConditions(t *testing.T) {
+	// Test concurrent restart signal sending to ensure no race conditions
+	restartChan := make(chan struct{}, 1) // Small buffer to force blocking scenarios
+	url := "rtsp://test-restart.com/stream"
+
+	mockProcess := &FFmpegProcess{}
+
+	var wg sync.WaitGroup
+	numGoroutines := 10
+
+	// Launch multiple goroutines to send restart signals simultaneously
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Restart signal goroutine %d panicked: %v", id, r)
+				}
+			}()
+
+			// Each goroutine attempts to send restart signal
+			mockProcess.sendRestartSignal(restartChan, url, fmt.Sprintf("Test-%d", id))
+		}(i)
+	}
+
+	// Drain restart channel in another goroutine to prevent blocking
+	go func() {
+		for {
+			select {
+			case <-restartChan:
+				// Consume restart signals
+			case <-time.After(3 * time.Second):
+				// Timeout to prevent goroutine leak
+				return
+			}
+		}
+	}()
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	t.Log("All restart signal goroutines completed without panicking")
+}
+
+func TestConcurrentProcessMapOperations(t *testing.T) {
+	// Test concurrent operations on the process map
+	baseURL := "rtsp://concurrent-test.com/stream"
+
+	var wg sync.WaitGroup
+	numGoroutines := 15
+	operationsPerGoroutine := 50
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Process map goroutine %d panicked: %v", id, r)
+				}
+			}()
+
+			url := fmt.Sprintf("%s-%d", baseURL, id)
+
+			for j := 0; j < operationsPerGoroutine; j++ {
+				mockProcess := &FFmpegProcess{
+					cmd:    &exec.Cmd{},
+					cancel: func() {},
+				}
+
+				// Store process
+				ffmpegProcesses.Store(url, mockProcess)
+
+				// Load process
+				if process, exists := ffmpegProcesses.Load(url); exists {
+					if p, ok := process.(*FFmpegProcess); ok {
+						// Perform cleanup
+						p.Cleanup(url)
+					}
+				}
+
+				// Try LoadAndDelete
+				if process, loaded := ffmpegProcesses.LoadAndDelete(url); loaded {
+					if p, ok := process.(*FFmpegProcess); ok {
+						// Process was loaded, cleanup if needed
+						_ = p
+					}
+				}
+			}
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	t.Log("All process map operations completed without race conditions")
+}
+
+func TestAudioLevelChannelRaceConditions(t *testing.T) {
+	// Test concurrent audio level channel operations
+	audioLevelChan := make(chan AudioLevelData, 1) // Small buffer to test clearing logic
+
+	mockProcess := &FFmpegProcess{}
+	url := "rtsp://audio-test.com/stream"
+	data := make([]byte, 1024)
+
+	var wg sync.WaitGroup
+	numGoroutines := 10
+
+	// Consumer goroutine to drain the channel
+	go func() {
+		for {
+			select {
+			case <-audioLevelChan:
+				// Consume audio level data
+			case <-time.After(2 * time.Second):
+				// Timeout to prevent goroutine leak
+				return
+			}
+		}
+	}()
+
+	// Launch multiple goroutines to send audio level data simultaneously
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Audio level goroutine %d panicked: %v", id, r)
+				}
+			}()
+
+			// Simulate processAudioData calls that include audio level channel operations
+			bufferErrorCount := 0
+			lastBufferErrorTime := time.Now()
+			restartChan := make(chan struct{}, 1)
+
+			for j := 0; j < 5; j++ { // Reduced iterations to avoid hitting buffer error threshold
+				err := mockProcess.processAudioData(url, data, &bufferErrorCount, &lastBufferErrorTime, restartChan, audioLevelChan)
+				// processAudioData expects buffers to exist, so we expect buffer errors in this test
+				if err != nil && err.Error() != "buffer_error_continue" && !strings.Contains(err.Error(), "too many buffer write errors") {
+					t.Errorf("Unexpected error from processAudioData: %v", err)
+				}
+			}
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	t.Log("All audio level channel operations completed without race conditions")
+}
+
+func TestProcessTrackerConcurrentAccess(t *testing.T) {
+	// Test concurrent access to restart trackers
+	var wg sync.WaitGroup
+	numGoroutines := 10
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Restart tracker goroutine %d panicked: %v", id, r)
+				}
+			}()
+
+			// Create multiple mock commands to test tracker creation/access
+			for j := 0; j < 50; j++ {
+				cmd := &exec.Cmd{
+					Path: fmt.Sprintf("/test/path/%d", id),
+					Args: []string{fmt.Sprintf("arg%d", j)},
+				}
+
+				// Get tracker (this accesses the global restartTrackers map)
+				tracker := getRestartTracker(cmd)
+				assert.NotNil(t, tracker, "Tracker should not be nil")
+
+				// Create a mock process and update restart info
+				process := &FFmpegProcess{
+					restartTracker: tracker,
+				}
+				process.updateRestartInfo()
+
+				// Get restart delay
+				delay := process.getRestartDelay()
+				assert.Greater(t, delay, time.Duration(0), "Delay should be positive")
+			}
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	t.Log("All restart tracker operations completed without race conditions")
+}
