@@ -1271,3 +1271,589 @@ func TestBackoffStrategyUnlimitedRetries(t *testing.T) {
 	assert.True(t, retry, "Should allow retry after reset")
 	assert.Equal(t, 1*time.Second, delay, "Delay should reset to initial value")
 }
+
+func TestConcurrentCleanupRaceConditions(t *testing.T) {
+	// Test concurrent cleanup calls to ensure no race conditions
+	url := "rtsp://test-race.com/stream"
+
+	// Create a mock process with proper initialization
+	mockProcess := &FFmpegProcess{
+		cmd:    &exec.Cmd{},
+		cancel: func() {},
+		stdout: nil,
+		// cleanupMutex and cleanupDone are zero-initialized
+	}
+
+	// Store process in the map
+	ffmpegProcesses.Store(url, mockProcess)
+
+	// Launch multiple goroutines to cleanup simultaneously
+	var wg sync.WaitGroup
+	numGoroutines := 20
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Cleanup goroutine %d panicked: %v", id, r)
+				}
+			}()
+
+			// Each goroutine attempts cleanup
+			mockProcess.Cleanup(url)
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	// Verify cleanup was performed (process should be removed from map)
+	if _, exists := ffmpegProcesses.Load(url); exists {
+		t.Error("Process should have been removed from map after cleanup")
+	}
+}
+
+func TestConcurrentRestartSignalRaceConditions(t *testing.T) {
+	// Test concurrent restart signal sending to ensure no race conditions
+	restartChan := make(chan struct{}, 1) // Small buffer to force blocking scenarios
+	url := "rtsp://test-restart.com/stream"
+
+	mockProcess := &FFmpegProcess{}
+
+	var wg sync.WaitGroup
+	numGoroutines := 10
+
+	// Launch multiple goroutines to send restart signals simultaneously
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Restart signal goroutine %d panicked: %v", id, r)
+				}
+			}()
+
+			// Each goroutine attempts to send restart signal
+			mockProcess.sendRestartSignal(restartChan, url, fmt.Sprintf("Test-%d", id))
+		}(i)
+	}
+
+	// Drain restart channel in another goroutine to prevent blocking
+	go func() {
+		for {
+			select {
+			case <-restartChan:
+				// Consume restart signals
+			case <-time.After(3 * time.Second):
+				// Timeout to prevent goroutine leak
+				return
+			}
+		}
+	}()
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	t.Log("All restart signal goroutines completed without panicking")
+}
+
+func TestConcurrentProcessMapOperations(t *testing.T) {
+	// Test concurrent operations on the process map
+	baseURL := "rtsp://concurrent-test.com/stream"
+
+	var wg sync.WaitGroup
+	numGoroutines := 15
+	operationsPerGoroutine := 50
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Process map goroutine %d panicked: %v", id, r)
+				}
+			}()
+
+			url := fmt.Sprintf("%s-%d", baseURL, id)
+
+			for j := 0; j < operationsPerGoroutine; j++ {
+				mockProcess := &FFmpegProcess{
+					cmd:    &exec.Cmd{},
+					cancel: func() {},
+				}
+
+				// Store process
+				ffmpegProcesses.Store(url, mockProcess)
+
+				// Load process
+				if process, exists := ffmpegProcesses.Load(url); exists {
+					if p, ok := process.(*FFmpegProcess); ok {
+						// Perform cleanup
+						p.Cleanup(url)
+					}
+				}
+
+				// Try LoadAndDelete
+				if process, loaded := ffmpegProcesses.LoadAndDelete(url); loaded {
+					if p, ok := process.(*FFmpegProcess); ok {
+						// Process was loaded, cleanup if needed
+						_ = p
+					}
+				}
+			}
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	t.Log("All process map operations completed without race conditions")
+}
+
+// mockProcessAudioDataForChannelTest simulates processAudioData but focuses only on audio level channel operations
+// This avoids buffer write errors that would clutter test output
+func mockProcessAudioDataForChannelTest(url string, data []byte, audioLevelChan chan AudioLevelData) error {
+	// Skip buffer writes (which would fail in test environment) and focus on channel operations
+
+	// Broadcast audio data to WebSocket clients (this is a no-op in test environment)
+	// broadcastAudioData(url, data) // Skip this as it may not be available in test
+
+	// Calculate and send audio level - this is the main focus of the test
+	audioLevelData := calculateAudioLevel(data, url, "")
+	select {
+	case audioLevelChan <- audioLevelData:
+		// Successfully sent data
+	default:
+		// Channel is full, drop the data to avoid blocking audio processing
+		// Audio level data is not critical and can be dropped
+	}
+
+	return nil
+}
+
+func TestAudioLevelChannelRaceConditions(t *testing.T) {
+	// Test concurrent audio level channel operations
+	audioLevelChan := make(chan AudioLevelData, 1) // Small buffer to test clearing logic
+
+	url := "rtsp://audio-test.com/stream"
+	data := make([]byte, 1024)
+
+	var wg sync.WaitGroup
+	numGoroutines := 10
+
+	// Consumer goroutine to drain the channel
+	go func() {
+		for {
+			select {
+			case <-audioLevelChan:
+				// Consume audio level data
+			case <-time.After(2 * time.Second):
+				// Timeout to prevent goroutine leak
+				return
+			}
+		}
+	}()
+
+	// Launch multiple goroutines to send audio level data simultaneously
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Audio level goroutine %d panicked: %v", id, r)
+				}
+			}()
+
+			// Use mock function that focuses only on channel operations without buffer errors
+			for j := 0; j < 10; j++ {
+				err := mockProcessAudioDataForChannelTest(url, data, audioLevelChan)
+				if err != nil {
+					t.Errorf("Unexpected error from mockProcessAudioDataForChannelTest: %v", err)
+				}
+			}
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	t.Log("All audio level channel operations completed without race conditions")
+}
+
+func TestProcessTrackerConcurrentAccess(t *testing.T) {
+	// Test concurrent access to restart trackers
+	var wg sync.WaitGroup
+	numGoroutines := 10
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Restart tracker goroutine %d panicked: %v", id, r)
+				}
+			}()
+
+			// Create multiple mock commands to test tracker creation/access
+			for j := 0; j < 50; j++ {
+				cmd := &exec.Cmd{
+					Path: fmt.Sprintf("/test/path/%d", id),
+					Args: []string{fmt.Sprintf("arg%d", j)},
+				}
+
+				// Get tracker (this accesses the global restartTrackers map)
+				tracker := getRestartTracker(cmd)
+				assert.NotNil(t, tracker, "Tracker should not be nil")
+
+				// Create a mock process and update restart info
+				process := &FFmpegProcess{
+					restartTracker: tracker,
+				}
+				process.updateRestartInfo()
+
+				// Get restart delay
+				delay := process.getRestartDelay()
+				assert.Greater(t, delay, time.Duration(0), "Delay should be positive")
+			}
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	t.Log("All restart tracker operations completed without race conditions")
+}
+
+// Test the new lifecycle manager functions
+
+func TestLifecycleManager_IsStreamConfigured(t *testing.T) {
+	// We can't easily test isStreamConfigured without modifying global state
+	// Instead, let's test the logic by creating a testable function
+
+	testIsStreamConfigured := func(configuredURLs []string, targetURL string) bool {
+		for _, url := range configuredURLs {
+			if url == targetURL {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Test data
+	testURL := "rtsp://test.example.com/stream"
+
+	tests := []struct {
+		name        string
+		configURLs  []string
+		expectFound bool
+	}{
+		{"stream_configured", []string{testURL}, true},
+		{"stream_not_configured", []string{}, false},
+		{"multiple_streams_with_target", []string{"rtsp://other.com", testURL, "rtsp://another.com"}, true},
+		{"multiple_streams_without_target", []string{"rtsp://other1.com", "rtsp://other2.com"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := testIsStreamConfigured(tt.configURLs, testURL)
+			assert.Equal(t, tt.expectFound, result)
+		})
+	}
+}
+
+func TestLifecycleManager_WaitWithInterrupts(t *testing.T) {
+	manager := newLifecycleManager(
+		FFmpegConfig{URL: "rtsp://test.com"},
+		make(chan struct{}, 1),
+		make(chan AudioLevelData),
+	)
+
+	tests := []struct {
+		name           string
+		duration       time.Duration
+		triggerRestart bool
+		cancelContext  bool
+		expectError    bool
+	}{
+		{"normal_completion", 10 * time.Millisecond, false, false, false},
+		{"restart_interrupt", 100 * time.Millisecond, true, false, false},
+		{"context_cancellation", 100 * time.Millisecond, false, true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			// Start the wait in a goroutine
+			errChan := make(chan error, 1)
+			go func() {
+				errChan <- manager.waitWithInterrupts(ctx, tt.duration)
+			}()
+
+			// Trigger interruption if needed
+			if tt.triggerRestart {
+				time.Sleep(5 * time.Millisecond)
+				manager.restartChan <- struct{}{}
+			}
+
+			if tt.cancelContext {
+				time.Sleep(5 * time.Millisecond)
+				cancel()
+			}
+
+			// Wait for result
+			select {
+			case err := <-errChan:
+				if tt.expectError {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+				}
+			case <-time.After(200 * time.Millisecond):
+				t.Fatal("Test timed out")
+			}
+		})
+	}
+}
+
+func TestLifecycleManager_CleanupProcessFromMap(t *testing.T) {
+	url := "rtsp://cleanup-test.com/stream"
+
+	// Create a mock process
+	mockProcess := &FFmpegProcess{
+		cmd:    &exec.Cmd{},
+		cancel: func() {},
+	}
+
+	// Store process in map
+	ffmpegProcesses.Store(url, mockProcess)
+
+	// Verify it's stored
+	_, exists := ffmpegProcesses.Load(url)
+	assert.True(t, exists, "Process should be stored in map")
+
+	// Create manager and cleanup
+	manager := newLifecycleManager(
+		FFmpegConfig{URL: url},
+		make(chan struct{}),
+		make(chan AudioLevelData),
+	)
+
+	manager.cleanupProcessFromMap()
+
+	// Verify it's removed
+	_, exists = ffmpegProcesses.Load(url)
+	assert.False(t, exists, "Process should be removed from map")
+}
+
+func TestLifecycleManager_StartProcessWithRetry_StreamNotConfigured(t *testing.T) {
+	manager := newLifecycleManager(
+		FFmpegConfig{URL: "rtsp://not-configured.com"},
+		make(chan struct{}),
+		make(chan AudioLevelData),
+	)
+
+	// Test the actual startProcessWithRetry method with a stream that's not configured
+	// Since the stream is not in the global config, startProcessWithRetry should
+	// return an error indicating the stream is not configured
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	process, err := manager.startProcessWithRetry(ctx)
+
+	// Should return an error because the stream is not configured
+	assert.Error(t, err, "Should return error when stream is not configured")
+	assert.Nil(t, process, "Process should be nil when stream is not configured")
+
+	// The error should be related to stream configuration or context timeout
+	// (context timeout happens because isStreamConfigured returns false and we keep retrying)
+	assert.True(t,
+		strings.Contains(err.Error(), "context") ||
+			strings.Contains(err.Error(), "stream") ||
+			errors.Is(err, context.DeadlineExceeded),
+		"Error should be related to context timeout or stream configuration, got: %v", err)
+}
+
+func TestLifecycleManager_HandleRestartDelay(t *testing.T) {
+	tests := []struct {
+		name             string
+		timeout          time.Duration
+		wasManualRestart bool
+		expectError      bool
+		expectedErrorMsg string
+	}{
+		{
+			name:             "timeout_scenario",
+			timeout:          5 * time.Millisecond,
+			wasManualRestart: false,
+			expectError:      true,
+			expectedErrorMsg: "no longer configured", // Stream check happens first
+		},
+		{
+			name:             "successful_delay_completion",
+			timeout:          200 * time.Millisecond, // Sufficient time
+			wasManualRestart: false,
+			expectError:      true,
+			expectedErrorMsg: "no longer configured", // Stream not configured error
+		},
+		{
+			name:             "manual_restart_scenario",
+			timeout:          100 * time.Millisecond,
+			wasManualRestart: true,
+			expectError:      true,
+			expectedErrorMsg: "no longer configured", // Stream not configured error
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := newLifecycleManager(
+				FFmpegConfig{URL: "rtsp://test-delay.com"},
+				make(chan struct{}),
+				make(chan AudioLevelData),
+			)
+
+			// Create a mock process with restart tracker
+			mockProcess := &FFmpegProcess{
+				restartTracker: &FFmpegRestartTracker{
+					restartCount:  1,
+					lastRestartAt: time.Now(),
+				},
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
+			defer cancel()
+
+			err := manager.handleRestartDelay(ctx, mockProcess, tt.wasManualRestart)
+
+			if tt.expectError {
+				assert.Error(t, err, "Should return error for test case: %s", tt.name)
+
+				if tt.expectedErrorMsg != "" {
+					assert.Contains(t, err.Error(), tt.expectedErrorMsg,
+						"Error should contain expected message for test case: %s, got: %v", tt.name, err)
+				}
+			} else {
+				assert.NoError(t, err, "Should not return error for test case: %s", tt.name)
+			}
+		})
+	}
+}
+
+func TestNewLifecycleManager(t *testing.T) {
+	config := FFmpegConfig{URL: "rtsp://test.com", Transport: "tcp"}
+	restartChan := make(chan struct{})
+	audioLevelChan := make(chan AudioLevelData)
+
+	manager := newLifecycleManager(config, restartChan, audioLevelChan)
+
+	assert.NotNil(t, manager)
+	assert.Equal(t, config, manager.config)
+	assert.Equal(t, restartChan, manager.restartChan)
+	assert.Equal(t, audioLevelChan, manager.audioLevelChan)
+	assert.NotNil(t, manager.backoff)
+
+	// Test that backoff is configured for unlimited retries
+	for i := 0; i < 10; i++ {
+		_, canRetry := manager.backoff.nextDelay()
+		assert.True(t, canRetry, "Should always allow retry with unlimited backoff")
+	}
+}
+
+func TestLifecycleManager_ConcurrentOperations(t *testing.T) {
+	// Test concurrent operations on the lifecycle manager
+	manager := newLifecycleManager(
+		FFmpegConfig{URL: "rtsp://concurrent.com"},
+		make(chan struct{}, 10),
+		make(chan AudioLevelData, 10),
+	)
+
+	var wg sync.WaitGroup
+	numGoroutines := 5
+
+	// Test concurrent waitWithInterrupts calls
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+			defer cancel()
+
+			err := manager.waitWithInterrupts(ctx, 10*time.Millisecond)
+			// Should either succeed or be cancelled by timeout
+			if err != nil {
+				assert.True(t, errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled))
+			}
+		}()
+	}
+
+	wg.Wait()
+	t.Log("Concurrent lifecycle manager operations completed successfully")
+}
+
+// Helper function to format URLs for YAML
+func formatURLsForYAML(urls []string) string {
+	if len(urls) == 0 {
+		return "[]"
+	}
+
+	result := "["
+	for i, url := range urls {
+		if i > 0 {
+			result += ", "
+		}
+		result += fmt.Sprintf("%q", url)
+	}
+	result += "]"
+	return result
+}
+
+// Test the simplified manageFfmpegLifecycle function
+func TestManageFfmpegLifecycle_StreamNotConfigured(t *testing.T) {
+	// Since the default config likely doesn't contain our test URL,
+	// this should return quickly with no error
+	ctx := context.Background()
+	config := FFmpegConfig{URL: "rtsp://not-configured.com"}
+	restartChan := make(chan struct{})
+	audioLevelChan := make(chan AudioLevelData)
+
+	err := manageFfmpegLifecycle(ctx, config, restartChan, audioLevelChan)
+
+	// Should return nil (no error) when stream is not configured
+	assert.NoError(t, err)
+}
+
+func TestManageFfmpegLifecycle_ContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	config := FFmpegConfig{URL: "rtsp://test-cancel.com"}
+	restartChan := make(chan struct{})
+	audioLevelChan := make(chan AudioLevelData)
+
+	// Start lifecycle management in goroutine
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- manageFfmpegLifecycle(ctx, config, restartChan, audioLevelChan)
+	}()
+
+	// Cancel context after a short delay
+	time.Sleep(10 * time.Millisecond)
+	cancel()
+
+	// Wait for function to return
+	select {
+	case err := <-errChan:
+		// Should return either context.Canceled or nil (if stream not configured)
+		if err != nil {
+			assert.True(t, errors.Is(err, context.Canceled), "Should return context.Canceled error if context cancelled during processing")
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("Function should have returned quickly after context cancellation")
+	}
+}

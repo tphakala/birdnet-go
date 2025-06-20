@@ -33,6 +33,8 @@ type FFmpegProcess struct {
 	done           <-chan error       // The error channel for the FFmpeg process
 	stdout         io.ReadCloser      // The stdout of the FFmpeg process
 	restartTracker *FFmpegRestartTracker
+	cleanupMutex   sync.Mutex // Mutex to protect cleanup operations
+	cleanupDone    bool       // Flag to track if cleanup has been performed
 }
 
 // audioWatchdog is a struct that keeps track of the last time data was received from the RTSP source
@@ -163,9 +165,36 @@ func (p *FFmpegProcess) getRestartDelay() time.Duration {
 }
 
 // Cleanup cleans up the FFmpeg process and removes it from the map
+// This method is thread-safe and prevents race conditions during concurrent cleanup calls
 func (p *FFmpegProcess) Cleanup(url string) {
-	if p == nil || p.cmd == nil || p.cmd.Process == nil {
-		ffmpegProcesses.Delete(url)
+	p.CleanupWithDelete(url, true)
+}
+
+func (p *FFmpegProcess) CleanupWithDelete(url string, shouldDelete bool) {
+	if p == nil {
+		if shouldDelete {
+			ffmpegProcesses.Delete(url)
+		}
+		return
+	}
+
+	// Use mutex to ensure only one cleanup operation per process
+	p.cleanupMutex.Lock()
+	defer p.cleanupMutex.Unlock()
+
+	// Check if cleanup has already been performed
+	if p.cleanupDone {
+		return
+	}
+
+	// Mark cleanup as in progress
+	p.cleanupDone = true
+
+	// Check if process exists before attempting cleanup
+	if p.cmd == nil || p.cmd.Process == nil {
+		if shouldDelete {
+			ffmpegProcesses.Delete(url)
+		}
 		return
 	}
 
@@ -175,7 +204,9 @@ func (p *FFmpegProcess) Cleanup(url string) {
 	}
 
 	// Cancel the context to signal process termination
-	p.cancel()
+	if p.cancel != nil {
+		p.cancel()
+	}
 
 	// Use a timeout to wait for the process to finish
 	done := make(chan struct{})
@@ -207,7 +238,10 @@ func (p *FFmpegProcess) Cleanup(url string) {
 		restartTrackers.Delete(key)
 	}
 
-	ffmpegProcesses.Delete(url)
+	// Only delete from process map if requested
+	if shouldDelete {
+		ffmpegProcesses.Delete(url)
+	}
 }
 
 // startWatchdog starts a goroutine that monitors the audio stream for inactivity
@@ -258,17 +292,42 @@ func (p *FFmpegProcess) isStreamConfigured(url string) bool {
 }
 
 // sendRestartSignal sends restart signal with timeout and channel clearing
+// This function is thread-safe and handles race conditions when multiple goroutines
+// attempt to send restart signals simultaneously
 func (p *FFmpegProcess) sendRestartSignal(restartChan chan struct{}, url, reason string) {
+	// First attempt: try non-blocking send
 	select {
 	case restartChan <- struct{}{}:
 		log.Printf("🔄 %s triggered restart for RTSP source %s", reason, url)
-	case <-time.After(5 * time.Second):
-		log.Printf("⚠️ Restart channel blocked for 5s during %s restart for %s", reason, url)
-		// Clear the channel and send restart signal
-		for len(restartChan) > 0 {
-			<-restartChan
+		return
+	default:
+		// Channel is full, proceed to drain and retry
+	}
+
+	// Second attempt: drain old signals and count them
+	drainedCount := 0
+	for {
+		select {
+		case <-restartChan:
+			drainedCount++
+		default:
+			// Channel is now empty, break out of drain loop
+			goto sendAttempt
 		}
-		restartChan <- struct{}{}
+	}
+
+sendAttempt:
+	if drainedCount > 0 {
+		log.Printf("🔄 Drained %d old restart signals for RTSP source %s", drainedCount, url)
+	}
+
+	// Third attempt: try to send after draining
+	select {
+	case restartChan <- struct{}{}:
+		log.Printf("🔄 %s triggered restart for RTSP source %s (after draining %d signals)", reason, url, drainedCount)
+	default:
+		// Another goroutine filled the channel between draining and sending
+		log.Printf("⚠️ Another restart signal was just sent for %s, skipping duplicate", url)
 	}
 }
 
@@ -326,11 +385,8 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 	case audioLevelChan <- audioLevelData:
 		// Successfully sent data
 	default:
-		// Channel is full, clear it and send new data
-		for len(audioLevelChan) > 0 {
-			<-audioLevelChan
-		}
-		audioLevelChan <- audioLevelData
+		// Channel is full, drop the data to avoid blocking audio processing
+		// Audio level data is not critical and can be dropped
 	}
 
 	return nil
@@ -469,151 +525,207 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 	}, nil
 }
 
-func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
-	// Create a new backoff strategy with unlimited attempts (-1), 5 seconds initial delay, and 2 minutes maximum delay
-	// Using -1 for maxAttempts to indicate unlimited retries for RTSP connection issues
-	backoff := newBackoffStrategy(-1, 5*time.Second, 2*time.Minute)
+// lifecycleManager handles the complete lifecycle of an FFmpeg process
+type lifecycleManager struct {
+	config         FFmpegConfig
+	backoff        *backoffStrategy
+	restartChan    chan struct{}
+	audioLevelChan chan AudioLevelData
+}
 
+// newLifecycleManager creates a new lifecycle manager with unlimited retries
+func newLifecycleManager(config FFmpegConfig, restartChan chan struct{}, audioLevelChan chan AudioLevelData) *lifecycleManager {
+	return &lifecycleManager{
+		config:         config,
+		backoff:        newBackoffStrategy(-1, 5*time.Second, 2*time.Minute), // Unlimited retries
+		restartChan:    restartChan,
+		audioLevelChan: audioLevelChan,
+	}
+}
+
+// isStreamConfigured checks if the stream URL is still configured in settings
+func (lm *lifecycleManager) isStreamConfigured() bool {
+	settings := conf.Setting()
+	for _, url := range settings.Realtime.RTSP.URLs {
+		if url == lm.config.URL {
+			return true
+		}
+	}
+	return false
+}
+
+// cleanupProcessFromMap removes and cleans up a process from the global map
+func (lm *lifecycleManager) cleanupProcessFromMap() {
+	if process, loaded := ffmpegProcesses.LoadAndDelete(lm.config.URL); loaded {
+		if p, ok := process.(*FFmpegProcess); ok {
+			// Use CleanupWithDelete(false) since we already removed it with LoadAndDelete
+			p.CleanupWithDelete(lm.config.URL, false)
+		}
+	}
+}
+
+// startProcessWithRetry attempts to start FFmpeg with backoff retry logic
+func (lm *lifecycleManager) startProcessWithRetry(ctx context.Context) (*FFmpegProcess, error) {
 	for {
-		// Check if the stream is still configured before starting/restarting
-		settings := conf.Setting()
-		streamConfigured := false
-		for _, url := range settings.Realtime.RTSP.URLs {
-			if url == config.URL {
-				streamConfigured = true
-				break
-			}
+		// Check if stream is still configured before each attempt
+		if !lm.isStreamConfigured() {
+			lm.cleanupProcessFromMap()
+			return nil, fmt.Errorf("stream %s no longer configured", lm.config.URL)
 		}
 
-		if !streamConfigured {
-			// Remove the process from the map if it exists
-			if process, exists := ffmpegProcesses.Load(config.URL); exists {
-				if p, ok := process.(*FFmpegProcess); ok {
-					p.Cleanup(config.URL)
-				}
-			}
-			ffmpegProcesses.Delete(config.URL)
-			return nil
-		}
-
-		// Start a new FFmpeg process
-		process, err := startFFmpeg(ctx, config)
+		// Attempt to start FFmpeg process
+		process, err := startFFmpeg(ctx, lm.config)
 		if err != nil {
-			// Clean up our nil placeholder from the ffmpegProcesses map
-			ffmpegProcesses.Delete(config.URL)
+			// Clean up any placeholders from failed attempts
+			ffmpegProcesses.Delete(lm.config.URL)
 
-			// Get the next delay duration and check if we should retry
-			delay, retry := backoff.nextDelay()
+			// Get next delay and check if we should retry
+			delay, retry := lm.backoff.nextDelay()
 			if !retry {
 				// This should never happen with unlimited retries (-1), but keep as safeguard
-				log.Printf("⚠️ Backoff strategy unexpectedly returned no retry for RTSP source %s: %v", config.URL, err)
-				return fmt.Errorf("failed to start FFmpeg after maximum attempts: %w", err)
+				log.Printf("⚠️ Backoff strategy unexpectedly returned no retry for RTSP source %s: %v", lm.config.URL, err)
+				return nil, fmt.Errorf("failed to start FFmpeg after maximum attempts: %w", err)
 			}
 
-			// Log the failure and the next retry attempt
-			log.Printf("⚠️ Failed to start FFmpeg for RTSP source %s: %v. Retrying in %v...", config.URL, err, delay)
+			log.Printf("⚠️ Failed to start FFmpeg for RTSP source %s: %v. Retrying in %v...", lm.config.URL, err, delay)
 
-			// Wait for either the context to be cancelled or the delay to pass
-			select {
-			case <-ctx.Done():
-				// If the context is cancelled, return its error
-				return ctx.Err()
-			case <-time.After(delay):
-				// If the delay has passed, continue to the next iteration
-				continue
-			case <-restartChan:
-				// If restart signal is received during backoff, restart immediately
-				log.Printf("🔄 Restart signal received during backoff, restarting FFmpeg for RTSP source %s immediately.", config.URL)
-				backoff.reset()
-				continue
+			// Wait for delay, context cancellation, or restart signal
+			if waitErr := lm.waitWithInterrupts(ctx, delay); waitErr != nil {
+				return nil, waitErr
 			}
+			continue
 		}
 
-		// Reset backoff on successful start
-		backoff.reset()
+		// Success - reset backoff and return process
+		lm.backoff.reset()
+		return process, nil
+	}
+}
 
-		// Store the process in the map
-		ffmpegProcesses.Store(config.URL, process)
+// waitWithInterrupts waits for a duration while allowing interruption by context or restart signals
+func (lm *lifecycleManager) waitWithInterrupts(ctx context.Context, duration time.Duration) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(duration):
+		return nil // Normal completion
+	case <-lm.restartChan:
+		log.Printf("🔄 Restart signal received during wait, restarting FFmpeg for RTSP source %s immediately.", lm.config.URL)
+		lm.backoff.reset()
+		return nil // Continue with immediate restart
+	}
+}
 
-		// Start processing audio and wait for it to finish or for a restart signal
-		processDone := make(chan error, 1)
-		go func() {
-			processDone <- process.processAudio(ctx, config.URL, restartChan, audioLevelChan)
-		}()
+// runProcessAndWait runs the process and waits for completion or restart signals
+func (lm *lifecycleManager) runProcessAndWait(ctx context.Context, process *FFmpegProcess) (processEnded, wasManualRestart bool, err error) {
+	// Store the process in the map
+	ffmpegProcesses.Store(lm.config.URL, process)
 
-		// Track whether this was a manual restart to avoid double-updating restart info
-		wasManualRestart := false
+	// Start processing audio in a separate goroutine
+	processDone := make(chan error, 1)
+	go func() {
+		processDone <- process.processAudio(ctx, lm.config.URL, lm.restartChan, lm.audioLevelChan)
+	}()
 
-		select {
-		case <-ctx.Done():
-			// Context cancelled, stop the FFmpeg process
-			process.Cleanup(config.URL)
-			return ctx.Err()
+	// Wait for process completion, context cancellation, or restart signal
+	select {
+	case <-ctx.Done():
+		process.Cleanup(lm.config.URL)
+		return false, false, ctx.Err()
 
-		case err := <-processDone:
-			// FFmpeg process or audio processing ended
-			process.Cleanup(config.URL)
+	case err := <-processDone:
+		process.Cleanup(lm.config.URL)
 
-			// Check if the stream is still configured before handling the error
-			settings := conf.Setting()
-			streamConfigured := false
-			for _, url := range settings.Realtime.RTSP.URLs {
-				if url == config.URL {
-					streamConfigured = true
-					break
-				}
-			}
-
-			if !streamConfigured {
-				ffmpegProcesses.Delete(config.URL)
-				return nil
-			}
-
-			if err != nil && !errors.Is(err, context.Canceled) {
-				log.Printf("⚠️ FFmpeg process for RTSP source %s ended unexpectedly: %v", config.URL, err)
-			}
-
-		case <-restartChan:
-			// Restart signal received
-			log.Printf("🔄 Restart signal received, restarting FFmpeg for RTSP source %s.", config.URL)
-			// Update restart information BEFORE cleanup to ensure valid process state
-			process.updateRestartInfo()
-			wasManualRestart = true
-			process.Cleanup(config.URL)
-			backoff.reset()
+		// Check if stream is still configured after process ends
+		if !lm.isStreamConfigured() {
+			lm.cleanupProcessFromMap()
+			return false, false, fmt.Errorf("stream %s no longer configured", lm.config.URL)
 		}
 
-		// Check configuration again before waiting for restart
-		settings = conf.Setting()
-		streamConfigured = false
-		for _, url := range settings.Realtime.RTSP.URLs {
-			if url == config.URL {
-				streamConfigured = true
-				break
-			}
+		if err != nil && !errors.Is(err, context.Canceled) {
+			log.Printf("⚠️ FFmpeg process for RTSP source %s ended unexpectedly: %v", lm.config.URL, err)
 		}
+		return true, false, nil // Process ended normally
 
-		if !streamConfigured {
-			log.Printf("🛑 Stream %s is no longer configured, stopping lifecycle manager", config.URL)
-			ffmpegProcesses.Delete(config.URL)
+	case <-lm.restartChan:
+		log.Printf("🔄 Restart signal received, restarting FFmpeg for RTSP source %s.", lm.config.URL)
+		// Update restart info BEFORE cleanup to ensure valid process state
+		process.updateRestartInfo()
+		process.Cleanup(lm.config.URL)
+		lm.backoff.reset()
+		return true, true, nil // Manual restart
+	}
+}
+
+// handleRestartDelay handles the delay between process restarts
+func (lm *lifecycleManager) handleRestartDelay(ctx context.Context, process *FFmpegProcess, wasManualRestart bool) error {
+	// Check if stream is still configured before restart delay
+	if !lm.isStreamConfigured() {
+		log.Printf("🛑 Stream %s is no longer configured, stopping lifecycle manager", lm.config.URL)
+		lm.cleanupProcessFromMap()
+		return fmt.Errorf("stream %s no longer configured", lm.config.URL)
+	}
+
+	// Update restart information and get delay (only if not already updated for manual restart)
+	if !wasManualRestart {
+		process.updateRestartInfo()
+	}
+	delay := process.getRestartDelay()
+
+	// Wait for delay, context cancellation, or restart signal
+	return lm.waitWithInterrupts(ctx, delay)
+}
+
+// manageFfmpegLifecycle manages the complete lifecycle of an FFmpeg process with simplified logic
+func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
+	manager := newLifecycleManager(config, restartChan, audioLevelChan)
+
+	for {
+		// Check if stream is configured before starting
+		if !manager.isStreamConfigured() {
+			manager.cleanupProcessFromMap()
 			return nil
 		}
 
-		// Update restart information and get delay (only if not already updated for manual restart)
-		if !wasManualRestart {
-			process.updateRestartInfo()
-		}
-		delay := process.getRestartDelay()
-
-		// wait for either the context to be cancelled (user requested quit) or the delay to pass
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(delay):
-			// Continue to next iteration after delay
-		case <-restartChan:
-			log.Printf("🔄 Restart signal received during restart delay, restarting FFmpeg for RTSP source %s immediately.", config.URL)
+		// Start FFmpeg process with retry logic
+		process, err := manager.startProcessWithRetry(ctx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return err
+			}
+			// For non-context errors, continue the lifecycle loop
 			continue
+		}
+
+		// Run the process and wait for completion or restart
+		processEnded, wasManualRestart, err := manager.runProcessAndWait(ctx, process)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return err
+			}
+			// For stream-no-longer-configured errors, return
+			if strings.Contains(err.Error(), "no longer configured") {
+				return nil
+			}
+			// For other errors, continue the lifecycle loop
+			continue
+		}
+
+		// If process didn't end (context was cancelled), return
+		if !processEnded {
+			return nil
+		}
+
+		// Handle restart delay before next iteration
+		if delayErr := manager.handleRestartDelay(ctx, process, wasManualRestart); delayErr != nil {
+			if errors.Is(delayErr, context.Canceled) {
+				return delayErr
+			}
+			// For stream-no-longer-configured errors, return
+			if strings.Contains(delayErr.Error(), "no longer configured") {
+				return nil
+			}
+			// For other errors, continue to next iteration
 		}
 	}
 }
