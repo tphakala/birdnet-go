@@ -1243,3 +1243,31 @@ func TestRestartTrackerCleanupFix(t *testing.T) {
 	t.Logf("Restart tracker cleanup test: initial=%d, after_add=%d, after_cleanup=%d",
 		initialCount, afterAddCount, afterCleanupCount)
 }
+
+func TestBackoffStrategyUnlimitedRetries(t *testing.T) {
+	// Test unlimited retries with maxAttempts = -1
+	backoff := newBackoffStrategy(-1, 1*time.Second, 10*time.Second)
+
+	delays := []time.Duration{}
+	// Test many more attempts than would normally be allowed
+	for i := 0; i < 20; i++ {
+		delay, retry := backoff.nextDelay()
+		assert.True(t, retry, "Should always allow retry with unlimited attempts (attempt %d)", i+1)
+		delays = append(delays, delay)
+
+		// Verify exponential backoff pattern with cap
+		expectedDelay := time.Duration(1<<uint(i)) * time.Second
+		if expectedDelay > 10*time.Second {
+			expectedDelay = 10 * time.Second
+		}
+		assert.Equal(t, expectedDelay, delay, "Delay should follow exponential backoff pattern (attempt %d)", i+1)
+	}
+
+	t.Logf("Successfully completed %d retry attempts with unlimited strategy", len(delays))
+
+	// Test reset functionality
+	backoff.reset()
+	delay, retry := backoff.nextDelay()
+	assert.True(t, retry, "Should allow retry after reset")
+	assert.Equal(t, 1*time.Second, delay, "Delay should reset to initial value")
+}
