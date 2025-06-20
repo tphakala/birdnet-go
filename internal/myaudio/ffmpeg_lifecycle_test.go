@@ -1740,7 +1740,7 @@ func formatURLsForYAML(urls []string) string {
 		if i > 0 {
 			result += ", "
 		}
-		result += fmt.Sprintf(`"%s"`, url)
+		result += fmt.Sprintf("%q", url)
 	}
 	result += "]"
 	return result

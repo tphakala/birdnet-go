@@ -618,7 +618,7 @@ func (lm *lifecycleManager) waitWithInterrupts(ctx context.Context, duration tim
 }
 
 // runProcessAndWait runs the process and waits for completion or restart signals
-func (lm *lifecycleManager) runProcessAndWait(ctx context.Context, process *FFmpegProcess) (processEnded bool, wasManualRestart bool, err error) {
+func (lm *lifecycleManager) runProcessAndWait(ctx context.Context, process *FFmpegProcess) (processEnded, wasManualRestart bool, err error) {
 	// Store the process in the map
 	ffmpegProcesses.Store(lm.config.URL, process)
 
