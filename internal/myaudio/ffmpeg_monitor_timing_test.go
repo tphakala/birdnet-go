@@ -320,9 +320,9 @@ func TestTimedOperationsWithContext(t *testing.T) {
 	defer cancel()
 
 	// Start operation in background
-	var err error
+	errChan := make(chan error, 1)
 	go func() {
-		err = monitor.cleanupOrphanedProcesses()
+		errChan <- monitor.cleanupOrphanedProcesses()
 	}()
 
 	// Wait for the operation to start
@@ -337,6 +337,15 @@ func TestTimedOperationsWithContext(t *testing.T) {
 	select {
 	case <-operationCompleted:
 		// Operation completed
+	case <-ctx.Done():
+		t.Fatal("Timeout waiting for operation to complete")
+	}
+
+	// Get the error result
+	var err error
+	select {
+	case err = <-errChan:
+		// Got the result
 	case <-ctx.Done():
 		t.Fatal("Timeout waiting for operation to complete")
 	}
