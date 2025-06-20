@@ -33,6 +33,8 @@ type FFmpegProcess struct {
 	done           <-chan error       // The error channel for the FFmpeg process
 	stdout         io.ReadCloser      // The stdout of the FFmpeg process
 	restartTracker *FFmpegRestartTracker
+	cleanupMutex   sync.Mutex // Mutex to protect cleanup operations
+	cleanupDone    bool       // Flag to track if cleanup has been performed
 }
 
 // audioWatchdog is a struct that keeps track of the last time data was received from the RTSP source
@@ -163,8 +165,27 @@ func (p *FFmpegProcess) getRestartDelay() time.Duration {
 }
 
 // Cleanup cleans up the FFmpeg process and removes it from the map
+// This method is thread-safe and prevents race conditions during concurrent cleanup calls
 func (p *FFmpegProcess) Cleanup(url string) {
-	if p == nil || p.cmd == nil || p.cmd.Process == nil {
+	if p == nil {
+		ffmpegProcesses.Delete(url)
+		return
+	}
+
+	// Use mutex to ensure only one cleanup operation per process
+	p.cleanupMutex.Lock()
+	defer p.cleanupMutex.Unlock()
+
+	// Check if cleanup has already been performed
+	if p.cleanupDone {
+		return
+	}
+
+	// Mark cleanup as in progress
+	p.cleanupDone = true
+
+	// Check if process exists before attempting cleanup
+	if p.cmd == nil || p.cmd.Process == nil {
 		ffmpegProcesses.Delete(url)
 		return
 	}
@@ -175,7 +196,9 @@ func (p *FFmpegProcess) Cleanup(url string) {
 	}
 
 	// Cancel the context to signal process termination
-	p.cancel()
+	if p.cancel != nil {
+		p.cancel()
+	}
 
 	// Use a timeout to wait for the process to finish
 	done := make(chan struct{})
@@ -258,17 +281,36 @@ func (p *FFmpegProcess) isStreamConfigured(url string) bool {
 }
 
 // sendRestartSignal sends restart signal with timeout and channel clearing
+// This function is thread-safe and handles race conditions when multiple goroutines
+// attempt to send restart signals simultaneously
 func (p *FFmpegProcess) sendRestartSignal(restartChan chan struct{}, url, reason string) {
 	select {
 	case restartChan <- struct{}{}:
 		log.Printf("🔄 %s triggered restart for RTSP source %s", reason, url)
 	case <-time.After(5 * time.Second):
 		log.Printf("⚠️ Restart channel blocked for 5s during %s restart for %s", reason, url)
-		// Clear the channel and send restart signal
-		for len(restartChan) > 0 {
-			<-restartChan
+
+		// Atomically clear the channel and send restart signal
+		// This prevents race conditions where multiple goroutines try to clear the channel
+		cleared := false
+		for !cleared {
+			select {
+			case <-restartChan:
+				// Successfully drained one item, continue draining
+			default:
+				// Channel is empty, we can now send our signal
+				cleared = true
+			}
 		}
-		restartChan <- struct{}{}
+
+		// Send the restart signal
+		select {
+		case restartChan <- struct{}{}:
+			log.Printf("🔄 %s triggered restart for RTSP source %s (after clearing)", reason, url)
+		default:
+			// If still blocked, log and continue - avoid infinite blocking
+			log.Printf("⚠️ Unable to send restart signal for %s after clearing channel", url)
+		}
 	}
 }
 
@@ -326,11 +368,27 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 	case audioLevelChan <- audioLevelData:
 		// Successfully sent data
 	default:
-		// Channel is full, clear it and send new data
-		for len(audioLevelChan) > 0 {
-			<-audioLevelChan
+		// Channel is full, atomically clear it and send new data
+		// This prevents race conditions where multiple goroutines try to clear the channel
+		cleared := false
+		for !cleared {
+			select {
+			case <-audioLevelChan:
+				// Successfully drained one item, continue draining
+			default:
+				// Channel is empty, we can now send our data
+				cleared = true
+			}
 		}
-		audioLevelChan <- audioLevelData
+
+		// Send the audio level data
+		select {
+		case audioLevelChan <- audioLevelData:
+			// Successfully sent data after clearing
+		default:
+			// If still blocked, drop the data to avoid blocking audio processing
+			// Audio level data is not critical and can be dropped
+		}
 	}
 
 	return nil
@@ -487,12 +545,12 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 
 		if !streamConfigured {
 			// Remove the process from the map if it exists
-			if process, exists := ffmpegProcesses.Load(config.URL); exists {
+			// Use LoadAndDelete for atomic operation to prevent race conditions
+			if process, loaded := ffmpegProcesses.LoadAndDelete(config.URL); loaded {
 				if p, ok := process.(*FFmpegProcess); ok {
 					p.Cleanup(config.URL)
 				}
 			}
-			ffmpegProcesses.Delete(config.URL)
 			return nil
 		}
 
@@ -565,7 +623,12 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 			}
 
 			if !streamConfigured {
-				ffmpegProcesses.Delete(config.URL)
+				// Use LoadAndDelete for atomic operation to prevent race conditions
+				if process, loaded := ffmpegProcesses.LoadAndDelete(config.URL); loaded {
+					if p, ok := process.(*FFmpegProcess); ok {
+						p.Cleanup(config.URL)
+					}
+				}
 				return nil
 			}
 
@@ -595,7 +658,12 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 
 		if !streamConfigured {
 			log.Printf("🛑 Stream %s is no longer configured, stopping lifecycle manager", config.URL)
-			ffmpegProcesses.Delete(config.URL)
+			// Use LoadAndDelete for atomic operation to prevent race conditions
+			if process, loaded := ffmpegProcesses.LoadAndDelete(config.URL); loaded {
+				if p, ok := process.(*FFmpegProcess); ok {
+					p.Cleanup(config.URL)
+				}
+			}
 			return nil
 		}
 
