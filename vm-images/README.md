@@ -315,4 +315,265 @@ Contributions welcome for:
 - Performance optimizations
 - Security improvements
 - Additional architectures
-- Documentation updates 
+- Documentation updates
+
+## 🏗️ Architecture
+
+The VM uses a **two-disk architecture** for optimal data persistence and easy updates:
+
+### Main OS Disk (8GB)
+- **Purpose**: Operating system, applications, and configuration
+- **Contents**: Ubuntu 24.10, Docker, BirdNET-Go configuration
+- **Replaceable**: Can be updated/replaced without data loss
+- **Mount**: Root filesystem (`/`)
+
+### Data Disk (Separate)
+- **Purpose**: Persistent data storage
+- **Contents**: Audio clips, SQLite database, logs, backups
+- **Persistent**: Survives VM updates and rebuilds
+- **Mount**: `/data/birdnet-go/`
+- **Recommended Size**: 50GB+ (depends on retention needs)
+
+## 🚀 Quick Start
+
+### 1. Download VM Image
+
+Download the latest compressed VM image for your architecture:
+
+```bash
+# AMD64
+wget https://github.com/tphakala/birdnet-go/releases/download/v1.x.x/birdnet-go-vm-amd64-v1.x.x.qcow2.zst
+
+# ARM64  
+wget https://github.com/tphakala/birdnet-go/releases/download/v1.x.x/birdnet-go-vm-arm64-v1.x.x.qcow2.zst
+```
+
+### 2. Extract Image
+
+```bash
+zstd -d birdnet-go-vm-amd64-v1.x.x.qcow2.zst
+```
+
+### 3. Create Data Disk
+
+Create a separate disk for persistent data:
+
+```bash
+# Create a 50GB data disk
+qemu-img create -f qcow2 birdnet-go-data.qcow2 50G
+```
+
+### 4. Start VM
+
+#### QEMU/KVM
+```bash
+qemu-system-x86_64 \
+  -enable-kvm \
+  -m 2048 \
+  -smp 2 \
+  -drive file=birdnet-go-vm-amd64-v1.x.x.qcow2,format=qcow2 \
+  -drive file=birdnet-go-data.qcow2,format=qcow2 \
+  -netdev user,id=net0,hostfwd=tcp::8080-:8080 \
+  -device virtio-net,netdev=net0 \
+  -nographic
+```
+
+#### Proxmox VE
+1. Upload both disk images to Proxmox storage
+2. Create new VM with:
+   - **Disk 1**: Main OS disk (birdnet-go-vm-xxx.qcow2)
+   - **Disk 2**: Data disk (birdnet-go-data.qcow2)
+   - **Network**: Bridge with port 8080 accessible
+3. Start VM
+
+#### VMware vSphere/ESXi
+1. Convert qcow2 to VMDK:
+   ```bash
+   qemu-img convert -f qcow2 -O vmdk birdnet-go-vm-amd64-v1.x.x.qcow2 birdnet-go-vm.vmdk
+   qemu-img convert -f qcow2 -O vmdk birdnet-go-data.qcow2 birdnet-go-data.vmdk
+   ```
+2. Create VM with both disks attached
+
+### 5. Initialize Data Disk
+
+After first boot, initialize the data disk:
+
+```bash
+# SSH into the VM (default: user 'birdnet', check cloud-init logs for password)
+ssh birdnet@<vm-ip>
+
+# Initialize the data disk (usually /dev/vdb)
+sudo /usr/local/bin/init-data-disk /dev/vdb
+
+# Start the data mount service
+sudo systemctl start data.mount
+
+# Start BirdNET-Go
+sudo systemctl start birdnet-go
+```
+
+### 6. Access BirdNET-Go
+
+Open your browser and navigate to: `http://<vm-ip>:8080`
+
+## 📁 Directory Structure
+
+```
+/
+├── opt/birdnet-go/           # Application files (OS disk)
+│   ├── config/               # Configuration files
+│   │   └── config.yaml       # Main configuration
+│   └── scripts/              # Helper scripts
+└── data/birdnet-go/          # Persistent data (Data disk)
+    ├── clips/                # Audio recordings
+    ├── database/             # SQLite database
+    │   └── birdnet.db        # Main database file
+    ├── logs/                 # Application logs
+    └── backups/              # Database backups
+```
+
+## 🔄 Updates & Maintenance
+
+### Updating BirdNET-Go
+
+The two-disk architecture makes updates safe and easy:
+
+1. **Docker Image Updates** (Automatic):
+   ```bash
+   # Manual update
+   sudo systemctl restart birdnet-go
+   ```
+
+2. **VM Image Updates** (Major updates):
+   - Download new VM image
+   - Shut down current VM
+   - Replace OS disk with new image
+   - Keep existing data disk attached
+   - Start VM with new OS disk + existing data disk
+   - **All your data is preserved!**
+
+### Backup Strategy
+
+#### Database Backup
+```bash
+# Create backup
+sudo -u birdnet sqlite3 /data/birdnet-go/database/birdnet.db ".backup /data/birdnet-go/backups/birdnet-$(date +%Y%m%d).db"
+
+# Automated daily backup (already configured)
+sudo systemctl status birdnet-go-backup.timer
+```
+
+#### Full Data Backup
+```bash
+# Backup entire data disk
+sudo rsync -av /data/birdnet-go/ /backup/location/
+```
+
+## 🛠️ Advanced Configuration
+
+### Custom Data Disk Size
+
+Resize the data disk if needed:
+
+```bash
+# Resize disk file
+qemu-img resize birdnet-go-data.qcow2 +20G
+
+# Inside VM, resize filesystem
+sudo resize2fs /dev/disk/by-label/birdnet-data
+```
+
+### Multiple Data Disks
+
+For large installations, you can use separate disks:
+
+```bash
+# Create specialized disks
+qemu-img create -f qcow2 birdnet-go-clips.qcow2 100G    # Audio clips
+qemu-img create -f qcow2 birdnet-go-database.qcow2 10G  # Database only
+```
+
+Update mount configuration in `/etc/systemd/system/` accordingly.
+
+### Network Storage
+
+Mount network storage for data:
+
+```bash
+# Example: NFS mount for clips
+echo "nfs-server:/path/to/clips /data/birdnet-go/clips nfs defaults 0 0" | sudo tee -a /etc/fstab
+```
+
+## 🔧 Troubleshooting
+
+### Data Disk Not Mounting
+
+```bash
+# Check disk detection
+lsblk
+
+# Check filesystem
+sudo fsck /dev/vdb
+
+# Manual mount
+sudo mount /dev/disk/by-label/birdnet-data /data
+```
+
+### Service Not Starting
+
+```bash
+# Check service status
+sudo systemctl status birdnet-go
+sudo systemctl status data.mount
+
+# Check logs
+sudo journalctl -u birdnet-go -f
+sudo journalctl -u data.mount -f
+```
+
+### Permissions Issues
+
+```bash
+# Fix data directory permissions
+sudo chown -R 1000:1000 /data/birdnet-go
+sudo chmod -R 755 /data/birdnet-go
+```
+
+## 📊 System Requirements
+
+- **CPU**: 2+ cores (x86_64 or ARM64)
+- **RAM**: 2GB minimum, 4GB recommended
+- **Storage**: 
+  - OS Disk: 8GB (fixed)
+  - Data Disk: 50GB+ recommended (depends on retention)
+- **Network**: Port 8080 accessible
+
+## 🔒 Security Features
+
+- Automatic security updates enabled
+- UFW firewall configured (SSH + 8080 only)
+- Non-root user execution
+- Read-only configuration mount
+- Separate data disk prevents OS-level data loss
+
+## 🌟 Use Cases
+
+Perfect for:
+- **Home bird monitoring** with data persistence
+- **Research installations** requiring data integrity
+- **Cloud deployments** with separate storage volumes
+- **Development/testing** with easy VM replacement
+- **Production systems** requiring zero-downtime updates
+
+## 📝 Default Credentials
+
+- **User**: `birdnet`
+- **SSH**: Key-based authentication (cloud-init)
+- **Web Interface**: No authentication (configure as needed)
+
+## 🏷️ Version Information
+
+- **Base OS**: Ubuntu 24.10 (Oracular Oriole)
+- **Docker**: Latest stable
+- **BirdNET-Go**: Latest nightly build
+- **Architecture**: AMD64 and ARM64 supported 

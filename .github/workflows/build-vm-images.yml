@@ -421,7 +421,8 @@ jobs:
           1. **Download** the image for your architecture
           2. **Verify** the checksum: \`sha256sum -c *.sha256\`
           3. **Decompress**: \`zstd -d *.qcow2.zst\`
-          4. **Run** with your preferred virtualization platform
+          4. **Create** a separate data disk: \`qemu-img create -f qcow2 birdnet-go-data.qcow2 50G\`
+          5. **Run** with both disks attached to your VM
           
           ## 📦 Available Images
           
@@ -431,6 +432,9 @@ jobs:
           ## 🔧 Specifications
           
           - **Base OS**: Ubuntu 24.10 (Oracular Oriole) Server
+          - **Architecture**: Two-disk design (OS + Data)
+          - **OS Disk**: 8GB (applications, configuration)
+          - **Data Disk**: Separate (persistent data, user-defined size)
           - **Format**: qcow2 (compressed with zstd)
           - **Default User**: \`birdnet\` (SSH key authentication)
           - **Web Interface**: http://VM-IP:8080
