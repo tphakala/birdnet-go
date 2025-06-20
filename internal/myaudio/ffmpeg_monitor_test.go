@@ -1786,9 +1786,9 @@ func TestContextCancellation(t *testing.T) {
 	}
 
 	// Start the long-running operation in a goroutine
-	var err error
+	errChan := make(chan error, 1)
 	go func() {
-		err = longRunningOperation(ctx)
+		errChan <- longRunningOperation(ctx)
 	}()
 
 	// Wait for operation to block
@@ -1807,6 +1807,15 @@ func TestContextCancellation(t *testing.T) {
 		// Operation was cancelled by context
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("Timed out waiting for operation to be cancelled")
+	}
+
+	// Get the error from the channel
+	var err error
+	select {
+	case err = <-errChan:
+		// Got the error result
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Timed out waiting for operation to complete")
 	}
 
 	// Verify the error
