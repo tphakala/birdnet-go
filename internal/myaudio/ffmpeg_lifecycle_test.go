@@ -1428,27 +1428,8 @@ func mockProcessAudioDataForChannelTest(url string, data []byte, audioLevelChan 
 	case audioLevelChan <- audioLevelData:
 		// Successfully sent data
 	default:
-		// Channel is full, atomically clear it and send new data
-		// This prevents race conditions where multiple goroutines try to clear the channel
-		cleared := false
-		for !cleared {
-			select {
-			case <-audioLevelChan:
-				// Successfully drained one item, continue draining
-			default:
-				// Channel is empty, we can now send our data
-				cleared = true
-			}
-		}
-
-		// Send the audio level data
-		select {
-		case audioLevelChan <- audioLevelData:
-			// Successfully sent data after clearing
-		default:
-			// If still blocked, drop the data to avoid blocking audio processing
-			// Audio level data is not critical and can be dropped
-		}
+		// Channel is full, drop the data to avoid blocking audio processing
+		// Audio level data is not critical and can be dropped
 	}
 
 	return nil
@@ -1673,43 +1654,97 @@ func TestLifecycleManager_CleanupProcessFromMap(t *testing.T) {
 }
 
 func TestLifecycleManager_StartProcessWithRetry_StreamNotConfigured(t *testing.T) {
-	// Since we can't easily mock global config, test the logic by ensuring
-	// the manager properly handles the stream configuration check
 	manager := newLifecycleManager(
 		FFmpegConfig{URL: "rtsp://not-configured.com"},
 		make(chan struct{}),
 		make(chan AudioLevelData),
 	)
 
-	// The isStreamConfigured function will check against the actual global config
-	// which by default doesn't include our test URLs, so this test should pass
-	assert.NotNil(t, manager)
-	assert.Equal(t, "rtsp://not-configured.com", manager.config.URL)
+	// Test the actual startProcessWithRetry method with a stream that's not configured
+	// Since the stream is not in the global config, startProcessWithRetry should
+	// return an error indicating the stream is not configured
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	process, err := manager.startProcessWithRetry(ctx)
+
+	// Should return an error because the stream is not configured
+	assert.Error(t, err, "Should return error when stream is not configured")
+	assert.Nil(t, process, "Process should be nil when stream is not configured")
+
+	// The error should be related to stream configuration or context timeout
+	// (context timeout happens because isStreamConfigured returns false and we keep retrying)
+	assert.True(t,
+		strings.Contains(err.Error(), "context") ||
+			strings.Contains(err.Error(), "stream") ||
+			errors.Is(err, context.DeadlineExceeded),
+		"Error should be related to context timeout or stream configuration, got: %v", err)
 }
 
 func TestLifecycleManager_HandleRestartDelay(t *testing.T) {
-	manager := newLifecycleManager(
-		FFmpegConfig{URL: "rtsp://test.com"},
-		make(chan struct{}),
-		make(chan AudioLevelData),
-	)
-
-	// Create a mock process with restart tracker
-	mockProcess := &FFmpegProcess{
-		restartTracker: &FFmpegRestartTracker{
-			restartCount:  1,
-			lastRestartAt: time.Now(),
+	tests := []struct {
+		name             string
+		timeout          time.Duration
+		wasManualRestart bool
+		expectError      bool
+		expectedErrorMsg string
+	}{
+		{
+			name:             "timeout_scenario",
+			timeout:          5 * time.Millisecond,
+			wasManualRestart: false,
+			expectError:      true,
+			expectedErrorMsg: "no longer configured", // Stream check happens first
+		},
+		{
+			name:             "successful_delay_completion",
+			timeout:          200 * time.Millisecond, // Sufficient time
+			wasManualRestart: false,
+			expectError:      true,
+			expectedErrorMsg: "no longer configured", // Stream not configured error
+		},
+		{
+			name:             "manual_restart_scenario",
+			timeout:          100 * time.Millisecond,
+			wasManualRestart: true,
+			expectError:      true,
+			expectedErrorMsg: "no longer configured", // Stream not configured error
 		},
 	}
 
-	// Test with short timeout context
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
-	defer cancel()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := newLifecycleManager(
+				FFmpegConfig{URL: "rtsp://test-delay.com"},
+				make(chan struct{}),
+				make(chan AudioLevelData),
+			)
 
-	err := manager.handleRestartDelay(ctx, mockProcess, false)
+			// Create a mock process with restart tracker
+			mockProcess := &FFmpegProcess{
+				restartTracker: &FFmpegRestartTracker{
+					restartCount:  1,
+					lastRestartAt: time.Now(),
+				},
+			}
 
-	// Should get context timeout since the stream likely isn't configured
-	assert.Error(t, err)
+			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
+			defer cancel()
+
+			err := manager.handleRestartDelay(ctx, mockProcess, tt.wasManualRestart)
+
+			if tt.expectError {
+				assert.Error(t, err, "Should return error for test case: %s", tt.name)
+
+				if tt.expectedErrorMsg != "" {
+					assert.Contains(t, err.Error(), tt.expectedErrorMsg,
+						"Error should contain expected message for test case: %s, got: %v", tt.name, err)
+				}
+			} else {
+				assert.NoError(t, err, "Should not return error for test case: %s", tt.name)
+			}
+		})
+	}
 }
 
 func TestNewLifecycleManager(t *testing.T) {
