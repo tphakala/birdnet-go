@@ -1,15 +1,102 @@
 #cloud-config
 users:
-  - name: birdnet
+  # Build user (temporary, will be removed after build)
+  - name: birdnet-build
     groups: sudo, docker, audio, adm
     shell: /bin/bash
     sudo: ALL=(ALL) NOPASSWD:ALL
-    passwd: $6$rounds=4096$saltstring$UW6/F2d0U.Ufbq.C/j8lJeJnG$Ks7Q7gLgq4k.VjL8rP9Q.1.SN7t8xD
+    # Password: birdnet-build-temp (for build debugging only)
+    passwd: $6$bj1uJsDgX3cqg69/$SG4MgEKLKsn6XOKMPs0FACl0Gtb2hEhPL0a7TNfd.OolgsfL5YA35IH2ssVPSM2/8oCkH9FWOejqtDrQsLiqj0
     ssh_authorized_keys:
       - ${ssh_public_key}
+    lock_passwd: false
+  
+  # End-user account with secure defaults
+  - name: birdnet
+    groups: sudo, docker, audio, adm
+    shell: /bin/bash
+    sudo: ALL=(ALL:ALL) ALL  # Require password for sudo
+    # Default password: birdnetgo (users should change this!)
+    passwd: $6$EElFeIVWP.uml/Oq$1Z1gOERvk6msgG4FFVYF7SPJswV1CKTK..fcDJ6wPZaymXdHC8kc7MyPoxFOvRH2l9r.ky6U7kjYlLGWlDDGw.
+    lock_passwd: false
+    # Force password change on first login
+    chpasswd:
+      expire: true
 
-# Enable password authentication temporarily for build
-ssh_pwauth: true
+# SSH configuration for end users
+ssh_pwauth: true  # Enable password auth for end users
+ssh_authorized_keys_command: none
+
+# SSH configuration for different user types
+write_files:
+  - path: /etc/ssh/sshd_config.d/99-birdnet-go.conf
+    content: |
+      # BirdNET-Go VM SSH Configuration
+      
+      # Security settings
+      PermitRootLogin no
+      MaxAuthTries 3
+      MaxSessions 10
+      
+      # Enable both key and password authentication
+      PubkeyAuthentication yes
+      PasswordAuthentication yes
+      
+      # Allow specific users
+      AllowUsers birdnet birdnet-build
+      
+      # Stricter settings for production use
+      ClientAliveInterval 300
+      ClientAliveCountMax 2
+    owner: root:root
+    permissions: '0644'
+  
+  - path: /etc/motd
+    content: |
+      
+      ╔══════════════════════════════════════════════════════════════════════╗
+      ║                          🐦 BirdNET-Go VM                           ║
+      ║                                                                      ║
+      ║  Welcome to your BirdNET-Go virtual machine!                        ║
+      ║                                                                      ║
+      ║  🔐 SECURITY NOTICE:                                                 ║
+      ║  • Default password: birdnetgo                                       ║
+      ║  • Please change your password immediately: passwd                   ║
+      ║  • Consider setting up SSH keys for better security                  ║
+      ║                                                                      ║
+      ║  🚀 Quick Start:                                                     ║
+      ║  • Check status: sudo systemctl status birdnet-go                   ║
+      ║  • View logs: sudo journalctl -u birdnet-go -f                      ║
+      ║  • Web interface: http://$(hostname -I | awk '{print $1}'):8080     ║
+      ║                                                                      ║
+      ║  📚 Documentation: https://github.com/tphakala/birdnet-go           ║
+      ║                                                                      ║
+      ╚══════════════════════════════════════════════════════════════════════╝
+      
+    owner: root:root
+    permissions: '0644'
+  
+  - path: /etc/profile.d/birdnet-go-welcome.sh
+    content: |
+      #!/bin/bash
+      # Show password change reminder for default password users
+      if [ "$USER" = "birdnet" ] && [ -f /home/birdnet/.password-default ]; then
+        echo ""
+        echo "⚠️  WARNING: You are using the default password!"
+        echo "   Please change it now with: passwd"
+        echo "   This message will disappear after password change."
+        echo ""
+      fi
+    owner: root:root
+    permissions: '0755'
+  
+  - path: /etc/birdnet-go/version
+    content: |
+      Version: ${version}
+      Architecture: ${arch}
+      Build Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+    owner: root:root
+    permissions: '0644'
 
 # Set timezone
 timezone: UTC
@@ -39,16 +126,7 @@ packages:
   - nano
   - vim
   - unattended-upgrades
-
-# Write files
-write_files:
-  - path: /etc/birdnet-go/version
-    content: |
-      Version: ${version}
-      Architecture: ${arch}
-      Build Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-    owner: root:root
-    permissions: '0644'
+  - pwgen  # For generating secure passwords
 
 # Enable automatic security updates
 runcmd:
@@ -57,6 +135,33 @@ runcmd:
   - mkdir -p /etc/birdnet-go
   - mkdir -p /opt/birdnet-go/{config,data}
   - chown -R birdnet:birdnet /opt/birdnet-go
+  
+  # Create password change tracking
+  - touch /home/birdnet/.password-default
+  - chown birdnet:birdnet /home/birdnet/.password-default
+  
+  # Setup password change detection
+  - |
+    cat > /usr/local/bin/password-changed << 'EOF'
+    #!/bin/bash
+    # Remove default password marker when password is changed
+    if [ "$PAM_USER" = "birdnet" ] && [ -f /home/birdnet/.password-default ]; then
+      rm -f /home/birdnet/.password-default
+    fi
+    EOF
+  - chmod +x /usr/local/bin/password-changed
+  
+  # Add to PAM to detect password changes
+  - echo "session optional pam_exec.so /usr/local/bin/password-changed" >> /etc/pam.d/common-session
+  
+  # Restart SSH to apply new configuration
+  - systemctl restart ssh
+  
+  # Debug: Check SSH status and user setup (build phase only)
+  - echo "SSH service status:" >> /var/log/cloud-init-output.log
+  - systemctl status ssh >> /var/log/cloud-init-output.log 2>&1
+  - echo "User accounts:" >> /var/log/cloud-init-output.log
+  - cut -d: -f1,3 /etc/passwd | grep -E ":(1000|1001):" >> /var/log/cloud-init-output.log 2>&1
 
 # Final message
-final_message: "BirdNET-Go VM is ready! Version: ${version}, Architecture: ${arch}" 
+final_message: "BirdNET-Go VM is ready! Default user: birdnet, password: birdnetgo (CHANGE THIS!)" 
