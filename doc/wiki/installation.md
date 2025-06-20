@@ -9,6 +9,22 @@ There are four main ways to install BirdNET-Go:
 3.  **Manual Docker Installation (Advanced, Linux only):** Manually run the BirdNET-Go Docker container. This offers more control but requires managing the container lifecycle yourself.
 4.  **Manual Binary Installation (All platforms):** Download pre-compiled binaries. This is currently the only supported method for Windows and macOS users. This approach avoids Docker but requires manually installing dependencies (TensorFlow Lite C library, FFmpeg, SoX) and managing the application process.
 
+## Container Registry Options
+
+BirdNET-Go Docker images are available from two registries:
+
+### GitHub Container Registry (Primary)
+- **Registry**: `ghcr.io/tphakala/birdnet-go`
+- **Advantages**: Tightly integrated with source code, automatic builds
+- **Tags**: `:nightly`, `:latest`, `:v1.2.3`
+
+### Docker Hub (Mirror)
+- **Registry**: `tphakala/birdnet-go` 
+- **Advantages**: Familiar to Docker users, no GitHub account needed
+- **Tags**: `:nightly`, `:latest`, `:v1.2.3`
+
+Both registries contain identical images. You can use either registry interchangeably in all examples below.
+
 ## Recommended Method: `install.sh` (Linux)
 
 This script streamlines the installation process on compatible Linux systems (Debian 11+, Ubuntu 20.04+, Raspberry Pi OS 64-bit Bullseye or newer).
@@ -17,7 +33,7 @@ This script streamlines the installation process on compatible Linux systems (De
 
 *   Checks system prerequisites (OS version, 64-bit architecture, Docker installation, user groups).
 *   Installs Docker and necessary dependencies (`alsa-utils`, `curl`, `jq`, etc.) if they are missing.
-*   Pulls the latest `nightly` BirdNET-Go Docker image (`ghcr.io/tphakala/birdnet-go:nightly`).
+*   Pulls the latest `nightly` BirdNET-Go Docker image (defaults to `ghcr.io/tphakala/birdnet-go:nightly`).
 *   Creates necessary directories (`~/birdnet-go-app/config` and `~/birdnet-go-app/data`) for persistent configuration and data storage.
 *   Downloads a base `config.yaml` file.
 *   Guides you through initial configuration (web port, audio input source, audio export format, locale, location, optional password protection).
@@ -105,6 +121,21 @@ docker run -ti --rm \\
   ghcr.io/tphakala/birdnet-go:nightly
 ```
 
+**Alternative using Docker Hub:**
+```bash
+docker run -ti --rm \\
+  --name birdnet-go \\
+  -p <host_port>:8080 \\
+  --env TZ="<TZ identifier>" \\
+  --env BIRDNET_UID=$(id -u) \\
+  --env BIRDNET_GID=$(id -g) \\
+  --device /dev/snd \\
+  --add-host="host.docker.internal:host-gateway" \\
+  -v </path/on/host/to/config>:/config \\
+  -v </path/on/host/to/data>:/data \\
+  tphakala/birdnet-go:nightly
+```
+
 **Parameters:**
 
 | Parameter                                   | Function                                                                                                                               | Example Value         |
@@ -117,7 +148,7 @@ docker run -ti --rm \\
 | `--add-host="host.docker.internal:host-gateway"` | Allows the container to potentially reach services running on the host machine itself.                                                   | *Keep as is*          |
 | `-v </path/on/host/to/config>:/config`      | Mounts a directory from your host for persistent configuration. BirdNET-Go will read/write `config.yaml` here.                           | `-v $HOME/bn-config:/config` |
 | `-v </path/on/host/to/data>:/data`          | Mounts a directory from your host for persistent data (database, audio clips, logs).                                                    | `-v $HOME/bn-data:/data`   |
-| `ghcr.io/tphakala/birdnet-go:nightly`       | The BirdNET-Go Docker image to use. `:nightly` is recommended for the latest features. `:latest` points to the most recent stable release. |                       |
+| `ghcr.io/tphakala/birdnet-go:nightly` or `tphakala/birdnet-go:nightly` | The BirdNET-Go Docker image to use. Available from GitHub Container Registry or Docker Hub. `:nightly` is recommended for latest features. `:latest` points to the most recent stable release. |                       |
 
 **Notes:**
 
@@ -162,7 +193,7 @@ ExecStart=/usr/bin/docker run --rm \\
     --device /dev/snd \\                # Mounts audio devices
     -v <config_dir_path>:/config \\     # Maps host config dir (~/birdnet-go-app/config)
     -v <data_dir_path>:/data \\         # Maps host data dir (~/birdnet-go-app/data)
-    ghcr.io/tphakala/birdnet-go:nightly # Docker image
+    ghcr.io/tphakala/birdnet-go:nightly # Docker image (or tphakala/birdnet-go:nightly from Docker Hub)
 
 [Install]
 WantedBy=multi-user.target
@@ -180,5 +211,5 @@ WantedBy=multi-user.target
     *   `--add-host`: Allows the container to connect back to services potentially running on the host.
     *   `--device /dev/snd`: Makes host sound devices available inside the container.
     *   `-v ...:/config`, `-v ...:/data`: Mount the host directories for persistent configuration and data.
-    *   `ghcr.io/tphakala/birdnet-go:nightly`: Specifies the Docker image to run.
+    *   `ghcr.io/tphakala/birdnet-go:nightly`: Specifies the Docker image to run. Alternative: `tphakala/birdnet-go:nightly` from Docker Hub.
 *   `WantedBy=multi-user.target`: Ensures the service starts during the normal boot process.

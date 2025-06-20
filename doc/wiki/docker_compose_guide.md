@@ -2,6 +2,15 @@
 
 This guide provides instructions for setting up and running BirdNET-Go using Docker Compose, which is an alternative to the `install.sh` script and systemd service method.
 
+## Container Registry Options
+
+BirdNET-Go Docker images are available from two registries:
+
+- **GitHub Container Registry (Primary)**: `ghcr.io/tphakala/birdnet-go`
+- **Docker Hub (Mirror)**: `tphakala/birdnet-go`
+
+Both registries contain identical images and can be used interchangeably. The examples below use GitHub Container Registry, but you can substitute `tphakala/birdnet-go` if you prefer Docker Hub.
+
 ## Prerequisites
 
 - Docker and Docker Compose installed on your system
