@@ -22,7 +22,7 @@ variable "arch" {
 
 variable "base_image" {
   type        = string
-  description = "Base Ubuntu cloud image URL"
+  description = "Base Ubuntu 24.10 cloud image URL"
   default     = ""
 }
 
@@ -35,8 +35,13 @@ variable "output_dir" {
 # Local variables for architecture-specific settings
 locals {
   base_images = {
-    amd64 = "https://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-amd64.img"
-    arm64 = "https://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-arm64.img"
+    amd64 = "https://cloud-images.ubuntu.com/releases/oracular/release/ubuntu-24.10-server-cloudimg-amd64.img"
+    arm64 = "https://cloud-images.ubuntu.com/releases/oracular/release/ubuntu-24.10-server-cloudimg-arm64.img"
+  }
+  
+  base_checksums = {
+    amd64 = "sha256:8446856f1903fd305a17cfb610bbb6c01e8e2230cdf41d44fc9e3d824f747ff4"
+    arm64 = "sha256:99b858f01e238c74eb263ab8b83ea543f2576cee166e9ed8210c75035526679b"
   }
   
   qemu_machines = {
@@ -60,21 +65,28 @@ locals {
   }
 }
 
-# Data source for SSH key
-data "sshkey" "install" {
-  type = "rsa"
-  name = "birdnet-go-vm"
+# SSH key variables for build
+variable "ssh_public_key" {
+  type        = string
+  description = "SSH public key for build access"
+  default     = ""
+}
+
+variable "ssh_private_key_file" {
+  type        = string
+  description = "Path to SSH private key file"
+  default     = ""
 }
 
 # Build configuration
 source "qemu" "birdnet-go" {
   # Image settings
   iso_url      = var.base_image != "" ? var.base_image : local.base_images[var.arch]
-  iso_checksum = "none"
+  iso_checksum = var.base_image != "" ? "none" : local.base_checksums[var.arch]
   disk_image   = true
   
   # Output settings
-  output_directory = "${var.output_dir}"
+  output_directory = "${var.output_dir}-${var.arch}"
   vm_name         = "birdnet-go-vm-${var.arch}-${var.version}.qcow2"
   
   # System settings
@@ -107,7 +119,7 @@ source "qemu" "birdnet-go" {
       hostname = "birdnet-go"
     })
     "user-data" = templatefile("${path.root}/templates/user-data.yml", {
-      ssh_public_key = data.sshkey.install.public_key
+      ssh_public_key = var.ssh_public_key
       version       = var.version
       arch          = var.arch
     })
@@ -115,9 +127,10 @@ source "qemu" "birdnet-go" {
   cd_label = "cidata"
   
   # SSH settings
-  ssh_username        = "birdnet"
-  ssh_private_key_file = data.sshkey.install.private_key_path
-  ssh_timeout        = "20m"
+  ssh_username         = "birdnet"
+  ssh_private_key_file = var.ssh_private_key_file != "" ? var.ssh_private_key_file : null
+  ssh_password         = var.ssh_private_key_file == "" ? "birdnet-build-temp" : null
+  ssh_timeout         = "20m"
   
   # Boot settings
   boot_wait = "10s"
@@ -211,7 +224,7 @@ build {
       "Version: ${var.version}",
       "Architecture: ${var.arch}",
       "Build Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)",
-      "Base OS: Ubuntu 22.04 LTS",
+      "Base OS: Ubuntu 24.10 (Oracular Oriole)",
       "Docker Version: $(docker --version)",
       "EOF",
       "echo 'System information generated'"
@@ -232,7 +245,7 @@ build {
   post-processor "shell-local" {
     inline = [
       "echo 'Compressing image...'",
-      "cd ${var.output_dir}",
+      "cd ${var.output_dir}-${var.arch}",
       "zstd -19 --rm birdnet-go-vm-${var.arch}-${var.version}.qcow2",
       "echo 'Generating checksums...'",
       "sha256sum birdnet-go-vm-${var.arch}-${var.version}.qcow2.zst > birdnet-go-vm-${var.arch}-${var.version}.qcow2.zst.sha256",

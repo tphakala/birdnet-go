@@ -4,6 +4,38 @@
 
 set -e
 
+# Function to show help
+show_help() {
+    cat << 'EOF'
+🐦 BirdNET-Go VM Image Builder
+
+USAGE:
+    ./build.sh [ARCHITECTURE] [VERSION]
+    ./build.sh --help
+
+ARGUMENTS:
+    ARCHITECTURE    Target architecture (amd64 or arm64) [default: amd64]
+    VERSION         Version string for the image [default: dev-YYYYMMDD]
+
+OPTIONS:
+    --help, -h      Show this help message
+
+EXAMPLES:
+    ./build.sh                    # Build amd64 with default version
+    ./build.sh arm64              # Build arm64 with default version  
+    ./build.sh amd64 v1.0.0       # Build amd64 with specific version
+
+REQUIREMENTS:
+    - packer
+    - qemu-system-x86_64 (for amd64)
+    - qemu-system-aarch64 (for arm64)
+    - zstd
+
+The script will create a compressed qcow2 VM image with BirdNET-Go pre-installed.
+EOF
+    exit 0
+}
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -14,6 +46,11 @@ NC='\033[0m' # No Color
 print_message() {
     echo -e "${2}${1}${NC}"
 }
+
+# Check for help option
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    show_help
+fi
 
 # Default values
 ARCH="${1:-amd64}"
@@ -63,6 +100,14 @@ print_message "✅ All dependencies found" "$GREEN"
 
 # Create necessary directories
 mkdir -p {templates,scripts,files,$OUTPUT_DIR}
+
+# Generate SSH keys for build if they don't exist
+if [ ! -f "build_key" ]; then
+    print_message "🔑 Generating SSH keys for build..." "$YELLOW"
+    ssh-keygen -t rsa -b 4096 -f build_key -N "" -C "birdnet-go-build-$ARCH"
+    chmod 600 build_key
+    chmod 644 build_key.pub
+fi
 
 # Create cloud-init templates if they don't exist
 if [ ! -f "templates/meta-data.yml" ]; then
@@ -314,20 +359,26 @@ fi
 
 # Validate Packer configuration
 print_message "🔍 Validating Packer configuration..." "$YELLOW"
+SSH_PUBLIC_KEY=$(cat build_key.pub)
 packer validate \
     -var "version=$VERSION" \
     -var "arch=$ARCH" \
     -var "output_dir=$OUTPUT_DIR" \
+    -var "ssh_public_key=$SSH_PUBLIC_KEY" \
+    -var "ssh_private_key_file=build_key" \
     birdnet-go-vm.pkr.hcl
 
 # Build the image
 print_message "🏗️ Building VM image..." "$GREEN"
 print_message "This may take 10-30 minutes depending on your system..." "$YELLOW"
 
+SSH_PUBLIC_KEY=$(cat build_key.pub)
 packer build \
     -var "version=$VERSION" \
     -var "arch=$ARCH" \
     -var "output_dir=$OUTPUT_DIR" \
+    -var "ssh_public_key=$SSH_PUBLIC_KEY" \
+    -var "ssh_private_key_file=build_key" \
     birdnet-go-vm.pkr.hcl
 
 # Show results

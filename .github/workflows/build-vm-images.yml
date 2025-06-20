@@ -79,6 +79,12 @@ jobs:
         run: |
           mkdir -p vm-images/{output,templates,scripts,files}
 
+      - name: Generate SSH keys for build
+        run: |
+          ssh-keygen -t rsa -b 4096 -f vm-images/build_key -N "" -C "birdnet-go-build-${{ matrix.arch }}"
+          chmod 600 vm-images/build_key
+          chmod 644 vm-images/build_key.pub
+
       - name: Create cloud-init templates
         run: |
           # Create meta-data template
@@ -90,16 +96,17 @@ jobs:
           # Create user-data template
           cat > vm-images/templates/user-data.yml << 'EOF'
           #cloud-config
-          users:
-            - name: birdnet
-              groups: sudo, docker, audio, adm
-              shell: /bin/bash
-              sudo: ALL=(ALL) NOPASSWD:ALL
-              ssh_authorized_keys:
-                - ${ssh_public_key}
-          
-          # Disable password authentication
-          ssh_pwauth: false
+                     users:
+             - name: birdnet
+               groups: sudo, docker, audio, adm
+               shell: /bin/bash
+               sudo: ALL=(ALL) NOPASSWD:ALL
+               passwd: \$6\$rounds=4096\$saltstring\$UW6/F2d0U.Ufbq.C/j8lJeJnG\$Ks7Q7gLgq4k.VjL8rP9Q.1.SN7t8xD
+               ssh_authorized_keys:
+                 - ${ssh_public_key}
+           
+           # Enable password authentication temporarily for build
+           ssh_pwauth: true
           
           # Set timezone
           timezone: UTC
@@ -334,26 +341,32 @@ jobs:
       - name: Validate Packer configuration
         working-directory: vm-images
         run: |
+          SSH_PUBLIC_KEY=$(cat build_key.pub)
           packer validate \
             -var "version=${{ steps.version.outputs.version }}" \
             -var "arch=${{ matrix.arch }}" \
+            -var "ssh_public_key=$SSH_PUBLIC_KEY" \
+            -var "ssh_private_key_file=build_key" \
             birdnet-go-vm.pkr.hcl
 
       - name: Build VM image
         working-directory: vm-images
         run: |
           echo "🏗️ Building VM image for ${{ matrix.arch }}..."
+          SSH_PUBLIC_KEY=$(cat build_key.pub)
           packer build \
             -var "version=${{ steps.version.outputs.version }}" \
             -var "arch=${{ matrix.arch }}" \
+            -var "ssh_public_key=$SSH_PUBLIC_KEY" \
+            -var "ssh_private_key_file=build_key" \
             birdnet-go-vm.pkr.hcl
 
       - name: Verify build artifacts
         working-directory: vm-images
         run: |
-          ls -la output/
+          ls -la output-${{ matrix.arch }}/
           echo "📦 Build artifacts:"
-          for file in output/*; do
+          for file in output-${{ matrix.arch }}/*; do
             echo "  $(basename $file): $(du -h $file | cut -f1)"
           done
 
@@ -361,7 +374,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: birdnet-go-vm-${{ matrix.arch }}-${{ steps.version.outputs.version }}
-          path: vm-images/output/*
+          path: vm-images/output-${{ matrix.arch }}/*
           retention-days: 30
 
   create-release:
@@ -417,7 +430,7 @@ jobs:
           
           ## 🔧 Specifications
           
-          - **Base OS**: Ubuntu 22.04 LTS Server
+          - **Base OS**: Ubuntu 24.10 (Oracular Oriole) Server
           - **Format**: qcow2 (compressed with zstd)
           - **Default User**: \`birdnet\` (SSH key authentication)
           - **Web Interface**: http://VM-IP:8080
