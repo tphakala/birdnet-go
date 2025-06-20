@@ -97,6 +97,7 @@ func (b *BoundedBuffer) String() string {
 }
 
 // newBackoffStrategy creates a new backoff strategy with the given parameters
+// If maxAttempts is -1, the strategy will retry indefinitely
 func newBackoffStrategy(maxAttempts int, initialDelay, maxDelay time.Duration) *backoffStrategy {
 	return &backoffStrategy{
 		maxAttempts:  maxAttempts,
@@ -106,8 +107,10 @@ func newBackoffStrategy(maxAttempts int, initialDelay, maxDelay time.Duration) *
 }
 
 // nextDelay returns the next delay and a boolean indicating if the maximum number of attempts has been reached
+// If maxAttempts is -1, it will retry indefinitely
 func (b *backoffStrategy) nextDelay() (time.Duration, bool) {
-	if b.attempt >= b.maxAttempts {
+	// If maxAttempts is -1, allow unlimited retries
+	if b.maxAttempts > 0 && b.attempt >= b.maxAttempts {
 		return 0, false
 	}
 	delay := b.initialDelay * time.Duration(1<<uint(b.attempt))
@@ -467,8 +470,9 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 }
 
 func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
-	// Create a new backoff strategy with 5 attempts, 5 seconds initial delay, and 2 minutes maximum delay
-	backoff := newBackoffStrategy(5, 5*time.Second, 2*time.Minute)
+	// Create a new backoff strategy with unlimited attempts (-1), 5 seconds initial delay, and 2 minutes maximum delay
+	// Using -1 for maxAttempts to indicate unlimited retries for RTSP connection issues
+	backoff := newBackoffStrategy(-1, 5*time.Second, 2*time.Minute)
 
 	for {
 		// Check if the stream is still configured before starting/restarting
@@ -501,7 +505,8 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 			// Get the next delay duration and check if we should retry
 			delay, retry := backoff.nextDelay()
 			if !retry {
-				// If we've exceeded our retry attempts, return an error
+				// This should never happen with unlimited retries (-1), but keep as safeguard
+				log.Printf("⚠️ Backoff strategy unexpectedly returned no retry for RTSP source %s: %v", config.URL, err)
 				return fmt.Errorf("failed to start FFmpeg after maximum attempts: %w", err)
 			}
 
@@ -515,6 +520,11 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 				return ctx.Err()
 			case <-time.After(delay):
 				// If the delay has passed, continue to the next iteration
+				continue
+			case <-restartChan:
+				// If restart signal is received during backoff, restart immediately
+				log.Printf("🔄 Restart signal received during backoff, restarting FFmpeg for RTSP source %s immediately.", config.URL)
+				backoff.reset()
 				continue
 			}
 		}
