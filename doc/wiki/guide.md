@@ -50,9 +50,15 @@ curl -fsSL https://github.com/tphakala/birdnet-go/raw/main/install.sh -o install
 bash ./install.sh
 ```
 
+**Container Registry Options:**
+- **GitHub Container Registry (Primary)**: `ghcr.io/tphakala/birdnet-go`
+- **Docker Hub (Mirror)**: `tphakala/birdnet-go`
+
+Both registries contain identical images. The installation script uses GitHub Container Registry by default.
+
 The script will:
 - Check system prerequisites and install required packages
-- Pull the latest BirdNET-Go Docker image
+- Pull the latest BirdNET-Go Docker image from the primary registry
 - Guide you through configuration (audio input, location, language, etc.)
 - Create a systemd service for automatic start on boot
 - Set up directories for configuration and data persistence

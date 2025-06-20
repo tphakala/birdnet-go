@@ -15,6 +15,8 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 * [Manual Docker Installation](installation.md#manual-docker-installation-advanced-linux-only) - Advanced Docker setup
 * [Manual Binary Installation](installation.md#manual-binary-installation-all-platforms) - Windows, macOS, and Linux binary installation
 
+**Note**: Docker images are available from both [GitHub Container Registry](https://github.com/tphakala/birdnet-go/pkgs/container/birdnet-go) and [Docker Hub](https://hub.docker.com/r/tphakala/birdnet-go).
+
 ## Advanced Features
 
 * [BirdNET Detection Pipeline](BirdNET‐Go-Guide#birdnet-detection-pipeline) - Understanding how settings affect detections
