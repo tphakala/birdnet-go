@@ -59,8 +59,18 @@ locals {
     arm64 = "cortex-a72"
   }
   
+  qemu_cpus_tcg = {
+    amd64 = "qemu64"
+    arm64 = "cortex-a72"
+  }
+  
   accelerators = {
     amd64 = "kvm"
+    arm64 = "tcg"
+  }
+  
+  accelerators_no_kvm = {
+    amd64 = "tcg"
     arm64 = "tcg"
   }
 }
@@ -76,6 +86,12 @@ variable "ssh_private_key_file" {
   type        = string
   description = "Path to SSH private key file"
   default     = ""
+}
+
+variable "use_kvm" {
+  type        = bool
+  description = "Whether to use KVM acceleration (disable for CI environments)"
+  default     = true
 }
 
 # Build configuration
@@ -101,14 +117,19 @@ source "qemu" "birdnet-go" {
   # Architecture-specific QEMU settings
   qemu_binary     = local.qemu_binaries[var.arch]
   machine_type    = local.qemu_machines[var.arch]
-  cpu_model       = local.qemu_cpus[var.arch]
-  accelerator     = local.accelerators[var.arch]
+  cpu_model       = var.use_kvm ? local.qemu_cpus[var.arch] : local.qemu_cpus_tcg[var.arch]
+  accelerator     = var.use_kvm ? local.accelerators[var.arch] : local.accelerators_no_kvm[var.arch]
   
   # Additional QEMU arguments
-  qemuargs = var.arch == "amd64" ? [
-    ["-enable-kvm"],
-    ["-device", "virtio-rng-pci"]
-  ] : [
+  qemuargs = var.arch == "amd64" ? (
+    var.use_kvm ? [
+      ["-enable-kvm"],
+      ["-device", "virtio-rng-pci"]
+    ] : [
+      ["-device", "virtio-rng-pci"],
+      ["-machine", "accel=tcg"]
+    ]
+  ) : [
     ["-device", "virtio-rng-pci"],
     ["-bios", "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd"]
   ]
@@ -130,10 +151,10 @@ source "qemu" "birdnet-go" {
   ssh_username         = "birdnet"
   ssh_private_key_file = var.ssh_private_key_file != "" ? var.ssh_private_key_file : null
   ssh_password         = var.ssh_private_key_file == "" ? "birdnet-build-temp" : null
-  ssh_timeout         = "20m"
+  ssh_timeout         = var.use_kvm ? "20m" : "45m"  # TCG builds need more time
   
   # Boot settings
-  boot_wait = "10s"
+  boot_wait = var.use_kvm ? "10s" : "30s"  # TCG needs more boot time
   
   # Shutdown settings
   shutdown_command = "sudo shutdown -P now"
