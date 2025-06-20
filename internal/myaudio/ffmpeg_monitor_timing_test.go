@@ -227,6 +227,7 @@ func TestConcurrencyWithoutSleep(t *testing.T) {
 
 	// Wait for all operations to start
 	opsStarted := 0
+waitForStart:
 	for opsStarted < 5 {
 		select {
 		case <-operationStarted:
@@ -236,22 +237,23 @@ func TestConcurrencyWithoutSleep(t *testing.T) {
 			return
 		case <-time.After(100 * time.Millisecond):
 			t.Log("Timeout waiting for operations to start, continuing anyway")
-			break
+			break waitForStart
 		}
 	}
 
 	// Wait for several operations to complete
 	completedOps := 0
+waitForCompletion:
 	for completedOps < 10 && ctx.Err() == nil {
 		select {
 		case <-operationCompleted:
 			completedOps++
 		case <-ctx.Done():
 			t.Log("Context canceled while waiting for operations to complete")
-			break
+			break waitForCompletion
 		case <-time.After(100 * time.Millisecond):
 			t.Log("Not all operations completed within timeout, proceeding anyway")
-			break
+			break waitForCompletion
 		}
 	}
 
