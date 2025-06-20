@@ -385,27 +385,8 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 	case audioLevelChan <- audioLevelData:
 		// Successfully sent data
 	default:
-		// Channel is full, atomically clear it and send new data
-		// This prevents race conditions where multiple goroutines try to clear the channel
-		cleared := false
-		for !cleared {
-			select {
-			case <-audioLevelChan:
-				// Successfully drained one item, continue draining
-			default:
-				// Channel is empty, we can now send our data
-				cleared = true
-			}
-		}
-
-		// Send the audio level data
-		select {
-		case audioLevelChan <- audioLevelData:
-			// Successfully sent data after clearing
-		default:
-			// If still blocked, drop the data to avoid blocking audio processing
-			// Audio level data is not critical and can be dropped
-		}
+		// Channel is full, drop the data to avoid blocking audio processing
+		// Audio level data is not critical and can be dropped
 	}
 
 	return nil
