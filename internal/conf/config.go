@@ -167,10 +167,7 @@ type TelemetrySettings struct {
 
 // SentrySettings contains settings for Sentry error tracking
 type SentrySettings struct {
-	Enabled    bool   // true to enable Sentry error tracking (opt-in)
-	DSN        string // Sentry DSN for error reporting
-	SampleRate float64 // Error sampling rate (0.0 to 1.0)
-	Debug      bool   // true to enable Sentry debug mode
+	Enabled bool // true to enable Sentry error tracking (opt-in)
 }
 
 // RealtimeSettings contains all settings related to realtime processing.
