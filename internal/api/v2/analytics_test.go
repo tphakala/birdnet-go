@@ -20,7 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // TestGetSpeciesSummary tests the species summary endpoint
@@ -365,7 +365,7 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 	mockDS.On("GetAllImageCaches", mock.AnythingOfType("string")).Return([]datastore.ImageCache{}, nil)
 
 	// Initialize a mock image cache for controller creation - ONCE for all test cases
-	testMetrics, _ := telemetry.NewMetrics() // Create a dummy metrics instance
+	testMetrics, _ := observability.NewMetrics() // Create a dummy metrics instance
 	// Create a stub provider to avoid nil pointer panics
 	stubProvider := &TestImageProvider{
 		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
@@ -521,8 +521,8 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	}
 
 	// Create a bird image cache with our mock provider
-	// ---> FIX: Provide a non-nil telemetry.Metrics instance <---
-	testMetrics, _ := telemetry.NewMetrics() // Create a dummy metrics instance
+	// ---> FIX: Provide a non-nil observability.Metrics instance <---
+	testMetrics, _ := observability.NewMetrics() // Create a dummy metrics instance
 	imageCache := imageprovider.InitCache("test", mockImageProvider, testMetrics, mockDS)
 	t.Cleanup(func() { imageCache.Close() })
 

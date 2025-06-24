@@ -12,7 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // MQTTStatus represents the current status of the MQTT connection
@@ -121,7 +121,7 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 // to determine the current connection status.
 // Returns true if connected, false otherwise, along with any error message encountered.
 func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context) (connected bool, lastError string) {
-	metrics, err := telemetry.NewMetrics()
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to create metrics for temporary MQTT client", "error", err)
@@ -221,7 +221,7 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 	}
 
 	// Create new metrics instance for the test
-	metrics, err := telemetry.NewMetrics()
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, MQTTTestResult{
 			Success: false,

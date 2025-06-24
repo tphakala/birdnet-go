@@ -13,8 +13,8 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
-	"github.com/tphakala/birdnet-go/internal/telemetry/metrics"
+	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 const (
@@ -35,7 +35,7 @@ type client struct {
 }
 
 // NewClient creates a new MQTT client with the provided configuration.
-func NewClient(settings *conf.Settings, metrics *telemetry.Metrics) (Client, error) {
+func NewClient(settings *conf.Settings, metrics *observability.Metrics) (Client, error) {
 	mqttLogger.Info("Creating new MQTT client")
 	config := DefaultConfig()
 	config.Broker = settings.Realtime.MQTT.Broker

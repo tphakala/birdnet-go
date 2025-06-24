@@ -15,7 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
+	"github.com/tphakala/birdnet-go/internal/observability"
 	"gorm.io/gorm"
 )
 
@@ -304,8 +304,8 @@ func (m *TestImageProvider) Fetch(scientificName string) (imageprovider.BirdImag
 }
 
 // NewTestMetrics creates a new metrics instance for testing
-func NewTestMetrics(t *testing.T) *telemetry.Metrics {
-	metrics, err := telemetry.NewMetrics()
+func NewTestMetrics(t *testing.T) *observability.Metrics {
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		t.Fatalf("Failed to create test metrics: %v", err)
 	}

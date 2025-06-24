@@ -15,8 +15,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logging"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
-	"github.com/tphakala/birdnet-go/internal/telemetry/metrics"
+	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 // ErrImageNotFound indicates that the image provider could not find an image for the requested species.
@@ -265,7 +265,7 @@ func (c *BirdImageCache) Close() error {
 }
 
 // initCache initializes a new BirdImageCache with the given ImageProvider.
-func InitCache(providerName string, e ImageProvider, t *telemetry.Metrics, store datastore.Interface) *BirdImageCache {
+func InitCache(providerName string, e ImageProvider, t *observability.Metrics, store datastore.Interface) *BirdImageCache {
 	logger := imageProviderLogger.With("provider", providerName)
 	logger.Info("Initializing image cache")
 	settings := conf.Setting()
@@ -724,7 +724,7 @@ func (c *BirdImageCache) updateMetrics() {
 }
 
 // CreateDefaultCache creates the default BirdImageCache (currently Wikimedia Commons via Wikipedia API).
-func CreateDefaultCache(metrics *telemetry.Metrics, store datastore.Interface) (*BirdImageCache, error) {
+func CreateDefaultCache(metrics *observability.Metrics, store datastore.Interface) (*BirdImageCache, error) {
 	// Use the correct constructor name from wikipedia.go
 	provider, err := NewWikiMediaProvider()
 	if err != nil {

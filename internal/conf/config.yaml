@@ -193,3 +193,10 @@ output:
     database: birdnet     # mysql database name
     host: localhost       # mysql database host
     port: 3306            # mysql database port
+
+# Sentry telemetry configuration (opt-in, respects EU privacy laws)
+sentry:
+  enabled: false          # false by default, must be explicitly enabled by user
+  dsn: ""                 # Sentry DSN - get this from your Sentry project settings
+  samplerate: 1.0         # Error sampling rate (0.0 to 1.0)
+  debug: false            # Enable Sentry debug mode

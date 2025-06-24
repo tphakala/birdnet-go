@@ -19,7 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // Processor represents the main processing unit for audio analysis.
@@ -36,7 +36,7 @@ type Processor struct {
 	eventTrackerMu      sync.RWMutex         // Mutex to protect EventTracker access
 	LastDogDetection    map[string]time.Time // keep track of dog barks per audio source
 	LastHumanDetection  map[string]time.Time // keep track of human vocal per audio source
-	Metrics             *telemetry.Metrics
+	Metrics             *observability.Metrics
 	DynamicThresholds   map[string]*DynamicThreshold
 	thresholdsMutex     sync.RWMutex // Mutex to protect access to DynamicThresholds
 	pendingDetections   map[string]PendingDetection
@@ -83,8 +83,8 @@ type PendingDetection struct {
 // ensuring thread safety when the map is accessed or modified by concurrent goroutines.
 var mutex sync.Mutex
 
-// func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *telemetry.Metrics) *Processor {
-func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *telemetry.Metrics, birdImageCache *imageprovider.BirdImageCache) *Processor {
+// func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *observability.Metrics) *Processor {
+func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache) *Processor {
 	p := &Processor{
 		Settings:       settings,
 		Ds:             ds,

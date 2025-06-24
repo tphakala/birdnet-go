@@ -12,7 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // MQTT test stage constants
@@ -80,7 +80,7 @@ func (h *Handlers) TestMQTT(c echo.Context) error {
 	}
 
 	// Create a temporary MQTT client for testing
-	metrics, err := telemetry.NewMetrics()
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		return h.NewHandlerError(err, "Failed to create metrics", http.StatusInternalServerError)
 	}
