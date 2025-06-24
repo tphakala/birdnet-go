@@ -95,6 +95,29 @@ Based on golangci-lint analysis, avoid these patterns:
 - Linting: `golangci-lint run -v`
 - Always run linter before committing code
 
+### Custom Errors Package Usage
+
+When importing and using the custom errors package:
+
+```go
+import (
+    "github.com/tphakala/birdnet-go/internal/errors"
+)
+```
+
+**Important**: Always import as `errors` (not as an alias like `customerrors`) to maintain consistency with the existing codebase patterns. The custom errors package provides enhanced error handling with automatic telemetry integration and categorization.
+
+Use the fluent builder pattern for creating enhanced errors:
+```go
+return errors.New(err).
+    Component("component_name").
+    Category(errors.CategoryNetwork).
+    Context("key", "value").
+    Build()
+```
+
+The package automatically reports errors to Sentry when configured, with privacy-safe context data.
+
 ## Additional Cursor Rules Integration
 
 ### Go Best Practices (from .cursor/rules/go.mdc)
