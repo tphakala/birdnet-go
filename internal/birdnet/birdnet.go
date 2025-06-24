@@ -121,7 +121,7 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 // initializeModel loads and initializes the primary BirdNET model.
 func (bn *BirdNET) initializeModel() error {
 	start := time.Now()
-	
+
 	modelData, err := bn.loadModel()
 	if err != nil {
 		return errors.New(err).
@@ -222,7 +222,7 @@ func (bn *BirdNET) getMetaModelData() []byte {
 // initializeMetaModel loads and initializes the meta model used for range filtering.
 func (bn *BirdNET) initializeMetaModel() error {
 	start := time.Now()
-	
+
 	metaModelData := bn.getMetaModelData()
 
 	model := tflite.NewModel(metaModelData)
@@ -323,26 +323,26 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 			Context("fallback_locale", conf.DefaultFallbackLocale).
 			Build()
 	}
-	
+
 	// Check if fallback occurred and report to telemetry
 	if result.FallbackOccurred {
 		bn.Debug("Label file fallback occurred: requested '%s', using '%s'", result.RequestedLocale, result.ActualLocale)
-		
+
 		// ALWAYS report locale fallback to telemetry as a warning
 		// This is critical for tracking configuration issues
 		// Use deferred capture since BirdNET initializes before Sentry
 		telemetry.CaptureMessageDeferred(
-			fmt.Sprintf("Label file fallback: requested locale '%s' not available for model %s, using '%s'", 
+			fmt.Sprintf("Label file fallback: requested locale '%s' not available for model %s, using '%s'",
 				result.RequestedLocale, bn.ModelInfo.ID, result.ActualLocale),
 			sentry.LevelError,
 			"birdnet-label-loading",
 		)
-		
+
 		// Also log to console so users see it immediately
-		fmt.Printf("⚠️  Label file warning: locale '%s' not available, using '%s' instead\n", 
+		fmt.Printf("⚠️  Label file warning: locale '%s' not available, using '%s' instead\n",
 			result.RequestedLocale, result.ActualLocale)
 	}
-	
+
 	data := result.Data
 
 	// Read the labels line by line
@@ -371,7 +371,7 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 
 func (bn *BirdNET) loadExternalLabels() error {
 	start := time.Now()
-	
+
 	// Report external label file usage to telemetry
 	// Use deferred capture since BirdNET initializes before Sentry
 	telemetry.CaptureMessageDeferred(
@@ -379,7 +379,7 @@ func (bn *BirdNET) loadExternalLabels() error {
 		sentry.LevelInfo,
 		"birdnet-label-loading",
 	)
-	
+
 	file, err := os.Open(bn.Settings.BirdNET.LabelPath)
 	if err != nil {
 		return errors.New(err).
@@ -458,7 +458,7 @@ func (bn *BirdNET) Delete() {
 // loadModel loads either the embedded model or an external model file
 func (bn *BirdNET) loadModel() ([]byte, error) {
 	start := time.Now()
-	
+
 	if bn.Settings.BirdNET.ModelPath == "" {
 		return modelData, nil
 	}
@@ -473,7 +473,7 @@ func (bn *BirdNET) loadModel() ([]byte, error) {
 			Timing("model-file-read", time.Since(start)).
 			Build()
 	}
-	
+
 	bn.Debug("Loaded external model file: %s (size: %d MB)", modelPath, len(data)/1024/1024)
 	return data, nil
 }
@@ -496,7 +496,7 @@ func (bn *BirdNET) validateModelAndLabels() error {
 
 	// Compare with the number of labels
 	if labelCount != modelOutputSize {
-		return errors.Newf("label count mismatch: model expects %d classes but label file has %d labels", 
+		return errors.Newf("label count mismatch: model expects %d classes but label file has %d labels",
 			modelOutputSize, labelCount).
 			Category(errors.CategoryValidation).
 			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).

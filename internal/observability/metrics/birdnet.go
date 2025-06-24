@@ -12,24 +12,24 @@ import (
 type BirdNETMetrics struct {
 	DetectionCounter *prometheus.CounterVec
 	ProcessTimeGauge prometheus.Gauge
-	
+
 	// Performance metrics
-	PredictionDuration     *prometheus.HistogramVec
-	ChunkProcessDuration   *prometheus.HistogramVec
-	ModelInvokeDuration    *prometheus.HistogramVec
-	RangeFilterDuration    *prometheus.HistogramVec
-	
+	PredictionDuration   *prometheus.HistogramVec
+	ChunkProcessDuration *prometheus.HistogramVec
+	ModelInvokeDuration  *prometheus.HistogramVec
+	RangeFilterDuration  *prometheus.HistogramVec
+
 	// Operation counters
-	PredictionTotal        *prometheus.CounterVec
-	PredictionErrors       *prometheus.CounterVec
-	ModelLoadTotal         *prometheus.CounterVec
-	ModelLoadErrors        *prometheus.CounterVec
-	
+	PredictionTotal  *prometheus.CounterVec
+	PredictionErrors *prometheus.CounterVec
+	ModelLoadTotal   *prometheus.CounterVec
+	ModelLoadErrors  *prometheus.CounterVec
+
 	// Current state gauges
-	ActiveProcessingGauge  prometheus.Gauge
-	ModelLoadedGauge       prometheus.Gauge
-	
-	registry               *prometheus.Registry
+	ActiveProcessingGauge prometheus.Gauge
+	ModelLoadedGauge      prometheus.Gauge
+
+	registry *prometheus.Registry
 }
 
 // NewBirdNETMetrics creates a new instance of BirdNETMetrics.
@@ -62,44 +62,44 @@ func (m *BirdNETMetrics) initMetrics() error {
 			Help: "Most recent processing time for a BirdNET detection request in milliseconds.",
 		},
 	)
-	
+
 	// Performance histograms
 	m.PredictionDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name: "birdnet_prediction_duration_seconds",
-			Help: "Time taken to perform a prediction",
+			Name:    "birdnet_prediction_duration_seconds",
+			Help:    "Time taken to perform a prediction",
 			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to ~1s
 		},
 		[]string{"model"},
 	)
-	
+
 	m.ChunkProcessDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name: "birdnet_chunk_process_duration_seconds",
-			Help: "Time taken to process an audio chunk",
+			Name:    "birdnet_chunk_process_duration_seconds",
+			Help:    "Time taken to process an audio chunk",
 			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10),
 		},
 		[]string{"model"},
 	)
-	
+
 	m.ModelInvokeDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name: "birdnet_model_invoke_duration_seconds",
-			Help: "Time taken for TensorFlow Lite model invocation",
+			Name:    "birdnet_model_invoke_duration_seconds",
+			Help:    "Time taken for TensorFlow Lite model invocation",
 			Buckets: prometheus.ExponentialBuckets(0.001, 2, 8), // 1ms to ~256ms
 		},
 		[]string{"model"},
 	)
-	
+
 	m.RangeFilterDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name: "birdnet_range_filter_duration_seconds",
-			Help: "Time taken to apply range filter",
+			Name:    "birdnet_range_filter_duration_seconds",
+			Help:    "Time taken to apply range filter",
 			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 8), // 0.1ms to ~25.6ms
 		},
 		[]string{"model"},
 	)
-	
+
 	// Operation counters
 	m.PredictionTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -108,7 +108,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 		},
 		[]string{"model", "status"},
 	)
-	
+
 	m.PredictionErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "birdnet_prediction_errors_total",
@@ -116,7 +116,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 		},
 		[]string{"model", "error_type"},
 	)
-	
+
 	m.ModelLoadTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "birdnet_model_load_total",
@@ -124,7 +124,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 		},
 		[]string{"model", "status"},
 	)
-	
+
 	m.ModelLoadErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "birdnet_model_load_errors_total",
@@ -132,7 +132,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 		},
 		[]string{"model", "error_type"},
 	)
-	
+
 	// State gauges
 	m.ActiveProcessingGauge = prometheus.NewGauge(
 		prometheus.GaugeOpts{
@@ -140,14 +140,14 @@ func (m *BirdNETMetrics) initMetrics() error {
 			Help: "Number of currently active processing operations",
 		},
 	)
-	
+
 	m.ModelLoadedGauge = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "birdnet_model_loaded",
 			Help: "Whether the BirdNET model is currently loaded (1) or not (0)",
 		},
 	)
-	
+
 	return nil
 }
 
@@ -226,24 +226,23 @@ func categorizeError(err error) string {
 	}
 }
 
-
 // Describe implements the prometheus.Collector interface.
 func (m *BirdNETMetrics) Describe(ch chan<- *prometheus.Desc) {
 	m.DetectionCounter.Describe(ch)
 	ch <- m.ProcessTimeGauge.Desc()
-	
+
 	// Performance metrics
 	m.PredictionDuration.Describe(ch)
 	m.ChunkProcessDuration.Describe(ch)
 	m.ModelInvokeDuration.Describe(ch)
 	m.RangeFilterDuration.Describe(ch)
-	
+
 	// Operation counters
 	m.PredictionTotal.Describe(ch)
 	m.PredictionErrors.Describe(ch)
 	m.ModelLoadTotal.Describe(ch)
 	m.ModelLoadErrors.Describe(ch)
-	
+
 	// State gauges
 	ch <- m.ActiveProcessingGauge.Desc()
 	ch <- m.ModelLoadedGauge.Desc()
@@ -253,19 +252,19 @@ func (m *BirdNETMetrics) Describe(ch chan<- *prometheus.Desc) {
 func (m *BirdNETMetrics) Collect(ch chan<- prometheus.Metric) {
 	m.DetectionCounter.Collect(ch)
 	ch <- m.ProcessTimeGauge
-	
+
 	// Performance metrics
 	m.PredictionDuration.Collect(ch)
 	m.ChunkProcessDuration.Collect(ch)
 	m.ModelInvokeDuration.Collect(ch)
 	m.RangeFilterDuration.Collect(ch)
-	
+
 	// Operation counters
 	m.PredictionTotal.Collect(ch)
 	m.PredictionErrors.Collect(ch)
 	m.ModelLoadTotal.Collect(ch)
 	m.ModelLoadErrors.Collect(ch)
-	
+
 	// State gauges
 	ch <- m.ActiveProcessingGauge
 	ch <- m.ModelLoadedGauge

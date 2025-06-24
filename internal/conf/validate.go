@@ -126,14 +126,14 @@ func validateBirdNETSettings(birdnetSettings *BirdNETConfig, settings *Settings)
 			// This means locale normalization fell back to default
 			message := fmt.Sprintf("BirdNET locale '%s' is not supported, will use fallback '%s'", birdnetSettings.Locale, normalizedLocale)
 			errs = append(errs, message)
-			
+
 			// Store the validation warning for telemetry reporting
 			// We can't call telemetry directly here due to import cycles
 			// This will be handled by the calling code in main.go
 			if settings.ValidationWarnings == nil {
 				settings.ValidationWarnings = make([]string, 0)
 			}
-			settings.ValidationWarnings = append(settings.ValidationWarnings, 
+			settings.ValidationWarnings = append(settings.ValidationWarnings,
 				fmt.Sprintf("config-locale-validation: %s", message))
 		}
 		// Update the settings with the normalized locale
@@ -157,9 +157,9 @@ func validateWebServerSettings(settings *WebServerSettings) error {
 		// Check if port is provided when enabled
 		if settings.Port == "" {
 			return errors.New(fmt.Errorf("WebServer port is required when enabled")).
-			Category(errors.CategoryValidation).
-			Context("validation_type", "webserver-port-required").
-			Build()
+				Category(errors.CategoryValidation).
+				Context("validation_type", "webserver-port-required").
+				Build()
 		}
 		// You might want to add more specific port validation here
 	}
@@ -341,7 +341,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 			Context("validation_type", "audio-tool-ffmpeg").
 			Context("warning", "ffmpeg-not-available").
 			Build()
-		_ = validationErr // Error is logged via telemetry, continue processing
+		_ = validationErr        // Error is logged via telemetry, continue processing
 		settings.FfmpegPath = "" // Ensure path is empty if validation failed
 	} else {
 		settings.FfmpegPath = validatedFfmpegPath // Store the validated path (explicit or from PATH)
@@ -372,36 +372,36 @@ func validateAudioSettings(settings *AudioSettings) error {
 			case "aac", "opus", "mp3":
 				if !strings.HasSuffix(settings.Export.Bitrate, "k") {
 					return errors.New(fmt.Errorf("invalid bitrate format for %s: %s. Must end with 'k' (e.g., '64k')", settings.Export.Type, settings.Export.Bitrate)).
-					Category(errors.CategoryValidation).
-					Context("validation_type", "audio-export-bitrate-format").
-					Context("export_type", settings.Export.Type).
-					Context("bitrate", settings.Export.Bitrate).
-					Build()
+						Category(errors.CategoryValidation).
+						Context("validation_type", "audio-export-bitrate-format").
+						Context("export_type", settings.Export.Type).
+						Context("bitrate", settings.Export.Bitrate).
+						Build()
 				}
 				bitrateValue, err := strconv.Atoi(strings.TrimSuffix(settings.Export.Bitrate, "k"))
 				if err != nil {
 					return errors.New(fmt.Errorf("invalid bitrate value for %s: %s", settings.Export.Type, settings.Export.Bitrate)).
-					Category(errors.CategoryValidation).
-					Context("validation_type", "audio-export-bitrate-value").
-					Context("export_type", settings.Export.Type).
-					Context("bitrate", settings.Export.Bitrate).
-					Build()
+						Category(errors.CategoryValidation).
+						Context("validation_type", "audio-export-bitrate-value").
+						Context("export_type", settings.Export.Type).
+						Context("bitrate", settings.Export.Bitrate).
+						Build()
 				}
 				if bitrateValue < 32 || bitrateValue > 320 {
 					return errors.New(fmt.Errorf("bitrate for %s must be between 32k and 320k", settings.Export.Type)).
-					Category(errors.CategoryValidation).
-					Context("validation_type", "audio-export-bitrate-range").
-					Context("export_type", settings.Export.Type).
-					Build()
+						Category(errors.CategoryValidation).
+						Context("validation_type", "audio-export-bitrate-range").
+						Context("export_type", settings.Export.Type).
+						Build()
 				}
 			case "wav", "flac":
 				// These formats don't use bitrate, so we'll ignore the bitrate setting
 			default:
 				return errors.New(fmt.Errorf("unsupported audio export type: %s", settings.Export.Type)).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "audio-export-type").
-				Context("export_type", settings.Export.Type).
-				Build()
+					Category(errors.CategoryValidation).
+					Context("validation_type", "audio-export-type").
+					Context("export_type", settings.Export.Type).
+					Build()
 			}
 		}
 	}
