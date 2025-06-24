@@ -312,49 +312,37 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 	// Get the appropriate locale code for the model version
 	localeCode := bn.Settings.BirdNET.Locale
 
-	// Use the helper function to get the label file data with logging
-	data, err := GetLabelFileDataWithLogger(bn.ModelInfo.ID, localeCode, bn)
-	if err != nil {
+	// Use the new detailed loading function
+	result := GetLabelFileDataWithResult(bn.ModelInfo.ID, localeCode, bn)
+	if result.Error != nil {
 		// Create enhanced error for telemetry reporting
-		labelError := errors.New(err).
+		return errors.New(result.Error).
 			Category(errors.CategoryLabelLoad).
 			Context("requested_locale", localeCode).
 			Context("model_version", bn.ModelInfo.ID).
 			Context("fallback_locale", conf.DefaultFallbackLocale).
 			Build()
-		
-		bn.Debug("Error loading label file: %v", err)
-		
-		// Fall back to English if the requested locale isn't available
-		if localeCode != "en" && localeCode != conf.DefaultFallbackLocale {
-			bn.Debug("Falling back to %s labels", conf.DefaultFallbackLocale)
-			
-			// Report the locale fallback as a warning to telemetry
-			// This helps track when users configure unsupported locales
-			telemetry.CaptureMessage(
-				fmt.Sprintf("Label file fallback: requested locale '%s' not available, using '%s'", 
-					localeCode, conf.DefaultFallbackLocale),
-				sentry.LevelWarning,
-				"birdnet-label-loading",
-			)
-			
-			data, err = GetLabelFileDataWithLogger(bn.ModelInfo.ID, conf.DefaultFallbackLocale, bn)
-			if err != nil {
-				return errors.New(err).
-					Category(errors.CategoryLabelLoad).
-					Context("requested_locale", localeCode).
-					Context("fallback_locale", conf.DefaultFallbackLocale).
-					Context("model_version", bn.ModelInfo.ID).
-					Build()
-			}
-			
-			// Log successful fallback
-			bn.Debug("Successfully loaded fallback labels for locale: %s", conf.DefaultFallbackLocale)
-		} else {
-			// This is a critical error - even the default locale failed
-			return labelError
-		}
 	}
+	
+	// Check if fallback occurred and report to telemetry
+	if result.FallbackOccurred {
+		bn.Debug("Label file fallback occurred: requested '%s', using '%s'", result.RequestedLocale, result.ActualLocale)
+		
+		// ALWAYS report locale fallback to telemetry as a warning
+		// This is critical for tracking configuration issues
+		telemetry.CaptureMessage(
+			fmt.Sprintf("Label file fallback: requested locale '%s' not available for model %s, using '%s'", 
+				result.RequestedLocale, bn.ModelInfo.ID, result.ActualLocale),
+			sentry.LevelWarning,
+			"birdnet-label-loading",
+		)
+		
+		// Also log to console so users see it immediately
+		fmt.Printf("⚠️  Label file warning: locale '%s' not available, using '%s' instead\n", 
+			result.RequestedLocale, result.ActualLocale)
+	}
+	
+	data := result.Data
 
 	// Read the labels line by line
 	scanner := bufio.NewScanner(bytes.NewReader(data))
