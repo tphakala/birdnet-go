@@ -123,7 +123,7 @@ func scrubMessageForPrivacy(message string) string {
 	if globalPrivacyScrubber != nil {
 		return globalPrivacyScrubber(message)
 	}
-	
+
 	// Fallback to basic scrubbing if no privacy scrubber is set
 	return basicURLScrub(message)
 }

@@ -30,12 +30,12 @@ const (
 
 // EnhancedError wraps an error with additional context and metadata
 type EnhancedError struct {
-	Err         error                  // Original error
-	Component   string                 // Component where error occurred (auto-detected if empty)
-	Category    ErrorCategory          // Error category for better grouping
-	Context     map[string]interface{} // Additional context data
-	Timestamp   time.Time              // When the error occurred
-	reported    bool                   // Whether telemetry has been sent
+	Err       error                  // Original error
+	Component string                 // Component where error occurred (auto-detected if empty)
+	Category  ErrorCategory          // Error category for better grouping
+	Context   map[string]interface{} // Additional context data
+	Timestamp time.Time              // When the error occurred
+	reported  bool                   // Whether telemetry has been sent
 }
 
 // Error implements the error interface
@@ -207,7 +207,7 @@ func detectComponent() string {
 	}
 
 	funcName := fn.Name()
-	
+
 	// Extract component from package path
 	if strings.Contains(funcName, "birdnet") {
 		return "birdnet"
@@ -221,7 +221,7 @@ func detectComponent() string {
 	if strings.Contains(funcName, "datastore") {
 		return "datastore"
 	}
-	
+
 	// Extract from package path
 	parts := strings.Split(funcName, "/")
 	if len(parts) > 0 {
@@ -230,14 +230,14 @@ func detectComponent() string {
 			return lastPart[:dotIndex]
 		}
 	}
-	
+
 	return "unknown"
 }
 
 // detectCategory automatically detects error category based on error message and component
 func detectCategory(err error, component string) ErrorCategory {
 	errorMsg := strings.ToLower(err.Error())
-	
+
 	// Model-related errors
 	if strings.Contains(errorMsg, "model") {
 		if strings.Contains(errorMsg, "load") || strings.Contains(errorMsg, "read") {
@@ -247,17 +247,17 @@ func detectCategory(err error, component string) ErrorCategory {
 			return CategoryModelInit
 		}
 	}
-	
+
 	// Label-related errors
 	if strings.Contains(errorMsg, "label") {
 		return CategoryLabelLoad
 	}
-	
+
 	// File I/O errors
 	if strings.Contains(errorMsg, "file") || strings.Contains(errorMsg, "read") || strings.Contains(errorMsg, "open") {
 		return CategoryFileIO
 	}
-	
+
 	// Network errors
 	if strings.Contains(errorMsg, "connection") || strings.Contains(errorMsg, "timeout") || strings.Contains(errorMsg, "rtsp") {
 		if component == "myaudio" || strings.Contains(errorMsg, "rtsp") {
@@ -265,12 +265,12 @@ func detectCategory(err error, component string) ErrorCategory {
 		}
 		return CategoryNetwork
 	}
-	
+
 	// Validation errors
 	if strings.Contains(errorMsg, "validation") || strings.Contains(errorMsg, "mismatch") || strings.Contains(errorMsg, "invalid") {
 		return CategoryValidation
 	}
-	
+
 	// Component-based detection
 	switch component {
 	case "birdnet":
@@ -282,7 +282,7 @@ func detectCategory(err error, component string) ErrorCategory {
 	case "http-controller":
 		return CategoryHTTP
 	}
-	
+
 	return CategoryGeneric
 }
 

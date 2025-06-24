@@ -35,7 +35,7 @@ func (a ByScore) Less(i, j int) bool { return a[i].Score > a[j].Score } // For d
 // BuildRangeFilter updates the range filter with current probable species
 func BuildRangeFilter(bn *BirdNET) error {
 	start := time.Now()
-	
+
 	// Get date for Range Filter week calculation
 	today := time.Now().Truncate(24 * time.Hour)
 
@@ -188,7 +188,7 @@ func matchesSpecies(label, speciesName string) bool {
 // predictFilter applies a TensorFlow Lite model to predict species based on the context.
 func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error) {
 	start := time.Now()
-	
+
 	input := bn.RangeInterpreter.GetInputTensor(0)
 	if input == nil {
 		return nil, errors.New(fmt.Errorf("cannot get input tensor")).

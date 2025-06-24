@@ -181,7 +181,7 @@ func (p *FFmpegProcess) CleanupWithDelete(url string, shouldDelete bool) {
 	}
 
 	// Log cleanup attempt with telemetry
-	telemetry.CaptureMessage(fmt.Sprintf("Starting FFmpeg cleanup for %s", url), 
+	telemetry.CaptureMessage(fmt.Sprintf("Starting FFmpeg cleanup for %s", url),
 		sentry.LevelInfo, "ffmpeg-cleanup-start")
 
 	// Use mutex to ensure only one cleanup operation per process
@@ -224,12 +224,12 @@ func (p *FFmpegProcess) CleanupWithDelete(url string, shouldDelete bool) {
 	select {
 	case <-done:
 		log.Printf("🛑 FFmpeg process for RTSP source %s stopped normally", url)
-		telemetry.CaptureMessage(fmt.Sprintf("FFmpeg process for %s stopped normally", url), 
+		telemetry.CaptureMessage(fmt.Sprintf("FFmpeg process for %s stopped normally", url),
 			sentry.LevelInfo, "ffmpeg-cleanup-normal")
 		// Process finished normally
 	case <-time.After(10 * time.Second):
 		// Timeout occurred, forcefully kill the process
-		telemetry.CaptureMessage(fmt.Sprintf("FFmpeg cleanup timeout for %s, forcing termination", url), 
+		telemetry.CaptureMessage(fmt.Sprintf("FFmpeg cleanup timeout for %s, forcing termination", url),
 			sentry.LevelWarning, "ffmpeg-cleanup-timeout")
 		if err := killProcessGroup(p.cmd); err != nil {
 			// Only attempt direct process kill if killProcessGroup fails
@@ -349,9 +349,9 @@ func (p *FFmpegProcess) handleWatchdogTimeout(url string, restartChan chan struc
 	}
 
 	// Capture watchdog timeout event
-	telemetry.CaptureMessage(fmt.Sprintf("Watchdog timeout detected for RTSP stream %s", url), 
+	telemetry.CaptureMessage(fmt.Sprintf("Watchdog timeout detected for RTSP stream %s", url),
 		sentry.LevelWarning, "rtsp-watchdog-timeout")
-	
+
 	p.sendRestartSignal(restartChan, url, "Watchdog")
 	return fmt.Errorf("watchdog detected no data for RTSP source %s", url)
 }
@@ -383,7 +383,7 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 		if *bufferErrorCount >= maxBufferErrors {
 			log.Printf("⚠️ Too many buffer write errors (%d) for RTSP source %s since %v, triggering restart", *bufferErrorCount, url, lastBufferErrorTime.Format("15:04:05"))
 			// Capture buffer error threshold exceeded
-			telemetry.CaptureMessage(fmt.Sprintf("Buffer error threshold exceeded for %s: %d errors", url, *bufferErrorCount), 
+			telemetry.CaptureMessage(fmt.Sprintf("Buffer error threshold exceeded for %s: %d errors", url, *bufferErrorCount),
 				sentry.LevelError, "rtsp-buffer-error-threshold")
 			p.sendRestartSignal(restartChan, url, "Buffer error threshold")
 			return fmt.Errorf("too many buffer write errors for RTSP source %s", url)
@@ -514,7 +514,7 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 		return nil, fmt.Errorf("error starting FFmpeg: %w", err)
 	} else {
 		// Log successful FFmpeg start with telemetry
-		telemetry.CaptureMessage(fmt.Sprintf("FFmpeg process started successfully for %s (PID: %d)", config.URL, cmd.Process.Pid), 
+		telemetry.CaptureMessage(fmt.Sprintf("FFmpeg process started successfully for %s (PID: %d)", config.URL, cmd.Process.Pid),
 			sentry.LevelInfo, "ffmpeg-process-started")
 		log.Printf("✅ FFmpeg started successfully for RTSP source %s", config.URL)
 	}
@@ -616,7 +616,7 @@ func (lm *lifecycleManager) startProcessWithRetry(ctx context.Context) (*FFmpegP
 
 			log.Printf("⚠️ Failed to start FFmpeg for RTSP source %s: %v. Retrying in %v...", lm.config.URL, err, delay)
 			// Track retry attempts with telemetry
-			telemetry.CaptureMessage(fmt.Sprintf("FFmpeg retry attempt for %s: delay=%v", 
+			telemetry.CaptureMessage(fmt.Sprintf("FFmpeg retry attempt for %s: delay=%v",
 				lm.config.URL, delay), sentry.LevelWarning, "ffmpeg-retry-attempt")
 
 			// Wait for delay, context cancellation, or restart signal
@@ -629,7 +629,7 @@ func (lm *lifecycleManager) startProcessWithRetry(ctx context.Context) (*FFmpegP
 		// Success - reset backoff and return process
 		lm.backoff.reset()
 		// Log successful connection after retries
-		telemetry.CaptureMessage(fmt.Sprintf("FFmpeg connection established for %s after retries", lm.config.URL), 
+		telemetry.CaptureMessage(fmt.Sprintf("FFmpeg connection established for %s after retries", lm.config.URL),
 			sentry.LevelInfo, "ffmpeg-connection-success")
 		return process, nil
 	}
@@ -775,7 +775,7 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	}
 
 	// Log RTSP connection attempt with telemetry
-	telemetry.CaptureMessage(fmt.Sprintf("Starting RTSP capture for %s with transport %s", url, transport), 
+	telemetry.CaptureMessage(fmt.Sprintf("Starting RTSP capture for %s with transport %s", url, transport),
 		sentry.LevelInfo, "rtsp-connection-start")
 
 	// Create a configuration for FFmpeg

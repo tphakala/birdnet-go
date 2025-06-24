@@ -14,8 +14,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
-	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"gorm.io/gorm"
 )
 
