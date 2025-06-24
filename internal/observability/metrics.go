@@ -9,6 +9,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -47,6 +48,9 @@ func NewMetrics() (*Metrics, error) {
 		ImageProvider: imageProviderMetrics,
 	}
 
+	// Initialize tracing with metrics
+	initializeTracing(birdnetMetrics)
+
 	return m, nil
 }
 
@@ -62,4 +66,9 @@ func (m *Metrics) metricsHandler(w http.ResponseWriter, r *http.Request) {
 		ErrorHandling: promhttp.HTTPErrorOnError,
 	})
 	h.ServeHTTP(w, r)
+}
+
+// initializeTracing sets up the birdnet tracing system with metrics
+func initializeTracing(birdnetMetrics *metrics.BirdNETMetrics) {
+	birdnet.SetMetrics(birdnetMetrics)
 }

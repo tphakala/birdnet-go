@@ -4,30 +4,42 @@ package birdnet
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
-// TracingSpan represents a traced operation
+// TracingSpan represents a traced operation with minimal overhead
 type TracingSpan struct {
 	operation   string
 	description string
 	startTime   time.Time
-	tags        map[string]string
-	data        map[string]interface{}
+	tags        map[string]string // Only allocated if needed
+	data        map[string]interface{} // Only allocated if needed
 	sentrySpan  *sentry.Span
+	metricsEnabled bool
+	model       string // For metrics labeling
 }
 
-// StartSpan starts a new tracing span
+// Global metrics instance (set by observability package)
+var globalMetrics *metrics.BirdNETMetrics
+var activeOperations int64
+
+// SetMetrics sets the global metrics instance for tracing
+func SetMetrics(m *metrics.BirdNETMetrics) {
+	globalMetrics = m
+}
+
+// StartSpan starts a new tracing span with minimal overhead
 func StartSpan(ctx context.Context, operation string, description string) (*TracingSpan, context.Context) {
 	span := &TracingSpan{
 		operation:   operation,
 		description: description,
 		startTime:   time.Now(),
-		tags:        make(map[string]string),
-		data:        make(map[string]interface{}),
+		metricsEnabled: globalMetrics != nil,
 	}
 
 	// Only create Sentry span if telemetry is enabled
@@ -39,29 +51,48 @@ func StartSpan(ctx context.Context, operation string, description string) (*Trac
 		ctx = sentrySpan.Context()
 	}
 
+	// Track active operations for metrics
+	if span.metricsEnabled {
+		count := atomic.AddInt64(&activeOperations, 1)
+		globalMetrics.SetActiveProcessing(float64(count))
+	}
+
 	return span, ctx
 }
 
-// SetTag sets a tag on the span
+// SetTag sets a tag on the span (lazy allocation)
 func (s *TracingSpan) SetTag(key, value string) {
 	if s == nil {
 		return
 	}
 	
-	s.tags[key] = value
+	// Special handling for model tag
+	if key == "model" {
+		s.model = value
+	}
+	
+	// Only allocate tags map if Sentry is enabled
 	if s.sentrySpan != nil {
+		if s.tags == nil {
+			s.tags = make(map[string]string)
+		}
+		s.tags[key] = value
 		s.sentrySpan.SetTag(key, value)
 	}
 }
 
-// SetData sets arbitrary data on the span
+// SetData sets arbitrary data on the span (lazy allocation)
 func (s *TracingSpan) SetData(key string, value interface{}) {
 	if s == nil {
 		return
 	}
 	
-	s.data[key] = value
+	// Only allocate data map if Sentry is enabled
 	if s.sentrySpan != nil {
+		if s.data == nil {
+			s.data = make(map[string]interface{})
+		}
+		s.data[key] = value
 		s.sentrySpan.SetData(key, value)
 	}
 }
@@ -73,9 +104,35 @@ func (s *TracingSpan) Finish() {
 	}
 	
 	duration := time.Since(s.startTime)
-	s.SetData("duration_ms", duration.Milliseconds())
+	durationSeconds := duration.Seconds()
 	
+	// Record metrics if enabled
+	if s.metricsEnabled {
+		model := s.model
+		if model == "" {
+			model = "unknown"
+		}
+		
+		// Record appropriate metric based on operation
+		switch s.operation {
+		case "birdnet.predict":
+			globalMetrics.RecordPrediction(model, durationSeconds, nil)
+		case "birdnet.process_chunk":
+			globalMetrics.RecordChunkProcess(model, durationSeconds)
+		case "birdnet.model_invoke":
+			globalMetrics.RecordModelInvoke(model, durationSeconds)
+		case "birdnet.range_filter":
+			globalMetrics.RecordRangeFilter(model, durationSeconds)
+		}
+		
+		// Update active operations count
+		count := atomic.AddInt64(&activeOperations, -1)
+		globalMetrics.SetActiveProcessing(float64(count))
+	}
+	
+	// Record in Sentry if enabled
 	if s.sentrySpan != nil {
+		s.SetData("duration_ms", duration.Milliseconds())
 		s.sentrySpan.Finish()
 	}
 }
@@ -121,20 +178,23 @@ func TracePrediction(ctx context.Context, sampleSize int, fn func() (interface{}
 	return result, err
 }
 
-// RecordMetric records a performance metric (for future metrics collection)
+// RecordMetric records a performance metric
 func RecordMetric(name string, value float64, tags map[string]string) {
-	// For now, just log if debug is enabled
+	// Log if debug is enabled
 	settings := conf.GetSettings()
 	if settings != nil && settings.Debug {
 		fmt.Printf("[METRIC] %s: %.2f tags=%v\n", name, value, tags)
 	}
 	
-	// Future: Send to metrics collection system
+	// Note: Detailed metrics are now recorded via spans automatically
 }
 
 // RecordDuration records the duration of an operation
 func RecordDuration(operation string, duration time.Duration) {
-	RecordMetric(fmt.Sprintf("birdnet.%s.duration", operation), 
-		float64(duration.Milliseconds()), 
-		map[string]string{"unit": "ms"})
+	// This is now handled automatically by spans
+	if globalMetrics == nil {
+		RecordMetric(fmt.Sprintf("birdnet.%s.duration", operation), 
+			float64(duration.Milliseconds()), 
+			map[string]string{"unit": "ms"})
+	}
 }
