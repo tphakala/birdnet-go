@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	sentryecho "github.com/getsentry/sentry-go/echo"
 	"github.com/tphakala/birdnet-go/internal/security"
 )
 
@@ -32,6 +33,14 @@ var publicV2ApiPrefixes = map[string]struct{}{
 // configureMiddleware sets up middleware for the server.
 func (s *Server) configureMiddleware() {
 	s.Echo.Use(middleware.Recover())
+
+	// Add Sentry middleware if enabled (before other middleware to catch all errors)
+	if s.Settings.Sentry.Enabled {
+		s.Echo.Use(sentryecho.New(sentryecho.Options{
+			Repanic: true, // Let Echo's recover middleware handle panics
+			WaitForDelivery: false, // Don't block requests
+		}))
+	}
 
 	// Add structured logging middleware if available
 	if s.webLogger != nil {

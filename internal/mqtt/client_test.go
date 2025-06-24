@@ -18,7 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 const (
@@ -605,7 +605,7 @@ func testDNSResolutionForTest(t *testing.T) {
 }
 
 // createTestClient is a helper function that creates and configures an MQTT client for testing purposes.
-func createTestClient(t *testing.T, broker string) (Client, *telemetry.Metrics) {
+func createTestClient(t *testing.T, broker string) (Client, *observability.Metrics) {
 	testSettings := &conf.Settings{
 		Main: struct {
 			Name      string
@@ -622,7 +622,7 @@ func createTestClient(t *testing.T, broker string) (Client, *telemetry.Metrics) 
 			},
 		},
 	}
-	metrics, err := telemetry.NewMetrics()
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		if t != nil {
 			t.Fatalf("Failed to create metrics: %v", err)

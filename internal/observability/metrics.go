@@ -1,5 +1,5 @@
-// Package telemetry provides metrics and monitoring capabilities for the BirdNET-Go application.
-package telemetry
+// Package observability provides metrics and monitoring capabilities for the BirdNET-Go application.
+package observability
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/tphakala/birdnet-go/internal/telemetry/metrics"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 // Metrics holds all the metric collectors for the application.

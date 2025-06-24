@@ -23,7 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
+	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
 
@@ -125,7 +125,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	birdnet.ResizeQueue(5)
 
 	// Initialize Prometheus metrics manager
-	metrics, err := telemetry.NewMetrics()
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		return fmt.Errorf("error initializing metrics: %w", err)
 	}
@@ -249,11 +249,11 @@ func startWeatherPolling(wg *sync.WaitGroup, settings *conf.Settings, dataStore 
 	}()
 }
 
-func startTelemetryEndpoint(wg *sync.WaitGroup, settings *conf.Settings, metrics *telemetry.Metrics, quitChan chan struct{}) {
+func startTelemetryEndpoint(wg *sync.WaitGroup, settings *conf.Settings, metrics *observability.Metrics, quitChan chan struct{}) {
 	// Initialize Prometheus metrics endpoint if enabled
 	if settings.Realtime.Telemetry.Enabled {
 		// Initialize metrics endpoint
-		telemetryEndpoint, err := telemetry.NewEndpoint(settings, metrics)
+		telemetryEndpoint, err := observability.NewEndpoint(settings, metrics)
 		if err != nil {
 			log.Printf("Error initializing telemetry endpoint: %v", err)
 			return
@@ -366,7 +366,7 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 // or ensuring this is called only once during a deterministic startup phase (e.g., in main).
 // setupImageProviderRegistry initializes or retrieves the global image provider registry
 // and registers the default providers (Wikimedia, AviCommons).
-func setupImageProviderRegistry(ds datastore.Interface, metrics *telemetry.Metrics) (*imageprovider.ImageProviderRegistry, error) {
+func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.Metrics) (*imageprovider.ImageProviderRegistry, error) {
 	// Use the global registry if available, otherwise create a new one
 	var registry *imageprovider.ImageProviderRegistry
 	if httpcontroller.ImageProviderRegistry != nil {
@@ -576,7 +576,7 @@ func warmUpImageCacheInBackground(ds datastore.Interface, registry *imageprovide
 
 // initBirdImageCache initializes the bird image cache by setting up providers,
 // selecting a default, and starting a background warm-up process.
-func initBirdImageCache(ds datastore.Interface, metrics *telemetry.Metrics) *imageprovider.BirdImageCache {
+func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) *imageprovider.BirdImageCache {
 	// 1. Set up the registry and register known providers
 	registry, regErr := setupImageProviderRegistry(ds, metrics)
 	if regErr != nil {

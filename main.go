@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // buildTime is the time when the binary was built.
@@ -40,6 +41,9 @@ func main() {
 }
 
 func mainWithExitCode() int {
+	// Ensure Sentry is flushed on exit
+	defer telemetry.Flush(2 * time.Second)
+
 	// Check if profiling is enabled
 	if os.Getenv("BIRDNET_GO_PROFILE") == "1" {
 		fmt.Println("Profiling enabled")
@@ -85,6 +89,12 @@ func mainWithExitCode() int {
 
 	fmt.Printf("🐦 \033[37mBirdNET-Go %s (built: %s), using config file: %s\033[0m\n",
 		settings.Version, settings.BuildDate, viper.ConfigFileUsed())
+
+	// Initialize Sentry telemetry if enabled
+	if err := telemetry.InitSentry(settings); err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing Sentry: %v\n", err)
+		// Continue without Sentry - it's not critical
+	}
 
 	// Execute the root command
 	rootCmd := cmd.RootCommand(settings)

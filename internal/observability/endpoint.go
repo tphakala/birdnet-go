@@ -1,5 +1,5 @@
-// Package telemetry provides tools for monitoring and debugging the BirdNET-Go application.
-package telemetry
+// Package observability provides tools for monitoring and debugging the BirdNET-Go application.
+package observability
 
 import (
 	"context"

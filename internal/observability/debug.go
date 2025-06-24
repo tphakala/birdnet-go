@@ -1,5 +1,5 @@
 // Package telemetry provides tools for monitoring and debugging the BirdNET-Go application.
-package telemetry
+package observability
 
 import (
 	"net/http"

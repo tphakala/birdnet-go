@@ -10,7 +10,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 const (
@@ -182,7 +182,7 @@ func mapAviCommonsLicense(code string) (name, url string) {
 }
 
 // CreateAviCommonsCache creates a new BirdImageCache with the AviCommons image provider.
-func CreateAviCommonsCache(dataFs fs.FS, metrics *telemetry.Metrics, store datastore.Interface) (*BirdImageCache, error) {
+func CreateAviCommonsCache(dataFs fs.FS, metrics *observability.Metrics, store datastore.Interface) (*BirdImageCache, error) {
 	logger := imageProviderLogger.With("provider", aviCommonsProviderName)
 	logger.Info("Creating AviCommons cache")
 	settings := conf.Setting()
@@ -201,7 +201,7 @@ func CreateAviCommonsCache(dataFs fs.FS, metrics *telemetry.Metrics, store datas
 }
 
 // RegisterAviCommonsProvider creates and registers an AviCommons provider with the registry.
-func RegisterAviCommonsProvider(registry *ImageProviderRegistry, dataFs fs.FS, metrics *telemetry.Metrics, store datastore.Interface) error {
+func RegisterAviCommonsProvider(registry *ImageProviderRegistry, dataFs fs.FS, metrics *observability.Metrics, store datastore.Interface) error {
 	logger := imageProviderLogger.With("provider", aviCommonsProviderName)
 	logger.Info("Registering AviCommons provider with registry")
 	cache, err := CreateAviCommonsCache(dataFs, metrics, store)

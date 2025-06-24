@@ -165,6 +165,14 @@ type TelemetrySettings struct {
 	Listen  string // IP address and port to listen on
 }
 
+// SentrySettings contains settings for Sentry error tracking
+type SentrySettings struct {
+	Enabled    bool   // true to enable Sentry error tracking (opt-in)
+	DSN        string // Sentry DSN for error reporting
+	SampleRate float64 // Error sampling rate (0.0 to 1.0)
+	Debug      bool   // true to enable Sentry debug mode
+}
+
 // RealtimeSettings contains all settings related to realtime processing.
 type RealtimeSettings struct {
 	Interval         int                      // minimum interval between log messages in seconds
@@ -332,6 +340,7 @@ type Settings struct {
 	Realtime  RealtimeSettings  // Realtime processing settings
 	WebServer WebServerSettings // web server configuration
 	Security  Security          // security configuration
+	Sentry    SentrySettings    // Sentry error tracking configuration
 
 	Output struct {
 		File struct {
