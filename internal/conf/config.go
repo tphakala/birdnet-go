@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -408,7 +409,23 @@ func Load() (*Settings, error) {
 
 	// Validate settings
 	if err := ValidateSettings(settings); err != nil {
-		return nil, fmt.Errorf("error validating settings: %w", err)
+		// Check if it's just a validation warning (contains fallback info)
+		if validationErr, ok := err.(ValidationError); ok {
+			// Report configuration issues to telemetry for debugging
+			for _, errMsg := range validationErr.Errors {
+				if strings.Contains(errMsg, "fallback") || strings.Contains(errMsg, "not supported") {
+					// This is a warning about locale fallback - report to telemetry but don't fail
+					log.Printf("Configuration warning: %s", errMsg)
+					// Note: Telemetry reporting will happen later in birdnet package when Sentry is initialized
+				} else {
+					// This is a real validation error - fail the config load
+					return nil, fmt.Errorf("error validating settings: %w", err)
+				}
+			}
+		} else {
+			// Other validation errors should fail the config load
+			return nil, fmt.Errorf("error validating settings: %w", err)
+		}
 	}
 
 	// Log the loaded species settings for debugging

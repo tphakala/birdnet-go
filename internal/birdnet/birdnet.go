@@ -14,9 +14,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/cpuspec"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 	tflite "github.com/tphakala/go-tflite"
 	"github.com/tphakala/go-tflite/delegates/xnnpack"
 )
@@ -313,16 +315,44 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 	// Use the helper function to get the label file data with logging
 	data, err := GetLabelFileDataWithLogger(bn.ModelInfo.ID, localeCode, bn)
 	if err != nil {
+		// Create enhanced error for telemetry reporting
+		labelError := errors.New(err).
+			Category(errors.CategoryLabelLoad).
+			Context("requested_locale", localeCode).
+			Context("model_version", bn.ModelInfo.ID).
+			Context("fallback_locale", conf.DefaultFallbackLocale).
+			Build()
+		
 		bn.Debug("Error loading label file: %v", err)
+		
 		// Fall back to English if the requested locale isn't available
 		if localeCode != "en" && localeCode != conf.DefaultFallbackLocale {
 			bn.Debug("Falling back to %s labels", conf.DefaultFallbackLocale)
+			
+			// Report the locale fallback as a warning to telemetry
+			// This helps track when users configure unsupported locales
+			telemetry.CaptureMessage(
+				fmt.Sprintf("Label file fallback: requested locale '%s' not available, using '%s'", 
+					localeCode, conf.DefaultFallbackLocale),
+				sentry.LevelWarning,
+				"birdnet-label-loading",
+			)
+			
 			data, err = GetLabelFileDataWithLogger(bn.ModelInfo.ID, conf.DefaultFallbackLocale, bn)
 			if err != nil {
-				return fmt.Errorf("failed to load fallback English labels: %w", err)
+				return errors.New(err).
+					Category(errors.CategoryLabelLoad).
+					Context("requested_locale", localeCode).
+					Context("fallback_locale", conf.DefaultFallbackLocale).
+					Context("model_version", bn.ModelInfo.ID).
+					Build()
 			}
+			
+			// Log successful fallback
+			bn.Debug("Successfully loaded fallback labels for locale: %s", conf.DefaultFallbackLocale)
 		} else {
-			return fmt.Errorf("failed to load label file: %w", err)
+			// This is a critical error - even the default locale failed
+			return labelError
 		}
 	}
 
@@ -336,7 +366,12 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error scanning label file: %w", err)
+		return errors.New(err).
+			Category(errors.CategoryLabelLoad).
+			Context("operation", "scan_labels").
+			Context("locale", localeCode).
+			Context("model_version", bn.ModelInfo.ID).
+			Build()
 	}
 
 	// Check and log species missing from taxonomy
@@ -346,16 +381,35 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 }
 
 func (bn *BirdNET) loadExternalLabels() error {
+	start := time.Now()
+	
+	// Report external label file usage to telemetry
+	telemetry.CaptureMessage(
+		fmt.Sprintf("Using external label file: %s", bn.Settings.BirdNET.LabelPath),
+		sentry.LevelInfo,
+		"birdnet-label-loading",
+	)
+	
 	file, err := os.Open(bn.Settings.BirdNET.LabelPath)
 	if err != nil {
-		return fmt.Errorf("failed to open external label file: %w", err)
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("label_path", bn.Settings.BirdNET.LabelPath).
+			Context("operation", "open").
+			Timing("label-file-open", time.Since(start)).
+			Build()
 	}
 	defer file.Close()
 
 	// Read the file directly as a text file
 	err = bn.loadLabelsFromText(file)
 	if err != nil {
-		return err
+		return errors.New(err).
+			Category(errors.CategoryLabelLoad).
+			Context("label_path", bn.Settings.BirdNET.LabelPath).
+			Context("operation", "parse").
+			Timing("label-file-load", time.Since(start)).
+			Build()
 	}
 
 	// Check and log species missing from taxonomy
