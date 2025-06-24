@@ -2,7 +2,6 @@
 package imageprovider
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -14,13 +13,14 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 // ErrImageNotFound indicates that the image provider could not find an image for the requested species.
-var ErrImageNotFound = errors.New("image not found by provider")
+var ErrImageNotFound = errors.NewStd("image not found by provider")
 
 // ImageProvider defines the interface for fetching bird images.
 type ImageProvider interface {
@@ -68,7 +68,13 @@ func init() {
 	// Default level is Info. Set to Debug for more detailed cache/provider info.
 	imageProviderLogger, _, err = logging.NewFileLogger("logs/imageprovider.log", "imageprovider", imageProviderLevelVar)
 	if err != nil {
-		logging.Error("Failed to initialize imageprovider file logger", "error", err)
+		enhancedErr := errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryFileIO).
+			Context("log_file", "logs/imageprovider.log").
+			Context("operation", "logger_initialization").
+			Build()
+		logging.Error("Failed to initialize imageprovider file logger", "error", enhancedErr)
 		// Fallback to a disabled logger (writes to io.Discard) but respects the level var
 		logging.Warn("Imageprovider service falling back to a disabled logger due to initialization error.")
 		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: imageProviderLevelVar})
@@ -145,10 +151,16 @@ func (c *BirdImageCache) refreshStaleEntries() {
 	logger.Debug("Getting all cached entries for refresh check")
 	entries, err := c.store.GetAllImageCaches(c.providerName) // Use provider name
 	if err != nil {
-		logger.Error("Failed to get cached entries for refresh", "error", err)
-		// if c.debug {
-		// 	log.Printf("Debug: [%s] Failed to get cached entries for refresh: %v", c.providerName, err)
-		// }
+		enhancedErr := errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryImageCache).
+			Context("provider", c.providerName).
+			Context("operation", "get_cached_entries_for_refresh").
+			Build()
+		logger.Error("Failed to get cached entries for refresh", "error", enhancedErr)
+		if c.metrics != nil {
+			c.metrics.IncrementDownloadErrorsWithCategory("image-cache", c.providerName, "get_cached_entries_for_refresh")
+		}
 		return
 	}
 
@@ -227,10 +239,21 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 	logger.Debug("Fetching new image data from provider")
 	birdImage, err := c.provider.Fetch(scientificName)
 	if err != nil {
-		logger.Error("Failed to fetch image during refresh", "error", err)
-		// if c.debug {
-		// 	log.Printf("Debug: Failed to refresh image for %s: %v", scientificName, err)
-		// }
+		// Check if it's already an enhanced error, if not enhance it
+		var enhancedErr *errors.EnhancedError
+		if !errors.As(err, &enhancedErr) {
+			enhancedErr = errors.New(err).
+				Component("imageprovider").
+				Category(errors.CategoryImageFetch).
+				Context("provider", c.providerName).
+				Context("scientific_name", scientificName).
+				Context("operation", "cache_refresh_fetch").
+				Build()
+		}
+		logger.Error("Failed to fetch image during refresh", "error", enhancedErr)
+		if c.metrics != nil {
+			c.metrics.IncrementDownloadErrorsWithCategory("image-fetch", c.providerName, "cache_refresh_fetch")
+		}
 		return
 	}
 
@@ -327,7 +350,14 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 		logger.Error("Failed to get image from DB cache", "error", err)
 		// A specific not found error isn't exported, so we'll return nil, nil later if cachedImage is nil
 		// For now, just return the error to indicate a DB problem occurred
-		return nil, fmt.Errorf("failed to query image cache for %s (%s): %w", scientificName, c.providerName, err)
+		enhancedErr := errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryImageCache).
+			Context("provider", c.providerName).
+			Context("scientific_name", scientificName).
+			Context("operation", "query_image_cache").
+			Build()
+		return nil, enhancedErr
 	}
 
 	// Check if cachedImage is nil (indicates 'not found' since err was nil)
@@ -387,7 +417,17 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 	}
 
 	if err := c.store.SaveImageCache(dbEntry); err != nil {
-		logger.Error("Failed to save image to DB cache", "error", err)
+		enhancedErr := errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryImageCache).
+			Context("provider", c.providerName).
+			Context("scientific_name", image.ScientificName).
+			Context("operation", "save_image_cache").
+			Build()
+		logger.Error("Failed to save image to DB cache", "error", enhancedErr)
+		if c.metrics != nil {
+			c.metrics.IncrementDownloadErrorsWithCategory("image-cache", c.providerName, "save_image_cache")
+		}
 	}
 }
 
@@ -397,13 +437,28 @@ func (c *BirdImageCache) loadCachedImages() error {
 	logger.Info("Loading all cached images from DB into memory")
 	if c.store == nil {
 		logger.Warn("Cannot load cached images: DB store is nil")
-		return errors.New("datastore is nil")
+		enhancedErr := errors.Newf("datastore is nil").
+			Component("imageprovider").
+			Category(errors.CategoryImageCache).
+			Context("provider", c.providerName).
+			Context("operation", "load_cached_images").
+			Build()
+		return enhancedErr
 	}
 
 	entries, err := c.store.GetAllImageCaches(c.providerName) // Get entries specific to this provider
 	if err != nil {
-		logger.Error("Failed to get all image caches from DB", "error", err)
-		return fmt.Errorf("failed to get all image caches for %s: %w", c.providerName, err)
+		enhancedErr := errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryImageCache).
+			Context("provider", c.providerName).
+			Context("operation", "get_all_image_caches").
+			Build()
+		logger.Error("Failed to get all image caches from DB", "error", enhancedErr)
+		if c.metrics != nil {
+			c.metrics.IncrementDownloadErrorsWithCategory("image-cache", c.providerName, "get_all_image_caches")
+		}
+		return enhancedErr
 	}
 
 	loadedCount := 0
@@ -486,7 +541,18 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 	img, foundInCache, err := c.tryInitialize(scientificName)
 	if err != nil {
 		if !errors.Is(err, ErrImageNotFound) {
-			logger.Error("Failed to initialize or fetch image (tryInitialize returned error)", "error", err)
+			// Check if it's already an enhanced error, if not enhance it
+			var enhancedErr *errors.EnhancedError
+			if !errors.As(err, &enhancedErr) {
+				enhancedErr = errors.New(err).
+					Component("imageprovider").
+					Category(errors.CategoryImageProvider).
+					Context("provider", c.providerName).
+					Context("scientific_name", scientificName).
+					Context("operation", "try_initialize").
+					Build()
+			}
+			logger.Error("Failed to initialize or fetch image (tryInitialize returned error)", "error", enhancedErr)
 		}
 		// Even if initialization failed, maybe a fallback provider has it?
 		// This requires the registry to be set.
@@ -555,8 +621,15 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 	// 2. Not in DB or DB load failed, fetch from the actual provider
 	logger.Info("Image not found in DB cache, fetching from provider")
 	if c.provider == nil {
-		logger.Error("Cannot fetch image: provider is nil")
-		return BirdImage{}, fmt.Errorf("image provider for %s is not configured", c.providerName)
+		enhancedErr := errors.Newf("image provider for %s is not configured", c.providerName).
+			Component("imageprovider").
+			Category(errors.CategoryImageProvider).
+			Context("provider", c.providerName).
+			Context("scientific_name", scientificName).
+			Context("operation", "fetch_and_store").
+			Build()
+		logger.Error("Cannot fetch image: provider is nil", "error", enhancedErr)
+		return BirdImage{}, enhancedErr
 	}
 
 	// Check if this provider is specifically disabled in config
@@ -565,7 +638,21 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 
 	fetchedImage, fetchErr := c.provider.Fetch(scientificName)
 	if fetchErr != nil {
-		logger.Error("Failed to fetch image from provider", "error", fetchErr)
+		// Check if it's already an enhanced error, if not enhance it
+		var enhancedErr *errors.EnhancedError
+		if !errors.As(fetchErr, &enhancedErr) {
+			enhancedErr = errors.New(fetchErr).
+				Component("imageprovider").
+				Category(errors.CategoryImageFetch).
+				Context("provider", c.providerName).
+				Context("scientific_name", scientificName).
+				Context("operation", "provider_fetch").
+				Build()
+		}
+		logger.Error("Failed to fetch image from provider", "error", enhancedErr)
+		if c.metrics != nil {
+			c.metrics.IncrementDownloadErrorsWithCategory("image-fetch", c.providerName, "provider_fetch")
+		}
 		// Store a negative cache entry? For now, just return error.
 		// Check if it's a 'not found' error vs a transient error
 		if errors.Is(fetchErr, ErrImageNotFound) {
@@ -575,7 +662,7 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 			return BirdImage{}, fetchErr // Return the specific ErrImageNotFound
 		}
 		// For other errors, don't store anything and return the error
-		return BirdImage{}, fmt.Errorf("failed to fetch image for %s from %s: %w", scientificName, c.providerName, fetchErr)
+		return BirdImage{}, enhancedErr
 	}
 
 	// If fetch was successful but returned an empty URL (provider couldn't find it)
@@ -665,14 +752,32 @@ func (c *BirdImageCache) fetchDirect(scientificName string) (BirdImage, error) {
 	logger := imageProviderLogger.With("provider", c.providerName, "scientific_name", scientificName)
 	logger.Debug("Performing direct fetch from provider (bypassing cache checks)")
 	if c.provider == nil {
-		logger.Error("Cannot perform direct fetch: provider is nil")
-		return BirdImage{}, fmt.Errorf("image provider %s is not configured", c.providerName)
+		enhancedErr := errors.Newf("image provider %s is not configured", c.providerName).
+			Component("imageprovider").
+			Category(errors.CategoryImageProvider).
+			Context("provider", c.providerName).
+			Context("scientific_name", scientificName).
+			Context("operation", "fetch_direct").
+			Build()
+		logger.Error("Cannot perform direct fetch: provider is nil", "error", enhancedErr)
+		return BirdImage{}, enhancedErr
 	}
 
 	img, err := c.provider.Fetch(scientificName)
 	if err != nil {
-		logger.Error("Direct fetch failed", "error", err)
-		return BirdImage{}, err
+		// Check if it's already an enhanced error, if not enhance it
+		var enhancedErr *errors.EnhancedError
+		if !errors.As(err, &enhancedErr) {
+			enhancedErr = errors.New(err).
+				Component("imageprovider").
+				Category(errors.CategoryImageFetch).
+				Context("provider", c.providerName).
+				Context("scientific_name", scientificName).
+				Context("operation", "direct_fetch").
+				Build()
+		}
+		logger.Error("Direct fetch failed", "error", enhancedErr)
+		return BirdImage{}, enhancedErr
 	}
 
 	img.CachedAt = time.Now() // Set time even though it's not 'cached'
@@ -728,8 +833,14 @@ func CreateDefaultCache(metrics *observability.Metrics, store datastore.Interfac
 	// Use the correct constructor name from wikipedia.go
 	provider, err := NewWikiMediaProvider()
 	if err != nil {
-		imageProviderLogger.Error("Failed to create WikiMedia image provider", "error", err)
-		return nil, fmt.Errorf("failed to create wikimedia image provider: %w", err)
+		enhancedErr := errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryImageProvider).
+			Context("provider", "wikimedia").
+			Context("operation", "create_default_cache").
+			Build()
+		imageProviderLogger.Error("Failed to create WikiMedia image provider", "error", enhancedErr)
+		return nil, enhancedErr
 	}
 	// Using "wikimedia" as the provider name aligns with the constructor used
 	return InitCache("wikimedia", provider, metrics, store), nil
@@ -755,16 +866,33 @@ func NewImageProviderRegistry() *ImageProviderRegistry {
 func (r *ImageProviderRegistry) Register(name string, cache *BirdImageCache) error {
 	// Validate inputs
 	if name == "" {
-		return fmt.Errorf("provider name cannot be empty")
+		enhancedErr := errors.Newf("provider name cannot be empty").
+			Component("imageprovider").
+			Category(errors.CategoryValidation).
+			Context("operation", "register_provider").
+			Build()
+		return enhancedErr
 	}
 	if cache == nil {
-		return fmt.Errorf("cannot register nil cache for provider '%s'", name)
+		enhancedErr := errors.Newf("cannot register nil cache for provider '%s'", name).
+			Component("imageprovider").
+			Category(errors.CategoryValidation).
+			Context("provider", name).
+			Context("operation", "register_provider").
+			Build()
+		return enhancedErr
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.caches[name]; exists {
-		return fmt.Errorf("image provider cache named '%s' already registered", name)
+		enhancedErr := errors.Newf("image provider cache named '%s' already registered", name).
+			Component("imageprovider").
+			Category(errors.CategoryValidation).
+			Context("provider", name).
+			Context("operation", "register_provider").
+			Build()
+		return enhancedErr
 	}
 	r.caches[name] = cache
 	return nil
@@ -783,15 +911,33 @@ func (r *ImageProviderRegistry) GetCache(name string) (*BirdImageCache, bool) {
 func (r *ImageProviderRegistry) GetImage(providerName, scientificName string) (BirdImage, error) {
 	// Validate inputs
 	if providerName == "" {
-		return BirdImage{}, fmt.Errorf("provider name cannot be empty")
+		enhancedErr := errors.Newf("provider name cannot be empty").
+			Component("imageprovider").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_image").
+			Build()
+		return BirdImage{}, enhancedErr
 	}
 	if scientificName == "" {
-		return BirdImage{}, fmt.Errorf("scientific name cannot be empty")
+		enhancedErr := errors.Newf("scientific name cannot be empty").
+			Component("imageprovider").
+			Category(errors.CategoryValidation).
+			Context("provider", providerName).
+			Context("operation", "get_image").
+			Build()
+		return BirdImage{}, enhancedErr
 	}
 
 	cache, ok := r.GetCache(providerName)
 	if !ok {
-		return BirdImage{}, fmt.Errorf("no image provider cache registered for name '%s'", providerName)
+		enhancedErr := errors.Newf("no image provider cache registered for name '%s'", providerName).
+			Component("imageprovider").
+			Category(errors.CategoryImageProvider).
+			Context("provider", providerName).
+			Context("scientific_name", scientificName).
+			Context("operation", "get_image").
+			Build()
+		return BirdImage{}, enhancedErr
 	}
 	return cache.Get(scientificName)
 }

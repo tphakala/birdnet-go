@@ -14,7 +14,7 @@ type ImageProviderMetrics struct {
 	CacheHits        prometheus.Counter
 	CacheMisses      prometheus.Counter
 	ImageDownloads   prometheus.Counter
-	DownloadErrors   prometheus.Counter
+	DownloadErrors   *prometheus.CounterVec
 	DownloadDuration prometheus.Histogram
 	registry         *prometheus.Registry
 }
@@ -55,10 +55,10 @@ func (m *ImageProviderMetrics) initMetrics() error {
 		Help: "Total number of image downloads.",
 	})
 
-	m.DownloadErrors = prometheus.NewCounter(prometheus.CounterOpts{
+	m.DownloadErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "image_provider_download_errors_total",
 		Help: "Total number of image download errors.",
-	})
+	}, []string{"error_category", "provider", "operation"})
 
 	m.DownloadDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "image_provider_download_duration_seconds",
@@ -91,7 +91,12 @@ func (m *ImageProviderMetrics) IncrementImageDownloads() {
 
 // IncrementDownloadErrors increases the download error counter by one.
 func (m *ImageProviderMetrics) IncrementDownloadErrors() {
-	m.DownloadErrors.Inc()
+	m.DownloadErrors.WithLabelValues("generic", "unknown", "unknown").Inc()
+}
+
+// IncrementDownloadErrorsWithCategory increases the download error counter with categorization.
+func (m *ImageProviderMetrics) IncrementDownloadErrorsWithCategory(category, provider, operation string) {
+	m.DownloadErrors.WithLabelValues(category, provider, operation).Inc()
 }
 
 // ObserveDownloadDuration records the duration of an image download operation.
@@ -103,20 +108,20 @@ func (m *ImageProviderMetrics) ObserveDownloadDuration(durationSeconds float64) 
 // Collect implements the prometheus.Collector interface.
 func (m *ImageProviderMetrics) Collect(ch chan<- prometheus.Metric) {
 	log.Println("ImageProviderMetrics Collect method called")
-	ch <- m.CacheSize
-	ch <- m.CacheHits
-	ch <- m.CacheMisses
-	ch <- m.ImageDownloads
-	ch <- m.DownloadErrors
-	ch <- m.DownloadDuration
+	m.CacheSize.Collect(ch)
+	m.CacheHits.Collect(ch)
+	m.CacheMisses.Collect(ch)
+	m.ImageDownloads.Collect(ch)
+	m.DownloadErrors.Collect(ch)
+	m.DownloadDuration.Collect(ch)
 }
 
 // Describe implements the prometheus.Collector interface.
 func (m *ImageProviderMetrics) Describe(ch chan<- *prometheus.Desc) {
-	ch <- m.CacheSize.Desc()
-	ch <- m.CacheHits.Desc()
-	ch <- m.CacheMisses.Desc()
-	ch <- m.ImageDownloads.Desc()
-	ch <- m.DownloadErrors.Desc()
-	ch <- m.DownloadDuration.Desc()
+	m.CacheSize.Describe(ch)
+	m.CacheHits.Describe(ch)
+	m.CacheMisses.Describe(ch)
+	m.ImageDownloads.Describe(ch)
+	m.DownloadErrors.Describe(ch)
+	m.DownloadDuration.Describe(ch)
 }

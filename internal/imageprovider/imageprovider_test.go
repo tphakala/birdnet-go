@@ -1,7 +1,6 @@
 package imageprovider_test
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"gorm.io/gorm"
@@ -32,7 +32,7 @@ func (m *mockImageProvider) Fetch(scientificName string) (imageprovider.BirdImag
 	m.mu.Unlock()
 
 	if m.shouldFail {
-		return imageprovider.BirdImage{}, errors.New("mock fetch error")
+		return imageprovider.BirdImage{}, errors.NewStd("mock fetch error")
 	}
 
 	// Simulate network delay if specified
