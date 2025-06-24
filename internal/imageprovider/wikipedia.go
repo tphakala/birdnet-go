@@ -4,8 +4,6 @@ package imageprovider
 import (
 	"bytes"
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -15,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/k3a/html2text"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"golang.org/x/net/html"
 	"golang.org/x/time/rate"
 )
@@ -46,8 +45,15 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 	settings := conf.Setting()
 	client, err := mwclient.New("https://wikipedia.org/w/api.php", "BirdNET-Go")
 	if err != nil {
-		logger.Error("Failed to create mwclient for Wikipedia API", "error", err)
-		return nil, fmt.Errorf("failed to create mwclient: %w", err)
+		enhancedErr := errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("operation", "create_mwclient").
+			Context("api_url", "https://wikipedia.org/w/api.php").
+			Build()
+		logger.Error("Failed to create mwclient for Wikipedia API", "error", enhancedErr)
+		return nil, enhancedErr
 	}
 
 	// Rate limit: 10 requests per second with burst of 10
@@ -76,9 +82,16 @@ func (l *wikiMediaProvider) queryWithRetry(reqID string, params map[string]strin
 		attemptLogger.Debug("Waiting for rate limiter")
 		err := l.limiter.Wait(context.Background()) // Using Background context for limiter wait
 		if err != nil {
-			attemptLogger.Error("Rate limiter error", "error", err)
+			enhancedErr := errors.New(err).
+				Component("imageprovider").
+				Category(errors.CategoryNetwork).
+				Context("provider", wikiProviderName).
+				Context("request_id", reqID).
+				Context("operation", "rate_limiter_wait").
+				Build()
+			attemptLogger.Error("Rate limiter error", "error", enhancedErr)
 			// Don't retry on limiter error, return immediately
-			return nil, fmt.Errorf("rate limiter error: %w", err)
+			return nil, enhancedErr
 		}
 
 		attemptLogger.Debug("Sending GET request to Wikipedia API")
@@ -101,7 +114,15 @@ func (l *wikiMediaProvider) queryWithRetry(reqID string, params map[string]strin
 	}
 
 	logger.Error("API request failed after all retries", "last_error", lastErr)
-	return nil, fmt.Errorf("all %d attempts failed, last error: %w", l.maxRetries, lastErr)
+	enhancedErr := errors.New(lastErr).
+		Component("imageprovider").
+		Category(errors.CategoryNetwork).
+		Context("provider", wikiProviderName).
+		Context("request_id", reqID).
+		Context("max_retries", l.maxRetries).
+		Context("operation", "query_with_retry").
+		Build()
+	return nil, enhancedErr
 }
 
 // queryAndGetFirstPage queries Wikipedia with given parameters and returns the first page hit.
@@ -119,7 +140,8 @@ func (l *wikiMediaProvider) queryAndGetFirstPage(reqID string, params map[string
 		// if l.debug {
 		// 	log.Printf("Debug: Wikipedia API query failed after retries: %v", err)
 		// }
-		return nil, fmt.Errorf("failed to query Wikipedia: %w", err)
+		// Error already enhanced in queryWithRetry
+		return nil, err
 	}
 
 	// Optionally log raw response at Debug level
@@ -146,7 +168,14 @@ func (l *wikiMediaProvider) queryAndGetFirstPage(reqID string, params map[string
 		// 		log.Printf("[%s] Debug: Response structure: %v", reqID, obj)
 		// 	}
 		// }
-		return nil, fmt.Errorf("failed to get pages from response: %w", err)
+		enhancedErr := errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryImageFetch).
+			Context("provider", wikiProviderName).
+			Context("request_id", reqID).
+			Context("operation", "parse_pages_from_response").
+			Build()
+		return nil, enhancedErr
 	}
 
 	if len(pages) == 0 {
@@ -217,7 +246,16 @@ func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
 		// }
 		// Don't expose internal error to user, use a generic message
 		// Keep existing error message which is reasonable
-		return BirdImage{}, fmt.Errorf("unable to retrieve image attribution for species: %s", scientificName)
+		enhancedErr := errors.Newf("unable to retrieve image attribution for species: %s", scientificName).
+			Component("imageprovider").
+			Category(errors.CategoryImageFetch).
+			Context("provider", wikiProviderName).
+			Context("request_id", reqID).
+			Context("scientific_name", scientificName).
+			Context("thumbnail_source_file", thumbnailSourceFile).
+			Context("operation", "fetch_author_info").
+			Build()
+		return BirdImage{}, enhancedErr
 	}
 	logger = logger.With("author", authorInfo.name, "license", authorInfo.licenseName)
 	logger.Info("Author info retrieved successfully")
@@ -267,7 +305,19 @@ func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string) (url, f
 		// 	log.Printf("Debug: Failed to query thumbnail page: %v", err)
 		// }
 		// Return a consistent user-facing error
-		return "", "", fmt.Errorf("no Wikipedia page found for species: %s", scientificName)
+		// Check if it's already an enhanced error from queryAndGetFirstPage
+		var enhancedErr *errors.EnhancedError
+		if !errors.As(err, &enhancedErr) {
+			enhancedErr = errors.Newf("no Wikipedia page found for species: %s", scientificName).
+				Component("imageprovider").
+				Category(errors.CategoryImageFetch).
+				Context("provider", wikiProviderName).
+				Context("request_id", reqID).
+				Context("scientific_name", scientificName).
+				Context("operation", "query_thumbnail").
+				Build()
+		}
+		return "", "", enhancedErr
 	}
 
 	url, err = page.GetString("thumbnail", "source")
@@ -277,7 +327,15 @@ func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string) (url, f
 		// 	log.Printf("Debug: Failed to extract thumbnail URL: %v", err)
 		// }
 		// Return a consistent user-facing error
-		return "", "", fmt.Errorf("no free-license image available for species: %s", scientificName)
+		enhancedErr := errors.Newf("no free-license image available for species: %s", scientificName).
+			Component("imageprovider").
+			Category(errors.CategoryImageFetch).
+			Context("provider", wikiProviderName).
+			Context("request_id", reqID).
+			Context("scientific_name", scientificName).
+			Context("operation", "extract_thumbnail_url").
+			Build()
+		return "", "", enhancedErr
 	}
 
 	fileName, err = page.GetString("pageimage")
@@ -287,7 +345,15 @@ func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string) (url, f
 		// 	log.Printf("Debug: Failed to extract thumbnail filename: %v", err)
 		// }
 		// Return a consistent user-facing error
-		return "", "", fmt.Errorf("image metadata not available for species: %s", scientificName)
+		enhancedErr := errors.Newf("image metadata not available for species: %s", scientificName).
+			Component("imageprovider").
+			Category(errors.CategoryImageFetch).
+			Context("provider", wikiProviderName).
+			Context("request_id", reqID).
+			Context("scientific_name", scientificName).
+			Context("operation", "extract_thumbnail_filename").
+			Build()
+		return "", "", enhancedErr
 	}
 
 	logger.Debug("Successfully retrieved thumbnail URL and filename", "url", url, "filename", fileName)
@@ -329,7 +395,19 @@ func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailFileName string) (*w
 		// 	log.Printf("Debug: Failed to query author info page: %v", err)
 		// }
 		// Return internal error, fetch will wrap it
-		return nil, fmt.Errorf("failed to query image info for %s: %w", thumbnailFileName, err)
+		// Check if it's already an enhanced error from queryAndGetFirstPage
+		var enhancedErr *errors.EnhancedError
+		if !errors.As(err, &enhancedErr) {
+			enhancedErr = errors.New(err).
+				Component("imageprovider").
+				Category(errors.CategoryImageFetch).
+				Context("provider", wikiProviderName).
+				Context("request_id", reqID).
+				Context("thumbnail_filename", thumbnailFileName).
+				Context("operation", "query_author_info").
+				Build()
+		}
+		return nil, enhancedErr
 	}
 
 	// Extract metadata
@@ -337,13 +415,29 @@ func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailFileName string) (*w
 	imgInfo, err := page.GetObjectArray("imageinfo")
 	if err != nil || len(imgInfo) == 0 {
 		logger.Error("Failed to get imageinfo array from page data", "error", err, "array_len", len(imgInfo))
-		return nil, fmt.Errorf("no imageinfo found for %s", thumbnailFileName)
+		enhancedErr := errors.Newf("no imageinfo found for %s", thumbnailFileName).
+			Component("imageprovider").
+			Category(errors.CategoryImageFetch).
+			Context("provider", wikiProviderName).
+			Context("request_id", reqID).
+			Context("thumbnail_filename", thumbnailFileName).
+			Context("operation", "extract_imageinfo").
+			Build()
+		return nil, enhancedErr
 	}
 
 	extMetadata, err := imgInfo[0].GetObject("extmetadata")
 	if err != nil {
 		logger.Error("Failed to get extmetadata object from imageinfo", "error", err)
-		return nil, fmt.Errorf("no extmetadata found for %s", thumbnailFileName)
+		enhancedErr := errors.Newf("no extmetadata found for %s", thumbnailFileName).
+			Component("imageprovider").
+			Category(errors.CategoryImageFetch).
+			Context("provider", wikiProviderName).
+			Context("request_id", reqID).
+			Context("thumbnail_filename", thumbnailFileName).
+			Context("operation", "extract_extmetadata").
+			Build()
+		return nil, enhancedErr
 	}
 
 	// Extract specific fields (Artist, LicenseShortName, LicenseUrl)
@@ -393,7 +487,14 @@ func extractArtistInfo(htmlStr string) (href, text string, err error) {
 	doc, err := html.Parse(strings.NewReader(htmlStr))
 	if err != nil {
 		logger.Error("Failed to parse artist HTML", "error", err)
-		return "", "", fmt.Errorf("failed to parse artist HTML: %w", err)
+		enhancedErr := errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryImageFetch).
+			Context("provider", wikiProviderName).
+			Context("html_length", len(htmlStr)).
+			Context("operation", "parse_artist_html").
+			Build()
+		return "", "", enhancedErr
 	}
 
 	userLinks := findWikipediaUserLinks(findLinks(doc))

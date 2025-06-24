@@ -13,26 +13,29 @@ import (
 type ErrorCategory string
 
 const (
-	CategoryModelInit     ErrorCategory = "model-initialization"
-	CategoryModelLoad     ErrorCategory = "model-loading"
-	CategoryLabelLoad     ErrorCategory = "label-loading"
-	CategoryValidation    ErrorCategory = "validation"
-	CategoryFileIO        ErrorCategory = "file-io"
-	CategoryNetwork       ErrorCategory = "network"
-	CategoryAudio         ErrorCategory = "audio-processing"
-	CategoryRTSP          ErrorCategory = "rtsp-connection"
-	CategoryDatabase      ErrorCategory = "database"
-	CategoryHTTP          ErrorCategory = "http-request"
-	CategoryConfiguration ErrorCategory = "configuration"
-	CategorySystem        ErrorCategory = "system-resource"
-	CategoryDiskUsage     ErrorCategory = "disk-usage"
-	CategoryDiskCleanup   ErrorCategory = "disk-cleanup"
-	CategoryFileParsing   ErrorCategory = "file-parsing"
-	CategoryPolicyConfig  ErrorCategory = "policy-config"
+	CategoryModelInit      ErrorCategory = "model-initialization"
+	CategoryModelLoad      ErrorCategory = "model-loading"
+	CategoryLabelLoad      ErrorCategory = "label-loading"
+	CategoryValidation     ErrorCategory = "validation"
+	CategoryFileIO         ErrorCategory = "file-io"
+	CategoryNetwork        ErrorCategory = "network"
+	CategoryAudio          ErrorCategory = "audio-processing"
+	CategoryRTSP           ErrorCategory = "rtsp-connection"
+	CategoryDatabase       ErrorCategory = "database"
+	CategoryHTTP           ErrorCategory = "http-request"
+	CategoryConfiguration  ErrorCategory = "configuration"
+	CategorySystem         ErrorCategory = "system-resource"
+	CategoryDiskUsage      ErrorCategory = "disk-usage"
+	CategoryDiskCleanup    ErrorCategory = "disk-cleanup"
+	CategoryFileParsing    ErrorCategory = "file-parsing"
+	CategoryPolicyConfig   ErrorCategory = "policy-config"
 	CategoryMQTTConnection ErrorCategory = "mqtt-connection"
-	CategoryMQTTPublish   ErrorCategory = "mqtt-publish"
-	CategoryMQTTAuth      ErrorCategory = "mqtt-authentication"
-	CategoryGeneric       ErrorCategory = "generic"
+	CategoryMQTTPublish    ErrorCategory = "mqtt-publish"
+	CategoryMQTTAuth       ErrorCategory = "mqtt-authentication"
+	CategoryImageFetch     ErrorCategory = "image-fetch"
+	CategoryImageCache     ErrorCategory = "image-cache"
+	CategoryImageProvider  ErrorCategory = "image-provider"
+	CategoryGeneric        ErrorCategory = "generic"
 )
 
 // EnhancedError wraps an error with additional context and metadata
@@ -228,6 +231,9 @@ func detectComponent() string {
 	if strings.Contains(funcName, "datastore") {
 		return "datastore"
 	}
+	if strings.Contains(funcName, "imageprovider") {
+		return "imageprovider"
+	}
 
 	// Extract from package path
 	parts := strings.Split(funcName, "/")
@@ -288,6 +294,14 @@ func detectCategory(err error, component string) ErrorCategory {
 		return CategoryDatabase
 	case "http-controller":
 		return CategoryHTTP
+	case "imageprovider":
+		if strings.Contains(errorMsg, "cache") {
+			return CategoryImageCache
+		}
+		if strings.Contains(errorMsg, "fetch") || strings.Contains(errorMsg, "download") || strings.Contains(errorMsg, "url") {
+			return CategoryImageFetch
+		}
+		return CategoryImageProvider
 	}
 
 	return CategoryGeneric
@@ -410,4 +424,9 @@ func As(err error, target interface{}) bool {
 // Unwrap returns the result of calling the Unwrap method on err (passthrough to standard library)
 func Unwrap(err error) error {
 	return stderrors.Unwrap(err)
+}
+
+// Join returns an error that wraps the given errors (passthrough to standard library)
+func Join(errs ...error) error {
+	return stderrors.Join(errs...)
 }

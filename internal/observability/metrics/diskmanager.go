@@ -10,21 +10,21 @@ type DiskManagerMetrics struct {
 	registry *prometheus.Registry
 
 	// Disk usage metrics
-	diskUsageBytes             prometheus.Gauge
-	diskTotalBytes             prometheus.Gauge
-	diskUtilizationPercentage  prometheus.Gauge
-	diskCheckDurationSeconds   prometheus.Histogram
+	diskUsageBytes            prometheus.Gauge
+	diskTotalBytes            prometheus.Gauge
+	diskUtilizationPercentage prometheus.Gauge
+	diskCheckDurationSeconds  prometheus.Histogram
 
 	// Cleanup operation metrics
-	cleanupOperationsTotal     *prometheus.CounterVec
-	cleanupErrorsTotal         *prometheus.CounterVec
-	filesDeletedTotal          *prometheus.CounterVec
-	bytesFreedTotal            *prometheus.CounterVec
-	cleanupDurationSeconds     *prometheus.HistogramVec
+	cleanupOperationsTotal *prometheus.CounterVec
+	cleanupErrorsTotal     *prometheus.CounterVec
+	filesDeletedTotal      *prometheus.CounterVec
+	bytesFreedTotal        *prometheus.CounterVec
+	cleanupDurationSeconds *prometheus.HistogramVec
 
 	// File processing metrics
-	filesProcessedTotal        *prometheus.CounterVec
-	fileParsingErrorsTotal     *prometheus.CounterVec
+	filesProcessedTotal    *prometheus.CounterVec
+	fileParsingErrorsTotal *prometheus.CounterVec
 }
 
 // NewDiskManagerMetrics creates and registers new disk manager metrics
@@ -159,7 +159,7 @@ func (m *DiskManagerMetrics) Collect(ch chan<- prometheus.Metric) {
 func (m *DiskManagerMetrics) UpdateDiskUsage(usedBytes, totalBytes uint64) {
 	m.diskUsageBytes.Set(float64(usedBytes))
 	m.diskTotalBytes.Set(float64(totalBytes))
-	
+
 	var utilizationPercentage float64
 	if totalBytes > 0 {
 		utilizationPercentage = float64(usedBytes) / float64(totalBytes) * 100
