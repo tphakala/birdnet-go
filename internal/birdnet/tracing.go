@@ -14,14 +14,14 @@ import (
 
 // TracingSpan represents a traced operation with minimal overhead
 type TracingSpan struct {
-	operation   string
-	description string
-	startTime   time.Time
-	tags        map[string]string // Only allocated if needed
-	data        map[string]interface{} // Only allocated if needed
-	sentrySpan  *sentry.Span
+	operation      string
+	description    string
+	startTime      time.Time
+	tags           map[string]string      // Only allocated if needed
+	data           map[string]interface{} // Only allocated if needed
+	sentrySpan     *sentry.Span
 	metricsEnabled bool
-	model       string // For metrics labeling
+	model          string // For metrics labeling
 }
 
 // Global metrics instance (set by observability package)
@@ -34,11 +34,11 @@ func SetMetrics(m *metrics.BirdNETMetrics) {
 }
 
 // StartSpan starts a new tracing span with minimal overhead
-func StartSpan(ctx context.Context, operation string, description string) (*TracingSpan, context.Context) {
+func StartSpan(ctx context.Context, operation, description string) (*TracingSpan, context.Context) {
 	span := &TracingSpan{
-		operation:   operation,
-		description: description,
-		startTime:   time.Now(),
+		operation:      operation,
+		description:    description,
+		startTime:      time.Now(),
 		metricsEnabled: globalMetrics != nil,
 	}
 
@@ -65,12 +65,12 @@ func (s *TracingSpan) SetTag(key, value string) {
 	if s == nil {
 		return
 	}
-	
+
 	// Special handling for model tag
 	if key == "model" {
 		s.model = value
 	}
-	
+
 	// Only allocate tags map if Sentry is enabled
 	if s.sentrySpan != nil {
 		if s.tags == nil {
@@ -86,7 +86,7 @@ func (s *TracingSpan) SetData(key string, value interface{}) {
 	if s == nil {
 		return
 	}
-	
+
 	// Only allocate data map if Sentry is enabled
 	if s.sentrySpan != nil {
 		if s.data == nil {
@@ -102,17 +102,17 @@ func (s *TracingSpan) Finish() {
 	if s == nil {
 		return
 	}
-	
+
 	duration := time.Since(s.startTime)
 	durationSeconds := duration.Seconds()
-	
+
 	// Record metrics if enabled
 	if s.metricsEnabled {
 		model := s.model
 		if model == "" {
 			model = "unknown"
 		}
-		
+
 		// Record appropriate metric based on operation
 		switch s.operation {
 		case "birdnet.predict":
@@ -124,12 +124,12 @@ func (s *TracingSpan) Finish() {
 		case "birdnet.range_filter":
 			globalMetrics.RecordRangeFilter(model, durationSeconds)
 		}
-		
+
 		// Update active operations count
 		count := atomic.AddInt64(&activeOperations, -1)
 		globalMetrics.SetActiveProcessing(float64(count))
 	}
-	
+
 	// Record in Sentry if enabled
 	if s.sentrySpan != nil {
 		s.SetData("duration_ms", duration.Milliseconds())
@@ -147,7 +147,7 @@ func TraceAnalysis(ctx context.Context, operation string, fn func() error) error
 		span.SetTag("error", "true")
 		span.SetData("error_message", err.Error())
 	}
-	
+
 	return err
 }
 
@@ -157,13 +157,13 @@ func TracePrediction(ctx context.Context, sampleSize int, fn func() (interface{}
 	defer span.Finish()
 
 	span.SetData("sample_size", sampleSize)
-	
+
 	start := time.Now()
 	result, err := fn()
 	duration := time.Since(start)
-	
+
 	span.SetData("prediction_duration_ms", duration.Milliseconds())
-	
+
 	if err != nil {
 		span.SetTag("error", "true")
 		span.SetData("error_message", err.Error())
@@ -174,7 +174,7 @@ func TracePrediction(ctx context.Context, sampleSize int, fn func() (interface{}
 			span.SetData("result_count", len(results))
 		}
 	}
-	
+
 	return result, err
 }
 
@@ -185,7 +185,7 @@ func RecordMetric(name string, value float64, tags map[string]string) {
 	if settings != nil && settings.Debug {
 		fmt.Printf("[METRIC] %s: %.2f tags=%v\n", name, value, tags)
 	}
-	
+
 	// Note: Detailed metrics are now recorded via spans automatically
 }
 
@@ -193,8 +193,8 @@ func RecordMetric(name string, value float64, tags map[string]string) {
 func RecordDuration(operation string, duration time.Duration) {
 	// This is now handled automatically by spans
 	if globalMetrics == nil {
-		RecordMetric(fmt.Sprintf("birdnet.%s.duration", operation), 
-			float64(duration.Milliseconds()), 
+		RecordMetric(fmt.Sprintf("birdnet.%s.duration", operation),
+			float64(duration.Milliseconds()),
 			map[string]string{"unit": "ms"})
 	}
 }

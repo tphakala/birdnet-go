@@ -12,13 +12,13 @@ import (
 
 // HandleErrorWithSentry is a helper function that handles errors in a privacy-compliant way
 // It logs the error locally and sends it to Sentry if enabled
-func HandleErrorWithSentry(c echo.Context, err error, component string, userMessage string) error {
+func HandleErrorWithSentry(c echo.Context, err error, component, userMessage string) error {
 	// Log the error locally for debugging
 	log.Printf("Error in %s: %v", component, err)
-	
+
 	// Send to Sentry if enabled (privacy-compliant)
 	telemetry.CaptureError(err, component)
-	
+
 	// Return appropriate error response to user
 	return c.JSON(500, map[string]string{
 		"error": userMessage,
@@ -32,14 +32,14 @@ func WithSentryContext(component string, handler echo.HandlerFunc) echo.HandlerF
 		if hub := sentryecho.GetHubFromContext(c); hub != nil {
 			hub.Scope().SetTag("component", component)
 		}
-		
+
 		// Execute the handler
 		err := handler(c)
 		if err != nil {
 			// Capture the error with context
 			telemetry.CaptureError(err, component)
 		}
-		
+
 		return err
 	}
 }
@@ -56,7 +56,7 @@ func (h *Handlers) ExampleHandler(c echo.Context) error {
 			// Use the privacy-compliant error handler
 			return HandleErrorWithSentry(c, err, "example", "Failed to retrieve detections")
 		}
-		
+
 		return c.JSON(200, data)
 	})(c)
 }
