@@ -30,16 +30,16 @@ func (bn *BirdNET) Predict(sample [][]float32) ([]datastore.Results, error) {
 
 // PredictWithContext performs inference with tracing support
 func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
-	span, ctx := StartSpan(ctx, "birdnet.predict", "Species prediction")
+	span, _ := StartSpan(ctx, "birdnet.predict", "Species prediction")
 	defer span.Finish()
-	
+
 	start := time.Now()
 	span.SetTag("model", bn.ModelInfo.ID)
 	span.SetData("sample_count", len(sample))
 	if len(sample) > 0 {
 		span.SetData("sample_size", len(sample[0]))
 	}
-	
+
 	// implement locking to prevent concurrent access to the interpreter, not
 	// necessarily best way to manage multiple audio sources but works for now
 	bn.mu.Lock()
@@ -53,16 +53,16 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Context("interpreter_state", "initialized").
 			Build()
-		
+
 		// Record error in metrics via span finish
 		span.SetTag("error", "true")
 		span.SetData("error_type", "input_tensor_nil")
-		
+
 		// Record error in metrics directly
 		if globalMetrics != nil {
 			globalMetrics.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
 		}
-		
+
 		return nil, err
 	}
 
@@ -82,22 +82,22 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 			Context("status_code", status).
 			Timing("prediction-invoke", time.Since(start)).
 			Build()
-			
+
 		span.SetTag("error", "true")
 		span.SetData("error_type", "invoke_failed")
 		span.SetData("status_code", status)
-		
+
 		// Record error in metrics
 		if globalMetrics != nil {
 			globalMetrics.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
 		}
-		
+
 		return nil, err
 	}
-	
+
 	invokeDuration := time.Since(invokeStart)
 	span.SetData("invoke_duration_ms", invokeDuration.Milliseconds())
-	
+
 	// Record model invoke timing separately
 	if globalMetrics != nil {
 		globalMetrics.RecordModelInvoke(bn.ModelInfo.ID, invokeDuration.Seconds())
@@ -117,15 +117,15 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 			Context("confidence_count", len(confidence)).
 			Timing("prediction-total", time.Since(start)).
 			Build()
-			
+
 		span.SetTag("error", "true")
 		span.SetData("error_type", "label_mismatch")
-		
+
 		// Record error in metrics
 		if globalMetrics != nil {
 			globalMetrics.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
 		}
-		
+
 		return nil, err
 	}
 
@@ -135,12 +135,12 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	// Log prediction timing for performance monitoring
 	duration := time.Since(start)
 	bn.Debug("Prediction completed in %v with %d results", duration, len(results))
-	
+
 	// Record metrics
 	span.SetData("total_duration_ms", duration.Milliseconds())
 	span.SetData("result_count", len(results))
 	span.SetTag("error", "false")
-	
+
 	// The span.Finish() will automatically record the prediction metrics
 
 	// Return the top 10 results
@@ -179,12 +179,12 @@ func (bn *BirdNET) ProcessChunk(chunk []float32, predStart time.Time) ([]datasto
 func (bn *BirdNET) ProcessChunkWithContext(ctx context.Context, chunk []float32, predStart time.Time) ([]datastore.Note, error) {
 	span, ctx := StartSpan(ctx, "birdnet.process_chunk", "Process audio chunk")
 	defer span.Finish()
-	
+
 	start := time.Now()
 	span.SetTag("model", "birdnet") // Default model name for chunk processing
 	span.SetData("chunk_size", len(chunk))
 	span.SetData("pred_start", predStart.Format(time.RFC3339))
-	
+
 	results, err := bn.PredictWithContext(ctx, [][]float32{chunk})
 	if err != nil {
 		return nil, errors.New(err).
