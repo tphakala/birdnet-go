@@ -1,0 +1,163 @@
+{{define "supportSettings"}}
+
+<!-- Hidden input to always submit the template name -->
+<input type="hidden" name="templateName" value="{{.TemplateName}}">
+
+<!-- Sentry Telemetry Settings start -->
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+     role="region" 
+     aria-labelledby="sentryHeader"
+     x-data="{ 
+    sentry: {
+        enabled: {{.Settings.Sentry.Enabled}},
+        dsn: '{{.Settings.Sentry.DSN}}',
+        sampleRate: {{.Settings.Sentry.SampleRate}},
+        debug: {{.Settings.Sentry.Debug}}
+    },
+    sentrySettingsOpen: false,
+    showTooltip: null,
+    hasChanges: false,
+    resetChanges() {
+        this.hasChanges = false;
+    }
+}" x-init="
+    $watch('sentry', (value) => { hasChanges = true }, { deep: true });
+">
+
+    <!-- control collapse element open state and label visibility -->
+    <input type="checkbox" 
+           id="sentrySettingsOpen" 
+           x-on:change="sentrySettingsOpen = !sentrySettingsOpen" 
+           aria-controls="sentrySettingsContent"
+           aria-expanded="true" />
+
+    {{template "sectionHeader" dict
+        "id" "sentry"
+        "title" "Error Tracking & Telemetry"
+        "description" "Optional error tracking to help improve BirdNET-Go reliability and performance"}}
+
+    <div class="collapse-content"
+         id="sentrySettingsContent"
+         role="group" 
+         aria-labelledby="sentryDescription">
+
+        <!-- Privacy Notice -->
+        <div class="alert alert-info mb-4 shadow-sm" role="alert">
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <div>
+                <h3 class="font-bold">Privacy-First Error Tracking</h3>
+                <div class="text-sm mt-1">
+                    <p>Error tracking is <strong>completely optional</strong> and requires your explicit consent. When enabled:</p>
+                    <ul class="list-disc list-inside mt-2 space-y-1">
+                        <li>Only essential error information is collected for debugging</li>
+                        <li>No personal data, audio recordings, or bird detection data is sent</li>
+                        <li>All data is filtered to remove sensitive information</li>
+                        <li>Helps developers identify and fix issues in RTSP streams, database connections, and system reliability</li>
+                        <li>Compliant with GDPR and other privacy regulations</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        {{template "checkbox" dict
+            "id" "sentryEnabled"
+            "model" "sentry.enabled"
+            "name" "sentry.enabled"
+            "label" "Enable Error Tracking (Opt-in)"
+            "tooltip" "Enable privacy-compliant error tracking to help improve BirdNET-Go. Only essential technical information is collected."}}
+
+        <div x-show="sentry.enabled"
+             class="grid grid-cols-1 gap-4 mt-4"
+             id="sentrySettings"
+             role="group"
+             aria-label="Sentry Configuration Settings">
+
+            <!-- DSN Field -->
+            {{template "passwordField" dict
+                "id" "sentryDsn"
+                "model" "sentry.dsn"
+                "name" "sentry.dsn"
+                "label" "Sentry DSN"
+                "placeholder" "https://your-dsn@sentry.io/project-id"
+                "tooltip" "Your Sentry Data Source Name (DSN) from your Sentry project settings. This determines where error reports are sent."}}
+
+            <!-- Advanced Settings -->
+            <div class="border-t border-base-300 pt-4 mt-4">
+                <h3 class="text-sm font-medium mb-3">Advanced Settings</h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {{template "numberField" dict
+                        "id" "sentrySampleRate"
+                        "model" "sentry.sampleRate"
+                        "name" "sentry.samplerate"
+                        "label" "Sample Rate"
+                        "step" "0.1"
+                        "min" "0.0"
+                        "max" "1.0"
+                        "tooltip" "Percentage of errors to capture (0.0 = none, 1.0 = all). Lower values reduce data usage."}}
+
+                    {{template "checkbox" dict
+                        "id" "sentryDebug"
+                        "model" "sentry.debug"
+                        "name" "sentry.debug"
+                        "label" "Debug Mode"
+                        "tooltip" "Enable debug logging for Sentry operations. Only enable for troubleshooting."}}
+                </div>
+            </div>
+
+            <!-- Setup Instructions -->
+            <div class="border-t border-base-300 pt-4 mt-4">
+                <h3 class="text-sm font-medium mb-3">Setup Instructions</h3>
+                <div class="prose prose-sm max-w-none">
+                    <ol class="list-decimal list-inside space-y-2">
+                        <li>Create a free account at <a href="https://sentry.io" target="_blank" rel="noopener noreferrer" class="link link-primary">sentry.io</a></li>
+                        <li>Create a new project for BirdNET-Go</li>
+                        <li>Copy the DSN from your project settings</li>
+                        <li>Paste the DSN in the field above</li>
+                        <li>Enable error tracking and save settings</li>
+                    </ol>
+                    <p class="mt-3 text-gray-600">Once configured, BirdNET-Go will automatically report errors to help identify and fix issues with RTSP streams, database operations, and system stability.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- What Data is Collected -->
+        {{template "noteField" dict
+            "condition" "sentry.enabled"
+            "content" "<strong>What Data is Collected:</strong><br/>• Error messages and types<br/>• Component names where errors occur<br/>• Technical error context (no personal data)<br/>• RTSP connection issues and patterns<br/>• System resource errors<br/><br/><strong>What is NOT Collected:</strong><br/>• Audio recordings or bird detection data<br/>• Personal information or user data<br/>• IP addresses or location data<br/>• File paths or system details<br/>• Any sensitive application data"}}
+    </div>
+</div>
+<!-- Sentry Telemetry Settings end -->
+
+<!-- Future Support Features placeholder -->
+<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+     role="region" 
+     aria-labelledby="localSupportHeader">
+
+    <!-- control collapse element open state and label visibility -->
+    <input type="checkbox" 
+           id="localSupportSettingsOpen" 
+           aria-controls="localSupportSettingsContent"
+           aria-expanded="true" />
+
+    {{template "sectionHeader" dict
+        "id" "localSupport"
+        "title" "Local Support Tools"
+        "description" "Tools for collecting local logs and diagnostic information"}}
+
+    <div class="collapse-content"
+         id="localSupportSettingsContent"
+         role="group" 
+         aria-labelledby="localSupportDescription">
+
+        <div class="alert alert-warning" role="alert">
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+            <div>
+                <h3 class="font-bold">Coming Soon</h3>
+                <p class="text-sm">Local log collection and diagnostic tools will be available in a future update. These tools will help you collect system logs and diagnostic information for troubleshooting without sending data externally.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{end}}
