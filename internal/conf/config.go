@@ -323,6 +323,7 @@ type Settings struct {
 	// Runtime values, not stored in config file
 	Version   string `yaml:"-"` // Version from build
 	BuildDate string `yaml:"-"` // Build date from build
+	SystemID  string `yaml:"-"` // Unique system identifier for telemetry
 
 	Main struct {
 		Name      string    // name of BirdNET-Go node, can be used to identify source of notes

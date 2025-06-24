@@ -70,6 +70,19 @@ The system meets privacy requirements for:
 - **Device identifiers** or hardware serial numbers
 - **Network topology** or internal IP ranges
 
+### System Identification 🔑
+
+BirdNET-Go uses a **unique system ID** for telemetry purposes:
+
+**What**: A randomly generated identifier (format: XXXX-XXXX-XXXX)
+**Why**: Allows tracking errors from the same system without revealing identity
+**Example**: "A1B2-C3D4-E5F6"
+**Privacy protection**: 
+- Generated locally using cryptographically secure random numbers
+- No connection to hardware, network, or user information
+- Stored only in your local configuration directory
+- You control when and if to share this ID
+
 ## Anonymization Process
 
 ### URL Anonymization Algorithm
@@ -184,6 +197,27 @@ Even before transmission, BirdNET-Go protects your privacy:
 - **Immediate effect**: Changes take effect without restart
 - **Visual indicators**: Clear status display of telemetry state
 - **No hidden tracking**: No telemetry occurs when disabled
+
+### Using Your System ID
+
+Your unique System ID provides a privacy-preserving way to help developers debug issues:
+
+1. **Find your System ID**: Go to Settings → Support → Your System ID
+2. **Copy it**: Use the convenient copy button next to your ID
+3. **When reporting issues**: Include your System ID in GitHub issues if you want developers to correlate your error reports
+4. **Privacy preserved**: The System ID cannot be linked to you without your explicit action
+
+**Example GitHub issue**:
+```markdown
+I'm experiencing connection issues with my RTSP stream.
+System ID: A1B2-C3D4-E5F6 (telemetry enabled)
+```
+
+This allows developers to:
+- ✅ Find related error reports in telemetry data
+- ✅ Better understand your specific issue
+- ✅ Provide more targeted solutions
+- ❌ Cannot identify you unless you share the ID
 
 ## Compliance & Auditing
 

@@ -35,6 +35,7 @@ func InitSentry(settings *conf.Settings) error {
 		// Privacy-compliant settings
 		AttachStacktrace: false, // Don't attach stack traces by default
 		Environment:      "production",
+		ServerName:       "", // Explicitly clear server name to prevent hostname leakage
 		
 		// Set release version if available
 		Release: fmt.Sprintf("birdnet-go@%s", settings.Version),
@@ -54,6 +55,7 @@ func InitSentry(settings *conf.Settings) error {
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			// Remove any potentially sensitive information
 			event.User = sentry.User{} // Clear user data
+			event.ServerName = "" // Ensure server name is not included
 			
 			// Clear any sensitive context
 			if event.Contexts != nil {
@@ -70,6 +72,12 @@ func InitSentry(settings *conf.Settings) error {
 				}
 			}
 			
+			// Remove hostname from tags if present
+			if event.Tags != nil {
+				delete(event.Tags, "server_name")
+				delete(event.Tags, "hostname")
+			}
+			
 			return event
 		},
 	})
@@ -78,10 +86,23 @@ func InitSentry(settings *conf.Settings) error {
 		return fmt.Errorf("sentry initialization failed: %w", err)
 	}
 
+	// Configure global scope with system ID
+	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		// Set system ID as a tag for all events
+		scope.SetTag("system_id", settings.SystemID)
+		
+		// Set application context
+		scope.SetContext("application", map[string]any{
+			"name":      "BirdNET-Go",
+			"version":   settings.Version,
+			"system_id": settings.SystemID,
+		})
+	})
+
 	// Flush buffered events before the program terminates
 	defer sentry.Flush(2 * time.Second)
 
-	log.Println("Sentry telemetry initialized successfully (opt-in enabled)")
+	log.Printf("Sentry telemetry initialized successfully (opt-in enabled, System ID: %s)", settings.SystemID)
 	return nil
 }
 

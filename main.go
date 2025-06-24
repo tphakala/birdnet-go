@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime/pprof"
 	"time"
 
@@ -87,6 +88,15 @@ func mainWithExitCode() int {
 	settings.Version = version
 	settings.BuildDate = buildDate
 
+	// Load or create system ID for telemetry
+	systemID, err := telemetry.LoadOrCreateSystemID(filepath.Dir(viper.ConfigFileUsed()))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to load system ID: %v\n", err)
+		// Generate a temporary one for this session
+		systemID, _ = telemetry.GenerateSystemID()
+	}
+	settings.SystemID = systemID
+
 	fmt.Printf("🐦 \033[37mBirdNET-Go %s (built: %s), using config file: %s\033[0m\n",
 		settings.Version, settings.BuildDate, viper.ConfigFileUsed())
 
@@ -95,6 +105,9 @@ func mainWithExitCode() int {
 		fmt.Fprintf(os.Stderr, "Error initializing Sentry: %v\n", err)
 		// Continue without Sentry - it's not critical
 	}
+
+	// Initialize error handling integration with telemetry
+	telemetry.InitializeErrorIntegration()
 
 	// Execute the root command
 	rootCmd := cmd.RootCommand(settings)
