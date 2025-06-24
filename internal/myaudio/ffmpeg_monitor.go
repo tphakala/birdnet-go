@@ -10,7 +10,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // Global variables - make ffmpegProcesses a pointer to sync.Map
@@ -366,10 +368,14 @@ func (m *FFmpegMonitor) checkProcesses() error {
 			// If URL is not in configuration, clean up the process
 			if !configuredURLs[url] {
 				log.Printf("🧹 Found orphaned FFmpeg process for URL %s, cleaning up", url)
+				telemetry.CaptureMessage(fmt.Sprintf("Cleaning up orphaned FFmpeg process for %s", url), 
+					sentry.LevelInfo, "ffmpeg-orphaned-cleanup")
 				process.Cleanup(url)
 			}
 		} else {
 			log.Printf("⚠️ Process for URL %s doesn't implement ProcessCleaner interface", url)
+			telemetry.CaptureMessage(fmt.Sprintf("Process for %s doesn't implement ProcessCleaner interface", url), 
+				sentry.LevelWarning, "ffmpeg-interface-error")
 		}
 		return true
 	})
