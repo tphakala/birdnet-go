@@ -12,9 +12,11 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/cpuspec"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	tflite "github.com/tphakala/go-tflite"
 	"github.com/tphakala/go-tflite/delegates/xnnpack"
 )
@@ -71,7 +73,11 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	var err error
 	bn.ModelInfo, err = DetermineModelInfo(modelIdentifier)
 	if err != nil {
-		return nil, fmt.Errorf("failed to determine model information: %w", err)
+		return nil, errors.New(err).
+			Category(errors.CategoryModelInit).
+			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
+			Context("model_identifier", modelIdentifier).
+			Build()
 	}
 
 	// Load taxonomy data
@@ -112,14 +118,26 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 
 // initializeModel loads and initializes the primary BirdNET model.
 func (bn *BirdNET) initializeModel() error {
+	start := time.Now()
+	
 	modelData, err := bn.loadModel()
 	if err != nil {
-		return err
+		return errors.New(err).
+			Category(errors.CategoryModelLoad).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Timing("model-load", time.Since(start)).
+			Build()
 	}
 
 	model := tflite.NewModel(modelData)
 	if model == nil {
-		return fmt.Errorf("cannot load model")
+		return errors.New(fmt.Errorf("cannot load TensorFlow Lite model")).
+			Category(errors.CategoryModelInit).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("model_size_mb", len(modelData)/1024/1024).
+			Context("use_xnnpack", bn.Settings.BirdNET.UseXNNPACK).
+			Timing("model-init", time.Since(start)).
+			Build()
 	}
 
 	// Determine the number of threads for the interpreter based on settings and system capacity.
@@ -395,16 +413,33 @@ func (bn *BirdNET) validateModelAndLabels() error {
 	// Get the output tensor to check its dimensions
 	outputTensor := bn.AnalysisInterpreter.GetOutputTensor(0)
 	if outputTensor == nil {
-		return fmt.Errorf("cannot get output tensor")
+		return errors.New(fmt.Errorf("cannot get output tensor from model")).
+			Category(errors.CategoryValidation).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("interpreter_status", "failed").
+			Build()
 	}
 
 	// Get the number of classes from the model's output tensor
 	modelOutputSize := outputTensor.Dim(outputTensor.NumDims() - 1)
+	labelCount := len(bn.Settings.BirdNET.Labels)
 
 	// Compare with the number of labels
-	if len(bn.Settings.BirdNET.Labels) != modelOutputSize {
-		return fmt.Errorf("\033[31m❌ label count mismatch: model expects %d classes but label file has %d labels\033[0m",
-			modelOutputSize, len(bn.Settings.BirdNET.Labels))
+	if labelCount != modelOutputSize {
+		return errors.Newf("label count mismatch: model expects %d classes but label file has %d labels", 
+			modelOutputSize, labelCount).
+			Category(errors.CategoryValidation).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("expected_labels", modelOutputSize).
+			Context("actual_labels", labelCount).
+			Context("locale", bn.Settings.BirdNET.Locale).
+			Context("label_path_type", func() string {
+				if bn.Settings.BirdNET.LabelPath == "" {
+					return "embedded"
+				}
+				return "external"
+			}()).
+			Build()
 	}
 
 	bn.Debug("\033[32m✅ Model validation successful: %d labels match model output size\033[0m", modelOutputSize)
