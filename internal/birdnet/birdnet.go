@@ -219,11 +219,18 @@ func (bn *BirdNET) getMetaModelData() []byte {
 
 // initializeMetaModel loads and initializes the meta model used for range filtering.
 func (bn *BirdNET) initializeMetaModel() error {
+	start := time.Now()
+	
 	metaModelData := bn.getMetaModelData()
 
 	model := tflite.NewModel(metaModelData)
 	if model == nil {
-		return fmt.Errorf("cannot load meta model from embedded data")
+		return errors.New(fmt.Errorf("cannot load meta model from embedded data")).
+			Category(errors.CategoryModelLoad).
+			Context("model_type", "range_filter").
+			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
+			Timing("meta-model-load", time.Since(start)).
+			Build()
 	}
 
 	// Meta model requires only one CPU.
@@ -236,10 +243,20 @@ func (bn *BirdNET) initializeMetaModel() error {
 	// Create and allocate the TensorFlow Lite interpreter for the meta model.
 	bn.RangeInterpreter = tflite.NewInterpreter(model, options)
 	if bn.RangeInterpreter == nil {
-		return fmt.Errorf("cannot create meta model interpreter")
+		return errors.New(fmt.Errorf("cannot create meta model interpreter")).
+			Category(errors.CategoryModelInit).
+			Context("model_type", "range_filter").
+			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
+			Timing("meta-model-init", time.Since(start)).
+			Build()
 	}
 	if status := bn.RangeInterpreter.AllocateTensors(); status != tflite.OK {
-		return fmt.Errorf("tensor allocation failed for meta model")
+		return errors.Newf("tensor allocation failed for meta model: %v", status).
+			Category(errors.CategoryModelInit).
+			Context("model_type", "range_filter").
+			Context("status_code", status).
+			Timing("meta-model-allocate", time.Since(start)).
+			Build()
 	}
 
 	return nil
@@ -396,6 +413,8 @@ func (bn *BirdNET) Delete() {
 
 // loadModel loads either the embedded model or an external model file
 func (bn *BirdNET) loadModel() ([]byte, error) {
+	start := time.Now()
+	
 	if bn.Settings.BirdNET.ModelPath == "" {
 		return modelData, nil
 	}
@@ -403,8 +422,15 @@ func (bn *BirdNET) loadModel() ([]byte, error) {
 	modelPath := bn.Settings.BirdNET.ModelPath
 	data, err := os.ReadFile(modelPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read model file: %w", err)
+		return nil, errors.New(err).
+			Category(errors.CategoryFileIO).
+			ModelContext(modelPath, "external").
+			Context("operation", "read").
+			Timing("model-file-read", time.Since(start)).
+			Build()
 	}
+	
+	bn.Debug("Loaded external model file: %s (size: %d MB)", modelPath, len(data)/1024/1024)
 	return data, nil
 }
 

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observation"
 	tflite "github.com/tphakala/go-tflite"
 )
@@ -33,13 +34,21 @@ func (a ByScore) Less(i, j int) bool { return a[i].Score > a[j].Score } // For d
 
 // BuildRangeFilter updates the range filter with current probable species
 func BuildRangeFilter(bn *BirdNET) error {
+	start := time.Now()
+	
 	// Get date for Range Filter week calculation
 	today := time.Now().Truncate(24 * time.Hour)
 
 	// Update location based species list
 	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
 	if err != nil {
-		return err
+		return errors.New(err).
+			Category(errors.CategoryValidation).
+			Context("date", today.Format("2006-01-02")).
+			Context("latitude", bn.Settings.BirdNET.Latitude).
+			Context("longitude", bn.Settings.BirdNET.Longitude).
+			Timing("range-filter-build", time.Since(start)).
+			Build()
 	}
 
 	// Convert the speciesScores slice to a slice of species labels
@@ -58,6 +67,12 @@ func BuildRangeFilter(bn *BirdNET) error {
 			content += species + "\n"
 		}
 		if err := os.WriteFile(debugFile, []byte(content), 0o644); err != nil {
+			// Don't fail the operation, just log the error
+			err = errors.New(err).
+				Category(errors.CategoryFileIO).
+				Context("debug_file", debugFile).
+				Context("species_count", len(includedSpecies)).
+				Build()
 			log.Printf("❌ [range_filter/rebuild] Warning: Failed to write included species file: %v\n", err)
 		}
 	}
@@ -84,7 +99,12 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 	// Apply prediction filter based on the context
 	filters, err := bn.predictFilter(date, week)
 	if err != nil {
-		return nil, fmt.Errorf("error during prediction filter: %w", err)
+		return nil, errors.New(err).
+			Category(errors.CategoryValidation).
+			Context("date", date.Format("2006-01-02")).
+			Context("week", week).
+			Context("model", bn.Settings.BirdNET.RangeFilter.Model).
+			Build()
 	}
 
 	// check bn.Settings.BirdNET.LocationFilterThreshold for valid value
@@ -167,9 +187,15 @@ func matchesSpecies(label, speciesName string) bool {
 
 // predictFilter applies a TensorFlow Lite model to predict species based on the context.
 func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error) {
+	start := time.Now()
+	
 	input := bn.RangeInterpreter.GetInputTensor(0)
 	if input == nil {
-		return nil, fmt.Errorf("cannot get input tensor")
+		return nil, errors.New(fmt.Errorf("cannot get input tensor")).
+			Category(errors.CategoryModelInit).
+			Context("model_type", "range_filter").
+			Context("interpreter_state", "initialized").
+			Build()
 	}
 
 	// If week is not set, use current date to get week
@@ -185,7 +211,11 @@ func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error)
 
 	// Ensure the input tensor has enough capacity
 	if len(float32s) < len(data) {
-		return nil, fmt.Errorf("input tensor does not have enough capacity")
+		return nil, errors.Newf("input tensor does not have enough capacity: need %d, have %d", len(data), len(float32s)).
+			Category(errors.CategoryValidation).
+			Context("required_size", len(data)).
+			Context("actual_size", len(float32s)).
+			Build()
 	}
 
 	// Copy the data into the input tensor
@@ -194,7 +224,15 @@ func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error)
 	// Execute the model inference
 	status := bn.RangeInterpreter.Invoke()
 	if status != tflite.OK {
-		return nil, fmt.Errorf("tensor invoke failed")
+		return nil, errors.Newf("tensor invoke failed: %v", status).
+			Category(errors.CategoryModelInit).
+			Context("model_type", "range_filter").
+			Context("status_code", status).
+			Context("latitude", bn.Settings.BirdNET.Latitude).
+			Context("longitude", bn.Settings.BirdNET.Longitude).
+			Context("week", week).
+			Timing("range-filter-invoke", time.Since(start)).
+			Build()
 	}
 
 	// Retrieve the output tensor
