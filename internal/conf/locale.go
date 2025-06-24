@@ -141,6 +141,7 @@ func GetLabelFilename(modelVersion, localeCode string) (string, error) {
 // NormalizeLocale normalizes the input locale string and matches it to a known locale code or full name.
 // If the locale is not supported, it falls back to DefaultFallbackLocale.
 func NormalizeLocale(inputLocale string) (string, error) {
+	originalInput := inputLocale
 	inputLocale = strings.ToLower(inputLocale)
 
 	// Check if it's already a valid locale code
@@ -162,5 +163,12 @@ func NormalizeLocale(inputLocale string) (string, error) {
 		fallbackName = DefaultFallbackLocale // fallback to code if name not found
 	}
 
-	return DefaultFallbackLocale, fmt.Errorf("locale %s not supported, falling back to %s", inputLocale, fallbackName)
+	// Create detailed error with available locales for debugging
+	availableLocales := make([]string, 0, len(LocaleCodes))
+	for code := range LocaleCodes {
+		availableLocales = append(availableLocales, code)
+	}
+
+	return DefaultFallbackLocale, fmt.Errorf("locale '%s' not supported (available: %v), falling back to %s", 
+		originalInput, availableLocales[:5], fallbackName) // Show first 5 available locales
 }

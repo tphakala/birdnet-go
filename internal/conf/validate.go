@@ -118,6 +118,17 @@ func validateBirdNETSettings(settings *BirdNETConfig) error {
 		errs = append(errs, "RangeFilter threshold must be between 0 and 1")
 	}
 
+	// Validate locale setting
+	if settings.Locale != "" {
+		normalizedLocale, err := NormalizeLocale(settings.Locale)
+		if err != nil {
+			// This means locale normalization fell back to default
+			errs = append(errs, fmt.Sprintf("BirdNET locale '%s' is not supported, will use fallback '%s'", settings.Locale, normalizedLocale))
+		}
+		// Update the settings with the normalized locale
+		settings.Locale = normalizedLocale
+	}
+
 	// If there are any errors, return them as a single error
 	if len(errs) > 0 {
 		return fmt.Errorf("BirdNET settings errors: %v", errs)
