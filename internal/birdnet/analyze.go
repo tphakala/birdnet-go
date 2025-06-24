@@ -34,6 +34,7 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	defer span.Finish()
 	
 	start := time.Now()
+	span.SetTag("model", bn.ModelInfo.ID)
 	span.SetData("sample_count", len(sample))
 	if len(sample) > 0 {
 		span.SetData("sample_size", len(sample[0]))
@@ -47,13 +48,22 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	// Get the input tensor from the interpreter
 	inputTensor := bn.AnalysisInterpreter.GetInputTensor(0)
 	if inputTensor == nil {
-		span.SetTag("error", "true")
-		span.SetData("error_type", "input_tensor_nil")
-		return nil, errors.New(fmt.Errorf("cannot get input tensor")).
+		err := errors.New(fmt.Errorf("cannot get input tensor")).
 			Category(errors.CategoryModelInit).
 			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Context("interpreter_state", "initialized").
 			Build()
+		
+		// Record error in metrics via span finish
+		span.SetTag("error", "true")
+		span.SetData("error_type", "input_tensor_nil")
+		
+		// Record error in metrics directly
+		if globalMetrics != nil {
+			globalMetrics.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		}
+		
+		return nil, err
 	}
 
 	// Preparing input tensor with the sample data
@@ -65,18 +75,33 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	// Invoke the interpreter to perform inference
 	invokeStart := time.Now()
 	if status := bn.AnalysisInterpreter.Invoke(); status != tflite.OK {
-		span.SetTag("error", "true")
-		span.SetData("error_type", "invoke_failed")
-		span.SetData("status_code", status)
-		return nil, errors.Newf("tensor invoke failed: %v", status).
+		err := errors.Newf("tensor invoke failed: %v", status).
 			Category(errors.CategoryAudio).
 			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Context("sample_length", len(sample[0])).
 			Context("status_code", status).
 			Timing("prediction-invoke", time.Since(start)).
 			Build()
+			
+		span.SetTag("error", "true")
+		span.SetData("error_type", "invoke_failed")
+		span.SetData("status_code", status)
+		
+		// Record error in metrics
+		if globalMetrics != nil {
+			globalMetrics.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		}
+		
+		return nil, err
 	}
-	span.SetData("invoke_duration_ms", time.Since(invokeStart).Milliseconds())
+	
+	invokeDuration := time.Since(invokeStart)
+	span.SetData("invoke_duration_ms", invokeDuration.Milliseconds())
+	
+	// Record model invoke timing separately
+	if globalMetrics != nil {
+		globalMetrics.RecordModelInvoke(bn.ModelInfo.ID, invokeDuration.Seconds())
+	}
 
 	// Read the results from the output tensor
 	outputTensor := bn.AnalysisInterpreter.GetOutputTensor(0)
@@ -86,12 +111,22 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 
 	results, err := pairLabelsAndConfidence(bn.Settings.BirdNET.Labels, confidence)
 	if err != nil {
-		return nil, errors.New(err).
+		err = errors.New(err).
 			Category(errors.CategoryValidation).
 			Context("label_count", len(bn.Settings.BirdNET.Labels)).
 			Context("confidence_count", len(confidence)).
 			Timing("prediction-total", time.Since(start)).
 			Build()
+			
+		span.SetTag("error", "true")
+		span.SetData("error_type", "label_mismatch")
+		
+		// Record error in metrics
+		if globalMetrics != nil {
+			globalMetrics.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		}
+		
+		return nil, err
 	}
 
 	// Sorting results by confidence in descending order.
@@ -106,8 +141,7 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	span.SetData("result_count", len(results))
 	span.SetTag("error", "false")
 	
-	RecordDuration("predict", duration)
-	RecordMetric("birdnet.predict.results", float64(len(results)), map[string]string{"model": bn.ModelInfo.ID})
+	// The span.Finish() will automatically record the prediction metrics
 
 	// Return the top 10 results
 	return trimResultsToMax(results, 10), nil
@@ -147,6 +181,7 @@ func (bn *BirdNET) ProcessChunkWithContext(ctx context.Context, chunk []float32,
 	defer span.Finish()
 	
 	start := time.Now()
+	span.SetTag("model", "birdnet") // Default model name for chunk processing
 	span.SetData("chunk_size", len(chunk))
 	span.SetData("pred_start", predStart.Format(time.RFC3339))
 	
