@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // WAVHeaderSize is the standard size of a WAV file header in bytes
@@ -19,7 +21,11 @@ const WAVHeaderSize = 44
 func saveBufferToFile(buffer *bytes.Buffer, filename string, startTime, endTime time.Time) error {
 	// Validate input parameters
 	if buffer == nil {
-		return fmt.Errorf("buffer is nil")
+		return errors.New(fmt.Errorf("buffer is nil")).
+			Component("birdweather").
+			Category(errors.CategoryValidation).
+			Context("filename", filename).
+			Build()
 	}
 
 	// Get the buffer size before any operations that might consume it
@@ -28,19 +34,34 @@ func saveBufferToFile(buffer *bytes.Buffer, filename string, startTime, endTime 
 	// Create directory if it doesn't exist
 	dirPath := filepath.Dir(filename)
 	if err := os.MkdirAll(dirPath, 0o755); err != nil {
-		return fmt.Errorf("error creating directory: %w", err)
+		return errors.New(err).
+			Component("birdweather").
+			Category(errors.CategoryFileIO).
+			FileContext(dirPath, 0).
+			Context("operation", "create_directory").
+			Build()
 	}
 
 	// Save the audio file
 	file, err := os.Create(filename)
 	if err != nil {
-		return fmt.Errorf("error creating file: %w", err)
+		return errors.New(err).
+			Component("birdweather").
+			Category(errors.CategoryFileIO).
+			FileContext(filename, 0).
+			Context("operation", "create_file").
+			Build()
 	}
 	defer file.Close()
 
 	// Write the buffer to the file
 	if _, err := io.Copy(file, buffer); err != nil {
-		return fmt.Errorf("error writing buffer to file: %w", err)
+		return errors.New(err).
+			Component("birdweather").
+			Category(errors.CategoryFileIO).
+			FileContext(filename, int64(bufferSize)).
+			Context("operation", "write_file").
+			Build()
 	}
 
 	// Get the actual file size from the filesystem
