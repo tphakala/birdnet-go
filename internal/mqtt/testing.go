@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TestConfig encapsulates test configuration for artificial delays and failures
@@ -186,11 +187,34 @@ func runNetworkTest(ctx context.Context, stage TestStage, test networkTest) Test
 		}
 	case err := <-resultChan:
 		if err != nil {
+			// Extract error details for better categorization
+			errorMessage := err.Error()
+			errorCategory := "generic"
+
+			// Check if it's already an enhanced error
+			var enhancedErr *errors.EnhancedError
+			if errors.As(err, &enhancedErr) {
+				errorCategory = string(enhancedErr.GetCategory())
+			} else {
+				// Categorize based on error content
+				errorLower := strings.ToLower(errorMessage)
+				switch {
+				case strings.Contains(errorLower, "dns"):
+					errorCategory = "network"
+				case strings.Contains(errorLower, "connection refused"), strings.Contains(errorLower, "tcp"):
+					errorCategory = "network"
+				case strings.Contains(errorLower, "mqtt"), strings.Contains(errorLower, "auth"), strings.Contains(errorLower, "unauthorized"):
+					errorCategory = "mqtt-connection"
+				case strings.Contains(errorLower, "publish"), strings.Contains(errorLower, "timeout"):
+					errorCategory = "mqtt-publish"
+				}
+			}
+
 			return TestResult{
 				Success: false,
 				Stage:   stage.String(),
-				Error:   err.Error(),
-				Message: fmt.Sprintf("Failed to perform %s", stage),
+				Error:   errorMessage,
+				Message: fmt.Sprintf("Failed to perform %s (%s)", stage, errorCategory),
 			}
 		}
 	}
@@ -209,7 +233,18 @@ func (c *client) testDNSStage(ctx context.Context, brokerHost string) TestResult
 
 	return runNetworkTest(dnsCtx, DNSResolution, func(ctx context.Context) error {
 		_, err := net.DefaultResolver.LookupHost(ctx, brokerHost)
-		return err
+		if err != nil {
+			// Enhance DNS resolution errors
+			enhancedErr := errors.New(err).
+				Component("mqtt").
+				Category(errors.CategoryNetwork).
+				Context("broker", c.config.Broker).
+				Context("hostname", brokerHost).
+				Context("operation", "dns_resolution_test").
+				Build()
+			return enhancedErr
+		}
+		return nil
 	})
 }
 
@@ -220,9 +255,18 @@ func (c *client) testTCPStage(ctx context.Context) TestResult {
 
 	return runNetworkTest(tcpCtx, TCPConnection, func(ctx context.Context) error {
 		var d net.Dialer
-		conn, err := d.DialContext(ctx, "tcp", extractHostPort(c.config.Broker))
+		hostPort := extractHostPort(c.config.Broker)
+		conn, err := d.DialContext(ctx, "tcp", hostPort)
 		if err != nil {
-			return err
+			// Enhance TCP connection errors
+			enhancedErr := errors.New(err).
+				Component("mqtt").
+				Category(errors.CategoryNetwork).
+				Context("broker", c.config.Broker).
+				Context("host_port", hostPort).
+				Context("operation", "tcp_connection_test").
+				Build()
+			return enhancedErr
 		}
 		defer conn.Close()
 		return nil
@@ -265,13 +309,42 @@ func (c *client) testPublishStage(ctx context.Context) TestResult {
 		// Convert to JSON
 		noteJson, err := json.Marshal(mockNote)
 		if err != nil {
-			return fmt.Errorf("failed to create test message: %w", err)
+			enhancedErr := errors.New(err).
+				Component("mqtt").
+				Category(errors.CategoryValidation).
+				Context("broker", c.config.Broker).
+				Context("operation", "json_marshal_test").
+				Build()
+			return enhancedErr
 		}
 
 		// Construct test topic with proper handling of base topic
 		testTopic := constructTestTopic(c.config.Topic)
 
-		return c.Publish(ctx, testTopic, string(noteJson))
+		// The Publish method already returns enhanced errors, so we can pass it through
+		err = c.Publish(ctx, testTopic, string(noteJson))
+		if err != nil {
+			// Add test-specific context to publish errors
+			var enhancedErr *errors.EnhancedError
+			if errors.As(err, &enhancedErr) {
+				// Add test context to existing enhanced error
+				enhancedErr.Context["test_topic"] = testTopic
+				enhancedErr.Context["test_payload_size"] = len(noteJson)
+				enhancedErr.Context["operation"] = "publish_test"
+				return enhancedErr
+			}
+			// If not enhanced, create new enhanced error
+			newErr := errors.New(err).
+				Component("mqtt").
+				Category(errors.CategoryMQTTPublish).
+				Context("broker", c.config.Broker).
+				Context("test_topic", testTopic).
+				Context("test_payload_size", len(noteJson)).
+				Context("operation", "publish_test").
+				Build()
+			return newErr
+		}
+		return nil
 	})
 }
 

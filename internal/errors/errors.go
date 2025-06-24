@@ -29,6 +29,9 @@ const (
 	CategoryDiskCleanup   ErrorCategory = "disk-cleanup"
 	CategoryFileParsing   ErrorCategory = "file-parsing"
 	CategoryPolicyConfig  ErrorCategory = "policy-config"
+	CategoryMQTTConnection ErrorCategory = "mqtt-connection"
+	CategoryMQTTPublish   ErrorCategory = "mqtt-publish"
+	CategoryMQTTAuth      ErrorCategory = "mqtt-authentication"
 	CategoryGeneric       ErrorCategory = "generic"
 )
 
