@@ -3,7 +3,6 @@ package myaudio
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -53,6 +53,23 @@ type FFmpegRestartTracker struct {
 
 // restartTrackers keeps track of restart information for each RTSP source URL
 var restartTrackers sync.Map
+
+// categorizeStreamURL categorizes a stream URL for telemetry while preserving privacy
+func categorizeStreamURL(url string) string {
+	if strings.HasPrefix(url, "rtsp://") {
+		if strings.Contains(url, "localhost") || strings.Contains(url, "127.0.0.1") {
+			return "rtsp-local"
+		}
+		if strings.Contains(url, "192.168.") || strings.Contains(url, "10.") {
+			return "rtsp-private"
+		}
+		return "rtsp-external"
+	}
+	if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
+		return "http-stream"
+	}
+	return "other-stream"
+}
 
 // backoffStrategy implements an exponential backoff for retries
 type backoffStrategy struct {
@@ -353,7 +370,11 @@ func (p *FFmpegProcess) handleWatchdogTimeout(url string, restartChan chan struc
 		sentry.LevelWarning, "rtsp-watchdog-timeout")
 
 	p.sendRestartSignal(restartChan, url, "Watchdog")
-	return fmt.Errorf("watchdog detected no data for RTSP source %s", url)
+	return errors.New(fmt.Errorf("watchdog detected no data for RTSP source %s", url)).
+		Category(errors.CategoryRTSP).
+		Component("ffmpeg-watchdog").
+		Context("url_type", categorizeStreamURL(url)).
+		Build()
 }
 
 // processAudioData processes a chunk of audio data and handles buffer errors
@@ -386,11 +407,16 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 			telemetry.CaptureMessage(fmt.Sprintf("Buffer error threshold exceeded for %s: %d errors", url, *bufferErrorCount),
 				sentry.LevelError, "rtsp-buffer-error-threshold")
 			p.sendRestartSignal(restartChan, url, "Buffer error threshold")
-			return fmt.Errorf("too many buffer write errors for RTSP source %s", url)
+			return errors.New(fmt.Errorf("too many buffer write errors for RTSP source %s", url)).
+				Category(errors.CategoryAudio).
+				Component("ffmpeg-buffer").
+				Context("url_type", categorizeStreamURL(url)).
+				Context("error_count", *bufferErrorCount).
+				Build()
 		}
 
 		time.Sleep(1 * time.Second)
-		return errors.New("buffer_error_continue") // Special error to signal continue
+		return errors.NewStd("buffer_error_continue") // Special error to signal continue
 	}
 
 	// Reset error count on successful buffer writes
@@ -444,7 +470,11 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 					return nil
 				}
 				// Only return error for unexpected failures
-				return fmt.Errorf("error reading from ffmpeg: %w", err)
+				return errors.New(fmt.Errorf("error reading from ffmpeg: %w", err)).
+					Category(errors.CategoryRTSP).
+					Component("ffmpeg-audio-read").
+					Context("url_type", categorizeStreamURL(url)).
+					Build()
 			}
 
 			// Ensure we don't process more data than we've read
@@ -466,8 +496,13 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, error) {
 	settings := conf.Setting().Realtime.Audio
 	if err := validateFFmpegPath(settings.FfmpegPath); err != nil {
-		telemetry.CaptureError(fmt.Errorf("FFmpeg path validation failed for %s: %w", config.URL, err), "ffmpeg-path-validation")
-		return nil, err
+		enhancedErr := errors.New(fmt.Errorf("FFmpeg path validation failed for %s: %w", config.URL, err)).
+			Category(errors.CategoryValidation).
+			Component("ffmpeg-validation").
+			Context("url_type", categorizeStreamURL(config.URL)).
+			Build()
+		telemetry.CaptureError(enhancedErr, "ffmpeg-path-validation")
+		return nil, enhancedErr
 	}
 
 	// Create a new context with cancellation
@@ -500,8 +535,13 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		cancel() // Cancel the context if pipe creation fails
-		telemetry.CaptureError(fmt.Errorf("FFmpeg pipe creation failed for %s: %w", config.URL, err), "ffmpeg-pipe-creation")
-		return nil, fmt.Errorf("error creating ffmpeg pipe: %w", err)
+		enhancedErr := errors.New(fmt.Errorf("FFmpeg pipe creation failed for %s: %w", config.URL, err)).
+			Category(errors.CategorySystem).
+			Component("ffmpeg-pipe").
+			Context("url_type", categorizeStreamURL(config.URL)).
+			Build()
+		telemetry.CaptureError(enhancedErr, "ffmpeg-pipe-creation")
+		return nil, enhancedErr
 	}
 
 	// Log the FFmpeg command for debugging purposes
@@ -510,8 +550,13 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 	// Start the FFmpeg process
 	if err := cmd.Start(); err != nil {
 		cancel() // Cancel the context if process start fails
-		telemetry.CaptureError(fmt.Errorf("FFmpeg process start failed for %s: %w", config.URL, err), "ffmpeg-process-start")
-		return nil, fmt.Errorf("error starting FFmpeg: %w", err)
+		enhancedErr := errors.New(fmt.Errorf("FFmpeg process start failed for %s: %w", config.URL, err)).
+			Category(errors.CategorySystem).
+			Component("ffmpeg-process").
+			Context("url_type", categorizeStreamURL(config.URL)).
+			Build()
+		telemetry.CaptureError(enhancedErr, "ffmpeg-process-start")
+		return nil, enhancedErr
 	} else {
 		// Log successful FFmpeg start with telemetry
 		telemetry.CaptureMessage(fmt.Sprintf("FFmpeg process started successfully for %s (PID: %d)", config.URL, cmd.Process.Pid),

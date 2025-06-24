@@ -12,6 +12,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -135,7 +136,10 @@ func (pm *UnixProcessManager) FindProcesses() ([]ProcessInfo, error) {
 		if strings.Contains(err.Error(), "exit status 1") {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("error running pgrep command: %w", err)
+		return nil, errors.New(fmt.Errorf("error running pgrep command: %w", err)).
+			Category(errors.CategorySystem).
+			Component("process-manager").
+			Build()
 	}
 
 	var processes []ProcessInfo
@@ -154,7 +158,11 @@ func (pm *UnixProcessManager) FindProcesses() ([]ProcessInfo, error) {
 func (pm *UnixProcessManager) TerminateProcess(pid int) error {
 	_, err := pm.cmdExecutor.ExecuteCommand("kill", "-9", fmt.Sprint(pid))
 	if err != nil {
-		return fmt.Errorf("failed to terminate process %d: %w", pid, err)
+		return errors.New(fmt.Errorf("failed to terminate process %d: %w", pid, err)).
+			Category(errors.CategorySystem).
+			Component("process-manager-unix").
+			Context("pid", pid).
+			Build()
 	}
 	return nil
 }
@@ -174,7 +182,10 @@ type WindowsProcessManager struct {
 func (pm *WindowsProcessManager) FindProcesses() ([]ProcessInfo, error) {
 	output, err := pm.cmdExecutor.ExecuteCommand("tasklist", "/FI", "IMAGENAME eq ffmpeg.exe", "/NH", "/FO", "CSV")
 	if err != nil {
-		return nil, fmt.Errorf("error running tasklist command: %w", err)
+		return nil, errors.New(fmt.Errorf("error running tasklist command: %w", err)).
+			Category(errors.CategorySystem).
+			Component("process-manager-windows").
+			Build()
 	}
 
 	var processes []ProcessInfo
@@ -200,7 +211,11 @@ func (pm *WindowsProcessManager) FindProcesses() ([]ProcessInfo, error) {
 func (pm *WindowsProcessManager) TerminateProcess(pid int) error {
 	_, err := pm.cmdExecutor.ExecuteCommand("taskkill", "/F", "/T", "/PID", fmt.Sprint(pid))
 	if err != nil {
-		return fmt.Errorf("failed to terminate process %d: %w", pid, err)
+		return errors.New(fmt.Errorf("failed to terminate process %d: %w", pid, err)).
+			Category(errors.CategorySystem).
+			Component("process-manager-windows").
+			Context("pid", pid).
+			Build()
 	}
 	return nil
 }
@@ -382,7 +397,10 @@ func (m *FFmpegMonitor) checkProcesses() error {
 
 	// Find and clean up any orphaned FFmpeg processes
 	if err := m.cleanupOrphanedProcesses(); err != nil {
-		return fmt.Errorf("error cleaning up orphaned FFmpeg processes: %w", err)
+		return errors.New(fmt.Errorf("error cleaning up orphaned FFmpeg processes: %w", err)).
+			Category(errors.CategorySystem).
+			Component("ffmpeg-monitor").
+			Build()
 	}
 
 	return nil
@@ -393,7 +411,10 @@ func (m *FFmpegMonitor) cleanupOrphanedProcesses() error {
 	// Get list of all FFmpeg processes
 	processes, err := m.processManager.FindProcesses()
 	if err != nil {
-		return fmt.Errorf("error finding FFmpeg processes: %w", err)
+		return errors.New(fmt.Errorf("error finding FFmpeg processes: %w", err)).
+			Category(errors.CategorySystem).
+			Component("ffmpeg-monitor").
+			Build()
 	}
 
 	// Build a map of PIDs found in the system
