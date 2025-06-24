@@ -286,66 +286,66 @@
 </div>
 <!-- MQTT Settings end -->
 
-<!-- Telemetry Settings start -->
+<!-- Observability Settings start -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
      role="region" 
-     aria-labelledby="telemetryHeader"
+     aria-labelledby="observabilityHeader"
      x-data="{ 
-    telemetry: {
+    observability: {
         enabled: {{.Settings.Realtime.Telemetry.Enabled}},
         listen: '{{.Settings.Realtime.Telemetry.Listen}}'
     },
-    telemetrySettingsOpen: false,
+    observabilitySettingsOpen: false,
     showTooltip: null,
     hasChanges: false,
     resetChanges() {
         this.hasChanges = false;
     }
 }" x-init="
-    $watch('telemetry', (value) => { hasChanges = true }, { deep: true });
+    $watch('observability', (value) => { hasChanges = true }, { deep: true });
 ">
 
     <!-- control collapse element open state and label visibility -->
     <input type="checkbox" 
-           id="telemetrySettingsOpen" 
-           x-on:change="telemetrySettingsOpen = !telemetrySettingsOpen" 
-           aria-controls="telemetrySettingsContent"
+           id="observabilitySettingsOpen" 
+           x-on:change="observabilitySettingsOpen = !observabilitySettingsOpen" 
+           aria-controls="observabilitySettingsContent"
            aria-expanded="true" />
 
     {{template "sectionHeader" dict
-        "id" "telemetry"
-        "title" "Telemetry"
+        "id" "observability"
+        "title" "Observability"
         "description" "Monitor BirdNET-Go's performance and bird detection metrics through Prometheus-compatible endpoint"}}
 
     <div class="collapse-content"
-         id="telemetrySettingsContent"
+         id="observabilitySettingsContent"
          role="group" 
-         aria-labelledby="telemetryDescription">
+         aria-labelledby="observabilityDescription">
 
         {{template "checkbox" dict
-            "id" "telemetryEnabled"
-            "model" "telemetry.enabled"
+            "id" "observabilityEnabled"
+            "model" "observability.enabled"
             "name" "realtime.telemetry.enabled"
-            "label" "Enable Telemetry Integration"
-            "tooltip" "Enable or disable integration with Telemetry service."}}
+            "label" "Enable Observability Integration"
+            "tooltip" "Enable or disable integration with Prometheus metrics endpoint."}}
 
-        <div x-show="telemetry.enabled"
+        <div x-show="observability.enabled"
              class="grid grid-cols-1 md:grid-cols-2 gap-x-6"
-             id="telemetrySettings"
+             id="observabilitySettings"
              role="group"
-             aria-label="Telemetry Connection Settings">
+             aria-label="Observability Connection Settings">
 
             {{template "textField" dict
-                "id" "telemetryListen"
-                "model" "telemetry.listen"
+                "id" "observabilityListen"
+                "model" "observability.listen"
                 "name" "realtime.telemetry.listen"
                 "label" "Listen Address"
-                "tooltip" "The IP address and port to listen on (e.g., 0.0.0.0:8090)."}}
+                "tooltip" "The IP address and port to listen on for Prometheus metrics (e.g., 0.0.0.0:8090)."}}
 
         </div>
     </div>
 </div>
-<!-- Telemetry Settings end -->
+<!-- Observability Settings end -->
 
 <!-- Weather Settings start -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 

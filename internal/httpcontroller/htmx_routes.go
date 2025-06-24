@@ -82,6 +82,7 @@ func (s *Server) initRoutes() {
 		"/settings/integrations":     {Path: "/settings/integrations", TemplateName: "settingsBase", Title: "Integration Settings", Authorized: true},
 		"/settings/security":         {Path: "/settings/security", TemplateName: "settingsBase", Title: "Security & Access Settings", Authorized: true},
 		"/settings/species":          {Path: "/settings/species", TemplateName: "settingsBase", Title: "Species Settings", Authorized: true},
+		"/settings/support":          {Path: "/settings/support", TemplateName: "settingsBase", Title: "Support", Authorized: true},
 	}
 
 	// Set up full page routes
