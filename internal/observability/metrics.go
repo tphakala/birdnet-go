@@ -10,6 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -19,6 +20,7 @@ type Metrics struct {
 	MQTT          *metrics.MQTTMetrics
 	BirdNET       *metrics.BirdNETMetrics
 	ImageProvider *metrics.ImageProviderMetrics
+	DiskManager   *metrics.DiskManagerMetrics
 }
 
 // NewMetrics creates a new instance of Metrics, initializing all metric collectors.
@@ -41,15 +43,24 @@ func NewMetrics() (*Metrics, error) {
 		return nil, fmt.Errorf("failed to create ImageProvider metrics: %w", err)
 	}
 
+	diskManagerMetrics, err := metrics.NewDiskManagerMetrics(registry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create DiskManager metrics: %w", err)
+	}
+
 	m := &Metrics{
 		registry:      registry,
 		MQTT:          mqttMetrics,
 		BirdNET:       birdnetMetrics,
 		ImageProvider: imageProviderMetrics,
+		DiskManager:   diskManagerMetrics,
 	}
 
 	// Initialize tracing with metrics
 	initializeTracing(birdnetMetrics)
+
+	// Initialize diskmanager with metrics
+	diskmanager.SetMetrics(diskManagerMetrics)
 
 	return m, nil
 }

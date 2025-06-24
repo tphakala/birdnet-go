@@ -4,16 +4,25 @@
 package diskmanager
 
 import (
-	"fmt"
 	"syscall"
+	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // GetDiskUsage returns the disk usage percentage for the given path
 func GetDiskUsage(path string) (float64, error) {
+	startTime := time.Now()
 	var stat syscall.Statfs_t
 	err := syscall.Statfs(path, &stat)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get disk stats: %w", err)
+		enhancedErr := errors.New(err).
+			Component("diskmanager").
+			Category(errors.CategoryDiskUsage).
+			Context("path", path).
+			Timing("disk_usage_check", time.Since(startTime)).
+			Build()
+		return 0, enhancedErr
 	}
 
 	// Calculate disk usage percentage
@@ -27,10 +36,17 @@ func GetDiskUsage(path string) (float64, error) {
 
 // GetDetailedDiskUsage returns the total and used disk space in bytes for the filesystem containing the given path.
 func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
+	startTime := time.Now()
 	var stat syscall.Statfs_t
 	err := syscall.Statfs(path, &stat)
 	if err != nil {
-		return DiskSpaceInfo{}, fmt.Errorf("failed to statfs '%s': %w", path, err)
+		enhancedErr := errors.New(err).
+			Component("diskmanager").
+			Category(errors.CategoryDiskUsage).
+			Context("path", path).
+			Timing("detailed_disk_usage_check", time.Since(startTime)).
+			Build()
+		return DiskSpaceInfo{}, enhancedErr
 	}
 
 	totalBytes := stat.Blocks * uint64(stat.Bsize)
