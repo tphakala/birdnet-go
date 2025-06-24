@@ -45,41 +45,39 @@ func InitSentry(settings *conf.Settings) error {
 	// Initialize Sentry with privacy-compliant options
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn:        sentryDSN,
-		SampleRate: 1.0, // Capture all errors by default
+		SampleRate: 1.0,   // Capture all errors by default
 		Debug:      false, // Keep debug off for production
-		
+
 		// Privacy-compliant settings
 		AttachStacktrace: false, // Don't attach stack traces by default
 		Environment:      "production",
 		ServerName:       "", // Explicitly clear server name to prevent hostname leakage
-		
+
 		// Set release version if available
 		Release: fmt.Sprintf("birdnet-go@%s", settings.Version),
-		
+
 		// Configure integrations
 		Integrations: func(integrations []sentry.Integration) []sentry.Integration {
 			// Remove any integrations that might collect sensitive data
 			var filtered []sentry.Integration
-			for _, integration := range integrations {
-				// Keep only essential integrations
-				filtered = append(filtered, integration)
-			}
+			// Keep only essential integrations
+			filtered = append(filtered, integrations...)
 			return filtered
 		},
-		
+
 		// BeforeSend allows us to filter sensitive data
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			// Remove any potentially sensitive information
 			event.User = sentry.User{} // Clear user data
-			event.ServerName = "" // Ensure server name is not included
-			
+			event.ServerName = ""      // Ensure server name is not included
+
 			// Clear any sensitive context
 			if event.Contexts != nil {
 				delete(event.Contexts, "device")
 				delete(event.Contexts, "os")
 				delete(event.Contexts, "runtime")
 			}
-			
+
 			// Only keep essential error information
 			for k := range event.Extra {
 				// Remove any extra data that might contain sensitive info
@@ -87,13 +85,13 @@ func InitSentry(settings *conf.Settings) error {
 					delete(event.Extra, k)
 				}
 			}
-			
+
 			// Remove hostname from tags if present
 			if event.Tags != nil {
 				delete(event.Tags, "server_name")
 				delete(event.Tags, "hostname")
 			}
-			
+
 			return event
 		},
 	})
@@ -106,7 +104,7 @@ func InitSentry(settings *conf.Settings) error {
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		// Set system ID as a tag for all events
 		scope.SetTag("system_id", settings.SystemID)
-		
+
 		// Set application context
 		scope.SetContext("application", map[string]any{
 			"name":      "BirdNET-Go",
@@ -129,7 +127,7 @@ func InitSentry(settings *conf.Settings) error {
 	}
 
 	if len(messagesToProcess) > 0 {
-		log.Printf("Sentry telemetry initialized successfully, processed %d deferred messages (System ID: %s)", 
+		log.Printf("Sentry telemetry initialized successfully, processed %d deferred messages (System ID: %s)",
 			len(messagesToProcess), settings.SystemID)
 	} else {
 		log.Printf("Sentry telemetry initialized successfully (opt-in enabled, System ID: %s)", settings.SystemID)
@@ -154,10 +152,10 @@ func CaptureError(err error, component string) {
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", component)
 		scope.SetContext("error", map[string]any{
-			"type":            fmt.Sprintf("%T", err),
+			"type":             fmt.Sprintf("%T", err),
 			"scrubbed_message": scrubbedErrorMsg,
 		})
-		
+
 		// Create a new error with scrubbed message to avoid exposing sensitive data
 		scrubbedErr := fmt.Errorf("%s", scrubbedErrorMsg)
 		sentry.CaptureException(scrubbedErr)
@@ -217,7 +215,7 @@ func Flush(timeout time.Duration) {
 	if settings == nil || !settings.Sentry.Enabled {
 		return
 	}
-	
+
 	sentry.Flush(timeout)
 }
 
@@ -234,34 +232,34 @@ func anonymizeURL(rawURL string) string {
 	// Create a normalized version for hashing
 	// Include scheme, host pattern, and path structure but remove sensitive data
 	var normalizedParts []string
-	
+
 	// Include scheme (rtsp, http, etc.)
 	if parsedURL.Scheme != "" {
 		normalizedParts = append(normalizedParts, parsedURL.Scheme)
 	}
-	
+
 	// Anonymize hostname/IP
 	host := parsedURL.Hostname()
 	if host != "" {
 		hostType := categorizeHost(host)
 		normalizedParts = append(normalizedParts, hostType)
 	}
-	
+
 	// Include port if present
 	if parsedURL.Port() != "" {
 		normalizedParts = append(normalizedParts, "port-"+parsedURL.Port())
 	}
-	
+
 	// Include path structure (without sensitive details)
 	if parsedURL.Path != "" && parsedURL.Path != "/" {
 		pathStructure := anonymizePath(parsedURL.Path)
 		normalizedParts = append(normalizedParts, pathStructure)
 	}
-	
+
 	// Create consistent hash
 	normalized := strings.Join(normalizedParts, ":")
 	hash := sha256.Sum256([]byte(normalized))
-	
+
 	return fmt.Sprintf("url-%x", hash[:12])
 }
 
@@ -271,24 +269,24 @@ func categorizeHost(host string) string {
 	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
 		return "localhost"
 	}
-	
+
 	// Check for private IP ranges
 	if isPrivateIP(host) {
 		return "private-ip"
 	}
-	
+
 	// Check for public IP
 	if isIPAddress(host) {
 		return "public-ip"
 	}
-	
+
 	// For domain names, preserve TLD only
 	parts := strings.Split(host, ".")
 	if len(parts) >= 2 {
 		tld := parts[len(parts)-1]
 		return "domain-" + tld
 	}
-	
+
 	return "unknown-host"
 }
 
@@ -299,28 +297,29 @@ func anonymizePath(path string) string {
 	if path == "" {
 		return "root"
 	}
-	
+
 	// Split path into segments
 	segments := strings.Split(path, "/")
 	var anonymizedSegments []string
-	
+
 	for _, segment := range segments {
 		if segment == "" {
 			continue
 		}
-		
+
 		// Check for common patterns that might be safe to preserve
-		if isCommonStreamName(segment) {
+		switch {
+		case isCommonStreamName(segment):
 			anonymizedSegments = append(anonymizedSegments, "stream")
-		} else if isNumeric(segment) {
+		case isNumeric(segment):
 			anonymizedSegments = append(anonymizedSegments, "numeric")
-		} else {
+		default:
 			// Hash individual segments to maintain path structure
 			hash := sha256.Sum256([]byte(segment))
 			anonymizedSegments = append(anonymizedSegments, fmt.Sprintf("seg-%x", hash[:4]))
 		}
 	}
-	
+
 	return "path-" + strings.Join(anonymizedSegments, "-")
 }
 
@@ -331,7 +330,7 @@ func isPrivateIP(host string) bool {
 		"172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
 		"192.168.", "169.254.",
 	}
-	
+
 	for _, prefix := range privateRanges {
 		if strings.HasPrefix(host, prefix) {
 			return true
@@ -347,7 +346,7 @@ func isIPAddress(host string) bool {
 	if ipv4Regex.MatchString(host) {
 		return true
 	}
-	
+
 	// Check for IPv6 (contains colons)
 	return strings.Contains(host, ":")
 }
@@ -356,7 +355,7 @@ func isIPAddress(host string) bool {
 func isCommonStreamName(segment string) bool {
 	commonNames := []string{"stream", "live", "rtsp", "video", "audio", "feed", "cam", "camera"}
 	segment = strings.ToLower(segment)
-	
+
 	for _, name := range commonNames {
 		if strings.Contains(segment, name) {
 			return true
@@ -372,14 +371,14 @@ func isNumeric(s string) bool {
 			return false
 		}
 	}
-	return len(s) > 0
+	return s != ""
 }
 
 // ScrubMessage removes or anonymizes sensitive information from telemetry messages
 func ScrubMessage(message string) string {
 	// Find URLs in the message and replace them with anonymized versions
-	urlRegex := regexp.MustCompile(`\b(?:https?|rtsp|rtmp)://[^\s]+`)
-	
+	urlRegex := regexp.MustCompile(`\b(?:https?|rtsp|rtmp)://\S+`)
+
 	return urlRegex.ReplaceAllStringFunc(message, func(foundURL string) string {
 		anonymized := anonymizeURL(foundURL)
 		return anonymized
