@@ -8,10 +8,26 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
+)
+
+// DeferredMessage represents a message that was captured before Sentry initialization
+type DeferredMessage struct {
+	Message   string
+	Level     sentry.Level
+	Component string
+	Timestamp time.Time
+}
+
+// sentryInitialized tracks whether Sentry has been initialized
+var (
+	sentryInitialized bool
+	deferredMessages  []DeferredMessage
+	deferredMutex     sync.Mutex
 )
 
 // InitSentry initializes Sentry SDK with privacy-compliant settings
@@ -99,10 +115,29 @@ func InitSentry(settings *conf.Settings) error {
 		})
 	})
 
+	// Mark Sentry as initialized and process any deferred messages
+	deferredMutex.Lock()
+	sentryInitialized = true
+	messagesToProcess := make([]DeferredMessage, len(deferredMessages))
+	copy(messagesToProcess, deferredMessages)
+	deferredMessages = nil // Clear the deferred messages
+	deferredMutex.Unlock()
+
+	// Process any messages that were captured before Sentry was ready
+	for _, msg := range messagesToProcess {
+		CaptureMessage(msg.Message, msg.Level, msg.Component)
+	}
+
+	if len(messagesToProcess) > 0 {
+		log.Printf("Sentry telemetry initialized successfully, processed %d deferred messages (System ID: %s)", 
+			len(messagesToProcess), settings.SystemID)
+	} else {
+		log.Printf("Sentry telemetry initialized successfully (opt-in enabled, System ID: %s)", settings.SystemID)
+	}
+
 	// Flush buffered events before the program terminates
 	defer sentry.Flush(2 * time.Second)
 
-	log.Printf("Sentry telemetry initialized successfully (opt-in enabled, System ID: %s)", settings.SystemID)
 	return nil
 }
 
@@ -144,6 +179,36 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 		scope.SetLevel(level)
 		sentry.CaptureMessage(scrubbedMessage)
 	})
+}
+
+// CaptureMessageDeferred captures a message for later processing if Sentry is not yet initialized
+// If Sentry is already initialized, it immediately sends the message
+func CaptureMessageDeferred(message string, level sentry.Level, component string) {
+	settings := conf.GetSettings()
+	if settings == nil || !settings.Sentry.Enabled {
+		return
+	}
+
+	deferredMutex.Lock()
+	defer deferredMutex.Unlock()
+
+	if sentryInitialized {
+		// Sentry is already initialized, send immediately
+		deferredMutex.Unlock() // Unlock before calling CaptureMessage to avoid deadlock
+		CaptureMessage(message, level, component)
+		deferredMutex.Lock() // Re-lock for defer unlock
+		return
+	}
+
+	// Sentry not yet initialized, store for later processing
+	deferredMessage := DeferredMessage{
+		Message:   message,
+		Level:     level,
+		Component: component,
+		Timestamp: time.Now(),
+	}
+
+	deferredMessages = append(deferredMessages, deferredMessage)
 }
 
 // Flush ensures all buffered events are sent to Sentry

@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/pprof"
+	"strings"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/cmd"
 	"github.com/tphakala/birdnet-go/internal/analysis"
@@ -108,6 +110,20 @@ func mainWithExitCode() int {
 
 	// Initialize error handling integration with telemetry
 	telemetry.InitializeErrorIntegration()
+
+	// Process configuration validation warnings that occurred before Sentry initialization
+	if len(settings.ValidationWarnings) > 0 {
+		for _, warning := range settings.ValidationWarnings {
+			parts := strings.SplitN(warning, ": ", 2)
+			if len(parts) == 2 {
+				component := parts[0]
+				message := parts[1]
+				telemetry.CaptureMessage(message, sentry.LevelWarning, component)
+			}
+		}
+		// Clear the warnings as they've been processed
+		settings.ValidationWarnings = nil
+	}
 
 	// Execute the root command
 	rootCmd := cmd.RootCommand(settings)

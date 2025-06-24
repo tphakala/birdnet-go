@@ -2,6 +2,7 @@
 package errors
 
 import (
+	stderrors "errors"
 	"fmt"
 	"runtime"
 	"strings"
@@ -379,4 +380,27 @@ func ValidationError(message string) *EnhancedError {
 	return New(fmt.Errorf("%s", message)).
 		Category(CategoryValidation).
 		Build()
+}
+
+// Standard library passthrough functions
+// These allow this package to be a drop-in replacement for the standard errors package
+
+// NewStd creates a new standard error (passthrough to standard library)
+func NewStd(text string) error {
+	return stderrors.New(text)
+}
+
+// Is reports whether any error in err's tree matches target (passthrough to standard library)
+func Is(err, target error) bool {
+	return stderrors.Is(err, target)
+}
+
+// As finds the first error in err's tree that matches target (passthrough to standard library)
+func As(err error, target interface{}) bool {
+	return stderrors.As(err, target)
+}
+
+// Unwrap returns the result of calling the Unwrap method on err (passthrough to standard library)
+func Unwrap(err error) error {
+	return stderrors.Unwrap(err)
 }

@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"embed"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"gopkg.in/yaml.v3"
 )
 
@@ -322,9 +322,10 @@ type Settings struct {
 	Debug bool // true to enable debug mode
 
 	// Runtime values, not stored in config file
-	Version   string `yaml:"-"` // Version from build
-	BuildDate string `yaml:"-"` // Build date from build
-	SystemID  string `yaml:"-"` // Unique system identifier for telemetry
+	Version            string   `yaml:"-"` // Version from build
+	BuildDate          string   `yaml:"-"` // Build date from build
+	SystemID           string   `yaml:"-"` // Unique system identifier for telemetry
+	ValidationWarnings []string `yaml:"-"` // Configuration validation warnings for telemetry
 
 	Main struct {
 		Name      string    // name of BirdNET-Go node, can be used to identify source of notes
@@ -399,12 +400,18 @@ func Load() (*Settings, error) {
 
 	// Initialize viper and read config
 	if err := initViper(); err != nil {
-		return nil, fmt.Errorf("error initializing viper: %w", err)
+		return nil, errors.New(err).
+			Category(errors.CategoryConfiguration).
+			Context("operation", "init-viper").
+			Build()
 	}
 
 	// Unmarshal the config into settings
 	if err := viper.Unmarshal(settings); err != nil {
-		return nil, fmt.Errorf("error unmarshaling config into struct: %w", err)
+		return nil, errors.New(err).
+			Category(errors.CategoryConfiguration).
+			Context("operation", "unmarshal-config").
+			Build()
 	}
 
 	// Validate settings
@@ -419,12 +426,19 @@ func Load() (*Settings, error) {
 					// Note: Telemetry reporting will happen later in birdnet package when Sentry is initialized
 				} else {
 					// This is a real validation error - fail the config load
-					return nil, fmt.Errorf("error validating settings: %w", err)
+					return nil, errors.New(err).
+						Category(errors.CategoryValidation).
+						Context("component", "settings").
+						Context("error_msg", errMsg).
+						Build()
 				}
 			}
 		} else {
 			// Other validation errors should fail the config load
-			return nil, fmt.Errorf("error validating settings: %w", err)
+			return nil, errors.New(err).
+				Category(errors.CategoryValidation).
+				Context("component", "settings").
+				Build()
 		}
 	}
 
@@ -449,7 +463,10 @@ func initViper() error {
 	// Get OS specific config paths
 	configPaths, err := GetDefaultConfigPaths()
 	if err != nil {
-		return fmt.Errorf("error getting default config paths: %w", err)
+		return errors.New(err).
+			Category(errors.CategoryConfiguration).
+			Context("operation", "get-config-paths").
+			Build()
 	}
 
 	// Assign config paths to Viper
@@ -469,7 +486,11 @@ func initViper() error {
 			// Config file not found, create config with defaults
 			return createDefaultConfig()
 		}
-		return fmt.Errorf("fatal error reading config file: %w", err)
+		// Report critical config file read errors
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("operation", "read-config-file").
+			Build()
 	}
 
 	return nil
@@ -477,9 +498,12 @@ func initViper() error {
 
 // createDefaultConfig creates a default config file and writes it to the default config path
 func createDefaultConfig() error {
-	configPaths, err := GetDefaultConfigPaths() // Again, adjusted for error handling
+	configPaths, err := GetDefaultConfigPaths()
 	if err != nil {
-		return fmt.Errorf("error getting default config paths: %w", err)
+		return errors.New(err).
+			Category(errors.CategoryConfiguration).
+			Context("operation", "create-default-config-paths").
+			Build()
 	}
 	configPath := filepath.Join(configPaths[0], "config.yaml")
 	defaultConfig := getDefaultConfig()
@@ -491,12 +515,20 @@ func createDefaultConfig() error {
 
 	// Create directories for config file
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		return fmt.Errorf("error creating directories for config file: %w", err)
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("operation", "create-config-dirs").
+			Context("path", filepath.Dir(configPath)).
+			Build()
 	}
 
 	// Write default config file
 	if err := os.WriteFile(configPath, []byte(defaultConfig), 0o644); err != nil {
-		return fmt.Errorf("error writing default config file: %w", err)
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("operation", "write-default-config").
+			Context("path", configPath).
+			Build()
 	}
 
 	fmt.Println("Created default config file at:", configPath)
@@ -537,12 +569,19 @@ func SaveSettings() error {
 	// Find the path of the current config file
 	configPath, err := FindConfigFile()
 	if err != nil {
-		return fmt.Errorf("error finding config file: %w", err)
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("operation", "find-config-file").
+			Build()
 	}
 
 	// Save the settings to the config file
 	if err := SaveYAMLConfig(configPath, &settingsCopy); err != nil {
-		return fmt.Errorf("error saving config: %w", err)
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("operation", "save-yaml-config").
+			Context("path", configPath).
+			Build()
 	}
 
 	log.Printf("Settings saved successfully to %s", configPath)
@@ -555,7 +594,12 @@ func Setting() *Settings {
 		if settingsInstance == nil {
 			_, err := Load()
 			if err != nil {
-				log.Fatalf("Error loading settings: %v", err)
+				// Fatal error loading settings - application cannot continue
+				enhancedErr := errors.New(err).
+					Category(errors.CategoryConfiguration).
+					Context("operation", "load-settings-init").
+					Build()
+				log.Fatalf("Error loading settings: %v", enhancedErr)
 			}
 		}
 	})
@@ -568,14 +612,21 @@ func SaveYAMLConfig(configPath string, settings *Settings) error {
 	// Marshal the settings struct to YAML
 	yamlData, err := yaml.Marshal(settings)
 	if err != nil {
-		return fmt.Errorf("error marshaling settings to YAML: %w", err)
+		return errors.New(err).
+			Category(errors.CategoryConfiguration).
+			Context("operation", "yaml-marshal").
+			Build()
 	}
 
 	// Write the YAML data to a temporary file
 	// This is done to ensure atomic write operation
 	tempFile, err := os.CreateTemp(filepath.Dir(configPath), "config-*.yaml")
 	if err != nil {
-		return fmt.Errorf("error creating temporary file: %w", err)
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("operation", "create-temp-file").
+			Context("dir", filepath.Dir(configPath)).
+			Build()
 	}
 	tempFileName := tempFile.Name()
 	// Ensure the temporary file is removed in case of any failure
@@ -584,11 +635,17 @@ func SaveYAMLConfig(configPath string, settings *Settings) error {
 	// Write the YAML data to the temporary file
 	if _, err := tempFile.Write(yamlData); err != nil {
 		tempFile.Close()
-		return fmt.Errorf("error writing to temporary file: %w", err)
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("operation", "write-temp-file").
+			Build()
 	}
 	// Close the temporary file after writing
 	if err := tempFile.Close(); err != nil {
-		return fmt.Errorf("error closing temporary file: %w", err)
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("operation", "close-temp-file").
+			Build()
 	}
 
 	// Try to rename the temporary file to replace the original config file
@@ -597,7 +654,12 @@ func SaveYAMLConfig(configPath string, settings *Settings) error {
 		// If rename fails (e.g., cross-device link), fall back to copy & delete
 		// This might happen when the temp directory is on a different filesystem
 		if err := moveFile(tempFileName, configPath); err != nil {
-			return fmt.Errorf("error copying config file: %w", err)
+			return errors.New(err).
+				Category(errors.CategoryFileIO).
+				Context("operation", "move-config-file").
+				Context("src", tempFileName).
+				Context("dst", configPath).
+				Build()
 		}
 	}
 
@@ -612,7 +674,11 @@ func GenerateRandomSecret() string {
 	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {
 		// Log the error and return a safe fallback or empty string
-		log.Printf("Failed to generate random secret: %v", err)
+		enhancedErr := errors.New(err).
+			Category(errors.CategorySystem).
+			Context("operation", "generate-random-secret").
+			Build()
+		log.Printf("Failed to generate random secret: %v", enhancedErr)
 		return ""
 	}
 	return base64.RawURLEncoding.EncodeToString(bytes)

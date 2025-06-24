@@ -330,10 +330,11 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 		
 		// ALWAYS report locale fallback to telemetry as a warning
 		// This is critical for tracking configuration issues
-		telemetry.CaptureMessage(
+		// Use deferred capture since BirdNET initializes before Sentry
+		telemetry.CaptureMessageDeferred(
 			fmt.Sprintf("Label file fallback: requested locale '%s' not available for model %s, using '%s'", 
 				result.RequestedLocale, bn.ModelInfo.ID, result.ActualLocale),
-			sentry.LevelWarning,
+			sentry.LevelError,
 			"birdnet-label-loading",
 		)
 		
@@ -372,7 +373,8 @@ func (bn *BirdNET) loadExternalLabels() error {
 	start := time.Now()
 	
 	// Report external label file usage to telemetry
-	telemetry.CaptureMessage(
+	// Use deferred capture since BirdNET initializes before Sentry
+	telemetry.CaptureMessageDeferred(
 		fmt.Sprintf("Using external label file: %s", bn.Settings.BirdNET.LabelPath),
 		sentry.LevelInfo,
 		"birdnet-label-loading",
