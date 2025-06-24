@@ -25,6 +25,10 @@ const (
 	CategoryHTTP          ErrorCategory = "http-request"
 	CategoryConfiguration ErrorCategory = "configuration"
 	CategorySystem        ErrorCategory = "system-resource"
+	CategoryDiskUsage     ErrorCategory = "disk-usage"
+	CategoryDiskCleanup   ErrorCategory = "disk-cleanup"
+	CategoryFileParsing   ErrorCategory = "file-parsing"
+	CategoryPolicyConfig  ErrorCategory = "policy-config"
 	CategoryGeneric       ErrorCategory = "generic"
 )
 
