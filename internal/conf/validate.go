@@ -142,7 +142,10 @@ func validateBirdNETSettings(birdnetSettings *BirdNETConfig, settings *Settings)
 
 	// If there are any errors, return them as a single error
 	if len(errs) > 0 {
-		return fmt.Errorf("BirdNET settings errors: %v", errs)
+		return errors.New(fmt.Errorf("BirdNET settings errors: %v", errs)).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "birdnet-settings-collection").
+			Build()
 	}
 
 	return nil
@@ -163,11 +166,19 @@ func validateWebServerSettings(settings *WebServerSettings) error {
 
 	// Validate LiveStream settings
 	if settings.LiveStream.BitRate < 16 || settings.LiveStream.BitRate > 320 {
-		return fmt.Errorf("LiveStream bitrate must be between 16 and 320 kbps, got %d", settings.LiveStream.BitRate)
+		return errors.New(fmt.Errorf("LiveStream bitrate must be between 16 and 320 kbps, got %d", settings.LiveStream.BitRate)).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "livestream-bitrate").
+			Context("bitrate", settings.LiveStream.BitRate).
+			Build()
 	}
 
 	if settings.LiveStream.SegmentLength < 1 || settings.LiveStream.SegmentLength > 30 {
-		return fmt.Errorf("LiveStream segment length must be between 1 and 30 seconds, got %d", settings.LiveStream.SegmentLength)
+		return errors.New(fmt.Errorf("LiveStream segment length must be between 1 and 30 seconds, got %d", settings.LiveStream.SegmentLength)).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "livestream-segment-length").
+			Context("segment_length", settings.LiveStream.SegmentLength).
+			Build()
 	}
 
 	return nil
@@ -200,7 +211,10 @@ func validateSecuritySettings(settings *Security) error {
 
 	// Validate session duration
 	if settings.SessionDuration <= 0 {
-		return fmt.Errorf("security.sessionduration must be a positive duration")
+		return errors.New(fmt.Errorf("security.sessionduration must be a positive duration")).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "security-session-duration").
+			Build()
 	}
 
 	return nil
@@ -357,19 +371,37 @@ func validateAudioSettings(settings *AudioSettings) error {
 			switch settings.Export.Type {
 			case "aac", "opus", "mp3":
 				if !strings.HasSuffix(settings.Export.Bitrate, "k") {
-					return fmt.Errorf("invalid bitrate format for %s: %s. Must end with 'k' (e.g., '64k')", settings.Export.Type, settings.Export.Bitrate)
+					return errors.New(fmt.Errorf("invalid bitrate format for %s: %s. Must end with 'k' (e.g., '64k')", settings.Export.Type, settings.Export.Bitrate)).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "audio-export-bitrate-format").
+					Context("export_type", settings.Export.Type).
+					Context("bitrate", settings.Export.Bitrate).
+					Build()
 				}
 				bitrateValue, err := strconv.Atoi(strings.TrimSuffix(settings.Export.Bitrate, "k"))
 				if err != nil {
-					return fmt.Errorf("invalid bitrate value for %s: %s", settings.Export.Type, settings.Export.Bitrate)
+					return errors.New(fmt.Errorf("invalid bitrate value for %s: %s", settings.Export.Type, settings.Export.Bitrate)).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "audio-export-bitrate-value").
+					Context("export_type", settings.Export.Type).
+					Context("bitrate", settings.Export.Bitrate).
+					Build()
 				}
 				if bitrateValue < 32 || bitrateValue > 320 {
-					return fmt.Errorf("bitrate for %s must be between 32k and 320k", settings.Export.Type)
+					return errors.New(fmt.Errorf("bitrate for %s must be between 32k and 320k", settings.Export.Type)).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "audio-export-bitrate-range").
+					Context("export_type", settings.Export.Type).
+					Build()
 				}
 			case "wav", "flac":
 				// These formats don't use bitrate, so we'll ignore the bitrate setting
 			default:
-				return fmt.Errorf("unsupported audio export type: %s", settings.Export.Type)
+				return errors.New(fmt.Errorf("unsupported audio export type: %s", settings.Export.Type)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "audio-export-type").
+				Context("export_type", settings.Export.Type).
+				Build()
 			}
 		}
 	}
@@ -381,7 +413,11 @@ func validateAudioSettings(settings *AudioSettings) error {
 func validateDashboardSettings(settings *Dashboard) error {
 	// Validate SummaryLimit
 	if settings.SummaryLimit < 10 || settings.SummaryLimit > 1000 {
-		return fmt.Errorf("Dashboard SummaryLimit must be between 10 and 1000")
+		return errors.New(fmt.Errorf("Dashboard SummaryLimit must be between 10 and 1000")).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "dashboard-summary-limit").
+			Context("summary_limit", settings.SummaryLimit).
+			Build()
 	}
 
 	return nil
@@ -391,7 +427,11 @@ func validateDashboardSettings(settings *Dashboard) error {
 func validateWeatherSettings(settings *WeatherSettings) error {
 	// Validate poll interval (minimum 15 minutes)
 	if settings.PollInterval < 15 {
-		return fmt.Errorf("weather poll interval must be at least 15 minutes, got %d", settings.PollInterval)
+		return errors.New(fmt.Errorf("weather poll interval must be at least 15 minutes, got %d", settings.PollInterval)).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "weather-poll-interval").
+			Context("poll_interval", settings.PollInterval).
+			Build()
 	}
 	return nil
 }
