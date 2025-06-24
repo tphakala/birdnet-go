@@ -417,7 +417,8 @@ func Load() (*Settings, error) {
 	// Validate settings
 	if err := ValidateSettings(settings); err != nil {
 		// Check if it's just a validation warning (contains fallback info)
-		if validationErr, ok := err.(ValidationError); ok {
+		var validationErr ValidationError
+		if errors.As(err, &validationErr) {
 			// Report configuration issues to telemetry for debugging
 			for _, errMsg := range validationErr.Errors {
 				if strings.Contains(errMsg, "fallback") || strings.Contains(errMsg, "not supported") {
