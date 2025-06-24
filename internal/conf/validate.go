@@ -3,7 +3,6 @@
 package conf
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -11,6 +10,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // ValidationError represents a collection of validation errors
@@ -28,7 +29,7 @@ func ValidateSettings(settings *Settings) error {
 	ve := ValidationError{}
 
 	// Validate BirdNET settings
-	if err := validateBirdNETSettings(&settings.BirdNET); err != nil {
+	if err := validateBirdNETSettings(&settings.BirdNET, settings); err != nil {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
@@ -75,58 +76,68 @@ func ValidateSettings(settings *Settings) error {
 }
 
 // validateBirdNETSettings validates the BirdNET-specific settings
-func validateBirdNETSettings(settings *BirdNETConfig) error {
+func validateBirdNETSettings(birdnetSettings *BirdNETConfig, settings *Settings) error {
 	var errs []string
 
 	// Check if sensitivity is within valid range
-	if settings.Sensitivity < 0 || settings.Sensitivity > 1.5 {
+	if birdnetSettings.Sensitivity < 0 || birdnetSettings.Sensitivity > 1.5 {
 		errs = append(errs, "BirdNET sensitivity must be between 0 and 1.5")
 	}
 
 	// Check if threshold is within valid range
-	if settings.Threshold < 0 || settings.Threshold > 1 {
+	if birdnetSettings.Threshold < 0 || birdnetSettings.Threshold > 1 {
 		errs = append(errs, "BirdNET threshold must be between 0 and 1")
 	}
 
 	// Check if overlap is within valid range
-	if settings.Overlap < 0 || settings.Overlap > 2.99 {
+	if birdnetSettings.Overlap < 0 || birdnetSettings.Overlap > 2.99 {
 		errs = append(errs, "BirdNET overlap value must be between 0 and 2.99 seconds")
 	}
 
 	// Check if longitude is within valid range
-	if settings.Longitude < -180 || settings.Longitude > 180 {
+	if birdnetSettings.Longitude < -180 || birdnetSettings.Longitude > 180 {
 		errs = append(errs, "BirdNET longitude must be between -180 and 180")
 	}
 
 	// Check if latitude is within valid range
-	if settings.Latitude < -90 || settings.Latitude > 90 {
+	if birdnetSettings.Latitude < -90 || birdnetSettings.Latitude > 90 {
 		errs = append(errs, "BirdNET latitude must be between -90 and 90")
 	}
 
 	// Check if threads is non-negative
-	if settings.Threads < 0 {
+	if birdnetSettings.Threads < 0 {
 		errs = append(errs, "BirdNET threads must be at least 0")
 	}
 
 	// Validate RangeFilter settings
-	if settings.RangeFilter.Model == "" {
+	if birdnetSettings.RangeFilter.Model == "" {
 		errs = append(errs, "RangeFilter model must not be empty")
 	}
 
 	// Check if RangeFilter threshold is within valid range
-	if settings.RangeFilter.Threshold < 0 || settings.RangeFilter.Threshold > 1 {
+	if birdnetSettings.RangeFilter.Threshold < 0 || birdnetSettings.RangeFilter.Threshold > 1 {
 		errs = append(errs, "RangeFilter threshold must be between 0 and 1")
 	}
 
 	// Validate locale setting
-	if settings.Locale != "" {
-		normalizedLocale, err := NormalizeLocale(settings.Locale)
+	if birdnetSettings.Locale != "" {
+		normalizedLocale, err := NormalizeLocale(birdnetSettings.Locale)
 		if err != nil {
 			// This means locale normalization fell back to default
-			errs = append(errs, fmt.Sprintf("BirdNET locale '%s' is not supported, will use fallback '%s'", settings.Locale, normalizedLocale))
+			message := fmt.Sprintf("BirdNET locale '%s' is not supported, will use fallback '%s'", birdnetSettings.Locale, normalizedLocale)
+			errs = append(errs, message)
+			
+			// Store the validation warning for telemetry reporting
+			// We can't call telemetry directly here due to import cycles
+			// This will be handled by the calling code in main.go
+			if settings.ValidationWarnings == nil {
+				settings.ValidationWarnings = make([]string, 0)
+			}
+			settings.ValidationWarnings = append(settings.ValidationWarnings, 
+				fmt.Sprintf("config-locale-validation: %s", message))
 		}
 		// Update the settings with the normalized locale
-		settings.Locale = normalizedLocale
+		birdnetSettings.Locale = normalizedLocale
 	}
 
 	// If there are any errors, return them as a single error
@@ -142,7 +153,10 @@ func validateWebServerSettings(settings *WebServerSettings) error {
 	if settings.Enabled {
 		// Check if port is provided when enabled
 		if settings.Port == "" {
-			return errors.New("WebServer port is required when enabled")
+			return errors.New(fmt.Errorf("WebServer port is required when enabled")).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "webserver-port-required").
+			Build()
 		}
 		// You might want to add more specific port validation here
 	}
@@ -163,7 +177,10 @@ func validateWebServerSettings(settings *WebServerSettings) error {
 func validateSecuritySettings(settings *Security) error {
 	// Check if any OAuth provider is enabled
 	if (settings.BasicAuth.Enabled || settings.GoogleAuth.Enabled || settings.GithubAuth.Enabled) && settings.Host == "" {
-		return fmt.Errorf("security.host must be set when using authentication providers")
+		return errors.New(fmt.Errorf("security.host must be set when using authentication providers")).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "security-authentication-host").
+			Build()
 	}
 
 	// Validate the subnet bypass setting against the allowed pattern
@@ -172,7 +189,11 @@ func validateSecuritySettings(settings *Security) error {
 		for _, subnet := range subnets {
 			_, _, err := net.ParseCIDR(strings.TrimSpace(subnet))
 			if err != nil {
-				return fmt.Errorf("invalid subnet format: %w", err)
+				return errors.New(err).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "security-subnet-format").
+					Context("subnet", subnet).
+					Build()
 			}
 		}
 	}
@@ -189,7 +210,10 @@ func validateSecuritySettings(settings *Security) error {
 func validateRealtimeSettings(settings *RealtimeSettings) error {
 	// Check if interval is non-negative
 	if settings.Interval < 0 {
-		return errors.New("Realtime interval must be non-negative")
+		return errors.New(fmt.Errorf("Realtime interval must be non-negative")).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "realtime-interval").
+			Build()
 	}
 
 	// Validate MQTT settings
@@ -206,12 +230,18 @@ func validateMQTTSettings(settings *MQTTSettings) error {
 	if settings.Enabled {
 		// Check if broker is provided when enabled
 		if settings.Broker == "" {
-			return errors.New("MQTT broker URL is required when MQTT is enabled")
+			return errors.New(fmt.Errorf("MQTT broker URL is required when MQTT is enabled")).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "mqtt-broker-required").
+				Build()
 		}
 
 		// Check if topic is provided when enabled
 		if settings.Topic == "" {
-			return errors.New("MQTT topic is required when MQTT is enabled")
+			return errors.New(fmt.Errorf("MQTT topic is required when MQTT is enabled")).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "mqtt-topic-required").
+				Build()
 		}
 
 		// Explicitly support anonymous connections (empty username and password)
@@ -220,16 +250,28 @@ func validateMQTTSettings(settings *MQTTSettings) error {
 		// Validate retry settings if enabled
 		if settings.RetrySettings.Enabled {
 			if settings.RetrySettings.MaxRetries < 0 {
-				return errors.New("MQTT max retries must be non-negative")
+				return errors.New(fmt.Errorf("MQTT max retries must be non-negative")).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "mqtt-max-retries").
+					Build()
 			}
 			if settings.RetrySettings.InitialDelay < 0 {
-				return errors.New("MQTT initial delay must be non-negative")
+				return errors.New(fmt.Errorf("MQTT initial delay must be non-negative")).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "mqtt-initial-delay").
+					Build()
 			}
 			if settings.RetrySettings.MaxDelay < settings.RetrySettings.InitialDelay {
-				return errors.New("MQTT max delay must be greater than or equal to initial delay")
+				return errors.New(fmt.Errorf("MQTT max delay must be greater than or equal to initial delay")).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "mqtt-max-delay").
+					Build()
 			}
 			if settings.RetrySettings.BackoffMultiplier <= 0 {
-				return errors.New("MQTT backoff multiplier must be positive")
+				return errors.New(fmt.Errorf("MQTT backoff multiplier must be positive")).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "mqtt-backoff-multiplier").
+					Build()
 			}
 		}
 	}
@@ -256,12 +298,18 @@ func validateBirdweatherSettings(settings *BirdweatherSettings) error {
 
 		// Check if threshold is within valid range
 		if settings.Threshold < 0 || settings.Threshold > 1 {
-			return errors.New("Birdweather threshold must be between 0 and 1")
+			return errors.New(fmt.Errorf("Birdweather threshold must be between 0 and 1")).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "birdweather-threshold").
+				Build()
 		}
 
 		// Check if location accuracy is non-negative
 		if settings.LocationAccuracy < 0 {
-			return errors.New("Birdweather location accuracy must be non-negative")
+			return errors.New(fmt.Errorf("Birdweather location accuracy must be non-negative")).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "birdweather-location-accuracy").
+				Build()
 		}
 	}
 	return nil
@@ -273,6 +321,13 @@ func validateAudioSettings(settings *AudioSettings) error {
 	validatedFfmpegPath, ffmpegErr := ValidateToolPath(settings.FfmpegPath, GetFfmpegBinaryName())
 	if ffmpegErr != nil {
 		log.Printf("FFmpeg validation failed: %v. Audio export/conversion requiring FFmpeg might be disabled or use defaults.", ffmpegErr)
+		// Log validation warning - telemetry will be handled by the errors package
+		validationErr := errors.New(ffmpegErr).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-tool-ffmpeg").
+			Context("warning", "ffmpeg-not-available").
+			Build()
+		_ = validationErr // Error is logged via telemetry, continue processing
 		settings.FfmpegPath = "" // Ensure path is empty if validation failed
 	} else {
 		settings.FfmpegPath = validatedFfmpegPath // Store the validated path (explicit or from PATH)
