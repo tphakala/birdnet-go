@@ -4,7 +4,6 @@ package imageprovider
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -160,27 +159,46 @@ func (l *wikiMediaProvider) queryAndGetFirstPage(reqID string, params map[string
 	// }
 
 	logger.Debug("Parsing pages from API response")
-	pages, err := resp.GetObjectArray("query", "pages")
+
+	// First check if the response has a query field at all
+	query, err := resp.GetObject("query")
 	if err != nil {
-		logger.Error("Failed to parse pages from Wikipedia response", "error", err)
-		// Create a more descriptive error message that specifies which keys were missing
-		var descriptiveMessage string
-		if err.Error() == "key not found" {
-			descriptiveMessage = "imageprovider: Wikipedia API response missing expected 'query.pages' structure"
-		} else {
-			descriptiveMessage = fmt.Sprintf("imageprovider: failed to parse Wikipedia API response pages: %s", err.Error())
+		// No query field usually means the API returned an error or unexpected structure
+		logger.Debug("No 'query' field in Wikipedia response", "error", err)
+
+		// Check if there's an error field in the response
+		if errorObj, errCheck := resp.GetObject("error"); errCheck == nil {
+			if errorCode, errCode := errorObj.GetString("code"); errCode == nil {
+				if errorInfo, errInfo := errorObj.GetString("info"); errInfo == nil {
+					logger.Warn("Wikipedia API returned error", "error_code", errorCode, "error_info", errorInfo)
+				}
+			}
 		}
 
-		descriptiveErr := errors.Newf("%s", descriptiveMessage).
-			Component("imageprovider").
-			Category(errors.CategoryImageFetch).
-			Context("provider", wikiProviderName).
-			Context("request_id", reqID).
-			Context("operation", "parse_pages_from_response").
-			Context("expected_path", "query.pages").
-			Context("error_detail", err.Error()).
-			Build()
-		return nil, descriptiveErr
+		// This is likely a "not found" scenario, not an error worth reporting to telemetry
+		return nil, ErrImageNotFound
+	}
+
+	// Try to get pages array from the query object
+	pages, err := query.GetObjectArray("pages")
+	if err != nil {
+		logger.Debug("No 'pages' field in query response", "error", err)
+
+		// Check for alternative structures that might indicate page issues
+		// Check for redirects
+		if redirects, redirectErr := query.GetObjectArray("redirects"); redirectErr == nil && len(redirects) > 0 {
+			logger.Debug("Wikipedia response contains redirects but no pages")
+		}
+
+		// Check for normalized titles
+		if normalized, normalErr := query.GetObjectArray("normalized"); normalErr == nil && len(normalized) > 0 {
+			logger.Debug("Wikipedia response contains normalized titles but no pages")
+		}
+
+		// This is a common scenario for species without Wikipedia pages
+		// Don't create telemetry noise - treat as "not found"
+		logger.Debug("Wikipedia page structure indicates no available page for species")
+		return nil, ErrImageNotFound
 	}
 
 	if len(pages) == 0 {
@@ -245,22 +263,31 @@ func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
 
 	authorInfo, err := l.queryAuthorInfo(reqID, thumbnailSourceFile)
 	if err != nil {
-		// Error logged in queryAuthorInfo
-		// if l.debug {
-		// 	log.Printf("[%s] Debug: Failed to fetch author info for %s: %v", reqID, scientificName, err)
-		// }
-		// Don't expose internal error to user, use a generic message
-		// Keep existing error message which is reasonable
-		enhancedErr := errors.Newf("unable to retrieve image attribution for species: %s", scientificName).
-			Component("imageprovider").
-			Category(errors.CategoryImageFetch).
-			Context("provider", wikiProviderName).
-			Context("request_id", reqID).
-			Context("scientific_name", scientificName).
-			Context("thumbnail_source_file", thumbnailSourceFile).
-			Context("operation", "fetch_author_info").
-			Build()
-		return BirdImage{}, enhancedErr
+		// If it's just a "not found" error, continue with default author info
+		// Only fail for actual errors (network issues, parsing failures)
+		if errors.Is(err, ErrImageNotFound) {
+			logger.Debug("Author info not available, using defaults")
+			// Use default author info rather than failing
+			authorInfo = &wikiMediaAuthor{
+				name:        "Unknown",
+				URL:         "",
+				licenseName: "Unknown",
+				licenseURL:  "",
+			}
+		} else {
+			// This is a real error (network, API issues), so we should report it
+			logger.Error("Failed to fetch author info", "error", err)
+			enhancedErr := errors.Newf("unable to retrieve image attribution for species: %s", scientificName).
+				Component("imageprovider").
+				Category(errors.CategoryImageFetch).
+				Context("provider", wikiProviderName).
+				Context("request_id", reqID).
+				Context("scientific_name", scientificName).
+				Context("thumbnail_source_file", thumbnailSourceFile).
+				Context("operation", "fetch_author_info").
+				Build()
+			return BirdImage{}, enhancedErr
+		}
 	}
 	logger = logger.With("author", authorInfo.name, "license", authorInfo.licenseName)
 	logger.Info("Author info retrieved successfully")
@@ -327,50 +354,18 @@ func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string) (url, f
 
 	url, err = page.GetString("thumbnail", "source")
 	if err != nil {
-		logger.Warn("Failed to extract thumbnail URL from page data", "error", err)
-		// Create a more descriptive error message
-		var descriptiveMessage string
-		if err.Error() == "key not found" {
-			descriptiveMessage = fmt.Sprintf("no thumbnail.source field found in Wikipedia page data for species: %s", scientificName)
-		} else {
-			descriptiveMessage = fmt.Sprintf("no free-license image available for species: %s", scientificName)
-		}
-
-		enhancedErr := errors.Newf("%s", descriptiveMessage).
-			Component("imageprovider").
-			Category(errors.CategoryImageFetch).
-			Context("provider", wikiProviderName).
-			Context("request_id", reqID).
-			Context("scientific_name", scientificName).
-			Context("operation", "extract_thumbnail_url").
-			Context("expected_path", "thumbnail.source").
-			Context("error_detail", err.Error()).
-			Build()
-		return "", "", enhancedErr
+		logger.Debug("No thumbnail URL found in page data", "error", err)
+		// This is common for pages without images or with non-free images
+		// Don't create telemetry noise - treat as "not found"
+		return "", "", ErrImageNotFound
 	}
 
 	fileName, err = page.GetString("pageimage")
 	if err != nil {
-		logger.Warn("Failed to extract thumbnail filename (pageimage) from page data", "error", err)
-		// Create a more descriptive error message
-		var descriptiveMessage string
-		if err.Error() == "key not found" {
-			descriptiveMessage = fmt.Sprintf("no pageimage field found in Wikipedia page data for species: %s", scientificName)
-		} else {
-			descriptiveMessage = fmt.Sprintf("image metadata not available for species: %s", scientificName)
-		}
-
-		enhancedErr := errors.Newf("%s", descriptiveMessage).
-			Component("imageprovider").
-			Category(errors.CategoryImageFetch).
-			Context("provider", wikiProviderName).
-			Context("request_id", reqID).
-			Context("scientific_name", scientificName).
-			Context("operation", "extract_thumbnail_filename").
-			Context("expected_path", "pageimage").
-			Context("error_detail", err.Error()).
-			Build()
-		return "", "", enhancedErr
+		logger.Debug("No pageimage filename found in page data", "error", err)
+		// This is common for pages without proper image metadata
+		// Don't create telemetry noise - treat as "not found"
+		return "", "", ErrImageNotFound
 	}
 
 	logger.Debug("Successfully retrieved thumbnail URL and filename", "url", url, "filename", fileName)
@@ -431,50 +426,18 @@ func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailFileName string) (*w
 	logger.Debug("Extracting metadata from imageinfo response")
 	imgInfo, err := page.GetObjectArray("imageinfo")
 	if err != nil || len(imgInfo) == 0 {
-		logger.Error("Failed to get imageinfo array from page data", "error", err, "array_len", len(imgInfo))
-		// Create a more descriptive error message
-		var descriptiveMessage string
-		if err != nil && err.Error() == "key not found" {
-			descriptiveMessage = fmt.Sprintf("no imageinfo field found in Wikipedia file page for %s", thumbnailFileName)
-		} else {
-			descriptiveMessage = fmt.Sprintf("no imageinfo found for %s", thumbnailFileName)
-		}
-
-		enhancedErr := errors.Newf("%s", descriptiveMessage).
-			Component("imageprovider").
-			Category(errors.CategoryImageFetch).
-			Context("provider", wikiProviderName).
-			Context("request_id", reqID).
-			Context("thumbnail_filename", thumbnailFileName).
-			Context("operation", "extract_imageinfo").
-			Context("expected_path", "imageinfo").
-			Context("error_detail", fmt.Sprintf("err=%v, len=%d", err, len(imgInfo))).
-			Build()
-		return nil, enhancedErr
+		logger.Debug("No imageinfo found in file page", "error", err, "array_len", len(imgInfo))
+		// This is common for files without metadata or processing issues
+		// Don't create telemetry noise - treat as "not found"
+		return nil, ErrImageNotFound
 	}
 
 	extMetadata, err := imgInfo[0].GetObject("extmetadata")
 	if err != nil {
-		logger.Error("Failed to get extmetadata object from imageinfo", "error", err)
-		// Create a more descriptive error message
-		var descriptiveMessage string
-		if err.Error() == "key not found" {
-			descriptiveMessage = fmt.Sprintf("no extmetadata field found in imageinfo for %s", thumbnailFileName)
-		} else {
-			descriptiveMessage = fmt.Sprintf("no extmetadata found for %s", thumbnailFileName)
-		}
-
-		enhancedErr := errors.Newf("%s", descriptiveMessage).
-			Component("imageprovider").
-			Category(errors.CategoryImageFetch).
-			Context("provider", wikiProviderName).
-			Context("request_id", reqID).
-			Context("thumbnail_filename", thumbnailFileName).
-			Context("operation", "extract_extmetadata").
-			Context("expected_path", "imageinfo[0].extmetadata").
-			Context("error_detail", err.Error()).
-			Build()
-		return nil, enhancedErr
+		logger.Debug("No extmetadata found in imageinfo", "error", err)
+		// This is common for files without extended metadata
+		// Don't create telemetry noise - treat as "not found"
+		return nil, ErrImageNotFound
 	}
 
 	// Extract specific fields (Artist, LicenseShortName, LicenseUrl)

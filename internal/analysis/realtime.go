@@ -142,7 +142,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	proc := processor.New(settings, dataStore, bn, metrics, birdImageCache)
 
 	// Initialize and start the HTTP server
-	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan, proc)
+	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan, proc, metrics)
 	httpServer.Start()
 
 	// Initialize the wait group to wait for all goroutines to finish

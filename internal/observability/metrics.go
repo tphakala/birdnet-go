@@ -26,6 +26,7 @@ type Metrics struct {
 	SunCalc       *metrics.SunCalcMetrics
 	Datastore     *metrics.DatastoreMetrics
 	MyAudio       *metrics.MyAudioMetrics
+	HTTP          *metrics.HTTPMetrics
 }
 
 // NewMetrics creates a new instance of Metrics, initializing all metric collectors.
@@ -73,6 +74,11 @@ func NewMetrics() (*Metrics, error) {
 		return nil, fmt.Errorf("failed to create MyAudio metrics: %w", err)
 	}
 
+	httpMetrics, err := metrics.NewHTTPMetrics(registry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP metrics: %w", err)
+	}
+
 	m := &Metrics{
 		registry:      registry,
 		MQTT:          mqttMetrics,
@@ -83,6 +89,7 @@ func NewMetrics() (*Metrics, error) {
 		SunCalc:       sunCalcMetrics,
 		Datastore:     datastoreMetrics,
 		MyAudio:       myAudioMetrics,
+		HTTP:          httpMetrics,
 	}
 
 	// Initialize tracing with metrics
