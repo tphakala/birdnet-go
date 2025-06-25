@@ -75,7 +75,8 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	var err error
 	bn.ModelInfo, err = DetermineModelInfo(modelIdentifier)
 	if err != nil {
-		return nil, errors.New(err).
+		return nil, errors.New(fmt.Errorf("BirdNET: failed to determine model information: %w", err)).
+			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
 			Context("model_identifier", modelIdentifier).
@@ -85,19 +86,36 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	// Load taxonomy data
 	bn.TaxonomyMap, bn.ScientificIndex, err = LoadTaxonomyData(bn.TaxonomyPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load taxonomy data: %w", err)
+		return nil, errors.New(fmt.Errorf("BirdNET: failed to load taxonomy data: %w", err)).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			Context("taxonomy_path", bn.TaxonomyPath).
+			Build()
 	}
 
 	if err := bn.initializeModel(); err != nil {
-		return nil, fmt.Errorf("failed to initialize model: %w", err)
+		return nil, errors.New(fmt.Errorf("BirdNET: failed to initialize analysis model: %w", err)).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
+			Build()
 	}
 
 	if err := bn.initializeMetaModel(); err != nil {
-		return nil, fmt.Errorf("failed to initialize meta model: %w", err)
+		return nil, errors.New(fmt.Errorf("BirdNET: failed to initialize range filter model: %w", err)).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
+			Build()
 	}
 
 	if err := bn.loadLabels(); err != nil {
-		return nil, fmt.Errorf("failed to load labels: %w", err)
+		return nil, errors.New(fmt.Errorf("BirdNET: failed to load species labels: %w", err)).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
+			Context("locale", settings.BirdNET.Locale).
+			Build()
 	}
 
 	// Normalize and validate locale setting.
