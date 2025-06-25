@@ -288,11 +288,21 @@ func (ds *DataStore) Delete(id string) error {
 	return ds.DB.Transaction(func(tx *gorm.DB) error {
 		// Delete the full results entry associated with the note
 		if err := tx.Where("note_id = ?", noteID).Delete(&Results{}).Error; err != nil {
-			return fmt.Errorf("deleting results for note ID %d: %w", noteID, err)
+			return errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "delete_results").
+				Context("note_id", fmt.Sprintf("%d", noteID)).
+				Build()
 		}
 		// Delete the note itself
 		if err := tx.Delete(&Note{}, noteID).Error; err != nil {
-			return fmt.Errorf("deleting note with ID %d: %w", noteID, err)
+			return errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "delete_note").
+				Context("note_id", fmt.Sprintf("%d", noteID)).
+				Build()
 		}
 		return nil
 	})
@@ -311,7 +321,12 @@ func (ds *DataStore) GetNoteClipPath(noteID string) (string, error) {
 		First(&clipPath).Error // Use First to retrieve a single record
 
 	if err != nil {
-		return "", fmt.Errorf("failed to retrieve clip path: %w", err)
+		return "", errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_clip_path").
+			Context("note_id", noteID).
+			Build()
 	}
 
 	return clipPath.ClipName, nil
@@ -321,13 +336,22 @@ func (ds *DataStore) GetNoteClipPath(noteID string) (string, error) {
 func (ds *DataStore) DeleteNoteClipPath(noteID string) error {
 	// Validate the input parameter
 	if noteID == "" {
-		return fmt.Errorf("invalid note ID: must not be empty")
+		return errors.New(fmt.Errorf("invalid note ID: must not be empty")).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "delete_clip_path").
+			Build()
 	}
 
 	// Update the clip_name field to an empty string for the specified note ID
 	err := ds.DB.Model(&Note{}).Where("id = ?", noteID).Update("clip_name", "").Error
 	if err != nil {
-		return fmt.Errorf("failed to delete clip path for note ID %s: %w", noteID, err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "delete_clip_path").
+			Context("note_id", noteID).
+			Build()
 	}
 
 	// Return nil if no errors occurred, indicating successful execution
@@ -338,7 +362,11 @@ func (ds *DataStore) DeleteNoteClipPath(noteID string) error {
 func (ds *DataStore) GetAllNotes() ([]Note, error) {
 	var notes []Note
 	if result := ds.DB.Find(&notes); result.Error != nil {
-		return nil, fmt.Errorf("error getting all notes: %w", result.Error)
+		return nil, errors.New(result.Error).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_notes").
+			Build()
 	}
 	return notes, nil
 }
@@ -370,7 +398,12 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 		Limit(reportCount)
 
 	if err := query.Scan(&results).Error; err != nil {
-		return nil, err
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_top_birds_data").
+			Context("date", selectedDate).
+			Build()
 	}
 
 	// Create a single note for each species with the count information
@@ -434,7 +467,13 @@ func (ds *DataStore) GetHourlyOccurrences(date, commonName string, minConfidence
 		Scan(&results).Error
 
 	if err != nil {
-		return hourlyCounts, err
+		return hourlyCounts, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_hourly_occurrences").
+			Context("date", date).
+			Context("species", commonName).
+			Build()
 	}
 
 	for _, result := range results {
@@ -490,7 +529,12 @@ func (ds *DataStore) GetLastDetections(numDetections int) ([]Note, error) {
 	if result := ds.DB.Preload("Review").Preload("Lock").Preload("Comments", func(db *gorm.DB) *gorm.DB {
 		return db.Order("created_at DESC") // Order comments by creation time, newest first
 	}).Order("id DESC").Limit(numDetections).Find(&notes); result.Error != nil {
-		return nil, fmt.Errorf("error getting last detections: %w", result.Error)
+		return nil, errors.New(result.Error).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_last_detections").
+			Context("limit", fmt.Sprintf("%d", numDetections)).
+			Build()
 	}
 
 	// Populate virtual fields
@@ -516,7 +560,14 @@ func (ds *DataStore) GetAllDetectedSpecies() ([]Note, error) {
 		Group("scientific_name").
 		Scan(&results).Error
 
-	return results, err
+	if err != nil {
+		return results, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_detected_species").
+			Build()
+	}
+	return results, nil
 }
 
 // SearchNotes performs a search on notes with optional sorting, pagination, and limits.
@@ -541,7 +592,12 @@ func (ds *DataStore) SearchNotes(query string, sortAscending bool, limit, offset
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("error searching notes: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "search_notes").
+			Context("query", query).
+			Build()
 	}
 	return notes, nil
 }
@@ -554,7 +610,12 @@ func (ds *DataStore) SaveDailyEvents(dailyEvents *DailyEvents) error {
 		FirstOrCreate(dailyEvents)
 
 	if result.Error != nil {
-		return fmt.Errorf("failed to save daily events: %w", result.Error)
+		return errors.New(result.Error).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "save_daily_events").
+			Context("date", dailyEvents.Date).
+			Build()
 	}
 
 	return nil
@@ -564,7 +625,15 @@ func (ds *DataStore) SaveDailyEvents(dailyEvents *DailyEvents) error {
 func (ds *DataStore) GetDailyEvents(date string) (DailyEvents, error) {
 	var dailyEvents DailyEvents
 	if err := ds.DB.Where("date = ?", date).First(&dailyEvents).Error; err != nil {
-		return dailyEvents, err
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return dailyEvents, nil // Return empty struct for not found
+		}
+		return dailyEvents, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_daily_events").
+			Context("date", date).
+			Build()
 	}
 	return dailyEvents, nil
 }
@@ -573,7 +642,11 @@ func (ds *DataStore) GetDailyEvents(date string) (DailyEvents, error) {
 func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
 	// Basic validation
 	if hourlyWeather.Time.IsZero() {
-		return fmt.Errorf("invalid time value in hourly weather data")
+		return errors.New(stderrors.New("invalid time value")).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "save_hourly_weather").
+			Build()
 	}
 
 	// Use upsert to avoid duplicates for the same timestamp
@@ -582,7 +655,11 @@ func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
 		FirstOrCreate(hourlyWeather)
 
 	if result.Error != nil {
-		return fmt.Errorf("failed to save hourly weather: %w", result.Error)
+		return errors.New(result.Error).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "save_hourly_weather").
+			Build()
 	}
 
 	return nil
@@ -597,7 +674,12 @@ func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
 		Find(&hourlyWeather).Error
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get hourly weather for date %s: %w", date, err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_hourly_weather").
+			Context("date", date).
+			Build()
 	}
 
 	return hourlyWeather, nil
@@ -610,9 +692,17 @@ func (ds *DataStore) LatestHourlyWeather() (*HourlyWeather, error) {
 	err := ds.DB.Order("time DESC").First(&weather).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("no weather data found")
+			return nil, errors.New(stderrors.New("no weather data found")).
+				Component("datastore").
+				Category(errors.CategoryValidation).
+				Context("operation", "get_latest_weather").
+				Build()
 		}
-		return nil, fmt.Errorf("failed to get latest weather: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_latest_weather").
+			Build()
 	}
 
 	return &weather, nil
@@ -648,7 +738,16 @@ func (ds *DataStore) GetHourlyDetections(date, hour string, duration, limit, off
 		detections[i].Locked = detections[i].Lock != nil
 	}
 
-	return detections, err
+	if err != nil {
+		return detections, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_hourly_detections").
+			Context("date", date).
+			Context("hour", hour).
+			Build()
+	}
+	return detections, nil
 }
 
 // CountSpeciesDetections counts the number of detections for a specific species, date, and hour.
@@ -668,7 +767,13 @@ func (ds *DataStore) CountSpeciesDetections(species, date, hour string, duration
 
 	err := query.Count(&count).Error
 	if err != nil {
-		return 0, fmt.Errorf("error counting species detections: %w", err)
+		return 0, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "count_species_detections").
+			Context("species", species).
+			Context("date", date).
+			Build()
 	}
 
 	return count, nil
@@ -682,7 +787,12 @@ func (ds *DataStore) CountSearchResults(query string) (int64, error) {
 		Count(&count).Error
 
 	if err != nil {
-		return 0, fmt.Errorf("error counting search results: %w", err)
+		return 0, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "count_search_results").
+			Context("query", query).
+			Build()
 	}
 
 	return count, nil
@@ -692,18 +802,36 @@ func (ds *DataStore) CountSearchResults(query string) (int64, error) {
 // and returns appropriate errors if the note doesn't exist or if the update fails.
 func (ds *DataStore) UpdateNote(id string, updates map[string]interface{}) error {
 	if id == "" {
-		return fmt.Errorf("invalid id: must not be empty")
+		return errors.New(stderrors.New("invalid id: must not be empty")).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "update_note").
+			Build()
 	}
 	if len(updates) == 0 {
-		return fmt.Errorf("no updates provided")
+		return errors.New(stderrors.New("no updates provided")).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "update_note").
+			Build()
 	}
 
 	result := ds.DB.Model(&Note{}).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
-		return fmt.Errorf("failed to update note: %w", result.Error)
+		return errors.New(result.Error).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "update_note").
+			Context("note_id", id).
+			Build()
 	}
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("note with id %s not found", id)
+		return errors.New(stderrors.New("note not found")).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "update_note").
+			Context("note_id", id).
+			Build()
 	}
 
 	return nil
@@ -714,7 +842,12 @@ func (ds *DataStore) GetNoteReview(noteID string) (*NoteReview, error) {
 	var review NoteReview
 	id, err := strconv.ParseUint(noteID, 10, 32)
 	if err != nil {
-		return nil, fmt.Errorf("invalid note ID: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_note_review").
+			Context("note_id", noteID).
+			Build()
 	}
 
 	// Use Session to temporarily modify logger config for this query
@@ -726,7 +859,12 @@ func (ds *DataStore) GetNoteReview(noteID string) (*NoteReview, error) {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil // Return nil if no review exists
 		}
-		return nil, fmt.Errorf("error getting note review: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_note_review").
+			Context("note_id", noteID).
+			Build()
 	}
 
 	return &review, nil
@@ -740,7 +878,12 @@ func (ds *DataStore) SaveNoteReview(review *NoteReview) error {
 		FirstOrCreate(review)
 
 	if result.Error != nil {
-		return fmt.Errorf("failed to save note review: %w", result.Error)
+		return errors.New(result.Error).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "save_note_review").
+			Context("note_id", fmt.Sprintf("%d", review.NoteID)).
+			Build()
 	}
 
 	return nil
@@ -751,12 +894,22 @@ func (ds *DataStore) GetNoteComments(noteID string) ([]NoteComment, error) {
 	var comments []NoteComment
 	id, err := strconv.ParseUint(noteID, 10, 32)
 	if err != nil {
-		return nil, fmt.Errorf("invalid note ID: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_note_comments").
+			Context("note_id", noteID).
+			Build()
 	}
 
 	err = ds.DB.Where("note_id = ?", id).Order("created_at DESC").Find(&comments).Error
 	if err != nil {
-		return nil, fmt.Errorf("error getting note comments: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_note_comments").
+			Context("note_id", noteID).
+			Build()
 	}
 
 	return comments, nil
@@ -766,18 +919,36 @@ func (ds *DataStore) GetNoteComments(noteID string) ([]NoteComment, error) {
 func (ds *DataStore) SaveNoteComment(comment *NoteComment) error {
 	// Validate input
 	if comment == nil {
-		return fmt.Errorf("comment cannot be nil")
+		return errors.New(stderrors.New("comment cannot be nil")).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "save_note_comment").
+			Build()
 	}
 	if comment.NoteID == 0 {
-		return fmt.Errorf("note ID cannot be zero")
+		return errors.New(stderrors.New("note ID cannot be zero")).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "save_note_comment").
+			Build()
 	}
 	// Entry can be empty as comments are optional, but if provided, check length
 	if len(comment.Entry) > 1000 {
-		return fmt.Errorf("comment entry exceeds maximum length of 1000 characters")
+		return errors.New(stderrors.New("comment entry exceeds maximum length")).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "save_note_comment").
+			Context("entry_length", fmt.Sprintf("%d", len(comment.Entry))).
+			Build()
 	}
 
 	if err := ds.DB.Create(comment).Error; err != nil {
-		return fmt.Errorf("failed to save note comment: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "save_note_comment").
+			Context("note_id", fmt.Sprintf("%d", comment.NoteID)).
+			Build()
 	}
 	return nil
 }
@@ -786,11 +957,21 @@ func (ds *DataStore) SaveNoteComment(comment *NoteComment) error {
 func (ds *DataStore) DeleteNoteComment(commentID string) error {
 	id, err := strconv.ParseUint(commentID, 10, 32)
 	if err != nil {
-		return fmt.Errorf("invalid comment ID: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "delete_note_comment").
+			Context("comment_id", commentID).
+			Build()
 	}
 
 	if err := ds.DB.Delete(&NoteComment{}, id).Error; err != nil {
-		return fmt.Errorf("failed to delete note comment: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "delete_note_comment").
+			Context("comment_id", commentID).
+			Build()
 	}
 	return nil
 }
@@ -799,7 +980,12 @@ func (ds *DataStore) DeleteNoteComment(commentID string) error {
 func (ds *DataStore) UpdateNoteComment(commentID, entry string) error {
 	id, err := strconv.ParseUint(commentID, 10, 32)
 	if err != nil {
-		return fmt.Errorf("invalid comment ID: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "update_note_comment").
+			Context("comment_id", commentID).
+			Build()
 	}
 
 	result := ds.DB.Model(&NoteComment{}).Where("id = ?", id).Updates(map[string]interface{}{
@@ -808,11 +994,21 @@ func (ds *DataStore) UpdateNoteComment(commentID, entry string) error {
 	})
 
 	if result.Error != nil {
-		return fmt.Errorf("failed to update note comment: %w", result.Error)
+		return errors.New(result.Error).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "update_note_comment").
+			Context("comment_id", commentID).
+			Build()
 	}
 
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("comment with ID %s not found", commentID)
+		return errors.New(stderrors.New("comment not found")).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "update_note_comment").
+			Context("comment_id", commentID).
+			Build()
 	}
 
 	return nil
@@ -848,7 +1044,11 @@ func sortAscendingString(asc bool) string {
 // Transaction executes a function within a transaction.
 func (ds *DataStore) Transaction(fc func(tx *gorm.DB) error) error {
 	if fc == nil {
-		return fmt.Errorf("transaction function cannot be nil")
+		return errors.New(stderrors.New("transaction function cannot be nil")).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "transaction").
+			Build()
 	}
 	return ds.DB.Transaction(fc)
 }
@@ -857,7 +1057,12 @@ func (ds *DataStore) Transaction(fc func(tx *gorm.DB) error) error {
 func (ds *DataStore) GetNoteLock(noteID string) (*NoteLock, error) {
 	id, err := strconv.ParseUint(noteID, 10, 32)
 	if err != nil {
-		return nil, fmt.Errorf("invalid note ID: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_note_lock").
+			Context("note_id", noteID).
+			Build()
 	}
 
 	var lock NoteLock
@@ -867,7 +1072,12 @@ func (ds *DataStore) GetNoteLock(noteID string) (*NoteLock, error) {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil // Return nil if no lock exists
 		}
-		return nil, fmt.Errorf("error getting lock details: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_note_lock").
+			Context("note_id", noteID).
+			Build()
 	}
 
 	return &lock, nil
@@ -877,7 +1087,12 @@ func (ds *DataStore) GetNoteLock(noteID string) (*NoteLock, error) {
 func (ds *DataStore) IsNoteLocked(noteID string) (bool, error) {
 	id, err := strconv.ParseUint(noteID, 10, 32)
 	if err != nil {
-		return false, fmt.Errorf("invalid note ID: %w", err)
+		return false, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "is_note_locked").
+			Context("note_id", noteID).
+			Build()
 	}
 
 	var count int64
@@ -887,7 +1102,12 @@ func (ds *DataStore) IsNoteLocked(noteID string) (bool, error) {
 		Error
 
 	if err != nil {
-		return false, fmt.Errorf("error checking lock status: %w", err)
+		return false, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "is_note_locked").
+			Context("note_id", noteID).
+			Build()
 	}
 
 	return count > 0, nil
@@ -897,7 +1117,12 @@ func (ds *DataStore) IsNoteLocked(noteID string) (bool, error) {
 func (ds *DataStore) LockNote(noteID string) error {
 	id, err := strconv.ParseUint(noteID, 10, 32)
 	if err != nil {
-		return fmt.Errorf("invalid note ID: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "lock_note").
+			Context("note_id", noteID).
+			Build()
 	}
 
 	// Generate a unique transaction ID (first 8 chars of UUID)
@@ -927,7 +1152,12 @@ func (ds *DataStore) LockNote(noteID string) error {
 				lastErr = result.Error
 				continue
 			}
-			return fmt.Errorf("failed to lock note: %w", result.Error)
+			return errors.New(result.Error).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "lock_note").
+				Context("note_id", noteID).
+				Build()
 		}
 
 		// If we get here, the transaction was successful
@@ -937,14 +1167,26 @@ func (ds *DataStore) LockNote(noteID string) error {
 		return nil
 	}
 
-	return fmt.Errorf("[%s] failed after %d attempts: %w", txID, maxRetries, lastErr)
+	return errors.New(lastErr).
+		Component("datastore").
+		Category(errors.CategoryDatabase).
+		Context("operation", "lock_note").
+		Context("note_id", noteID).
+		Context("transaction_id", txID).
+		Context("max_retries", fmt.Sprintf("%d", maxRetries)).
+		Build()
 }
 
 // UnlockNote removes a lock from a note
 func (ds *DataStore) UnlockNote(noteID string) error {
 	id, err := strconv.ParseUint(noteID, 10, 32)
 	if err != nil {
-		return fmt.Errorf("invalid note ID: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "unlock_note").
+			Context("note_id", noteID).
+			Build()
 	}
 
 	// Generate a unique transaction ID (first 8 chars of UUID)
@@ -959,7 +1201,12 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 		// First check if the lock exists
 		exists, err := ds.IsNoteLocked(noteID)
 		if err != nil {
-			return fmt.Errorf("failed to check lock existence: %w", err)
+			return errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "unlock_note_check_existence").
+				Context("note_id", noteID).
+				Build()
 		}
 		if !exists {
 			// Lock doesn't exist, nothing to unlock
@@ -975,7 +1222,12 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 				lastErr = result.Error
 				continue
 			}
-			return fmt.Errorf("failed to unlock note: %w", result.Error)
+			return errors.New(result.Error).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "unlock_note").
+				Context("note_id", noteID).
+				Build()
 		}
 
 		// If we get here, the transaction was successful
@@ -985,14 +1237,25 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 		return nil
 	}
 
-	return fmt.Errorf("[%s] failed after %d attempts: %w", txID, maxRetries, lastErr)
+	return errors.New(lastErr).
+		Component("datastore").
+		Category(errors.CategoryDatabase).
+		Context("operation", "unlock_note").
+		Context("note_id", noteID).
+		Context("transaction_id", txID).
+		Context("max_retries", fmt.Sprintf("%d", maxRetries)).
+		Build()
 }
 
 // GetImageCache retrieves an image cache entry by scientific name and provider
 func (ds *DataStore) GetImageCache(query ImageCacheQuery) (*ImageCache, error) {
 	var cache ImageCache
 	if query.ScientificName == "" || query.ProviderName == "" {
-		return nil, fmt.Errorf("scientific name and provider name must be provided in query")
+		return nil, errors.New(stderrors.New("scientific name and provider name must be provided")).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_image_cache").
+			Build()
 	}
 	// Use Session to disable logging for this query
 	if err := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
@@ -1000,7 +1263,13 @@ func (ds *DataStore) GetImageCache(query ImageCacheQuery) (*ImageCache, error) {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil // Return nil, nil when record is not found
 		}
-		return nil, fmt.Errorf("getting image cache for %s from %s: %w", query.ScientificName, query.ProviderName, err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_image_cache").
+			Context("scientific_name", query.ScientificName).
+			Context("provider", query.ProviderName).
+			Build()
 	}
 	return &cache, nil
 }
@@ -1008,10 +1277,18 @@ func (ds *DataStore) GetImageCache(query ImageCacheQuery) (*ImageCache, error) {
 // SaveImageCache saves an image cache entry to the database
 func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 	if cache.ProviderName == "" {
-		return fmt.Errorf("provider name cannot be empty when saving image cache")
+		return errors.New(stderrors.New("provider name cannot be empty")).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "save_image_cache").
+			Build()
 	}
 	if cache.ScientificName == "" {
-		return fmt.Errorf("scientific name cannot be empty when saving image cache")
+		return errors.New(stderrors.New("scientific name cannot be empty")).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "save_image_cache").
+			Build()
 	}
 
 	// Use Clauses(clause.OnConflict...) to perform an UPSERT operation
@@ -1020,7 +1297,13 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 		Columns:   []clause.Column{{Name: "provider_name"}, {Name: "scientific_name"}},
 		DoUpdates: clause.AssignmentColumns([]string{"url", "license_name", "license_url", "author_name", "author_url", "cached_at"}),
 	}).Create(cache).Error; err != nil {
-		return fmt.Errorf("saving image cache for %s from %s: %w", cache.ScientificName, cache.ProviderName, err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "save_image_cache").
+			Context("scientific_name", cache.ScientificName).
+			Context("provider", cache.ProviderName).
+			Build()
 	}
 	return nil
 }
@@ -1030,7 +1313,12 @@ func (ds *DataStore) GetAllImageCaches(providerName string) ([]ImageCache, error
 	var caches []ImageCache
 	if err := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
 		Where("provider_name = ?", providerName).Find(&caches).Error; err != nil {
-		return nil, fmt.Errorf("getting all image caches for provider %s: %w", providerName, err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_image_caches").
+			Context("provider", providerName).
+			Build()
 	}
 	return caches, nil
 }
@@ -1047,7 +1335,11 @@ func (ds *DataStore) GetLockedNotesClipPaths() ([]string, error) {
 		Error
 
 	if err != nil {
-		return nil, fmt.Errorf("error getting locked notes clip paths: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_locked_notes_clip_paths").
+			Build()
 	}
 
 	return clipPaths, nil
@@ -1069,7 +1361,13 @@ func (ds *DataStore) CountHourlyDetections(date, hour string, duration int) (int
 	err := query.Count(&count).Error
 
 	if err != nil {
-		return 0, fmt.Errorf("error counting hourly detections: %w", err)
+		return 0, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "count_hourly_detections").
+			Context("date", date).
+			Context("hour", hour).
+			Build()
 	}
 
 	return count, nil
@@ -1236,11 +1534,21 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 
 	startDate, err := time.Parse("2006-01-02", startDateStr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid start date format: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_time_of_day_conditions").
+			Context("start_date", startDateStr).
+			Build()
 	}
 	endDate, err := time.Parse("2006-01-02", endDateStr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid end date format: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_time_of_day_conditions").
+			Context("end_date", endDateStr).
+			Build()
 	}
 
 	if endDate.Before(startDate) {
@@ -1352,7 +1660,11 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error) {
 	// Sanitise filters first
 	if err := filters.sanitise(); err != nil {
-		return nil, 0, fmt.Errorf("invalid search filters: %w", err)
+		return nil, 0, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "search_detections").
+			Build()
 	}
 
 	// Build the query with GORM query builder
@@ -1384,7 +1696,11 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 	var total int64
 	err := countQuery.WithContext(filters.Ctx).Count(&total).Error // Apply context
 	if err != nil {
-		return nil, 0, fmt.Errorf("count query failed: %w", err)
+		return nil, 0, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "search_detections_count").
+			Build()
 	}
 	// --- End Count Query ---
 
@@ -1425,7 +1741,11 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 	// Execute the query
 	var scannedResults []ScannedResult
 	if err := query.WithContext(filters.Ctx).Scan(&scannedResults).Error; err != nil { // Apply context
-		return nil, 0, fmt.Errorf("search query failed: %w", err)
+		return nil, 0, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "search_detections_query").
+			Build()
 	}
 
 	// Convert ScannedResult objects to DetectionRecord objects
@@ -1520,7 +1840,12 @@ func (ds *DataStore) getSunEventsForDate(dateStr string, timestamp time.Time) (s
 	// Calculate sun times for the given date
 	sunTimes, err := ds.SunCalc.GetSunEventTimes(timestamp)
 	if err != nil {
-		return suncalc.SunEventTimes{}, fmt.Errorf("failed to get sun times for date %s: %w", dateStr, err)
+		return suncalc.SunEventTimes{}, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryNetwork).
+			Context("operation", "get_sun_events_for_date").
+			Context("date", dateStr).
+			Build()
 	}
 
 	// Cache the calculated sun times
