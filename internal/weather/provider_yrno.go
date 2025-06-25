@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 const (
@@ -61,7 +62,12 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 	req, err := http.NewRequest("GET", url, http.NoBody)
 	if err != nil {
 		logger.Error("Failed to create HTTP request", "url", url, "error", err)
-		return nil, fmt.Errorf("error creating request: %w", err)
+		return nil, errors.New(err).
+			Component("weather").
+			Category(errors.CategoryNetwork).
+			Context("operation", "create_http_request").
+			Context("provider", yrNoProviderName).
+			Build()
 	}
 
 	req.Header.Set("User-Agent", UserAgent)
@@ -83,7 +89,13 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 			attemptLogger.Warn("HTTP request failed", "error", err)
 			if i == MaxRetries-1 {
 				logger.Error("Failed to fetch weather data after max retries", "error", err)
-				return nil, fmt.Errorf("error fetching weather data after %d retries: %w", MaxRetries, err)
+				return nil, errors.New(err).
+					Component("weather").
+					Category(errors.CategoryNetwork).
+					Context("operation", "weather_api_request").
+					Context("provider", yrNoProviderName).
+					Context("max_retries", fmt.Sprintf("%d", MaxRetries)).
+					Build()
 			}
 			time.Sleep(RetryDelay)
 			continue // Retry
@@ -114,7 +126,14 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 			attemptLogger.Warn("Received non-OK status code", "status_code", resp.StatusCode, "response_body", responseBodyStr)
 			if i == MaxRetries-1 {
 				logger.Error("Failed to fetch weather data due to non-OK status after max retries", "status_code", resp.StatusCode, "response_body", responseBodyStr)
-				return nil, fmt.Errorf("received non-OK response (%d) after %d retries", resp.StatusCode, MaxRetries)
+				return nil, errors.New(fmt.Errorf("received non-OK response (%d) after %d retries", resp.StatusCode, MaxRetries)).
+					Component("weather").
+					Category(errors.CategoryNetwork).
+					Context("operation", "weather_api_response").
+					Context("provider", yrNoProviderName).
+					Context("status_code", fmt.Sprintf("%d", resp.StatusCode)).
+					Context("max_retries", fmt.Sprintf("%d", MaxRetries)).
+					Build()
 			}
 			time.Sleep(RetryDelay)
 			continue // Retry
@@ -135,7 +154,12 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 			if err != nil {
 				resp.Body.Close()
 				logger.Error("Failed to create gzip reader", "error", err)
-				return nil, fmt.Errorf("error creating gzip reader: %w", err)
+				return nil, errors.New(err).
+					Component("weather").
+					Category(errors.CategoryNetwork).
+					Context("operation", "create_gzip_reader").
+					Context("provider", yrNoProviderName).
+					Build()
 			}
 			reader = gzReader
 		}
@@ -147,12 +171,22 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 		resp.Body.Close() // Close original body now
 		if err != nil {
 			logger.Error("Failed to read response body", "status_code", resp.StatusCode, "error", err)
-			return nil, fmt.Errorf("error reading response body: %w", err)
+			return nil, errors.New(err).
+				Component("weather").
+				Category(errors.CategoryNetwork).
+				Context("operation", "read_response_body").
+				Context("provider", yrNoProviderName).
+				Build()
 		}
 
 		if err := json.Unmarshal(body, &response); err != nil {
 			logger.Error("Failed to unmarshal response JSON", "status_code", resp.StatusCode, "error", err, "response_body", string(body))
-			return nil, fmt.Errorf("error unmarshaling weather data: %w", err)
+			return nil, errors.New(err).
+				Component("weather").
+				Category(errors.CategoryValidation).
+				Context("operation", "unmarshal_weather_data").
+				Context("provider", yrNoProviderName).
+				Build()
 		}
 
 		// Success!
@@ -162,7 +196,12 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 
 	if len(response.Properties.Timeseries) == 0 {
 		logger.Error("API response parsed successfully but contained no timeseries data")
-		return nil, fmt.Errorf("no weather data available in timeseries")
+		return nil, errors.New(fmt.Errorf("no weather data available in timeseries")).
+			Component("weather").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_weather_response").
+			Context("provider", yrNoProviderName).
+			Build()
 	}
 
 	current := response.Properties.Timeseries[0]
