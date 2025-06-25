@@ -165,11 +165,11 @@ func TestDescriptiveErrorMessages(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := handleNetworkError(tt.baseErr, "https://test.com", 30*time.Second, tt.operation)
-			
+
 			if result == nil {
 				t.Fatal("Expected non-nil error")
 			}
-			
+
 			if !contains(result.Error(), tt.expectedPrefix) {
 				t.Errorf("Expected error to contain %q, got %q", tt.expectedPrefix, result.Error())
 			}
