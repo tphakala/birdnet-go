@@ -13,6 +13,24 @@ The enhanced error system automatically reports errors to Sentry with privacy-sa
 
 ## Quick Start
 
+### Important: Import Guidelines
+
+**DO NOT** import the standard `errors` package alongside this custom errors package. This custom package provides passthrough functions for standard error operations:
+
+```go
+// ❌ WRONG - Do not import both
+import (
+    "errors"  // Don't do this
+    "github.com/tphakala/birdnet-go/internal/errors"
+)
+
+// ✅ CORRECT - Import only the custom errors package
+import "github.com/tphakala/birdnet-go/internal/errors"
+
+// The custom package provides passthrough functions:
+// errors.Is(), errors.As(), errors.Unwrap() are all available
+```
+
 ### Basic Usage
 
 ```go
@@ -384,3 +402,44 @@ The enhanced error system is designed to be lightweight:
 - Telemetry reporting is asynchronous
 - Privacy scrubbing uses efficient regex patterns
 - Automatic component detection uses call stack inspection minimally
+
+## Import Best Practices
+
+### Standard Library Integration
+
+This package provides all necessary error handling functions as passthrough methods, so you should **never** import the standard `errors` package alongside it:
+
+```go
+// ❌ WRONG - Creates import conflicts and confusion
+import (
+    stderrors "errors"  // Don't alias the standard package
+    "github.com/tphakala/birdnet-go/internal/errors"
+)
+
+// ✅ CORRECT - Use only the custom errors package
+import "github.com/tphakala/birdnet-go/internal/errors"
+
+// Available passthrough functions:
+errors.Is(err, target)     // Standard error checking
+errors.As(err, &target)    // Standard error unwrapping
+errors.Unwrap(err)         // Standard error unwrapping
+errors.Join(errs...)       // Standard error joining
+```
+
+### Function Availability
+
+The custom errors package provides:
+- **Enhanced Functions**: `errors.New()`, `errors.Newf()` with telemetry integration
+- **Standard Functions**: `errors.Is()`, `errors.As()`, `errors.Unwrap()`, `errors.Join()`
+- **Specialized Functions**: Component detection, context building, privacy scrubbing
+
+### Migration Checklist
+
+When updating existing code:
+1. ✅ Remove any `import "errors"` or `import stderrors "errors"`
+2. ✅ Ensure `import "github.com/tphakala/birdnet-go/internal/errors"` is present
+3. ✅ Replace `fmt.Errorf()` with `errors.Newf()` where enhanced telemetry is needed
+4. ✅ Add `.Component()`, `.Category()`, and `.Context()` calls
+5. ✅ End with `.Build()` to create the enhanced error
+
+This approach ensures consistent error handling throughout the codebase while maintaining compatibility with standard Go error interfaces.
