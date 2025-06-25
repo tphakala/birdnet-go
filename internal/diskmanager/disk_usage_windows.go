@@ -4,6 +4,7 @@
 package diskmanager
 
 import (
+	"fmt"
 	"syscall"
 	"time"
 	"unsafe"
@@ -21,14 +22,14 @@ func GetDiskUsage(baseDir string) (float64, error) {
 
 	utf16Path, err := syscall.UTF16PtrFromString(baseDir)
 	if err != nil {
-		enhancedErr := errors.New(err).
+		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to convert path to UTF16: %w", err)).
 			Component("diskmanager").
 			Category(errors.CategoryDiskUsage).
 			Context("path", baseDir).
 			Context("operation", "utf16_conversion").
 			Timing("disk_usage_check", time.Since(startTime)).
 			Build()
-		return 0, enhancedErr
+		return 0, descriptiveErr
 	}
 
 	_, _, err = getDiskFreeSpaceEx.Call(
@@ -38,14 +39,14 @@ func GetDiskUsage(baseDir string) (float64, error) {
 		uintptr(unsafe.Pointer(&totalNumberOfFreeBytes)),
 	)
 	if err != syscall.Errno(0) {
-		enhancedErr := errors.New(err).
+		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to get Windows disk free space: %w", err)).
 			Component("diskmanager").
 			Category(errors.CategoryDiskUsage).
 			Context("path", baseDir).
 			Context("operation", "get_disk_free_space").
 			Timing("disk_usage_check", time.Since(startTime)).
 			Build()
-		return 0, enhancedErr
+		return 0, descriptiveErr
 	}
 
 	used := totalNumberOfBytes - totalNumberOfFreeBytes
@@ -77,14 +78,14 @@ func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
 		uintptr(unsafe.Pointer(&totalNumberOfFreeBytes)))
 
 	if ret == 0 {
-		enhancedErr := errors.New(err).
+		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to get Windows detailed disk usage: %w", err)).
 			Component("diskmanager").
 			Category(errors.CategoryDiskUsage).
 			Context("path", path).
 			Context("operation", "get_detailed_disk_usage").
 			Timing("detailed_disk_usage_check", time.Since(startTime)).
 			Build()
-		return DiskSpaceInfo{}, enhancedErr
+		return DiskSpaceInfo{}, descriptiveErr
 	}
 
 	usedBytes := uint64(totalNumberOfBytes - totalNumberOfFreeBytes)

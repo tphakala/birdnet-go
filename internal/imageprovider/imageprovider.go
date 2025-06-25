@@ -68,13 +68,13 @@ func init() {
 	// Default level is Info. Set to Debug for more detailed cache/provider info.
 	imageProviderLogger, _, err = logging.NewFileLogger("logs/imageprovider.log", "imageprovider", imageProviderLevelVar)
 	if err != nil {
-		enhancedErr := errors.New(err).
+		descriptiveErr := errors.New(fmt.Errorf("imageprovider: failed to initialize file logger: %w", err)).
 			Component("imageprovider").
 			Category(errors.CategoryFileIO).
 			Context("log_file", "logs/imageprovider.log").
 			Context("operation", "logger_initialization").
 			Build()
-		logging.Error("Failed to initialize imageprovider file logger", "error", enhancedErr)
+		logging.Error("Failed to initialize imageprovider file logger", "error", descriptiveErr)
 		// Fallback to a disabled logger (writes to io.Discard) but respects the level var
 		logging.Warn("Imageprovider service falling back to a disabled logger due to initialization error.")
 		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: imageProviderLevelVar})

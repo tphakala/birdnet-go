@@ -4,6 +4,7 @@
 package diskmanager
 
 import (
+	"fmt"
 	"syscall"
 	"time"
 
@@ -16,13 +17,13 @@ func GetDiskUsage(path string) (float64, error) {
 	var stat syscall.Statfs_t
 	err := syscall.Statfs(path, &stat)
 	if err != nil {
-		enhancedErr := errors.New(err).
+		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to get disk usage statistics: %w", err)).
 			Component("diskmanager").
 			Category(errors.CategoryDiskUsage).
 			Context("path", path).
 			Timing("disk_usage_check", time.Since(startTime)).
 			Build()
-		return 0, enhancedErr
+		return 0, descriptiveErr
 	}
 
 	// Calculate disk usage percentage
@@ -40,13 +41,13 @@ func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
 	var stat syscall.Statfs_t
 	err := syscall.Statfs(path, &stat)
 	if err != nil {
-		enhancedErr := errors.New(err).
+		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to get detailed disk statistics: %w", err)).
 			Component("diskmanager").
 			Category(errors.CategoryDiskUsage).
 			Context("path", path).
 			Timing("detailed_disk_usage_check", time.Since(startTime)).
 			Build()
-		return DiskSpaceInfo{}, enhancedErr
+		return DiskSpaceInfo{}, descriptiveErr
 	}
 
 	totalBytes := stat.Blocks * uint64(stat.Bsize)

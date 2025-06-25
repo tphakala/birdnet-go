@@ -4,6 +4,7 @@ package imageprovider
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -168,14 +169,14 @@ func (l *wikiMediaProvider) queryAndGetFirstPage(reqID string, params map[string
 		// 		log.Printf("[%s] Debug: Response structure: %v", reqID, obj)
 		// 	}
 		// }
-		enhancedErr := errors.New(err).
+		descriptiveErr := errors.New(fmt.Errorf("imageprovider: failed to parse Wikipedia API response pages: %w", err)).
 			Component("imageprovider").
 			Category(errors.CategoryImageFetch).
 			Context("provider", wikiProviderName).
 			Context("request_id", reqID).
 			Context("operation", "parse_pages_from_response").
 			Build()
-		return nil, enhancedErr
+		return nil, descriptiveErr
 	}
 
 	if len(pages) == 0 {

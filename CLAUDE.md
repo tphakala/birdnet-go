@@ -118,6 +118,68 @@ return errors.New(err).
 
 The package automatically reports errors to Sentry when configured, with privacy-safe context data.
 
+### Telemetry Error Message Guidelines
+
+For better telemetry identification and debugging, always use descriptive error messages that clearly identify the component and operation:
+
+#### Best Practices for Error Messages
+
+1. **Use Component Prefixes**: Always prefix error messages with the component name for clear identification in telemetry:
+   ```go
+   // Good
+   errors.New(fmt.Errorf("birdweather: failed to upload soundscape: %w", err))
+   errors.New(fmt.Errorf("diskmanager: failed to get disk usage statistics: %w", err))
+   errors.New(fmt.Errorf("imageprovider: failed to parse Wikipedia API response: %w", err))
+   
+   // Bad
+   errors.New(err) // Generic error without context
+   ```
+
+2. **Be Operation-Specific**: Include specific operation details in error messages:
+   ```go
+   // Good
+   "BirdNET: failed to initialize analysis model"
+   "diskmanager: failed to parse audio filename format"
+   "imageprovider: failed to fetch Wikipedia pages"
+   
+   // Bad
+   "initialization failed"
+   "parsing failed"
+   "fetch failed"
+   ```
+
+3. **Use Consistent Naming**: Use lowercase component names separated by colons:
+   ```go
+   "component: specific operation description: %w"
+   ```
+
+4. **Always Wrap Original Errors**: Use `%w` to preserve error chains:
+   ```go
+   errors.New(fmt.Errorf("component: operation failed: %w", originalErr))
+   ```
+
+#### Error Category Usage
+
+Combine descriptive messages with appropriate error categories:
+```go
+return errors.New(fmt.Errorf("diskmanager: failed to walk directory for audio files: %w", err)).
+    Component("diskmanager").
+    Category(errors.CategoryFileIO).
+    Context("operation", "walk_directory").
+    Context("base_dir", baseDir).
+    Build()
+```
+
+#### Component Naming Standards
+
+- **birdweather**: BirdWeather API client operations
+- **diskmanager**: Disk management and file operations  
+- **imageprovider**: Image fetching and caching operations
+- **birdnet**: BirdNET model operations
+- **myaudio**: Audio processing operations
+
+These guidelines ensure that telemetry errors in Sentry have clear, searchable titles that immediately identify the failing component and operation.
+
 ## Additional Cursor Rules Integration
 
 ### Go Best Practices (from .cursor/rules/go.mdc)
