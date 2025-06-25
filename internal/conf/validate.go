@@ -24,6 +24,16 @@ func (ve ValidationError) Error() string {
 	return fmt.Sprintf("Validation errors: %v", ve.Errors)
 }
 
+// logValidationWarning logs a validation warning for telemetry purposes without returning an error
+func logValidationWarning(err error, validationType, warningType string) {
+	// Create an enhanced error for telemetry tracking
+	_ = errors.New(err).
+		Category(errors.CategoryValidation).
+		Context("validation_type", validationType).
+		Context("warning", warningType).
+		Build()
+}
+
 // ValidateSettings validates the entire Settings struct
 func ValidateSettings(settings *Settings) error {
 	ve := ValidationError{}
@@ -335,13 +345,8 @@ func validateAudioSettings(settings *AudioSettings) error {
 	validatedFfmpegPath, ffmpegErr := ValidateToolPath(settings.FfmpegPath, GetFfmpegBinaryName())
 	if ffmpegErr != nil {
 		log.Printf("FFmpeg validation failed: %v. Audio export/conversion requiring FFmpeg might be disabled or use defaults.", ffmpegErr)
-		// Log validation warning - telemetry will be handled by the errors package
-		validationErr := errors.New(ffmpegErr).
-			Category(errors.CategoryValidation).
-			Context("validation_type", "audio-tool-ffmpeg").
-			Context("warning", "ffmpeg-not-available").
-			Build()
-		_ = validationErr        // Error is logged via telemetry, continue processing
+		// Log validation warning for telemetry
+		logValidationWarning(ffmpegErr, "audio-tool-ffmpeg", "ffmpeg-not-available")
 		settings.FfmpegPath = "" // Ensure path is empty if validation failed
 	} else {
 		settings.FfmpegPath = validatedFfmpegPath // Store the validated path (explicit or from PATH)

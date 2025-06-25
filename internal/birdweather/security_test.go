@@ -2,6 +2,7 @@ package birdweather
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -127,7 +128,7 @@ func TestErrorContextScrubbing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Verify that the URL passed to handleNetworkError is already masked
-			if !contains(tt.url, tt.expectInURL) {
+			if !strings.Contains(tt.url, tt.expectInURL) {
 				t.Errorf("URL should contain %v, but got %v", tt.expectInURL, tt.url)
 			}
 		})
@@ -170,7 +171,7 @@ func TestDescriptiveErrorMessages(t *testing.T) {
 				t.Fatal("Expected non-nil error")
 			}
 
-			if !contains(result.Error(), tt.expectedPrefix) {
+			if !strings.Contains(result.Error(), tt.expectedPrefix) {
 				t.Errorf("Expected error to contain %q, got %q", tt.expectedPrefix, result.Error())
 			}
 		})
@@ -186,15 +187,3 @@ func (e *timeoutError) Error() string   { return e.msg }
 func (e *timeoutError) Timeout() bool   { return true }
 func (e *timeoutError) Temporary() bool { return true }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || s != "" && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
