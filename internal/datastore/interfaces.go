@@ -3,7 +3,7 @@ package datastore
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/suncalc" // Import suncalc
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -122,7 +123,12 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 		// Begin a transaction
 		tx := ds.DB.Begin()
 		if tx.Error != nil {
-			lastErr = fmt.Errorf("starting transaction: %w", tx.Error)
+			lastErr = errors.New(tx.Error).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "start_transaction").
+				Context("attempt", fmt.Sprintf("%d", attempt+1)).
+				Build()
 			continue
 		}
 
@@ -139,7 +145,12 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 				if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
 					return err
 				}
-				return fmt.Errorf("saving note: %w", err)
+				return errors.New(err).
+					Component("datastore").
+					Category(errors.CategoryDatabase).
+					Context("operation", "save_note").
+					Context("note_id", fmt.Sprintf("%d", note.ID)).
+					Build()
 			}
 
 			// Assign the note ID to each result and save them
@@ -150,7 +161,12 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 					if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
 						return err
 					}
-					return fmt.Errorf("saving result: %w", err)
+					return errors.New(err).
+						Component("datastore").
+						Category(errors.CategoryDatabase).
+						Context("operation", "save_result").
+						Context("note_id", fmt.Sprintf("%d", note.ID)).
+						Build()
 				}
 			}
 
@@ -159,7 +175,11 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 				if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
 					return err
 				}
-				return fmt.Errorf("committing transaction: %w", err)
+				return errors.New(err).
+					Component("datastore").
+					Category(errors.CategoryDatabase).
+					Context("operation", "commit_transaction").
+					Build()
 			}
 
 			return nil
@@ -186,7 +206,13 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 	}
 
 	// If we've exhausted all retries
-	return fmt.Errorf("[%s] failed after %d attempts: %w", txID, maxRetries, lastErr)
+	return errors.New(lastErr).
+		Component("datastore").
+		Category(errors.CategoryDatabase).
+		Context("operation", "save_transaction").
+		Context("transaction_id", txID).
+		Context("max_retries", fmt.Sprintf("%d", maxRetries)).
+		Build()
 }
 
 // Get retrieves a note by its ID from the database.
@@ -194,7 +220,12 @@ func (ds *DataStore) Get(id string) (Note, error) {
 	// Convert the id from string to integer
 	noteID, err := strconv.Atoi(id)
 	if err != nil {
-		return Note{}, fmt.Errorf("converting ID to integer: %w", err)
+		return Note{}, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "convert_note_id").
+			Context("id", id).
+			Build()
 	}
 
 	var note Note
@@ -202,7 +233,12 @@ func (ds *DataStore) Get(id string) (Note, error) {
 	if err := ds.DB.Preload("Review").Preload("Lock").Preload("Comments", func(db *gorm.DB) *gorm.DB {
 		return db.Order("created_at DESC") // Order comments by creation time, newest first
 	}).First(&note, noteID).Error; err != nil {
-		return Note{}, fmt.Errorf("getting note with ID %d: %w", noteID, err)
+		return Note{}, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_note").
+			Context("note_id", fmt.Sprintf("%d", noteID)).
+			Build()
 	}
 
 	// Populate virtual Verified field
@@ -221,16 +257,31 @@ func (ds *DataStore) Delete(id string) error {
 	// Convert the id from string to unsigned integer
 	noteID, err := strconv.ParseUint(id, 10, 32)
 	if err != nil {
-		return fmt.Errorf("converting ID to integer: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "convert_note_id_for_delete").
+			Context("id", id).
+			Build()
 	}
 
 	// Check if the note is locked
 	isLocked, err := ds.IsNoteLocked(id)
 	if err != nil {
-		return fmt.Errorf("checking note lock status: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "check_note_lock").
+			Context("note_id", id).
+			Build()
 	}
 	if isLocked {
-		return fmt.Errorf("cannot delete note: note is locked")
+		return errors.New(fmt.Errorf("cannot delete note: note is locked")).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "delete_note").
+			Context("note_id", id).
+			Build()
 	}
 
 	// Perform the deletion within a transaction
@@ -1058,22 +1109,22 @@ func (f *SearchFilters) sanitise() error {
 	}
 	// Validate confidence range
 	if f.ConfidenceMin > f.ConfidenceMax {
-		return errors.New("confidence_min must be <= confidence_max")
+		return stderrors.New("confidence_min must be <= confidence_max")
 	}
 	// Validate mutually exclusive Verified flags
 	if f.VerifiedOnly && f.UnverifiedOnly {
-		return errors.New("verified_only and unverified_only cannot both be true")
+		return stderrors.New("verified_only and unverified_only cannot both be true")
 	}
 	// Validate mutually exclusive Locked flags
 	if f.LockedOnly && f.UnlockedOnly {
-		return errors.New("locked_only and unlocked_only cannot both be true")
+		return stderrors.New("locked_only and unlocked_only cannot both be true")
 	}
 	// Validate TimeOfDay
 	switch f.TimeOfDay {
 	case "", "any", "day", "night", "sunrise", "sunset": // Add sunrise/sunset
 		// Valid values
 	default:
-		return errors.New("invalid time_of_day value, must be 'any', 'day', 'night', 'sunrise', or 'sunset'")
+		return stderrors.New("invalid time_of_day value, must be 'any', 'day', 'night', 'sunrise', or 'sunset'")
 	}
 	return nil
 }
@@ -1193,12 +1244,12 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 	}
 
 	if endDate.Before(startDate) {
-		return nil, errors.New("end date cannot be before start date")
+		return nil, stderrors.New("end date cannot be before start date")
 	}
 
 	// Limit date range to avoid excessively long queries (increased to 365 days)
 	if endDate.Sub(startDate).Hours() > 365*24 {
-		return nil, errors.New("date range for TimeOfDay filter cannot exceed 365 days")
+		return nil, stderrors.New("date range for TimeOfDay filter cannot exceed 365 days")
 	}
 
 	var conditions []*gorm.DB
