@@ -9,17 +9,6 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
-// SentryError is a custom error type with meaningful title for Sentry reporting
-type SentryError struct {
-	Title   string
-	Message string
-}
-
-// Error implements the error interface
-func (se *SentryError) Error() string {
-	return se.Message
-}
-
 // TelemetryReporter is an interface for reporting errors to telemetry systems
 type TelemetryReporter interface {
 	ReportError(err *EnhancedError)
@@ -56,7 +45,11 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 	scrubbedMessage := scrubMessageForPrivacy(enhancedMessage)
 
 	sentry.WithScope(func(scope *sentry.Scope) {
-		// Set component and category tags
+		// Create a meaningful error title for Sentry
+		errorTitle := generateErrorTitle(ee)
+
+		// Set the error title as a tag that Sentry can use for grouping
+		scope.SetTag("error_title", errorTitle)
 		scope.SetTag("component", ee.Component)
 		scope.SetTag("category", string(ee.Category))
 		scope.SetTag("error_type", fmt.Sprintf("%T", ee.Err))
@@ -75,17 +68,23 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 		level := getErrorLevel(ee.Category)
 		scope.SetLevel(level)
 
-		// Create a meaningful error title for Sentry
-		errorTitle := generateErrorTitle(ee)
+		// Set custom fingerprint for better grouping using the error title
+		scope.SetFingerprint([]string{errorTitle, ee.Component, string(ee.Category)})
 
-		// Create a custom error type with meaningful title instead of generic fmt.Errorf
-		customErr := &SentryError{
-			Title:   errorTitle,
-			Message: scrubbedMessage,
+		// Use the error title as the exception type by creating a custom exception
+		event := sentry.NewEvent()
+		event.Message = scrubbedMessage
+		event.Level = level
+
+		// Create exception with custom type (this is what Sentry displays as the title)
+		exception := sentry.Exception{
+			Type:  errorTitle,
+			Value: scrubbedMessage,
 		}
+		event.Exception = []sentry.Exception{exception}
 
-		// Capture the custom error instead of generic fmt.Errorf
-		sentry.CaptureException(customErr)
+		// Capture the event instead of the error
+		sentry.CaptureEvent(event)
 	})
 
 	// Mark as reported
