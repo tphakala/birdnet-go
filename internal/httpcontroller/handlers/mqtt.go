@@ -12,7 +12,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
-	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // MQTT test stage constants
@@ -79,13 +78,12 @@ func (h *Handlers) TestMQTT(c echo.Context) error {
 		)
 	}
 
-	// Create a temporary MQTT client for testing
-	metrics, err := observability.NewMetrics()
-	if err != nil {
-		return h.NewHandlerError(err, "Failed to create metrics", http.StatusInternalServerError)
+	// Create a temporary MQTT client for testing using the shared metrics instance
+	if h.Metrics == nil {
+		return h.NewHandlerError(nil, "Metrics not initialized", http.StatusInternalServerError)
 	}
 
-	mqttClient, err := mqtt.NewClient(settings, metrics)
+	mqttClient, err := mqtt.NewClient(settings, h.Metrics)
 	if err != nil {
 		return h.NewHandlerError(err, "Failed to create MQTT client", http.StatusInternalServerError)
 	}
@@ -143,24 +141,6 @@ func (h *Handlers) TestMQTT(c echo.Context) error {
 	return nil
 }
 
-// enhanceTestResults adds helpful troubleshooting suggestions to test results
-func enhanceTestResults(results []mqtt.TestResult, broker string) []mqtt.TestResult {
-	enhanced := make([]mqtt.TestResult, len(results))
-	copy(enhanced, results)
-	for i := range enhanced {
-		if !enhanced[i].Success {
-			hint := generateTroubleshootingHint(&enhanced[i], broker)
-			if hint != "" {
-				// Format message with each component on its own line
-				enhanced[i].Message = fmt.Sprintf("%s\n\n%s\n\n%s",
-					enhanced[i].Message,
-					enhanced[i].Error,
-					hint)
-			}
-		}
-	}
-	return enhanced
-}
 
 // generateTroubleshootingHint provides context-specific troubleshooting suggestions
 func generateTroubleshootingHint(result *mqtt.TestResult, broker string) string {
