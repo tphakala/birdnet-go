@@ -1,7 +1,9 @@
 package birdweather
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -109,7 +111,7 @@ func TestMaskURLForLogging(t *testing.T) {
 func TestErrorContextScrubbing(t *testing.T) {
 	// This test would require mocking the telemetry system
 	// For now, we verify that the handleNetworkError function receives masked URLs
-	
+
 	tests := []struct {
 		name        string
 		url         string
@@ -132,8 +134,60 @@ func TestErrorContextScrubbing(t *testing.T) {
 	}
 }
 
+// TestDescriptiveErrorMessages verifies that BirdWeather errors have descriptive titles
+func TestDescriptiveErrorMessages(t *testing.T) {
+	tests := []struct {
+		name           string
+		operation      string
+		baseErr        error
+		expectedPrefix string
+	}{
+		{
+			name:           "soundscape upload timeout",
+			operation:      "soundscape upload",
+			baseErr:        &timeoutError{"context deadline exceeded"},
+			expectedPrefix: "BirdWeather soundscape upload timeout:",
+		},
+		{
+			name:           "detection post timeout",
+			operation:      "detection post",
+			baseErr:        &timeoutError{"context deadline exceeded"},
+			expectedPrefix: "BirdWeather detection post timeout:",
+		},
+		{
+			name:           "general network error",
+			operation:      "soundscape upload",
+			baseErr:        fmt.Errorf("connection refused"),
+			expectedPrefix: "BirdWeather soundscape upload network error:",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := handleNetworkError(tt.baseErr, "https://test.com", 30*time.Second, tt.operation)
+			
+			if result == nil {
+				t.Fatal("Expected non-nil error")
+			}
+			
+			if !contains(result.Error(), tt.expectedPrefix) {
+				t.Errorf("Expected error to contain %q, got %q", tt.expectedPrefix, result.Error())
+			}
+		})
+	}
+}
+
+// timeoutError implements net.Error interface for testing
+type timeoutError struct {
+	msg string
+}
+
+func (e *timeoutError) Error() string   { return e.msg }
+func (e *timeoutError) Timeout() bool   { return true }
+func (e *timeoutError) Temporary() bool { return true }
+
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+	return len(s) >= len(substr) && (s == substr || s != "" && containsHelper(s, substr))
 }
 
 func containsHelper(s, substr string) bool {

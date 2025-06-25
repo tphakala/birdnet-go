@@ -152,7 +152,7 @@ func TestHandleNetworkError(t *testing.T) {
 		{
 			name:        "Simple error",
 			err:         fmt.Errorf("simple error"),
-			expectMatch: "simple error",
+			expectMatch: "BirdWeather test operation network error: simple error",
 		},
 		{
 			name:        "Nil error",
@@ -165,7 +165,7 @@ func TestHandleNetworkError(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			resultErr := handleNetworkError(tc.err, "https://test.example.com", 30*time.Second)
+			resultErr := handleNetworkError(tc.err, "https://test.example.com", 30*time.Second, "test operation")
 
 			if resultErr == nil {
 				t.Fatal("handleNetworkError should never return nil")

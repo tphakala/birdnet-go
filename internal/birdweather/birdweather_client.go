@@ -146,7 +146,7 @@ func (b *BwClient) RandomizeLocation(radiusMeters float64) (latitude, longitude 
 }
 
 // handleNetworkError handles network errors and returns a more specific error message.
-func handleNetworkError(err error, url string, timeout time.Duration) *errors.EnhancedError {
+func handleNetworkError(err error, url string, timeout time.Duration, operation string) *errors.EnhancedError {
 	if err == nil {
 		return errors.New(fmt.Errorf("nil error")).
 			Component("birdweather").
@@ -155,12 +155,15 @@ func handleNetworkError(err error, url string, timeout time.Duration) *errors.En
 	}
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
-		serviceLogger.Warn("Network request timed out", "error", err)
-		return errors.New(err).
+		// Create descriptive error message with operation context
+		descriptiveErr := fmt.Errorf("BirdWeather %s timeout: %w", operation, err)
+		serviceLogger.Warn("Network request timed out", "operation", operation, "error", err)
+		return errors.New(descriptiveErr).
 			Component("birdweather").
 			Category(errors.CategoryNetwork).
 			NetworkContext(url, timeout).
 			Context("error_type", "timeout").
+			Context("operation", operation).
 			Build()
 	}
 	var urlErr *neturl.Error
@@ -169,21 +172,25 @@ func handleNetworkError(err error, url string, timeout time.Duration) *errors.En
 		if errors.As(urlErr.Err, &dnsErr) {
 			// Mask the URL before logging to prevent token exposure
 			maskedURL := strings.ReplaceAll(urlErr.URL, "app.birdweather.com/api/v1/stations/", "app.birdweather.com/api/v1/stations/***")
-			serviceLogger.Error("DNS resolution failed", "url", maskedURL, "error", err)
-			return errors.New(err).
+			descriptiveErr := fmt.Errorf("BirdWeather %s DNS resolution failed: %w", operation, err)
+			serviceLogger.Error("DNS resolution failed", "operation", operation, "url", maskedURL, "error", err)
+			return errors.New(descriptiveErr).
 				Component("birdweather").
 				Category(errors.CategoryNetwork).
 				NetworkContext(url, timeout).
 				Context("error_type", "dns_resolution").
+				Context("operation", operation).
 				Build()
 		}
 	}
-	serviceLogger.Error("Network error occurred", "error", err)
-	return errors.New(err).
+	descriptiveErr := fmt.Errorf("BirdWeather %s network error: %w", operation, err)
+	serviceLogger.Error("Network error occurred", "operation", operation, "error", err)
+	return errors.New(descriptiveErr).
 		Component("birdweather").
 		Category(errors.CategoryNetwork).
 		NetworkContext(url, timeout).
 		Context("error_type", "generic_network").
+		Context("operation", operation).
 		Build()
 }
 
@@ -466,7 +473,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	resp, err := b.HTTPClient.Do(req)
 	if err != nil {
 		serviceLogger.Error("Soundscape upload request failed", "url", maskedURL, "error", err)
-		return "", handleNetworkError(err, maskedURL, 45*time.Second)
+		return "", handleNetworkError(err, maskedURL, 45*time.Second, "soundscape upload")
 	}
 	if resp == nil {
 		serviceLogger.Error("Soundscape upload received nil response", "url", maskedURL)
@@ -603,7 +610,7 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 	resp, err := b.HTTPClient.Post(detectionURL, "application/json", bytes.NewBuffer(postDataBytes))
 	if err != nil {
 		serviceLogger.Error("Detection post request failed", "url", maskedDetectionURL, "soundscape_id", soundscapeID, "error", err)
-		return handleNetworkError(err, maskedDetectionURL, 45*time.Second)
+		return handleNetworkError(err, maskedDetectionURL, 45*time.Second, "detection post")
 	}
 	if resp == nil {
 		serviceLogger.Error("Detection post received nil response", "url", maskedDetectionURL, "soundscape_id", soundscapeID)
