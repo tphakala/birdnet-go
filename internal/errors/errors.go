@@ -64,7 +64,7 @@ func (ee *EnhancedError) Is(target error) bool {
 	if ee2, ok := target.(*EnhancedError); ok {
 		return ee.Category == ee2.Category
 	}
-	return ee.Err == target
+	return Is(ee.Err, target)
 }
 
 // GetComponent returns the component name

@@ -3,7 +3,6 @@ package datastore
 
 import (
 	"context"
-	stderrors "errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -642,7 +641,7 @@ func (ds *DataStore) GetDailyEvents(date string) (DailyEvents, error) {
 func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
 	// Basic validation
 	if hourlyWeather.Time.IsZero() {
-		return errors.New(stderrors.New("invalid time value")).
+		return errors.Newf("invalid time value").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "save_hourly_weather").
@@ -692,7 +691,7 @@ func (ds *DataStore) LatestHourlyWeather() (*HourlyWeather, error) {
 	err := ds.DB.Order("time DESC").First(&weather).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New(stderrors.New("no weather data found")).
+			return nil, errors.Newf("no weather data found").
 				Component("datastore").
 				Category(errors.CategoryValidation).
 				Context("operation", "get_latest_weather").
@@ -802,14 +801,14 @@ func (ds *DataStore) CountSearchResults(query string) (int64, error) {
 // and returns appropriate errors if the note doesn't exist or if the update fails.
 func (ds *DataStore) UpdateNote(id string, updates map[string]interface{}) error {
 	if id == "" {
-		return errors.New(stderrors.New("invalid id: must not be empty")).
+		return errors.Newf("invalid id: must not be empty").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "update_note").
 			Build()
 	}
 	if len(updates) == 0 {
-		return errors.New(stderrors.New("no updates provided")).
+		return errors.Newf("no updates provided").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "update_note").
@@ -826,7 +825,7 @@ func (ds *DataStore) UpdateNote(id string, updates map[string]interface{}) error
 			Build()
 	}
 	if result.RowsAffected == 0 {
-		return errors.New(stderrors.New("note not found")).
+		return errors.Newf("note not found").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "update_note").
@@ -919,14 +918,14 @@ func (ds *DataStore) GetNoteComments(noteID string) ([]NoteComment, error) {
 func (ds *DataStore) SaveNoteComment(comment *NoteComment) error {
 	// Validate input
 	if comment == nil {
-		return errors.New(stderrors.New("comment cannot be nil")).
+		return errors.Newf("comment cannot be nil").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "save_note_comment").
 			Build()
 	}
 	if comment.NoteID == 0 {
-		return errors.New(stderrors.New("note ID cannot be zero")).
+		return errors.Newf("note ID cannot be zero").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "save_note_comment").
@@ -934,7 +933,7 @@ func (ds *DataStore) SaveNoteComment(comment *NoteComment) error {
 	}
 	// Entry can be empty as comments are optional, but if provided, check length
 	if len(comment.Entry) > 1000 {
-		return errors.New(stderrors.New("comment entry exceeds maximum length")).
+		return errors.Newf("comment entry exceeds maximum length").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "save_note_comment").
@@ -1003,7 +1002,7 @@ func (ds *DataStore) UpdateNoteComment(commentID, entry string) error {
 	}
 
 	if result.RowsAffected == 0 {
-		return errors.New(stderrors.New("comment not found")).
+		return errors.Newf("comment not found").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "update_note_comment").
@@ -1044,7 +1043,7 @@ func sortAscendingString(asc bool) string {
 // Transaction executes a function within a transaction.
 func (ds *DataStore) Transaction(fc func(tx *gorm.DB) error) error {
 	if fc == nil {
-		return errors.New(stderrors.New("transaction function cannot be nil")).
+		return errors.Newf("transaction function cannot be nil").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "transaction").
@@ -1251,7 +1250,7 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 func (ds *DataStore) GetImageCache(query ImageCacheQuery) (*ImageCache, error) {
 	var cache ImageCache
 	if query.ScientificName == "" || query.ProviderName == "" {
-		return nil, errors.New(stderrors.New("scientific name and provider name must be provided")).
+		return nil, errors.Newf("scientific name and provider name must be provided").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "get_image_cache").
@@ -1277,14 +1276,14 @@ func (ds *DataStore) GetImageCache(query ImageCacheQuery) (*ImageCache, error) {
 // SaveImageCache saves an image cache entry to the database
 func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 	if cache.ProviderName == "" {
-		return errors.New(stderrors.New("provider name cannot be empty")).
+		return errors.Newf("provider name cannot be empty").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "save_image_cache").
 			Build()
 	}
 	if cache.ScientificName == "" {
-		return errors.New(stderrors.New("scientific name cannot be empty")).
+		return errors.Newf("scientific name cannot be empty").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "save_image_cache").
@@ -1407,22 +1406,34 @@ func (f *SearchFilters) sanitise() error {
 	}
 	// Validate confidence range
 	if f.ConfidenceMin > f.ConfidenceMax {
-		return stderrors.New("confidence_min must be <= confidence_max")
+		return errors.Newf("confidence_min must be <= confidence_max").
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Build()
 	}
 	// Validate mutually exclusive Verified flags
 	if f.VerifiedOnly && f.UnverifiedOnly {
-		return stderrors.New("verified_only and unverified_only cannot both be true")
+		return errors.Newf("verified_only and unverified_only cannot both be true").
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Build()
 	}
 	// Validate mutually exclusive Locked flags
 	if f.LockedOnly && f.UnlockedOnly {
-		return stderrors.New("locked_only and unlocked_only cannot both be true")
+		return errors.Newf("locked_only and unlocked_only cannot both be true").
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Build()
 	}
 	// Validate TimeOfDay
 	switch f.TimeOfDay {
 	case "", "any", "day", "night", "sunrise", "sunset": // Add sunrise/sunset
 		// Valid values
 	default:
-		return stderrors.New("invalid time_of_day value, must be 'any', 'day', 'night', 'sunrise', or 'sunset'")
+		return errors.Newf("invalid time_of_day value, must be 'any', 'day', 'night', 'sunrise', or 'sunset'").
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Build()
 	}
 	return nil
 }
@@ -1552,12 +1563,24 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 	}
 
 	if endDate.Before(startDate) {
-		return nil, stderrors.New("end date cannot be before start date")
+		return nil, errors.Newf("end date cannot be before start date").
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_time_of_day_conditions").
+			Context("start_date", startDateStr).
+			Context("end_date", endDateStr).
+			Build()
 	}
 
 	// Limit date range to avoid excessively long queries (increased to 365 days)
 	if endDate.Sub(startDate).Hours() > 365*24 {
-		return nil, stderrors.New("date range for TimeOfDay filter cannot exceed 365 days")
+		return nil, errors.Newf("date range for TimeOfDay filter cannot exceed 365 days").
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_time_of_day_conditions").
+			Context("start_date", startDateStr).
+			Context("end_date", endDateStr).
+			Build()
 	}
 
 	var conditions []*gorm.DB
