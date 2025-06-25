@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/url"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,37 @@ var (
 	deferredMessages  []DeferredMessage
 	deferredMutex     sync.Mutex
 )
+
+// PlatformInfo holds privacy-safe platform information for telemetry
+type PlatformInfo struct {
+	OS           string `json:"os"`
+	Architecture string `json:"arch"`
+	Container    bool   `json:"container"`
+	BoardModel   string `json:"board_model,omitempty"`
+	NumCPU       int    `json:"num_cpu"`
+	GoVersion    string `json:"go_version"`
+}
+
+// collectPlatformInfo gathers privacy-safe platform information for telemetry
+func collectPlatformInfo() PlatformInfo {
+	info := PlatformInfo{
+		OS:           runtime.GOOS,
+		Architecture: runtime.GOARCH,
+		Container:    conf.RunningInContainer(),
+		NumCPU:       runtime.NumCPU(),
+		GoVersion:    runtime.Version(),
+	}
+
+	// Only collect board model for ARM64 Linux systems (SBCs like Raspberry Pi)
+	// This helps understand deployment on edge devices without privacy concerns
+	if conf.IsLinuxArm64() {
+		if boardModel := conf.GetBoardModel(); boardModel != "" {
+			info.BoardModel = boardModel
+		}
+	}
+
+	return info
+}
 
 // InitSentry initializes Sentry SDK with privacy-compliant settings
 // This function will only initialize Sentry if explicitly enabled by the user
@@ -71,11 +103,13 @@ func InitSentry(settings *conf.Settings) error {
 			event.User = sentry.User{} // Clear user data
 			event.ServerName = ""      // Ensure server name is not included
 
-			// Clear any sensitive context
+			// Clear sensitive contexts while preserving our privacy-safe platform info
 			if event.Contexts != nil {
-				delete(event.Contexts, "device")
-				delete(event.Contexts, "os")
-				delete(event.Contexts, "runtime")
+				// Remove potentially sensitive default Sentry contexts
+				delete(event.Contexts, "device")  // Contains detailed device info
+				delete(event.Contexts, "os")      // Contains detailed OS info
+				delete(event.Contexts, "runtime") // Contains detailed runtime info
+				// Keep our custom "platform" and "application" contexts as they're privacy-safe
 			}
 
 			// Only keep essential error information
@@ -100,16 +134,37 @@ func InitSentry(settings *conf.Settings) error {
 		return fmt.Errorf("sentry initialization failed: %w", err)
 	}
 
-	// Configure global scope with system ID
+	// Collect platform information for telemetry
+	platformInfo := collectPlatformInfo()
+
+	// Configure global scope with system ID and platform information
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		// Set system ID as a tag for all events
 		scope.SetTag("system_id", settings.SystemID)
+
+		// Set platform tags for easy filtering in Sentry
+		scope.SetTag("os", platformInfo.OS)
+		scope.SetTag("arch", platformInfo.Architecture)
+		scope.SetTag("container", fmt.Sprintf("%t", platformInfo.Container))
+		if platformInfo.BoardModel != "" {
+			scope.SetTag("board_model", platformInfo.BoardModel)
+		}
 
 		// Set application context
 		scope.SetContext("application", map[string]any{
 			"name":      "BirdNET-Go",
 			"version":   settings.Version,
 			"system_id": settings.SystemID,
+		})
+
+		// Set platform context for detailed telemetry
+		scope.SetContext("platform", map[string]any{
+			"os":           platformInfo.OS,
+			"architecture": platformInfo.Architecture,
+			"container":    platformInfo.Container,
+			"board_model":  platformInfo.BoardModel,
+			"num_cpu":      platformInfo.NumCPU,
+			"go_version":   platformInfo.GoVersion,
 		})
 	})
 
