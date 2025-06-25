@@ -2,9 +2,12 @@
 package datastore
 
 import (
+	stderrors "errors"
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // SpeciesSummaryData contains overall statistics for a bird species
@@ -90,7 +93,13 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	// Execute the query
 	rows, err := ds.DB.Raw(queryStr, args...).Rows()
 	if err != nil {
-		return nil, fmt.Errorf("error getting species summary data: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_summary_data").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Build()
 	}
 	defer rows.Close()
 
@@ -108,7 +117,11 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 			&summary.AvgConfidence,
 			&summary.MaxConfidence,
 		); err != nil {
-			return nil, fmt.Errorf("error scanning species summary data: %w", err)
+			return nil, errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "scan_species_summary_data").
+				Build()
 		}
 
 		// Parse time strings to time.Time
@@ -154,7 +167,13 @@ func (ds *DataStore) GetHourlyAnalyticsData(date, species string) ([]HourlyAnaly
 
 	// Execute query
 	if err := query.Scan(&analytics).Error; err != nil {
-		return nil, fmt.Errorf("error getting hourly analytics data: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_hourly_analytics_data").
+			Context("date", date).
+			Context("species", species).
+			Build()
 	}
 
 	return analytics, nil
@@ -187,7 +206,14 @@ func (ds *DataStore) GetDailyAnalyticsData(startDate, endDate, species string) (
 
 	// Execute query
 	if err := query.Scan(&analytics).Error; err != nil {
-		return nil, fmt.Errorf("error getting daily analytics data: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_daily_analytics_data").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Context("species", species).
+			Build()
 	}
 
 	return analytics, nil
@@ -224,7 +250,13 @@ func (ds *DataStore) GetDetectionTrends(period string, limit int) ([]DailyAnalyt
 		`, startDate)
 
 		if err := ds.DB.Raw(query, limit).Scan(&trends).Error; err != nil {
-			return nil, fmt.Errorf("error getting detection trends for SQLite: %w", err)
+			return nil, errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_detection_trends_sqlite").
+				Context("period", period).
+				Context("limit", fmt.Sprintf("%d", limit)).
+				Build()
 		}
 	case "mysql":
 		startDate = fmt.Sprintf("DATE_SUB(CURRENT_DATE, INTERVAL %s)", interval)
@@ -238,10 +270,21 @@ func (ds *DataStore) GetDetectionTrends(period string, limit int) ([]DailyAnalyt
 		`, startDate)
 
 		if err := ds.DB.Raw(query, limit).Scan(&trends).Error; err != nil {
-			return nil, fmt.Errorf("error getting detection trends for MySQL: %w", err)
+			return nil, errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_detection_trends_mysql").
+				Context("period", period).
+				Context("limit", fmt.Sprintf("%d", limit)).
+				Build()
 		}
 	default:
-		return nil, fmt.Errorf("unsupported database dialect for trends calculation: %s", ds.DB.Dialector.Name())
+		return nil, errors.New(stderrors.New("unsupported database dialect")).
+			Component("datastore").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "get_detection_trends").
+			Context("dialect", ds.DB.Dialector.Name()).
+			Build()
 	}
 
 	return trends, nil
@@ -257,7 +300,12 @@ func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) (
 	if startDate != "" {
 		parsedStartDate, err = time.Parse("2006-01-02", startDate)
 		if err != nil {
-			return nil, fmt.Errorf("invalid start date format: %w", err)
+			return nil, errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryValidation).
+				Context("operation", "get_hourly_distribution").
+				Context("start_date", startDate).
+				Build()
 		}
 	}
 
@@ -265,14 +313,25 @@ func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) (
 	if endDate != "" {
 		parsedEndDate, err = time.Parse("2006-01-02", endDate)
 		if err != nil {
-			return nil, fmt.Errorf("invalid end date format: %w", err)
+			return nil, errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryValidation).
+				Context("operation", "get_hourly_distribution").
+				Context("end_date", endDate).
+				Build()
 		}
 	}
 
 	// Ensure start date is before or equal to end date only if both were provided
 	if startDate != "" && endDate != "" {
 		if parsedStartDate.After(parsedEndDate) {
-			return nil, fmt.Errorf("start date cannot be after end date")
+			return nil, errors.New(stderrors.New("start date cannot be after end date")).
+				Component("datastore").
+				Category(errors.CategoryValidation).
+				Context("operation", "get_hourly_distribution").
+				Context("start_date", startDate).
+				Context("end_date", endDate).
+				Build()
 		}
 	}
 
@@ -310,7 +369,14 @@ func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) (
 	// Execute the query
 	var results []HourlyDistributionData
 	if err := query.Find(&results).Error; err != nil {
-		return nil, fmt.Errorf("failed to retrieve hourly distribution: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_hourly_distribution").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Context("species", species).
+			Build()
 	}
 
 	return results, nil
@@ -337,7 +403,13 @@ func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, o
 
 	// Ensure start date is before or equal to end date using string comparison (safe for YYYY-MM-DD)
 	if startDate != "" && endDate != "" && startDate > endDate {
-		return nil, fmt.Errorf("start date cannot be after end date")
+		return nil, errors.New(stderrors.New("start date cannot be after end date")).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_new_species_detections").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Build()
 	}
 
 	// Revised query with pagination
@@ -375,7 +447,15 @@ func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, o
 
 	// Execute the raw SQL query into the temporary struct
 	if err := ds.DB.Raw(query, startDate, endDate, startDate, endDate, limit, offset).Scan(&rawResults).Error; err != nil {
-		return nil, fmt.Errorf("failed to get new species detections raw results: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_new_species_detections").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Context("limit", fmt.Sprintf("%d", limit)).
+			Context("offset", fmt.Sprintf("%d", offset)).
+			Build()
 	}
 
 	// Filter results in Go to ensure FirstDetectionDate is valid before final assignment
