@@ -88,15 +88,6 @@ func InitSentry(settings *conf.Settings) error {
 		// Set release version if available
 		Release: fmt.Sprintf("birdnet-go@%s", settings.Version),
 
-		// Configure integrations
-		Integrations: func(integrations []sentry.Integration) []sentry.Integration {
-			// Remove any integrations that might collect sensitive data
-			var filtered []sentry.Integration
-			// Keep only essential integrations
-			filtered = append(filtered, integrations...)
-			return filtered
-		},
-
 		// BeforeSend allows us to filter sensitive data
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			// Remove any potentially sensitive information
@@ -188,9 +179,6 @@ func InitSentry(settings *conf.Settings) error {
 		log.Printf("Sentry telemetry initialized successfully (opt-in enabled, System ID: %s)", settings.SystemID)
 	}
 
-	// Flush buffered events before the program terminates
-	defer sentry.Flush(2 * time.Second)
-
 	return nil
 }
 
@@ -243,15 +231,14 @@ func CaptureMessageDeferred(message string, level sentry.Level, component string
 	}
 
 	deferredMutex.Lock()
-	defer deferredMutex.Unlock()
-
+	
 	if sentryInitialized {
 		// Sentry is already initialized, send immediately
 		deferredMutex.Unlock() // Unlock before calling CaptureMessage to avoid deadlock
 		CaptureMessage(message, level, component)
-		deferredMutex.Lock() // Re-lock for defer unlock
 		return
 	}
+	defer deferredMutex.Unlock()
 
 	// Sentry not yet initialized, store for later processing
 	deferredMessage := DeferredMessage{
@@ -378,16 +365,22 @@ func anonymizePath(path string) string {
 	return "path-" + strings.Join(anonymizedSegments, "-")
 }
 
-// isPrivateIP checks if the host is a private IP address
+// isPrivateIP checks if the host is a private IP address (both IPv4 and IPv6)
 func isPrivateIP(host string) bool {
 	privateRanges := []string{
+		// IPv4 private ranges
 		"10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.", "172.23.",
 		"172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
 		"192.168.", "169.254.",
+		// IPv6 private ranges
+		"fc00:", "fd00:", // Unique local addresses
+		"fe80:", // Link-local addresses
+		"::1",   // Loopback
+		"ff00:", "ff01:", "ff02:", // Multicast
 	}
 
 	for _, prefix := range privateRanges {
-		if strings.HasPrefix(host, prefix) {
+		if strings.HasPrefix(strings.ToLower(host), strings.ToLower(prefix)) {
 			return true
 		}
 	}
