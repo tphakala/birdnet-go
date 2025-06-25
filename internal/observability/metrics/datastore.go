@@ -526,10 +526,10 @@ func (m *DatastoreMetrics) RecordTransactionError(operation, errorType string) {
 // Connection metrics
 
 // UpdateConnectionMetrics updates database connection metrics
-func (m *DatastoreMetrics) UpdateConnectionMetrics(active, idle, max int) {
+func (m *DatastoreMetrics) UpdateConnectionMetrics(active, idle, maxConn int) {
 	m.dbConnectionsActiveGauge.Set(float64(active))
 	m.dbConnectionsIdleGauge.Set(float64(idle))
-	m.dbConnectionsMaxGauge.Set(float64(max))
+	m.dbConnectionsMaxGauge.Set(float64(maxConn))
 }
 
 // RecordQueryResultSize records the size of query results
