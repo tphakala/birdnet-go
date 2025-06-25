@@ -38,7 +38,10 @@ func UpdateErrorIntegration(enabled bool) {
 	// function itself checks if telemetry is enabled before processing.
 }
 
-// GetPrivacyScrubFunction returns the privacy scrubbing function for use by the error package
+// GetPrivacyScrubFunction returns a function used to scrub sensitive information
+// from error messages to protect privacy in error handling and logging.
+// The returned function removes or masks personal data, file paths, and other
+// potentially sensitive information before errors are reported or logged.
 func GetPrivacyScrubFunction() func(string) string {
 	return ScrubMessage
 }

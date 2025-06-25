@@ -274,7 +274,11 @@ func ParsePercentage(percentage string) (float64, error) {
 		}
 		return value, nil
 	}
-	return 0, errors.NewStd("invalid percentage format")
+	return 0, errors.Newf("invalid percentage format").
+		Component("conf").
+		Category(errors.CategoryValidation).
+		Context("input", percentage).
+		Build()
 }
 
 // ParseRetentionPeriod converts a string like "24h", "7d", "1w", "3m", "1y" to hours.

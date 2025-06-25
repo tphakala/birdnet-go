@@ -3,16 +3,56 @@ package handlers
 import (
 	"fmt"
 	"log"
+	"net/http"
 
 	"github.com/getsentry/sentry-go"
 	sentryecho "github.com/getsentry/sentry-go/echo"
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
+// getStatusCodeFromError determines the appropriate HTTP status code based on error type
+func getStatusCodeFromError(err error) int {
+	// Check for enhanced errors with categories
+	var enhancedErr *errors.EnhancedError
+	if errors.As(err, &enhancedErr) {
+		switch enhancedErr.GetCategory() {
+		case errors.CategoryValidation:
+			return http.StatusBadRequest
+		case errors.CategoryMQTTAuth:
+			return http.StatusUnauthorized
+		case errors.CategoryNetwork, errors.CategoryDatabase, errors.CategoryFileIO, errors.CategoryRTSP, errors.CategoryMQTTConnection:
+			return http.StatusServiceUnavailable
+		case errors.CategoryConfiguration, errors.CategoryModelInit, errors.CategoryModelLoad:
+			return http.StatusInternalServerError
+		case errors.CategoryHTTP:
+			// For HTTP errors, default to bad gateway
+			return http.StatusBadGateway
+		default:
+			return http.StatusInternalServerError
+		}
+	}
+
+	// Check for Echo HTTP errors
+	var echoErr *echo.HTTPError
+	if errors.As(err, &echoErr) {
+		return echoErr.Code
+	}
+
+	// Check for handler errors
+	var handlerErr *HandlerError
+	if errors.As(err, &handlerErr) {
+		return handlerErr.Code
+	}
+
+	// Default to internal server error
+	return http.StatusInternalServerError
+}
+
 // HandleErrorWithSentry is a helper function that handles errors in a privacy-compliant way
 // It logs the error locally and sends it to Sentry if enabled
-func HandleErrorWithSentry(c echo.Context, err error, component, userMessage string) error {
+func HandleErrorWithSentry(c echo.Context, err error, component, userMessage string, statusCode int) error {
 	// Log the error locally for debugging
 	log.Printf("Error in %s: %v", component, err)
 
@@ -20,9 +60,15 @@ func HandleErrorWithSentry(c echo.Context, err error, component, userMessage str
 	telemetry.CaptureError(err, component)
 
 	// Return appropriate error response to user
-	return c.JSON(500, map[string]string{
+	return c.JSON(statusCode, map[string]string{
 		"error": userMessage,
 	})
+}
+
+// HandleErrorWithSentryAuto is like HandleErrorWithSentry but automatically determines the status code
+func HandleErrorWithSentryAuto(c echo.Context, err error, component, userMessage string) error {
+	statusCode := getStatusCodeFromError(err)
+	return HandleErrorWithSentry(c, err, component, userMessage, statusCode)
 }
 
 // WithSentryContext wraps a handler to capture errors with additional context
@@ -54,7 +100,7 @@ func (h *Handlers) ExampleHandler(c echo.Context) error {
 		data, err := h.DS.GetAllDetections(nil, nil) // Example database call
 		if err != nil {
 			// Use the privacy-compliant error handler
-			return HandleErrorWithSentry(c, err, "example", "Failed to retrieve detections")
+			return HandleErrorWithSentry(c, err, "example", "Failed to retrieve detections", 500)
 		}
 
 		return c.JSON(200, data)

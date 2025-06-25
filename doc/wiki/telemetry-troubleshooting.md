@@ -147,7 +147,7 @@ This guide helps you diagnose and resolve issues with BirdNET-Go's error trackin
 
 2. **Network congestion**
    - Ensure adequate bandwidth for error reporting
-   - Consider rate limiting if in containerized environment
+   - Consider rate limiting if in a containerized environment
 
 ### Configuration Issues
 
@@ -190,12 +190,12 @@ This guide helps you diagnose and resolve issues with BirdNET-Go's error trackin
 **Symptoms:**
 - Telemetry timeouts
 - "Connection refused" errors
-- Works from home but not at office
+- Works from home but not at the office
 
 **Solutions:**
 
 1. **Whitelist domains**
-   Add these domains to firewall whitelist:
+   Add these domains to the firewall whitelist:
    ```
    *.sentry.io
    *.ingest.sentry.io
@@ -223,7 +223,7 @@ This guide helps you diagnose and resolve issues with BirdNET-Go's error trackin
 
 #### Problem: Container cannot reach external services
 **Symptoms:**
-- Telemetry works on host but not in container
+- Telemetry works on host but not in a container
 - Network timeouts from container
 
 **Solutions:**
