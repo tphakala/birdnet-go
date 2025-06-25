@@ -3,9 +3,22 @@ package errors
 
 import (
 	"fmt"
+	"strings"
+	"unicode"
 
 	"github.com/getsentry/sentry-go"
 )
+
+// SentryError is a custom error type with meaningful title for Sentry reporting
+type SentryError struct {
+	Title   string
+	Message string
+}
+
+// Error implements the error interface
+func (se *SentryError) Error() string {
+	return se.Message
+}
 
 // TelemetryReporter is an interface for reporting errors to telemetry systems
 type TelemetryReporter interface {
@@ -62,12 +75,108 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 		level := getErrorLevel(ee.Category)
 		scope.SetLevel(level)
 
-		// Capture the error
-		sentry.CaptureException(fmt.Errorf("%s", scrubbedMessage))
+		// Create a meaningful error title for Sentry
+		errorTitle := generateErrorTitle(ee)
+
+		// Create a custom error type with meaningful title instead of generic fmt.Errorf
+		customErr := &SentryError{
+			Title:   errorTitle,
+			Message: scrubbedMessage,
+		}
+
+		// Capture the custom error instead of generic fmt.Errorf
+		sentry.CaptureException(customErr)
 	})
 
 	// Mark as reported
 	ee.MarkReported()
+}
+
+// generateErrorTitle creates a meaningful error title for Sentry based on enhanced error context
+func generateErrorTitle(ee *EnhancedError) string {
+	// Extract operation from context if available
+	operation, hasOperation := ee.Context["operation"].(string)
+
+	// Create title based on component, category, and operation
+	var titleParts []string
+
+	// Add component (capitalize first letter)
+	if ee.Component != "" {
+		component := titleCase(ee.Component)
+		titleParts = append(titleParts, component)
+	}
+
+	// Add category (human-readable format)
+	categoryTitle := formatCategoryForTitle(ee.Category)
+	if categoryTitle != "" {
+		titleParts = append(titleParts, categoryTitle)
+	}
+
+	// Add operation context if available
+	if hasOperation && operation != "" {
+		operationTitle := formatOperationForTitle(operation)
+		if operationTitle != "" {
+			titleParts = append(titleParts, operationTitle)
+		}
+	}
+
+	// Fallback to error type if no meaningful title can be constructed
+	if len(titleParts) == 0 {
+		return fmt.Sprintf("%T", ee.Err)
+	}
+
+	return strings.Join(titleParts, " ")
+}
+
+// formatCategoryForTitle converts error categories to human-readable titles
+func formatCategoryForTitle(category ErrorCategory) string {
+	switch category {
+	case CategoryValidation:
+		return "Validation Error"
+	case CategoryImageFetch:
+		return "Image Fetch Error"
+	case CategoryImageCache:
+		return "Image Cache Error"
+	case CategoryImageProvider:
+		return "Image Provider Error"
+	case CategoryNetwork:
+		return "Network Error"
+	case CategoryDatabase:
+		return "Database Error"
+	case CategoryFileIO:
+		return "File I/O Error"
+	case CategoryModelInit:
+		return "Model Initialization Error"
+	case CategoryModelLoad:
+		return "Model Loading Error"
+	case CategoryConfiguration:
+		return "Configuration Error"
+	case CategorySystem:
+		return "System Error"
+	default:
+		return string(category)
+	}
+}
+
+// formatOperationForTitle converts operation context to human-readable format
+func formatOperationForTitle(operation string) string {
+	// Replace underscores with spaces and title case
+	formatted := strings.ReplaceAll(operation, "_", " ")
+	words := strings.Fields(formatted)
+	for i, word := range words {
+		words[i] = titleCase(word)
+	}
+	return strings.Join(words, " ")
+}
+
+// titleCase capitalizes the first letter of a string (replacement for deprecated strings.Title)
+func titleCase(s string) string {
+	if s == "" {
+		return s
+	}
+	runes := []rune(s)
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
 }
 
 // getErrorLevel returns appropriate Sentry level based on category
