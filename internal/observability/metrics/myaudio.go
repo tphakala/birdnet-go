@@ -2,6 +2,7 @@
 package metrics
 
 import (
+	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -58,6 +59,19 @@ type MyAudioMetrics struct {
 	fileOperationErrors    *prometheus.CounterVec
 	fileSizesTotal         *prometheus.CounterVec
 	audioFileInfoGauge     *prometheus.GaugeVec
+
+	// Audio processing metrics
+	audioProcessingTotal     *prometheus.CounterVec
+	audioProcessingDuration  *prometheus.HistogramVec
+	audioProcessingErrors    *prometheus.CounterVec
+	audioConversionsTotal    *prometheus.CounterVec
+	audioConversionDuration  *prometheus.HistogramVec
+	audioConversionErrors    *prometheus.CounterVec
+	audioInferenceDuration   *prometheus.HistogramVec
+	audioDataSizeTotal       *prometheus.CounterVec
+	audioSampleCountTotal    *prometheus.CounterVec
+	birdnetResultsTotal      *prometheus.CounterVec
+	audioQueueOperations     *prometheus.CounterVec
 }
 
 // NewMyAudioMetrics creates and registers new myaudio metrics
@@ -345,6 +359,98 @@ func (m *MyAudioMetrics) initMetrics() error {
 		[]string{"format", "metric_type"}, // metric_type: sample_rate, channels, bit_depth, total_samples
 	)
 
+	// Audio processing metrics
+	m.audioProcessingTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "myaudio_audio_processing_total",
+			Help: "Total number of audio processing operations",
+		},
+		[]string{"operation", "source", "status"}, // operation: process_data, apply_filters; status: success, error
+	)
+
+	m.audioProcessingDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "myaudio_audio_processing_duration_seconds",
+			Help:    "Time taken for audio processing operations",
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 15), // 1ms to ~32s
+		},
+		[]string{"operation", "source"},
+	)
+
+	m.audioProcessingErrors = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "myaudio_audio_processing_errors_total",
+			Help: "Total number of audio processing errors",
+		},
+		[]string{"operation", "source", "error_type"},
+	)
+
+	m.audioConversionsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "myaudio_audio_conversions_total",
+			Help: "Total number of audio format conversions",
+		},
+		[]string{"conversion_type", "bit_depth", "status"}, // conversion_type: to_float32, apply_filters
+	)
+
+	m.audioConversionDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "myaudio_audio_conversion_duration_seconds",
+			Help:    "Time taken for audio format conversions",
+			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 12), // 0.1ms to ~400ms
+		},
+		[]string{"source", "conversion_type"},
+	)
+
+	m.audioConversionErrors = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "myaudio_audio_conversion_errors_total",
+			Help: "Total number of audio conversion errors",
+		},
+		[]string{"conversion_type", "bit_depth", "error_type"},
+	)
+
+	m.audioInferenceDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "myaudio_audio_inference_duration_seconds",
+			Help:    "Time taken for BirdNET inference operations",
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 15), // 1ms to ~32s
+		},
+		[]string{"source"},
+	)
+
+	m.audioDataSizeTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "myaudio_audio_data_size_bytes_total",
+			Help: "Total bytes of audio data processed",
+		},
+		[]string{"source"},
+	)
+
+	m.audioSampleCountTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "myaudio_audio_sample_count_total",
+			Help: "Total number of audio samples processed",
+		},
+		[]string{"source"},
+	)
+
+	m.birdnetResultsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "myaudio_birdnet_results_total",
+			Help: "Total number of BirdNET detection results",
+		},
+		[]string{"source"},
+	)
+
+	m.audioQueueOperations = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "myaudio_audio_queue_operations_total",
+			Help: "Total number of audio queue operations",
+		},
+		[]string{"source", "operation", "status"}, // operation: enqueue, dequeue
+	)
+
 	return nil
 }
 
@@ -382,6 +488,17 @@ func (m *MyAudioMetrics) Describe(ch chan<- *prometheus.Desc) {
 	m.fileOperationErrors.Describe(ch)
 	m.fileSizesTotal.Describe(ch)
 	m.audioFileInfoGauge.Describe(ch)
+	m.audioProcessingTotal.Describe(ch)
+	m.audioProcessingDuration.Describe(ch)
+	m.audioProcessingErrors.Describe(ch)
+	m.audioConversionsTotal.Describe(ch)
+	m.audioConversionDuration.Describe(ch)
+	m.audioConversionErrors.Describe(ch)
+	m.audioInferenceDuration.Describe(ch)
+	m.audioDataSizeTotal.Describe(ch)
+	m.audioSampleCountTotal.Describe(ch)
+	m.birdnetResultsTotal.Describe(ch)
+	m.audioQueueOperations.Describe(ch)
 }
 
 // Collect implements the Collector interface
@@ -418,6 +535,17 @@ func (m *MyAudioMetrics) Collect(ch chan<- prometheus.Metric) {
 	m.fileOperationErrors.Collect(ch)
 	m.fileSizesTotal.Collect(ch)
 	m.audioFileInfoGauge.Collect(ch)
+	m.audioProcessingTotal.Collect(ch)
+	m.audioProcessingDuration.Collect(ch)
+	m.audioProcessingErrors.Collect(ch)
+	m.audioConversionsTotal.Collect(ch)
+	m.audioConversionDuration.Collect(ch)
+	m.audioConversionErrors.Collect(ch)
+	m.audioInferenceDuration.Collect(ch)
+	m.audioDataSizeTotal.Collect(ch)
+	m.audioSampleCountTotal.Collect(ch)
+	m.birdnetResultsTotal.Collect(ch)
+	m.audioQueueOperations.Collect(ch)
 }
 
 // Buffer allocation recording methods
@@ -599,4 +727,61 @@ func (m *MyAudioMetrics) RecordAudioFileInfo(format string, sampleRate, numChann
 	m.audioFileInfoGauge.WithLabelValues(format, "channels").Set(float64(numChannels))
 	m.audioFileInfoGauge.WithLabelValues(format, "bit_depth").Set(float64(bitDepth))
 	m.audioFileInfoGauge.WithLabelValues(format, "total_samples").Set(float64(totalSamples))
+}
+
+// Audio processing recording methods
+
+// RecordAudioProcessing records an audio processing operation
+func (m *MyAudioMetrics) RecordAudioProcessing(operation, source, status string) {
+	m.audioProcessingTotal.WithLabelValues(operation, source, status).Inc()
+}
+
+// RecordAudioProcessingDuration records the duration of an audio processing operation
+func (m *MyAudioMetrics) RecordAudioProcessingDuration(operation, source string, duration float64) {
+	m.audioProcessingDuration.WithLabelValues(operation, source).Observe(duration)
+}
+
+// RecordAudioProcessingError records an audio processing error
+func (m *MyAudioMetrics) RecordAudioProcessingError(operation, source, errorType string) {
+	m.audioProcessingErrors.WithLabelValues(operation, source, errorType).Inc()
+}
+
+// RecordAudioConversion records an audio format conversion
+func (m *MyAudioMetrics) RecordAudioConversion(conversionType string, bitDepth int, status string) {
+	m.audioConversionsTotal.WithLabelValues(conversionType, fmt.Sprintf("%d", bitDepth), status).Inc()
+}
+
+// RecordAudioConversionDuration records the duration of an audio conversion
+func (m *MyAudioMetrics) RecordAudioConversionDuration(source, conversionType string, duration float64) {
+	m.audioConversionDuration.WithLabelValues(source, conversionType).Observe(duration)
+}
+
+// RecordAudioConversionError records an audio conversion error
+func (m *MyAudioMetrics) RecordAudioConversionError(conversionType string, bitDepth int, errorType string) {
+	m.audioConversionErrors.WithLabelValues(conversionType, fmt.Sprintf("%d", bitDepth), errorType).Inc()
+}
+
+// RecordAudioInferenceDuration records the duration of BirdNET inference
+func (m *MyAudioMetrics) RecordAudioInferenceDuration(source string, duration float64) {
+	m.audioInferenceDuration.WithLabelValues(source).Observe(duration)
+}
+
+// RecordAudioDataSize records the size of audio data processed
+func (m *MyAudioMetrics) RecordAudioDataSize(source string, sizeBytes int) {
+	m.audioDataSizeTotal.WithLabelValues(source).Add(float64(sizeBytes))
+}
+
+// RecordAudioSampleCount records the number of audio samples processed
+func (m *MyAudioMetrics) RecordAudioSampleCount(source string, sampleCount int) {
+	m.audioSampleCountTotal.WithLabelValues(source).Add(float64(sampleCount))
+}
+
+// RecordBirdNETResults records the number of BirdNET detection results
+func (m *MyAudioMetrics) RecordBirdNETResults(source string, resultCount int) {
+	m.birdnetResultsTotal.WithLabelValues(source).Add(float64(resultCount))
+}
+
+// RecordAudioQueueOperation records an audio queue operation
+func (m *MyAudioMetrics) RecordAudioQueueOperation(source, operation, status string) {
+	m.audioQueueOperations.WithLabelValues(source, operation, status).Inc()
 }
