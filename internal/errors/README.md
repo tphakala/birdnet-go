@@ -32,6 +32,16 @@ err := errors.New(originalErr).
     Context("operation", "fetch_thumbnail").
     Context("scientific_name", scientificName).
     Build()
+
+// Creating descriptive error messages (recommended pattern)
+err := errors.Newf("Wikipedia API response missing expected 'query.pages' structure").
+    Component("imageprovider").
+    Category(errors.CategoryImageFetch).
+    Context("provider", "wikipedia").
+    Context("operation", "parse_pages_from_response").
+    Context("expected_path", "query.pages").
+    Context("error_detail", originalErr.Error()).
+    Build()
 ```
 
 ### Best Practices for Telemetry
@@ -73,6 +83,47 @@ Context("operation", "validate_scientific_name")
 // Avoid - Generic or unclear operations
 Context("operation", "process")
 Context("operation", "handle")
+```
+
+#### 4. Create Descriptive Error Messages
+
+Replace generic errors with specific, actionable messages:
+
+```go
+// Good - Specific error with details
+var descriptiveMessage string
+if err.Error() == "key not found" {
+    descriptiveMessage = "Wikipedia API response missing expected 'query.pages' structure"
+} else {
+    descriptiveMessage = fmt.Sprintf("failed to parse Wikipedia API response: %s", err.Error())
+}
+
+err := errors.Newf("%s", descriptiveMessage).
+    Component("imageprovider").
+    Category(errors.CategoryImageFetch).
+    Context("expected_path", "query.pages").
+    Context("error_detail", err.Error()).
+    Build()
+
+// Avoid - Generic error messages
+err := errors.New(err).
+    Component("imageprovider").
+    Category(errors.CategoryImageFetch).
+    Build()
+```
+
+#### 5. Add Expected Path Context for API Errors
+
+When parsing API responses, always include what was expected:
+
+```go
+// Good - Shows exactly what field was missing
+Context("expected_path", "query.pages")
+Context("expected_path", "thumbnail.source") 
+Context("expected_path", "imageinfo[0].extmetadata")
+
+// Also include the original error details
+Context("error_detail", originalErr.Error())
 ```
 
 ## Error Categories
@@ -145,6 +196,61 @@ if err != nil {
         Category(errors.CategoryDatabase).
         Context("operation", "save_detection").
         Context("table", "detections").
+        Build()
+}
+```
+
+### Common Error Patterns
+
+#### API Response Parsing Errors
+
+```go
+// Pattern for handling missing API fields
+pages, err := resp.GetObjectArray("query", "pages")
+if err != nil {
+    var descriptiveMessage string
+    if err.Error() == "key not found" {
+        descriptiveMessage = "Wikipedia API response missing expected 'query.pages' structure"
+    } else {
+        descriptiveMessage = fmt.Sprintf("failed to parse Wikipedia API response pages: %s", err.Error())
+    }
+    
+    return errors.Newf("%s", descriptiveMessage).
+        Component("imageprovider").
+        Category(errors.CategoryImageFetch).
+        Context("provider", "wikipedia").
+        Context("operation", "parse_pages_from_response").
+        Context("expected_path", "query.pages").
+        Context("error_detail", err.Error()).
+        Build()
+}
+```
+
+#### Database Operation Errors
+
+```go
+// Pattern for database errors with context
+if err != nil {
+    return errors.New(err).
+        Component("datastore").
+        Category(errors.CategoryDatabase).
+        Context("operation", "save_detection").
+        Context("table", "detections").
+        Context("detection_id", detectionID).
+        Build()
+}
+```
+
+#### Validation Errors
+
+```go
+// Pattern for validation errors
+if scientificName == "" {
+    return errors.Newf("scientific name cannot be empty").
+        Component("imageprovider").
+        Category(errors.CategoryValidation).
+        Context("provider", providerName).
+        Context("operation", "validate_input").
         Build()
 }
 ```
@@ -241,16 +347,35 @@ if errors.As(err, &enhancedErr) {
 
 ### Poor Sentry Titles
 
-If you see generic titles like `*errors.errorString`:
+If you see generic titles like `*errors.errorString` or `*errors.SentryError`:
 1. Ensure you're using the enhanced error system (`errors.New().Build()`)
 2. Always specify `Component()` and `Category()`
 3. Add descriptive `Context("operation", "...")` data
+4. The system now automatically generates titles like "Imageprovider Image Fetch Error Parse Pages From Response"
+
+### Generic Error Messages
+
+If your error messages are too generic (like "key not found"):
+1. Create descriptive error messages that specify what was expected
+2. Use the pattern: check for specific error types and provide context
+3. Add `expected_path` context for API parsing errors
+4. Include `error_detail` context with the original error
+
+```go
+// Good example
+if err.Error() == "key not found" {
+    descriptiveMessage = "Wikipedia API response missing expected 'query.pages' structure"
+} else {
+    descriptiveMessage = fmt.Sprintf("failed to parse Wikipedia API response: %s", err.Error())
+}
+```
 
 ### Missing Context in Sentry
 
 1. Verify telemetry is enabled and configured
 2. Check that context data is not being filtered as sensitive
 3. Ensure error is being built with `.Build()` method
+4. Check that the component and category are being set correctly
 
 ### Performance Impact
 
