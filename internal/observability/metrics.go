@@ -120,4 +120,5 @@ func initializeTracing(birdnetMetrics *metrics.BirdNETMetrics) {
 func initializeMyAudioMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 	myaudio.SetAnalysisMetrics(myAudioMetrics)
 	myaudio.SetCaptureMetrics(myAudioMetrics)
+	myaudio.SetFileMetrics(myAudioMetrics)
 }

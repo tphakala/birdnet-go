@@ -51,6 +51,13 @@ type MyAudioMetrics struct {
 	audioDataValidationErrors *prometheus.CounterVec
 	audioSilenceDetections    *prometheus.CounterVec
 	audioDataCorruptionTotal  *prometheus.CounterVec
+
+	// File operation metrics
+	fileOperationsTotal    *prometheus.CounterVec
+	fileOperationDuration  *prometheus.HistogramVec
+	fileOperationErrors    *prometheus.CounterVec
+	fileSizesTotal         *prometheus.CounterVec
+	audioFileInfoGauge     *prometheus.GaugeVec
 }
 
 // NewMyAudioMetrics creates and registers new myaudio metrics
@@ -296,6 +303,48 @@ func (m *MyAudioMetrics) initMetrics() error {
 		[]string{"source", "corruption_type"},
 	)
 
+	// File operation metrics
+	m.fileOperationsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "myaudio_file_operations_total",
+			Help: "Total number of file operations",
+		},
+		[]string{"operation", "format", "status"}, // operation: get_info, read_buffered, save_wav; format: wav, flac, mp3; status: success, error
+	)
+
+	m.fileOperationDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "myaudio_file_operation_duration_seconds",
+			Help:    "Time taken for file operations",
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 12), // 1ms to ~4s
+		},
+		[]string{"operation", "format"},
+	)
+
+	m.fileOperationErrors = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "myaudio_file_operation_errors_total",
+			Help: "Total number of file operation errors",
+		},
+		[]string{"operation", "format", "error_type"}, // error_type: empty_path, open_failed, read_failed, etc.
+	)
+
+	m.fileSizesTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "myaudio_file_sizes_bytes_total",
+			Help: "Total bytes processed in file operations",
+		},
+		[]string{"operation", "format"},
+	)
+
+	m.audioFileInfoGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "myaudio_audio_file_info",
+			Help: "Audio file information (sample rate, channels, bit depth, samples)",
+		},
+		[]string{"format", "metric_type"}, // metric_type: sample_rate, channels, bit_depth, total_samples
+	)
+
 	return nil
 }
 
@@ -328,6 +377,11 @@ func (m *MyAudioMetrics) Describe(ch chan<- *prometheus.Desc) {
 	m.audioDataValidationErrors.Describe(ch)
 	m.audioSilenceDetections.Describe(ch)
 	m.audioDataCorruptionTotal.Describe(ch)
+	m.fileOperationsTotal.Describe(ch)
+	m.fileOperationDuration.Describe(ch)
+	m.fileOperationErrors.Describe(ch)
+	m.fileSizesTotal.Describe(ch)
+	m.audioFileInfoGauge.Describe(ch)
 }
 
 // Collect implements the Collector interface
@@ -359,6 +413,11 @@ func (m *MyAudioMetrics) Collect(ch chan<- prometheus.Metric) {
 	m.audioDataValidationErrors.Collect(ch)
 	m.audioSilenceDetections.Collect(ch)
 	m.audioDataCorruptionTotal.Collect(ch)
+	m.fileOperationsTotal.Collect(ch)
+	m.fileOperationDuration.Collect(ch)
+	m.fileOperationErrors.Collect(ch)
+	m.fileSizesTotal.Collect(ch)
+	m.audioFileInfoGauge.Collect(ch)
 }
 
 // Buffer allocation recording methods
@@ -510,4 +569,34 @@ func (m *MyAudioMetrics) RecordAudioSilenceDetection(source string) {
 // RecordAudioDataCorruption records audio data corruption detection
 func (m *MyAudioMetrics) RecordAudioDataCorruption(source, corruptionType string) {
 	m.audioDataCorruptionTotal.WithLabelValues(source, corruptionType).Inc()
+}
+
+// File operation recording methods
+
+// RecordFileOperation records a file operation
+func (m *MyAudioMetrics) RecordFileOperation(operation, format, status string) {
+	m.fileOperationsTotal.WithLabelValues(operation, format, status).Inc()
+}
+
+// RecordFileOperationDuration records the duration of a file operation
+func (m *MyAudioMetrics) RecordFileOperationDuration(operation, format string, duration float64) {
+	m.fileOperationDuration.WithLabelValues(operation, format).Observe(duration)
+}
+
+// RecordFileOperationError records a file operation error
+func (m *MyAudioMetrics) RecordFileOperationError(operation, format, errorType string) {
+	m.fileOperationErrors.WithLabelValues(operation, format, errorType).Inc()
+}
+
+// RecordFileSize records the size of files processed
+func (m *MyAudioMetrics) RecordFileSize(operation, format string, sizeBytes int64) {
+	m.fileSizesTotal.WithLabelValues(operation, format).Add(float64(sizeBytes))
+}
+
+// RecordAudioFileInfo records audio file information
+func (m *MyAudioMetrics) RecordAudioFileInfo(format string, sampleRate, numChannels, bitDepth, totalSamples int) {
+	m.audioFileInfoGauge.WithLabelValues(format, "sample_rate").Set(float64(sampleRate))
+	m.audioFileInfoGauge.WithLabelValues(format, "channels").Set(float64(numChannels))
+	m.audioFileInfoGauge.WithLabelValues(format, "bit_depth").Set(float64(bitDepth))
+	m.audioFileInfoGauge.WithLabelValues(format, "total_samples").Set(float64(totalSamples))
 }
