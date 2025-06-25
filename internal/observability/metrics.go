@@ -21,6 +21,8 @@ type Metrics struct {
 	BirdNET       *metrics.BirdNETMetrics
 	ImageProvider *metrics.ImageProviderMetrics
 	DiskManager   *metrics.DiskManagerMetrics
+	Weather       *metrics.WeatherMetrics
+	SunCalc       *metrics.SunCalcMetrics
 }
 
 // NewMetrics creates a new instance of Metrics, initializing all metric collectors.
@@ -48,12 +50,24 @@ func NewMetrics() (*Metrics, error) {
 		return nil, fmt.Errorf("failed to create DiskManager metrics: %w", err)
 	}
 
+	weatherMetrics, err := metrics.NewWeatherMetrics(registry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Weather metrics: %w", err)
+	}
+
+	sunCalcMetrics, err := metrics.NewSunCalcMetrics(registry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create SunCalc metrics: %w", err)
+	}
+
 	m := &Metrics{
 		registry:      registry,
 		MQTT:          mqttMetrics,
 		BirdNET:       birdnetMetrics,
 		ImageProvider: imageProviderMetrics,
 		DiskManager:   diskManagerMetrics,
+		Weather:       weatherMetrics,
+		SunCalc:       sunCalcMetrics,
 	}
 
 	// Initialize tracing with metrics

@@ -8,6 +8,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
@@ -101,7 +102,11 @@ func NewService(settings *conf.Settings, db datastore.Interface) (*Service, erro
 	case "openweather":
 		provider = NewOpenWeatherProvider()
 	default:
-		return nil, fmt.Errorf("invalid weather provider: %s", settings.Realtime.Weather.Provider)
+		return nil, errors.New(fmt.Errorf("invalid weather provider: %s", settings.Realtime.Weather.Provider)).
+			Component("weather").
+			Category(errors.CategoryConfiguration).
+			Context("provider", settings.Realtime.Weather.Provider).
+			Build()
 	}
 
 	return &Service{
@@ -124,7 +129,12 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 	if err := s.db.SaveDailyEvents(dailyEvents); err != nil {
 		// Log the error before returning
 		weatherLogger.Error("Failed to save daily events to database", "error", err, "date", dailyEvents.Date, "city", dailyEvents.CityName)
-		return fmt.Errorf("failed to save daily events: %w", err)
+		return errors.New(err).
+			Component("weather").
+			Category(errors.CategoryDatabase).
+			Context("operation", "save_daily_events").
+			Context("date", dailyEvents.Date).
+			Build()
 	}
 
 	// Create hourly weather data
@@ -155,7 +165,12 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 	if err := s.db.SaveHourlyWeather(hourlyWeather); err != nil {
 		// Log the error before returning
 		weatherLogger.Error("Failed to save hourly weather to database", "error", err, "time", hourlyWeather.Time)
-		return fmt.Errorf("failed to save hourly weather: %w", err)
+		return errors.New(err).
+			Component("weather").
+			Category(errors.CategoryDatabase).
+			Context("operation", "save_hourly_weather").
+			Context("time", hourlyWeather.Time.Format("2006-01-02 15:04:05")).
+			Build()
 	}
 
 	weatherLogger.Debug("Successfully saved weather data to database", "time", data.Time, "city", data.Location.City)
@@ -165,10 +180,18 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 // validateWeatherData performs basic validation on weather data
 func validateWeatherData(data *datastore.HourlyWeather) error {
 	if data.Temperature < -273.15 {
-		return fmt.Errorf("temperature cannot be below absolute zero: %f", data.Temperature)
+		return errors.New(fmt.Errorf("temperature cannot be below absolute zero: %f", data.Temperature)).
+			Component("weather").
+			Category(errors.CategoryValidation).
+			Context("temperature", fmt.Sprintf("%.2f", data.Temperature)).
+			Build()
 	}
 	if data.WindSpeed < 0 {
-		return fmt.Errorf("wind speed cannot be negative: %f", data.WindSpeed)
+		return errors.New(fmt.Errorf("wind speed cannot be negative: %f", data.WindSpeed)).
+			Component("weather").
+			Category(errors.CategoryValidation).
+			Context("wind_speed", fmt.Sprintf("%.2f", data.WindSpeed)).
+			Build()
 	}
 	return nil
 }
@@ -218,7 +241,12 @@ func (s *Service) fetchAndSave() error {
 			"error", err, // Keep the wrapped error message
 		)
 		// Return the original error for upstream handling
-		return fmt.Errorf("failed to fetch weather data: %w", err)
+		return errors.New(err).
+			Component("weather").
+			Category(errors.CategoryNetwork).
+			Context("operation", "fetch_weather_data").
+			Context("provider", s.settings.Realtime.Weather.Provider).
+			Build()
 	}
 
 	// Log successful fetch details using the weatherLogger
