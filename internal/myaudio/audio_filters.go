@@ -13,9 +13,9 @@ import (
 
 // Global variables for filter chain and mutex
 var (
-	filterChain    *equalizer.FilterChain
-	filterMutex    sync.RWMutex
-	filterMetrics  *metrics.MyAudioMetrics // Global metrics instance for filter operations
+	filterChain   *equalizer.FilterChain
+	filterMutex   sync.RWMutex
+	filterMetrics *metrics.MyAudioMetrics // Global metrics instance for filter operations
 )
 
 // SetFilterMetrics sets the metrics instance for filter operations

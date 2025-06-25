@@ -1,20 +1,22 @@
 package handlers
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"runtime/debug"
 	"sync"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/serviceapi"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
@@ -37,6 +39,7 @@ type Handlers struct {
 	notificationChan  chan Notification
 	debug             bool
 	Server            serviceapi.ServerFacade // Server facade providing security and processor access
+	Telemetry         *TelemetryMiddleware    // Telemetry middleware for metrics and enhanced error handling
 }
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.
@@ -79,7 +82,7 @@ func (bh *baseHandler) logInfo(message string) {
 }
 
 // New creates a new Handlers instance with the given dependencies.
-func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server, controlChan chan string, notificationChan chan Notification, server serviceapi.ServerFacade) *Handlers {
+func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server, controlChan chan string, notificationChan chan Notification, server serviceapi.ServerFacade, httpMetrics *metrics.HTTPMetrics) *Handlers {
 	if logger == nil {
 		logger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
@@ -101,6 +104,7 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		notificationChan:  notificationChan,
 		debug:             settings.Debug,
 		Server:            server,
+		Telemetry:         NewTelemetryMiddleware(httpMetrics),
 	}
 }
 
@@ -121,8 +125,17 @@ func defaultErrorHandler(err error) *HandlerError {
 func (h *Handlers) HandleError(err error, c echo.Context) error {
 	var he *HandlerError
 	var echoHTTPError *echo.HTTPError
+	var enhancedErr *errors.EnhancedError
 
 	switch {
+	case errors.As(err, &enhancedErr):
+		// Handle enhanced errors with better categorization
+		code := h.mapCategoryToHTTPStatus(enhancedErr.GetCategory())
+		he = &HandlerError{
+			Err:     enhancedErr,
+			Message: enhancedErr.Error(),
+			Code:    code,
+		}
 	case errors.As(err, &echoHTTPError):
 		he = &HandlerError{
 			Err:     echoHTTPError,
@@ -175,8 +188,38 @@ func (h *Handlers) HandleError(err error, c echo.Context) error {
 	// Set the response status code
 	c.Response().Status = he.Code
 
-	// Render the template
+	// Record template rendering metrics
+	if h.Telemetry != nil {
+		renderStart := time.Now()
+		renderErr := c.Render(he.Code, template, errorData)
+		h.Telemetry.RecordTemplateRender(template, time.Since(renderStart), renderErr)
+		return renderErr
+	}
+
+	// Render the template without telemetry
 	return c.Render(he.Code, template, errorData)
+}
+
+// mapCategoryToHTTPStatus maps error categories to appropriate HTTP status codes
+func (h *Handlers) mapCategoryToHTTPStatus(category errors.ErrorCategory) int {
+	switch category {
+	case errors.CategoryValidation:
+		return http.StatusBadRequest
+	case errors.CategoryDatabase:
+		return http.StatusInternalServerError
+	case errors.CategoryNetwork:
+		return http.StatusBadGateway
+	case errors.CategoryFileIO:
+		return http.StatusInternalServerError
+	case errors.CategoryConfiguration:
+		return http.StatusInternalServerError
+	case errors.CategorySystem:
+		return http.StatusInternalServerError
+	case errors.CategoryImageFetch, errors.CategoryImageCache, errors.CategoryImageProvider:
+		return http.StatusBadGateway
+	default:
+		return http.StatusInternalServerError
+	}
 }
 
 // getErrorTemplate returns the appropriate error template name based on the error code

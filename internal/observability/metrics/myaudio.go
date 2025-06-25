@@ -3,6 +3,7 @@ package metrics
 
 import (
 	"fmt"
+
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -54,24 +55,24 @@ type MyAudioMetrics struct {
 	audioDataCorruptionTotal  *prometheus.CounterVec
 
 	// File operation metrics
-	fileOperationsTotal    *prometheus.CounterVec
-	fileOperationDuration  *prometheus.HistogramVec
-	fileOperationErrors    *prometheus.CounterVec
-	fileSizesTotal         *prometheus.CounterVec
-	audioFileInfoGauge     *prometheus.GaugeVec
+	fileOperationsTotal   *prometheus.CounterVec
+	fileOperationDuration *prometheus.HistogramVec
+	fileOperationErrors   *prometheus.CounterVec
+	fileSizesTotal        *prometheus.CounterVec
+	audioFileInfoGauge    *prometheus.GaugeVec
 
 	// Audio processing metrics
-	audioProcessingTotal     *prometheus.CounterVec
-	audioProcessingDuration  *prometheus.HistogramVec
-	audioProcessingErrors    *prometheus.CounterVec
-	audioConversionsTotal    *prometheus.CounterVec
-	audioConversionDuration  *prometheus.HistogramVec
-	audioConversionErrors    *prometheus.CounterVec
-	audioInferenceDuration   *prometheus.HistogramVec
-	audioDataSizeTotal       *prometheus.CounterVec
-	audioSampleCountTotal    *prometheus.CounterVec
-	birdnetResultsTotal      *prometheus.CounterVec
-	audioQueueOperations     *prometheus.CounterVec
+	audioProcessingTotal    *prometheus.CounterVec
+	audioProcessingDuration *prometheus.HistogramVec
+	audioProcessingErrors   *prometheus.CounterVec
+	audioConversionsTotal   *prometheus.CounterVec
+	audioConversionDuration *prometheus.HistogramVec
+	audioConversionErrors   *prometheus.CounterVec
+	audioInferenceDuration  *prometheus.HistogramVec
+	audioDataSizeTotal      *prometheus.CounterVec
+	audioSampleCountTotal   *prometheus.CounterVec
+	birdnetResultsTotal     *prometheus.CounterVec
+	audioQueueOperations    *prometheus.CounterVec
 }
 
 // NewMyAudioMetrics creates and registers new myaudio metrics
