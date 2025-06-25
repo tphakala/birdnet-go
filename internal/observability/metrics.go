@@ -121,4 +121,6 @@ func initializeMyAudioMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 	myaudio.SetAnalysisMetrics(myAudioMetrics)
 	myaudio.SetCaptureMetrics(myAudioMetrics)
 	myaudio.SetFileMetrics(myAudioMetrics)
+	myaudio.SetProcessMetrics(myAudioMetrics)
+	myaudio.SetFilterMetrics(myAudioMetrics)
 }
