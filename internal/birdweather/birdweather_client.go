@@ -85,6 +85,14 @@ type BwClient struct {
 	HTTPClient    *http.Client
 }
 
+// maskURL masks sensitive BirdWeatherID tokens in URLs for safe logging
+func (b *BwClient) maskURL(urlStr string) string {
+	if b.BirdweatherID == "" {
+		return urlStr
+	}
+	return strings.ReplaceAll(urlStr, b.BirdweatherID, "***")
+}
+
 // BirdweatherClientInterface defines what methods a BirdweatherClient must have
 type Interface interface {
 	Publish(note *datastore.Note, pcmData []byte) error
@@ -159,7 +167,9 @@ func handleNetworkError(err error, url string, timeout time.Duration) *errors.En
 	if errors.As(err, &urlErr) {
 		var dnsErr *net.DNSError
 		if errors.As(urlErr.Err, &dnsErr) {
-			serviceLogger.Error("DNS resolution failed", "url", urlErr.URL, "error", err)
+			// Mask the URL before logging to prevent token exposure
+			maskedURL := strings.ReplaceAll(urlErr.URL, "app.birdweather.com/api/v1/stations/", "app.birdweather.com/api/v1/stations/***")
+			serviceLogger.Error("DNS resolution failed", "url", maskedURL, "error", err)
 			return errors.New(err).
 				Component("birdweather").
 				Category(errors.CategoryNetwork).

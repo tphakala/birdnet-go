@@ -48,9 +48,14 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 		scope.SetTag("category", string(ee.Category))
 		scope.SetTag("error_type", fmt.Sprintf("%T", ee.Err))
 
-		// Add context data
+		// Add context data with privacy scrubbing
 		for key, value := range ee.Context {
-			scope.SetContext(key, map[string]any{"value": value})
+			// Scrub string values for privacy
+			scrubbedValue := value
+			if strValue, ok := value.(string); ok {
+				scrubbedValue = scrubMessageForPrivacy(strValue)
+			}
+			scope.SetContext(key, map[string]any{"value": scrubbedValue})
 		}
 
 		// Set error level based on category
