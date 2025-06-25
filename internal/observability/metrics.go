@@ -23,6 +23,7 @@ type Metrics struct {
 	DiskManager   *metrics.DiskManagerMetrics
 	Weather       *metrics.WeatherMetrics
 	SunCalc       *metrics.SunCalcMetrics
+	Datastore     *metrics.DatastoreMetrics
 }
 
 // NewMetrics creates a new instance of Metrics, initializing all metric collectors.
@@ -60,6 +61,11 @@ func NewMetrics() (*Metrics, error) {
 		return nil, fmt.Errorf("failed to create SunCalc metrics: %w", err)
 	}
 
+	datastoreMetrics, err := metrics.NewDatastoreMetrics(registry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Datastore metrics: %w", err)
+	}
+
 	m := &Metrics{
 		registry:      registry,
 		MQTT:          mqttMetrics,
@@ -68,6 +74,7 @@ func NewMetrics() (*Metrics, error) {
 		DiskManager:   diskManagerMetrics,
 		Weather:       weatherMetrics,
 		SunCalc:       sunCalcMetrics,
+		Datastore:     datastoreMetrics,
 	}
 
 	// Initialize tracing with metrics
