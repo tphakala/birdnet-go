@@ -1,7 +1,6 @@
 package datastore
 
 import (
-	stderrors "errors"
 	"fmt"
 	"io"
 	"log"
@@ -94,7 +93,7 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 	requiredSpace := uint64(dbInfo.Size()) + 1024*1024 // Add 1MB buffer
 
 	if availableSpace < requiredSpace {
-		return errors.New(stderrors.New("insufficient disk space for backup")).
+		return errors.Newf("insufficient disk space for backup").
 			Component("datastore").
 			Category(errors.CategorySystem).
 			Context("operation", "create_backup").

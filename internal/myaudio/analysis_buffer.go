@@ -2,7 +2,6 @@
 package myaudio
 
 import (
-	stderrors "errors"
 	"fmt"
 	"log"
 	"strings"
@@ -310,14 +309,14 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 
 		// Record retry metrics
 		if analysisMetrics != nil {
-			if stderrors.Is(err, ringbuffer.ErrIsFull) {
+			if errors.Is(err, ringbuffer.ErrIsFull) {
 				analysisMetrics.RecordBufferWriteRetry("analysis", stream, "buffer_full")
 			} else {
 				analysisMetrics.RecordBufferWriteRetry("analysis", stream, "unexpected_error")
 			}
 		}
 
-		if stderrors.Is(err, ringbuffer.ErrIsFull) {
+		if errors.Is(err, ringbuffer.ErrIsFull) {
 			log.Printf("⚠️ Analysis buffer for stream %s is full. Waiting before retry %d/%d", stream, retry+1, maxRetries)
 		} else {
 			log.Printf("❌ Unexpected error writing to analysis buffer for stream %s: %v", stream, err)

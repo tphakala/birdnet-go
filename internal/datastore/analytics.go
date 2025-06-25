@@ -2,7 +2,6 @@
 package datastore
 
 import (
-	stderrors "errors"
 	"fmt"
 	"log"
 	"time"
@@ -279,7 +278,7 @@ func (ds *DataStore) GetDetectionTrends(period string, limit int) ([]DailyAnalyt
 				Build()
 		}
 	default:
-		return nil, errors.New(stderrors.New("unsupported database dialect")).
+		return nil, errors.Newf("unsupported database dialect").
 			Component("datastore").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "get_detection_trends").
@@ -325,7 +324,7 @@ func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) (
 	// Ensure start date is before or equal to end date only if both were provided
 	if startDate != "" && endDate != "" {
 		if parsedStartDate.After(parsedEndDate) {
-			return nil, errors.New(stderrors.New("start date cannot be after end date")).
+			return nil, errors.Newf("start date cannot be after end date").
 				Component("datastore").
 				Category(errors.CategoryValidation).
 				Context("operation", "get_hourly_distribution").
@@ -403,7 +402,7 @@ func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, o
 
 	// Ensure start date is before or equal to end date using string comparison (safe for YYYY-MM-DD)
 	if startDate != "" && endDate != "" && startDate > endDate {
-		return nil, errors.New(stderrors.New("start date cannot be after end date")).
+		return nil, errors.Newf("start date cannot be after end date").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "get_new_species_detections").
