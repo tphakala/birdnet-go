@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // BirdNETMetrics contains all Prometheus metrics related to BirdNET operations.
@@ -205,12 +206,32 @@ func (m *BirdNETMetrics) SetActiveProcessing(count float64) {
 	m.ActiveProcessingGauge.Set(count)
 }
 
-// categorizeError returns a category string for the error type
+// categorizeError returns a category string for the error type using enhanced error categories
 func categorizeError(err error) string {
 	if err == nil {
 		return "none"
 	}
-	// Simple categorization based on error message
+
+	// Check for enhanced errors with categories
+	var enhancedErr *errors.EnhancedError
+	if errors.As(err, &enhancedErr) {
+		switch enhancedErr.GetCategory() {
+		case errors.CategoryModelInit, errors.CategoryModelLoad:
+			return "model_error"
+		case errors.CategoryFileIO:
+			return "file_error"
+		case errors.CategoryAudio:
+			return "audio_error"
+		case errors.CategoryValidation:
+			return "validation_error"
+		case errors.CategorySystem:
+			return "system_error"
+		default:
+			return string(enhancedErr.GetCategory())
+		}
+	}
+
+	// Fallback to string matching for non-enhanced errors
 	errStr := err.Error()
 	switch {
 	case strings.Contains(errStr, "tensor"):

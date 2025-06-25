@@ -41,7 +41,7 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 	// Create enhanced error message with category
 	enhancedMessage := fmt.Sprintf("[%s] %s", ee.Category, ee.Err.Error())
 
-	// Scrub the message for privacy (import telemetry package function)
+	// Scrub the message for privacy (using local function)
 	scrubbedMessage := scrubMessageForPrivacy(enhancedMessage)
 
 	sentry.WithScope(func(scope *sentry.Scope) {
