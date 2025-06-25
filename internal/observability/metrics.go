@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -24,6 +25,7 @@ type Metrics struct {
 	Weather       *metrics.WeatherMetrics
 	SunCalc       *metrics.SunCalcMetrics
 	Datastore     *metrics.DatastoreMetrics
+	MyAudio       *metrics.MyAudioMetrics
 }
 
 // NewMetrics creates a new instance of Metrics, initializing all metric collectors.
@@ -66,6 +68,11 @@ func NewMetrics() (*Metrics, error) {
 		return nil, fmt.Errorf("failed to create Datastore metrics: %w", err)
 	}
 
+	myAudioMetrics, err := metrics.NewMyAudioMetrics(registry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MyAudio metrics: %w", err)
+	}
+
 	m := &Metrics{
 		registry:      registry,
 		MQTT:          mqttMetrics,
@@ -75,6 +82,7 @@ func NewMetrics() (*Metrics, error) {
 		Weather:       weatherMetrics,
 		SunCalc:       sunCalcMetrics,
 		Datastore:     datastoreMetrics,
+		MyAudio:       myAudioMetrics,
 	}
 
 	// Initialize tracing with metrics
@@ -82,6 +90,9 @@ func NewMetrics() (*Metrics, error) {
 
 	// Initialize diskmanager with metrics
 	diskmanager.SetMetrics(diskManagerMetrics)
+
+	// Initialize myaudio with metrics
+	initializeMyAudioMetrics(myAudioMetrics)
 
 	return m, nil
 }
@@ -103,4 +114,10 @@ func (m *Metrics) metricsHandler(w http.ResponseWriter, r *http.Request) {
 // initializeTracing sets up the birdnet tracing system with metrics
 func initializeTracing(birdnetMetrics *metrics.BirdNETMetrics) {
 	birdnet.SetMetrics(birdnetMetrics)
+}
+
+// initializeMyAudioMetrics sets up the myaudio buffer system with metrics
+func initializeMyAudioMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
+	myaudio.SetAnalysisMetrics(myAudioMetrics)
+	myaudio.SetCaptureMetrics(myAudioMetrics)
 }
