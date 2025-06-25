@@ -82,7 +82,7 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 	if metricsInstance := metrics; metricsInstance != nil {
 		httpMetrics = metricsInstance.HTTP
 	}
-	s.Handlers = handlers.New(s.DS, s.Settings, s.DashboardSettings, s.BirdImageCache, nil, s.SunCalc, s.AudioLevelChan, s.OAuth2Server, s.controlChan, s.notificationChan, s, httpMetrics)
+	s.Handlers = handlers.New(s.DS, s.Settings, s.DashboardSettings, s.BirdImageCache, nil, s.SunCalc, s.AudioLevelChan, s.OAuth2Server, s.controlChan, s.notificationChan, s, httpMetrics, metrics)
 
 	// Add processor middleware
 	s.Echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {

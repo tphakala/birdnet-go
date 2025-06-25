@@ -8,9 +8,18 @@ import (
 
 // InitializeErrorIntegration sets up the error package to use telemetry when enabled
 func InitializeErrorIntegration() {
-	// Check if telemetry is enabled
+	// Defensive check: ensure settings are available
 	settings := conf.GetSettings()
-	enabled := settings != nil && settings.Sentry.Enabled
+	if settings == nil {
+		// If settings are not available, disable telemetry
+		reporter := errors.NewSentryReporter(false)
+		errors.SetTelemetryReporter(reporter)
+		errors.SetPrivacyScrubber(ScrubMessage)
+		return
+	}
+
+	// Check if telemetry is enabled in settings
+	enabled := settings.Sentry.Enabled
 
 	// Create and set the telemetry reporter
 	reporter := errors.NewSentryReporter(enabled)
@@ -24,6 +33,9 @@ func InitializeErrorIntegration() {
 func UpdateErrorIntegration(enabled bool) {
 	reporter := errors.NewSentryReporter(enabled)
 	errors.SetTelemetryReporter(reporter)
+	// Note: We don't update the privacy scrubber here as it remains the same
+	// regardless of whether telemetry is enabled or disabled. The scrubbing
+	// function itself checks if telemetry is enabled before processing.
 }
 
 // GetPrivacyScrubFunction returns the privacy scrubbing function for use by the error package

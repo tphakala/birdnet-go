@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/serviceapi"
@@ -40,6 +41,7 @@ type Handlers struct {
 	debug             bool
 	Server            serviceapi.ServerFacade // Server facade providing security and processor access
 	Telemetry         *TelemetryMiddleware    // Telemetry middleware for metrics and enhanced error handling
+	Metrics           *observability.Metrics  // Shared metrics instance
 }
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.
@@ -82,7 +84,7 @@ func (bh *baseHandler) logInfo(message string) {
 }
 
 // New creates a new Handlers instance with the given dependencies.
-func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server, controlChan chan string, notificationChan chan Notification, server serviceapi.ServerFacade, httpMetrics *metrics.HTTPMetrics) *Handlers {
+func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *conf.Dashboard, birdImageCache *imageprovider.BirdImageCache, logger *log.Logger, sunCalc *suncalc.SunCalc, audioLevelChan chan myaudio.AudioLevelData, oauth2Server *security.OAuth2Server, controlChan chan string, notificationChan chan Notification, server serviceapi.ServerFacade, httpMetrics *metrics.HTTPMetrics, metricsInstance *observability.Metrics) *Handlers {
 	if logger == nil {
 		logger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
@@ -105,6 +107,7 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		debug:             settings.Debug,
 		Server:            server,
 		Telemetry:         NewTelemetryMiddleware(httpMetrics),
+		Metrics:           metricsInstance,
 	}
 }
 
