@@ -170,10 +170,8 @@ func handleNetworkError(err error, url string, timeout time.Duration, operation 
 	if errors.As(err, &urlErr) {
 		var dnsErr *net.DNSError
 		if errors.As(urlErr.Err, &dnsErr) {
-			// Mask the URL before logging to prevent token exposure
-			maskedURL := strings.ReplaceAll(urlErr.URL, "app.birdweather.com/api/v1/stations/", "app.birdweather.com/api/v1/stations/***")
 			descriptiveErr := fmt.Errorf("BirdWeather %s DNS resolution failed: %w", operation, err)
-			serviceLogger.Error("DNS resolution failed", "operation", operation, "url", maskedURL, "error", err)
+			serviceLogger.Error("DNS resolution failed", "operation", operation, "url", url, "error", err)
 			return errors.New(descriptiveErr).
 				Component("birdweather").
 				Category(errors.CategoryNetwork).

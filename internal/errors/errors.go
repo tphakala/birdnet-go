@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -202,40 +203,71 @@ func (eb *ErrorBuilder) Build() *EnhancedError {
 	return ee
 }
 
+// Component registry for dynamic component detection
+var (
+	componentRegistry = make(map[string]string)
+	registryMutex     sync.RWMutex
+)
+
+// RegisterComponent registers a package path pattern with a component name
+func RegisterComponent(packagePattern, componentName string) {
+	registryMutex.Lock()
+	defer registryMutex.Unlock()
+	componentRegistry[packagePattern] = componentName
+}
+
+// init registers default component mappings
+func init() {
+	RegisterComponent("birdnet", "birdnet")
+	RegisterComponent("myaudio", "myaudio")
+	RegisterComponent("httpcontroller", "http-controller")
+	RegisterComponent("datastore", "datastore")
+	RegisterComponent("imageprovider", "imageprovider")
+	RegisterComponent("diskmanager", "diskmanager")
+	RegisterComponent("mqtt", "mqtt")
+	RegisterComponent("weather", "weather")
+	RegisterComponent("conf", "configuration")
+	RegisterComponent("telemetry", "telemetry")
+}
+
 // Helper functions for auto-detection and categorization
 
 // detectComponent automatically detects the component based on the call stack
 func detectComponent() string {
-	pc, _, _, ok := runtime.Caller(4) // Skip New -> Build -> detectComponent -> reportToTelemetry
-	if !ok {
-		return "unknown"
+	// Try multiple call stack depths to find a recognizable component
+	for depth := 3; depth <= 6; depth++ {
+		pc, _, _, ok := runtime.Caller(depth)
+		if !ok {
+			continue
+		}
+
+		fn := runtime.FuncForPC(pc)
+		if fn == nil {
+			continue
+		}
+
+		funcName := fn.Name()
+		if component := lookupComponent(funcName); component != "unknown" {
+			return component
+		}
 	}
 
-	fn := runtime.FuncForPC(pc)
-	if fn == nil {
-		return "unknown"
+	return "unknown"
+}
+
+// lookupComponent searches the registry for a matching component
+func lookupComponent(funcName string) string {
+	registryMutex.RLock()
+	defer registryMutex.RUnlock()
+
+	// Check registered patterns
+	for pattern, component := range componentRegistry {
+		if strings.Contains(funcName, pattern) {
+			return component
+		}
 	}
 
-	funcName := fn.Name()
-
-	// Extract component from package path
-	if strings.Contains(funcName, "birdnet") {
-		return "birdnet"
-	}
-	if strings.Contains(funcName, "myaudio") {
-		return "myaudio"
-	}
-	if strings.Contains(funcName, "httpcontroller") {
-		return "http-controller"
-	}
-	if strings.Contains(funcName, "datastore") {
-		return "datastore"
-	}
-	if strings.Contains(funcName, "imageprovider") {
-		return "imageprovider"
-	}
-
-	// Extract from package path
+	// Fallback: extract from package path
 	parts := strings.Split(funcName, "/")
 	if len(parts) > 0 {
 		lastPart := parts[len(parts)-1]

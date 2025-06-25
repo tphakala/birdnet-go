@@ -189,12 +189,3 @@ func RecordMetric(name string, value float64, tags map[string]string) {
 	// Note: Detailed metrics are now recorded via spans automatically
 }
 
-// RecordDuration records the duration of an operation
-func RecordDuration(operation string, duration time.Duration) {
-	// This is now handled automatically by spans
-	if globalMetrics == nil {
-		RecordMetric(fmt.Sprintf("birdnet.%s.duration", operation),
-			float64(duration.Milliseconds()),
-			map[string]string{"unit": "ms"})
-	}
-}

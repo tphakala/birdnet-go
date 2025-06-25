@@ -424,6 +424,8 @@ func Load() (*Settings, error) {
 				if strings.Contains(errMsg, "fallback") || strings.Contains(errMsg, "not supported") {
 					// This is a warning about locale fallback - report to telemetry but don't fail
 					log.Printf("Configuration warning: %s", errMsg)
+					// Store the warning for later telemetry reporting
+					settings.ValidationWarnings = append(settings.ValidationWarnings, errMsg)
 					// Note: Telemetry reporting will happen later in birdnet package when Sentry is initialized
 				} else {
 					// This is a real validation error - fail the config load
