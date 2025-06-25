@@ -163,18 +163,22 @@ func (l *wikiMediaProvider) queryAndGetFirstPage(reqID string, params map[string
 	pages, err := resp.GetObjectArray("query", "pages")
 	if err != nil {
 		logger.Error("Failed to parse pages from Wikipedia response", "error", err)
-		// if l.debug {
-		// 	log.Printf("[%s] Debug: Failed to parse Wikipedia response pages: %v", reqID, err)
-		// 	if obj, err := resp.Object(); err == nil {
-		// 		log.Printf("[%s] Debug: Response structure: %v", reqID, obj)
-		// 	}
-		// }
-		descriptiveErr := errors.New(fmt.Errorf("imageprovider: failed to parse Wikipedia API response pages: %w", err)).
+		// Create a more descriptive error message that specifies which keys were missing
+		var descriptiveMessage string
+		if err.Error() == "key not found" {
+			descriptiveMessage = "imageprovider: Wikipedia API response missing expected 'query.pages' structure"
+		} else {
+			descriptiveMessage = fmt.Sprintf("imageprovider: failed to parse Wikipedia API response pages: %s", err.Error())
+		}
+
+		descriptiveErr := errors.Newf("%s", descriptiveMessage).
 			Component("imageprovider").
 			Category(errors.CategoryImageFetch).
 			Context("provider", wikiProviderName).
 			Context("request_id", reqID).
 			Context("operation", "parse_pages_from_response").
+			Context("expected_path", "query.pages").
+			Context("error_detail", err.Error()).
 			Build()
 		return nil, descriptiveErr
 	}
@@ -324,17 +328,23 @@ func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string) (url, f
 	url, err = page.GetString("thumbnail", "source")
 	if err != nil {
 		logger.Warn("Failed to extract thumbnail URL from page data", "error", err)
-		// if l.debug {
-		// 	log.Printf("Debug: Failed to extract thumbnail URL: %v", err)
-		// }
-		// Return a consistent user-facing error
-		enhancedErr := errors.Newf("no free-license image available for species: %s", scientificName).
+		// Create a more descriptive error message
+		var descriptiveMessage string
+		if err.Error() == "key not found" {
+			descriptiveMessage = fmt.Sprintf("no thumbnail.source field found in Wikipedia page data for species: %s", scientificName)
+		} else {
+			descriptiveMessage = fmt.Sprintf("no free-license image available for species: %s", scientificName)
+		}
+
+		enhancedErr := errors.Newf("%s", descriptiveMessage).
 			Component("imageprovider").
 			Category(errors.CategoryImageFetch).
 			Context("provider", wikiProviderName).
 			Context("request_id", reqID).
 			Context("scientific_name", scientificName).
 			Context("operation", "extract_thumbnail_url").
+			Context("expected_path", "thumbnail.source").
+			Context("error_detail", err.Error()).
 			Build()
 		return "", "", enhancedErr
 	}
@@ -342,17 +352,23 @@ func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string) (url, f
 	fileName, err = page.GetString("pageimage")
 	if err != nil {
 		logger.Warn("Failed to extract thumbnail filename (pageimage) from page data", "error", err)
-		// if l.debug {
-		// 	log.Printf("Debug: Failed to extract thumbnail filename: %v", err)
-		// }
-		// Return a consistent user-facing error
-		enhancedErr := errors.Newf("image metadata not available for species: %s", scientificName).
+		// Create a more descriptive error message
+		var descriptiveMessage string
+		if err.Error() == "key not found" {
+			descriptiveMessage = fmt.Sprintf("no pageimage field found in Wikipedia page data for species: %s", scientificName)
+		} else {
+			descriptiveMessage = fmt.Sprintf("image metadata not available for species: %s", scientificName)
+		}
+
+		enhancedErr := errors.Newf("%s", descriptiveMessage).
 			Component("imageprovider").
 			Category(errors.CategoryImageFetch).
 			Context("provider", wikiProviderName).
 			Context("request_id", reqID).
 			Context("scientific_name", scientificName).
 			Context("operation", "extract_thumbnail_filename").
+			Context("expected_path", "pageimage").
+			Context("error_detail", err.Error()).
 			Build()
 		return "", "", enhancedErr
 	}
@@ -416,13 +432,23 @@ func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailFileName string) (*w
 	imgInfo, err := page.GetObjectArray("imageinfo")
 	if err != nil || len(imgInfo) == 0 {
 		logger.Error("Failed to get imageinfo array from page data", "error", err, "array_len", len(imgInfo))
-		enhancedErr := errors.Newf("no imageinfo found for %s", thumbnailFileName).
+		// Create a more descriptive error message
+		var descriptiveMessage string
+		if err != nil && err.Error() == "key not found" {
+			descriptiveMessage = fmt.Sprintf("no imageinfo field found in Wikipedia file page for %s", thumbnailFileName)
+		} else {
+			descriptiveMessage = fmt.Sprintf("no imageinfo found for %s", thumbnailFileName)
+		}
+
+		enhancedErr := errors.Newf("%s", descriptiveMessage).
 			Component("imageprovider").
 			Category(errors.CategoryImageFetch).
 			Context("provider", wikiProviderName).
 			Context("request_id", reqID).
 			Context("thumbnail_filename", thumbnailFileName).
 			Context("operation", "extract_imageinfo").
+			Context("expected_path", "imageinfo").
+			Context("error_detail", fmt.Sprintf("err=%v, len=%d", err, len(imgInfo))).
 			Build()
 		return nil, enhancedErr
 	}
@@ -430,13 +456,23 @@ func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailFileName string) (*w
 	extMetadata, err := imgInfo[0].GetObject("extmetadata")
 	if err != nil {
 		logger.Error("Failed to get extmetadata object from imageinfo", "error", err)
-		enhancedErr := errors.Newf("no extmetadata found for %s", thumbnailFileName).
+		// Create a more descriptive error message
+		var descriptiveMessage string
+		if err.Error() == "key not found" {
+			descriptiveMessage = fmt.Sprintf("no extmetadata field found in imageinfo for %s", thumbnailFileName)
+		} else {
+			descriptiveMessage = fmt.Sprintf("no extmetadata found for %s", thumbnailFileName)
+		}
+
+		enhancedErr := errors.Newf("%s", descriptiveMessage).
 			Component("imageprovider").
 			Category(errors.CategoryImageFetch).
 			Context("provider", wikiProviderName).
 			Context("request_id", reqID).
 			Context("thumbnail_filename", thumbnailFileName).
 			Context("operation", "extract_extmetadata").
+			Context("expected_path", "imageinfo[0].extmetadata").
+			Context("error_detail", err.Error()).
 			Build()
 		return nil, enhancedErr
 	}
