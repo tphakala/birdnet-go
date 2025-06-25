@@ -54,13 +54,25 @@ type FFmpegRestartTracker struct {
 // restartTrackers keeps track of restart information for each RTSP source URL
 var restartTrackers sync.Map
 
+// containsPrivateIP172Range checks if URL contains an IP in the 172.16.0.0/12 range (172.16.x.x through 172.31.x.x)
+func containsPrivateIP172Range(url string) bool {
+	// Check for 172.16 through 172.31
+	for i := 16; i <= 31; i++ {
+		if strings.Contains(url, fmt.Sprintf("172.%d.", i)) {
+			return true
+		}
+	}
+	return false
+}
+
 // categorizeStreamURL categorizes a stream URL for telemetry while preserving privacy
 func categorizeStreamURL(url string) string {
 	if strings.HasPrefix(url, "rtsp://") {
 		if strings.Contains(url, "localhost") || strings.Contains(url, "127.0.0.1") {
 			return "rtsp-local"
 		}
-		if strings.Contains(url, "192.168.") || strings.Contains(url, "10.") {
+		if strings.Contains(url, "192.168.") || strings.Contains(url, "10.") || 
+			containsPrivateIP172Range(url) {
 			return "rtsp-private"
 		}
 		return "rtsp-external"
@@ -378,7 +390,8 @@ func (p *FFmpegProcess) handleWatchdogTimeout(url string, restartChan chan struc
 }
 
 // processAudioData processes a chunk of audio data and handles buffer errors
-func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCount *int, lastBufferErrorTime *time.Time, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
+// Returns (true, nil) if processing should continue, (false, nil) if successful, or (false, error) if there's a real error
+func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCount *int, lastBufferErrorTime *time.Time, restartChan chan struct{}, audioLevelChan chan AudioLevelData) (bool, error) {
 	const maxBufferErrors = 10
 	hasBufferError := false
 
@@ -407,7 +420,7 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 			telemetry.CaptureMessage(fmt.Sprintf("Buffer error threshold exceeded for %s: %d errors", url, *bufferErrorCount),
 				sentry.LevelError, "rtsp-buffer-error-threshold")
 			p.sendRestartSignal(restartChan, url, "Buffer error threshold")
-			return errors.New(fmt.Errorf("too many buffer write errors for RTSP source %s", url)).
+			return false, errors.New(fmt.Errorf("too many buffer write errors for RTSP source %s", url)).
 				Category(errors.CategoryAudio).
 				Component("ffmpeg-buffer").
 				Context("url_type", categorizeStreamURL(url)).
@@ -416,7 +429,7 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 		}
 
 		time.Sleep(1 * time.Second)
-		return errors.NewStd("buffer_error_continue") // Special error to signal continue
+		return true, nil // Signal to continue processing
 	}
 
 	// Reset error count on successful buffer writes
@@ -435,7 +448,7 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 		// Audio level data is not critical and can be dropped
 	}
 
-	return nil
+	return false, nil
 }
 
 // processAudio reads audio data from FFmpeg's stdout and writes it to buffers
@@ -481,11 +494,12 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 			if n > 0 {
 				watchdog.update() // Update the watchdog timestamp
 
-				if err := p.processAudioData(url, buf[:n], &bufferErrorCount, &lastBufferErrorTime, restartChan, audioLevelChan); err != nil {
-					if err.Error() == "buffer_error_continue" {
-						continue
-					}
+				continueProcessing, err := p.processAudioData(url, buf[:n], &bufferErrorCount, &lastBufferErrorTime, restartChan, audioLevelChan)
+				if err != nil {
 					return err
+				}
+				if continueProcessing {
+					continue
 				}
 			}
 		}

@@ -19,6 +19,25 @@ type seekableBuffer struct {
 	pos int64
 }
 
+// recordFileOperationError is a helper function to record file operation errors and return the enhanced error
+func recordFileOperationError(operation, format, errorType string, enhancedErr error) error {
+	if fileMetrics != nil {
+		fileMetrics.RecordFileOperation(operation, format, "error")
+		fileMetrics.RecordFileOperationError(operation, format, errorType)
+	}
+	return enhancedErr
+}
+
+// recordFileOperationErrorWithValidation is a helper function to record file operation errors with additional validation error
+func recordFileOperationErrorWithValidation(operation, format, errorType, validationType string, enhancedErr error) error {
+	if fileMetrics != nil {
+		fileMetrics.RecordFileOperation(operation, format, "error")
+		fileMetrics.RecordFileOperationError(operation, format, errorType)
+		fileMetrics.RecordAudioDataValidationError(operation, validationType)
+	}
+	return enhancedErr
+}
+
 // SavePCMDataToWAV saves the given PCM data as a WAV file at the specified filePath.
 func SavePCMDataToWAV(filePath string, pcmData []byte) error {
 	start := time.Now()
@@ -31,11 +50,7 @@ func SavePCMDataToWAV(filePath string, pcmData []byte) error {
 			Context("operation", "save_pcm_to_wav").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("save_wav", "wav", "error")
-			fileMetrics.RecordFileOperationError("save_wav", "wav", "empty_path")
-		}
-		return enhancedErr
+		return recordFileOperationError("save_wav", "wav", "empty_path", enhancedErr)
 	}
 
 	if len(pcmData) == 0 {
@@ -46,11 +61,7 @@ func SavePCMDataToWAV(filePath string, pcmData []byte) error {
 			Context("data_size", 0).
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("save_wav", "wav", "error")
-			fileMetrics.RecordFileOperationError("save_wav", "wav", "empty_data")
-		}
-		return enhancedErr
+		return recordFileOperationError("save_wav", "wav", "empty_data", enhancedErr)
 	}
 
 	// Validate PCM data alignment
@@ -65,12 +76,7 @@ func SavePCMDataToWAV(filePath string, pcmData []byte) error {
 			Context("expected_alignment", expectedAlignment).
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("save_wav", "wav", "error")
-			fileMetrics.RecordFileOperationError("save_wav", "wav", "data_alignment")
-			fileMetrics.RecordAudioDataValidationError("save_wav", "alignment")
-		}
-		return enhancedErr
+		return recordFileOperationErrorWithValidation("save_wav", "wav", "data_alignment", "alignment", enhancedErr)
 	}
 
 	// Create the directory structure if it doesn't exist
@@ -82,11 +88,7 @@ func SavePCMDataToWAV(filePath string, pcmData []byte) error {
 			Context("file_operation", "create_directories").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("save_wav", "wav", "error")
-			fileMetrics.RecordFileOperationError("save_wav", "wav", "directory_creation_failed")
-		}
-		return enhancedErr
+		return recordFileOperationError("save_wav", "wav", "directory_creation_failed", enhancedErr)
 	}
 
 	// Open a new file for writing
@@ -99,11 +101,7 @@ func SavePCMDataToWAV(filePath string, pcmData []byte) error {
 			Context("file_operation", "create_file").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("save_wav", "wav", "error")
-			fileMetrics.RecordFileOperationError("save_wav", "wav", "file_creation_failed")
-		}
-		return enhancedErr
+		return recordFileOperationError("save_wav", "wav", "file_creation_failed", enhancedErr)
 	}
 	defer outFile.Close()
 
@@ -119,11 +117,7 @@ func SavePCMDataToWAV(filePath string, pcmData []byte) error {
 			Context("num_channels", conf.NumChannels).
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("save_wav", "wav", "error")
-			fileMetrics.RecordFileOperationError("save_wav", "wav", "encoder_creation_failed")
-		}
-		return enhancedErr
+		return recordFileOperationError("save_wav", "wav", "encoder_creation_failed", enhancedErr)
 	}
 
 	// Convert the byte slice to a slice of integer samples
@@ -136,12 +130,7 @@ func SavePCMDataToWAV(filePath string, pcmData []byte) error {
 			Context("pcm_data_size", len(pcmData)).
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("save_wav", "wav", "error")
-			fileMetrics.RecordFileOperationError("save_wav", "wav", "sample_conversion_failed")
-			fileMetrics.RecordAudioDataValidationError("save_wav", "conversion")
-		}
-		return enhancedErr
+		return recordFileOperationErrorWithValidation("save_wav", "wav", "sample_conversion_failed", "conversion", enhancedErr)
 	}
 
 	// Write the integer samples to the WAV file
@@ -154,11 +143,7 @@ func SavePCMDataToWAV(filePath string, pcmData []byte) error {
 			Context("sample_count", len(intSamples)).
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("save_wav", "wav", "error")
-			fileMetrics.RecordFileOperationError("save_wav", "wav", "write_failed")
-		}
-		return enhancedErr
+		return recordFileOperationError("save_wav", "wav", "write_failed", enhancedErr)
 	}
 
 	// Close the WAV encoder, which finalizes the file format
@@ -170,11 +155,7 @@ func SavePCMDataToWAV(filePath string, pcmData []byte) error {
 			Context("file_operation", "close_encoder").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("save_wav", "wav", "error")
-			fileMetrics.RecordFileOperationError("save_wav", "wav", "encoder_close_failed")
-		}
-		return enhancedErr
+		return recordFileOperationError("save_wav", "wav", "encoder_close_failed", enhancedErr)
 	}
 
 	// Record successful operation
