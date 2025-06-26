@@ -67,6 +67,16 @@ Source: MIT
 License: https://github.com/fsnotify/fsnotify/blob/v1.8.0/LICENSE
 Source: BSD-3-Clause
 
+### github.com/getsentry/sentry-go
+
+License: https://github.com/getsentry/sentry-go/blob/v0.34.0/LICENSE
+Source: MIT
+
+### github.com/getsentry/sentry-go/echo
+
+License: https://github.com/getsentry/sentry-go/blob/echo/v0.34.0/echo/LICENSE
+Source: MIT
+
 ### github.com/go-audio/audio
 
 License: https://github.com/go-audio/audio/blob/v1.0.0/LICENSE
@@ -362,7 +372,7 @@ Source: BSD-3-Clause
 License: https://cs.opensource.google/go/x/sync/+/v0.15.0:LICENSE
 Source: BSD-3-Clause
 
-### golang.org/x/sys/unix
+### golang.org/x/sys
 
 License: https://cs.opensource.google/go/x/sys/+/v0.33.0:LICENSE
 Source: BSD-3-Clause
@@ -379,7 +389,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
 
-License: https://cs.opensource.google/go/x/time/+/v0.11.0:LICENSE
+License: https://cs.opensource.google/go/x/time/+/v0.12.0:LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/protobuf
