@@ -416,8 +416,25 @@ func (w *RTSPHealthWatchdog) startNewProcess(url string, stats *StreamHealthStat
 			stats.mu.Unlock()
 		}()
 
-		audioLevelChan := getAudioLevelChannelForURL(url)
-		if err := manageFfmpegLifecycle(ctx, config, restartChan, audioLevelChan); err != nil {
+		// For health watchdog, create a dummy unified audio channel since it's not used for actual data processing
+		unifiedAudioChan := make(chan UnifiedAudioData, 10)
+		go func() {
+			// Drain the unified audio channel to prevent blocking
+			for {
+				select {
+				case <-ctx.Done():
+					// Exit when context is cancelled
+					return
+				case _, ok := <-unifiedAudioChan:
+					if !ok {
+						// Channel closed, exit
+						return
+					}
+					// Discard audio data in health watchdog context
+				}
+			}
+		}()
+		if err := manageFfmpegLifecycle(ctx, config, restartChan, unifiedAudioChan); err != nil {
 			enhancedErr := errors.New(err).
 				Component("rtsp-health-watchdog").
 				Category(errors.CategoryRTSP).
@@ -547,23 +564,33 @@ func UpdateStreamDataReceived(url string) {
 // restartChannels stores restart channels for each URL
 var restartChannels sync.Map
 
-// audioLevelChannels stores audio level channels for each URL
-var audioLevelChannels sync.Map
+// unifiedAudioChannels stores unified audio channels for each URL
+var unifiedAudioChannels sync.Map
+
+// audioLevelConverters stores converter channels for each URL to prevent goroutine leaks
+var audioLevelConverters sync.Map
 
 // RegisterStreamChannels registers the restart and audio level channels for a URL
-func RegisterStreamChannels(url string, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+func RegisterStreamChannels(url string, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
 	if restartChan != nil {
 		restartChannels.Store(url, restartChan)
 	}
-	if audioLevelChan != nil {
-		audioLevelChannels.Store(url, audioLevelChan)
+	if unifiedAudioChan != nil {
+		unifiedAudioChannels.Store(url, unifiedAudioChan)
 	}
 }
 
 // UnregisterStreamChannels removes the channels for a URL
 func UnregisterStreamChannels(url string) {
 	restartChannels.Delete(url)
-	audioLevelChannels.Delete(url)
+	unifiedAudioChannels.Delete(url)
+	// Also delete the converter channel to prevent leaks
+	if ch, ok := audioLevelConverters.Load(url); ok {
+		audioLevelConverters.Delete(url)
+		// The goroutine will exit when the unified channel closes
+		// We don't close the converter channel here as the goroutine handles that
+		_ = ch // Avoid unused variable warning
+	}
 }
 
 // getRestartChannelForURL retrieves the restart channel for a URL
@@ -574,13 +601,50 @@ func getRestartChannelForURL(url string) chan struct{} {
 	return nil
 }
 
-// getAudioLevelChannelForURL retrieves the audio level channel for a URL
+// getAudioLevelChannelForURL retrieves a simple audio level channel for a URL
+// This creates a converter channel only once per URL to prevent goroutine leaks
 func getAudioLevelChannelForURL(url string) chan AudioLevelData {
-	if ch, ok := audioLevelChannels.Load(url); ok {
-		return ch.(chan AudioLevelData)
+	// Check if we already have a converter for this URL
+	if existingCh, ok := audioLevelConverters.Load(url); ok {
+		return existingCh.(chan AudioLevelData)
 	}
+
+	// Check if we have a unified channel for this URL
+	if unifiedCh, ok := unifiedAudioChannels.Load(url); ok {
+		// Create a converter channel
+		audioLevelCh := make(chan AudioLevelData, 10)
+
+		// Try to store it atomically
+		if actual, loaded := audioLevelConverters.LoadOrStore(url, audioLevelCh); loaded {
+			// Another goroutine created one already, use that instead
+			close(audioLevelCh)
+			return actual.(chan AudioLevelData)
+		}
+
+		// Start the converter goroutine only once
+		go func() {
+			defer func() {
+				// Clean up when unified channel closes
+				audioLevelConverters.Delete(url)
+				close(audioLevelCh)
+			}()
+
+			// Convert unified audio data to simple audio level data for health monitoring
+			unifiedChannel := unifiedCh.(chan UnifiedAudioData)
+			for unifiedData := range unifiedChannel {
+				select {
+				case audioLevelCh <- unifiedData.AudioLevel:
+					// Sent successfully
+				default:
+					// Channel full, just discard for health monitoring
+				}
+			}
+		}()
+		return audioLevelCh
+	}
+
 	// Log missing channel registration to help diagnose configuration issues
-	logging.Debug("No audio level channel registered for URL, returning fallback channel",
+	logging.Debug("No unified audio channel registered for URL, returning fallback channel",
 		"service", "rtsp-health-watchdog",
 		"url", url,
 		"operation", "get_audio_level_channel",

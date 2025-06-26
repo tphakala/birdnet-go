@@ -463,7 +463,7 @@ func (p *FFmpegProcess) handleWatchdogTimeout(url string, restartChan chan struc
 
 // processAudioData processes a chunk of audio data and handles buffer errors
 // Returns an error if processing should stop, nil if it should continue
-func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCount *int, lastBufferErrorTime *time.Time, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
+func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCount *int, lastBufferErrorTime *time.Time, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) error {
 	const maxBufferErrors = 10
 	hasBufferError := false
 
@@ -513,14 +513,32 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 	// Broadcast audio data to WebSocket clients
 	broadcastAudioData(url, data)
 
-	// Calculate and send audio level
+	// Calculate audio level
 	audioLevelData := calculateAudioLevel(data, url, "")
+
+	// Create unified audio data structure
+	unifiedData := UnifiedAudioData{
+		AudioLevel: audioLevelData,
+		Timestamp:  time.Now(),
+	}
+
+	// Process sound level data if enabled - this may be nil if 10-second window isn't complete
+	if conf.Setting().Realtime.Audio.SoundLevel.Enabled {
+		if soundLevelData, err := ProcessSoundLevelData(url, data); err != nil {
+			log.Printf("❌ Error processing sound level data for RTSP source %s: %v", url, err)
+		} else if soundLevelData != nil {
+			// Attach sound level data when available
+			unifiedData.SoundLevel = soundLevelData
+		}
+	}
+
+	// Send unified data to channel (non-blocking)
 	select {
-	case audioLevelChan <- audioLevelData:
+	case unifiedAudioChan <- unifiedData:
 		// Successfully sent data
 	default:
 		// Channel is full, drop the data to avoid blocking audio processing
-		// Audio level data is not critical and can be dropped
+		// Audio data is not critical and can be dropped for RTSP processing
 	}
 
 	// Continue processing - return nil to indicate success
@@ -528,7 +546,7 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 }
 
 // processAudio reads audio data from FFmpeg's stdout and writes it to buffers
-func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
+func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) error {
 	// Create a buffer to store audio data
 	buf := make([]byte, 32768)
 	watchdog := &audioWatchdog{lastDataTime: time.Now()}
@@ -598,7 +616,7 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 			if n > 0 {
 				watchdog.update() // Update the watchdog timestamp
 
-				err := p.processAudioData(url, buf[:n], &bufferErrorCount, &lastBufferErrorTime, restartChan, audioLevelChan)
+				err := p.processAudioData(url, buf[:n], &bufferErrorCount, &lastBufferErrorTime, restartChan, unifiedAudioChan)
 				if err != nil {
 					return err
 				}
@@ -739,19 +757,19 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 
 // lifecycleManager handles the complete lifecycle of an FFmpeg process
 type lifecycleManager struct {
-	config         FFmpegConfig
-	backoff        *backoffStrategy
-	restartChan    chan struct{}
-	audioLevelChan chan AudioLevelData
+	config           FFmpegConfig
+	backoff          *backoffStrategy
+	restartChan      chan struct{}
+	unifiedAudioChan chan UnifiedAudioData
 }
 
 // newLifecycleManager creates a new lifecycle manager with unlimited retries
-func newLifecycleManager(config FFmpegConfig, restartChan chan struct{}, audioLevelChan chan AudioLevelData) *lifecycleManager {
+func newLifecycleManager(config FFmpegConfig, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) *lifecycleManager {
 	return &lifecycleManager{
-		config:         config,
-		backoff:        newBackoffStrategy(-1, 5*time.Second, 2*time.Minute), // Unlimited retries
-		restartChan:    restartChan,
-		audioLevelChan: audioLevelChan,
+		config:           config,
+		backoff:          newBackoffStrategy(-1, 5*time.Second, 2*time.Minute), // Unlimited retries
+		restartChan:      restartChan,
+		unifiedAudioChan: unifiedAudioChan,
 	}
 }
 
@@ -854,7 +872,7 @@ func (lm *lifecycleManager) runProcessAndWait(ctx context.Context, process *FFmp
 	// Start processing audio in a separate goroutine
 	processDone := make(chan error, 1)
 	go func() {
-		processDone <- process.processAudio(ctx, lm.config.URL, lm.restartChan, lm.audioLevelChan)
+		processDone <- process.processAudio(ctx, lm.config.URL, lm.restartChan, lm.unifiedAudioChan)
 	}()
 
 	// Wait for process completion, context cancellation, or restart signal
@@ -909,7 +927,7 @@ func (lm *lifecycleManager) handleRestartDelay(ctx context.Context, process *FFm
 }
 
 // manageFfmpegLifecycle manages the complete lifecycle of an FFmpeg process with simplified logic
-func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
+func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) error {
 	// Get or create a mutex for this URL to prevent concurrent starts
 	mutexInterface, _ := startupMutex.LoadOrStore(config.URL, &sync.Mutex{})
 	mutex := mutexInterface.(*sync.Mutex)
@@ -938,7 +956,7 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 	ffmpegProcesses.Store(config.URL, placeholder)
 	mutex.Unlock()
 
-	manager := newLifecycleManager(config, restartChan, audioLevelChan)
+	manager := newLifecycleManager(config, restartChan, unifiedAudioChan)
 
 	for {
 		// Check if stream is configured before starting
@@ -1004,10 +1022,20 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 }
 
 // CaptureAudioRTSP is the main function for capturing audio from an RTSP stream
-func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
 	// Register the channels for this stream
-	RegisterStreamChannels(url, restartChan, audioLevelChan)
+	RegisterStreamChannels(url, restartChan, unifiedAudioChan)
 	defer UnregisterStreamChannels(url)
+
+	// Initialize sound level processor for this RTSP source if enabled
+	settings := conf.Setting()
+	displayName := conf.SanitizeRTSPUrl(url)
+	if settings.Realtime.Audio.SoundLevel.Enabled {
+		if err := RegisterSoundLevelProcessor(url, displayName); err != nil {
+			log.Printf("❌ Error initializing sound level processor for RTSP source %s: %v", url, err)
+		}
+		defer UnregisterSoundLevelProcessor(url)
+	}
 
 	// Return with error if FFmpeg path is not set
 	if conf.GetFfmpegBinaryName() == "" {
@@ -1044,7 +1072,7 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	}()
 
 	// Manage the FFmpeg lifecycle
-	err := manageFfmpegLifecycle(ctx, config, restartChan, audioLevelChan)
+	err := manageFfmpegLifecycle(ctx, config, restartChan, unifiedAudioChan)
 	// If an error occurred and it's not due to context cancellation, log it and report to user
 	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Printf("⚠️ FFmpeg lifecycle manager for RTSP source %s exited with error: %v", url, err)

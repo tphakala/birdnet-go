@@ -26,6 +26,7 @@ type Metrics struct {
 	SunCalc       *metrics.SunCalcMetrics
 	Datastore     *metrics.DatastoreMetrics
 	MyAudio       *metrics.MyAudioMetrics
+	SoundLevel    *metrics.SoundLevelMetrics
 	HTTP          *metrics.HTTPMetrics
 }
 
@@ -74,6 +75,11 @@ func NewMetrics() (*Metrics, error) {
 		return nil, fmt.Errorf("failed to create MyAudio metrics: %w", err)
 	}
 
+	soundLevelMetrics, err := metrics.NewSoundLevelMetrics(registry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create SoundLevel metrics: %w", err)
+	}
+
 	httpMetrics, err := metrics.NewHTTPMetrics(registry)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP metrics: %w", err)
@@ -89,6 +95,7 @@ func NewMetrics() (*Metrics, error) {
 		SunCalc:       sunCalcMetrics,
 		Datastore:     datastoreMetrics,
 		MyAudio:       myAudioMetrics,
+		SoundLevel:    soundLevelMetrics,
 		HTTP:          httpMetrics,
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"strings"
@@ -48,7 +49,7 @@ type TestableRestartLogic struct {
 }
 
 // ManageLifecycle is a testable version of manageFfmpegLifecycle
-func (t *TestableRestartLogic) ManageLifecycle(ctx context.Context, config FFmpegConfig, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
+func (t *TestableRestartLogic) ManageLifecycle(ctx context.Context, config FFmpegConfig, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) error {
 	if t.shouldFailStart {
 		return errors.New("failed to start FFmpeg process (simulated)")
 	}
@@ -421,7 +422,7 @@ func TestFfmpegLifecyclePattern(t *testing.T) {
 		ctx context.Context,
 		config FFmpegConfig,
 		restartChan chan struct{},
-		audioLevelChan chan AudioLevelData,
+		unifiedAudioChan chan UnifiedAudioData,
 		// Injected dependencies
 		settingsProvider func() *conf.Settings,
 		processMap interface {
@@ -470,10 +471,10 @@ func TestFfmpegLifecyclePattern(t *testing.T) {
 	config := FFmpegConfig{URL: "rtsp://example.com/stream", Transport: "tcp"}
 	ctx := context.Background()
 	restartChan := make(chan struct{}, 1)
-	audioLevelChan := make(chan AudioLevelData, 1)
+	unifiedAudioChan := make(chan UnifiedAudioData, 1)
 
 	// Test the function
-	err := testableManageLifecycle(ctx, config, restartChan, audioLevelChan, settingsProvider, processMap)
+	err := testableManageLifecycle(ctx, config, restartChan, unifiedAudioChan, settingsProvider, processMap)
 
 	// In this simplified example, the function should return nil
 	// because the stream is configured, but no actual FFmpeg process starts
@@ -940,10 +941,13 @@ func TestRestartTrackerMemoryLeak(t *testing.T) {
 
 // TestAudioLevelChannelRace tests race conditions in audio level channel clearing
 func TestAudioLevelChannelRace(t *testing.T) {
-	audioLevelChan := make(chan AudioLevelData, 1)
+	unifiedAudioChan := make(chan UnifiedAudioData, 1)
 
 	// Fill the channel
-	audioLevelChan <- AudioLevelData{Level: 50, Source: "test", Name: "test"}
+	unifiedAudioChan <- UnifiedAudioData{
+		AudioLevel: AudioLevelData{Level: 50, Source: "test", Name: "test"},
+		Timestamp:  time.Now(),
+	}
 
 	// Test concurrent channel operations
 	var wg sync.WaitGroup
@@ -953,18 +957,21 @@ func TestAudioLevelChannelRace(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		newData := AudioLevelData{Level: 80, Source: "test", Name: "test"}
+		newData := UnifiedAudioData{
+			AudioLevel: AudioLevelData{Level: 80, Source: "test", Name: "test"},
+			Timestamp:  time.Now(),
+		}
 
 		select {
-		case audioLevelChan <- newData:
+		case unifiedAudioChan <- newData:
 			t.Log("Successfully sent data")
 		default:
 			t.Log("Channel full, attempting to clear")
 			// This is the problematic logic from the code
-			for len(audioLevelChan) > 0 {
-				<-audioLevelChan
+			for len(unifiedAudioChan) > 0 {
+				<-unifiedAudioChan
 			}
-			audioLevelChan <- newData
+			unifiedAudioChan <- newData
 			t.Log("Data sent after clearing")
 		}
 	}()
@@ -975,7 +982,7 @@ func TestAudioLevelChannelRace(t *testing.T) {
 		defer wg.Done()
 
 		select {
-		case data := <-audioLevelChan:
+		case data := <-unifiedAudioChan:
 			t.Logf("Received data: %+v", data)
 		case <-time.After(10 * time.Millisecond):
 			t.Log("Timeout waiting for data")
@@ -1416,7 +1423,7 @@ func TestConcurrentProcessMapOperations(t *testing.T) {
 
 // mockProcessAudioDataForChannelTest simulates processAudioData but focuses only on audio level channel operations
 // This avoids buffer write errors that would clutter test output
-func mockProcessAudioDataForChannelTest(url string, data []byte, audioLevelChan chan AudioLevelData) error {
+func mockProcessAudioDataForChannelTest(url string, data []byte, unifiedAudioChan chan UnifiedAudioData) error {
 	// Skip buffer writes (which would fail in test environment) and focus on channel operations
 
 	// Broadcast audio data to WebSocket clients (this is a no-op in test environment)
@@ -1424,12 +1431,156 @@ func mockProcessAudioDataForChannelTest(url string, data []byte, audioLevelChan 
 
 	// Calculate and send audio level - this is the main focus of the test
 	audioLevelData := calculateAudioLevel(data, url, "")
+
+	// Create unified audio data structure
+	unifiedData := UnifiedAudioData{
+		AudioLevel: audioLevelData,
+		Timestamp:  time.Now(),
+	}
+
 	select {
-	case audioLevelChan <- audioLevelData:
+	case unifiedAudioChan <- unifiedData:
 		// Successfully sent data
 	default:
 		// Channel is full, drop the data to avoid blocking audio processing
-		// Audio level data is not critical and can be dropped
+		// Audio data is not critical and can be dropped for testing
+	}
+
+	return nil
+}
+
+// TestSoundLevelDataPath tests that sound level data is properly included in UnifiedAudioData
+func TestSoundLevelDataPath(t *testing.T) {
+	// Register sound level processor for test
+	testSource := "test_rtsp_stream"
+	testName := "Test Camera"
+	err := RegisterSoundLevelProcessor(testSource, testName)
+	assert.NoError(t, err, "Failed to register sound level processor")
+	defer UnregisterSoundLevelProcessor(testSource)
+
+	// Create a channel to receive unified audio data
+	unifiedAudioChan := make(chan UnifiedAudioData, 10)
+
+	// Create test audio data that will produce sound level measurements
+	// Use a 10-second buffer to ensure we get a complete sound level measurement
+	sampleRate := 48000
+	duration := 11                     // 11 seconds to ensure we complete a 10-second window
+	samplesPerSecond := sampleRate * 2 // 16-bit samples
+	totalSamples := samplesPerSecond * duration
+
+	// Generate test audio data with a 1kHz tone
+	testData := make([]byte, totalSamples)
+	frequency := 1000.0 // 1kHz tone
+	amplitude := 0.5
+
+	for i := 0; i < totalSamples/2; i++ {
+		// Generate sine wave
+		t := float64(i) / float64(sampleRate)
+		sample := int16(amplitude * 32767 * math.Sin(2*math.Pi*frequency*t))
+
+		// Write as little-endian 16-bit
+		testData[i*2] = byte(sample & 0xFF)
+		testData[i*2+1] = byte((sample >> 8) & 0xFF)
+	}
+
+	// Process audio data in chunks to simulate real streaming
+	chunkSize := samplesPerSecond // 1 second chunks
+	soundLevelReceived := false
+
+	// Start a goroutine to receive data
+	done := make(chan bool)
+	go func() {
+		timeout := time.After(15 * time.Second)
+		for {
+			select {
+			case unifiedData := <-unifiedAudioChan:
+				// Verify we have audio level data
+				assert.NotNil(t, unifiedData.AudioLevel)
+				assert.Equal(t, testSource, unifiedData.AudioLevel.Source)
+
+				// Check if we received sound level data
+				if unifiedData.SoundLevel != nil {
+					soundLevelReceived = true
+
+					// Verify sound level data
+					assert.Equal(t, testSource, unifiedData.SoundLevel.Source)
+					assert.Equal(t, testName, unifiedData.SoundLevel.Name)
+					assert.Equal(t, 10, unifiedData.SoundLevel.Duration)
+					assert.NotEmpty(t, unifiedData.SoundLevel.OctaveBands)
+
+					// Verify we have measurements for the 1kHz band
+					found1kHz := false
+					for bandKey, bandData := range unifiedData.SoundLevel.OctaveBands {
+						if !strings.Contains(bandKey, "1.0_kHz") && !strings.Contains(bandKey, "1000") {
+							continue
+						}
+						found1kHz = true
+						// The 1kHz tone should produce significant levels in this band
+						assert.True(t, bandData.Mean > -40, "Expected significant level for 1kHz tone, got %f dB", bandData.Mean)
+						assert.True(t, bandData.Max >= bandData.Mean, "Max should be >= mean")
+						assert.True(t, bandData.Min <= bandData.Mean, "Min should be <= mean")
+						break
+					}
+					assert.True(t, found1kHz, "Expected to find 1kHz band in octave band data")
+
+					done <- true
+					return
+				}
+			case <-timeout:
+				t.Error("Timeout waiting for sound level data")
+				done <- false
+				return
+			}
+		}
+	}()
+
+	// Process audio data in chunks
+	for i := 0; i < duration; i++ {
+		start := i * chunkSize
+		end := start + chunkSize
+		if end > len(testData) {
+			end = len(testData)
+		}
+
+		chunk := testData[start:end]
+
+		// Process through the mock function
+		err := mockProcessAudioDataWithSoundLevel(testSource, chunk, unifiedAudioChan)
+		assert.NoError(t, err)
+
+		// Small delay to simulate real-time processing
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Wait for sound level data to be received
+	success := <-done
+	assert.True(t, success, "Failed to receive sound level data")
+	assert.True(t, soundLevelReceived, "Sound level data was not included in UnifiedAudioData")
+}
+
+// mockProcessAudioDataWithSoundLevel is an enhanced version that includes sound level processing
+func mockProcessAudioDataWithSoundLevel(url string, data []byte, unifiedAudioChan chan UnifiedAudioData) error {
+	// Calculate audio level
+	audioLevelData := calculateAudioLevel(data, url, "")
+
+	// Process sound level data
+	var soundLevelData *SoundLevelData
+	if soundLevel, err := ProcessSoundLevelData(url, data); err == nil && soundLevel != nil {
+		soundLevelData = soundLevel
+	}
+
+	// Create unified audio data structure
+	unifiedData := UnifiedAudioData{
+		AudioLevel: audioLevelData,
+		SoundLevel: soundLevelData,
+		Timestamp:  time.Now(),
+	}
+
+	select {
+	case unifiedAudioChan <- unifiedData:
+		// Successfully sent data
+	default:
+		// Channel is full, drop the data to avoid blocking
 	}
 
 	return nil
@@ -1437,7 +1588,7 @@ func mockProcessAudioDataForChannelTest(url string, data []byte, audioLevelChan 
 
 func TestAudioLevelChannelRaceConditions(t *testing.T) {
 	// Test concurrent audio level channel operations
-	audioLevelChan := make(chan AudioLevelData, 1) // Small buffer to test clearing logic
+	unifiedAudioChan := make(chan UnifiedAudioData, 1) // Small buffer to test clearing logic
 
 	url := "rtsp://audio-test.com/stream"
 	data := make([]byte, 1024)
@@ -1449,7 +1600,7 @@ func TestAudioLevelChannelRaceConditions(t *testing.T) {
 	go func() {
 		for {
 			select {
-			case <-audioLevelChan:
+			case <-unifiedAudioChan:
 				// Consume audio level data
 			case <-time.After(2 * time.Second):
 				// Timeout to prevent goroutine leak
@@ -1471,7 +1622,7 @@ func TestAudioLevelChannelRaceConditions(t *testing.T) {
 
 			// Use mock function that focuses only on channel operations without buffer errors
 			for j := 0; j < 10; j++ {
-				err := mockProcessAudioDataForChannelTest(url, data, audioLevelChan)
+				err := mockProcessAudioDataForChannelTest(url, data, unifiedAudioChan)
 				if err != nil {
 					t.Errorf("Unexpected error from mockProcessAudioDataForChannelTest: %v", err)
 				}
@@ -1571,7 +1722,7 @@ func TestLifecycleManager_WaitWithInterrupts(t *testing.T) {
 	manager := newLifecycleManager(
 		FFmpegConfig{URL: "rtsp://test.com"},
 		make(chan struct{}, 1),
-		make(chan AudioLevelData),
+		make(chan UnifiedAudioData),
 	)
 
 	tests := []struct {
@@ -1643,7 +1794,7 @@ func TestLifecycleManager_CleanupProcessFromMap(t *testing.T) {
 	manager := newLifecycleManager(
 		FFmpegConfig{URL: url},
 		make(chan struct{}),
-		make(chan AudioLevelData),
+		make(chan UnifiedAudioData),
 	)
 
 	manager.cleanupProcessFromMap()
@@ -1657,7 +1808,7 @@ func TestLifecycleManager_StartProcessWithRetry_StreamNotConfigured(t *testing.T
 	manager := newLifecycleManager(
 		FFmpegConfig{URL: "rtsp://not-configured.com"},
 		make(chan struct{}),
-		make(chan AudioLevelData),
+		make(chan UnifiedAudioData),
 	)
 
 	// Test the actual startProcessWithRetry method with a stream that's not configured
@@ -1717,7 +1868,7 @@ func TestLifecycleManager_HandleRestartDelay(t *testing.T) {
 			manager := newLifecycleManager(
 				FFmpegConfig{URL: "rtsp://test-delay.com"},
 				make(chan struct{}),
-				make(chan AudioLevelData),
+				make(chan UnifiedAudioData),
 			)
 
 			// Create a mock process with restart tracker
@@ -1750,14 +1901,14 @@ func TestLifecycleManager_HandleRestartDelay(t *testing.T) {
 func TestNewLifecycleManager(t *testing.T) {
 	config := FFmpegConfig{URL: "rtsp://test.com", Transport: "tcp"}
 	restartChan := make(chan struct{})
-	audioLevelChan := make(chan AudioLevelData)
+	unifiedAudioChan := make(chan UnifiedAudioData)
 
-	manager := newLifecycleManager(config, restartChan, audioLevelChan)
+	manager := newLifecycleManager(config, restartChan, unifiedAudioChan)
 
 	assert.NotNil(t, manager)
 	assert.Equal(t, config, manager.config)
 	assert.Equal(t, restartChan, manager.restartChan)
-	assert.Equal(t, audioLevelChan, manager.audioLevelChan)
+	assert.Equal(t, unifiedAudioChan, manager.unifiedAudioChan)
 	assert.NotNil(t, manager.backoff)
 
 	// Test that backoff is configured for unlimited retries
@@ -1772,7 +1923,7 @@ func TestLifecycleManager_ConcurrentOperations(t *testing.T) {
 	manager := newLifecycleManager(
 		FFmpegConfig{URL: "rtsp://concurrent.com"},
 		make(chan struct{}, 10),
-		make(chan AudioLevelData, 10),
+		make(chan UnifiedAudioData, 10),
 	)
 
 	var wg sync.WaitGroup
@@ -1822,9 +1973,9 @@ func TestManageFfmpegLifecycle_StreamNotConfigured(t *testing.T) {
 	ctx := context.Background()
 	config := FFmpegConfig{URL: "rtsp://not-configured.com"}
 	restartChan := make(chan struct{})
-	audioLevelChan := make(chan AudioLevelData)
+	unifiedAudioChan := make(chan UnifiedAudioData)
 
-	err := manageFfmpegLifecycle(ctx, config, restartChan, audioLevelChan)
+	err := manageFfmpegLifecycle(ctx, config, restartChan, unifiedAudioChan)
 
 	// Should return nil (no error) when stream is not configured
 	assert.NoError(t, err)
@@ -1834,12 +1985,12 @@ func TestManageFfmpegLifecycle_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	config := FFmpegConfig{URL: "rtsp://test-cancel.com"}
 	restartChan := make(chan struct{})
-	audioLevelChan := make(chan AudioLevelData)
+	unifiedAudioChan := make(chan UnifiedAudioData)
 
 	// Start lifecycle management in goroutine
 	errChan := make(chan error, 1)
 	go func() {
-		errChan <- manageFfmpegLifecycle(ctx, config, restartChan, audioLevelChan)
+		errChan <- manageFfmpegLifecycle(ctx, config, restartChan, unifiedAudioChan)
 	}()
 
 	// Cancel context after a short delay

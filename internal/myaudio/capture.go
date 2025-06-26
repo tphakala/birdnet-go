@@ -108,6 +108,18 @@ type AudioLevelData struct {
 	Name     string `json:"name"`     // Human-readable name of the source
 }
 
+// UnifiedAudioData holds both audio level and sound level data
+type UnifiedAudioData struct {
+	// Basic audio level information (always present)
+	AudioLevel AudioLevelData `json:"audio_level"`
+
+	// Sound level data (present only when 10-second window is complete)
+	SoundLevel *SoundLevelData `json:"sound_level,omitempty"`
+
+	// Metadata
+	Timestamp time.Time `json:"timestamp"`
+}
+
 // activeStreams keeps track of currently active RTSP streams
 var activeStreams sync.Map
 
@@ -165,7 +177,7 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 }
 
 // ReconfigureRTSPStreams handles dynamic reconfiguration of RTSP streams
-func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
 	// If there are no RTSP URLs configured and FFmpeg monitor is running, stop it
 	if len(settings.Realtime.RTSP.URLs) == 0 {
 		if ffmpegMonitor != nil {
@@ -267,7 +279,7 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 
 		// New stream, start it
 		activeStreams.Store(url, true)
-		go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, audioLevelChan)
+		go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, unifiedAudioChan)
 	}
 }
 
@@ -308,7 +320,7 @@ func initializeBuffersForSource(sourceID string) error {
 	return nil
 }
 
-func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
 	// If no RTSP URLs and no audio device configured, return early
 	if len(settings.Realtime.RTSP.URLs) == 0 && settings.Realtime.Audio.Source == "" {
 		return
@@ -323,7 +335,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 			}
 
 			activeStreams.Store(url, true)
-			go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, audioLevelChan)
+			go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, unifiedAudioChan)
 		}
 	}
 
@@ -348,7 +360,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 		}
 
 		// Device audio capture
-		go captureAudioMalgo(settings, selectedSource, wg, quitChan, restartChan, audioLevelChan)
+		go captureAudioMalgo(settings, selectedSource, wg, quitChan, restartChan, unifiedAudioChan)
 	}
 }
 
@@ -558,7 +570,7 @@ func processAudioFrame(
 	convertBuffer []byte, // Can be nil, used if provided
 	settings *conf.Settings,
 	source captureSource,
-	audioLevelChan chan AudioLevelData,
+	unifiedAudioChan chan UnifiedAudioData,
 ) (finalBufferPtr *[]byte, fromPool bool, err error) { // Updated return signature
 
 	processedSamples := pSamples             // Start with original samples
@@ -647,19 +659,35 @@ func processAudioFrame(
 	// Calculate audio level (use the safe bufferToUse)
 	audioLevelData := calculateAudioLevel(bufferToUse, "malgo", source.Name)
 
-	// Send level to channel (non-blocking)
+	// Create unified audio data structure
+	unifiedData := UnifiedAudioData{
+		AudioLevel: audioLevelData,
+		Timestamp:  time.Now(),
+	}
+
+	// Process sound level data if enabled (use the safe bufferToUse) - this may be nil if 10-second window isn't complete
+	if conf.Setting().Realtime.Audio.SoundLevel.Enabled {
+		if soundLevelData, err := ProcessSoundLevelData("malgo", bufferToUse); err != nil {
+			log.Printf("❌ Error processing sound level data: %v", err)
+		} else if soundLevelData != nil {
+			// Attach sound level data when available
+			unifiedData.SoundLevel = soundLevelData
+		}
+	}
+
+	// Send unified data to channel (non-blocking)
 	select {
-	case audioLevelChan <- audioLevelData:
+	case unifiedAudioChan <- unifiedData:
 		// Data sent successfully
 	default:
 		// Channel is full, clear the channel and try again
-		for len(audioLevelChan) > 0 {
-			<-audioLevelChan
+		for len(unifiedAudioChan) > 0 {
+			<-unifiedAudioChan
 		}
 		select {
-		case audioLevelChan <- audioLevelData:
+		case unifiedAudioChan <- unifiedData:
 		default:
-			log.Printf("⚠️ Audio level channel full even after clearing for source %s", source.Name)
+			log.Printf("⚠️ Unified audio channel full even after clearing for source %s", source.Name)
 		}
 	}
 
@@ -703,9 +731,12 @@ func handleDeviceStop(captureDevice *malgo.Device, quitChan, restartChan chan st
 	}
 }
 
-func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
 	wg.Add(1)
 	defer wg.Done()
+
+	// Clean up sound level processor when function exits
+	defer UnregisterSoundLevelProcessor("malgo")
 
 	if settings.Debug {
 		fmt.Println("Initializing context")
@@ -744,6 +775,13 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 		log.Printf("❌ Error initializing filter chain: %v", err)
 	}
 
+	// Initialize sound level processor for this source if enabled
+	if settings.Realtime.Audio.SoundLevel.Enabled {
+		if err := RegisterSoundLevelProcessor("malgo", source.Name); err != nil {
+			log.Printf("❌ Error initializing sound level processor: %v", err)
+		}
+	}
+
 	var captureDevice *malgo.Device
 	var formatType malgo.FormatType // Declare formatType here
 	var scratchBuffer []byte        // Dedicated buffer for conversion destination
@@ -753,7 +791,7 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 		// processAudioFrame now handles pooling internally and returns buffer info
 		// Pass scratchBuffer as the potential destination for conversion
 		finalBufferPtr, fromPool, err := processAudioFrame(
-			pSamples, formatType, scratchBuffer, settings, source, audioLevelChan,
+			pSamples, formatType, scratchBuffer, settings, source, unifiedAudioChan,
 		)
 		if err != nil {
 			// Error already logged in processAudioFrame

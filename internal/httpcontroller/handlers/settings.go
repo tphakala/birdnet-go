@@ -130,6 +130,15 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		})
 	}
 
+	// Check if sound level settings have changed
+	if soundLevelSettingsChanged(&oldSettings, settings) {
+		h.SSE.SendNotification(Notification{
+			Message: "Reconfiguring sound level monitoring...",
+			Type:    "info",
+		})
+		h.controlChan <- "reconfigure_sound_level"
+	}
+
 	// Check the authentication settings and update if needed
 	h.updateAuthenticationSettings(settings)
 
@@ -746,6 +755,22 @@ func birdWeatherSettingsChanged(oldSettings, currentSettings *conf.Settings) boo
 
 	// Check for debug mode changes
 	if oldSettings.Realtime.Birdweather.Debug != currentSettings.Realtime.Birdweather.Debug {
+		return true
+	}
+
+	return false
+}
+
+// soundLevelSettingsChanged checks if sound level monitoring settings have changed
+func soundLevelSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Check for changes in enabled state
+	if oldSettings.Realtime.Audio.SoundLevel.Enabled != currentSettings.Realtime.Audio.SoundLevel.Enabled {
+		return true
+	}
+
+	// Check for changes in interval (only if enabled)
+	if currentSettings.Realtime.Audio.SoundLevel.Enabled &&
+		oldSettings.Realtime.Audio.SoundLevel.Interval != currentSettings.Realtime.Audio.SoundLevel.Interval {
 		return true
 	}
 

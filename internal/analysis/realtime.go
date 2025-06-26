@@ -1,7 +1,8 @@
 package analysis
 
 import (
-	"errors"
+	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
@@ -15,20 +16,69 @@ import (
 
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	"github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/weather"
+	"golang.org/x/time/rate"
 )
 
 // audioLevelChan is a channel to send audio level updates
 var audioLevelChan = make(chan myaudio.AudioLevelData, 100)
+
+// soundLevelChan is a channel to send sound level updates
+var soundLevelChan = make(chan myaudio.SoundLevelData, 100)
+
+// AudioDemuxManager manages the lifecycle of audio demultiplexing goroutines
+type AudioDemuxManager struct {
+	doneChan chan struct{}
+	mutex    sync.Mutex
+	wg       sync.WaitGroup
+}
+
+// NewAudioDemuxManager creates a new AudioDemuxManager
+func NewAudioDemuxManager() *AudioDemuxManager {
+	return &AudioDemuxManager{}
+}
+
+// Stop signals the current demux goroutine to stop and waits for it to exit
+func (m *AudioDemuxManager) Stop() {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.doneChan != nil {
+		close(m.doneChan)
+		m.wg.Wait() // Wait for goroutine to exit
+		m.doneChan = nil
+	}
+}
+
+// Start creates a new done channel and increments the wait group
+func (m *AudioDemuxManager) Start() chan struct{} {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	m.doneChan = make(chan struct{})
+	m.wg.Add(1)
+	return m.doneChan
+}
+
+// Done should be called when the goroutine exits
+func (m *AudioDemuxManager) Done() {
+	m.wg.Done()
+}
+
+// Global audio demux manager instance
+var audioDemuxManager = NewAudioDemuxManager()
 
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
@@ -94,8 +144,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// quitChannel is used to signal the goroutines to stop.
 	quitChan := make(chan struct{})
 
-	// Initialize audioLevelChan, used to visualize audio levels on web ui
-	audioLevelChan = make(chan myaudio.AudioLevelData, 100)
+	// audioLevelChan and soundLevelChan are already initialized as global variables at package level
 
 	// Prepare sources list
 	var sources []string
@@ -159,7 +208,27 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	}
 
 	// start audio capture
-	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan)
+	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
+
+	// start sound level publishers only if sound level monitoring is enabled
+	if settings.Realtime.Audio.SoundLevel.Enabled {
+		// start sound level MQTT publisher if MQTT is enabled
+		if settings.Realtime.MQTT.Enabled {
+			startSoundLevelMQTTPublisher(&wg, quitChan, proc)
+		}
+
+		// start sound level SSE publisher
+		if httpServer.APIV2 != nil {
+			startSoundLevelSSEPublisher(&wg, quitChan, httpServer.APIV2)
+		}
+
+		// start sound level metrics publisher
+		startSoundLevelMetricsPublisher(&wg, quitChan, metrics)
+
+		log.Println("🔊 Sound level monitoring enabled")
+	} else {
+		log.Println("🔇 Sound level monitoring disabled")
+	}
 
 	// Start RTSP health watchdog if we have RTSP streams
 	if len(settings.Realtime.RTSP.URLs) > 0 {
@@ -181,7 +250,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	startTelemetryEndpoint(&wg, settings, metrics, quitChan)
 
 	// start control monitor for hot reloads
-	startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc)
+	startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, httpServer)
 
 	// start quit signal monitor
 	monitorCtrlC(quitChan)
@@ -221,15 +290,68 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		case <-restartChan:
 			// Handle the restart signal.
 			fmt.Println("🔄 Restarting audio capture")
-			startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan)
+			startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
 		}
 	}
 }
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
-func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData) {
+func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData) {
+	// Stop previous demultiplexing goroutine if it exists
+	audioDemuxManager.Stop()
+
+	// Start new demux goroutine
+	doneChan := audioDemuxManager.Start()
+
+	// Create a unified audio channel
+	unifiedAudioChan := make(chan myaudio.UnifiedAudioData, 100)
+	go func() {
+		defer audioDemuxManager.Done()
+
+		// Convert unified audio data back to separate channels for existing handlers
+		for {
+			select {
+			case <-doneChan:
+				// Exit when signaled
+				return
+			case <-quitChan:
+				// Exit when quit signal received
+				return
+			case unifiedData, ok := <-unifiedAudioChan:
+				if !ok {
+					// Channel closed, exit
+					return
+				}
+
+				// Send audio level data to existing audio level channel with safety check
+				select {
+				case <-doneChan:
+					return
+				case <-quitChan:
+					return
+				case audioLevelChan <- unifiedData.AudioLevel:
+				default:
+					// Channel full, drop data
+				}
+
+				// Send sound level data to existing sound level channel if present
+				if unifiedData.SoundLevel != nil {
+					select {
+					case <-doneChan:
+						return
+					case <-quitChan:
+						return
+					case soundLevelChan <- *unifiedData.SoundLevel:
+					default:
+						// Channel full, drop data
+					}
+				}
+			}
+		}
+	}()
+
 	// waitgroup is managed within CaptureAudio
-	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, audioLevelChan)
+	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
 }
 
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
@@ -392,15 +514,23 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 	if _, ok := registry.GetCache("wikimedia"); !ok {
 		wikiCache, err := imageprovider.CreateDefaultCache(metrics, ds)
 		if err != nil {
-			errMsg := fmt.Sprintf("Failed to create WikiMedia image cache: %v", err)
-			log.Println(errMsg)
-			errs = append(errs, errors.New(errMsg))
+			log.Printf("Failed to create WikiMedia image cache: %v", err)
+			errs = append(errs, errors.New(err).
+				Component("realtime-analysis").
+				Category(errors.CategoryImageProvider).
+				Context("operation", "create_wikimedia_cache").
+				Context("provider", "wikimedia").
+				Build())
 			// Continue even if one provider fails
 		} else {
 			if err := registry.Register("wikimedia", wikiCache); err != nil {
-				errMsg := fmt.Sprintf("Failed to register WikiMedia image provider: %v", err)
-				log.Println(errMsg)
-				errs = append(errs, errors.New(errMsg))
+				log.Printf("Failed to register WikiMedia image provider: %v", err)
+				errs = append(errs, errors.New(err).
+					Component("realtime-analysis").
+					Category(errors.CategoryImageProvider).
+					Context("operation", "register_wikimedia_provider").
+					Context("provider", "wikimedia").
+					Build())
 			} else {
 				log.Println("Registered WikiMedia image provider")
 			}
@@ -429,9 +559,13 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 		}
 
 		if err := imageprovider.RegisterAviCommonsProvider(registry, httpcontroller.ImageDataFs, metrics, ds); err != nil {
-			errMsg := fmt.Sprintf("Failed to register AviCommons provider: %v", err)
-			log.Println(errMsg)
-			errs = append(errs, errors.New(errMsg))
+			log.Printf("Failed to register AviCommons provider: %v", err)
+			errs = append(errs, errors.New(err).
+				Component("realtime-analysis").
+				Category(errors.CategoryImageProvider).
+				Context("operation", "register_avicommons_provider").
+				Context("provider", "avicommons").
+				Build())
 			// Check if we can read the data file for debugging
 			if _, errRead := fs.ReadFile(httpcontroller.ImageDataFs, "internal/imageprovider/data/latest.json"); errRead != nil {
 				log.Printf("Error reading AviCommons data file: %v", errRead)
@@ -638,8 +772,9 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) 
 }
 
 // startControlMonitor handles various control signals for realtime analysis mode
-func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor) {
-	monitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc)
+func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, httpServer *httpcontroller.Server) {
+	monitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, audioLevelChan, soundLevelChan)
+	monitor.httpServer = httpServer
 	monitor.Start()
 }
 
@@ -711,4 +846,271 @@ func cleanupHLSStreamingFiles() error {
 	}
 
 	return nil
+}
+
+// startSoundLevelMQTTPublisher starts a goroutine to consume sound level data and publish to MQTT
+func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan chan struct{}, proc *processor.Processor) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		for {
+			select {
+			case <-quitChan:
+				return
+			case soundData := <-soundLevelChan:
+				// Publish sound level data to MQTT
+				if err := publishSoundLevelToMQTT(soundData, proc); err != nil {
+					log.Printf("❌ Error publishing sound level data to MQTT: %v", err)
+				}
+			}
+		}
+	}()
+}
+
+// publishSoundLevelToMQTT publishes sound level data to MQTT
+func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.Processor) error {
+	// Get current settings to determine MQTT topic
+	settings := conf.Setting()
+	if !settings.Realtime.MQTT.Enabled {
+		return nil // MQTT not enabled, skip
+	}
+
+	// Create MQTT topic for sound level data
+	topic := fmt.Sprintf("%s/soundlevel", strings.TrimSuffix(settings.Realtime.MQTT.Topic, "/"))
+
+	// Marshal sound level data to JSON
+	jsonData, err := json.Marshal(soundData)
+	if err != nil {
+		// Record error metric
+		if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
+			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "mqtt", "marshal_error")
+		}
+		return errors.New(err).
+			Component("realtime-analysis").
+			Category(errors.CategoryNetwork).
+			Context("operation", "marshal_sound_level_data").
+			Context("source", soundData.Source).
+			Build()
+	}
+
+	// Publish to MQTT
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := proc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
+		// Record error metric
+		if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
+			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "mqtt", "publish_error")
+			proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "mqtt", "error")
+		}
+		return errors.New(err).
+			Component("realtime-analysis").
+			Category(errors.CategoryNetwork).
+			Context("operation", "publish_sound_level_mqtt").
+			Context("topic", topic).
+			Context("source", soundData.Source).
+			Build()
+	}
+
+	// Record success metric
+	if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
+		proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "mqtt", "success")
+	}
+
+	log.Printf("📡 Published sound level data to MQTT topic: %s (source: %s, bands: %d)",
+		topic, soundData.Source, len(soundData.OctaveBands))
+
+	return nil
+}
+
+// startSoundLevelPublishers starts all sound level publishers with the given done channel
+func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc *processor.Processor, soundLevelChan chan myaudio.SoundLevelData, httpServer *httpcontroller.Server) {
+	settings := conf.Setting()
+
+	// Create a merged quit channel that responds to both the done channel and global quit
+	mergedQuitChan := make(chan struct{})
+	go func() {
+		<-doneChan
+		close(mergedQuitChan)
+	}()
+
+	// Start MQTT publisher if enabled
+	if settings.Realtime.MQTT.Enabled {
+		startSoundLevelMQTTPublisherWithDone(wg, mergedQuitChan, proc, soundLevelChan)
+	}
+
+	// Start SSE publisher if API is available
+	if httpServer != nil && httpServer.APIV2 != nil {
+		startSoundLevelSSEPublisherWithDone(wg, mergedQuitChan, httpServer.APIV2, soundLevelChan)
+	}
+
+	// Start metrics publisher
+	if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
+		startSoundLevelMetricsPublisherWithDone(wg, mergedQuitChan, proc.Metrics, soundLevelChan)
+	}
+}
+
+// startSoundLevelMQTTPublisherWithDone starts MQTT publisher with a custom done channel
+func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, proc *processor.Processor, soundLevelChan chan myaudio.SoundLevelData) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		log.Println("📡 Started sound level MQTT publisher")
+
+		for {
+			select {
+			case <-doneChan:
+				log.Println("🔌 Stopping sound level MQTT publisher")
+				return
+			case soundData := <-soundLevelChan:
+				if err := publishSoundLevelToMQTT(soundData, proc); err != nil {
+					// Log with enhanced error (error already has telemetry context from publishSoundLevelToMQTT)
+					log.Printf("❌ Error publishing sound level data to MQTT: %v", err)
+				}
+			}
+		}
+	}()
+}
+
+// startSoundLevelSSEPublisherWithDone starts SSE publisher with a custom done channel
+func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, apiController *api.Controller, soundLevelChan chan myaudio.SoundLevelData) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		log.Println("📡 Started sound level SSE publisher")
+
+		// Create a rate limiter: 1 log per minute
+		errorLogLimiter := rate.NewLimiter(rate.Every(time.Minute), 1)
+
+		for {
+			select {
+			case <-doneChan:
+				log.Println("🔌 Stopping sound level SSE publisher")
+				return
+			case soundData := <-soundLevelChan:
+				if err := broadcastSoundLevelSSE(apiController, soundData); err != nil {
+					// Only log errors if rate limiter allows
+					if errorLogLimiter.Allow() {
+						log.Printf("⚠️ Error broadcasting sound level data via SSE: %v", err)
+					}
+				}
+			}
+		}
+	}()
+}
+
+// broadcastSoundLevelSSE broadcasts sound level data via SSE with error handling and metrics
+func broadcastSoundLevelSSE(apiController *api.Controller, soundData myaudio.SoundLevelData) error {
+	if err := apiController.BroadcastSoundLevel(&soundData); err != nil {
+		// Record error metric
+		if metrics := getSoundLevelMetricsFromAPI(apiController); metrics != nil {
+			metrics.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "sse", "broadcast_error")
+			metrics.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "error")
+		}
+
+		// Return enhanced error
+		return errors.New(err).
+			Component("realtime-analysis").
+			Category(errors.CategoryNetwork).
+			Context("operation", "broadcast_sound_level_sse").
+			Context("source", soundData.Source).
+			Context("name", soundData.Name).
+			Context("bands_count", len(soundData.OctaveBands)).
+			Build()
+	}
+
+	// Record success metric
+	if metrics := getSoundLevelMetricsFromAPI(apiController); metrics != nil {
+		metrics.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "success")
+	}
+
+	return nil
+}
+
+// getSoundLevelMetricsFromAPI safely retrieves sound level metrics from API controller
+func getSoundLevelMetricsFromAPI(apiController *api.Controller) *metrics.SoundLevelMetrics {
+	if apiController == nil || apiController.Processor == nil ||
+		apiController.Processor.Metrics == nil || apiController.Processor.Metrics.SoundLevel == nil {
+		return nil
+	}
+	return apiController.Processor.Metrics.SoundLevel
+}
+
+// startSoundLevelMetricsPublisherWithDone starts metrics publisher with a custom done channel
+func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, metrics *observability.Metrics, soundLevelChan chan myaudio.SoundLevelData) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		log.Println("📊 Started sound level metrics publisher")
+
+		for {
+			select {
+			case <-doneChan:
+				log.Println("🔌 Stopping sound level metrics publisher")
+				return
+			case soundData := <-soundLevelChan:
+				// Update Prometheus metrics
+				if metrics != nil && metrics.SoundLevel != nil {
+					updateSoundLevelMetrics(soundData, metrics)
+				}
+			}
+		}
+	}()
+}
+
+// registerSoundLevelProcessorsForActiveSources registers sound level processors for all active audio sources
+func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error {
+	var errs []error
+
+	// Register for malgo source if active
+	if settings.Realtime.Audio.Source != "" {
+		if err := myaudio.RegisterSoundLevelProcessor("malgo", settings.Realtime.Audio.Source); err != nil {
+			errs = append(errs, errors.New(err).
+				Component("realtime-analysis").
+				Category(errors.CategorySystem).
+				Context("operation", "register_sound_level_processor").
+				Context("source_type", "malgo").
+				Context("source_name", settings.Realtime.Audio.Source).
+				Build())
+		} else {
+			log.Printf("🔊 Registered sound level processor for audio device: %s", settings.Realtime.Audio.Source)
+		}
+	}
+
+	// Register for each RTSP source
+	for _, url := range settings.Realtime.RTSP.URLs {
+		displayName := conf.SanitizeRTSPUrl(url)
+		if err := myaudio.RegisterSoundLevelProcessor(url, displayName); err != nil {
+			errs = append(errs, errors.New(err).
+				Component("realtime-analysis").
+				Category(errors.CategorySystem).
+				Context("operation", "register_sound_level_processor").
+				Context("source_type", "rtsp").
+				Context("source_url", url).
+				Build())
+		} else {
+			log.Printf("🔊 Registered sound level processor for RTSP source: %s", displayName)
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
+}
+
+// unregisterAllSoundLevelProcessors unregisters all sound level processors
+func unregisterAllSoundLevelProcessors(settings *conf.Settings) {
+	// Unregister malgo source
+	if settings.Realtime.Audio.Source != "" {
+		myaudio.UnregisterSoundLevelProcessor("malgo")
+		log.Printf("🔇 Unregistered sound level processor for audio device: %s", settings.Realtime.Audio.Source)
+	}
+
+	// Unregister all RTSP sources
+	for _, url := range settings.Realtime.RTSP.URLs {
+		myaudio.UnregisterSoundLevelProcessor(url)
+		log.Printf("🔇 Unregistered sound level processor for RTSP source: %s", conf.SanitizeRTSPUrl(url))
+	}
 }
