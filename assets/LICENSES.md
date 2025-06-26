@@ -94,7 +94,7 @@ Source: Apache-2.0
 
 ### github.com/go-chi/chi/v5
 
-License: https://github.com/go-chi/chi/blob/v5.1.0/LICENSE
+License: https://github.com/go-chi/chi/blob/v5.2.2/LICENSE
 Source: MIT
 
 ### github.com/go-echarts/go-echarts/v2
