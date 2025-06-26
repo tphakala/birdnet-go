@@ -245,19 +245,25 @@ func init() {
 
 // detectComponent automatically detects the component based on the call stack
 func detectComponent() string {
-	// Try multiple call stack depths to find a recognizable component
-	for depth := 3; depth <= 6; depth++ {
-		pc, _, _, ok := runtime.Caller(depth)
-		if !ok {
-			continue
-		}
+	// Walk the entire call stack to find the first recognizable component
+	// This is more robust than hardcoded depths as it adapts to different call chains
+	pcs := make([]uintptr, 32)   // Capture up to 32 stack frames
+	n := runtime.Callers(2, pcs) // Skip runtime.Callers and detectComponent
 
+	for i := 0; i < n; i++ {
+		pc := pcs[i]
 		fn := runtime.FuncForPC(pc)
 		if fn == nil {
 			continue
 		}
 
 		funcName := fn.Name()
+
+		// Skip internal error package functions
+		if strings.Contains(funcName, "github.com/tphakala/birdnet-go/internal/errors") {
+			continue
+		}
+
 		if component := lookupComponent(funcName); component != "unknown" {
 			return component
 		}
