@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -186,13 +187,38 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 		Architecture: runtime.GOARCH,
 		GoVersion:    runtime.Version(),
 		CPUCount:     runtime.NumCPU(),
-		DiskInfo:     make(map[string]uint64),
+		DiskInfo:     []DiskInfo{},
 	}
 
 	// Get memory info (simplified, platform-specific implementations would be better)
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 	info.MemoryMB = memStats.Sys / 1024 / 1024
+
+	// Collect disk information
+	partitions, err := disk.Partitions(false)
+	if err == nil {
+		for _, partition := range partitions {
+			usage, err := disk.Usage(partition.Mountpoint)
+			if err != nil {
+				continue
+			}
+
+			// Skip very small filesystems (like /dev, /sys, etc.)
+			if usage.Total < 1024*1024*100 { // Less than 100MB
+				continue
+			}
+
+			diskInfo := DiskInfo{
+				Mountpoint: partition.Mountpoint,
+				Total:      usage.Total,
+				Used:       usage.Used,
+				Free:       usage.Free,
+				UsagePerc:  usage.UsedPercent,
+			}
+			info.DiskInfo = append(info.DiskInfo, diskInfo)
+		}
+	}
 
 	// Check if running in Docker
 	if _, err := os.Stat("/.dockerenv"); err == nil {
@@ -208,17 +234,6 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 						break
 					}
 				}
-			}
-		}
-	}
-
-	// Add Raspberry Pi detection
-	if runtime.GOOS == "linux" && runtime.GOARCH == "arm64" {
-		if content, err := os.ReadFile("/proc/device-tree/model"); err == nil {
-			model := strings.TrimSpace(string(content))
-			if strings.Contains(model, "Raspberry Pi") {
-				info.DiskInfo["raspberry_pi_model"] = 1 // Just to indicate it's a Pi
-				// You could parse the model string for more details
 			}
 		}
 	}
