@@ -160,6 +160,17 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 		}
 	}
 
+	// Add Raspberry Pi detection
+	if runtime.GOOS == "linux" && runtime.GOARCH == "arm64" {
+		if content, err := os.ReadFile("/proc/device-tree/model"); err == nil {
+			model := strings.TrimSpace(string(content))
+			if strings.Contains(model, "Raspberry Pi") {
+				info.DiskInfo["raspberry_pi_model"] = 1 // Just to indicate it's a Pi
+				// You could parse the model string for more details
+			}
+		}
+	}
+
 	return info
 }
 
@@ -186,10 +197,12 @@ func (c *Collector) collectConfig(scrub bool) (map[string]any, error) {
 
 // scrubConfig removes sensitive information from configuration
 func (c *Collector) scrubConfig(config map[string]any) map[string]any {
-	// List of sensitive keys to redact
+	// List of sensitive keys to redact (expanded list)
 	sensitiveKeys := []string{
 		"password", "token", "secret", "key", "api_key", "api_token",
 		"client_id", "client_secret", "webhook_url", "mqtt_password",
+		"id", "apikey", "username", "broker", "topic", "urls",
+		"mqtt_username", "mqtt_topic", "birdweather_id",
 	}
 
 	scrubbed := make(map[string]any)
@@ -326,10 +339,12 @@ func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64) ([]Lo
 	var logs []LogEntry
 	
 	// Look for log files in common locations
+	// The logging package creates logs in a "logs" directory
 	logPaths := []string{
-		filepath.Join(c.dataPath, "logs"),
-		filepath.Join(c.dataPath, "birdnet-go.log"),
-		filepath.Join(c.configPath, "birdnet-go.log"),
+		"logs",                                    // Default logs directory from logging package
+		filepath.Join(c.dataPath, "logs"),        // Legacy location
+		filepath.Join(c.dataPath, "birdnet.log"), // Legacy location
+		filepath.Join(c.configPath, "logs"),      // Config directory logs
 	}
 
 	cutoffTime := time.Now().Add(-duration)

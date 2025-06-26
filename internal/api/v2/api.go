@@ -357,6 +357,7 @@ func (c *Controller) initRoutes() {
 		{"media routes", c.initMediaRoutes},
 		{"range routes", c.initRangeRoutes},
 		{"sse routes", c.initSSERoutes},
+		{"support routes", c.initSupportRoutes},
 	}
 
 	for _, initializer := range routeInitializers {
