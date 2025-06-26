@@ -7,12 +7,12 @@
 package suncalc
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/sj14/astral/pkg/astral"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // SunEventTimes holds the calculated sun event times in local time
@@ -79,25 +79,41 @@ func (sc *SunCalc) calculateSunEventTimes(date time.Time) (SunEventTimes, error)
 	// Calculate sunrise
 	sunrise, err := astral.Sunrise(sc.observer, date)
 	if err != nil {
-		return SunEventTimes{}, fmt.Errorf("failed to calculate sunrise: %w", err)
+		return SunEventTimes{}, errors.New(err).
+			Component("suncalc").
+			Category(errors.CategoryGeneric).
+			Context("operation", "calculate_sunrise").
+			Build()
 	}
 
 	// Calculate sunset
 	sunset, err := astral.Sunset(sc.observer, date)
 	if err != nil {
-		return SunEventTimes{}, fmt.Errorf("failed to calculate sunset: %w", err)
+		return SunEventTimes{}, errors.New(err).
+			Component("suncalc").
+			Category(errors.CategoryGeneric).
+			Context("operation", "calculate_sunset").
+			Build()
 	}
 
 	// Convert sunrise UTC to local time
 	localSunrise, err := conf.ConvertUTCToLocal(sunrise)
 	if err != nil {
-		return SunEventTimes{}, fmt.Errorf("failed to convert sunrise to local time: %w", err)
+		return SunEventTimes{}, errors.New(err).
+			Component("suncalc").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "convert_sunrise_to_local").
+			Build()
 	}
 
 	// Convert sunset UTC to local time
 	localSunset, err := conf.ConvertUTCToLocal(sunset)
 	if err != nil {
-		return SunEventTimes{}, fmt.Errorf("failed to convert sunset to local time: %w", err)
+		return SunEventTimes{}, errors.New(err).
+			Component("suncalc").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "convert_sunset_to_local").
+			Build()
 	}
 
 	// Try to calculate civil dawn, but fall back to sunrise if it fails
@@ -147,7 +163,11 @@ func (sc *SunCalc) calculateSunEventTimes(date time.Time) (SunEventTimes, error)
 func (sc *SunCalc) GetSunriseTime(date time.Time) (time.Time, error) {
 	sunEventTimes, err := sc.GetSunEventTimes(date)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("failed to get sun event times: %w", err)
+		return time.Time{}, errors.New(err).
+			Component("suncalc").
+			Category(errors.CategoryGeneric).
+			Context("operation", "get_sunrise_time").
+			Build()
 	}
 	return sunEventTimes.Sunrise, nil
 }
@@ -156,7 +176,11 @@ func (sc *SunCalc) GetSunriseTime(date time.Time) (time.Time, error) {
 func (sc *SunCalc) GetSunsetTime(date time.Time) (time.Time, error) {
 	sunEventTimes, err := sc.GetSunEventTimes(date)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("failed to get sun event times: %w", err)
+		return time.Time{}, errors.New(err).
+			Component("suncalc").
+			Category(errors.CategoryGeneric).
+			Context("operation", "get_sunset_time").
+			Build()
 	}
 	return sunEventTimes.Sunset, nil
 }

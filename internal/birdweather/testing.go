@@ -46,6 +46,15 @@ var (
 	rateLimiterMu sync.Mutex
 )
 
+// maskURLForLogging masks sensitive BirdWeatherID tokens in URLs for safe logging
+// This is a package-level function for use in testing code
+func maskURLForLogging(urlStr, birdweatherID string) string {
+	if birdweatherID == "" {
+		return urlStr
+	}
+	return strings.ReplaceAll(urlStr, birdweatherID, "***")
+}
+
 // checkRateLimit returns error if tests are being run too frequently
 func checkRateLimit() error {
 	rateLimiterMu.Lock()
@@ -301,7 +310,7 @@ func (b *BwClient) testAPIConnectivity(ctx context.Context) TestResult {
 				// Attempt DNS resolution with fallback resolvers
 				ips, resolveErr := resolveDNSWithFallback(hostname)
 				if resolveErr != nil {
-					return fmt.Errorf("Failed to connect to BirdWeather API at %s: %w - Could not resolve the BirdWeather API hostname", apiEndpoint, err)
+					return fmt.Errorf("Failed to connect to BirdWeather API: %w - Could not resolve the BirdWeather API hostname", err)
 				}
 
 				// If fallback DNS succeeded, it means the system DNS is incorrectly configured
@@ -326,7 +335,7 @@ func (b *BwClient) testAPIConnectivity(ctx context.Context) TestResult {
 				}
 
 				// Both attempts failed
-				return fmt.Errorf("Failed to connect to BirdWeather API at %s: %w - Failed to perform API Connectivity connection with system DNS. Fallback DNS resolved the hostname, indicating issue with your systems DNS resolver configuration. Please check your network settings.", apiEndpoint, err)
+				return fmt.Errorf("Failed to connect to BirdWeather API: %w - Failed to perform API Connectivity connection with system DNS. Fallback DNS resolved the hostname, indicating issue with your systems DNS resolver configuration. Please check your network settings.", err)
 			}
 
 			// Not a DNS error, return the original error
@@ -400,28 +409,28 @@ func tryAPIConnection(ctx context.Context, apiEndpoint string, hostHeader ...str
 	if err != nil {
 		var netErr net.Error
 		if errors.As(err, &netErr) && netErr.Timeout() {
-			return fmt.Errorf("API connectivity test timed out while connecting to %s: %w", apiEndpoint, err)
+			return fmt.Errorf("API connectivity test timed out: %w", err)
 		}
 		// Check if this is a DNS error
 		if isDNSError(err) {
-			return fmt.Errorf("Failed to connect to BirdWeather API at %s: %w - Could not resolve the BirdWeather API hostname", apiEndpoint, err)
+			return fmt.Errorf("Failed to connect to BirdWeather API: %w - Could not resolve the BirdWeather API hostname", err)
 		}
-		return fmt.Errorf("Failed to connect to BirdWeather API at %s: %w", apiEndpoint, err)
+		return fmt.Errorf("Failed to connect to BirdWeather API: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		// Special handling for 404 Not Found errors
 		if resp.StatusCode == 404 {
-			log.Printf("BirdWeather API endpoint not found: %s returned 404", apiEndpoint)
-			return fmt.Errorf("API endpoint not found (404): %s", apiEndpoint)
+			log.Printf("BirdWeather API endpoint not found: returned 404")
+			return fmt.Errorf("API endpoint not found (404)")
 		}
-		log.Printf("BirdWeather API returned error status: %d for URL %s", resp.StatusCode, apiEndpoint)
-		return fmt.Errorf("API at %s returned error status: %d", apiEndpoint, resp.StatusCode)
+		log.Printf("BirdWeather API returned error status: %d", resp.StatusCode)
+		return fmt.Errorf("API returned error status: %d", resp.StatusCode)
 	}
 
 	// Successfully connected to the API
-	log.Printf("✅ Successfully connected to BirdWeather API at %s (status: %d)", apiEndpoint, resp.StatusCode)
+	log.Printf("✅ Successfully connected to BirdWeather API (status: %d)", resp.StatusCode)
 	return nil
 }
 
@@ -480,6 +489,7 @@ func (b *BwClient) testAuthentication(ctx context.Context) TestResult {
 
 // tryAuthentication attempts to authenticate with the station URL
 func tryAuthentication(ctx context.Context, b *BwClient, stationURL string) error {
+	maskedURL := maskURLForLogging(stationURL, b.BirdweatherID)
 	req, err := http.NewRequestWithContext(ctx, "GET", stationURL, http.NoBody)
 	if err != nil {
 		return err
@@ -488,21 +498,21 @@ func tryAuthentication(ctx context.Context, b *BwClient, stationURL string) erro
 
 	resp, err := b.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to authenticate with BirdWeather at %s: %w", stationURL, err)
+		return fmt.Errorf("failed to authenticate with BirdWeather at %s: %w", maskedURL, err)
 	}
 	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case 401, 403:
-		log.Printf("❌ BirdWeather authentication failed: invalid station ID (tried URL: %s)", stationURL)
-		return fmt.Errorf("authentication failed: invalid station ID (tried URL: %s)", stationURL)
+		log.Printf("❌ BirdWeather authentication failed: invalid station ID")
+		return fmt.Errorf("authentication failed: invalid station ID")
 	case 404:
-		log.Printf("❌ BirdWeather station not found: %s returned 404", stationURL)
-		return fmt.Errorf("station not found (404): %s", stationURL)
+		log.Printf("❌ BirdWeather station not found: returned 404")
+		return fmt.Errorf("station not found (404)")
 	default:
 		if resp.StatusCode >= 400 {
-			log.Printf("❌ BirdWeather authentication failed: server returned status code %d for URL %s", resp.StatusCode, stationURL)
-			return fmt.Errorf("authentication failed: server returned status code %d for URL %s", resp.StatusCode, stationURL)
+			log.Printf("❌ BirdWeather authentication failed: server returned status code %d", resp.StatusCode)
+			return fmt.Errorf("authentication failed: server returned status code %d", resp.StatusCode)
 		}
 	}
 
@@ -534,23 +544,24 @@ func tryAuthenticationWithHostOverride(ctx context.Context, b *BwClient, station
 		},
 	}
 
+	maskedURL := maskURLForLogging(stationURL, b.BirdweatherID)
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to authenticate with BirdWeather at %s (host: %s): %w", stationURL, hostOverride, err)
+		return fmt.Errorf("failed to authenticate with BirdWeather at %s (host: %s): %w", maskedURL, hostOverride, err)
 	}
 	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case 401, 403:
-		log.Printf("❌ BirdWeather authentication failed: invalid station ID (tried URL: %s)", stationURL)
-		return fmt.Errorf("authentication failed: invalid station ID (tried URL: %s)", stationURL)
+		log.Printf("❌ BirdWeather authentication failed: invalid station ID")
+		return fmt.Errorf("authentication failed: invalid station ID")
 	case 404:
-		log.Printf("❌ BirdWeather station not found: %s returned 404", stationURL)
-		return fmt.Errorf("station not found (404): %s", stationURL)
+		log.Printf("❌ BirdWeather station not found: returned 404")
+		return fmt.Errorf("station not found (404)")
 	default:
 		if resp.StatusCode >= 400 {
-			log.Printf("❌ BirdWeather authentication failed: server returned status code %d for URL %s", resp.StatusCode, stationURL)
-			return fmt.Errorf("authentication failed: server returned status code %d for URL %s", resp.StatusCode, stationURL)
+			log.Printf("❌ BirdWeather authentication failed: server returned status code %d", resp.StatusCode)
+			return fmt.Errorf("authentication failed: server returned status code %d", resp.StatusCode)
 		}
 	}
 

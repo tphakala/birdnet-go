@@ -1,12 +1,14 @@
 package birdnet
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sort"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observation"
 	tflite "github.com/tphakala/go-tflite"
 )
@@ -23,6 +25,21 @@ type DetectionsMap map[string][]datastore.Results
 // Predict performs inference on a given sample using the TensorFlow Lite interpreter.
 // It processes the sample to predict species and their confidence levels.
 func (bn *BirdNET) Predict(sample [][]float32) ([]datastore.Results, error) {
+	return bn.PredictWithContext(context.Background(), sample)
+}
+
+// PredictWithContext performs inference with tracing support
+func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
+	span, _ := StartSpan(ctx, "birdnet.predict", "Species prediction")
+	defer span.Finish()
+
+	start := time.Now()
+	span.SetTag("model", bn.ModelInfo.ID)
+	span.SetData("sample_count", len(sample))
+	if len(sample) > 0 {
+		span.SetData("sample_size", len(sample[0]))
+	}
+
 	// implement locking to prevent concurrent access to the interpreter, not
 	// necessarily best way to manage multiple audio sources but works for now
 	bn.mu.Lock()
@@ -31,7 +48,22 @@ func (bn *BirdNET) Predict(sample [][]float32) ([]datastore.Results, error) {
 	// Get the input tensor from the interpreter
 	inputTensor := bn.AnalysisInterpreter.GetInputTensor(0)
 	if inputTensor == nil {
-		return nil, fmt.Errorf("cannot get input tensor")
+		err := errors.New(fmt.Errorf("cannot get input tensor")).
+			Category(errors.CategoryModelInit).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("interpreter_state", "initialized").
+			Build()
+
+		// Record error in metrics via span finish
+		span.SetTag("error", "true")
+		span.SetData("error_type", "input_tensor_nil")
+
+		// Record error in metrics directly
+		if globalMetrics != nil {
+			globalMetrics.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		}
+
+		return nil, err
 	}
 
 	// Preparing input tensor with the sample data
@@ -41,8 +73,34 @@ func (bn *BirdNET) Predict(sample [][]float32) ([]datastore.Results, error) {
 	//log.Printf("Invoking tensor with sample length: %d", len(sample[0]))
 
 	// Invoke the interpreter to perform inference
+	invokeStart := time.Now()
 	if status := bn.AnalysisInterpreter.Invoke(); status != tflite.OK {
-		return nil, fmt.Errorf("tensor invoke failed: %v", status)
+		err := errors.Newf("tensor invoke failed: %v", status).
+			Category(errors.CategoryAudio).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("sample_length", len(sample[0])).
+			Context("status_code", status).
+			Timing("prediction-invoke", time.Since(start)).
+			Build()
+
+		span.SetTag("error", "true")
+		span.SetData("error_type", "invoke_failed")
+		span.SetData("status_code", status)
+
+		// Record error in metrics
+		if globalMetrics != nil {
+			globalMetrics.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		}
+
+		return nil, err
+	}
+
+	invokeDuration := time.Since(invokeStart)
+	span.SetData("invoke_duration_ms", invokeDuration.Milliseconds())
+
+	// Record model invoke timing separately
+	if globalMetrics != nil {
+		globalMetrics.RecordModelInvoke(bn.ModelInfo.ID, invokeDuration.Seconds())
 	}
 
 	// Read the results from the output tensor
@@ -53,11 +111,37 @@ func (bn *BirdNET) Predict(sample [][]float32) ([]datastore.Results, error) {
 
 	results, err := pairLabelsAndConfidence(bn.Settings.BirdNET.Labels, confidence)
 	if err != nil {
+		err = errors.New(err).
+			Category(errors.CategoryValidation).
+			Context("label_count", len(bn.Settings.BirdNET.Labels)).
+			Context("confidence_count", len(confidence)).
+			Timing("prediction-total", time.Since(start)).
+			Build()
+
+		span.SetTag("error", "true")
+		span.SetData("error_type", "label_mismatch")
+
+		// Record error in metrics
+		if globalMetrics != nil {
+			globalMetrics.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		}
+
 		return nil, err
 	}
 
 	// Sorting results by confidence in descending order.
 	sortResults(results)
+
+	// Log prediction timing for performance monitoring
+	duration := time.Since(start)
+	bn.Debug("Prediction completed in %v with %d results", duration, len(results))
+
+	// Record metrics
+	span.SetData("total_duration_ms", duration.Milliseconds())
+	span.SetData("result_count", len(results))
+	span.SetTag("error", "false")
+
+	// The span.Finish() will automatically record the prediction metrics
 
 	// Return the top 10 results
 	return trimResultsToMax(results, 10), nil
@@ -88,9 +172,27 @@ func (bn *BirdNET) Predict(sample [][]float32) ([]datastore.Results, error) {
 
 // processChunk handles the prediction for a single chunk of audio data.
 func (bn *BirdNET) ProcessChunk(chunk []float32, predStart time.Time) ([]datastore.Note, error) {
-	results, err := bn.Predict([][]float32{chunk})
+	return bn.ProcessChunkWithContext(context.Background(), chunk, predStart)
+}
+
+// ProcessChunkWithContext handles prediction for a single chunk with tracing
+func (bn *BirdNET) ProcessChunkWithContext(ctx context.Context, chunk []float32, predStart time.Time) ([]datastore.Note, error) {
+	span, ctx := StartSpan(ctx, "birdnet.process_chunk", "Process audio chunk")
+	defer span.Finish()
+
+	start := time.Now()
+	span.SetTag("model", "birdnet") // Default model name for chunk processing
+	span.SetData("chunk_size", len(chunk))
+	span.SetData("pred_start", predStart.Format(time.RFC3339))
+
+	results, err := bn.PredictWithContext(ctx, [][]float32{chunk})
 	if err != nil {
-		return nil, fmt.Errorf("prediction failed: %w", err)
+		return nil, errors.New(err).
+			Category(errors.CategoryAudio).
+			Context("chunk_start_time", predStart.Format(time.RFC3339)).
+			Context("chunk_size", len(chunk)).
+			Timing("chunk-prediction", time.Since(start)).
+			Build()
 	}
 
 	// calculate predEnd time based on settings.BirdNET.Overlap

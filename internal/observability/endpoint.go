@@ -1,5 +1,6 @@
-// Package telemetry provides tools for monitoring and debugging the BirdNET-Go application.
-package telemetry
+// Package observability provides Prometheus metrics functionality for monitoring the BirdNET-Go application.
+// Sentry-related monitoring and error telemetry are handled in the telemetry package.
+package observability
 
 import (
 	"context"

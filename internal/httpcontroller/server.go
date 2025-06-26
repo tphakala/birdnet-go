@@ -21,6 +21,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/observability"
+	obsmetrics "github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/serviceapi"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
@@ -42,6 +44,7 @@ type Server struct {
 	notificationChan  chan handlers.Notification
 	Processor         *processor.Processor
 	APIV2             *api.Controller // Our new JSON API
+	metrics           *observability.Metrics
 
 	// Page and partial routes
 	pageRoutes    map[string]PageRouteConfig
@@ -53,7 +56,7 @@ type Server struct {
 }
 
 // New initializes a new HTTP server with given context and datastore.
-func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache *imageprovider.BirdImageCache, audioLevelChan chan myaudio.AudioLevelData, controlChan chan string, proc *processor.Processor) *Server {
+func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache *imageprovider.BirdImageCache, audioLevelChan chan myaudio.AudioLevelData, controlChan chan string, proc *processor.Processor, observabilityMetrics *observability.Metrics) *Server {
 	configureDefaultSettings(settings)
 
 	s := &Server{
@@ -67,6 +70,7 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 		controlChan:       controlChan,
 		notificationChan:  make(chan handlers.Notification, 10),
 		Processor:         proc,
+		metrics:           observabilityMetrics,
 	}
 
 	// Configure an IP extractor
@@ -75,8 +79,12 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 	// Initialize SunCalc for calculating sun event times
 	s.SunCalc = suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
 
-	// Initialize handlers
-	s.Handlers = handlers.New(s.DS, s.Settings, s.DashboardSettings, s.BirdImageCache, nil, s.SunCalc, s.AudioLevelChan, s.OAuth2Server, s.controlChan, s.notificationChan, s)
+	// Initialize handlers with metrics
+	var httpMetrics *obsmetrics.HTTPMetrics
+	if observabilityMetrics != nil {
+		httpMetrics = observabilityMetrics.HTTP
+	}
+	s.Handlers = handlers.New(s.DS, s.Settings, s.DashboardSettings, s.BirdImageCache, nil, s.SunCalc, s.AudioLevelChan, s.OAuth2Server, s.controlChan, s.notificationChan, s, httpMetrics, observabilityMetrics)
 
 	// Add processor middleware
 	s.Echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -180,6 +188,7 @@ func (s *Server) initializeServer() {
 		log.Default(),
 		s.Processor,
 		s.OAuth2Server, // Pass OAuth2Server instance
+		s.metrics,      // Pass observability metrics
 	)
 
 	// Connect the processor's SSE broadcaster to the API controller's SSE manager

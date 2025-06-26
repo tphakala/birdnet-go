@@ -7,6 +7,8 @@ require (
 	github.com/antonholmquist/jason v1.0.0
 	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/fatih/color v1.18.0
+	github.com/getsentry/sentry-go v0.34.0
+	github.com/getsentry/sentry-go/echo v0.34.0
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0
 	github.com/go-echarts/go-echarts/v2 v2.5.2

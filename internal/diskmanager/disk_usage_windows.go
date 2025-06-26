@@ -6,11 +6,15 @@ package diskmanager
 import (
 	"fmt"
 	"syscall"
+	"time"
 	"unsafe"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // GetDiskUsage returns the disk usage percentage for Windows
 func GetDiskUsage(baseDir string) (float64, error) {
+	startTime := time.Now()
 	kernel32 := syscall.NewLazyDLL("kernel32.dll")
 	getDiskFreeSpaceEx := kernel32.NewProc("GetDiskFreeSpaceExW")
 
@@ -18,7 +22,14 @@ func GetDiskUsage(baseDir string) (float64, error) {
 
 	utf16Path, err := syscall.UTF16PtrFromString(baseDir)
 	if err != nil {
-		return 0, err
+		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to convert path to UTF16: %w", err)).
+			Component("diskmanager").
+			Category(errors.CategoryDiskUsage).
+			Context("path", baseDir).
+			Context("operation", "utf16_conversion").
+			Timing("disk_usage_check", time.Since(startTime)).
+			Build()
+		return 0, descriptiveErr
 	}
 
 	_, _, err = getDiskFreeSpaceEx.Call(
@@ -28,7 +39,14 @@ func GetDiskUsage(baseDir string) (float64, error) {
 		uintptr(unsafe.Pointer(&totalNumberOfFreeBytes)),
 	)
 	if err != syscall.Errno(0) {
-		return 0, err
+		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to get Windows disk free space: %w", err)).
+			Component("diskmanager").
+			Category(errors.CategoryDiskUsage).
+			Context("path", baseDir).
+			Context("operation", "get_disk_free_space").
+			Timing("disk_usage_check", time.Since(startTime)).
+			Build()
+		return 0, descriptiveErr
 	}
 
 	used := totalNumberOfBytes - totalNumberOfFreeBytes
@@ -48,6 +66,7 @@ type DiskSpaceInfo struct {
 
 // GetDetailedDiskUsage returns the total and used disk space in bytes for the filesystem containing the given path.
 func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
+	startTime := time.Now()
 	h := syscall.MustLoadDLL("kernel32.dll")
 	c := h.MustFindProc("GetDiskFreeSpaceExW")
 
@@ -59,7 +78,14 @@ func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
 		uintptr(unsafe.Pointer(&totalNumberOfFreeBytes)))
 
 	if ret == 0 {
-		return DiskSpaceInfo{}, fmt.Errorf("failed to get disk free space for '%s': %w", path, err)
+		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to get Windows detailed disk usage: %w", err)).
+			Component("diskmanager").
+			Category(errors.CategoryDiskUsage).
+			Context("path", path).
+			Context("operation", "get_detailed_disk_usage").
+			Timing("detailed_disk_usage_check", time.Since(startTime)).
+			Build()
+		return DiskSpaceInfo{}, descriptiveErr
 	}
 
 	usedBytes := uint64(totalNumberOfBytes - totalNumberOfFreeBytes)

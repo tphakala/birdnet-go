@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -36,7 +37,12 @@ func getDiskSpace(path string) (uint64, error) {
 	var err error
 	availableSpace, err = getDiskFreeSpace(dir)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get disk space: %w", err)
+		return 0, errors.New(err).
+			Component("datastore").
+			Category(errors.CategorySystem).
+			Context("operation", "get_disk_space").
+			Context("path", dir).
+			Build()
 	}
 
 	return availableSpace, nil
@@ -48,7 +54,12 @@ func checkWritePermission(path string) error {
 	tempFile := filepath.Join(filepath.Dir(path), ".tmp_write_test")
 	f, err := os.OpenFile(tempFile, os.O_CREATE|os.O_WRONLY, 0o666)
 	if err != nil {
-		return fmt.Errorf("no write permission in directory: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategorySystem).
+			Context("operation", "check_write_permission").
+			Context("directory", filepath.Dir(path)).
+			Build()
 	}
 	f.Close()
 	os.Remove(tempFile)
@@ -65,7 +76,12 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 	// Get database file size
 	dbInfo, err := os.Stat(dbPath)
 	if err != nil {
-		return fmt.Errorf("failed to get database file info: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategorySystem).
+			Context("operation", "get_database_file_info").
+			Context("db_path", dbPath).
+			Build()
 	}
 
 	// Check available disk space
@@ -77,7 +93,13 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 	requiredSpace := uint64(dbInfo.Size()) + 1024*1024 // Add 1MB buffer
 
 	if availableSpace < requiredSpace {
-		return fmt.Errorf("insufficient disk space for backup. Required: %d bytes, Available: %d bytes", requiredSpace, availableSpace)
+		return errors.Newf("insufficient disk space for backup").
+			Component("datastore").
+			Category(errors.CategorySystem).
+			Context("operation", "create_backup").
+			Context("required_bytes", fmt.Sprintf("%d", requiredSpace)).
+			Context("available_bytes", fmt.Sprintf("%d", availableSpace)).
+			Build()
 	}
 
 	// Check if we have write permissions in the backup directory
@@ -92,20 +114,36 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 	// Open source file
 	source, err := os.Open(dbPath)
 	if err != nil {
-		return fmt.Errorf("failed to open source database: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategorySystem).
+			Context("operation", "open_source_database").
+			Context("db_path", dbPath).
+			Build()
 	}
 	defer source.Close()
 
 	// Create backup file
 	destination, err := os.Create(backupPath)
 	if err != nil {
-		return fmt.Errorf("failed to create backup file: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategorySystem).
+			Context("operation", "create_backup_file").
+			Context("backup_path", backupPath).
+			Build()
 	}
 	defer destination.Close()
 
 	// Copy the file
 	if _, err := io.Copy(destination, source); err != nil {
-		return fmt.Errorf("failed to copy database: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategorySystem).
+			Context("operation", "copy_database").
+			Context("source", dbPath).
+			Context("destination", backupPath).
+			Build()
 	}
 
 	log.Printf("Created database backup: %s", backupPath)
@@ -119,7 +157,12 @@ func (s *SQLiteStore) Open() error {
 
 	// Create database directory if it doesn't exist
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		return fmt.Errorf("failed to create database directory: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategorySystem).
+			Context("operation", "create_database_directory").
+			Context("directory", filepath.Dir(dbPath)).
+			Build()
 	}
 
 	// Configure GORM logger
@@ -130,13 +173,22 @@ func (s *SQLiteStore) Open() error {
 		Logger: gormLogger,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to open SQLite database: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "open_sqlite_database").
+			Context("db_path", dbPath).
+			Build()
 	}
 
 	// Set SQLite pragmas for better performance
 	sqlDB, err := db.DB()
 	if err != nil {
-		return fmt.Errorf("failed to get underlying *sql.DB: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_underlying_sqldb").
+			Build()
 	}
 
 	// Set pragmas
@@ -170,7 +222,11 @@ func (s *SQLiteStore) Close() error {
 	if s.DB != nil {
 		sqlDB, err := s.DB.DB()
 		if err != nil {
-			return fmt.Errorf("failed to get underlying *sql.DB: %w", err)
+			return errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_underlying_sqldb").
+				Build()
 		}
 		return sqlDB.Close()
 	}

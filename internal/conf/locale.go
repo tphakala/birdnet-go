@@ -5,6 +5,8 @@ package conf
 import (
 	"fmt"
 	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // DefaultFallbackLocale is the default locale used when the requested locale is not supported
@@ -126,13 +128,22 @@ var LocaleCodes = map[string]string{
 func GetLabelFilename(modelVersion, localeCode string) (string, error) {
 	config, exists := ModelLabelMapping[modelVersion]
 	if !exists {
-		return "", fmt.Errorf("unsupported model version: %s", modelVersion)
+		return "", errors.New(fmt.Errorf("unsupported model version: %s", modelVersion)).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "model-version-support").
+			Context("model_version", modelVersion).
+			Build()
 	}
 
 	// Get the file identifier for the locale code
 	fileLocale, exists := LocaleCodeMapping[localeCode]
 	if !exists {
-		return "", fmt.Errorf("unsupported locale code for model %s: %s", modelVersion, localeCode)
+		return "", errors.New(fmt.Errorf("unsupported locale code for model %s: %s", modelVersion, localeCode)).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "locale-code-support").
+			Context("model_version", modelVersion).
+			Context("locale_code", localeCode).
+			Build()
 	}
 
 	return config.BasePath + fmt.Sprintf(config.FilePattern, fileLocale), nil
@@ -141,6 +152,7 @@ func GetLabelFilename(modelVersion, localeCode string) (string, error) {
 // NormalizeLocale normalizes the input locale string and matches it to a known locale code or full name.
 // If the locale is not supported, it falls back to DefaultFallbackLocale.
 func NormalizeLocale(inputLocale string) (string, error) {
+	originalInput := inputLocale
 	inputLocale = strings.ToLower(inputLocale)
 
 	// Check if it's already a valid locale code
@@ -162,5 +174,17 @@ func NormalizeLocale(inputLocale string) (string, error) {
 		fallbackName = DefaultFallbackLocale // fallback to code if name not found
 	}
 
-	return DefaultFallbackLocale, fmt.Errorf("locale %s not supported, falling back to %s", inputLocale, fallbackName)
+	// Create detailed error with available locales for debugging
+	availableLocales := make([]string, 0, len(LocaleCodes))
+	for code := range LocaleCodes {
+		availableLocales = append(availableLocales, code)
+	}
+
+	return DefaultFallbackLocale, errors.New(fmt.Errorf("locale '%s' not supported, falling back to %s", originalInput, fallbackName)).
+		Category(errors.CategoryValidation).
+		Context("validation_type", "locale-normalization").
+		Context("input_locale", originalInput).
+		Context("fallback_locale", DefaultFallbackLocale).
+		Context("available_locales_sample", availableLocales[:5]).
+		Build()
 }

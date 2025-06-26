@@ -12,9 +12,13 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/cpuspec"
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 	tflite "github.com/tphakala/go-tflite"
 	"github.com/tphakala/go-tflite/delegates/xnnpack"
 )
@@ -71,25 +75,47 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	var err error
 	bn.ModelInfo, err = DetermineModelInfo(modelIdentifier)
 	if err != nil {
-		return nil, fmt.Errorf("failed to determine model information: %w", err)
+		return nil, errors.New(fmt.Errorf("BirdNET: failed to determine model information: %w", err)).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
+			Context("model_identifier", modelIdentifier).
+			Build()
 	}
 
 	// Load taxonomy data
 	bn.TaxonomyMap, bn.ScientificIndex, err = LoadTaxonomyData(bn.TaxonomyPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load taxonomy data: %w", err)
+		return nil, errors.New(fmt.Errorf("BirdNET: failed to load taxonomy data: %w", err)).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			Context("taxonomy_path", bn.TaxonomyPath).
+			Build()
 	}
 
 	if err := bn.initializeModel(); err != nil {
-		return nil, fmt.Errorf("failed to initialize model: %w", err)
+		return nil, errors.New(fmt.Errorf("BirdNET: failed to initialize analysis model: %w", err)).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
+			Build()
 	}
 
 	if err := bn.initializeMetaModel(); err != nil {
-		return nil, fmt.Errorf("failed to initialize meta model: %w", err)
+		return nil, errors.New(fmt.Errorf("BirdNET: failed to initialize range filter model: %w", err)).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
+			Build()
 	}
 
 	if err := bn.loadLabels(); err != nil {
-		return nil, fmt.Errorf("failed to load labels: %w", err)
+		return nil, errors.New(fmt.Errorf("BirdNET: failed to load species labels: %w", err)).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
+			Context("locale", settings.BirdNET.Locale).
+			Build()
 	}
 
 	// Normalize and validate locale setting.
@@ -112,14 +138,26 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 
 // initializeModel loads and initializes the primary BirdNET model.
 func (bn *BirdNET) initializeModel() error {
+	start := time.Now()
+
 	modelData, err := bn.loadModel()
 	if err != nil {
-		return err
+		return errors.New(err).
+			Category(errors.CategoryModelLoad).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Timing("model-load", time.Since(start)).
+			Build()
 	}
 
 	model := tflite.NewModel(modelData)
 	if model == nil {
-		return fmt.Errorf("cannot load model")
+		return errors.New(fmt.Errorf("cannot load TensorFlow Lite model")).
+			Category(errors.CategoryModelInit).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("model_size_mb", len(modelData)/1024/1024).
+			Context("use_xnnpack", bn.Settings.BirdNET.UseXNNPACK).
+			Timing("model-init", time.Since(start)).
+			Build()
 	}
 
 	// Determine the number of threads for the interpreter based on settings and system capacity.
@@ -201,11 +239,18 @@ func (bn *BirdNET) getMetaModelData() []byte {
 
 // initializeMetaModel loads and initializes the meta model used for range filtering.
 func (bn *BirdNET) initializeMetaModel() error {
+	start := time.Now()
+
 	metaModelData := bn.getMetaModelData()
 
 	model := tflite.NewModel(metaModelData)
 	if model == nil {
-		return fmt.Errorf("cannot load meta model from embedded data")
+		return errors.New(fmt.Errorf("cannot load meta model from embedded data")).
+			Category(errors.CategoryModelLoad).
+			Context("model_type", "range_filter").
+			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
+			Timing("meta-model-load", time.Since(start)).
+			Build()
 	}
 
 	// Meta model requires only one CPU.
@@ -218,10 +263,20 @@ func (bn *BirdNET) initializeMetaModel() error {
 	// Create and allocate the TensorFlow Lite interpreter for the meta model.
 	bn.RangeInterpreter = tflite.NewInterpreter(model, options)
 	if bn.RangeInterpreter == nil {
-		return fmt.Errorf("cannot create meta model interpreter")
+		return errors.New(fmt.Errorf("cannot create meta model interpreter")).
+			Category(errors.CategoryModelInit).
+			Context("model_type", "range_filter").
+			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
+			Timing("meta-model-init", time.Since(start)).
+			Build()
 	}
 	if status := bn.RangeInterpreter.AllocateTensors(); status != tflite.OK {
-		return fmt.Errorf("tensor allocation failed for meta model")
+		return errors.Newf("tensor allocation failed for meta model: %v", status).
+			Category(errors.CategoryModelInit).
+			Context("model_type", "range_filter").
+			Context("status_code", status).
+			Timing("meta-model-allocate", time.Since(start)).
+			Build()
 	}
 
 	return nil
@@ -275,21 +330,38 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 	// Get the appropriate locale code for the model version
 	localeCode := bn.Settings.BirdNET.Locale
 
-	// Use the helper function to get the label file data with logging
-	data, err := GetLabelFileDataWithLogger(bn.ModelInfo.ID, localeCode, bn)
-	if err != nil {
-		bn.Debug("Error loading label file: %v", err)
-		// Fall back to English if the requested locale isn't available
-		if localeCode != "en" && localeCode != conf.DefaultFallbackLocale {
-			bn.Debug("Falling back to %s labels", conf.DefaultFallbackLocale)
-			data, err = GetLabelFileDataWithLogger(bn.ModelInfo.ID, conf.DefaultFallbackLocale, bn)
-			if err != nil {
-				return fmt.Errorf("failed to load fallback English labels: %w", err)
-			}
-		} else {
-			return fmt.Errorf("failed to load label file: %w", err)
-		}
+	// Use the new detailed loading function
+	result := GetLabelFileDataWithResult(bn.ModelInfo.ID, localeCode, bn)
+	if result.Error != nil {
+		// Create enhanced error for telemetry reporting
+		return errors.New(result.Error).
+			Category(errors.CategoryLabelLoad).
+			Context("requested_locale", localeCode).
+			Context("model_version", bn.ModelInfo.ID).
+			Context("fallback_locale", conf.DefaultFallbackLocale).
+			Build()
 	}
+
+	// Check if fallback occurred and report to telemetry
+	if result.FallbackOccurred {
+		bn.Debug("Label file fallback occurred: requested '%s', using '%s'", result.RequestedLocale, result.ActualLocale)
+
+		// ALWAYS report locale fallback to telemetry as a warning
+		// This is critical for tracking configuration issues
+		// Use deferred capture since BirdNET initializes before Sentry
+		telemetry.CaptureMessageDeferred(
+			fmt.Sprintf("Label file fallback: requested locale '%s' not available for model %s, using '%s'",
+				result.RequestedLocale, bn.ModelInfo.ID, result.ActualLocale),
+			sentry.LevelError,
+			"birdnet-label-loading",
+		)
+
+		// Also log to console so users see it immediately
+		fmt.Printf("⚠️  Label file warning: locale '%s' not available, using '%s' instead\n",
+			result.RequestedLocale, result.ActualLocale)
+	}
+
+	data := result.Data
 
 	// Read the labels line by line
 	scanner := bufio.NewScanner(bytes.NewReader(data))
@@ -301,7 +373,12 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error scanning label file: %w", err)
+		return errors.New(err).
+			Category(errors.CategoryLabelLoad).
+			Context("operation", "scan_labels").
+			Context("locale", localeCode).
+			Context("model_version", bn.ModelInfo.ID).
+			Build()
 	}
 
 	// Check and log species missing from taxonomy
@@ -311,16 +388,36 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 }
 
 func (bn *BirdNET) loadExternalLabels() error {
+	start := time.Now()
+
+	// Report external label file usage to telemetry
+	// Use deferred capture since BirdNET initializes before Sentry
+	telemetry.CaptureMessageDeferred(
+		fmt.Sprintf("Using external label file: %s", bn.Settings.BirdNET.LabelPath),
+		sentry.LevelInfo,
+		"birdnet-label-loading",
+	)
+
 	file, err := os.Open(bn.Settings.BirdNET.LabelPath)
 	if err != nil {
-		return fmt.Errorf("failed to open external label file: %w", err)
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("label_path", bn.Settings.BirdNET.LabelPath).
+			Context("operation", "open").
+			Timing("label-file-open", time.Since(start)).
+			Build()
 	}
 	defer file.Close()
 
 	// Read the file directly as a text file
 	err = bn.loadLabelsFromText(file)
 	if err != nil {
-		return err
+		return errors.New(err).
+			Category(errors.CategoryLabelLoad).
+			Context("label_path", bn.Settings.BirdNET.LabelPath).
+			Context("operation", "parse").
+			Timing("label-file-load", time.Since(start)).
+			Build()
 	}
 
 	// Check and log species missing from taxonomy
@@ -378,6 +475,8 @@ func (bn *BirdNET) Delete() {
 
 // loadModel loads either the embedded model or an external model file
 func (bn *BirdNET) loadModel() ([]byte, error) {
+	start := time.Now()
+
 	if bn.Settings.BirdNET.ModelPath == "" {
 		return modelData, nil
 	}
@@ -385,8 +484,15 @@ func (bn *BirdNET) loadModel() ([]byte, error) {
 	modelPath := bn.Settings.BirdNET.ModelPath
 	data, err := os.ReadFile(modelPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read model file: %w", err)
+		return nil, errors.New(err).
+			Category(errors.CategoryFileIO).
+			ModelContext(modelPath, "external").
+			Context("operation", "read").
+			Timing("model-file-read", time.Since(start)).
+			Build()
 	}
+
+	bn.Debug("Loaded external model file: %s (size: %d MB)", modelPath, len(data)/1024/1024)
 	return data, nil
 }
 
@@ -395,16 +501,33 @@ func (bn *BirdNET) validateModelAndLabels() error {
 	// Get the output tensor to check its dimensions
 	outputTensor := bn.AnalysisInterpreter.GetOutputTensor(0)
 	if outputTensor == nil {
-		return fmt.Errorf("cannot get output tensor")
+		return errors.New(fmt.Errorf("cannot get output tensor from model")).
+			Category(errors.CategoryValidation).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("interpreter_status", "failed").
+			Build()
 	}
 
 	// Get the number of classes from the model's output tensor
 	modelOutputSize := outputTensor.Dim(outputTensor.NumDims() - 1)
+	labelCount := len(bn.Settings.BirdNET.Labels)
 
 	// Compare with the number of labels
-	if len(bn.Settings.BirdNET.Labels) != modelOutputSize {
-		return fmt.Errorf("\033[31m❌ label count mismatch: model expects %d classes but label file has %d labels\033[0m",
-			modelOutputSize, len(bn.Settings.BirdNET.Labels))
+	if labelCount != modelOutputSize {
+		return errors.Newf("label count mismatch: model expects %d classes but label file has %d labels",
+			modelOutputSize, labelCount).
+			Category(errors.CategoryValidation).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("expected_labels", modelOutputSize).
+			Context("actual_labels", labelCount).
+			Context("locale", bn.Settings.BirdNET.Locale).
+			Context("label_path_type", func() string {
+				if bn.Settings.BirdNET.LabelPath == "" {
+					return "embedded"
+				}
+				return "external"
+			}()).
+			Build()
 	}
 
 	bn.Debug("\033[32m✅ Model validation successful: %d labels match model output size\033[0m", modelOutputSize)

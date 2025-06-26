@@ -193,3 +193,7 @@ output:
     database: birdnet     # mysql database name
     host: localhost       # mysql database host
     port: 3306            # mysql database port
+
+# Sentry telemetry configuration (opt-in, respects EU privacy laws)
+sentry:
+  enabled: false          # false by default, must be explicitly enabled by user (opt-in)

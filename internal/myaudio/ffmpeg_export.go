@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // tempExt is the temporary file extension used when exporting audio with FFmpeg
@@ -24,46 +24,243 @@ const tempExt = ".temp"
 // outputPath is full path with audio file name and extension based on format
 // pcmData is the PCM data to export
 func ExportAudioWithFFmpeg(pcmData []byte, outputPath string, settings *conf.AudioSettings) error {
-	// Assume settings.FfmpegPath is validated by conf.ValidateAudioSettings
+	start := time.Now()
+
+	// Validate inputs
+	if settings == nil {
+		enhancedErr := errors.Newf("audio settings parameter is nil").
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "export_audio_ffmpeg").
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("export_ffmpeg", "unknown", "error")
+			fileMetrics.RecordFileOperationError("export_ffmpeg", "unknown", "nil_settings")
+		}
+		return enhancedErr
+	}
+
 	if settings.FfmpegPath == "" {
-		return fmt.Errorf("FFmpeg path is not configured or invalid")
+		enhancedErr := errors.Newf("FFmpeg path is not configured or invalid").
+			Component("myaudio").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "export_audio_ffmpeg").
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("export_ffmpeg", "unknown", "error")
+			fileMetrics.RecordFileOperationError("export_ffmpeg", "unknown", "missing_ffmpeg_path")
+		}
+		return enhancedErr
+	}
+
+	if outputPath == "" {
+		enhancedErr := errors.Newf("empty output path provided").
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "export_audio_ffmpeg").
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("export_ffmpeg", "unknown", "error")
+			fileMetrics.RecordFileOperationError("export_ffmpeg", "unknown", "empty_output_path")
+		}
+		return enhancedErr
+	}
+
+	if len(pcmData) == 0 {
+		enhancedErr := errors.Newf("empty PCM data provided for export").
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "export_audio_ffmpeg").
+			Context("data_size", 0).
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("export_ffmpeg", settings.Export.Type, "error")
+			fileMetrics.RecordFileOperationError("export_ffmpeg", settings.Export.Type, "empty_data")
+		}
+		return enhancedErr
 	}
 
 	// Create a temporary file for FFmpeg output, returns full path with tempExt
 	// temporary file is used to perform export as atomic file operation
 	tempFilePath, err := createTempFile(outputPath)
 	if err != nil {
-		return err
+		enhancedErr := errors.New(err).
+			Component("myaudio").
+			Category(errors.CategoryFileIO).
+			Context("operation", "export_audio_ffmpeg").
+			Context("file_operation", "create_temp_file").
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("export_ffmpeg", settings.Export.Type, "error")
+			fileMetrics.RecordFileOperationError("export_ffmpeg", settings.Export.Type, "temp_file_creation_failed")
+		}
+		return enhancedErr
 	}
 
 	// Run the FFmpeg command to process the audio
 	if err := runFFmpegCommand(settings.FfmpegPath, pcmData, tempFilePath, settings); err != nil {
-		return err
+		enhancedErr := errors.New(err).
+			Component("myaudio").
+			Category(errors.CategorySystem).
+			Context("operation", "export_audio_ffmpeg").
+			Context("file_operation", "run_ffmpeg_command").
+			Context("export_type", settings.Export.Type).
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("export_ffmpeg", settings.Export.Type, "error")
+			fileMetrics.RecordFileOperationError("export_ffmpeg", settings.Export.Type, "ffmpeg_command_failed")
+		}
+		return enhancedErr
 	}
 
 	// Finalize the output by renaming the temporary file to the final audio file
-	return finalizeOutput(tempFilePath)
+	if err := finalizeOutput(tempFilePath); err != nil {
+		enhancedErr := errors.New(err).
+			Component("myaudio").
+			Category(errors.CategoryFileIO).
+			Context("operation", "export_audio_ffmpeg").
+			Context("file_operation", "finalize_output").
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("export_ffmpeg", settings.Export.Type, "error")
+			fileMetrics.RecordFileOperationError("export_ffmpeg", settings.Export.Type, "finalize_failed")
+		}
+		return enhancedErr
+	}
+
+	// Record successful operation
+	if fileMetrics != nil {
+		duration := time.Since(start).Seconds()
+		fileMetrics.RecordFileOperation("export_ffmpeg", settings.Export.Type, "success")
+		fileMetrics.RecordFileOperationDuration("export_ffmpeg", settings.Export.Type, duration)
+		fileMetrics.RecordFileSize("export_ffmpeg", settings.Export.Type, int64(len(pcmData)))
+	}
+
+	return nil
 }
 
 // createTempFile creates a temporary file path for FFmpeg output
 func createTempFile(outputPath string) (string, error) {
-	outputDir := filepath.Dir(outputPath)
-	if err := os.MkdirAll(outputDir, os.ModePerm); err != nil {
-		return "", fmt.Errorf("failed to create audio export directory: %w", err)
+	start := time.Now()
+
+	// Validate input
+	if outputPath == "" {
+		enhancedErr := errors.Newf("empty output path provided for temp file creation").
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "create_temp_file").
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("create_temp", "unknown", "error")
+			fileMetrics.RecordFileOperationError("create_temp", "unknown", "empty_path")
+		}
+		return "", enhancedErr
 	}
+
+	outputDir := filepath.Dir(outputPath)
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		enhancedErr := errors.New(err).
+			Component("myaudio").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_temp_file").
+			Context("file_operation", "create_directories").
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("create_temp", "temp", "error")
+			fileMetrics.RecordFileOperationError("create_temp", "temp", "directory_creation_failed")
+		}
+		return "", enhancedErr
+	}
+
 	tempFilePath := outputPath + tempExt
+
+	// Record successful operation
+	if fileMetrics != nil {
+		duration := time.Since(start).Seconds()
+		fileMetrics.RecordFileOperation("create_temp", "temp", "success")
+		fileMetrics.RecordFileOperationDuration("create_temp", "temp", duration)
+	}
+
 	return tempFilePath, nil
 }
 
 // finalizeOutput path removes tempExt from the file name completing atomic file operation
 func finalizeOutput(tempFilePath string) error {
-	// strip tempExt from the end of the path
+	start := time.Now()
+
+	// Validate input
+	if tempFilePath == "" {
+		enhancedErr := errors.Newf("empty temp file path provided for finalize operation").
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "finalize_output").
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("finalize_output", "unknown", "error")
+			fileMetrics.RecordFileOperationError("finalize_output", "unknown", "empty_path")
+		}
+		return enhancedErr
+	}
+
+	if !strings.HasSuffix(tempFilePath, tempExt) {
+		enhancedErr := errors.Newf("temp file path does not have expected temporary extension: %s", tempExt).
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "finalize_output").
+			Context("expected_extension", tempExt).
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("finalize_output", "temp", "error")
+			fileMetrics.RecordFileOperationError("finalize_output", "temp", "invalid_temp_extension")
+		}
+		return enhancedErr
+	}
+
+	// Strip tempExt from the end of the path
 	finalOutputPath := tempFilePath[:len(tempFilePath)-len(tempExt)]
+
+	// Get file format from final output path
+	format := strings.ToLower(filepath.Ext(finalOutputPath))
+	if format != "" {
+		format = format[1:] // Remove the dot
+	} else {
+		format = "unknown"
+	}
 
 	// Rename the temporary file to the final output path
 	if err := os.Rename(tempFilePath, finalOutputPath); err != nil {
-		return fmt.Errorf("failed to rename temporary audio file to final output: %w", err)
+		enhancedErr := errors.New(err).
+			Component("myaudio").
+			Category(errors.CategoryFileIO).
+			Context("operation", "finalize_output").
+			Context("file_operation", "rename_file").
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("finalize_output", format, "error")
+			fileMetrics.RecordFileOperationError("finalize_output", format, "rename_failed")
+		}
+		return enhancedErr
 	}
+
+	// Record successful operation
+	if fileMetrics != nil {
+		duration := time.Since(start).Seconds()
+		fileMetrics.RecordFileOperation("finalize_output", format, "success")
+		fileMetrics.RecordFileOperationDuration("finalize_output", format, duration)
+	}
+
 	return nil
 }
 
@@ -238,15 +435,89 @@ func runCustomFFmpegCommandToBuffer(ffmpegPath string, pcmData []byte, customArg
 // ffmpegPath is the path to the FFmpeg executable.
 // customArgs is a slice of strings representing additional FFmpeg arguments (including output format/codec).
 func ExportAudioWithCustomFFmpegArgsContext(ctx context.Context, pcmData []byte, ffmpegPath string, customArgs []string) (*bytes.Buffer, error) {
-	// Assume ffmpegPath is valid (validated by caller, usually via conf.ValidateAudioSettings)
+	start := time.Now()
+
+	// Validate inputs
+	if ctx == nil {
+		enhancedErr := errors.Newf("context parameter is nil").
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "export_custom_ffmpeg_context").
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("export_custom_ffmpeg", "unknown", "error")
+			fileMetrics.RecordFileOperationError("export_custom_ffmpeg", "unknown", "nil_context")
+		}
+		return nil, enhancedErr
+	}
+
 	if ffmpegPath == "" {
-		return nil, fmt.Errorf("FFmpeg path provided is empty")
+		enhancedErr := errors.Newf("FFmpeg path provided is empty").
+			Component("myaudio").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "export_custom_ffmpeg_context").
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("export_custom_ffmpeg", "unknown", "error")
+			fileMetrics.RecordFileOperationError("export_custom_ffmpeg", "unknown", "empty_ffmpeg_path")
+		}
+		return nil, enhancedErr
+	}
+
+	if len(pcmData) == 0 {
+		enhancedErr := errors.Newf("empty PCM data provided for custom FFmpeg export").
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "export_custom_ffmpeg_context").
+			Context("data_size", 0).
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("export_custom_ffmpeg", "custom", "error")
+			fileMetrics.RecordFileOperationError("export_custom_ffmpeg", "custom", "empty_data")
+		}
+		return nil, enhancedErr
+	}
+
+	if len(customArgs) == 0 {
+		enhancedErr := errors.Newf("empty custom arguments provided for FFmpeg export").
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "export_custom_ffmpeg_context").
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("export_custom_ffmpeg", "custom", "error")
+			fileMetrics.RecordFileOperationError("export_custom_ffmpeg", "custom", "empty_args")
+		}
+		return nil, enhancedErr
 	}
 
 	// Run the FFmpeg command, capturing output to a buffer
 	outputBuffer, err := runCustomFFmpegCommandToBufferWithContext(ctx, ffmpegPath, pcmData, customArgs)
 	if err != nil {
-		return nil, err // Error already includes FFmpeg output if execution failed
+		enhancedErr := errors.New(err).
+			Component("myaudio").
+			Category(errors.CategorySystem).
+			Context("operation", "export_custom_ffmpeg_context").
+			Context("custom_args_count", len(customArgs)).
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("export_custom_ffmpeg", "custom", "error")
+			fileMetrics.RecordFileOperationError("export_custom_ffmpeg", "custom", "ffmpeg_execution_failed")
+		}
+		return nil, enhancedErr
+	}
+
+	// Record successful operation
+	if fileMetrics != nil {
+		duration := time.Since(start).Seconds()
+		fileMetrics.RecordFileOperation("export_custom_ffmpeg", "custom", "success")
+		fileMetrics.RecordFileOperationDuration("export_custom_ffmpeg", "custom", duration)
+		fileMetrics.RecordFileSize("export_custom_ffmpeg", "custom", int64(len(pcmData)))
 	}
 
 	// Return the buffer containing the exported audio data
@@ -519,8 +790,36 @@ func AnalyzeAudioLoudnessWithContext(ctx context.Context, pcmData []byte, ffmpeg
 
 // EncodePCMtoWAVWithContext encodes PCM data in WAV format using context for cancellation/timeout
 func EncodePCMtoWAVWithContext(ctx context.Context, pcmData []byte) (*bytes.Buffer, error) {
+	start := time.Now()
+
+	// Validate inputs
+	if ctx == nil {
+		enhancedErr := errors.Newf("context parameter is nil").
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "encode_pcm_to_wav_context").
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("encode_wav", "wav", "error")
+			fileMetrics.RecordFileOperationError("encode_wav", "wav", "nil_context")
+		}
+		return nil, enhancedErr
+	}
+
 	if len(pcmData) == 0 {
-		return nil, fmt.Errorf("PCM data is empty")
+		enhancedErr := errors.Newf("PCM data is empty for WAV encoding").
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "encode_pcm_to_wav_context").
+			Context("data_size", 0).
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("encode_wav", "wav", "error")
+			fileMetrics.RecordFileOperationError("encode_wav", "wav", "empty_data")
+		}
+		return nil, enhancedErr
 	}
 
 	// Constants for WAV format
@@ -548,7 +847,18 @@ func EncodePCMtoWAVWithContext(ctx context.Context, pcmData []byte) (*bytes.Buff
 	// Check if context is done before proceeding
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		enhancedErr := errors.New(ctx.Err()).
+			Component("myaudio").
+			Category(errors.CategorySystem).
+			Context("operation", "encode_pcm_to_wav_context").
+			Context("stage", "context_check").
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("encode_wav", "wav", "error")
+			fileMetrics.RecordFileOperationError("encode_wav", "wav", "context_cancelled")
+		}
+		return nil, enhancedErr
 	default:
 		// Continue with writing
 	}
@@ -563,14 +873,45 @@ func EncodePCMtoWAVWithContext(ctx context.Context, pcmData []byte) (*bytes.Buff
 		} else {
 			// Handle all other data types
 			if err := binary.Write(buffer, binary.LittleEndian, elem); err != nil {
-				return nil, fmt.Errorf("failed to write element to buffer: %w", err)
+				enhancedErr := errors.New(err).
+					Component("myaudio").
+					Category(errors.CategorySystem).
+					Context("operation", "encode_pcm_to_wav_context").
+					Context("stage", "write_header_element").
+					Build()
+
+				if fileMetrics != nil {
+					fileMetrics.RecordFileOperation("encode_wav", "wav", "error")
+					fileMetrics.RecordFileOperationError("encode_wav", "wav", "header_write_failed")
+				}
+				return nil, enhancedErr
 			}
 		}
 	}
 
 	// Write PCM data to buffer
 	if _, err := buffer.Write(pcmData); err != nil {
-		return nil, fmt.Errorf("failed to write PCM data to WAV buffer: %w", err)
+		enhancedErr := errors.New(err).
+			Component("myaudio").
+			Category(errors.CategorySystem).
+			Context("operation", "encode_pcm_to_wav_context").
+			Context("stage", "write_pcm_data").
+			Context("pcm_data_size", len(pcmData)).
+			Build()
+
+		if fileMetrics != nil {
+			fileMetrics.RecordFileOperation("encode_wav", "wav", "error")
+			fileMetrics.RecordFileOperationError("encode_wav", "wav", "pcm_write_failed")
+		}
+		return nil, enhancedErr
+	}
+
+	// Record successful operation
+	if fileMetrics != nil {
+		duration := time.Since(start).Seconds()
+		fileMetrics.RecordFileOperation("encode_wav", "wav", "success")
+		fileMetrics.RecordFileOperationDuration("encode_wav", "wav", duration)
+		fileMetrics.RecordFileSize("encode_wav", "wav", int64(len(pcmData)))
 	}
 
 	return buffer, nil

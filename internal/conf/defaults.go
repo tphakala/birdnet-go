@@ -232,4 +232,10 @@ func setDefaultConfig() {
 	viper.SetDefault("security.githubauth.clientsecret", "")
 	viper.SetDefault("security.githubauth.redirecturi", "/settings")
 	viper.SetDefault("security.githubauth.userid", "")
+
+	// Sentry configuration
+	viper.SetDefault("sentry.enabled", false)
+	viper.SetDefault("sentry.dsn", "")
+	viper.SetDefault("sentry.samplerate", 1.0)
+	viper.SetDefault("sentry.debug", false)
 }

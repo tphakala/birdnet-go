@@ -5,15 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime/pprof"
+	"strings"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/cmd"
 	"github.com/tphakala/birdnet-go/internal/analysis"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // buildTime is the time when the binary was built.
@@ -40,6 +44,9 @@ func main() {
 }
 
 func mainWithExitCode() int {
+	// Ensure Sentry is flushed on exit
+	defer telemetry.Flush(2 * time.Second)
+
 	// Check if profiling is enabled
 	if os.Getenv("BIRDNET_GO_PROFILE") == "1" {
 		fmt.Println("Profiling enabled")
@@ -83,8 +90,40 @@ func mainWithExitCode() int {
 	settings.Version = version
 	settings.BuildDate = buildDate
 
+	// Load or create system ID for telemetry
+	systemID, err := telemetry.LoadOrCreateSystemID(filepath.Dir(viper.ConfigFileUsed()))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to load system ID: %v\n", err)
+		// Generate a temporary one for this session
+		systemID, _ = telemetry.GenerateSystemID()
+	}
+	settings.SystemID = systemID
+
 	fmt.Printf("🐦 \033[37mBirdNET-Go %s (built: %s), using config file: %s\033[0m\n",
 		settings.Version, settings.BuildDate, viper.ConfigFileUsed())
+
+	// Initialize Sentry telemetry if enabled
+	if err := telemetry.InitSentry(settings); err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing Sentry: %v\n", err)
+		// Continue without Sentry - it's not critical
+	}
+
+	// Initialize error handling integration with telemetry
+	telemetry.InitializeErrorIntegration()
+
+	// Process configuration validation warnings that occurred before Sentry initialization
+	if len(settings.ValidationWarnings) > 0 {
+		for _, warning := range settings.ValidationWarnings {
+			parts := strings.SplitN(warning, ": ", 2)
+			if len(parts) == 2 {
+				component := parts[0]
+				message := parts[1]
+				telemetry.CaptureMessage(message, sentry.LevelWarning, component)
+			}
+		}
+		// Clear the warnings as they've been processed
+		settings.ValidationWarnings = nil
+	}
 
 	// Execute the root command
 	rootCmd := cmd.RootCommand(settings)

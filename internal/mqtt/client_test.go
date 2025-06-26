@@ -18,7 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 const (
@@ -398,7 +398,7 @@ func testMetricsCollection(t *testing.T) {
 	}
 
 	// Log other metrics for informational purposes
-	t.Logf("Error count: %v", getCounterValue(t, metrics.MQTT.Errors))
+	t.Logf("Error count: %v", getCounterVecValue(t, metrics.MQTT.Errors))
 	t.Logf("Reconnect attempts: %v", getCounterValue(t, metrics.MQTT.ReconnectAttempts))
 	t.Logf("Publish latency: %v", getHistogramValue(t, metrics.MQTT.PublishLatency))
 	debugLog(t, "Metrics Collection test completed")
@@ -432,6 +432,26 @@ func getCounterValue(t *testing.T, counter prometheus.Counter) float64 {
 		t.Fatalf("Failed to write metric: %v", err)
 	}
 	return *metric.Counter.Value
+}
+
+func getCounterVecValue(t *testing.T, counterVec *prometheus.CounterVec) float64 {
+	// Get all metric families
+	metricFamilies, err := prometheus.DefaultGatherer.Gather()
+	if err != nil {
+		t.Fatalf("Failed to gather metrics: %v", err)
+	}
+
+	// Find the metric family for this counter vec
+	for _, mf := range metricFamilies {
+		if mf.GetName() == "mqtt_errors_total" {
+			totalValue := 0.0
+			for _, metric := range mf.GetMetric() {
+				totalValue += metric.GetCounter().GetValue()
+			}
+			return totalValue
+		}
+	}
+	return 0.0
 }
 
 // testContextCancellation verifies that the client properly handles context cancellation
@@ -605,7 +625,7 @@ func testDNSResolutionForTest(t *testing.T) {
 }
 
 // createTestClient is a helper function that creates and configures an MQTT client for testing purposes.
-func createTestClient(t *testing.T, broker string) (Client, *telemetry.Metrics) {
+func createTestClient(t *testing.T, broker string) (Client, *observability.Metrics) {
 	testSettings := &conf.Settings{
 		Main: struct {
 			Name      string
@@ -622,7 +642,7 @@ func createTestClient(t *testing.T, broker string) (Client, *telemetry.Metrics) 
 			},
 		},
 	}
-	metrics, err := telemetry.NewMetrics()
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		if t != nil {
 			t.Fatalf("Failed to create metrics: %v", err)

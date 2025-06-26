@@ -12,7 +12,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // MQTTStatus represents the current status of the MQTT connection
@@ -121,15 +120,15 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 // to determine the current connection status.
 // Returns true if connected, false otherwise, along with any error message encountered.
 func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context) (connected bool, lastError string) {
-	metrics, err := telemetry.NewMetrics()
-	if err != nil {
+	// Use the injected metrics instance
+	if c.metrics == nil {
 		if c.apiLogger != nil {
-			c.apiLogger.Error("Failed to create metrics for temporary MQTT client", "error", err)
+			c.apiLogger.Error("Metrics instance not available for MQTT status check")
 		}
-		return false, fmt.Sprintf("error:metrics:initialization:%s", err.Error())
+		return false, "error:metrics:not_initialized"
 	}
 
-	tempClient, err := mqtt.NewClient(c.Settings, metrics)
+	tempClient, err := mqtt.NewClient(c.Settings, c.metrics)
 	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to create temporary MQTT client for status check", "error", err)
@@ -220,17 +219,16 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 		})
 	}
 
-	// Create new metrics instance for the test
-	metrics, err := telemetry.NewMetrics()
-	if err != nil {
+	// Use the injected metrics instance
+	if c.metrics == nil {
 		return ctx.JSON(http.StatusInternalServerError, MQTTTestResult{
 			Success: false,
-			Message: fmt.Sprintf("Failed to create metrics for MQTT test: %v", err),
+			Message: "Metrics instance not available for MQTT test",
 		})
 	}
 
 	// Create test MQTT client with the current configuration
-	client, err := mqtt.NewClient(c.Settings, metrics)
+	client, err := mqtt.NewClient(c.Settings, c.metrics)
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, MQTTTestResult{
 			Success: false,
